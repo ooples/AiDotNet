@@ -55,7 +55,7 @@ namespace AiDotNet.GaussianProcesses;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("Deep Gaussian Processes", "https://doi.org/10.48550/arXiv.1211.0358", Year = 2013, Authors = "Andreas Damianou, Neil D. Lawrence")]
-public partial class DeepGaussianProcess<T> : GaussianProcessBase<T>
+public class DeepGaussianProcess<T> : GaussianProcessBase<T>
 {
     /// <summary>
     /// The GP layers in the deep architecture.

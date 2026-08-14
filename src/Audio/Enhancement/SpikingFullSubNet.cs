@@ -43,7 +43,7 @@ namespace AiDotNet.Audio.Enhancement;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Spiking-FullSubNet: Spiking Neural Networks for Speech Enhancement", "https://arxiv.org/abs/2406.04662", Year = 2024, Authors = "Jiaying Lin, Rong Xie, Qi Liu")]
-public partial class SpikingFullSubNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
+public class SpikingFullSubNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
 {
     /// <inheritdoc />
     /// <remarks>

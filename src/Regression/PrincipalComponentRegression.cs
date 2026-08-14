@@ -53,7 +53,7 @@ namespace AiDotNet.Regression;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
     [ResearchPaper("Principal Component Analysis", "https://doi.org/10.1007/978-1-4757-1904-8")]
-public partial class PrincipalComponentRegression<T> : RegressionBase<T>
+public class PrincipalComponentRegression<T> : RegressionBase<T>
 {
     /// <summary>
     /// Configuration options for the principal component regression model.

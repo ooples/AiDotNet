@@ -34,7 +34,7 @@ namespace AiDotNet.AnomalyDetection.Statistical;
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
     [ResearchPaper("Exploratory Data Analysis", "https://doi.org/10.1002/bimj.4710230408")]
-public partial class ZScoreDetector<T> : AnomalyDetectorBase<T>
+public class ZScoreDetector<T> : AnomalyDetectorBase<T>
 {
     private readonly double _zThreshold;
     [Buffer]

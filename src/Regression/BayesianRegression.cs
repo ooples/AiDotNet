@@ -72,7 +72,7 @@ namespace AiDotNet.Regression;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
     [ResearchPaper("Pattern Recognition and Machine Learning", "https://www.springer.com/gp/book/9780387310732")]
-public partial class BayesianRegression<T> : RegressionBase<T>
+public class BayesianRegression<T> : RegressionBase<T>
 {
     /// <summary>
     /// Options specific to Bayesian regression.

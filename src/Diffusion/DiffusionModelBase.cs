@@ -59,16 +59,6 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
     protected virtual void RegisterState(AiDotNet.Models.ModelStateRegistry<T> state)
     {
     }
-    /// <summary>Generated state declarations for fields declared across this model's hierarchy.</summary>
-    /// <param name="state">The registry to declare into.</param>
-    /// <remarks>
-    /// Emitted by ModelStateGenerator into the partial model, so a model author declares nothing. The
-    /// hand-written <c>RegisterState</c> beside it exists only for state the classifier genuinely
-    /// cannot place; anything it CAN place belongs here, where it cannot be forgotten.
-    /// </remarks>
-    protected virtual void RegisterGeneratedState(AiDotNet.Models.ModelStateRegistry<T> state)
-    {
-    }
 
     /// <summary>The declared state, registered once and lazily so it runs after the constructor.</summary>
     protected AiDotNet.Models.ModelStateRegistry<T> DeclaredState
@@ -78,7 +68,6 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
             if (!_declaredStateRegistered)
             {
                 _declaredStateRegistered = true;
-                RegisterGeneratedState(_declaredState);
                 RegisterState(_declaredState);
             }
             return _declaredState;

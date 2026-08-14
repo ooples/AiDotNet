@@ -51,7 +51,7 @@ namespace AiDotNet.Classification.Neighbors;
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
     [ResearchPaper("Nearest Neighbor Pattern Classification", "https://doi.org/10.1109/TIT.1967.1053964")]
-public partial class KNeighborsClassifier<T> : ProbabilisticClassifierBase<T>
+public class KNeighborsClassifier<T> : ProbabilisticClassifierBase<T>
 {
 
     // A lazy learner: it stores training data, not parameters, as its own comment says.

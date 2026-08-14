@@ -39,7 +39,7 @@ namespace AiDotNet.AnomalyDetection.Statistical;
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
     [ResearchPaper("Contributions to the Mathematical Theory of Evolution", "https://doi.org/10.1098/rsta.1900.0009")]
-public partial class ChiSquareDetector<T> : AnomalyDetectorBase<T>
+public class ChiSquareDetector<T> : AnomalyDetectorBase<T>
 {
     private readonly double _alpha;
     [Buffer]

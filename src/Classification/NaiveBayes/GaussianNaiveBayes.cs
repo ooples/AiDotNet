@@ -66,7 +66,7 @@ namespace AiDotNet.Classification.NaiveBayes;
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
     [ResearchPaper("A Comparison of Event Models for Naive Bayes Text Classification", "https://www.cs.cmu.edu/~knigam/papers/multinomial-aaaiws98.pdf")]
-public partial class GaussianNaiveBayes<T> : NaiveBayesBase<T>
+public class GaussianNaiveBayes<T> : NaiveBayesBase<T>
 {
     /// <summary>
     /// Mean values for each feature in each class.

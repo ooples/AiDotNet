@@ -44,7 +44,7 @@ namespace AiDotNet.AnomalyDetection.ClusterBased;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("A Density-Based Algorithm for Discovering Clusters in Large Spatial Databases with Noise", "https://www.aaai.org/Papers/KDD/1996/KDD96-037.pdf", Year = 1996, Authors = "Martin Ester, Hans-Peter Kriegel, Joerg Sander, Xiaowei Xu")]
-public partial class DBSCANDetector<T> : AnomalyDetectorBase<T>
+public class DBSCANDetector<T> : AnomalyDetectorBase<T>
 {
     private readonly double? _epsilon;
     private readonly int? _minPts;

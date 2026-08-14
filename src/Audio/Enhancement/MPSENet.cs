@@ -41,7 +41,7 @@ namespace AiDotNet.Audio.Enhancement;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("MP-SENet: A Speech Enhancement Model with Parallel Denoising of Magnitude and Phase Spectra", "https://doi.org/10.48550/arXiv.2305.13686", Year = 2023, Authors = "Ye-Xin Lu, Yang Ai, Zhen-Hua Ling")]
-public partial class MPSENet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
+public class MPSENet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
 {
     /// <inheritdoc />
     /// <remarks>

@@ -50,7 +50,7 @@ namespace AiDotNet.AnomalyDetection.Linear;
     "https://doi.org/10.1080/00401706.1999.10485670",
     Year = 1999,
     Authors = "Peter J. Rousseeuw, Katrien Van Driessen")]
-public partial class MCDDetector<T> : AnomalyDetectorBase<T>
+public class MCDDetector<T> : AnomalyDetectorBase<T>
 {
     private readonly double _supportFraction;
     [Buffer]

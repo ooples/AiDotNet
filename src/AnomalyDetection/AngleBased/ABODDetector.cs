@@ -43,7 +43,7 @@ namespace AiDotNet.AnomalyDetection.AngleBased;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("Angle-Based Outlier Detection in High-dimensional Data", "https://doi.org/10.1145/1401890.1401946", Year = 2008, Authors = "Hans-Peter Kriegel, Matthias Schubert, Arthur Zimek")]
-public partial class ABODDetector<T> : AnomalyDetectorBase<T>
+public class ABODDetector<T> : AnomalyDetectorBase<T>
 {
     [Buffer]
     private Matrix<T>? _trainingData;
