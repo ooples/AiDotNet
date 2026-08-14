@@ -1197,7 +1197,7 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
     /// predictor. Avoids the round-trip through a single flat
     /// <see cref="Vector{T}"/> that <see cref="GetParameters"/> +
     /// <see cref="SetParameters"/> would otherwise produce — for real-scale
-    /// DiT models (Bark: ~360M parameters; ~3 GB as doubles), the flat
+    /// DiT models (hundreds of millions of parameters; multiple GB as doubles), the flat
     /// intermediate triples peak memory and OOMs CI test hosts. Per-layer
     /// copy keeps peak at ~2× model weights instead of ~3×.
     /// </summary>

@@ -1285,13 +1285,10 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // architecture at reduced width/depth. (The failing ModelFamily model is the
         // TextToSpeech.CodecBased.FishSpeech.)
         "FishSpeech", "FishSpeechV15",
-        // Bark's production defaults are a ~100M-parameter codec LM (512-wide
-        // text encoder, 768-wide 12-layer decoder, 8192-way acoustic head).
-        // Streaming training bounds its memory, but the generated fixture's
-        // six-step TrainingError probe still exceeds 120 s on a 4-core runner.
-        // FP32 plus the public-options smoke constructor below keeps the same
-        // embedding -> transformer -> codec-head topology at CI scale.
-        "Bark",
+        // Bark's production defaults are three 24-layer, 1024-wide transformers plus EnCodec.
+        // The generated fixtures use TinyForTests: the same semantic/coarse/fine/codec topology
+        // with checkpoint-test widths, so CI measures the real contracts without timing out.
+        "Bark", "BarkModel",
         // AudioGen Medium is a 24-layer, 1536-wide autoregressive audio LM.
         // Its generated fixture already takes the bounded streaming path, but
         // the fused-linear backward still needs a large per-layer gradient
@@ -7993,24 +7990,20 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "NumAudioEncoderLayers = 1, NumAudioEncoderHeads = 2, NumMels = 64, LMHiddenDim = 32, " +
                     "NumLMLayers = 1, NumLMHeads = 2, VocabSize = 64, AdapterDim = 32 })";
             }
-            else if (model.ClassName == "Bark" && model.TypeParameterCount == 1
+            else if ((model.ClassName is "Bark" or "BarkModel") && model.TypeParameterCount == 1
                      && typeName.StartsWith(
                          "AiDotNet.TextToSpeech.CodecBased.", System.StringComparison.Ordinal))
             {
-                // Preserve Bark's paper-scale production defaults while exercising
-                // the identical codec-LM topology at CPU-smoke scale. The generated
-                // class is floatified by Fp32TestClassNames; the TTS branch also caps
-                // TrainingIterations at 2, so TrainingError remains a real six-step
-                // fitting assertion without spending six paper-scale streaming steps.
+                // Preserve Bark's paper-scale production defaults while exercising its complete
+                // semantic-causal -> coarse-causal -> fine-bidirectional -> codec topology at
+                // Hugging Face's checkpoint-test scale. TinyForTests changes widths and depths,
+                // never stage semantics or the shared lifecycle/caching implementation.
                 pinInitSeed = true;
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.TextGeneration, " +
                     "inputSize: 4, outputSize: 32), " +
-                    "new AiDotNet.TextToSpeech.CodecBased.BarkOptions { TextEncoderDim = 32, " +
-                    "LLMDim = 32, NumEncoderLayers = 1, NumLLMLayers = 1, NumHeads = 2, " +
-                    "NumCodebooks = 2, CodebookSize = 16, MaxTextLength = 8, MaxCodecFrames = 8, " +
-                    "DropoutRate = 0.0 })";
+                    "AiDotNet.TextToSpeech.CodecBased.BarkOptions.TinyForTests(32))";
             }
             else if (model.ClassName == "CosyVoice" && model.TypeParameterCount == 1
                      && typeName.StartsWith(
@@ -12435,7 +12428,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 sb.AppendLine("    protected override int[] InputShape => new[] { 4 };");
                 sb.AppendLine($"    protected override int[] OutputShape => new[] {{ 4, {codecDim} }};");
                 sb.AppendLine();
-                if (model.ClassName is "UniAudio" or "WhisperSpeech" or "XTTSv2" or "XTTSv2Clone")
+                if (model.ClassName is "Bark" or "BarkModel" or "UniAudio" or "WhisperSpeech" or "XTTSv2" or "XTTSv2Clone")
                 {
                     // These codec language models predict a discrete acoustic token at each
                     // sequence position and train with token cross-entropy. Dense random
@@ -12452,7 +12445,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     sb.AppendLine();
                 }
                 bool useCodecSmokeIterations =
-                    model.ClassName is "Bark" or "FishSpeech" or "VALLE2" or "XTTSv2Clone"
+                    model.ClassName is "Bark" or "BarkModel" or "FishSpeech" or "VALLE2" or "XTTSv2Clone"
                         or "GLM4Voice" or "IndexTTS2" or "SeedTTS" or "SoundStorm";
                 sb.AppendLine(useCodecSmokeIterations
                     ? "    protected override int MoreDataShortIterations => 1;"
@@ -12460,13 +12453,11 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 sb.AppendLine(useCodecSmokeIterations
                     ? "    protected override int MoreDataLongIterations => 2;"
                     : "    protected override int MoreDataLongIterations => 10;");
-                if (model.ClassName is "Bark" or "VALLE2" or "GLM4Voice" or "IndexTTS2" or "SeedTTS" or "SoundStorm"
+                if (model.ClassName is "Bark" or "BarkModel" or "VALLE2" or "GLM4Voice" or "IndexTTS2" or "SeedTTS" or "SoundStorm"
                     || IsValleCodecLMModel(model.ClassName))
                 {
                     sb.AppendLine("    protected override int TrainingIterations => 2;");
-                    sb.AppendLine(model.ClassName == "Bark"
-                        ? "    protected override int MemorizationTaskIterations => 2;"
-                        : "    protected override int MemorizationTaskIterations => 15;");
+                    sb.AppendLine("    protected override int MemorizationTaskIterations => 15;");
                 }
                 else if (model.ClassName is "VALLE" or "VALLEX")
                 {
@@ -16663,7 +16654,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
     {
         int tickIdx = className.IndexOf('`');
         if (tickIdx > 0) className = className.Substring(0, tickIdx);
-        return className is "GPTSoVITS" or "CSM" or "Bark" or "OrpheusTTS" or "ParlerTTS"
+        return className is "GPTSoVITS" or "CSM" or "Bark" or "BarkModel" or "OrpheusTTS" or "ParlerTTS"
             or "FireRedTTS" or "F5TTS" or "FishSpeech" or "FishSpeechV15"
             or "UniAudio" or "Zonos" or "XTTSv2" or "XTTSv2Clone"
             or "CosyVoice" or "CosyVoice2" or "CosyVoice3"
@@ -16703,7 +16694,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             "SoundStorm" => 16,
             "Amphion" => 32,
             "Dia" => 32,
-            "Bark" => 32,
+            "Bark" or "BarkModel" => 32,
             "OrpheusTTS" => 80,
             "ParlerTTS" => 80,
             "CosyVoice" => 16,
@@ -16740,6 +16731,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         int tickIdx = className.IndexOf('`');
         if (tickIdx > 0) className = className.Substring(0, tickIdx);
         return IsValleCodecLMModel(className)
+            || className is "Bark" or "BarkModel"
             || className is "GLM4Voice" or "IndexTTS" or "IndexTTS2" or "OuteTTS"
                 or "KaniTTS" or "KaniTTS2" or "SeedTTS" or "SeedTTSClone"
                 or "SpeechGPT" or "SpiritLM" or "SoundStorm" or "Zonos" ? 64 : 256;

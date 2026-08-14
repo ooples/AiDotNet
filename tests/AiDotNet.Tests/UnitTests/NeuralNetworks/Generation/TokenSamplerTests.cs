@@ -86,4 +86,15 @@ public class TokenSamplerTests
         }
         Assert.True(low > high, $"low-temp argmax rate {low} should exceed high-temp {high}");
     }
+
+    [Fact]
+    public async Task ProbabilityOf_UsesTheSameFilteredDistributionAsSampling()
+    {
+        await Task.Yield();
+        var logits = V(0f, 5f, 1f);
+        var options = new SamplingOptions { Temperature = 0.7, TopK = 1 };
+
+        Assert.Equal(1.0, TokenSampler<float>.ProbabilityOf(logits, options, 1), precision: 12);
+        Assert.Equal(0.0, TokenSampler<float>.ProbabilityOf(logits, options, 0), precision: 12);
+    }
 }
