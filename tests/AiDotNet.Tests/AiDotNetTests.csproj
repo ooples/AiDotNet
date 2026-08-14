@@ -50,7 +50,6 @@
        compiled assembly is not callable from tests; this pulls in just the pure-string helper. -->
   <ItemGroup>
     <Compile Include="..\..\src\AiDotNet.Generators\GeneratedTestFloatify.cs" Link="Generators\GeneratedTestFloatify.cs" />
-    <Compile Include="..\..\src\AiDotNet.Generators\GeneratedVisionFixtureShape.cs" Link="Generators\GeneratedVisionFixtureShape.cs" />
     <!-- Shared-compile the model-metadata validator so its assembly-scoping logic (AIDN001 must
          fire for AiDotNet's own library models but NOT for consumer/test IFullModel doubles) can
          be driven directly in a Roslyn generator unit test. Referenced above only as an analyzer,
