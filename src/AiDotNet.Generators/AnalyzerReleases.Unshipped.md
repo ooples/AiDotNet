@@ -27,3 +27,5 @@ AIDN076 | AiDotNet.GoldenPattern | Warning | GoldenPatternValidationGenerator, C
 AIDN060 | AiDotNet.TypeSafety | Info | HardcodedDoubleFieldGenerator, Hardcoded double field in generic <T> class
 AIDN061 | AiDotNet.TypeSafety | Info | HardcodedDoubleFieldGenerator, Hardcoded double[] field in generic <T> class
 AIDN062 | AiDotNet.TypeSafety | Info | HardcodedDoubleFieldGenerator, Hardcoded double[,]/double[][] field in generic <T> class
+AIDN090 | AiDotNet.FacadeConfiguration | Warning | FacadeConfigurationValidationGenerator, Configure* method stores a value nothing ever reads
+AIDN091 | AiDotNet.FacadeConfiguration | Warning | FacadeConfigurationValidationGenerator, Configured value is only reachable through an accessor nobody calls

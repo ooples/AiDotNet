@@ -754,6 +754,25 @@ public class AiModelResultOptions<T, TInput, TOutput> : ModelOptions
     /// </remarks>
     public AugmentationConfig? AugmentationConfig { get; set; }
 
+    /// <summary>
+    /// Segmentation overlay settings supplied via <c>ConfigureSegmentationVisualization</c>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> These are the settings used when drawing a segmentation result over the
+    /// original image — how transparent the colour tint is, whether region outlines are drawn, and
+    /// which colour palette to use. Carrying them here means the choice you made when building the
+    /// model is still available at the point you actually render a prediction.
+    /// </para>
+    /// <para>
+    /// Rendering itself is a free function,
+    /// <c>SegmentationRenderer.DrawSegmentationMasks</c>/<c>Render</c>, following the same shape as
+    /// <c>torchvision.utils.draw_segmentation_masks</c>. This property only carries the defaults, so
+    /// a caller who configured them on the builder does not have to repeat them at every call site.
+    /// </para>
+    /// </remarks>
+    public ComputerVision.Segmentation.Common.SegmentationVisualizationConfig? SegmentationVisualization { get; set; }
+
     // ============================================================================
     // Safety & Robustness Properties
     // ============================================================================

@@ -25,7 +25,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     /// on the original image with colored regions. This configures how that overlay looks — colors,
     /// transparency, labels, and contours.</para>
     /// </remarks>
-    public AiModelBuilder<T, TInput, TOutput> ConfigureSegmentationVisualization(
+    public IAiModelBuilder<T, TInput, TOutput> ConfigureSegmentationVisualization(
         SegmentationVisualizationConfig? config = null)
     {
         _segmentationVisualizationConfig = config ?? new SegmentationVisualizationConfig();
