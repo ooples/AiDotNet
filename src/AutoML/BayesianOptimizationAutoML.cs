@@ -149,11 +149,6 @@ public sealed class BayesianOptimizationAutoML<T, TInput, TOutput> : BuiltInSupe
         return Task.FromResult(sampled);
     }
 
-    protected override AutoMLModelBase<T, TInput, TOutput> CreateInstanceForCopy()
-    {
-        return new BayesianOptimizationAutoML<T, TInput, TOutput>(Random);
-    }
-
     private Type? PickModelTypeByUcb()
     {
         lock (_lock)

@@ -247,6 +247,23 @@ public class PANNs<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
         if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxEncoder = new OnnxModel<T>(p, _options.OnnxOptions);
     }
 
+    // KEPT DELIBERATELY, and this is a gap in the base rather than a property of this model. Deleting
+    // it with the other 606 made two tests fail on WEIGHTS, not on configuration: Clone's output moved
+    // 0.504 -> 0.488, and the after-training probe reported trained weights lost for a lazy-state
+    // layer. The difference from what CloneEngine does is the options argument -- this passes
+    // new PANNsOptions(_options), a COPY, where the engine passes the reference it read -- and until
+    // that is understood rather than guessed at, the override stays and the failure does not ship.
+    // Re-deleting it is fine once the engine reproduces this; the suppression is what makes that a
+    // decision somebody takes rather than something a loop does silently.
+#pragma warning disable ADN0058
+    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
+    {
+        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
+            return new PANNs<T>(Architecture, mp, new PANNsOptions(_options));
+        return new PANNs<T>(Architecture, new PANNsOptions(_options), lossFunction: LossFunction);
+    }
+#pragma warning restore ADN0058
+
     #endregion
 
     #region Helpers

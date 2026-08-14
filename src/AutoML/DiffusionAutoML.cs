@@ -441,14 +441,6 @@ namespace AiDotNet.AutoML
             return GetDefaultDiffusionSearchSpace();
         }
 
-        /// <summary>
-        /// Creates an instance for deep copy.
-        /// </summary>
-        protected override AutoMLModelBase<T, Tensor<T>, Tensor<T>> CreateInstanceForCopy()
-        {
-            return new DiffusionAutoML<T>(_seed);
-        }
-
         private Dictionary<string, ParameterRange> GetDefaultDiffusionSearchSpace()
         {
             return new Dictionary<string, ParameterRange>

@@ -186,6 +186,8 @@ public static class CloneEngine
                 if (candidate[i] == UseDefault) { arguments[i] = Type.Missing; continue; }
 
                 if (!TryReadMember(type, candidate[i], source, out arguments[i])) { readable = false; break; }
+
+                arguments[i] = DuplicateSubModel(arguments[i]);
             }
 
             if (!readable) continue;
@@ -294,6 +296,58 @@ public static class CloneEngine
     /// the other.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Clones a constructor argument that is itself a model or a layer.
+    /// </summary>
+    /// <param name="value">The argument value read from the source.</param>
+    /// <returns>Its clone, or the value unchanged when it is not something that clones itself.</returns>
+    /// <remarks>
+    /// <para>
+    /// A constructor argument used to be handed straight across, which meant a rebuilt model SHARED
+    /// its sub-modules with the one it was copied from. Nothing looks wrong at the moment of cloning
+    /// -- the payload writes the same weights back into the same tensors -- and the damage appears
+    /// later, when training the copy also trains the original. That is what roughly 180 hand-written
+    /// <c>Clone</c> overrides in the diffusion family are working around when they call
+    /// <c>_unet.Clone()</c> and <c>_vae.Clone()</c> before handing them to the constructor: the base
+    /// could not do it, so each model did it again.
+    /// </para>
+    /// <para>
+    /// Cheap, because these clones are copy-on-write: a layer's <c>Clone</c> shares the parent's
+    /// weight tensors by reference and only materialises on write. So this buys independence without
+    /// buying a second copy of a foundation-scale model, which is the reason it can be applied to
+    /// every argument rather than to a hand-picked list of which sub-modules "count".
+    /// </para>
+    /// <para>
+    /// Matched on the library's own <c>ICloneable&lt;T&gt;</c> rather than a list of base types, so a
+    /// consumer's own module is duplicated on the same terms as one of ours. Anything that does not
+    /// declare itself cloneable -- options, primitives, a shared frozen resource -- is passed across
+    /// untouched, exactly as before.
+    /// </para>
+    /// </remarks>
+    private static object? DuplicateSubModel(object? value)
+    {
+        if (value is null) return null;
+
+        var cloneable = value.GetType().GetInterfaces().FirstOrDefault(i =>
+            i.IsGenericType
+            && i.GetGenericTypeDefinition().Name == "ICloneable`1"
+            && i.Namespace == "AiDotNet.Interfaces");
+
+        if (cloneable?.GetMethod("Clone", Type.EmptyTypes) is not { } clone) return value;
+
+        // A sub-module that cannot clone itself is not a reason to abandon the rebuild -- the shared
+        // reference is what happened before this existed, so falling back to it is no worse than the
+        // behaviour this replaces, and the alternative is refusing to clone the parent at all.
+        try
+        {
+            return clone.Invoke(value, null) ?? value;
+        }
+        catch (TargetInvocationException)
+        {
+            return value;
+        }
+    }
+
     private static object? Duplicate(object? value)
     {
         switch (value)

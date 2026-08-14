@@ -987,17 +987,29 @@ namespace AiDotNet.AutoML
     }
 
     /// <summary>
-    /// Factory method for creating a new instance for deep copy.
-    /// Derived classes must implement this to return a new instance of themselves.
-    /// This ensures each copy has its own collections and lock object.
+    /// Creates a new instance of this model's runtime type for a deep copy to populate.
     /// </summary>
-    /// <returns>A fresh instance of the derived class with default parameters</returns>
+    /// <returns>A fresh instance of the derived class.</returns>
     /// <remarks>
-    /// When implementing this method, derived classes should create a fresh instance with default parameters,
-    /// and should not attempt to preserve runtime or initialization state from the original instance.
-    /// The deep copy logic will transfer relevant state (trial history, search space, etc.) after construction.
+    /// <para>
+    /// NO LONGER ABSTRACT, for the reason <c>CreateNewInstance</c> stopped being abstract across the
+    /// other model families: an abstract factory hook obliges every subclass to write out "build one
+    /// of me", and the recorded constructor already knows how. Fourteen models implemented it here,
+    /// each re-listing the arguments its own type happens to take, and each one a place a new
+    /// argument can be forgotten.
+    /// </para>
+    /// <para>
+    /// The clone plan replays the constructor the instance was actually built through, so this is the
+    /// same code for every model. Deep copy still transfers trial history, search space and the rest
+    /// afterwards exactly as before -- this only supplies the empty instance it fills.
+    /// </para>
+    /// <para>
+    /// Still virtual: a model whose construction the plan cannot reproduce can override, and ADN0059
+    /// names it when that is the case rather than leaving it to fail at runtime.
+    /// </para>
     /// </remarks>
-    protected abstract AutoMLModelBase<T, TInput, TOutput> CreateInstanceForCopy();
+    protected virtual AutoMLModelBase<T, TInput, TOutput> CreateInstanceForCopy()
+        => (AutoMLModelBase<T, TInput, TOutput>)AiDotNet.Models.CloneEngine.CopyConfiguration(this);
 
 
         #endregion

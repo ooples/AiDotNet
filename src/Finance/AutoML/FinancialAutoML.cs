@@ -253,19 +253,6 @@ public class FinancialAutoML<T> : SupervisedAutoMLModelBase<T, Tensor<T>, Tensor
     }
 
     /// <summary>
-    /// Creates a new instance for cloning.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> AutoML uses this to make a copy of itself with the same options.
-    /// </para>
-    /// </remarks>
-    protected override AutoMLModelBase<T, Tensor<T>, Tensor<T>> CreateInstanceForCopy()
-    {
-        return new FinancialAutoML<T>(_options, Random);
-    }
-
-    /// <summary>
     /// Applies the AutoML budget to time and trial limits.
     /// </summary>
     /// <param name="budget">The budget options to apply.</param>

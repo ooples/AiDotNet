@@ -127,7 +127,11 @@ public class CloneAutomationAnalyzer : DiagnosticAnalyzer
             return;
         }
 
-        if (name is not ("CreateNewInstance" or "DeepCopy" or "Clone")) return;
+        // CreateInstanceForCopy belongs here for exactly the same reason as the other three: it is a
+        // factory hook whose whole body is "build one of me", which is what the recorded constructor
+        // already does. Leaving it out of the list was an omission rather than a decision -- 14 sites
+        // sat in the same shape as the 607 that went, and nothing was naming them.
+        if (name is not ("CreateNewInstance" or "DeepCopy" or "Clone" or "CreateInstanceForCopy")) return;
         if (method.ParameterList.Parameters.Count != 0) return;
 
         if (!IsSingleReturnOfNewObject(method) && !IsPureForwarder(method, name)) return;
