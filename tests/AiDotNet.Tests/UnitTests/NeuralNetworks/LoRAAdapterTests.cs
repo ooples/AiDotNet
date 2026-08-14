@@ -81,15 +81,19 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
 
             // Act
             int deferredCount = (int)adapter.ParameterCount;
+            Assert.All(
+                baseLayer.GetTrainableParametersWithoutMaterialization(),
+                parameter => Assert.Equal(0, parameter.Length));
 
             var input = new Tensor<double>(new[] { 1, 10 });
             _ = adapter.Forward(input);
             int materializedCount = (int)adapter.ParameterCount;
 
             // Assert
-            // Count queries do not allocate lazy base weights. Once a real forward materializes
-            // them, the same adapter includes base (10*5 + 5 = 55) + LoRA (45) = 100.
-            Assert.Equal(45, deferredCount);
+            // The base's generated shape manifest can report 10*5 + 5 without allocating it. The
+            // adapter therefore has a stable structural count before and after the first forward,
+            // while the bare metadata query remains allocation-free.
+            Assert.Equal(100, deferredCount);
             Assert.Equal(2, adapter.GetSubLayers().Count);
             Assert.Equal(100, materializedCount);
         }

@@ -773,7 +773,25 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
                 }
             }
 
-            cached = components.ToArray();
+            // Preserve the historical LayerBase flat-vector contract across inheritance:
+            // legacy storage, every trainable tensor, every persistent buffer, then children.
+            // Generated base declarations are appended before derived declarations, so using raw
+            // append order would interleave a base class's child modules ahead of a derived class's
+            // own tensors (DoRA's magnitude is the concrete example). A stable role partition keeps
+            // declaration order within each role while making generated and runtime declarations
+            // reproduce the same model-agnostic order the base surfaces have always exposed.
+            cached = new DeclaredParameterComponent[components.Count];
+            int orderedIndex = 0;
+            for (int kind = (int)DeclaredParameterComponentKind.Legacy;
+                 kind <= (int)DeclaredParameterComponentKind.SubLayer;
+                 kind++)
+            {
+                for (int i = 0; i < components.Count; i++)
+                {
+                    if ((int)components[i].Kind == kind)
+                        cached[orderedIndex++] = components[i];
+                }
+            }
             int builtEpoch = ParameterSurfaceEpoch;
             _orderedParameterComponentsOwnLength = Parameters.Length;
             // Building can discover and register generated sub-layers, advancing the epoch. Bind
@@ -815,22 +833,21 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         GetTrainableParametersUnmaterialized();
 
     /// <summary>
-    /// Materializes this layer, if it can be, before its parameter surface is WRITTEN.
+    /// Materializes this layer, if it can be, before its parameter values are read or written.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Reading -- <see cref="ParameterCount"/> and <see cref="GetParameters"/> -- deliberately does
-    /// NOT call this. PyTorch does not allocate to answer a size question either: <c>numel()</c> on
-    /// an <c>UninitializedParameter</c> raises rather than materializing, and weights come into
-    /// being on the first forward or on <c>load_state_dict</c>, never on a count or a save. An
-    /// unmaterialized layer honestly reports zero from BOTH surfaces, which agrees, and the sweep
-    /// treats a consistent zero as no violation.
+    /// <see cref="ParameterCount"/> deliberately does not call this. A generated shape manifest can
+    /// report a construction-known leaf count without allocating the tensors, while a genuinely
+    /// data-dependent declaration reports only its currently live values. <see cref="GetParameters"/>,
+    /// restore, and state-chunk enumeration are value boundaries and do materialize whatever their
+    /// declared shapes prove is ready.
     /// </para>
     /// <para>
-    /// Materializing on read was a workaround written before checkpoints carried shapes. Now that
-    /// they do (see <see cref="WriteParameterLayout"/>), restore is told what to allocate instead of
-    /// having to infer it, so the read path costs nothing again -- forcing every lazy model in the
-    /// library to allocate just to be counted pushed the contract sweep past its 30-minute budget.
+    /// Keeping the count path allocation-free matters at foundation scale: forcing every lazy model
+    /// in the library to allocate merely to answer metadata pushed the contract sweep past its
+    /// 30-minute budget. Shape-aware checkpoints still provide the exact allocation plan when values
+    /// are actually requested.
     /// </para>
     /// </remarks>
     private void EnsureMaterializedForParameterSurface()
@@ -1443,7 +1460,7 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
             int[] dims = shape._dims ?? System.Array.Empty<int>();
             if (dims.Length == 0) continue;
 
-            if (shapesOnly) child.ResolveShapesOnly(dims);
+            if (shapesOnly) child.ResolveDeclaredSubLayerShapeOnly(dims);
             else ResolveAndMaterialize(child, dims);
         }
 
@@ -2417,6 +2434,31 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     /// expect weights to be allocated).
     /// </summary>
     protected bool IsResolvingShapesOnly { get; private set; }
+
+    /// <summary>
+    /// True when <see cref="ResolveShapesOnly"/> is consuming a composite owner's explicit
+    /// <c>[SubLayerInput]</c> declaration rather than a network-level speculative chain walk.
+    /// </summary>
+    /// <remarks>
+    /// A child may safely commit parameter geometry supplied by its owner: the owner knows the
+    /// actual internal topology. The same is not true of a public architecture shape projected
+    /// through a custom model's flat <c>Layers</c> list. Keeping this provenance in the base lets
+    /// every generated composite make that distinction without layer or model-name exemptions.
+    /// </remarks>
+    protected bool IsResolvingDeclaredSubLayerShapeOnly { get; private set; }
+
+    private void ResolveDeclaredSubLayerShapeOnly(int[] inputShape)
+    {
+        IsResolvingDeclaredSubLayerShapeOnly = true;
+        try
+        {
+            ResolveShapesOnly(inputShape);
+        }
+        finally
+        {
+            IsResolvingDeclaredSubLayerShapeOnly = false;
+        }
+    }
 
     /// <summary>
     /// Gets a value indicating whether this layer supports training.
@@ -4816,17 +4858,24 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
                 && _cachedOwnLength == Parameters.Length)
                 return _cachedParameterCount;
 
-            // Prefer the allocation-free structural manifest whenever the layer can describe it.
-            // A shape-resolved lazy tensor is a real parameter slot even before its backing storage
-            // is allocated; reporting zero made a complete CNN look parameter-free until Forward.
-            // DeclaredParameterShapes is generated from the same [TrainableParameter] declarations
-            // that own get/set/chunk order, so this remains one fold rather than a parallel formula.
-            if (TryGetDeclaredParameterCount(out long declaredTotal, out _))
+            // A constructor-sized composite has explicitly promised that every parameter dimension
+            // is known without observing data. A declared LEAF has the same proof directly in its
+            // generated tensor shapes: there is no deferred child graph whose initializer could make
+            // the structural total disagree with the live vector. This covers factory-bound layers
+            // such as ConvolutionalLayer.WithInputDepth automatically, without a per-layer plumbing
+            // override. Keep composites behind their explicit construction-sized contract; trusting
+            // arbitrary unresolved child declarations was the source of the broad B1-M count>vector
+            // regression.
+            var declaredChildren = GetSubLayers();
+            bool hasParameterChildren = declaredChildren is not null && declaredChildren.Any(child =>
+                child is not null && !IsSubLayerParameterFrozen(child));
+            if ((ParametersAreConstructionSized || !hasParameterChildren)
+                && TryGetDeclaredParameterCount(out long constructionSizedTotal, out _))
             {
-                _cachedParameterCount = declaredTotal;
+                _cachedParameterCount = constructionSizedTotal;
                 _cachedParameterEpoch = System.Threading.Volatile.Read(ref s_parameterEpoch);
                 _cachedOwnLength = Parameters.Length;
-                return declaredTotal;
+                return constructionSizedTotal;
             }
 
             // Deliberately does NOT materialize. Counting must stay side-effect-free: this property
@@ -4834,8 +4883,9 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
             // to size them threw OutOfMemoryException on a 774M-parameter model that the caller was
             // in the middle of tearing down. GetParameters and SetParameters DO materialize, and
             // both do so before they consult this count, so the value they see is still exact --
-            // it is only a bare count query on an unmaterialized layer that reports the smaller
-            // truth, which is the honest answer to "how many parameters exist right now".
+            // a declared leaf can report its construction-known structural width above, while an
+            // unresolved composite reports only the live state it can prove without bringing up a
+            // potentially enormous child graph.
             // Default counts three sources of trainable weights so the
             // base class behaves correctly for layers that haven't
             // overridden ParameterCount:
@@ -5258,11 +5308,9 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
 
     public virtual Vector<T> GetParameters()
     {
-        // Reading values is an explicit materialization boundary. ParameterCount remains allocation-
-        // free and can report a shape-resolved structural count, while a caller asking for the flat
-        // payload receives exactly those declared values. This is the same split as a lazy module's
-        // symbolic shape versus its state_dict payload, and prevents count/vector drift without
-        // allocating foundation-scale weights during topology inspection or disposal.
+        // Reading a value vector is an explicit materialization boundary. ParameterCount itself
+        // remains allocation-free; constructor-sized declarations above let it predict only the
+        // geometry this read is contractually guaranteed to materialize.
         EnsureParametersMaterialized();
 
         // One allocation, filled in a single pass. The obvious recursive form -- build a List and,
@@ -5298,8 +5346,8 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     /// </summary>
     internal IEnumerable<ParameterChunk<T>> GetParameterStateChunks(string stablePrefix)
     {
-        // Chunks carry values, not merely schema. Materialize at this explicit value boundary so
-        // their lengths are the concrete projection of the same manifest ParameterCount reads.
+        // Chunks carry values, not merely schema. Match GetParameters' explicit value boundary so
+        // both surfaces project the same materialized manifest.
         EnsureParametersMaterialized();
 
         var components = GetOrderedParameterComponents();

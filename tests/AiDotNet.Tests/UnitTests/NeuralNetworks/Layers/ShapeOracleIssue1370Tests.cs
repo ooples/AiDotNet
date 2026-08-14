@@ -55,6 +55,49 @@ public class ShapeOracleIssue1370Tests
     }
 
     /// <summary>
+    /// A network-level sequential shape projection must not commit a lazy LayerNorm to a width.
+    /// Custom model forwards can feed it a different tensor than the preceding public layer list
+    /// suggests; the real first input's last axis remains the only authoritative normalized width.
+    /// </summary>
+    [Fact]
+    public void ResolveShapesOnly_LazyLayerNorm_WaitsForRealForwardWidth()
+    {
+        var layer = new LayerNormalizationLayer<float>();
+
+        layer.ResolveShapesOnly([1, 64, 256]);
+
+        Assert.False(layer.IsShapeResolved);
+        Assert.Empty(layer.GetGammaTensor().AsSpan().ToArray());
+
+        var actualInput = new Tensor<float>([1, 64, 512]);
+        var output = layer.Forward(actualInput);
+
+        Assert.Equal(actualInput.Shape.ToArray(), output.Shape.ToArray());
+        Assert.Equal(512, layer.GetGammaTensor().Length);
+        Assert.Equal(512, layer.GetBetaTensor().Length);
+    }
+
+    /// <summary>
+    /// A generated composite's explicit SubLayerInput geometry is authoritative even though a
+    /// network-level projected geometry is not. The base must use that declaration to expose the
+    /// complete parameter surface before a real forward, with no hand-written count/get override.
+    /// </summary>
+    [Fact]
+    public void DeclaredSubLayerShape_LayerNormLiveSurfaceStaysInParityBeforeForward()
+    {
+        using var layer = new TransformerEncoderLayer<float>(
+            numHeads: 2,
+            feedForwardDim: 16,
+            embeddingSize: 8);
+
+        long declared = layer.ParameterCount;
+        int materialized = layer.GetParameters().Length;
+
+        Assert.True(declared > 0);
+        Assert.Equal(declared, materialized);
+    }
+
+    /// <summary>
     /// Eager-init <see cref="LayerNormalizationLayer{T}"/> ctor (AiDotNet#1370):
     /// passing featureSize at construction allocates gamma/beta immediately and
     /// resolves the layer's input + output shapes. <see cref="LayerBase{T}.IsShapeResolved"/>
@@ -178,8 +221,11 @@ public class ShapeOracleIssue1370Tests
         Assert.True(layer.IsShapeResolved);
         Assert.True(layer.TryDeclareShape());
 
-        // ParameterCount = 2 * numFeatures (gamma + beta, running stats not trainable).
-        Assert.Equal(2L * numFeatures, layer.ParameterCount);
+        // The optimizer view contains gamma + beta. The flat persistent-state surface also carries
+        // running mean + running variance so clone/checkpoint restore is inference-equivalent.
+        Assert.Equal(2L * numFeatures,
+            layer.GetTrainableParameters().Sum(parameter => (long)parameter.Length));
+        Assert.Equal(4L * numFeatures, layer.ParameterCount);
     }
 
     [Theory]

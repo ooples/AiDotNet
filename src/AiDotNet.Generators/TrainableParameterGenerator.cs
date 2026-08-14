@@ -325,10 +325,18 @@ public class TrainableParameterGenerator : IIncrementalGenerator
             }
 
             bool hasImperativePersistentRegistration =
-                ParameterMemberSemanticModel.GetRegistrationClassifications(classSymbol).Count > 0;
+                ParameterMemberSemanticModel.GetRegistrationClassifications(classSymbol).Count > 0
+                || HasPersistentRegistrationInvocation(classSymbol);
+            bool hasInheritedPersistentContract = HasInheritedPersistentContract(
+                classSymbol, attributeSymbol, bufferSymbol);
+            bool hasUnmodeledLayerContainer = classSymbol.GetMembers()
+                .OfType<IFieldSymbol>()
+                .Any(field => !field.IsStatic && IsPotentialLayerContainer(field.Type));
             bool emitParameterFreeContract = hasAutoParameters
                 && !useRuntimeParameterRegistry
                 && !hasImperativePersistentRegistration
+                && !hasInheritedPersistentContract
+                && !hasUnmodeledLayerContainer
                 && paramFields.Count == 0
                 && subLayerFields.Count == 0
                 && bufferFields.Count == 0;
@@ -1460,6 +1468,98 @@ public class TrainableParameterGenerator : IIncrementalGenerator
         }
 
         return false;
+    }
+
+    /// <summary>
+    /// A parameter-free declaration is a closed-world claim. Prove that no base type contributes
+    /// trainable fields, buffers, registered state, or child modules before emitting it.
+    /// </summary>
+    private static bool HasInheritedPersistentContract(
+        INamedTypeSymbol classSymbol,
+        INamedTypeSymbol? trainableParameterAttribute,
+        INamedTypeSymbol? bufferAttribute)
+    {
+        for (var current = classSymbol.BaseType;
+             current is not null && !IsLayerBaseDefinition(current);
+             current = current.BaseType)
+        {
+            // GetRegistrationClassifications maps registrations back to named fields. Runtime
+            // registries can also retain tensors supplied through locals (DeepAR's AddProjection
+            // helper is the canonical example), so the raw declaration is independently enough
+            // to disprove a closed-world parameter-free claim.
+            if (ParameterMemberSemanticModel.GetRegistrationClassifications(current).Count > 0
+                || HasPersistentRegistrationInvocation(current))
+                return true;
+
+            foreach (var field in current.GetMembers().OfType<IFieldSymbol>())
+            {
+                if (field.IsStatic) continue;
+                if (IsLayerType(field.Type)
+                    || IsLayerCollectionType(field.Type)
+                    || IsPotentialLayerContainer(field.Type))
+                {
+                    return true;
+                }
+
+                foreach (var attribute in field.GetAttributes())
+                {
+                    if ((trainableParameterAttribute is not null
+                         && SymbolEqualityComparer.Default.Equals(
+                             attribute.AttributeClass, trainableParameterAttribute))
+                        || (bufferAttribute is not null
+                            && SymbolEqualityComparer.Default.Equals(
+                                attribute.AttributeClass, bufferAttribute)))
+                    {
+                        return true;
+                    }
+                }
+            }
+        }
+
+        return false;
+    }
+
+    private static bool HasPersistentRegistrationInvocation(INamedTypeSymbol type)
+    {
+        foreach (var syntaxReference in type.DeclaringSyntaxReferences)
+        {
+            if (syntaxReference.GetSyntax() is not ClassDeclarationSyntax declaration) continue;
+            foreach (var invocation in declaration.DescendantNodes().OfType<InvocationExpressionSyntax>())
+            {
+                string? callName = invocation.Expression switch
+                {
+                    IdentifierNameSyntax identifier => identifier.Identifier.ValueText,
+                    MemberAccessExpressionSyntax access => access.Name.Identifier.ValueText,
+                    _ => null
+                };
+                if (callName is "RegisterTrainableParameter"
+                    or "RegisterBuffer"
+                    or "RegisterParameterComponent")
+                {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    private static bool IsLayerBaseDefinition(INamedTypeSymbol type)
+    {
+        var display = type.OriginalDefinition.ToDisplayString();
+        return display == LayerBaseTypeName || display.StartsWith(LayerBaseTypeName + "<");
+    }
+
+    /// <summary>
+    /// Conservatively recognizes containers whose value/element type is a layer even when the
+    /// collection shape is not yet one the generator can safely enumerate (for example a keyed,
+    /// mutable task-adapter dictionary). Such a type cannot be certified parameter-free.
+    /// </summary>
+    private static bool IsPotentialLayerContainer(ITypeSymbol type)
+    {
+        if (type is IArrayTypeSymbol array) return IsLayerType(array.ElementType);
+        if (type is not INamedTypeSymbol named || !named.IsGenericType) return false;
+        return named.TypeArguments.Any(IsLayerType);
     }
 
     private static bool IsLayerType(ITypeSymbol type)

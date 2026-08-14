@@ -2386,18 +2386,27 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// More complex networks typically have more parameters and can learn more complex patterns, but also
     /// require more data to train effectively. This is part of the IFullModel interface for consistency with other model types.
     /// The count is derived from the same stable parameter manifest used by the flat and chunked parameter
-    /// APIs. This property reports only values backed by live storage; the manifest's declared count
-    /// remains available separately for allocation-free capacity planning. It never substitutes a
-    /// guessed future size or reports a parked checkpoint payload as a live parameter.
+    /// APIs. Shape-resolved declarations are included even before allocation because an immediate
+    /// <see cref="GetParameters"/> call materializes and emits them. Truly shape-deferred slots still
+    /// contribute only concrete storage, never a guessed future size or a parked checkpoint payload.
     /// </remarks>
     public virtual long ParameterCount
     {
         get
         {
-            // ParameterCount is the concrete live surface by contract. DeclaredParameterCount on
-            // ParameterLayout remains available for capacity planning without pretending that lazy
-            // storage already exists. Both values come from one immutable, versioned snapshot.
-            return ParameterLayout.MaterializedParameterCount;
+            // A network read is an explicit value boundary: GetParameters materializes every slot
+            // whose shape is already known. Report that restorable projection up front so count and
+            // the vector it sizes cannot disagree. LayerBase.ParameterCount remains the lower-level
+            // live-storage view used by disposal and topology inspection, where allocating or
+            // anticipating foundation-scale weights would be incorrect.
+            var layout = ParameterLayout;
+            if (layout.DeclaredParameterCount.HasValue)
+                return layout.DeclaredParameterCount.Value;
+
+            // Unknown slots contribute no invented width. KnownParameterCount retains independently
+            // resolved declarations; MaterializedParameterCount retains any real storage already
+            // owned by a partially deferred graph.
+            return Math.Max(layout.KnownParameterCount, layout.MaterializedParameterCount);
         }
     }
 
@@ -4276,6 +4285,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             : new[] { currentShape, lastGoodShape };
         foreach (var tryShape in candidates)
         {
+            bool inputShapeAccepted = false;
             try
             {
                 if (layer is LayerBase<T> lb && !lb.IsShapeResolved)
@@ -4285,6 +4295,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                     // allocation still happens lazily on the first real Forward.
                     lb.ResolveShapesOnly(tryShape);
                 }
+                inputShapeAccepted = true;
                 int[] outShape = layer.GetOutputShape();
 
                 // Shadow the contract against the field HERE, where the answer actually propagates.
@@ -4319,8 +4330,13 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 // a verified declarative contract has a complete answer. Reshape is canonical: its
                 // input field is unresolved while its constructor-fixed output is already known.
                 // This is fallback-only, so a successful imperative answer always remains primary.
-                int[]? declaredOutput = SafeInfer(layer, tryShape, isBatched: false)
-                    ?? SafeInfer(layer, tryShape, isBatched: true);
+                // A declarative output can fill in a missing imperative output only after the layer
+                // accepted the candidate input. It must never overrule an input-validation failure:
+                // doing so pinned downstream weights to a geometry the real forward rejects.
+                int[]? declaredOutput = inputShapeAccepted
+                    ? SafeInfer(layer, tryShape, isBatched: false)
+                        ?? SafeInfer(layer, tryShape, isBatched: true)
+                    : null;
                 if (declaredOutput is not null
                     && declaredOutput.Length > 0
                     && System.Array.TrueForAll(declaredOutput, d => d > 0))

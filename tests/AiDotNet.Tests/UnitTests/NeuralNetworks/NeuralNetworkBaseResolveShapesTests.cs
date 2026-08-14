@@ -252,4 +252,43 @@ public class NeuralNetworkBaseResolveShapesTests
         for (int i = 0; i < checkpoint.Length; i++)
             Assert.Equal(checkpoint[i], restored[i]);
     }
+
+    [Fact]
+    public void ShapeContractFallback_DoesNotOverrideRejectedInputGeometry()
+    {
+        // This is the model-agnostic shape pattern used by SALMONN and similar projection-based
+        // architectures. The public input is [..., 4], but the first projection changes the
+        // internal feature width to 8 before attention sees it.
+        var downstreamProjection = new FullyConnectedLayer<double>(16);
+        using var network = new NeuralNetwork<double>(
+            new NeuralNetworkArchitecture<double>(
+                inputType: InputType.TwoDimensional,
+                taskType: NeuralNetworkTaskType.Regression,
+                inputHeight: 3,
+                inputWidth: 4,
+                outputSize: 8,
+                layers:
+                [
+                    new FullyConnectedLayer<double>(8),
+                    new LayerNormalizationLayer<double>(),
+                    new FullyConnectedLayer<double>(8),
+                    new LayerNormalizationLayer<double>(),
+                    new MultiHeadAttentionLayer<double>(headCount: 2, headDimension: 4),
+                    new LayerNormalizationLayer<double>(),
+                    downstreamProjection,
+                    new FullyConnectedLayer<double>(8)
+                ]));
+
+        // The speculative architecture walk reaches attention with two invalid candidates:
+        // rank-1 [8] and stale [..., 4]. Its declarative output must not overrule either input
+        // rejection and pin downstreamProjection to the stale width.
+        network.SetTrainingMode(false);
+        Assert.False(downstreamProjection.IsShapeResolved);
+
+        var output = network.Predict(new Tensor<double>([1, 3, 4]));
+
+        Assert.Equal(new[] { 1, 3, 8 }, output.Shape);
+        Assert.True(downstreamProjection.IsShapeResolved);
+        Assert.Equal(8, downstreamProjection.GetInputShape()[0]);
+    }
 }

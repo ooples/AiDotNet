@@ -180,6 +180,52 @@ public partial class StatelessLayer<T> : AiDotNet.NeuralNetworks.Layers.LayerBas
     }
 
     [Fact]
+    public async Task LayerGenerator_DoesNotDeclareInheritedParameterGraphFree()
+    {
+        await Task.Yield();
+        const string source = @"
+using AiDotNet.Attributes;
+public abstract class StatefulAdapterBase<T> : AiDotNet.NeuralNetworks.Layers.LayerBase<T>
+{
+    protected AiDotNet.Interfaces.ILayer<T> _child = default!;
+}
+[AutoParameters]
+public partial class DerivedAdapter<T> : StatefulAdapterBase<T>
+{
+    private readonly System.Collections.Generic.Dictionary<string, AiDotNet.Interfaces.ILayer<T>>
+        _taskAdapters = new();
+}";
+
+        string generated = Run(new AiDotNet.Generators.TrainableParameterGenerator(), source);
+        Assert.DoesNotContain("IsDeclaredParameterFree => true", generated, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task LayerGenerator_DoesNotDeclareInheritedRuntimeRegistryFree()
+    {
+        await Task.Yield();
+        const string source = @"
+using AiDotNet.Attributes;
+public abstract class RuntimeRegisteredHeadBase<T> : AiDotNet.NeuralNetworks.Layers.LayerBase<T>
+{
+    protected void AddProjection()
+    {
+        var weight = new AiDotNet.Tensors.LinearAlgebra.Tensor<T>();
+        RegisterTrainableParameter(
+            weight, AiDotNet.Tensors.Engines.PersistentTensorRole.Weights);
+    }
+}
+[AutoParameters]
+public partial class GaussianHead<T> : RuntimeRegisteredHeadBase<T>
+{
+    private readonly AiDotNet.Tensors.LinearAlgebra.Tensor<T> _mean = new();
+}";
+
+        string generated = Run(new AiDotNet.Generators.TrainableParameterGenerator(), source);
+        Assert.DoesNotContain("IsDeclaredParameterFree => true", generated, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task LayerGenerator_DeclaresChildStructureForAllocationFreeManifest()
     {
         await Task.Yield();
@@ -261,7 +307,14 @@ public partial class MixedLayer<T>
         string generated = Run(new AiDotNet.Generators.TrainableParameterGenerator(), source);
         Assert.Contains("_declared", generated, StringComparison.Ordinal);
         Assert.Contains("_registered", generated, StringComparison.Ordinal);
-        Assert.Contains("new Tensor<T>[] { _declared, _registered }", generated, StringComparison.Ordinal);
+        // Fixed generated surfaces use one cached backing array rather than allocating an inline
+        // array on every read. Verify that partial declarations still merge into that stable view
+        // in declaration/registration order.
+        Assert.Contains("__storage[0] = _declared;", generated, StringComparison.Ordinal);
+        Assert.Contains("__storage[1] = _registered;", generated, StringComparison.Ordinal);
+        Assert.True(
+            generated.IndexOf("__storage[0] = _declared;", StringComparison.Ordinal)
+            < generated.IndexOf("__storage[1] = _registered;", StringComparison.Ordinal));
     }
 
     [Fact]
