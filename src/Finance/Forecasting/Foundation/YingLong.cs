@@ -296,25 +296,6 @@ public class YingLong<T> : TimeSeriesFoundationModelBase<T>
     }
 
     /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        var clonedOptions = new YingLongOptions<T>(_options)
-        {
-            ContextLength = _contextLength,
-            ForecastHorizon = _forecastHorizon,
-            PatchLength = _patchLength,
-            HiddenDimension = _hiddenDimension,
-            NumLayers = _numLayers,
-            NumHeads = _numHeads,
-            IntermediateSize = _intermediateSize,
-            DropoutRate = _dropout,
-            ModelSize = _modelSize
-        };
-
-        return new YingLong<T>(Architecture, clonedOptions);
-    }
-
-    /// <inheritdoc/>
     protected override void SerializeNetworkSpecificData(BinaryWriter writer)
     {
         writer.Write(_contextLength);

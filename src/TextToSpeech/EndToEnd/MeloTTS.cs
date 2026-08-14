@@ -300,14 +300,6 @@ public class MeloTTS<T> : TtsModelBase<T>, IEndToEndTts<T>
         }
     }
 
-    /// <inheritdoc />
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new MeloTTS<T>(Architecture, mp, _options);
-        return new MeloTTS<T>(Architecture, _options, _optimizer);
-    }
-
     private void ThrowIfDisposed()
     {
         if (_disposed)

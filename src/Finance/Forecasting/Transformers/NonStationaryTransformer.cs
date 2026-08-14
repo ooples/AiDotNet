@@ -689,38 +689,6 @@ public partial class NonStationaryTransformer<T> : ForecastingModelBase<T>
     }
 
     /// <summary>
-    /// Creates a new instance of this network type.
-    /// </summary>
-    /// <returns>A new Non-stationary Transformer instance.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> This factory method creates a copy of the model structure,
-    /// useful for ensemble methods or hyperparameter search.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        var options = new NonStationaryTransformerOptions<T>
-        {
-            SequenceLength = _sequenceLength,
-            LabelLength = _labelLength,
-            PredictionHorizon = _predictionHorizon,
-            NumFeatures = _numFeatures,
-            ModelDimension = _modelDimension,
-            NumEncoderLayers = _numEncoderLayers,
-            NumDecoderLayers = _numDecoderLayers,
-            NumHeads = _numHeads,
-            FeedForwardDimension = _feedForwardDim,
-            ProjectionDimension = _projectionDim,
-            UseSeriesStationarization = _useSeriesStationarization,
-            UseDeStationaryAttention = _useDeStationaryAttention,
-            Dropout = _dropout
-        };
-
-        return new NonStationaryTransformer<T>(Architecture, options);
-    }
-
-    /// <summary>
     /// Serializes network-specific data for persistence.
     /// </summary>
     /// <param name="writer">Binary writer for output.</param>

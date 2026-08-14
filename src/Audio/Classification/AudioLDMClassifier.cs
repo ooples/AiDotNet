@@ -301,13 +301,6 @@ public class AudioLDMClassifier<T> : AudioClassifierBase<T>, IAudioEventDetector
             _optimizer = new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
     }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new AudioLDMClassifier<T>(Architecture, mp, _options);
-        return new AudioLDMClassifier<T>(Architecture, _options);
-    }
-
     #endregion
 
     #region Private Helpers

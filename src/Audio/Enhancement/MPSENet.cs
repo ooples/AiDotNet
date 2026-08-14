@@ -270,13 +270,6 @@ public partial class MPSENet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
             windowLength: _options.FFTSize <= nFft ? _options.FFTSize : null);
     }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new MPSENet<T>(Architecture, mp, _options);
-        return new MPSENet<T>(Architecture, _options);
-    }
-
     #endregion
 
     #region Disposal

@@ -550,21 +550,6 @@ public partial class StableDiffusion15Model<T> : LatentDiffusionModelBase<T>
 
     #region ICloneable Implementation
 
-    /// <inheritdoc />
-    public override IDiffusionModel<T> Clone()
-    {
-        // Delegate to submodule clones so default lazy paper-scale scaffolds stay
-        // lazy. Materialized/trained submodules are responsible for preserving
-        // their own weights.
-        var clonedUnet = (UNetNoisePredictor<T>)_unet.Clone();
-        var clonedVae = (StandardVAE<T>)_vae.Clone();
-
-        return new StableDiffusion15Model<T>(
-            unet: clonedUnet,
-            vae: clonedVae,
-            conditioner: _conditioner);
-    }
-
     /// <summary>
     /// Materializes lazy submodule weights before state-dict style operations.
     /// </summary>

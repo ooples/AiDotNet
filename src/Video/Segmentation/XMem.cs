@@ -814,30 +814,5 @@ public class XMem<T> : NeuralNetworkBase<T>
         for (int i = 0; i < 7; i++) _ = reader.ReadInt32();
     }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        var copiedOptions = new XMemOptions(_options);
-        if (!_useNativeMode && _onnxModelPath is { } modelPath)
-        {
-            return new XMem<T>(
-                Architecture,
-                modelPath,
-                _sensoryMemorySize,
-                _workingMemorySize,
-                _longTermMemorySize,
-                copiedOptions);
-        }
-
-        return new XMem<T>(
-            Architecture,
-            optimizer: null,
-            _lossFunction,
-            _numFeatures,
-            _sensoryMemorySize,
-            _workingMemorySize,
-            _longTermMemorySize,
-            copiedOptions);
-    }
-
     #endregion
 }

@@ -189,17 +189,5 @@ public class GatedDeltaNetLanguageModel<T> : NeuralNetworkBase<T>
         _ = reader.ReadInt32();
     }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        var cloneOptimizer = _optimizer.GetOptions() is AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>> optimizerOptions
-            ? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
-                null,
-                new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>(optimizerOptions))
-            : null;
-        return new GatedDeltaNetLanguageModel<T>(
-            Architecture, _vocabSize, _modelDimension, _numLayers, _numHeads,
-            _maxSeqLength, LossFunction, new GatedDeltaNetOptions(_options), cloneOptimizer);
-    }
-
     #endregion
 }

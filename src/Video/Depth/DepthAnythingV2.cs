@@ -667,19 +667,6 @@ public class DepthAnythingV2<T> : NeuralNetworkBase<T>
         if (string.IsNullOrEmpty(_onnxModelPath)) _onnxModelPath = null;
     }
 
-    /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        if (_useNativeMode)
-        {
-            return new DepthAnythingV2<T>(Architecture, CreateOptimizerForClone(), LossFunction, _modelSize, new DepthAnythingV2Options(_options));
-        }
-        else
-        {
-            return new DepthAnythingV2<T>(Architecture, _onnxModelPath!, _modelSize, new DepthAnythingV2Options(_options));
-        }
-    }
-
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? CreateOptimizerForClone()
     {
         return _optimizer switch

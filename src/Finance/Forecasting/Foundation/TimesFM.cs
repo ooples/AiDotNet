@@ -625,34 +625,6 @@ public partial class TimesFM<T> : TimeSeriesFoundationModelBase<T>
     }
 
     /// <summary>
-    /// Creates a new instance of this model with the same configuration.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Creates a fresh copy of the TimesFM architecture.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        var options = new TimesFMOptions<T>
-        {
-            ContextLength = _contextLength,
-            ForecastHorizon = _forecastHorizon,
-            PatchLength = _patchLength,
-            HiddenDimension = _hiddenDimension,
-            NumLayers = _numLayers,
-            NumHeads = _numHeads,
-            DropoutRate = _dropout,
-            UsePretrainedWeights = _usePretrainedWeights,
-            OutputPatchLength = _outputPatchLength,
-            NumQuantiles = _numQuantiles,
-            QuantileHeadDimension = _quantileHeadDimension
-        };
-
-        return new TimesFM<T>(Architecture, options);
-    }
-
-    /// <summary>
     /// Writes TimesFM-specific configuration during serialization.
     /// </summary>
     /// <remarks>

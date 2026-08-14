@@ -309,20 +309,6 @@ public class MobileNetV3Network<T> : NeuralNetworkBase<T>
     }
 
     /// <inheritdoc />
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        var config = new MobileNetV3Configuration(
-            _configuration.Variant,
-            _configuration.NumClasses,
-            _configuration.WidthMultiplier,
-            _configuration.InputHeight,
-            _configuration.InputWidth,
-            _configuration.InputChannels);
-
-        return new MobileNetV3Network<T>(Architecture, config, _optimizer, _lossFunction);
-    }
-
-    /// <inheritdoc />
     public override void Deserialize(byte[] data)
     {
         base.Deserialize(data);

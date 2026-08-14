@@ -406,13 +406,6 @@ public class VideoChat2<T> : VisionLanguageModelBase<T>, IVideoLanguageModel<T>
             OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
     }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new VideoChat2<T>(Architecture, mp, _options);
-        return new VideoChat2<T>(Architecture, _options);
-    }
-
     private void ThrowIfDisposed()
     {
         if (_disposed)

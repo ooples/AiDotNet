@@ -915,49 +915,6 @@ public partial class VITSModel<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
             RelinkNativeLayerViews();
     }
 
-    /// <summary>
-    /// Creates a new instance of this model for cloning.
-    /// </summary>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        if (!_useNativeMode && _modelPath is not null)
-        {
-            return new VITSModel<T>(
-                Architecture,
-                _modelPath,
-                _speakerEncoderPath,
-                SampleRate,
-                NumMels,
-                _speakingRate,
-                _noiseScale,
-                _lengthScale,
-                _fftSize,
-                _hopLength);
-        }
-        else
-        {
-            return new VITSModel<T>(
-                Architecture,
-                SampleRate,
-                NumMels,
-                _speakingRate,
-                _noiseScale,
-                _lengthScale,
-                _hiddenDim,
-                _numHeads,
-                _numEncoderLayers,
-                _numFlowLayers,
-                _speakerEmbeddingDim,
-                _numSpeakers,
-                _maxPhonemeLength,
-                _phonemeVocabSize,
-                _upsampleRates,
-                _fftSize,
-                _hopLength,
-                lossFunction: _lossFunction);
-        }
-    }
-
     #endregion
 
     #region Private Methods

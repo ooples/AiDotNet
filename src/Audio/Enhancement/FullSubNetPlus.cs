@@ -339,13 +339,6 @@ public partial class FullSubNetPlus<T> : AudioNeuralNetworkBase<T>, IAudioEnhanc
             windowLength: _options.FftSize <= nFft ? _options.FftSize : null);
     }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new FullSubNetPlus<T>(Architecture, mp, _options);
-        return new FullSubNetPlus<T>(Architecture, _options);
-    }
-
     #endregion
 
     #region Private Helpers

@@ -258,14 +258,6 @@ public class SoundStorm<T> : TtsModelBase<T>, ICodecTts<T>
             OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
     }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        var options = new SoundStormOptions(_options);
-        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new SoundStorm<T>(Architecture, mp, options);
-        return new SoundStorm<T>(Architecture, options);
-    }
-
     private void ThrowIfDisposed()
     {
         if (_disposed)

@@ -313,18 +313,6 @@ public partial class DeCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionL
             OnnxTextEncoder = new OnnxModel<T>(t2, _options.OnnxOptions);
     }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        var clonedOptions = new DeCLIPOptions(_options);
-        if (
-            !_useNativeMode
-            && _options.ImageEncoderModelPath is { } mp
-            && !string.IsNullOrEmpty(mp)
-        )
-            return new DeCLIP<T>(Architecture, mp, clonedOptions);
-        return new DeCLIP<T>(Architecture, clonedOptions, optimizer: null);
-    }
-
     private Tensor<T> TokenizeText(string text)
     {
         if (_tokenizer is null)

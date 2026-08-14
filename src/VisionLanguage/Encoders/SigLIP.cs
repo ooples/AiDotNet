@@ -444,19 +444,6 @@ public partial class SigLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionL
             OnnxTextEncoder = new OnnxModel<T>(tp2, _options.OnnxOptions);
     }
 
-    /// <inheritdoc />
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        var options = new SigLIPOptions(_options);
-        if (
-            !_useNativeMode
-            && _options.ImageEncoderModelPath is { } mp
-            && !string.IsNullOrEmpty(mp)
-        )
-            return new SigLIP<T>(Architecture, mp, options);
-        return new SigLIP<T>(Architecture, options);
-    }
-
     #endregion
 
     #region Private Helpers

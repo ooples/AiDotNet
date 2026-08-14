@@ -289,27 +289,6 @@ public partial class NeuralGARCH<T> : FinancialModelBase<T>, IVolatilityModel<T>
         };
     }
 
-    /// <summary>
-    /// Creates a new instance for cloning.
-    /// </summary>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> This is used internally to copy the model.</para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        var options = new NeuralGARCHOptions<T>
-        {
-            NumAssets = _numAssets,
-            LookbackWindow = _lookbackWindow,
-            ForecastHorizon = PredictionHorizon,
-            HiddenSize = _hiddenSize,
-            NumLayers = _numLayers,
-            DropoutRate = _dropoutRate
-        };
-
-        return new NeuralGARCH<T>(Architecture, options, _optimizer, _lossFunction);
-    }
-
     #endregion
 
     #region IVolatilityModel Implementation

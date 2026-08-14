@@ -335,16 +335,6 @@ public class Donut<T> : VisionLanguageModelBase<T>, IDocumentUnderstandingModel<
         }
     }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        // Copy the options so the new instance doesn't share — and mutate, via its
-        // deserialize path — the source instance's options object.
-        var optionsCopy = new DonutOptions(_options);
-        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new Donut<T>(Architecture, mp, optionsCopy);
-        return new Donut<T>(Architecture, optionsCopy);
-    }
-
     private void ThrowIfDisposed()
     {
         if (_disposed)

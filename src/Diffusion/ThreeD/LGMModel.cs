@@ -299,20 +299,6 @@ public partial class LGMModel<T> : ThreeDDiffusionModelBase<T>
 
     #region ICloneable Implementation
 
-    /// <inheritdoc />
-    public override IDiffusionModel<T> Clone()
-    {
-        var clonedUnet = (UNetNoisePredictor<T>)_unet.Clone();
-        var clonedVae = (StandardVAE<T>)_vae.Clone();
-
-        return new LGMModel<T>(
-            architecture: Architecture,
-            unet: clonedUnet,
-            vae: clonedVae,
-            conditioner: _conditioner,
-            defaultPointCount: DefaultPointCount);
-    }
-
     #endregion
 
     #region Metadata

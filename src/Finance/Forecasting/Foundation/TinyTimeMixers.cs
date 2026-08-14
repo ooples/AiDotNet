@@ -358,26 +358,6 @@ public class TinyTimeMixers<T> : TimeSeriesFoundationModelBase<T>
     }
 
     /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        var options = new TinyTimeMixersOptions<T>
-        {
-            ContextLength = _contextLength,
-            ForecastHorizon = _forecastHorizon,
-            PatchLength = _patchLength,
-            HiddenDimension = _hiddenDimension,
-            NumMixerLayers = _numMixerLayers,
-            ExpansionFactor = _expansionFactor,
-            DropoutRate = _dropout,
-            ModelSize = _modelSize,
-            UseAdaptivePatching = _useAdaptivePatching,
-            NumFeatures = _numFeatures
-        };
-
-        return new TinyTimeMixers<T>(Architecture, options);
-    }
-
-    /// <inheritdoc/>
     protected override void SerializeNetworkSpecificData(BinaryWriter writer)
     {
         writer.Write(_contextLength);

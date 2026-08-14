@@ -409,17 +409,6 @@ public class LSTMCRF<T> : SequenceLabelingNERBase<T>, INERModel<T>
         return modelOutput;
     }
 
-    /// <inheritdoc />
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        var optionsCopy = new LSTMCRFOptions(_options);
-
-        if (!_useNativeMode && optionsCopy.ModelPath is { } p && !string.IsNullOrEmpty(p))
-            return new LSTMCRF<T>(Architecture, p, optionsCopy);
-
-        return new LSTMCRF<T>(Architecture, optionsCopy);
-    }
-
     #endregion
 
     #region Metadata and Serialization

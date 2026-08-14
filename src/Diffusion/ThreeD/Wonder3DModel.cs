@@ -222,31 +222,6 @@ public partial class Wonder3DModel<T> : ThreeDDiffusionModelBase<T>
 
     #region ICloneable Implementation
 
-    /// <inheritdoc />
-    public override IDiffusionModel<T> Clone()
-    {
-        // Delegate to the U-Net's and VAE's own Clone implementations, which
-        // resolve lazy shape inference on BOTH source and clone before copying
-        // weights. The previous "construct fresh + SetParameters(GetParameters())"
-        // dance re-hit the lazy-init bug on the U-Net AND never copied the VAE's
-        // weights at all — the clone decoded through a fresh random VAE and
-        // produced different Predict outputs than the source
-        // (Clone_ShouldProduceIdenticalOutput). Same fix pattern as
-        // SDXLTurboModel / RealESRGANModel / EDiffIModel (PR #1562).
-        // Preserve outer configuration (architecture / options / scheduler) so
-        // custom diffusion settings round-trip through Clone.
-        var clonedUnet = (UNetNoisePredictor<T>)_unet.Clone();
-        var clonedVae = (StandardVAE<T>)_vae.Clone();
-        return new Wonder3DModel<T>(
-            architecture: Architecture,
-            options: (DiffusionModelOptions<T>)GetOptions(),
-            scheduler: Scheduler,
-            unet: clonedUnet,
-            vae: clonedVae,
-            conditioner: _conditioner,
-            defaultPointCount: DefaultPointCount);
-    }
-
     #endregion
 
     #region Metadata

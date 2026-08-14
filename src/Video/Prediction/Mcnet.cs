@@ -339,14 +339,6 @@ public class Mcnet<T> : VideoNeuralNetworkBase<T>
             OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
     }
 
-    /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        if (IsOnnxMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new Mcnet<T>(Architecture, mp, _options);
-        return new Mcnet<T>(Architecture, _options);
-    }
-
     #endregion
 
     #region Disposal

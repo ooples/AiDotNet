@@ -257,14 +257,6 @@ public class SpiritLM<T> : TtsModelBase<T>, ICodecTts<T>
             OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
     }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        var options = new SpiritLMOptions(_options);
-        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new SpiritLM<T>(Architecture, mp, options);
-        return new SpiritLM<T>(Architecture, options);
-    }
-
     private void ThrowIfDisposed()
     {
         if (_disposed)

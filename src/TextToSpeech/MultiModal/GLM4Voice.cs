@@ -310,13 +310,6 @@ public class GLM4Voice<T> : TtsModelBase<T>, ICodecTts<T>, IStreamingTts<T>
             OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
     }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new GLM4Voice<T>(Architecture, mp, new GLM4VoiceOptions(_options));
-        return new GLM4Voice<T>(Architecture, new GLM4VoiceOptions(_options));
-    }
-
     private void ThrowIfDisposed()
     {
         if (_disposed)

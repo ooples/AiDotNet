@@ -310,17 +310,6 @@ public partial class LLM2CLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisio
             OnnxTextEncoder = new OnnxModel<T>(t2, _options.OnnxOptions);
     }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        if (
-            !_useNativeMode
-            && _options.ImageEncoderModelPath is { } mp
-            && !string.IsNullOrEmpty(mp)
-        )
-            return new LLM2CLIP<T>(Architecture, mp, _options);
-        return new LLM2CLIP<T>(Architecture, _options);
-    }
-
     private Tensor<T> TokenizeText(string text)
     {
         if (_tokenizer is null)

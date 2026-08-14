@@ -580,28 +580,5 @@ public class SegNeXt<T> : Common.SemanticSegmentationBase<T>
         }
     }
 
-    /// <summary>
-    /// Creates a new SegNeXt instance with the same configuration but freshly initialized weights.
-    /// </summary>
-    /// <returns>A new <see cref="SegNeXt{T}"/> with the same settings but reinitialized weights.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Creates a "copy" of the model configuration with fresh random weights.
-    /// Used internally for cross-validation or ensemble training where multiple independent copies
-    /// of the same architecture are needed.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        if (_useNativeMode)
-        {
-            return new SegNeXt<T>(Architecture, _optimizer, LossFunction, _numClasses, _modelSize, _dropRate, _options);
-        }
-        else
-        {
-            return new SegNeXt<T>(Architecture, _onnxModelPath ?? throw new InvalidOperationException("ONNX model path not initialized."), _numClasses, _modelSize, _options);
-        }
-    }
-
     #endregion
 }

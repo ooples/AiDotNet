@@ -390,41 +390,4 @@ public class RecurrentNeuralNetwork<T> : NeuralNetworkBase<T>
     {
         _learningRate = NumOps.FromDouble(reader.ReadDouble());
     }
-
-    /// <summary>
-    /// Creates a new instance of the recurrent neural network with the same configuration.
-    /// </summary>
-    /// <returns>
-    /// A new instance of <see cref="RecurrentNeuralNetwork{T}"/> with the same configuration as the current instance.
-    /// </returns>
-    /// <remarks>
-    /// <para>
-    /// This method creates a new recurrent neural network that has the same configuration as the current instance.
-    /// It's used for model persistence, cloning, and transferring the model's configuration to new instances.
-    /// The new instance will have the same architecture and learning rate as the original,
-    /// but will not share parameter values unless they are explicitly copied after creation.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method makes a fresh copy of the current model with the same settings.
-    /// 
-    /// It's like creating a blueprint copy of your network that can be used to:
-    /// - Save your model's settings
-    /// - Create a new identical model
-    /// - Transfer your model's configuration to another system
-    /// 
-    /// This is useful when you want to:
-    /// - Create multiple similar recurrent neural networks
-    /// - Save a model's configuration for later use
-    /// - Reset a model while keeping its settings
-    /// 
-    /// Note that while the settings are copied, the learned parameters (like the weights that determine
-    /// how the network processes sequences) are not automatically transferred, so the new instance
-    /// will need training or parameter copying to match the performance of the original.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        // Create a new instance with the cloned architecture and the same learning rate
-        double learningRate = Convert.ToDouble(_learningRate);
-        return new RecurrentNeuralNetwork<T>(Architecture, learningRate, LossFunction);
-    }
 }

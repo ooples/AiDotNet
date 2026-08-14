@@ -207,13 +207,6 @@ public class PerVFI<T> : FrameInterpolationBase<T>
         // layers and corrupts the loaded weights (Clone_ShouldProduceIdenticalOutput divergence).
     }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
-            return new PerVFI<T>(Architecture, p, _options);
-        return new PerVFI<T>(Architecture, _options);
-    }
-
     #endregion
 
     #region Disposal

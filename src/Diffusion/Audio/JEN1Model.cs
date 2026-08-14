@@ -221,19 +221,6 @@ public partial class JEN1Model<T> : AudioDiffusionModelBase<T>
 
     #region ICloneable Implementation
 
-    /// <inheritdoc />
-    public override IDiffusionModel<T> Clone()
-    {
-        var clonedUnet = (UNetNoisePredictor<T>)_unet.Clone();
-        var clonedVae = (AudioVAE<T>)_audioVae.Clone();
-
-        return new JEN1Model<T>(
-            architecture: Architecture,
-            unet: clonedUnet,
-            audioVae: clonedVae,
-            conditioner: _conditioner);
-    }
-
     #endregion
 
     #region Metadata

@@ -217,13 +217,6 @@ public class Vocos<T> : VocoderBase<T>
             OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
     }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new Vocos<T>(Architecture, mp, new VocosOptions(_options));
-        return new Vocos<T>(Architecture, new VocosOptions(_options));
-    }
-
     private Tensor<T> ForwardNative(Tensor<T> input)
     {
         var output = input;

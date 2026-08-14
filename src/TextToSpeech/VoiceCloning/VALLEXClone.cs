@@ -358,13 +358,6 @@ public class VALLEXClone<T> : TtsModelBase<T>, ICodecTts<T>, IVoiceCloner<T>
             OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
     }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new VALLEXClone<T>(Architecture, mp, _options);
-        return new VALLEXClone<T>(Architecture, _options);
-    }
-
     private AdamWOptimizer<T, Tensor<T>, Tensor<T>> CreateDefaultOptimizer() =>
         new(
             this,

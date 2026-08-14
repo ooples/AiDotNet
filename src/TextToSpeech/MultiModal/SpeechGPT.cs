@@ -280,13 +280,6 @@ public class SpeechGPT<T> : TtsModelBase<T>, ICodecTts<T>
         }
     }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new SpeechGPT<T>(Architecture, mp, new SpeechGPTOptions(_options));
-        return new SpeechGPT<T>(Architecture, new SpeechGPTOptions(_options));
-    }
-
     private void ThrowIfDisposed()
     {
         if (_disposed)

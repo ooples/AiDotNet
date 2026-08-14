@@ -871,37 +871,6 @@ public partial class SpeechEmotionRecognizer<T> : AudioClassifierBase<T>, IEmoti
     }
 
     /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        if (_isOnnxMode && _modelPath is not null)
-        {
-            return new SpeechEmotionRecognizer<T>(
-                Architecture,
-                _modelPath,
-                SampleRate,
-                NumMels,
-                _nFft,
-                _hopLength,
-                _emotionLabels,
-                _includeArousalValence);
-        }
-
-        return new SpeechEmotionRecognizer<T>(
-            Architecture,
-            SampleRate,
-            NumMels,
-            _nFft,
-            _hopLength,
-            _inputDurationSeconds,
-            _numConvBlocks,
-            _baseFilters,
-            _hiddenDim,
-            _dropoutRate,
-            _emotionLabels,
-            _includeArousalValence);
-    }
-
-    /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()
     {
         var metadata = new ModelMetadata<T>

@@ -1859,60 +1859,6 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>, IAuxiliaryL
 
         return outputs;
     }
-
-    /// <summary>
-    /// Creates a new instance of the differentiable neural computer model.
-    /// </summary>
-    /// <returns>A new instance of the differentiable neural computer model with the same configuration.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method creates a new instance of the differentiable neural computer model with the same configuration as the current instance.
-    /// It is used internally during serialization/deserialization processes to create a fresh instance that can be populated
-    /// with the serialized data. The new instance will have the same architecture, memory size, memory word size,
-    /// controller size, read heads count, and activation function type as the original.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method creates a copy of the network structure without copying the learned data.
-    /// 
-    /// Think of it like creating a blueprint copy of the DNC:
-    /// - It copies the same neural network architecture
-    /// - It sets up the same memory size (same notepad dimensions)
-    /// - It configures the same number of read heads (how many pages to look at at once)
-    /// - It uses the same controller size (brain power)
-    /// - It keeps the same activation function (how neurons respond to input)
-    /// - But it doesn't copy any of the actual memories or learned behaviors
-    /// 
-    /// This is primarily used when saving or loading models, creating an empty framework
-    /// that the saved parameters and memory state can be loaded into later.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        // Determine which constructor to use based on which activation function is set
-        if (_activationFunction != null)
-        {
-            return new DifferentiableNeuralComputer<T>(
-                Architecture,
-                _memorySize,
-                _memoryWordSize,
-                _controllerSize,
-                _readHeads,
-                lossFunction: _lossFunction,
-                activationFunction: _activationFunction
-            );
-        }
-        else
-        {
-            return new DifferentiableNeuralComputer<T>(
-                Architecture,
-                _memorySize,
-                _memoryWordSize,
-                _controllerSize,
-                _readHeads,
-                lossFunction: _lossFunction,
-                vectorActivationFunction: _vectorActivationFunction
-            );
-        }
-    }
     /// <summary>
     /// Declares the output projection, which live outside <see cref="NeuralNetworkBase{T}.Layers"/>.
     /// </summary>

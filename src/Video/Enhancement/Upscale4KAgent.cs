@@ -228,17 +228,6 @@ public class Upscale4KAgent<T> : VideoSuperResolutionBase<T>
         // discard them and leave the model randomly initialized.
     }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
-            return new Upscale4KAgent<T>(Architecture, p, new Upscale4KAgentOptions(_options));
-
-        // A clone needs optimizer state bound to the clone's parameters. Reusing this
-        // instance's optimizer would couple the two models and bypass its constructor's
-        // option-derived learning rate.
-        return new Upscale4KAgent<T>(Architecture, new Upscale4KAgentOptions(_options));
-    }
-
     #endregion
 
     #region Disposal

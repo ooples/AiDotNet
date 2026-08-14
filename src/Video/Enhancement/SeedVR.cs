@@ -226,13 +226,6 @@ public class SeedVR<T> : VideoSuperResolutionBase<T>
         // discard them and leave the model randomly initialized.
     }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
-            return new SeedVR<T>(Architecture, p, _options);
-        return new SeedVR<T>(Architecture, _options);
-    }
-
     #endregion
 
     #region Disposal

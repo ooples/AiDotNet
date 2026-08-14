@@ -267,18 +267,6 @@ public partial class BlendedDiffusionModel<T> : LatentDiffusionModelBase<T>
 
     #region ICloneable Implementation
 
-    /// <inheritdoc />
-    public override IDiffusionModel<T> Clone()
-    {
-        var clonedUnet = (UNetNoisePredictor<T>)_unet.Clone();
-        var clonedVae = (StandardVAE<T>)_vae.Clone();
-
-        return new BlendedDiffusionModel<T>(
-            unet: clonedUnet,
-            vae: clonedVae,
-            conditioner: _conditioner);
-    }
-
     #endregion
 
     #region Metadata

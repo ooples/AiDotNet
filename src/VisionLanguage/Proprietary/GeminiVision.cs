@@ -295,13 +295,6 @@ public class GeminiVision<T> : VisionLanguageModelBase<T>, IProprietaryVLM<T>
             OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
     }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new GeminiVision<T>(Architecture, mp, _options);
-        return new GeminiVision<T>(Architecture, _options);
-    }
-
     private void ThrowIfDisposed()
     {
         if (_disposed)

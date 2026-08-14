@@ -227,13 +227,6 @@ public class DualXVSR<T> : VideoSuperResolutionBase<T>
         if (_useNativeMode) _optimizer = CreateDefaultOptimizer();
     }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new DualXVSR<T>(Architecture, mp, new DualXVSROptions(_options));
-        return new DualXVSR<T>(Architecture, new DualXVSROptions(_options));
-    }
-
     private AdamWOptimizer<T, Tensor<T>, Tensor<T>> CreateDefaultOptimizer()
         => new(this, new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
         {

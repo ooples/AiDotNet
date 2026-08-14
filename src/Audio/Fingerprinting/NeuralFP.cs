@@ -326,13 +326,6 @@ internal class NeuralFP<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
             _options.FftSize, _options.HopLength);
     }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new NeuralFP<T>(Architecture, mp, _options);
-        return new NeuralFP<T>(Architecture, _options);
-    }
-
     #endregion
 
     #region Disposal

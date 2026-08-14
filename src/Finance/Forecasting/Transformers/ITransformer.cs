@@ -649,39 +649,6 @@ public partial class ITransformer<T> : ForecastingModelBase<T>
     }
 
     /// <summary>
-    /// Creates a new instance of this model with the same configuration.
-    /// </summary>
-    /// <returns>A new iTransformer instance with identical settings.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Creates a fresh copy of the model with the same architecture
-    /// but newly initialized parameters. Useful for:
-    /// <list type="bullet">
-    /// <item>Creating ensemble models</item>
-    /// <item>Cross-validation (fresh model for each fold)</item>
-    /// <item>Resetting training</item>
-    /// </list>
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        if (_useNativeMode)
-        {
-            return new ITransformer<T>(
-                Architecture, _sequenceLength, _predictionHorizon, _numFeatures,
-                _numLayers, _numHeads, _modelDimension, _feedForwardDimension,
-                _useInstanceNormalization, _dropout, _optimizer, _lossFunction);
-        }
-        else
-        {
-            return new ITransformer<T>(
-                Architecture, OnnxModelPath ?? string.Empty,
-                _sequenceLength, _predictionHorizon, _numFeatures,
-                _optimizer, _lossFunction);
-        }
-    }
-
-    /// <summary>
     /// Writes network-specific configuration data during serialization.
     /// </summary>
     /// <param name="writer">The binary writer to write data to.</param>

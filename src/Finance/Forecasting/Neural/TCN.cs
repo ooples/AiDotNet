@@ -541,30 +541,6 @@ public partial class TCN<T> : ForecastingModelBase<T>
     }
 
     /// <summary>
-    /// Creates a new instance of this model with the same configuration.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Creates a fresh copy with randomly initialized weights.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        var options = new TCNOptions<T>
-        {
-            LookbackWindow = _lookbackWindow,
-            ForecastHorizon = _forecastHorizon,
-            NumChannels = _numChannels,
-            KernelSize = _kernelSize,
-            NumLayers = _numLayers,
-            DropoutRate = _dropout,
-            UseResidualConnections = _useResidualConnections
-        };
-
-        return new TCN<T>(Architecture, options);
-    }
-
-    /// <summary>
     /// Writes TCN-specific configuration during serialization.
     /// </summary>
     /// <remarks>

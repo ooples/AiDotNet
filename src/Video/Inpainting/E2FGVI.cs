@@ -816,21 +816,6 @@ public partial class E2FGVI<T> : VideoInpaintingBase<T>
         _numFeatures = reader.ReadInt32();
     }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        // Do not pass the live Architecture instance (its Layers list can be populated
-        // during lazy shape resolution).  A fresh blueprint gives clone/serialization
-        // an independent layer graph while preserving every public architecture field.
-        var architecture = new NeuralNetworkArchitecture<T>(
-            Architecture.InputType, Architecture.TaskType, Architecture.Complexity,
-            Architecture.InputSize, Architecture.InputHeight, Architecture.InputWidth,
-            Architecture.InputDepth, Architecture.OutputSize, inputFrames: Architecture.InputFrames,
-            shouldReturnFullSequence: Architecture.ShouldReturnFullSequence,
-            imageEmbeddingDim: Architecture.ImageEmbeddingDim,
-            textEmbeddingDim: Architecture.TextEmbeddingDim);
-        return new E2FGVI<T>(architecture, _numFeatures, _options);
-    }
-
     #endregion
 
     #region Base Class Abstract Methods

@@ -504,31 +504,6 @@ public partial class Mamba<T> : ForecastingModelBase<T>
         };
     }
 
-    /// <inheritdoc/>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the Mamba model, CreateNewInstance builds and wires up model components. This sets up the Mamba architecture before use.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        var options = new MambaOptions<T>
-        {
-            ContextLength = _contextLength,
-            ForecastHorizon = _forecastHorizon,
-            ModelDimension = _modelDimension,
-            StateDimension = _stateDimension,
-            ExpandFactor = _expandFactor,
-            ConvKernelSize = _convKernelSize,
-            NumLayers = _numLayers,
-            DropoutRate = _dropout,
-            DtRank = _dtRank,
-            UseBidirectional = _useBidirectional
-        };
-
-        return new Mamba<T>(Architecture, options, _numFeatures);
-    }
-
     /// <summary>
     /// Writes Mamba-specific configuration during serialization.
     /// </summary>

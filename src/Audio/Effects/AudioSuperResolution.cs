@@ -361,13 +361,6 @@ public partial class AudioSuperResolution<T> : AudioNeuralNetworkBase<T>, IAudio
         if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxEncoder = new OnnxModel<T>(p, _options.OnnxOptions);
     }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new AudioSuperResolution<T>(Architecture, mp, _options);
-        return new AudioSuperResolution<T>(Architecture, _options);
-    }
-
     #endregion
 
     #region Private Helpers

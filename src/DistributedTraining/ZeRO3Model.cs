@@ -100,11 +100,4 @@ public class ZeRO3Model<T, TInput, TOutput> : FSDPModel<T, TInput, TOutput>
         var newModel = InterfaceGuard.Parameterizable(WrappedModel).WithParameters(parameters);
         return new ZeRO3Model<T, TInput, TOutput>(newModel, Config);
     }
-
-    /// <inheritdoc/>
-    public override IFullModel<T, TInput, TOutput> Clone()
-    {
-        var clonedWrappedModel = WrappedModel.Clone();
-        return new ZeRO3Model<T, TInput, TOutput>(clonedWrappedModel, Config);
-    }
 }

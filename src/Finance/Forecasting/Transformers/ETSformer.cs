@@ -479,34 +479,6 @@ public partial class ETSformer<T> : ForecastingModelBase<T>
     }
 
     /// <summary>
-    /// Creates a new instance of this model with the same configuration.
-    /// </summary>
-    /// <returns>A new ETSformer instance.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the ETSformer model, CreateNewInstance builds and wires up model components. This sets up the ETSformer architecture before use.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        var options = new ETSformerOptions<T>
-        {
-            SequenceLength = _sequenceLength,
-            PredictionHorizon = _predictionHorizon,
-            NumFeatures = _numFeatures,
-            ModelDimension = _modelDimension,
-            NumEncoderLayers = _numEncoderLayers,
-            NumDecoderLayers = _numDecoderLayers,
-            NumHeads = _numHeads,
-            Dropout = _dropout,
-            K = _topK,
-            UseInstanceNormalization = _useInstanceNormalization
-        };
-
-        return new ETSformer<T>(Architecture, options);
-    }
-
-    /// <summary>
     /// Serializes model-specific data for saving.
     /// </summary>
     /// <param name="writer">Binary writer for output.</param>

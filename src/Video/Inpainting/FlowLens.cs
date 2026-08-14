@@ -231,14 +231,6 @@ public class FlowLens<T> : VideoInpaintingBase<T>
         _options.DropoutRate = reader.ReadDouble();
     }
 
-    /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
-            return new FlowLens<T>(Architecture, p, _options);
-        return new FlowLens<T>(Architecture, _options);
-    }
-
     private static Tensor<T> ConcatFramesAndMasks(Tensor<T> frames, Tensor<T> masks)
     {
         if (frames.Rank != 4)

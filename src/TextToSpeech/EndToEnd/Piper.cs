@@ -295,14 +295,6 @@ public class Piper<T> : TtsModelBase<T>, IEndToEndTts<T>
             OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
     }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        var options = new PiperOptions(_options);
-        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new Piper<T>(Architecture, mp, options);
-        return new Piper<T>(Architecture, options);
-    }
-
     private void ThrowIfDisposed()
     {
         if (_disposed)

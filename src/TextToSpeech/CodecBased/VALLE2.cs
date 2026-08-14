@@ -261,13 +261,6 @@ public class VALLE2<T> : TtsModelBase<T>, ICodecTts<T>
             OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
     }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new VALLE2<T>(Architecture, mp, _options);
-        return new VALLE2<T>(Architecture, _options);
-    }
-
     private AdamWOptimizer<T, Tensor<T>, Tensor<T>> CreateDefaultOptimizer() =>
         new(
             this,

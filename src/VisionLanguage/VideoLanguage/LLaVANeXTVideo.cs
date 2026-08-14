@@ -354,13 +354,6 @@ public class LLaVANeXTVideo<T> : VisionLanguageModelBase<T>, IVideoLanguageModel
             OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
     }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new LLaVANeXTVideo<T>(Architecture, mp, _options);
-        return new LLaVANeXTVideo<T>(Architecture, _options);
-    }
-
     private void ThrowIfDisposed()
     {
         if (_disposed)

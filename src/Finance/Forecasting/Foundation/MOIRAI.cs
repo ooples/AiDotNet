@@ -806,36 +806,6 @@ public partial class MOIRAI<T> : TimeSeriesFoundationModelBase<T>
         };
     }
 
-    /// <inheritdoc/>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the MOIRAI model, CreateNewInstance builds and wires up model components. This sets up the MOIRAI architecture before use.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        var options = new MOIRAIOptions<T>
-        {
-            ContextLength = _contextLength,
-            ForecastHorizon = _forecastHorizon,
-            PatchSizes = _patchSizes,
-            HiddenDimension = _hiddenDimension,
-            NumLayers = _numLayers,
-            NumHeads = _numHeads,
-            IntermediateSize = _intermediateSize,
-            NumMixtures = _numMixtures,
-            DropoutRate = _dropout,
-            MaskRatio = _maskRatio,
-            ModelSize = _modelSize,
-            UseDecoderOnly = _useDecoderOnly,
-            NumQuantiles = _numQuantiles,
-            MultiTokenSteps = _multiTokenSteps,
-            PatchSize = _v2PatchSize
-        };
-
-        return new MOIRAI<T>(Architecture, options, _numFeatures);
-    }
-
     /// <summary>
     /// Writes MOIRAI-specific configuration during serialization.
     /// </summary>

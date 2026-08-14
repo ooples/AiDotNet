@@ -225,14 +225,6 @@ public class FuseFormer<T> : VideoInpaintingBase<T>
         _options.DropoutRate = reader.ReadDouble();
     }
 
-    /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
-            return new FuseFormer<T>(Architecture, p, _options);
-        return new FuseFormer<T>(Architecture, _options);
-    }
-
     private static Tensor<T> ConcatFramesAndMasks(Tensor<T> frames, Tensor<T> masks)
     {
         if (frames.Rank != 4)

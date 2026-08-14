@@ -329,19 +329,6 @@ public class DeepVoice3<T> : TtsModelBase<T>, IAcousticModel<T>
             OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
     }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new DeepVoice3<T>(Architecture, mp, new DeepVoice3Options(_options));
-
-        var cloneOptimizer = _optimizer?.GetOptions() is AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>> options
-            ? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
-                null,
-                new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>(options))
-            : null;
-        return new DeepVoice3<T>(Architecture, new DeepVoice3Options(_options), cloneOptimizer);
-    }
-
     private void ThrowIfDisposed()
     {
         if (_disposed)

@@ -323,17 +323,6 @@ public partial class BASIC<T> : VisionLanguageModelBase<T>, IContrastiveVisionLa
             OnnxTextEncoder = new OnnxModel<T>(tp2, _options.OnnxOptions);
     }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        if (
-            !_useNativeMode
-            && _options.ImageEncoderModelPath is { } mp
-            && !string.IsNullOrEmpty(mp)
-        )
-            return new BASIC<T>(Architecture, mp, _options);
-        return new BASIC<T>(Architecture, _options);
-    }
-
     private Tensor<T> TokenizeText(string text)
     {
         if (_tokenizer is null)

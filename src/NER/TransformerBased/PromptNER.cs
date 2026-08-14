@@ -113,17 +113,6 @@ public class PromptNER<T> : TransformerNERBase<T>
         _ = resolvedOptions;
     }
 
-    /// <inheritdoc />
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        var optionsCopy = NEROptions is PromptNEROptions promptOptions
-            ? new PromptNEROptions(promptOptions)
-            : new TransformerNEROptions(NEROptions);
-        if (!UseNativeMode && optionsCopy.ModelPath is { } p && !string.IsNullOrEmpty(p))
-            return new PromptNER<T>(Architecture, p, optionsCopy);
-        return new PromptNER<T>(Architecture, optionsCopy);
-    }
-
     private static IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreatePaperOptimizer(
         TransformerNEROptions options)
     {

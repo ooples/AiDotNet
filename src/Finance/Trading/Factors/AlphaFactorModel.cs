@@ -374,31 +374,6 @@ public class AlphaFactorModel<T> : FinancialModelBase<T>, IFactorModel<T>
     }
 
     /// <summary>
-    /// Creates a new instance with the same configuration.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> This is used when the framework needs a fresh model
-    /// with the same settings (for example during cloning).
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        var optionsCopy = new AlphaFactorOptions<T>
-        {
-            NumFactors = _numFactors,
-            NumAssets = _numAssets,
-            NumFeatures = _numFeatures,
-            HiddenDimension = _hiddenDimension,
-            SequenceLength = _sequenceLength,
-            PredictionHorizon = _predictionHorizon,
-            DropoutRate = _dropoutRate
-        };
-
-        return new AlphaFactorModel<T>(Architecture, optionsCopy);
-    }
-
-    /// <summary>
     /// Serializes model-specific data.
     /// </summary>
     /// <param name="writer">Binary writer.</param>

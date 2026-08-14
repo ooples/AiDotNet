@@ -516,30 +516,6 @@ public partial class UniTS<T> : ForecastingModelBase<T>
         };
     }
 
-    /// <inheritdoc/>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the UniTS model, CreateNewInstance builds and wires up model components. This sets up the UniTS architecture before use.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        var options = new UniTSOptions<T>
-        {
-            ContextLength = _contextLength,
-            ForecastHorizon = _forecastHorizon,
-            HiddenDimension = _hiddenDimension,
-            NumLayers = _numLayers,
-            NumHeads = _numHeads,
-            ConvKernelSizes = _convKernelSizes,
-            DropoutRate = _dropout,
-            TaskType = _taskType,
-            NumClasses = _numClasses
-        };
-
-        return new UniTS<T>(Architecture, options, _numFeatures);
-    }
-
     /// <summary>
     /// Writes UniTS-specific configuration during serialization.
     /// </summary>

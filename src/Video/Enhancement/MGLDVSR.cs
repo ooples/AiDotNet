@@ -207,13 +207,6 @@ public class MGLDVSR<T> : VideoSuperResolutionBase<T>
             OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
     }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        if (IsOnnxMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new MGLDVSR<T>(Architecture, mp, _options);
-        return new MGLDVSR<T>(Architecture, _options);
-    }
-
     #endregion
 
     #region Disposal

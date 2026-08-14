@@ -294,15 +294,5 @@ public partial class DDPMModel<T> : DiffusionModelBase<T>
 
     #region ICloneable Implementation
 
-    /// <inheritdoc />
-    public override IDiffusionModel<T> Clone()
-    {
-        var clonedUnet = (UNetNoisePredictor<T>)_unet.Clone();
-        return new DDPMModel<T>(
-            scheduler: Scheduler,
-            unet: clonedUnet,
-            customPredictor: _customPredictor);
-    }
-
     #endregion
 }

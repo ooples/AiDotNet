@@ -312,25 +312,6 @@ public partial class PlaygroundV25Model<T> : LatentDiffusionModelBase<T>
 
     #region ICloneable Implementation
 
-    /// <inheritdoc />
-    public override IDiffusionModel<T> Clone()
-    {
-        // Delegate to the UNet/VAE's own Clone, which triggers lazy
-        // shape resolution on BOTH source and clone before copying
-        // weights. Reconstructing fresh predictors here and calling
-        // SetParameters with this.GetParameters under-copies the
-        // unresolved time-embedding DenseLayer params, producing a
-        // clone whose Predict diverges from the original — surfaces
-        // as Clone_ShouldProduceIdenticalOutput numerical failure.
-        var clonedUnet = (UNetNoisePredictor<T>)_unet.Clone();
-        var clonedVae = (StandardVAE<T>)_vae.Clone();
-
-        return new PlaygroundV25Model<T>(
-            unet: clonedUnet,
-            vae: clonedVae,
-            conditioner: _conditioner);
-    }
-
     #endregion
 
     #region Metadata

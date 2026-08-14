@@ -369,14 +369,6 @@ public class Kokoro<T> : TtsModelBase<T>, IEndToEndTts<T>
             OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
     }
 
-    /// <inheritdoc />
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new Kokoro<T>(Architecture, mp, _options);
-        return new Kokoro<T>(Architecture, _options);
-    }
-
     private void ThrowIfDisposed()
     {
         if (_disposed)

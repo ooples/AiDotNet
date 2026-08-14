@@ -348,14 +348,6 @@ public class CosyVoiceClone<T> : TtsModelBase<T>, ICodecTts<T>, IVoiceCloner<T>
             OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
     }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        var options = new CosyVoiceCloneOptions(_options);
-        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new CosyVoiceClone<T>(Architecture, mp, options);
-        return new CosyVoiceClone<T>(Architecture, options);
-    }
-
     private void ThrowIfDisposed()
     {
         if (_disposed)

@@ -619,34 +619,6 @@ public partial class Chronos<T> : TimeSeriesFoundationModelBase<T>
     }
 
     /// <summary>
-    /// Creates a new instance of this model with the same configuration.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Creates a fresh copy of the Chronos architecture.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        var options = new ChronosFinanceOptions<T>
-        {
-            ContextLength = _contextLength,
-            ForecastHorizon = _forecastHorizon,
-            NumTokens = _numTokens,
-            HiddenDimension = _hiddenDimension,
-            NumLayers = _numLayers,
-            NumHeads = _numHeads,
-            IntermediateSize = _intermediateSize,
-            NumSamples = _numSamples,
-            DropoutRate = _dropout,
-            Temperature = _temperature,
-            ModelSize = _modelSize
-        };
-
-        return new Chronos<T>(Architecture, options);
-    }
-
-    /// <summary>
     /// Writes Chronos-specific configuration during serialization.
     /// </summary>
     /// <remarks>

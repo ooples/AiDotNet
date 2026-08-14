@@ -308,13 +308,6 @@ public class OpenVoiceV2<T> : TtsModelBase<T>, IEndToEndTts<T>, IVoiceCloner<T>
             OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
     }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new OpenVoiceV2<T>(Architecture, mp, new OpenVoiceV2Options(_options));
-        return new OpenVoiceV2<T>(Architecture, new OpenVoiceV2Options(_options));
-    }
-
     private void ThrowIfDisposed()
     {
         if (_disposed)

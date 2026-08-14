@@ -292,17 +292,6 @@ public class ForwardTacotron<T> : TtsModelBase<T>, IAcousticModel<T>
             OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
     }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new ForwardTacotron<T>(Architecture, mp, new ForwardTacotronOptions(_options));
-
-        var cloneOptimizer = _optimizer?.GetOptions() is AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>> options
-            ? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(null, new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>(options))
-            : null;
-        return new ForwardTacotron<T>(Architecture, new ForwardTacotronOptions(_options), cloneOptimizer);
-    }
-
     private void ThrowIfDisposed()
     {
         if (_disposed)

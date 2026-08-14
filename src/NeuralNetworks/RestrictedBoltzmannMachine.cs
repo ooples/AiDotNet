@@ -1387,21 +1387,4 @@ public class RestrictedBoltzmannMachine<T> : NeuralNetworkBase<T>
         };
         return activations;
     }
-
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        // Determine which constructor to use based on whether we're using scalar or vector activations
-        if (_vectorActivation != null)
-        {
-            // Use the vector activation constructor
-            return new RestrictedBoltzmannMachine<T>(
-                Architecture, VisibleSize, HiddenSize, Convert.ToDouble(_learningRate), _cdSteps, _vectorActivation, LossFunction);
-        }
-        else
-        {
-            // Use the scalar activation constructor
-            return new RestrictedBoltzmannMachine<T>(
-                Architecture, VisibleSize, HiddenSize, Convert.ToDouble(_learningRate), _cdSteps, _scalarActivation, LossFunction);
-        }
-    }
 }

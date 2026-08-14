@@ -382,13 +382,6 @@ public partial class TFGridNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
             OnnxEncoder = new OnnxModel<T>(p, _options.OnnxOptions);
     }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new TFGridNet<T>(Architecture, mp, _options);
-        return new TFGridNet<T>(Architecture, _options);
-    }
-
     #endregion
 
     #region Private Helpers

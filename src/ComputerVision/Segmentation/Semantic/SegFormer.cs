@@ -680,33 +680,6 @@ public class SegFormer<T> : Common.SemanticSegmentationBase<T>
     }
 
     /// <summary>
-    /// Creates a new SegFormer instance with the same configuration as this one but freshly
-    /// initialized weights.
-    /// </summary>
-    /// <returns>A new <see cref="SegFormer{T}"/> model with the same architecture, model size,
-    /// number of classes, and other settings, but with reinitialized layer weights.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> This creates a "copy" of the model's configuration (same size,
-    /// same number of classes, same input dimensions) but with fresh random weights. It's used
-    /// internally by the framework for operations like cross-validation, where multiple independent
-    /// copies of the same model architecture need to be trained separately. In native mode it
-    /// creates a new trainable model; in ONNX mode it reloads from the same ONNX file.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        if (_useNativeMode)
-        {
-            return new SegFormer<T>(Architecture, _optimizer, LossFunction, _numClasses, _modelSize, _dropRate, _options);
-        }
-        else
-        {
-            return new SegFormer<T>(Architecture, _onnxModelPath ?? throw new InvalidOperationException("ONNX model path not initialized."), _numClasses, _modelSize, _options);
-        }
-    }
-
-    /// <summary>
     /// Releases managed resources held by this SegFormer instance, including the ONNX inference session.
     /// </summary>
     /// <param name="disposing"><c>true</c> when called from <see cref="IDisposable.Dispose"/>;

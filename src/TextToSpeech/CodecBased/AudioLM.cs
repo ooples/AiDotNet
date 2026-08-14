@@ -296,14 +296,6 @@ public class AudioLM<T> : TtsModelBase<T>, ICodecTts<T>
             OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
     }
 
-    /// <inheritdoc />
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new AudioLM<T>(Architecture, mp, new AudioLMOptions(_options));
-        return new AudioLM<T>(Architecture, new AudioLMOptions(_options));
-    }
-
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreateDefaultOptimizer()
         => new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
             this,

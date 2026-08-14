@@ -318,17 +318,6 @@ public partial class FLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLan
             OnnxTextEncoder = new OnnxModel<T>(t2, _options.OnnxOptions);
     }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        if (
-            !_useNativeMode
-            && _options.ImageEncoderModelPath is { } mp
-            && !string.IsNullOrEmpty(mp)
-        )
-            return new FLIP<T>(Architecture, mp, new FLIPOptions(_options));
-        return new FLIP<T>(Architecture, new FLIPOptions(_options));
-    }
-
     private Tensor<T> TokenizeText(string text)
     {
         if (_tokenizer is null)

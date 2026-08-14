@@ -333,17 +333,6 @@ public partial class LiT<T> : VisionLanguageModelBase<T>, IContrastiveVisionLang
             OnnxTextEncoder = new OnnxModel<T>(tp2, _options.OnnxOptions);
     }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        if (
-            !_useNativeMode
-            && _options.ImageEncoderModelPath is { } mp
-            && !string.IsNullOrEmpty(mp)
-        )
-            return new LiT<T>(Architecture, mp, _options);
-        return new LiT<T>(Architecture, _options);
-    }
-
     private Tensor<T> TokenizeText(string text)
     {
         if (_tokenizer is null)

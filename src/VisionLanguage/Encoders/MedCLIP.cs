@@ -304,17 +304,6 @@ public partial class MedCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVision
             OnnxTextEncoder = new OnnxModel<T>(t2, _options.OnnxOptions);
     }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        if (
-            !_useNativeMode
-            && _options.ImageEncoderModelPath is { } mp
-            && !string.IsNullOrEmpty(mp)
-        )
-            return new MedCLIP<T>(Architecture, mp, _options);
-        return new MedCLIP<T>(Architecture, _options);
-    }
-
     private Tensor<T> TokenizeText(string text)
     {
         if (_tokenizer is null)

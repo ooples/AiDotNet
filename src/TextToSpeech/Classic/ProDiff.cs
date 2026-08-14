@@ -325,29 +325,6 @@ public class ProDiff<T> : TtsModelBase<T>, IAcousticModel<T>
             OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
     }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new ProDiff<T>(Architecture, mp, new ProDiffOptions(_options));
-
-        if (_usesDefaultOptimizer)
-            return new ProDiff<T>(Architecture, new ProDiffOptions(_options));
-
-        // Never share mutable optimizer state between the source and clone.
-        // Preserve the built-in Adam/AdamW settings when possible; arbitrary
-        // injected optimizer implementations fall back to ProDiff's public,
-        // paper-aligned options on the new instance.
-        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? cloneOptimizer = _optimizer switch
-        {
-            AdamWOptimizer<T, Tensor<T>, Tensor<T>> when _optimizer.GetOptions() is AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>> options
-                => new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(null, CloneAdamWOptions(options)),
-            AdamOptimizer<T, Tensor<T>, Tensor<T>> when _optimizer.GetOptions() is AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> options
-                => new AdamOptimizer<T, Tensor<T>, Tensor<T>>(null, CloneAdamOptions(options)),
-            _ => null
-        };
-        return new ProDiff<T>(Architecture, new ProDiffOptions(_options), cloneOptimizer);
-    }
-
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreateDefaultOptimizer()
     {
         var scheduler = new NoamSchedule(

@@ -266,28 +266,6 @@ public class SimMTM<T> : TimeSeriesFoundationModelBase<T>
     }
 
     /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        var opts = new SimMTMOptions<T>
-        {
-            ContextLength = _contextLength,
-            ForecastHorizon = _forecastHorizon,
-            PatchLength = _patchLength,
-            HiddenDimension = _hiddenDimension,
-            NumLayers = _numLayers,
-            NumHeads = _numHeads,
-            MaskRatio = _maskRatio,
-            DropoutRate = _dropout,
-            SimilarityTemperature = _similarityTemperature
-        };
-
-        if (!_useNativeMode && OnnxModelPath is not null)
-            return new SimMTM<T>(Architecture, OnnxModelPath, opts);
-
-        return new SimMTM<T>(Architecture, opts);
-    }
-
-    /// <inheritdoc/>
     protected override void SerializeNetworkSpecificData(BinaryWriter writer)
     {
         writer.Write(_contextLength);

@@ -500,14 +500,6 @@ public class ShowO<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<T>
             OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
     }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        var options = new ShowOOptions(_options);
-        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new ShowO<T>(Architecture, mp, options);
-        return new ShowO<T>(Architecture, options);
-    }
-
     private void ThrowIfDisposed()
     {
         if (_disposed)

@@ -596,35 +596,6 @@ public partial class LSTNet<T> : ForecastingModelBase<T>
     }
 
     /// <summary>
-    /// Creates a new instance of this model with the same configuration.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> This creates a fresh copy of the model with the same
-    /// settings but randomly initialized weights. Useful for techniques like
-    /// ensemble learning.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        var options = new LSTNetOptions<T>
-        {
-            LookbackWindow = _lookbackWindow,
-            ForecastHorizon = _forecastHorizon,
-            HiddenRecurrentSize = _hiddenRecurrentSize,
-            HiddenSkipSize = _hiddenSkipSize,
-            ConvolutionFilters = _convolutionFilters,
-            ConvolutionKernelSize = _convolutionKernelSize,
-            SkipPeriod = _skipPeriod,
-            AutoregressiveWindow = _autoregressiveWindow,
-            UseHighway = _useHighway,
-            DropoutRate = _dropout
-        };
-
-        return new LSTNet<T>(Architecture, options);
-    }
-
-    /// <summary>
     /// Writes LSTNet-specific configuration during serialization.
     /// </summary>
     /// <remarks>

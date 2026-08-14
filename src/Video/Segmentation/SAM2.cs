@@ -1459,19 +1459,6 @@ public class SAM2<T> : NeuralNetworkBase<T>
         _ = reader.ReadString(); // onnxModelPath
     }
 
-    /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        if (_useNativeMode)
-        {
-            return new SAM2<T>(Architecture, _optimizer, LossFunction, _modelSize, _memoryBankSize);
-        }
-        else
-        {
-            return new SAM2<T>(Architecture, _onnxModelPath!, _modelSize, _memoryBankSize);
-        }
-    }
-
     #endregion
 }
 

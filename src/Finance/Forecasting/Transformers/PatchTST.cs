@@ -602,43 +602,6 @@ public partial class PatchTST<T> : ForecastingModelBase<T>
     }
 
     /// <summary>
-    /// Creates a new instance of this model with the same configuration.
-    /// </summary>
-    /// <returns>A new PatchTST instance with identical settings.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> This method creates a fresh copy of the model with the same
-    /// architecture and configuration, but with newly initialized parameters.
-    /// </para>
-    /// <para>
-    /// This is useful for:
-    /// <list type="bullet">
-    /// <item>Creating multiple models for ensemble methods</item>
-    /// <item>Implementing cross-validation where you need a fresh model for each fold</item>
-    /// <item>Resetting a model to start training from scratch</item>
-    /// </list>
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        if (UseNativeMode)
-        {
-            return new PatchTST<T>(
-                Architecture, SequenceLength, PredictionHorizon, NumFeatures,
-                _patchSize, _stride, _numLayers, _numHeads, _modelDimension, _feedForwardDimension,
-                _channelIndependent, _useInstanceNormalization, _dropout,
-                _optimizer, LossFunction);
-        }
-        else
-        {
-            return new PatchTST<T>(
-                Architecture, OnnxModelPath ?? string.Empty,
-                SequenceLength, PredictionHorizon, NumFeatures, _patchSize, _stride,
-                _optimizer, LossFunction);
-        }
-    }
-
-    /// <summary>
     /// Writes network-specific configuration data during serialization.
     /// </summary>
     /// <param name="writer">The binary writer to write data to.</param>

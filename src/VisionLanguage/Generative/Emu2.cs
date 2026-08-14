@@ -319,13 +319,6 @@ public partial class Emu2<T> : VisionLanguageModelBase<T>, IGenerativeVisionLang
             OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
     }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new Emu2<T>(Architecture, mp, _options);
-        return new Emu2<T>(Architecture, _options);
-    }
-
     private void ThrowIfDisposed()
     {
         if (_disposed)

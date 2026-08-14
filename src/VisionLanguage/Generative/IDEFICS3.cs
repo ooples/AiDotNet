@@ -320,13 +320,6 @@ public partial class IDEFICS3<T> : VisionLanguageModelBase<T>, IGenerativeVision
             OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
     }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new IDEFICS3<T>(Architecture, mp, _options);
-        return new IDEFICS3<T>(Architecture, _options);
-    }
-
     private void ThrowIfDisposed()
     {
         if (_disposed)

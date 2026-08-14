@@ -530,34 +530,6 @@ public partial class TFT<T> : ForecastingModelBase<T>
     }
 
     /// <summary>
-    /// Creates a new instance of this model with the same configuration.
-    /// </summary>
-    /// <returns>A new TFT model instance.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> This creates a fresh copy of the model with the same settings
-    /// but new (randomly initialized) weights. Useful for ensemble training or cross-validation.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        var options = new TemporalFusionTransformerOptions<T>
-        {
-            LookbackWindow = _sequenceLength,
-            ForecastHorizon = _predictionHorizon,
-            HiddenSize = _hiddenSize,
-            NumAttentionHeads = _numHeads,
-            NumLayers = _numLayers,
-            DropoutRate = _dropout,
-            QuantileLevels = _quantileLevels,
-            UseVariableSelection = _useVariableSelection,
-            StaticCovariateSize = _staticCovariateSize
-        };
-
-        return new TFT<T>(Architecture, options);
-    }
-
-    /// <summary>
     /// Writes TFT-specific configuration during serialization.
     /// </summary>
     /// <param name="writer">Binary writer for output.</param>

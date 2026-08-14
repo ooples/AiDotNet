@@ -285,30 +285,6 @@ public class TimeMAE<T> : TimeSeriesFoundationModelBase<T>
     }
 
     /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        var opts = new TimeMAEOptions<T>
-        {
-            ContextLength = _contextLength,
-            ForecastHorizon = _forecastHorizon,
-            PatchLength = _patchLength,
-            HiddenDimension = _hiddenDimension,
-            NumEncoderLayers = _numEncoderLayers,
-            NumDecoderLayers = _numDecoderLayers,
-            NumHeads = _numHeads,
-            MaskRatio = _maskRatio,
-            DropoutRate = _dropout,
-            LearningRate = _options.LearningRate
-        };
-
-        // Preserve ONNX mode if the original instance was created with an ONNX model
-        if (!_useNativeMode && OnnxModelPath is not null)
-            return new TimeMAE<T>(Architecture, OnnxModelPath, opts);
-
-        return new TimeMAE<T>(Architecture, opts);
-    }
-
-    /// <inheritdoc/>
     protected override void SerializeNetworkSpecificData(BinaryWriter writer)
     {
         writer.Write(_contextLength);

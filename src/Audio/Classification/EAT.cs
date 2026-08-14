@@ -266,13 +266,6 @@ public class EAT<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
         if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxEncoder = new OnnxModel<T>(p, _options.OnnxOptions);
     }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new EAT<T>(Architecture, mp, _options);
-        return new EAT<T>(Architecture, _options);
-    }
-
     #endregion
 
     #region Helpers

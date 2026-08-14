@@ -286,28 +286,6 @@ public partial class RealizedVolatilityTransformer<T> : FinancialModelBase<T>, I
         };
     }
 
-    /// <summary>
-    /// Creates a new instance for cloning.
-    /// </summary>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Used internally to make a full copy of the model.</para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        var options = new RealizedVolatilityTransformerOptions<T>
-        {
-            NumAssets = _numAssets,
-            LookbackWindow = _lookbackWindow,
-            ForecastHorizon = PredictionHorizon,
-            HiddenSize = _hiddenSize,
-            NumHeads = _numHeads,
-            NumLayers = _numLayers,
-            DropoutRate = _dropoutRate
-        };
-
-        return new RealizedVolatilityTransformer<T>(Architecture, options, _optimizer, _lossFunction);
-    }
-
     #endregion
 
     #region IVolatilityModel Implementation

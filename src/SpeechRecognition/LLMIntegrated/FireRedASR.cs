@@ -275,13 +275,6 @@ public class FireRedASR<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
             OnnxEncoder = new OnnxModel<T>(p, _options.OnnxOptions);
     }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new FireRedASR<T>(Architecture, mp, new FireRedASROptions(_options));
-        return new FireRedASR<T>(Architecture, new FireRedASROptions(_options));
-    }
-
     /// <summary>
     /// CTC greedy decode with per-frame softmax confidence tracking.
     /// Returns decoded token IDs and average confidence across non-blank frames.

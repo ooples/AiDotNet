@@ -328,14 +328,6 @@ public partial class BridgeTower<T> : VisionLanguageModelBase<T>, IVisionLanguag
             OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
     }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        var cloneOptions = new BridgeTowerOptions(_options);
-        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new BridgeTower<T>(Architecture, mp, cloneOptions);
-        return new BridgeTower<T>(Architecture, cloneOptions);
-    }
-
     private void ThrowIfDisposed()
     {
         if (_disposed)

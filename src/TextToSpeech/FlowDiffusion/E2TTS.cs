@@ -283,13 +283,6 @@ public class E2TTS<T> : TtsModelBase<T>, ICodecTts<T>
             OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
     }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        if (IsOnnxMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new E2TTS<T>(Architecture, mp, new E2TTSOptions(_options));
-        return new E2TTS<T>(Architecture, new E2TTSOptions(_options));
-    }
-
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreateDefaultOptimizer()
         => new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
             this,

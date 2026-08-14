@@ -74,16 +74,6 @@ public class DiTToTTS<T> : TtsModelBase<T>, IEndToEndTts<T>
     public override ModelMetadata<T> GetModelMetadata() { return new ModelMetadata<T> { Name = _useNativeMode ? "DiTToTTS-Native" : "DiTToTTS-ONNX", Description = "DiTToTTS TTS", FeatureCount = _options.HiddenDim, AdditionalInfo = new Dictionary<string, object> { ["ModelType"] = "DiTToTTS", ["Mode"] = _useNativeMode ? "Native" : "ONNX", ["HiddenDim"] = _options.HiddenDim, ["EncoderDim"] = _options.EncoderDim, ["FlowDim"] = _options.FlowDim, ["DecoderDim"] = _options.DecoderDim, ["NumEncoderLayers"] = _options.NumEncoderLayers, ["NumFlowLayers"] = _options.NumFlowLayers, ["NumHeads"] = _options.NumHeads, ["SampleRate"] = _options.SampleRate, ["MelChannels"] = _options.MelChannels } }; }
     protected override void SerializeNetworkSpecificData(BinaryWriter writer) { writer.Write(_useNativeMode); writer.Write(_options.ModelPath ?? string.Empty); writer.Write(_options.SampleRate); writer.Write(_options.DecoderDim); writer.Write(_options.DropoutRate); writer.Write(_options.EncoderDim); writer.Write(_options.FlowDim); writer.Write(_options.NumEncoderLayers); writer.Write(_options.NumFlowLayers); writer.Write(_options.NumHeads); }
     protected override void DeserializeNetworkSpecificData(BinaryReader reader) { _useNativeMode = reader.ReadBoolean(); string mp = reader.ReadString(); if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp; _options.SampleRate = reader.ReadInt32();  _options.DecoderDim = reader.ReadInt32(); _options.DropoutRate = reader.ReadDouble(); _options.EncoderDim = reader.ReadInt32(); _options.FlowDim = reader.ReadInt32(); _options.NumEncoderLayers = reader.ReadInt32(); _options.NumFlowLayers = reader.ReadInt32(); _options.NumHeads = reader.ReadInt32();  base.SampleRate = _options.SampleRate; base.MelChannels = _options.MelChannels; base.HopSize = _options.HopSize; base.HiddenDim = _options.HiddenDim; if (!_useNativeMode && _options.ModelPath is {} p && !string.IsNullOrEmpty(p)) OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions); }
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new DiTToTTS<T>(Architecture, mp, new DiTToTTSOptions(_options));
-
-        var cloneOptimizer = _optimizer?.GetOptions() is AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>> options
-            ? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(null, new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>(options))
-            : null;
-        return new DiTToTTS<T>(Architecture, new DiTToTTSOptions(_options), cloneOptimizer);
-    }
     private void ThrowIfDisposed() { if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(DiTToTTS<T>)); }
     protected override void Dispose(bool disposing) { if (_disposed) return; _disposed = true; base.Dispose(disposing); }
 }

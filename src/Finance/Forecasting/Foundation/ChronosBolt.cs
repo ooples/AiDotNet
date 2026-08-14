@@ -449,30 +449,6 @@ public partial class ChronosBolt<T> : TimeSeriesFoundationModelBase<T>
     }
 
     /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        var opts = new ChronosBoltOptions<T>
-        {
-            ContextLength = _contextLength,
-            ForecastHorizon = _forecastHorizon,
-            PatchLength = _patchLength,
-            EncoderHiddenDim = _encoderHiddenDim,
-            DecoderHiddenDim = _decoderHiddenDim,
-            NumEncoderLayers = _numEncoderLayers,
-            NumDecoderLayers = _numDecoderLayers,
-            NumHeads = _numHeads,
-            DropoutRate = _dropout,
-            ModelSize = _modelSize,
-            NumQuantiles = _numQuantiles
-        };
-
-        if (!_useNativeMode && OnnxModelPath is not null)
-            return new ChronosBolt<T>(Architecture, OnnxModelPath, opts);
-
-        return new ChronosBolt<T>(Architecture, opts);
-    }
-
-    /// <inheritdoc/>
     protected override void SerializeNetworkSpecificData(BinaryWriter writer)
     {
         writer.Write(_contextLength);

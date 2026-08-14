@@ -336,11 +336,4 @@ public class DDPModel<T, TInput, TOutput> : ShardedModelBase<T, TInput, TOutput>
             Config.CommunicationBackend.Barrier();
         }
     }
-
-    /// <inheritdoc/>
-    public override IFullModel<T, TInput, TOutput> Clone()
-    {
-        var clonedWrappedModel = WrappedModel.Clone();
-        return new DDPModel<T, TInput, TOutput>(clonedWrappedModel, Config);
-    }
 }

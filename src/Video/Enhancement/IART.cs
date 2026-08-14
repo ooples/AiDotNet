@@ -223,14 +223,6 @@ public class IART<T> : VideoSuperResolutionBase<T>
             OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
     }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        var optionsCopy = new IARTOptions(_options);
-        if (!_useNativeMode && optionsCopy.ModelPath is { } path && !string.IsNullOrEmpty(path))
-            return new IART<T>(Architecture, path, optionsCopy);
-        return new IART<T>(Architecture, optionsCopy);
-    }
-
     #endregion
 
     #region Disposal

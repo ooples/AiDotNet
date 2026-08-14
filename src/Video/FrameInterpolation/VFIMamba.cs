@@ -237,14 +237,6 @@ public class VFIMamba<T> : FrameInterpolationBase<T>
         }
     }
 
-    /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
-            return new VFIMamba<T>(Architecture, p, _options);
-        return new VFIMamba<T>(Architecture, _options);
-    }
-
     private void ThrowIfDisposed()
     {
         if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(VFIMamba<T>));

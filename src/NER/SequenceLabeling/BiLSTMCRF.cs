@@ -1108,34 +1108,6 @@ public class BiLSTMCRF<T> : SequenceLabelingNERBase<T>, INERModel<T>
         }
     }
 
-    /// <summary>
-    /// Creates a new, uninitialized instance of this model with the same configuration.
-    /// </summary>
-    /// <returns>A new <see cref="BiLSTMCRF{T}"/> instance with identical options but fresh
-    /// (randomly initialized) weights. Used internally by the framework for model cloning,
-    /// ensemble creation, and cross-validation.</returns>
-    /// <remarks>
-    /// <para>
-    /// The new instance receives a deep copy of the options via the copy constructor to prevent
-    /// mutation leaking between instances. In ONNX mode, the new instance loads the same
-    /// ONNX model file. In native mode, the new instance gets freshly initialized layers via
-    /// <see cref="InitializeLayers"/>.
-    /// </para>
-    /// <para>
-    /// <b>For Beginners:</b> This creates a "twin" of the current model with the same architecture
-    /// and settings, but with fresh random weights (as if it was just created). This is useful for
-    /// training multiple copies of the same model (ensemble learning) or for cross-validation
-    /// experiments where you need identical model architectures with different training data.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        var optionsCopy = new BiLSTMCRFOptions(_options);
-        if (!_useNativeMode && optionsCopy.ModelPath is { } p && !string.IsNullOrEmpty(p))
-            return new BiLSTMCRF<T>(Architecture, p, optionsCopy);
-        return new BiLSTMCRF<T>(Architecture, optionsCopy);
-    }
-
     #endregion
 
     #region Disposal

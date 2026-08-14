@@ -426,14 +426,6 @@ public class HTSAT<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
             OnnxEncoder = new OnnxModel<T>(p, _options.OnnxOptions);
     }
 
-    /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new HTSAT<T>(Architecture, mp, _options);
-        return new HTSAT<T>(Architecture, _options);
-    }
-
     #endregion
 
     #region Private Helpers

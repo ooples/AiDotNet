@@ -281,28 +281,6 @@ public class Kairos<T> : TimeSeriesFoundationModelBase<T>
     }
 
     /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        var opts = new KairosOptions<T>
-        {
-            ContextLength = _contextLength,
-            ForecastHorizon = _forecastHorizon,
-            PatchSizes = (int[])_patchSizes.Clone(),
-            HiddenDimension = _hiddenDimension,
-            NumLayers = _numLayers,
-            NumHeads = _numHeads,
-            IntermediateSize = _intermediateSize,
-            DropoutRate = _dropout,
-            ModelSize = _modelSize
-        };
-
-        if (!_useNativeMode && OnnxModelPath is not null)
-            return new Kairos<T>(Architecture, OnnxModelPath, opts);
-
-        return new Kairos<T>(Architecture, opts);
-    }
-
-    /// <inheritdoc/>
     protected override void SerializeNetworkSpecificData(BinaryWriter writer)
     {
         writer.Write(_contextLength);

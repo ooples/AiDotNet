@@ -34,7 +34,7 @@ public static class CloneEngine
     /// same literal is spelled out in <c>ClonePlanGenerator</c>, which lives in the analyzer assembly
     /// and cannot be referenced from here; changing it there requires changing it here.
     /// </remarks>
-    private const string UseDefault = "=default";
+    internal const string UseDefault = "=default";
 
     /// <summary>
     /// Creates a configuration copy of <paramref name="source"/>.

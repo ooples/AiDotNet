@@ -277,29 +277,6 @@ public class Kronos<T> : TimeSeriesFoundationModelBase<T>
     }
 
     /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        var opts = new KronosOptions<T>
-        {
-            ContextLength = _contextLength,
-            ForecastHorizon = _forecastHorizon,
-            PatchLength = _patchLength,
-            HiddenDimension = _hiddenDimension,
-            NumLayers = _numLayers,
-            NumHeads = _numHeads,
-            IntermediateSize = _intermediateSize,
-            DropoutRate = _dropout,
-            ModelSize = _modelSize,
-            NumCandlestickFeatures = _numCandlestickFeatures
-        };
-
-        if (!_useNativeMode && OnnxModelPath is not null)
-            return new Kronos<T>(Architecture, OnnxModelPath, opts);
-
-        return new Kronos<T>(Architecture, opts);
-    }
-
-    /// <inheritdoc/>
     protected override void SerializeNetworkSpecificData(BinaryWriter writer)
     {
         writer.Write(_contextLength);

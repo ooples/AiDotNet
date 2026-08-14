@@ -1010,43 +1010,6 @@ public class WhisperModel<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
         // Validation would happen here
     }
 
-    /// <summary>
-    /// Creates a new instance of this model for cloning.
-    /// </summary>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        if (_useNativeMode)
-        {
-            return new WhisperModel<T>(
-                Architecture,
-                modelSize: _modelSize,
-                language: _language,
-                translate: _translate,
-                sampleRate: SampleRate,
-                numMels: _numMels,
-                maxAudioLengthSeconds: _maxAudioLengthSeconds,
-                maxTokens: _maxTokens,
-                beamSize: _beamSize,
-                temperature: _temperature);
-        }
-        else
-        {
-            return new WhisperModel<T>(
-                Architecture,
-                encoderPath: _encoderPath!,
-                decoderPath: _decoderPath!,
-                modelSize: _modelSize,
-                language: _language,
-                translate: _translate,
-                sampleRate: SampleRate,
-                numMels: _numMels,
-                maxAudioLengthSeconds: _maxAudioLengthSeconds,
-                maxTokens: _maxTokens,
-                beamSize: _beamSize,
-                temperature: _temperature);
-        }
-    }
-
     #endregion
 
     #region Private Methods

@@ -252,19 +252,5 @@ public class DeepPortfolioManager<T> : PortfolioOptimizerBase<T>
         };
     }
 
-    /// <summary>
-    /// Executes CreateNewInstance for the DeepPortfolioManager.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the DeepPortfolioManager model, CreateNewInstance builds and wires up model components. This sets up the DeepPortfolioManager architecture before use.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        var options = new DeepPortfolioManagerOptions<T> { NumAssets = _numAssets, AllowShortSelling = _allowShortSelling, MaxWeight = _maxWeight };
-        return new DeepPortfolioManager<T>(Architecture, options, _optimizer, LossFunction);
-    }
-
     #endregion
 }

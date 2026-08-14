@@ -99,15 +99,6 @@ public class TemplateNER<T> : TransformerNERBase<T>
     {
     }
 
-    /// <inheritdoc />
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        var optionsCopy = new TransformerNEROptions(NEROptions);
-        if (!UseNativeMode && optionsCopy.ModelPath is { } p && !string.IsNullOrEmpty(p))
-            return new TemplateNER<T>(Architecture, p, optionsCopy);
-        return new TemplateNER<T>(Architecture, optionsCopy);
-    }
-
     /// <summary>
     /// Creates the training defaults used by the Template-NER reference implementation.
     /// </summary>

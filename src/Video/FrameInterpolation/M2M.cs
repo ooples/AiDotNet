@@ -210,13 +210,6 @@ public class M2M<T> : FrameInterpolationBase<T>
             OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
     }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
-            return new M2M<T>(Architecture, p, _options);
-        return new M2M<T>(Architecture, _options);
-    }
-
     #endregion
 
     #region Disposal

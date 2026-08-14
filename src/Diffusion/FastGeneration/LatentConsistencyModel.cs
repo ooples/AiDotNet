@@ -319,26 +319,6 @@ public partial class LatentConsistencyModel<T> : LatentDiffusionModelBase<T>
 
     #region ICloneable Implementation
 
-    /// <inheritdoc />
-    public override IDiffusionModel<T> Clone()
-    {
-        var contextDim = _baseModel switch
-        {
-            "SDXL" => 2048,
-            "SD2.1" => 1024,
-            _ => LCM_CROSS_ATTENTION_DIM
-        };
-
-        return new LatentConsistencyModel<T>(
-            architecture: Architecture,
-            options: Options as DiffusionModelOptions<T>,
-            scheduler: Scheduler,
-            unet: (UNetNoisePredictor<T>)_unet.Clone(),
-            vae: (StandardVAE<T>)_vae.Clone(),
-            conditioner: _conditioner,
-            baseModel: _baseModel);
-    }
-
     #endregion
 
     #region Metadata

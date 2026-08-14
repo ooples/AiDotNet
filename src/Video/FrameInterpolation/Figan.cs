@@ -367,14 +367,6 @@ public partial class Figan<T> : FrameInterpolationBase<T>
             OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
     }
 
-    /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        if (IsOnnxMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new Figan<T>(Architecture, mp, _options);
-        return new Figan<T>(Architecture, _options);
-    }
-
     #endregion
 
     #region Disposal

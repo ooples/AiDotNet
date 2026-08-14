@@ -378,14 +378,6 @@ internal class WavLMSER<T> : AudioClassifierBase<T>, IEmotionRecognizer<T>
         if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxEncoder = new OnnxModel<T>(p, _options.OnnxOptions);
     }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        var copiedOptions = new WavLMSEROptions(_options);
-        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new WavLMSER<T>(Architecture, mp, copiedOptions);
-        return new WavLMSER<T>(Architecture, copiedOptions);
-    }
-
     #endregion
 
     #region Disposal

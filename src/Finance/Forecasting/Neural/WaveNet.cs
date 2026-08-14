@@ -474,32 +474,6 @@ public partial class WaveNet<T> : ForecastingModelBase<T>
     }
 
     /// <summary>
-    /// Creates a new instance of this model with the same configuration.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the WaveNet model, CreateNewInstance builds and wires up model components. This sets up the WaveNet architecture before use.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        var options = new WaveNetOptions<T>
-        {
-            LookbackWindow = _lookbackWindow,
-            ForecastHorizon = _forecastHorizon,
-            ResidualChannels = _residualChannels,
-            SkipChannels = _skipChannels,
-            DilationDepth = _dilationDepth,
-            NumStacks = _numStacks,
-            KernelSize = _kernelSize,
-            UseGatedActivations = _useGatedActivations,
-            DropoutRate = _dropout
-        };
-
-        return new WaveNet<T>(Architecture, options);
-    }
-
-    /// <summary>
     /// Writes WaveNet-specific configuration during serialization.
     /// </summary>
     /// <remarks>

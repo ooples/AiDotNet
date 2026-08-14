@@ -327,13 +327,6 @@ public class Llama32Vision<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM
             OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
     }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new Llama32Vision<T>(Architecture, mp, _options);
-        return new Llama32Vision<T>(Architecture, _options);
-    }
-
     private void ThrowIfDisposed()
     {
         if (_disposed)

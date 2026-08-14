@@ -188,17 +188,5 @@ public class GLALanguageModel<T> : NeuralNetworkBase<T>
         _ = reader.ReadInt32();
     }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        var cloneOptimizer = _optimizer.GetOptions() is AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>> optimizerOptions
-            ? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
-                null,
-                new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>(optimizerOptions))
-            : null;
-        return new GLALanguageModel<T>(
-            Architecture, _vocabSize, _modelDimension, _numLayers, _numHeads,
-            _maxSeqLength, LossFunction, new GLAOptions(_options), cloneOptimizer);
-    }
-
     #endregion
 }

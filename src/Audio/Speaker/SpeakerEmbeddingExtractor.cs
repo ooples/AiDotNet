@@ -614,35 +614,6 @@ public class SpeakerEmbeddingExtractor<T> : SpeakerRecognitionBase<T>, ISpeakerE
         _ = reader.ReadInt32(); // numHeads
     }
 
-    /// <summary>
-    /// Creates a new instance of this model for cloning.
-    /// </summary>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        if (!_useNativeMode && _modelPath is not null)
-        {
-            return new SpeakerEmbeddingExtractor<T>(
-                Architecture,
-                _modelPath,
-                SampleRate,
-                EmbeddingDimension,
-                MinimumDurationSeconds,
-                _options.OnnxOptions);
-        }
-        else
-        {
-            return new SpeakerEmbeddingExtractor<T>(
-                Architecture,
-                SampleRate,
-                EmbeddingDimension,
-                MinimumDurationSeconds,
-                _hiddenDim,
-                _numEncoderLayers,
-                _numHeads,
-                lossFunction: _lossFunction);
-        }
-    }
-
     #endregion
 
     #region Legacy API Support

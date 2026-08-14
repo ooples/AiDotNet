@@ -686,18 +686,6 @@ public class SigLIP2<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguage
         ComputeLayerBoundaries();
     }
 
-    /// <inheritdoc />
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        if (
-            !_useNativeMode
-            && _options.ImageEncoderModelPath is { } mp
-            && !string.IsNullOrEmpty(mp)
-        )
-            return new SigLIP2<T>(Architecture, mp, _options);
-        return new SigLIP2<T>(Architecture, _options);
-    }
-
     #endregion
 
     #region Private Helpers

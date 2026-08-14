@@ -349,14 +349,6 @@ public class Oscar<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionModel<T
                 + (_options.TextDim != _options.FusionDim ? 2 : 0);
     }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        var options = new OscarOptions(_options);
-        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new Oscar<T>(Architecture, mp, options);
-        return new Oscar<T>(Architecture, options);
-    }
-
     private void ThrowIfDisposed()
     {
         if (_disposed)

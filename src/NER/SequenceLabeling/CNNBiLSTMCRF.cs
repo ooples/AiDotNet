@@ -446,17 +446,6 @@ public class CNNBiLSTMCRF<T> : SequenceLabelingNERBase<T>, INERModel<T>
         return modelOutput;
     }
 
-    /// <inheritdoc />
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        var optionsCopy = new CNNBiLSTMCRFOptions(_options);
-
-        if (!_useNativeMode && optionsCopy.ModelPath is { } p && !string.IsNullOrEmpty(p))
-            return new CNNBiLSTMCRF<T>(Architecture, p, optionsCopy);
-
-        return new CNNBiLSTMCRF<T>(Architecture, optionsCopy);
-    }
-
     #endregion
 
     #region Metadata and Serialization

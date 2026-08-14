@@ -497,20 +497,6 @@ public class GLaMM<T> : VisionLanguageModelBase<T>, IVisualGroundingModel<T>
             OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
     }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        var optionsCopy = new GLaMMOptions(_options);
-        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new GLaMM<T>(Architecture, mp, optionsCopy);
-
-        var cloneOptimizer = _optimizer?.GetOptions() is AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>> options
-            ? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
-                null,
-                new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>(options))
-            : null;
-        return new GLaMM<T>(Architecture, optionsCopy, cloneOptimizer);
-    }
-
     private void ThrowIfDisposed()
     {
         if (_disposed)

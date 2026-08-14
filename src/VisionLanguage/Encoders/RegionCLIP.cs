@@ -370,18 +370,6 @@ public partial class RegionCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVis
             OnnxTextEncoder = new OnnxModel<T>(t2, _options.OnnxOptions);
     }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        var options = new RegionCLIPOptions(_options);
-        if (
-            !_useNativeMode
-            && _options.ImageEncoderModelPath is { } mp
-            && !string.IsNullOrEmpty(mp)
-        )
-            return new RegionCLIP<T>(Architecture, mp, options);
-        return new RegionCLIP<T>(Architecture, options);
-    }
-
     private Tensor<T> TokenizeText(string text)
     {
         if (_tokenizer is null)

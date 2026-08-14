@@ -482,19 +482,6 @@ public partial class APNet2<T> : VocoderBase<T>
         RebindBranchLayers();
     }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new APNet2<T>(Architecture, mp, _options);
-
-        // Carry the objective and the optimizer across explicitly. Rebuilding from architecture and
-        // options alone silently re-derives them, so a model trained under a caller-supplied loss
-        // came back as a clone trained under a different one: the more-data invariant trains the
-        // original for a few steps and its CLONE for more, and the clone's parameters were
-        // bit-identical no matter which objective the original had been given.
-        return new APNet2<T>(Architecture, _options, _optimizer, LossFunction);
-    }
-
     private void ThrowIfDisposed()
     {
         if (_disposed)

@@ -526,31 +526,6 @@ public partial class TimeLLM<T> : ForecastingModelBase<T>
         };
     }
 
-    /// <inheritdoc/>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the TimeLLM model, CreateNewInstance builds and wires up model components. This sets up the TimeLLM architecture before use.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        var options = new TimeLLMOptions<T>
-        {
-            ContextLength = _contextLength,
-            ForecastHorizon = _forecastHorizon,
-            PatchLength = _patchLength,
-            PatchStride = _patchStride,
-            LLMDimension = _llmDimension,
-            NumPrototypes = _numPrototypes,
-            NumLayers = _numLayers,
-            NumHeads = _numHeads,
-            DropoutRate = _dropout,
-            LLMBackbone = _llmBackbone
-        };
-
-        return new TimeLLM<T>(Architecture, options, _numFeatures);
-    }
-
     /// <summary>
     /// Writes Time-LLM-specific configuration during serialization.
     /// </summary>

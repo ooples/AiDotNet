@@ -232,24 +232,6 @@ public partial class InvestLM<T> : FinancialNLPModelBase<T>
 
     // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
     // exactly the same enumeration, so this said nothing the base does not already say.
-    /// <summary>
-    /// Executes CreateNewInstance for the InvestLM.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the InvestLM model, CreateNewInstance builds and wires up model components. This sets up the InvestLM architecture before use.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        var options = new ModelOptions.InvestLMOptions<T>
-        {
-            MaxSequenceLength = MaxSequenceLength,
-            VocabularySize = VocabularySize,
-            HiddenDimension = HiddenDimension
-        };
-        return new InvestLM<T>(Architecture, options, _optimizer, LossFunction);
-    }
 
     /// <summary>
     /// Executes SerializeModelSpecificData for the InvestLM.

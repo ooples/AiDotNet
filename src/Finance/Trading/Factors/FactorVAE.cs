@@ -787,36 +787,6 @@ public class FactorVAE<T> : FinancialModelBase<T>, IFactorModel<T>
     }
 
     /// <summary>
-    /// Creates a new instance with the same configuration.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Used by the framework to clone models with identical settings.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        var optionsCopy = new FactorVAEOptions<T>
-        {
-            NumFactors = _numFactors,
-            NumAssets = _numAssets,
-            NumFeatures = _numFeatures,
-            HiddenDimension = _hiddenDimension,
-            LatentDimension = _latentDimension,
-            SequenceLength = _sequenceLength,
-            PredictionHorizon = _predictionHorizon,
-            Beta = _beta,
-            Gamma = _gamma,
-            DropoutRate = _dropoutRate,
-            KlWeight = _options.KlWeight,
-            Seed = _options.Seed,
-            UseAMSGrad = _options.UseAMSGrad
-        };
-
-        return new FactorVAE<T>(Architecture, optionsCopy);
-    }
-
-    /// <summary>
     /// Serializes model-specific data.
     /// </summary>
     /// <param name="writer">Binary writer.</param>

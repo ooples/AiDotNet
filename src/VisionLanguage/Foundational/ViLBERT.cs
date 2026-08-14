@@ -610,13 +610,6 @@ public class ViLBERT<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionModel
             ComputeDualStreamBoundaries();
     }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new ViLBERT<T>(Architecture, mp, new ViLBERTOptions(_options));
-        return new ViLBERT<T>(Architecture, new ViLBERTOptions(_options));
-    }
-
     private void ThrowIfDisposed()
     {
         if (_disposed)

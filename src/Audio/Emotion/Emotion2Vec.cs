@@ -325,13 +325,6 @@ public class Emotion2Vec<T> : AudioClassifierBase<T>, IEmotionRecognizer<T>
         if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxEncoder = new OnnxModel<T>(p, _options.OnnxOptions);
     }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new Emotion2Vec<T>(Architecture, mp, _options);
-        return new Emotion2Vec<T>(Architecture, _options);
-    }
-
     #endregion
 
     #region Disposal

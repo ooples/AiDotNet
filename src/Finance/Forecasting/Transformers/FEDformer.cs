@@ -595,31 +595,6 @@ public partial class FEDformer<T> : ForecastingModelBase<T>
     /// <inheritdoc/>
     /// <remarks>
     /// <para>
-    /// <b>For Beginners:</b> In the FEDformer model, CreateNewInstance builds and wires up model components. This sets up the FEDformer architecture before use.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        if (_useNativeMode)
-        {
-            return new FEDformer<T>(
-                Architecture, _sequenceLength, _predictionHorizon, _numFeatures,
-                _numEncoderLayers, _numDecoderLayers, _numHeads, _modelDimension, _feedForwardDimension,
-                _numModes, _movingAverageKernel, _useInstanceNormalization, _dropout,
-                _optimizer, _lossFunction);
-        }
-        else
-        {
-            return new FEDformer<T>(
-                Architecture, OnnxModelPath ?? string.Empty,
-                _sequenceLength, _predictionHorizon, _numFeatures,
-                _optimizer, _lossFunction);
-        }
-    }
-
-    /// <inheritdoc/>
-    /// <remarks>
-    /// <para>
     /// <b>For Beginners:</b> In the FEDformer model, SerializeNetworkSpecificData saves or restores model-specific settings. This lets the FEDformer architecture be reused later.
     /// </para>
     /// </remarks>

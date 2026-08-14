@@ -206,13 +206,6 @@ public class SwinVFI<T> : FrameInterpolationBase<T>
             OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
     }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
-            return new SwinVFI<T>(Architecture, p, _options);
-        return new SwinVFI<T>(Architecture, _options);
-    }
-
     #endregion
 
     #region Disposal

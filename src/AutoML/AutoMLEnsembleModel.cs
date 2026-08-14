@@ -377,18 +377,6 @@ public sealed partial class AutoMLEnsembleModel<T> : ModelBase<T, Matrix<T>, Vec
         return result;
     }
 
-    public override IFullModel<T, Matrix<T>, Vector<T>> DeepCopy()
-    {
-        var copiedMembers = Members.Select(m => m.DeepCopy()).ToList();
-        return new AutoMLEnsembleModel<T>(copiedMembers, PredictionType, GetSafeNormalizedWeights(copiedMembers.Count));
-    }
-
-    public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
-    {
-        var clonedMembers = Members.Select(m => m.Clone()).ToList();
-        return new AutoMLEnsembleModel<T>(clonedMembers, PredictionType, GetSafeNormalizedWeights(clonedMembers.Count));
-    }
-
     public override Vector<T> ComputeGradients(Matrix<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
     {
         if (Members.Count == 0)

@@ -583,32 +583,6 @@ public partial class Timer<T> : TimeSeriesFoundationModelBase<T>
         };
     }
 
-    /// <inheritdoc/>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the Timer model, CreateNewInstance builds and wires up model components. This sets up the Timer architecture before use.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        var options = new TimerOptions<T>
-        {
-            ContextLength = _contextLength,
-            ForecastHorizon = _forecastHorizon,
-            PatchLength = _patchLength,
-            PatchStride = _patchStride,
-            HiddenDimension = _hiddenDimension,
-            NumLayers = _numLayers,
-            NumHeads = _numHeads,
-            DropoutRate = _dropout,
-            MaskRatio = _maskRatio,
-            UseAutoregressiveDecoding = _useAutoregressiveDecoding,
-            GenerationTemperature = _generationTemperature
-        };
-
-        return new Timer<T>(Architecture, options, _numFeatures);
-    }
-
     /// <summary>
     /// Writes Timer-specific configuration during serialization.
     /// </summary>

@@ -1336,25 +1336,6 @@ public class BEATs<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
         }
     }
 
-    /// <summary>
-    /// Creates a new BEATs instance for the deserialization framework.
-    /// </summary>
-    /// <returns>A new BEATs instance configured with the same architecture and options.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> This is used internally by the serialization system. When loading
-    /// a saved model, the framework first creates a blank instance using this method, then
-    /// fills in the saved weights and configuration. You don't need to call this directly.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        var options = new BEATsOptions(_options);
-        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new BEATs<T>(Architecture, mp, options);
-        return new BEATs<T>(Architecture, options);
-    }
-
     #endregion
 
     #region Classification Helpers

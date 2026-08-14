@@ -647,15 +647,6 @@ public class AST<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
         }
     }
 
-    /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        var options = new ASTOptions(_options);
-        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new AST<T>(Architecture, mp, options);
-        return new AST<T>(Architecture, options);
-    }
-
     #endregion
 
     #region Classification Helpers

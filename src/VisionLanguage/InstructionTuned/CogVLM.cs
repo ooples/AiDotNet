@@ -324,14 +324,6 @@ public class CogVLM<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
             OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
     }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        var cloneOptions = new CogVLMOptions(_options);
-        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new CogVLM<T>(Architecture, mp, cloneOptions);
-        return new CogVLM<T>(Architecture, cloneOptions);
-    }
-
     private void ThrowIfDisposed()
     {
         if (_disposed)

@@ -335,23 +335,9 @@ public class FSDPModel<T, TInput, TOutput> : ShardedModelBase<T, TInput, TOutput
     }
 
     /// <inheritdoc/>
-    public override IFullModel<T, TInput, TOutput> Clone()
-    {
-        var clonedWrappedModel = WrappedModel.Clone();
-        return new FSDPModel<T, TInput, TOutput>(clonedWrappedModel, Config);
-    }
-
-    /// <inheritdoc/>
     public override Dictionary<string, T> GetFeatureImportance()
     {
         return WrappedModel.GetFeatureImportance();
-    }
-
-    /// <inheritdoc/>
-    public override IFullModel<T, TInput, TOutput> DeepCopy()
-    {
-        var deepCopiedWrappedModel = WrappedModel.DeepCopy();
-        return new FSDPModel<T, TInput, TOutput>(deepCopiedWrappedModel, Config);
     }
 
     /// <inheritdoc/>

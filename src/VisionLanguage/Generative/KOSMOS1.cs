@@ -338,13 +338,6 @@ public partial class KOSMOS1<T> : VisionLanguageModelBase<T>, IGenerativeVisionL
             OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
     }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new KOSMOS1<T>(Architecture, mp, _options);
-        return new KOSMOS1<T>(Architecture, _options);
-    }
-
     private void ThrowIfDisposed()
     {
         if (_disposed)

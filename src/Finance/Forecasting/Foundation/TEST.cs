@@ -272,30 +272,6 @@ public class TEST<T> : TimeSeriesFoundationModelBase<T>
     }
 
     /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        var opts = new TESTOptions<T>
-        {
-            ContextLength = _contextLength,
-            ForecastHorizon = _forecastHorizon,
-            PatchLength = _patchLength,
-            HiddenDimension = _hiddenDimension,
-            TextEmbeddingDimension = _textEmbeddingDimension,
-            NumLayers = _numLayers,
-            NumHeads = _numHeads,
-            DropoutRate = _dropout,
-            ModelSize = _modelSize,
-            NumPrototypes = _numPrototypes,
-            AlignmentWeight = _alignmentWeight
-        };
-
-        if (!_useNativeMode && OnnxModelPath is not null)
-            return new TEST<T>(Architecture, OnnxModelPath, opts);
-
-        return new TEST<T>(Architecture, opts);
-    }
-
-    /// <inheritdoc/>
     protected override void SerializeNetworkSpecificData(BinaryWriter writer)
     {
         writer.Write(_contextLength);

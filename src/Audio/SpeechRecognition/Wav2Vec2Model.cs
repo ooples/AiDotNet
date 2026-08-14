@@ -897,36 +897,6 @@ public partial class Wav2Vec2Model<T> : AudioNeuralNetworkBase<T>, ISpeechRecogn
         }
     }
 
-    /// <summary>
-    /// Creates a new instance of this model for cloning.
-    /// </summary>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        if (_useNativeMode)
-        {
-            return new Wav2Vec2Model<T>(
-                Architecture,
-                language: _language,
-                sampleRate: SampleRate,
-                maxAudioLengthSeconds: _maxAudioLengthSeconds,
-                hiddenDim: _hiddenDim,
-                numTransformerLayers: _numTransformerLayers,
-                numHeads: _numHeads,
-                ffDim: _ffDim,
-                vocabulary: _vocabulary);
-        }
-        else
-        {
-            return new Wav2Vec2Model<T>(
-                Architecture,
-                modelPath: _modelPath!,
-                language: _language,
-                sampleRate: SampleRate,
-                maxAudioLengthSeconds: _maxAudioLengthSeconds,
-                vocabulary: _vocabulary);
-        }
-    }
-
     #endregion
 
     #region Private Methods

@@ -215,13 +215,6 @@ public class BasicVSR<T> : VideoSuperResolutionBase<T>
         // discard them and leave the model randomly initialized.
     }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
-            return new BasicVSR<T>(Architecture, p, _options);
-        return new BasicVSR<T>(Architecture, _options);
-    }
-
     #endregion
 
     #region Disposal

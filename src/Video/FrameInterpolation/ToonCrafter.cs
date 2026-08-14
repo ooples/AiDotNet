@@ -232,14 +232,6 @@ public class ToonCrafter<T> : FrameInterpolationBase<T>
         // discard them and leave the model randomly initialized.
     }
 
-    /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
-            return new ToonCrafter<T>(Architecture, p, _options);
-        return new ToonCrafter<T>(Architecture, _options);
-    }
-
     private void ThrowIfDisposed()
     {
         if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(ToonCrafter<T>));

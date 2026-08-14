@@ -312,14 +312,6 @@ public class UniAudio<T> : TtsModelBase<T>, ICodecTts<T>
             OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
     }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        var optionsCopy = new UniAudioOptions(_options);
-        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new UniAudio<T>(Architecture, mp, optionsCopy);
-        return new UniAudio<T>(Architecture, optionsCopy);
-    }
-
     private void ThrowIfDisposed()
     {
         if (_disposed)

@@ -228,13 +228,6 @@ public class StreamDiffVSR<T> : VideoSuperResolutionBase<T>
             OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
     }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
-            return new StreamDiffVSR<T>(Architecture, p, _options);
-        return new StreamDiffVSR<T>(Architecture, _options);
-    }
-
     #endregion
 
     #region Disposal

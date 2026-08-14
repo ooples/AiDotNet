@@ -790,52 +790,6 @@ public class TtsModel<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
         _ = reader.ReadInt32(); // maxPhonemeLength
     }
 
-    /// <summary>
-    /// Creates a new instance of this model for cloning.
-    /// </summary>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        if (!_useNativeMode && _acousticModelPath is not null)
-        {
-            return new TtsModel<T>(
-                Architecture,
-                _acousticModelPath,
-                _vocoderModelPath,
-                SampleRate,
-                NumMels,
-                _speakingRate,
-                _pitchShift,
-                _energy,
-                _speakerId,
-                _language,
-                _useGriffinLimFallback,
-                _griffinLimIterations,
-                _fftSize,
-                _hopLength);
-        }
-        else
-        {
-            return new TtsModel<T>(
-                Architecture,
-                SampleRate,
-                NumMels,
-                _speakingRate,
-                _pitchShift,
-                _energy,
-                _speakerId,
-                _language,
-                _hiddenDim,
-                _numHeads,
-                _numEncoderLayers,
-                _numDecoderLayers,
-                _maxPhonemeLength,
-                _fftSize,
-                _hopLength,
-                _griffinLimIterations,
-                lossFunction: _lossFunction);
-        }
-    }
-
     #endregion
 
     #region Private Methods

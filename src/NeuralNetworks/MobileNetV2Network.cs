@@ -455,23 +455,6 @@ public class MobileNetV2Network<T> : NeuralNetworkBase<T>
     }
 
     /// <inheritdoc />
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        var config = new MobileNetV2Configuration(
-            _configuration.WidthMultiplier,
-            _configuration.NumClasses,
-            _configuration.InputHeight,
-            _configuration.InputWidth,
-            _configuration.InputChannels);
-
-        return new MobileNetV2Network<T>(
-            Architecture,
-            config,
-            lossFunction: _lossFunction,
-            options: new MobileNetV2Options(_options));
-    }
-
-    /// <inheritdoc />
     public override void Deserialize(byte[] data)
     {
         base.Deserialize(data);

@@ -335,13 +335,6 @@ public partial class MPLUGOwl<T> : VisionLanguageModelBase<T>, IInstructionTuned
             OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
     }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new MPLUGOwl<T>(Architecture, mp, _options);
-        return new MPLUGOwl<T>(Architecture, _options);
-    }
-
     private void ThrowIfDisposed()
     {
         if (_disposed)

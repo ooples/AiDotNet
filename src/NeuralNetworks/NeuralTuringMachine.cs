@@ -2361,41 +2361,6 @@ public partial class NeuralTuringMachine<T> : NeuralNetworkBase<T>, IAuxiliaryLo
     }
 
     /// <summary>
-    /// Creates a new instance of the neural turing machine model.
-    /// </summary>
-    /// <returns>A new instance of the neural turing machine model with the same configuration.</returns>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        // Determine which constructor to use based on whether we're using scalar or vector activations
-        if (ContentAddressingVectorActivation != null || GateVectorActivation != null || OutputVectorActivation != null)
-        {
-            // Use the vector activation constructor
-            return new NeuralTuringMachine<T>(
-                Architecture,
-                _memorySize,
-                _memoryVectorSize,
-                _controllerSize,
-                LossFunction,
-                ContentAddressingVectorActivation,
-                GateVectorActivation,
-                OutputVectorActivation);
-        }
-        else
-        {
-            // Use the scalar activation constructor
-            return new NeuralTuringMachine<T>(
-                Architecture,
-                _memorySize,
-                _memoryVectorSize,
-                _controllerSize,
-                LossFunction,
-                ContentAddressingActivation,
-                GateActivation,
-                OutputActivation);
-        }
-    }
-
-    /// <summary>
     /// Resets the internal state of the neural network.
     /// </summary>
     /// <remarks>

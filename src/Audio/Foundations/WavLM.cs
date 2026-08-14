@@ -255,13 +255,6 @@ public class WavLM<T> : AudioNeuralNetworkBase<T>, IAudioFoundationModel<T>
         base.SampleRate = _options.SampleRate;
     }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new WavLM<T>(Architecture, mp, _options);
-        return new WavLM<T>(Architecture, _options);
-    }
-
     #endregion
 
     #region Disposal

@@ -130,15 +130,6 @@ public class BiaffineNER<T> : SpanBasedNERBase<T>
             embeddingsDropout: BiaffineOptions.EmbeddingsDropout);
     }
 
-    /// <inheritdoc />
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        var optionsCopy = new SpanBasedNEROptions(NEROptions);
-        if (!UseNativeMode && optionsCopy.ModelPath is { } p && !string.IsNullOrEmpty(p))
-            return new BiaffineNER<T>(Architecture, p, optionsCopy);
-        return new BiaffineNER<T>(Architecture, optionsCopy);
-    }
-
     /// <summary>
     /// Builds span-level supervision: one label per candidate (start, end) pair.
     /// </summary>

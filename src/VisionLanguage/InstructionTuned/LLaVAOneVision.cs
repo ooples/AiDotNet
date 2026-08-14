@@ -316,13 +316,6 @@ public class LLaVAOneVision<T> : VisionLanguageModelBase<T>, IInstructionTunedVL
             OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
     }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new LLaVAOneVision<T>(Architecture, mp, _options);
-        return new LLaVAOneVision<T>(Architecture, _options);
-    }
-
     private void ThrowIfDisposed()
     {
         if (_disposed)

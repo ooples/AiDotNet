@@ -345,13 +345,6 @@ public class XTTSv2Clone<T> : TtsModelBase<T>, ICodecTts<T>, IVoiceCloner<T>
             OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
     }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new XTTSv2Clone<T>(Architecture, mp, new XTTSv2CloneOptions(_options));
-        return new XTTSv2Clone<T>(Architecture, new XTTSv2CloneOptions(_options));
-    }
-
     private AdamWOptimizer<T, Tensor<T>, Tensor<T>> CreateDefaultOptimizer() =>
         new(
             this,

@@ -605,35 +605,6 @@ public partial class TimesNet<T> : ForecastingModelBase<T>
     }
 
     /// <summary>
-    /// Creates a new instance of this model with the same configuration.
-    /// </summary>
-    /// <returns>A new TimesNet model instance.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> This creates a fresh copy of the model with the same settings
-    /// but new (randomly initialized) weights. Useful for ensemble training or cross-validation.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        var options = new TimesNetOptions<T>
-        {
-            SequenceLength = _sequenceLength,
-            PredictionHorizon = _predictionHorizon,
-            NumFeatures = _numFeatures,
-            ModelDimension = _modelDimension,
-            FeedForwardDimension = _feedForwardDimension,
-            NumLayers = _numLayers,
-            TopK = _topK,
-            ConvKernelSize = _convKernelSize,
-            Dropout = _dropout,
-            UseInstanceNormalization = _useInstanceNormalization
-        };
-
-        return new TimesNet<T>(Architecture, options);
-    }
-
-    /// <summary>
     /// Writes TimesNet-specific configuration during serialization.
     /// </summary>
     /// <param name="writer">Binary writer for output.</param>

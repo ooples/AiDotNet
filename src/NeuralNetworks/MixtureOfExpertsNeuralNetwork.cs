@@ -556,30 +556,6 @@ public partial class MixtureOfExpertsNeuralNetwork<T> : NeuralNetworkBase<T>
         return copy;
     }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        // Create a clone of the options to ensure the new instance has independent configuration
-        var clonedOptions = new MixtureOfExpertsOptions<T>
-        {
-            NumExperts = _options.NumExperts,
-            TopK = _options.TopK,
-            InputDim = _options.InputDim,
-            OutputDim = _options.OutputDim,
-            HiddenExpansion = _options.HiddenExpansion,
-            UseLoadBalancing = _options.UseLoadBalancing,
-            LoadBalancingWeight = _options.LoadBalancingWeight,
-            RandomSeed = _options.RandomSeed
-        };
-
-        // Pass null for optimizer to create a fresh optimizer instance for the clone
-        return new MixtureOfExpertsNeuralNetwork<T>(
-            clonedOptions,
-            Architecture,
-            null,  // Let constructor create new optimizer
-            _lossFunction,
-            Convert.ToDouble(MaxGradNorm));
-    }
-
     /// <summary>
     /// Indicates whether this network supports training.
     /// </summary>

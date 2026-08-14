@@ -112,14 +112,4 @@ public class AdaptedMetaModel<T, TInput, TOutput> : MetaLearningModelBase<T, TIn
     {
         return new AdaptedMetaModel<T, TInput, TOutput>(BaseModel, parameters, _supportFeatures, _modulationFactors);
     }
-
-    /// <inheritdoc/>
-    public override IFullModel<T, TInput, TOutput> DeepCopy()
-    {
-        var clonedModel = BaseModel.DeepCopy();
-        var clonedParams = _adaptedParams.Clone();
-        var clonedFeatures = _supportFeatures?.Clone();
-        var clonedModulation = _modulationFactors is not null ? (double[])_modulationFactors.Clone() : null;
-        return new AdaptedMetaModel<T, TInput, TOutput>(clonedModel, clonedParams, clonedFeatures, clonedModulation);
-    }
 }

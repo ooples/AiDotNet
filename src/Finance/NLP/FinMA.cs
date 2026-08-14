@@ -189,25 +189,6 @@ public partial class FinMA<T> : FinancialNLPModelBase<T>
 
     // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
     // exactly the same enumeration, so this said nothing the base does not already say.
-    /// <summary>
-    /// Executes CreateNewInstance for the FinMA.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the FinMA model, CreateNewInstance builds and wires up model components. This sets up the FinMA architecture before use.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        var options = new ModelOptions.FinMAOptions<T>
-        {
-            MaxSequenceLength = MaxSequenceLength,
-            NumAgents = _numAgents,
-            VocabularySize = VocabularySize,
-            HiddenDimension = HiddenDimension
-        };
-        return new FinMA<T>(Architecture, options, _optimizer, LossFunction);
-    }
 
     /// <summary>
     /// Executes SerializeModelSpecificData for the FinMA.

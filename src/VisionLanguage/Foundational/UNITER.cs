@@ -358,13 +358,6 @@ public class UNITER<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionModel<
                 + (_options.TextDim != _options.FusionDim ? 2 : 0);
     }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new UNITER<T>(Architecture, mp, _options);
-        return new UNITER<T>(Architecture, _options);
-    }
-
     private void ThrowIfDisposed()
     {
         if (_disposed)

@@ -275,14 +275,6 @@ public class AdaSpeech2<T> : TtsModelBase<T>, IAcousticModel<T>
             OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
     }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        var options = new AdaSpeech2Options(_options);
-        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new AdaSpeech2<T>(Architecture, mp, options);
-        return new AdaSpeech2<T>(Architecture, options);
-    }
-
     private void ThrowIfDisposed()
     {
         if (_disposed)

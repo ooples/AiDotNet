@@ -1080,53 +1080,6 @@ public partial class Tacotron2Model<T> : AudioNeuralNetworkBase<T>, ITextToSpeec
             BindNativeLayersFromPublishedList();
     }
 
-    /// <summary>
-    /// Creates a new instance of this model for cloning.
-    /// </summary>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        if (!_useNativeMode && _acousticModelPath is not null)
-        {
-            return new Tacotron2Model<T>(
-                Architecture,
-                _acousticModelPath,
-                _vocoderPath,
-                SampleRate,
-                NumMels,
-                _speakingRate,
-                _maxDecoderSteps,
-                _stopThreshold,
-                _fftSize,
-                _hopLength,
-                _griffinLimIterations);
-        }
-        else
-        {
-            return new Tacotron2Model<T>(
-                Architecture,
-                SampleRate,
-                NumMels,
-                _speakingRate,
-                _vocabSize,
-                _embeddingDim,
-                _encoderDim,
-                _decoderDim,
-                _attentionDim,
-                _attentionFilters,
-                _prenetDim,
-                _postnetEmbeddingDim,
-                _numEncoderConvLayers,
-                _numPostnetConvLayers,
-                _numMelsPerFrame,
-                _maxDecoderSteps,
-                _stopThreshold,
-                _fftSize,
-                _hopLength,
-                _griffinLimIterations,
-                lossFunction: _lossFunction);
-        }
-    }
-
     #endregion
 
     #region Private Methods

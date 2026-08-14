@@ -432,13 +432,6 @@ public class GPT4Point<T> : VisionLanguageModelBase<T>, IThreeDVisionLanguageMod
             OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
     }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new GPT4Point<T>(Architecture, mp, _options);
-        return new GPT4Point<T>(Architecture, _options);
-    }
-
     private void ThrowIfDisposed()
     {
         if (_disposed)

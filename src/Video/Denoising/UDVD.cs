@@ -208,15 +208,6 @@ public class UDVD<T> : VideoDenoisingBase<T>
         _options.DropoutRate = reader.ReadDouble();
     }
 
-    /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        var copiedOptions = new UDVDOptions(_options);
-        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
-            return new UDVD<T>(Architecture, p, copiedOptions);
-        return new UDVD<T>(Architecture, copiedOptions);
-    }
-
     private void ThrowIfDisposed()
     {
         if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(UDVD<T>));

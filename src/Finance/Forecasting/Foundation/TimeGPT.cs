@@ -493,31 +493,6 @@ public partial class TimeGPT<T> : ForecastingModelBase<T>
         };
     }
 
-    /// <inheritdoc/>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the TimeGPT model, CreateNewInstance builds and wires up model components. This sets up the TimeGPT architecture before use.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        var options = new TimeGPTOptions<T>
-        {
-            ContextLength = _contextLength,
-            ForecastHorizon = _forecastHorizon,
-            HiddenDimension = _hiddenDimension,
-            NumLayers = _numLayers,
-            NumHeads = _numHeads,
-            DropoutRate = _dropout,
-            UseConformalPrediction = _useConformalPrediction,
-            ConfidenceLevel = _confidenceLevel,
-            FineTuningSteps = _fineTuningSteps,
-            FineTuningLearningRate = _fineTuningLearningRate
-        };
-
-        return new TimeGPT<T>(Architecture, options, _numFeatures);
-    }
-
     /// <summary>
     /// Writes TimeGPT-specific configuration during serialization.
     /// </summary>

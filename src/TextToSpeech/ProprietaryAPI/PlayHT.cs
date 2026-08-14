@@ -231,13 +231,6 @@ public class PlayHT<T> : TtsModelBase<T>, IEndToEndTts<T>
             OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
     }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        if (IsOnnxMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new PlayHT<T>(Architecture, mp, _options);
-        return new PlayHT<T>(Architecture, _options, _optimizer);
-    }
-
     private void ThrowIfDisposed()
     {
         if (_disposed)

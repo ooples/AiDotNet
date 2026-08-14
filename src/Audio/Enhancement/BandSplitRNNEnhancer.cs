@@ -295,14 +295,6 @@ public partial class BandSplitRNNEnhancer<T> : AudioNeuralNetworkBase<T>, IAudio
         if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxEncoder = new OnnxModel<T>(p, _options.OnnxOptions);
     }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        var cloneOptions = new BandSplitRNNEnhancerOptions(_options);
-        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new BandSplitRNNEnhancer<T>(Architecture, mp, cloneOptions);
-        return new BandSplitRNNEnhancer<T>(Architecture, cloneOptions);
-    }
-
     #endregion
 
     #region Disposal

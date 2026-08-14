@@ -957,19 +957,6 @@ public class VideoMAE<T> : NeuralNetworkBase<T>
         }
     }
 
-    /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        if (_useNativeMode)
-        {
-            return new VideoMAE<T>(Architecture, _optimizer, LossFunction, _numClasses, _numFrames, _numFeatures, _maskRatio);
-        }
-        else
-        {
-            return new VideoMAE<T>(Architecture, _onnxModelPath!, _numClasses, _numFrames);
-        }
-    }
-
     #endregion
 
     #region IDisposable

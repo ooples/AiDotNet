@@ -234,13 +234,6 @@ public class ABME<T> : FrameInterpolationBase<T>
         // discard them and leave the model randomly initialized.
     }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
-            return new ABME<T>(Architecture, p, _options);
-        return new ABME<T>(Architecture, _options);
-    }
-
     #endregion
 
     #region Disposal

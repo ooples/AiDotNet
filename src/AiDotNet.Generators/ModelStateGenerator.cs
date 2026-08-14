@@ -109,7 +109,13 @@ public class ModelStateGenerator : IIncrementalGenerator
                 continue;
             }
 
-            var call = DeclareCall(member.Name, memberType, numeric,
+            // Keyed by DECLARING TYPE and member, not by member alone. A name is unique within one
+            // class and nothing more: VectorAutoRegressionModel and VARMAModel each keep a private
+            // Matrix<T> _residuals, which is ordinary C# and means the derived model's generated
+            // registration met the base's under the same key and threw "State '_residuals' is
+            // already declared". Every model with a field that shares a name with one further up its
+            // own hierarchy had the same fault waiting in it.
+            var call = DeclareCall(member.Name, $"{type.Name}.{member.Name}", memberType, numeric,
                 nullableTarget: memberType.NullableAnnotation == NullableAnnotation.Annotated
                     || memberType.IsValueType);
 
@@ -183,7 +189,8 @@ public class ModelStateGenerator : IIncrementalGenerator
     /// reaches this point and has no mapping is a container the registry has not learned yet, and the
     /// model keeps its own declaration until it does.
     /// </remarks>
-    private static string? DeclareCall(string name, ITypeSymbol memberType, string numeric, bool nullableTarget)
+    private static string? DeclareCall(
+        string name, string id, ITypeSymbol memberType, string numeric, bool nullableTarget)
     {
         // Namespaces stripped before matching. The display string is fully qualified, so
         // List<AiDotNet.Tensors.LinearAlgebra.Vector<T>> does not end with "List<Vector<T>>" and a
@@ -204,23 +211,23 @@ public class ModelStateGenerator : IIncrementalGenerator
 
         return key switch
         {
-            var k when k.EndsWith(".Vector<T>") || k == "Vector<T>" => $"state.Declare(\"{name}\", {getter}, {setter});",
-            var k when k.EndsWith(".Matrix<T>") || k == "Matrix<T>" => $"state.Declare(\"{name}\", {getter}, {setter});",
-            var k when k.EndsWith(".Tensor<T>") || k == "Tensor<T>" => $"state.Declare(\"{name}\", {getter}, {setter});",
-            "List<Vector<T>>" => $"state.Declare(\"{name}\", {getter}, {setter});",
-            "List<Matrix<T>>" => $"state.Declare(\"{name}\", {getter}, {setter});",
-            "Matrix<T>[]" => $"state.Declare(\"{name}\", {getter}, {setter});",
-            "Vector<int>" => $"state.Declare(\"{name}\", {getter}, {setter});",
-            "Dictionary<int, Vector<T>>" => $"state.Declare(\"{name}\", {getter}, {setter});",
-            "Vector<T>[]" => $"state.Declare(\"{name}\", {getter}, {setter});",
-            "int[]" => $"state.Declare(\"{name}\", {getter}, {setter});",
-            "double[]" => $"state.Declare(\"{name}\", {getter}, {setter});",
-            "T[]" => $"state.DeclareArray(\"{name}\", {getter}, {setter});",
-            "int" => $"state.DeclareInt32(\"{name}\", {getter}, {setter});",
-            "double" => $"state.DeclareDouble(\"{name}\", {getter}, {setter});",
-            "bool" => $"state.DeclareBoolean(\"{name}\", {getter}, {setter});",
-            "string" => $"state.DeclareString(\"{name}\", {getter}, {setter});",
-            "T" => $"state.DeclareScalar(\"{name}\", {getter}, {setter});",
+            var k when k.EndsWith(".Vector<T>") || k == "Vector<T>" => $"state.Declare(\"{id}\", {getter}, {setter});",
+            var k when k.EndsWith(".Matrix<T>") || k == "Matrix<T>" => $"state.Declare(\"{id}\", {getter}, {setter});",
+            var k when k.EndsWith(".Tensor<T>") || k == "Tensor<T>" => $"state.Declare(\"{id}\", {getter}, {setter});",
+            "List<Vector<T>>" => $"state.Declare(\"{id}\", {getter}, {setter});",
+            "List<Matrix<T>>" => $"state.Declare(\"{id}\", {getter}, {setter});",
+            "Matrix<T>[]" => $"state.Declare(\"{id}\", {getter}, {setter});",
+            "Vector<int>" => $"state.Declare(\"{id}\", {getter}, {setter});",
+            "Dictionary<int, Vector<T>>" => $"state.Declare(\"{id}\", {getter}, {setter});",
+            "Vector<T>[]" => $"state.Declare(\"{id}\", {getter}, {setter});",
+            "int[]" => $"state.Declare(\"{id}\", {getter}, {setter});",
+            "double[]" => $"state.Declare(\"{id}\", {getter}, {setter});",
+            "T[]" => $"state.DeclareArray(\"{id}\", {getter}, {setter});",
+            "int" => $"state.DeclareInt32(\"{id}\", {getter}, {setter});",
+            "double" => $"state.DeclareDouble(\"{id}\", {getter}, {setter});",
+            "bool" => $"state.DeclareBoolean(\"{id}\", {getter}, {setter});",
+            "string" => $"state.DeclareString(\"{id}\", {getter}, {setter});",
+            "T" => $"state.DeclareScalar(\"{id}\", {getter}, {setter});",
 
             // A nested model carries its own state through its own Serialize, so the parent only has
             // to say that it is there. Restored IN PLACE, because the parent builds it and what
@@ -228,16 +235,16 @@ public class ModelStateGenerator : IIncrementalGenerator
             // A parameter source keeps its state in a vector rather than a payload.
             _ when memberType.AllInterfaces.Any(i => i.Name == "IParameterSource")
                    && !IsSerializableModel(memberType) =>
-                $"state.DeclareParameterSource(\"{name}\", {getter});",
+                $"state.DeclareParameterSource(\"{id}\", {getter});",
 
             _ when IsSerializableModel(memberType) =>
-                $"state.DeclareChild<{memberType.ToDisplayString().TrimEnd('?')}>(\"{name}\", {getter});",
+                $"state.DeclareChild<{memberType.ToDisplayString().TrimEnd('?')}>(\"{id}\", {getter});",
 
             // A list of nested models -- an agent's per-actor target networks, a mixer's per-agent
             // heads. Same rule as a single child: each carries its own state, restored in place.
             _ when memberType is INamedTypeSymbol { Name: "List", TypeArguments.Length: 1 } list
                    && IsSerializableModel(list.TypeArguments[0]) =>
-                $"state.DeclareChildList<{list.TypeArguments[0].ToDisplayString().TrimEnd('?')}>(\"{name}\", {getter});",
+                $"state.DeclareChildList<{list.TypeArguments[0].ToDisplayString().TrimEnd('?')}>(\"{id}\", {getter});",
 
             _ => null,
         };

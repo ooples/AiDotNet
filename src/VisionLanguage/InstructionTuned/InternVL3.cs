@@ -348,13 +348,6 @@ public class InternVL3<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
             OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
     }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new InternVL3<T>(Architecture, mp, new InternVL3Options(_options));
-        return new InternVL3<T>(Architecture, new InternVL3Options(_options));
-    }
-
     private void ThrowIfDisposed()
     {
         if (_disposed)

@@ -307,13 +307,6 @@ public class ViLT<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionModel<T>
                 + (_options.TextDim != _options.FusionDim ? 2 : 0);
     }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new ViLT<T>(Architecture, mp, _options);
-        return new ViLT<T>(Architecture, _options);
-    }
-
     private void ThrowIfDisposed()
     {
         if (_disposed)

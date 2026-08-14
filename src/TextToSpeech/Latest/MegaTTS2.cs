@@ -260,13 +260,6 @@ public class MegaTTS2<T> : TtsModelBase<T>, IEndToEndTts<T>
             _optimizer = CreateDefaultOptimizer();
     }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new MegaTTS2<T>(Architecture, mp, new MegaTTS2Options(_options));
-        return new MegaTTS2<T>(Architecture, new MegaTTS2Options(_options));
-    }
-
     private void ThrowIfDisposed()
     {
         if (_disposed)

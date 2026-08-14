@@ -436,18 +436,6 @@ public partial class OpenCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisio
             OnnxTextEncoder = new OnnxModel<T>(tp2, _options.OnnxOptions);
     }
 
-    /// <inheritdoc />
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        if (
-            !_useNativeMode
-            && _options.ImageEncoderModelPath is { } mp
-            && !string.IsNullOrEmpty(mp)
-        )
-            return new OpenCLIP<T>(Architecture, mp, new OpenCLIPOptions(_options));
-        return new OpenCLIP<T>(Architecture, new OpenCLIPOptions(_options));
-    }
-
     #endregion
 
     #region Private Helpers

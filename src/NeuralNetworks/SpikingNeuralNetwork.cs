@@ -1545,61 +1545,6 @@ public partial class SpikingNeuralNetwork<T> : NeuralNetworkBase<T>
     }
 
     /// <summary>
-    /// Creates a new instance of the Spiking Neural Network with the same architecture and configuration.
-    /// </summary>
-    /// <returns>A new instance of the Spiking Neural Network with the same configuration as the current instance.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method creates a new spiking neural network with the same architecture, temporal parameters,
-    /// and activation function type as the current instance. The new instance has freshly initialized
-    /// parameters and state, making it useful for creating separate instances with the same configuration
-    /// or for resetting the network while preserving its structure.
-    /// </para>
-    /// <para><b>For Beginners:</b> This creates a brand new spiking neural network with the same setup.
-    /// 
-    /// Think of it like cloning your network's blueprint:
-    /// - It has the same structure (layers, neurons)
-    /// - It has the same temporal settings (time step, simulation steps)
-    /// - It uses the same type of activation function
-    /// - But it starts fresh with new connections and neuron states
-    /// 
-    /// This is useful when you want to:
-    /// - Start over with a fresh network but keep the same design
-    /// - Create multiple networks with identical settings for comparison
-    /// - Reset a network to its initial state
-    /// 
-    /// The new network will need to be trained from scratch, as it doesn't
-    /// inherit any of the learned weights from the original network.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        // Determine which constructor to use based on which activation function is set
-        if (_vectorActivation != null)
-        {
-            // Use the vector activation constructor
-            return new SpikingNeuralNetwork<T>(
-                Architecture,
-                NumOps.ToDouble(_timeStep),
-                _simulationSteps,
-                _vectorActivation,
-                LossFunction,
-                _options);
-        }
-        else
-        {
-            // Use the scalar activation constructor
-            return new SpikingNeuralNetwork<T>(
-                Architecture,
-                NumOps.ToDouble(_timeStep),
-                _simulationSteps,
-                _scalarActivation,
-                LossFunction,
-                _options);
-        }
-    }
-
-    /// <summary>
     /// Safe-indexed first-axis read for lazy layers that may return an
     /// empty shape array before resolution. Returns 0 (so the caller's
     /// fallback path takes over) instead of throwing IndexOutOfRangeException.

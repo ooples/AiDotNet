@@ -478,34 +478,6 @@ public partial class Crossformer<T> : ForecastingModelBase<T>
     }
 
     /// <summary>
-    /// Creates a new instance of this model with the same configuration.
-    /// </summary>
-    /// <returns>A new Crossformer model instance.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> This creates a fresh copy of the model with the same settings
-    /// but new (randomly initialized) weights. Useful for ensemble training or cross-validation.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        var options = new CrossformerOptions<T>
-        {
-            SequenceLength = _sequenceLength,
-            PredictionHorizon = _predictionHorizon,
-            NumFeatures = _numFeatures,
-            SegmentLength = _segmentLength,
-            ModelDimension = _modelDimension,
-            NumHeads = _numHeads,
-            NumLayers = _numLayers,
-            Dropout = _dropout,
-            UseInstanceNormalization = _useInstanceNormalization
-        };
-
-        return new Crossformer<T>(Architecture, options);
-    }
-
-    /// <summary>
     /// Writes Crossformer-specific configuration during serialization.
     /// </summary>
     /// <param name="writer">Binary writer for output.</param>

@@ -288,13 +288,6 @@ public class PeakNetFP<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
         _melSpectrogram = new MelSpectrogram<T>(_options.SampleRate, _options.NumMels, _options.FftSize, _options.HopLength);
     }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new PeakNetFP<T>(Architecture, mp, _options);
-        return new PeakNetFP<T>(Architecture, _options);
-    }
-
     #endregion
 
     #region Disposal

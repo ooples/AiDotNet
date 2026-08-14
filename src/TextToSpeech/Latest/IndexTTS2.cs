@@ -277,19 +277,6 @@ public class IndexTTS2<T> : TtsModelBase<T>, ICodecTts<T>
         }
     }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new IndexTTS2<T>(Architecture, mp, new IndexTTS2Options(_options));
-
-        var cloneOptimizer = _optimizer?.GetOptions() is AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>> optimizerOptions
-            ? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
-                null,
-                new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>(optimizerOptions))
-            : null;
-        return new IndexTTS2<T>(Architecture, new IndexTTS2Options(_options), cloneOptimizer);
-    }
-
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreateDefaultOptimizer()
         => new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
             this,

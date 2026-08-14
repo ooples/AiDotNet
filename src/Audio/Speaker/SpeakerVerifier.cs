@@ -558,34 +558,6 @@ public partial class SpeakerVerifier<T> : SpeakerRecognitionBase<T>, ISpeakerVer
         _embeddingExtractor.Layers.AddRange(Layers);
     }
 
-    /// <summary>
-    /// Creates a new instance of this model for cloning.
-    /// </summary>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        if (!_useNativeMode && _embeddingModelPath is not null)
-        {
-            return new SpeakerVerifier<T>(
-                Architecture,
-                _embeddingModelPath,
-                SampleRate,
-                EmbeddingDimension,
-                NumOps.ToDouble(DefaultThreshold));
-        }
-        else
-        {
-            return new SpeakerVerifier<T>(
-                Architecture,
-                SampleRate,
-                EmbeddingDimension,
-                NumOps.ToDouble(DefaultThreshold),
-                _hiddenDim,
-                _numEncoderLayers,
-                _numHeads,
-                lossFunction: _lossFunction);
-        }
-    }
-
     #endregion
 
     #region Legacy API Support

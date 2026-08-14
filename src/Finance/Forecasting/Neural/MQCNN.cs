@@ -741,32 +741,6 @@ public partial class MQCNN<T> : ForecastingModelBase<T>
     }
 
     /// <summary>
-    /// Creates a new instance of this model with the same configuration.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Creates a fresh copy of the model architecture,
-    /// useful for ensemble methods or hyperparameter search.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        var options = new MQCNNOptions<T>
-        {
-            LookbackWindow = _lookbackWindow,
-            ForecastHorizon = _forecastHorizon,
-            Quantiles = _quantiles,
-            EncoderChannels = _encoderChannels,
-            DecoderChannels = _decoderChannels,
-            NumEncoderLayers = _numEncoderLayers,
-            NumDecoderLayers = _numDecoderLayers,
-            DropoutRate = _dropout
-        };
-
-        return new MQCNN<T>(Architecture, options);
-    }
-
-    /// <summary>
     /// Writes MQCNN-specific configuration during serialization.
     /// </summary>
     /// <remarks>

@@ -251,7 +251,201 @@ public static class CloneRegistry
         }
 
         entries.Reverse();
-        return new ClonePlan(type, entries);
+        return new ClonePlan(
+            type,
+            entries,
+            constructorParameters: null,
+            constructorCandidates: BuildConstructorCandidates(type));
+    }
+
+    /// <summary>
+    /// Derives the constructors a type can be rebuilt through, for a type the generator never saw.
+    /// </summary>
+    /// <param name="type">The type to plan for.</param>
+    /// <returns>The candidates, widest first, or <see langword="null"/> when none were derived.</returns>
+    /// <remarks>
+    /// <para>
+    /// A reflected plan used to carry properties and nothing else, so <c>CloneEngine.Construct</c>
+    /// found no candidate and fell through to demanding a parameterless constructor. That made a
+    /// model the generator cannot see -- one declared in a consumer's own assembly, or a distribution
+    /// the generator skips -- cloneable only if it happened to have one, which is precisely the
+    /// "write your own model and everything generic just works" promise failing at the assembly
+    /// boundary. <c>GammaDistribution</c> and a test's own network subclass both died on it, with an
+    /// error telling the author to store constructor arguments in members they had already stored
+    /// them in.
+    /// </para>
+    /// <para>
+    /// Only derived when there is NO parameterless constructor. Where one exists, allocate-and-assign
+    /// is the path that has always run and the one every options object and layer relies on; taking a
+    /// derived constructor instead would re-route thousands of working clones through new code to fix
+    /// a case that is not broken. This fills the hole and touches nothing else.
+    /// </para>
+    /// <para>
+    /// The rule is the generator's rule, applied at runtime: a parameter is supplied when a property
+    /// or field holds it -- matched by name, by name with a leading underscore, or by the suffix rule
+    /// that lets <c>_bayesOptions</c> supply <c>options</c> -- and its type fits. A parameter nothing
+    /// supplies falls back to its own declared default, and a REQUIRED parameter nothing supplies
+    /// disqualifies that constructor rather than being handed null.
+    /// </para>
+    /// </remarks>
+    private static IReadOnlyList<IReadOnlyList<string>>? BuildConstructorCandidates(Type type)
+    {
+        const BindingFlags Flags =
+            BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance;
+
+        var parameterless = type.GetConstructor(Flags, binder: null, Type.EmptyTypes, modifiers: null);
+        if (parameterless is not null) return null;
+
+        var candidates = new List<IReadOnlyList<string>>();
+
+        // Widest first, matching what the plan promises. The engine still picks the first one this
+        // INSTANCE can satisfy, so a narrow constructor wins whenever the wide one wants something
+        // the object never stored.
+        foreach (var constructor in type.GetConstructors(Flags)
+            .OrderByDescending(c => c.GetParameters().Length))
+        {
+            var parameters = constructor.GetParameters();
+            if (parameters.Length == 0) continue;
+
+            var members = new string[parameters.Length];
+            var recordable = true;
+
+            for (int i = 0; i < parameters.Length; i++)
+            {
+                var member = FindSupplyingMember(type, parameters[i]);
+                if (member is not null) { members[i] = member; continue; }
+                if (parameters[i].HasDefaultValue) { members[i] = CloneEngine.UseDefault; continue; }
+
+                recordable = false;
+                break;
+            }
+
+            if (recordable) candidates.Add(members);
+        }
+
+        return candidates.Count > 0 ? candidates : null;
+    }
+
+    /// <summary>
+    /// Finds the member holding the value a constructor parameter was built from.
+    /// </summary>
+    /// <param name="type">The type being planned for.</param>
+    /// <param name="parameter">The constructor parameter to supply.</param>
+    /// <returns>The member's name, or <see langword="null"/> when nothing holds it.</returns>
+    /// <remarks>
+    /// An exact name beats a suffix match wherever both exist, so a type holding both <c>_options</c>
+    /// and <c>_bayesOptions</c> supplies <c>options</c> from the one actually named after it. The type
+    /// must fit as well as the name: a field called <c>_seed</c> holding a random generator does not
+    /// supply an <c>int seed</c>, and matching on the name alone would pass it and throw inside the
+    /// constructor rather than declining the candidate here.
+    /// </remarks>
+    private static string? FindSupplyingMember(Type type, ParameterInfo parameter)
+    {
+        const BindingFlags Flags =
+            BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly;
+
+        if (parameter.Name is not { } name) return null;
+
+        string? bySuffix = null;
+
+        for (var current = type; current is not null && current != typeof(object); current = current.BaseType)
+        {
+            foreach (var property in current.GetProperties(Flags))
+            {
+                if (!property.CanRead || property.GetIndexParameters().Length > 0) continue;
+
+                switch (Supplies(property.Name, name, property.PropertyType, parameter.ParameterType))
+                {
+                    case MemberMatch.Exact: return property.Name;
+                    case MemberMatch.Suffix: bySuffix ??= property.Name; break;
+                }
+            }
+
+            foreach (var field in current.GetFields(Flags))
+            {
+                switch (Supplies(field.Name, name, field.FieldType, parameter.ParameterType))
+                {
+                    case MemberMatch.Exact: return field.Name;
+                    case MemberMatch.Suffix: bySuffix ??= field.Name; break;
+                }
+            }
+        }
+
+        return bySuffix ?? FindUniqueByType(type, parameter.ParameterType);
+    }
+
+    /// <summary>
+    /// Finds the one member of a parameter's exact type, when there is exactly one.
+    /// </summary>
+    /// <param name="type">The type being planned for.</param>
+    /// <param name="parameterType">The constructor parameter's type.</param>
+    /// <returns>That member's name, or <see langword="null"/> when there is not exactly one.</returns>
+    /// <remarks>
+    /// <para>
+    /// The same rule <c>ClonePlanGenerator.FindUniqueByType</c> applies at compile time, and it is
+    /// here for the same reason: a constructor parameter is routinely stored under a name no rule
+    /// guesses. A subclass taking <c>arch</c> and handing it to a base that keeps it in
+    /// <c>Architecture</c> stores the value perfectly well; "Architecture" simply does not end in
+    /// "arch". Declining there would make a model unrebuildable over a naming choice.
+    /// </para>
+    /// <para>
+    /// EXACTLY ONE, and by exact type, both as the generator has it. Two members of a type would bind
+    /// in declaration order and could silently swap one for the other. Primitives and enums are
+    /// excluded because a lone int matching a lone int parameter is a coincidence, not a
+    /// correspondence -- keeping the runtime rule and the compile-time rule the same one.
+    /// </para>
+    /// </remarks>
+    private static string? FindUniqueByType(Type type, Type parameterType)
+    {
+        if (parameterType.IsPrimitive || parameterType.IsEnum
+            || parameterType == typeof(string) || parameterType == typeof(decimal)
+            || parameterType == typeof(DateTime) || parameterType == typeof(object))
+        {
+            return null;
+        }
+
+        const BindingFlags Flags =
+            BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly;
+
+        string? found = null;
+
+        for (var current = type; current is not null && current != typeof(object); current = current.BaseType)
+        {
+            foreach (var property in current.GetProperties(Flags))
+            {
+                if (!property.CanRead || property.GetIndexParameters().Length > 0) continue;
+                if (property.PropertyType != parameterType) continue;
+                if (found is not null) return null;
+
+                found = property.Name;
+            }
+
+            foreach (var field in current.GetFields(Flags))
+            {
+                if (field.FieldType != parameterType) continue;
+                if (found is not null) return null;
+
+                found = field.Name;
+            }
+        }
+
+        return found;
+    }
+
+    private enum MemberMatch { None, Suffix, Exact }
+
+    /// <summary>Decides whether a member can supply a constructor parameter.</summary>
+    private static MemberMatch Supplies(string member, string parameter, Type memberType, Type parameterType)
+    {
+        if (!parameterType.IsAssignableFrom(memberType)) return MemberMatch.None;
+
+        var trimmed = member.StartsWith("_", StringComparison.Ordinal) ? member.Substring(1) : member;
+        if (string.Equals(trimmed, parameter, StringComparison.OrdinalIgnoreCase)) return MemberMatch.Exact;
+
+        return trimmed.Length > parameter.Length
+            && trimmed.EndsWith(parameter, StringComparison.OrdinalIgnoreCase)
+                ? MemberMatch.Suffix
+                : MemberMatch.None;
     }
 
     /// <summary>

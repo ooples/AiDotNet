@@ -411,22 +411,6 @@ public class DenseNetNetwork<T> : NeuralNetworkBase<T>
         }
     }
 
-    /// <inheritdoc />
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        var config = new DenseNetConfiguration(
-            _configuration.Variant,
-            _configuration.NumClasses,
-            _configuration.InputHeight,
-            _configuration.InputWidth,
-            _configuration.InputChannels,
-            _configuration.GrowthRate,
-            _configuration.CompressionFactor,
-            _configuration.CustomBlockLayers);
-
-        return new DenseNetNetwork<T>(Architecture, config, _optimizer, _lossFunction);
-    }
-
     /// <summary>
     /// Gets the layer at the specified index.
     /// </summary>

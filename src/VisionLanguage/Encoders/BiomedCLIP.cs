@@ -419,18 +419,6 @@ public partial class BiomedCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVis
             OnnxTextEncoder = new OnnxModel<T>(t2, _options.OnnxOptions);
     }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        var options = new BiomedCLIPOptions(_options);
-        if (
-            !_useNativeMode
-            && _options.ImageEncoderModelPath is { } mp
-            && !string.IsNullOrEmpty(mp)
-        )
-            return new BiomedCLIP<T>(Architecture, mp, options);
-        return new BiomedCLIP<T>(Architecture, options);
-    }
-
     private Tensor<T> TokenizeText(string text)
     {
         if (_tokenizer is null)
