@@ -310,6 +310,55 @@ public partial class LayerNormalizationLayer<T> : LayerBase<T>, IShapeContract
     }
 
     /// <summary>
+    /// Rebinds a lazy LayerNorm to the feature width observed by its first real forward when a
+    /// prior shape-only network walk used an approximate sequential shape.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Shape-only propagation is intentionally allocation-compatible so parameter manifests can
+    /// be inspected before execution. For a custom or branched model, however, the sequential
+    /// walker can only approximate what a later layer receives. Treating that approximation as a
+    /// binding LayerNorm width caused one wrong guess to surface as the same gamma/input mismatch
+    /// in every model that reused the base lifecycle.
+    /// </para>
+    /// <para>
+    /// Only the shape-only provenance path reaches this hook. The eager
+    /// <see cref="LayerNormalizationLayer{T}(int, double)"/> contract remains strict and will not
+    /// silently resize an architecture-defined feature width.
+    /// </para>
+    /// </remarks>
+    protected override void ReconcileShapeOnlyResolution(Tensor<T> input)
+    {
+        int featureSize = input.Shape[input.Shape.Length - 1];
+        if (featureSize <= 0)
+        {
+            throw new ArgumentException(
+                $"LayerNormalizationLayer cannot reconcile featureSize: input.Shape[^1] = {featureSize}.",
+                nameof(input));
+        }
+
+        if (_gamma.Length != featureSize || _beta.Length != featureSize)
+        {
+            var gamma = Tensor<T>.CreateDefault([featureSize], NumOps.One);
+            var beta = Tensor<T>.CreateDefault([featureSize], NumOps.Zero);
+
+            if (!ReplaceTrainableParameter(_gamma, gamma, PersistentTensorRole.NormalizationParams))
+                RegisterTrainableParameter(gamma, PersistentTensorRole.NormalizationParams);
+            if (!ReplaceTrainableParameter(_beta, beta, PersistentTensorRole.NormalizationParams))
+                RegisterTrainableParameter(beta, PersistentTensorRole.NormalizationParams);
+
+            _gamma = gamma;
+            _beta = beta;
+            _gammaGradient = null;
+            _betaGradient = null;
+            _gammaVelocity = null;
+            _betaVelocity = null;
+        }
+
+        ResolveShapes([featureSize], [featureSize]);
+    }
+
+    /// <summary>
     /// Performs the forward pass of the layer normalization layer.
     /// </summary>
     /// <param name="input">The input tensor to normalize. Shape should be [batchSize, featureSize].</param>

@@ -2244,6 +2244,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         int shardIndex = ReadPositiveEnvironmentInteger("AIDOTNET_MODEL_PERF_SHARD_INDEX", 0, allowZero: true);
         Assert.InRange(shardIndex, 0, shardCount - 1);
         string fixtureName = GetType().FullName ?? GetType().Name;
+        string performanceFileName = MakePerformanceFileName(fixtureName);
         int assignedShard = (int)(StablePerformanceHash(fixtureName) % (uint)shardCount);
         Skip.If(assignedShard != shardIndex,
             $"Fixture is assigned to performance shard {assignedShard}/{shardCount}.");
@@ -2261,12 +2262,14 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         TimeSpan cpuStart = process.TotalProcessorTime;
         var totalTimer = System.Diagnostics.Stopwatch.StartNew();
 
+        WritePerformanceProgress(outputDirectory!, performanceFileName, "construct");
         var constructTimer = System.Diagnostics.Stopwatch.StartNew();
         using var network = CreateNetwork();
         constructTimer.Stop();
 
         var input = CreateRandomTensor(EffectiveInputShape, rng);
 
+        WritePerformanceProgress(outputDirectory!, performanceFileName, "cold-forward");
         var coldForwardTimer = System.Diagnostics.Stopwatch.StartNew();
         var coldOutput = network.Predict(input);
         coldForwardTimer.Stop();
@@ -2280,6 +2283,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         var steadyForwardMs = new double[steadyForwardSamples];
         for (int i = 0; i < steadyForwardSamples; i++)
         {
+            WritePerformanceProgress(outputDirectory!, performanceFileName, $"steady-forward-{i + 1}");
             var timer = System.Diagnostics.Stopwatch.StartNew();
             _ = network.Predict(input);
             timer.Stop();
@@ -2290,16 +2294,40 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         double tapeForwardMs = 0.0;
         double backwardMs = 0.0;
         int gradientTensorCount = 0;
+        double targetPreparationMs = 0.0;
         if (!TrainingInvariantsNotApplicable(network)
             && network is AiDotNet.NeuralNetworks.NeuralNetworkBase<T> nn)
         {
+            var objectiveTarget = target;
+            if (nn.DefaultLossFunction is AiDotNet.LossFunctions.CrossEntropyWithLogitsLoss<T>)
+            {
+                // Predict and ForwardForTraining are allowed to have different output contracts.
+                // NER is the canonical case: Predict pads decoded labels to the fixture's public
+                // output shape, while the objective consumes per-token logits at the real sequence
+                // length. Build the objective target from the path it is actually compared with.
+                WritePerformanceProgress(outputDirectory!, performanceFileName, "training-target-shape");
+                var targetPreparationTimer = System.Diagnostics.Stopwatch.StartNew();
+                using (var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
+                {
+                    var trainingOutput = nn.ForwardForTraining(input);
+                    objectiveTarget = MakeTargetWellPosedForLoss(
+                        network,
+                        CreateRandomTargetTensor(trainingOutput.Shape.ToArray(), rng),
+                        rng);
+                }
+                targetPreparationTimer.Stop();
+                targetPreparationMs = targetPreparationTimer.Elapsed.TotalMilliseconds;
+            }
+
+            WritePerformanceProgress(outputDirectory!, performanceFileName, "tape-forward");
             using var tape = new GradientTape<T>();
             var tapeForwardTimer = System.Diagnostics.Stopwatch.StartNew();
-            var objective = nn.BuildTrainingObjective(input, target, nn.DefaultLossFunction);
+            var objective = nn.BuildTrainingObjective(input, objectiveTarget, nn.DefaultLossFunction);
             tapeForwardTimer.Stop();
             tapeForwardMs = tapeForwardTimer.Elapsed.TotalMilliseconds;
             tapeEntries = tape.EntryCount;
 
+            WritePerformanceProgress(outputDirectory!, performanceFileName, "backward");
             var backwardTimer = System.Diagnostics.Stopwatch.StartNew();
             var gradients = tape.ComputeGradients(objective, sources: null);
             backwardTimer.Stop();
@@ -2310,6 +2338,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         double trainStepMs = 0.0;
         if (!TrainingInvariantsNotApplicable(network))
         {
+            WritePerformanceProgress(outputDirectory!, performanceFileName, "train-step");
             var trainTimer = System.Diagnostics.Stopwatch.StartNew();
             network.Train(input, target);
             trainTimer.Stop();
@@ -2320,6 +2349,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         int parameterSlots = 0;
         if (network is AiDotNet.NeuralNetworks.NeuralNetworkBase<T> parameterNetwork)
         {
+            WritePerformanceProgress(outputDirectory!, performanceFileName, "parameter-enumeration");
             foreach (var chunk in parameterNetwork.GetParameterStateChunks())
             {
                 parameterCount = checked(parameterCount + chunk.Tensor.Length);
@@ -2359,6 +2389,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
             shardCount,
             measuredUtc = DateTimeOffset.UtcNow,
             constructMs = constructTimer.Elapsed.TotalMilliseconds,
+            targetPreparationMs,
             coldForwardMs = coldForwardTimer.Elapsed.TotalMilliseconds,
             steadyForwardMedianMs = steadyForwardMs[steadyForwardSamples / 2],
             steadyForwardP95Ms = steadyForwardMs[steadyForwardSamples - 1],
@@ -2379,13 +2410,26 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         };
 
         Directory.CreateDirectory(outputDirectory!);
-        string safeName = MakePerformanceFileName(fixtureName);
-        string destination = Path.Combine(outputDirectory!, safeName + ".json");
+        WritePerformanceProgress(outputDirectory!, performanceFileName, "write-record");
+        string destination = Path.Combine(outputDirectory!, performanceFileName + ".json");
         string temporary = destination + "." + Guid.NewGuid().ToString("N") + ".tmp";
         string json = Newtonsoft.Json.JsonConvert.SerializeObject(sample, Newtonsoft.Json.Formatting.Indented);
         File.WriteAllText(temporary, json);
         if (File.Exists(destination)) File.Delete(destination);
         File.Move(temporary, destination);
+    }
+
+    private static void WritePerformanceProgress(string outputDirectory, string safeName, string phase)
+    {
+        Directory.CreateDirectory(outputDirectory);
+        string progressPath = Path.Combine(outputDirectory, safeName + ".progress.jsonl");
+        string line = Newtonsoft.Json.JsonConvert.SerializeObject(new
+        {
+            schemaVersion = 1,
+            phase,
+            observedUtc = DateTimeOffset.UtcNow,
+        });
+        File.AppendAllText(progressPath, line + Environment.NewLine);
     }
 
     private static string MakePerformanceFileName(string value)

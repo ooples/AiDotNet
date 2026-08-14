@@ -106,6 +106,54 @@ public class LayerShapeResolutionTests
     }
 
     [Fact]
+    public void LayerNorm_ShapeOnlyGuess_ReconcilesWithFirstRealFeatureWidth()
+    {
+        using var layer = new LayerNormalizationLayer<double>();
+
+        // A network topology walker sees only an approximate sequential width. Custom and
+        // branched forwards may route a different tensor to this layer at execution time.
+        layer.ResolveShapesOnly([32]);
+        Assert.Equal(64, layer.ParameterCount);
+
+        var actualInput = new Tensor<double>([2, 7, 192]);
+        var output = layer.Forward(actualInput);
+
+        Assert.Equal(actualInput.Shape, output.Shape);
+        Assert.Equal(192, layer.GetGammaTensor().Length);
+        Assert.Equal(192, layer.GetBetaTensor().Length);
+        Assert.Equal(384, layer.ParameterCount);
+        Assert.Equal(384, layer.GetParameters().Length);
+    }
+
+    [Fact]
+    public void LayerNorm_EagerFeatureWidth_RemainsBinding()
+    {
+        using var layer = new LayerNormalizationLayer<double>(featureSize: 32);
+        var incompatibleInput = new Tensor<double>([2, 192]);
+
+        Assert.ThrowsAny<ArgumentException>(() => layer.Forward(incompatibleInput));
+        Assert.Equal(32, layer.GetGammaTensor().Length);
+        Assert.Equal(32, layer.GetBetaTensor().Length);
+    }
+
+    [Fact]
+    public void Dense_ShapeOnlyGuess_AllocatesOnceAtFirstRealFeatureWidth()
+    {
+        using var layer = new DenseLayer<double>(outputSize: 8);
+
+        layer.ResolveShapesOnly([32]);
+        Assert.False(layer.IsInitialized);
+        Assert.Equal((32 * 8) + 8, layer.ParameterCount);
+
+        var output = layer.Forward(new Tensor<double>([2, 7, 192]));
+
+        Assert.Equal(new[] { 2, 7, 8 }, output.Shape);
+        Assert.Equal(192, layer.GetInputShape()[0]);
+        Assert.Equal((192 * 8) + 8, layer.ParameterCount);
+        Assert.Equal(layer.ParameterCount, layer.GetParameters().Length);
+    }
+
+    [Fact]
     public void Architecture_DynamicSpatialDims_CreateAndValidate()
     {
         var arch = NeuralNetworkArchitecture<double>.CreateDynamicSpatial(

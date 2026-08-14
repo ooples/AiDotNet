@@ -17,7 +17,7 @@ internal static class Program
 {
     private static readonly string[] RequiredMetrics =
     {
-        "constructMs", "coldForwardMs", "steadyForwardMedianMs", "steadyForwardP95Ms",
+        "constructMs", "targetPreparationMs", "coldForwardMs", "steadyForwardMedianMs", "steadyForwardP95Ms",
         "tapeForwardMs", "backwardMs", "trainStepMs", "allocatedBytes", "wallMs",
     };
 
@@ -103,7 +103,13 @@ internal static class Program
         foreach (CensusRecord record in records)
         {
             if (!string.Equals(record.Status, "ok", StringComparison.Ordinal))
-                diagnostics.Add(Diagnostic.Error(record.Fixture, "status", $"status is '{record.Status}'"));
+            {
+                string phase = string.IsNullOrWhiteSpace(record.Phase) ? "unknown" : record.Phase;
+                string detail = string.IsNullOrWhiteSpace(record.Error) ? "no process diagnostic" : record.Error;
+                diagnostics.Add(Diagnostic.Error(record.Fixture, "status",
+                    $"status is '{record.Status}' after {record.ElapsedMs:F0} ms in phase '{phase}': {detail}"));
+                continue;
+            }
 
             foreach (string metric in RequiredMetrics)
             {
@@ -129,7 +135,7 @@ internal static class Program
             entry => entry,
             new FixtureEnvironmentComparer());
 
-        foreach (CensusRecord record in records)
+        foreach (CensusRecord record in records.Where(r => r.Status == "ok"))
         {
             if (!index.TryGetValue((record.Fixture, record.Environment), out BaselineEntry? prior))
             {
@@ -158,7 +164,7 @@ internal static class Program
         ICollection<Diagnostic> diagnostics)
     {
         foreach (IGrouping<string, CensusRecord> cohort in records
-                     .Where(r => r.ParameterCount > 0 && r.Metric("trainStepMs") > 0.0)
+                     .Where(r => r.Status == "ok" && r.ParameterCount > 0 && r.Metric("trainStepMs") > 0.0)
                      .GroupBy(r => r.Cohort))
         {
             double[] values = cohort.Select(r => Math.Log(1.0 + r.Metric("trainStepMs"))).OrderBy(v => v).ToArray();
@@ -184,7 +190,7 @@ internal static class Program
         Options options,
         ICollection<Diagnostic> diagnostics)
     {
-        foreach (CensusRecord record in records)
+        foreach (CensusRecord record in records.Where(r => r.Status == "ok"))
         {
             double trainStep = record.Metric("trainStepMs");
             if (trainStep > options.MaxTrainStepMs)
@@ -205,7 +211,8 @@ internal static class Program
         IReadOnlyList<Diagnostic> diagnostics,
         int? expectedCount)
     {
-        CensusRecord[] slowest = records.OrderByDescending(r => r.Metric("trainStepMs")).Take(25).ToArray();
+        CensusRecord[] slowest = records.Where(r => r.Status == "ok")
+            .OrderByDescending(r => r.Metric("trainStepMs")).Take(25).ToArray();
         return new SummaryDocument
         {
             SchemaVersion = 1,
@@ -214,6 +221,8 @@ internal static class Program
             ObservedFixtures = records.Select(r => r.Fixture).Distinct().Count(),
             ErrorCount = diagnostics.Count(d => d.Severity == "error"),
             WarningCount = diagnostics.Count(d => d.Severity == "warning"),
+            StatusCounts = records.GroupBy(r => r.Status)
+                .ToDictionary(group => group.Key, group => group.Count(), StringComparer.Ordinal),
             Diagnostics = diagnostics.ToArray(),
             SlowestTrainSteps = slowest.Select(r => new RankedRecord
             {
@@ -232,7 +241,7 @@ internal static class Program
     {
         SchemaVersion = 1,
         GeneratedUtc = DateTimeOffset.UtcNow,
-        Entries = records.Select(record => new BaselineEntry
+        Entries = records.Where(record => record.Status == "ok").Select(record => new BaselineEntry
         {
             Fixture = record.Fixture,
             Environment = record.Environment,
@@ -271,7 +280,7 @@ internal static class Program
             string record = """
             {"schemaVersion":1,"status":"ok","fixture":"F","model":"M","precision":"System.Single",
              "parameterCount":10,"engine":"Cpu","framework":".NET","os":"test","processArchitecture":"X64","processorCount":1,
-             "constructMs":1,"coldForwardMs":2,"steadyForwardMedianMs":1,"steadyForwardP95Ms":1,
+             "constructMs":1,"targetPreparationMs":0,"coldForwardMs":2,"steadyForwardMedianMs":1,"steadyForwardP95Ms":1,
              "tapeForwardMs":1,"tapeEntries":2,"backwardMs":2,"trainStepMs":3,"allocatedBytes":4,"wallMs":5,
              "projectedTrainingReduceLossMs":90}
             """;
@@ -281,6 +290,22 @@ internal static class Program
             ValidateCoverage(records, 1, diagnostics);
             ValidateRecords(records, diagnostics);
             if (records.Count != 1 || diagnostics.Count != 0) return 1;
+
+            string timeout = """
+            {"schemaVersion":1,"status":"timeout","fixture":"SlowFixture","model":"","precision":"System.Single",
+             "frameworkMajor":10,"osPlatform":"test","processArchitecture":"X64","processorCount":1,
+             "phase":"backward","elapsedMs":180001,"error":"hard runtime ceiling exceeded"}
+            """;
+            File.WriteAllText(Path.Combine(directory, "timeout.json"), timeout);
+            records = LoadRecords(directory);
+            diagnostics.Clear();
+            ValidateCoverage(records, 2, diagnostics);
+            ValidateRecords(records, diagnostics);
+            if (diagnostics.Count != 1
+                || diagnostics[0].Metric != "status"
+                || !diagnostics[0].Message.Contains("backward", StringComparison.Ordinal))
+                return 1;
+            if (BuildBaseline(records).Entries.Length != 1) return 1;
             Console.WriteLine("ModelPerfProbe self-test passed.");
             return 0;
         }
@@ -343,6 +368,9 @@ internal static class Program
         public required string Status { get; init; }
         public required string Environment { get; init; }
         public required string Cohort { get; init; }
+        public required string Phase { get; init; }
+        public required string Error { get; init; }
+        public double ElapsedMs { get; init; }
         public long ParameterCount { get; init; }
         public required IReadOnlyDictionary<string, double> Metrics { get; init; }
         public double Metric(string name) => Metrics.TryGetValue(name, out double value) ? value : 0.0;
@@ -378,6 +406,9 @@ internal static class Program
                 Status = Text("status"),
                 Environment = environment,
                 Cohort = $"{Text("precision")}|10^{magnitude}",
+                Phase = Text("phase"),
+                Error = Text("error"),
+                ElapsedMs = Number("elapsedMs"),
                 ParameterCount = parameters,
                 Metrics = metrics,
             };
@@ -415,6 +446,7 @@ internal static class Program
         [JsonPropertyName("observedFixtures")] public int ObservedFixtures { get; set; }
         [JsonPropertyName("errorCount")] public int ErrorCount { get; set; }
         [JsonPropertyName("warningCount")] public int WarningCount { get; set; }
+        [JsonPropertyName("statusCounts")] public Dictionary<string, int> StatusCounts { get; set; } = new();
         [JsonPropertyName("diagnostics")] public Diagnostic[] Diagnostics { get; set; } = Array.Empty<Diagnostic>();
         [JsonPropertyName("slowestTrainSteps")] public RankedRecord[] SlowestTrainSteps { get; set; } = Array.Empty<RankedRecord>();
     }

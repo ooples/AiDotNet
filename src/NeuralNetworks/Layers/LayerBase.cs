@@ -1386,6 +1386,13 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     /// </remarks>
     private bool _firstForwardRan;
 
+    // Shape-only resolution deliberately does not mean that a real input has been observed. The
+    // network-level shape walker can only approximate a custom/branched forward as a sequential
+    // chain, so a layer that derives runtime state from the input must get one reconciliation hook
+    // before its first real compute. Without this distinction, a guessed shape can permanently size
+    // LayerNorm parameters or structural output metadata even though _firstForwardRan is still false.
+    private bool _shapeOnlyResolutionPendingFirstForward;
+
     /// <summary>
     /// Proactively declares this layer's parameter shapes WITHOUT requiring a forward pass.
     /// Returns <c>true</c> if the layer is in a state where shape-dependent post-processing
@@ -1474,6 +1481,20 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         var perSample = new int[shape.Length - 1];
         Array.Copy(shape, 1, perSample, 0, perSample.Length);
         ResolveShapes(perSample, perSample);
+    }
+
+    /// <summary>
+    /// Reconciles state derived during shape-only propagation with the first tensor the layer
+    /// actually receives. The default is a no-op because constructor-sized and ordinary lazy
+    /// layers have no runtime-only state to revise. Shape-polymorphic layers override this hook.
+    /// </summary>
+    /// <remarks>
+    /// This hook is invoked only when <see cref="ResolveShapesOnly(int[])"/> ran before the first
+    /// real forward. It does not weaken eager constructor contracts: an eagerly resolved layer
+    /// that was never shape-walked continues to treat its construction-time dimensions as binding.
+    /// </remarks>
+    protected virtual void ReconcileShapeOnlyResolution(Tensor<T> input)
+    {
     }
 
     /// <summary>
@@ -1936,10 +1957,19 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
             if (_disposed)
                 throw new ObjectDisposedException(GetType().Name,
                     "A disposed layer cannot execute a forward pass.");
-            if (!_firstForwardRan && !IsShapeResolved)
+            if (!_firstForwardRan)
             {
-                OnFirstForward(input);
+                if (!IsShapeResolved)
+                {
+                    OnFirstForward(input);
+                }
+                else if (_shapeOnlyResolutionPendingFirstForward)
+                {
+                    ReconcileShapeOnlyResolution(input);
+                }
+
                 _firstForwardRan = true;
+                _shapeOnlyResolutionPendingFirstForward = false;
                 RegisterStreamingWeightsWithPool();
             }
             EnsureInitialized();
@@ -2135,6 +2165,7 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         {
             IsResolvingShapesOnly = false;
         }
+        _shapeOnlyResolutionPendingFirstForward = true;
         // Intentionally NOT calling EnsureInitialized — weights stay deferred until
         // the first real forward pass so RNG state is preserved.
     }
