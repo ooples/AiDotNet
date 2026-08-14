@@ -30,9 +30,6 @@ permissions:
 env:
   PERF_SHARD_COUNT: 32
   PERF_MODEL_TIMEOUT_SECONDS: 180
-  # Final merge of AiDotNet.Tensors #945; this is the exact source represented by
-  # the pending 0.126.0 lockstep release.
-  TENSORS_COMMIT: 4965fc0973083e5aa5c338ced7731423c6ced082
 
 jobs:
   prepare:
@@ -45,18 +42,6 @@ jobs:
         with:
           persist-credentials: false
 
-      # Keep this checkout outside GITHUB_WORKSPACE. A nested checkout would inherit
-      # AiDotNet's Directory.Packages.props and incorrectly apply central package
-      # management to the independently versioned Tensors project (NU1008).
-      - name: Checkout stacked AiDotNet.Tensors dependency
-        shell: pwsh
-        run: |
-          $tensorsRoot = Join-Path $env:RUNNER_TEMP 'AiDotNet.Tensors'
-          git init $tensorsRoot
-          git -C $tensorsRoot remote add origin https://github.com/ooples/AiDotNet.Tensors.git
-          git -C $tensorsRoot fetch --depth 1 origin $env:TENSORS_COMMIT
-          git -C $tensorsRoot checkout --detach FETCH_HEAD
-
       - name: Setup .NET 10.0
         uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
@@ -64,35 +49,20 @@ jobs:
 
       - name: Restore fixture assembly
         shell: pwsh
-        run: |
-          $targets = Join-Path $env:GITHUB_WORKSPACE '.github/ci/aidotnet-tensors-unreleased.targets'
-          $tensorsRoot = Join-Path $env:RUNNER_TEMP 'AiDotNet.Tensors'
-          dotnet restore tests/AiDotNet.Tests/AiDotNetTests.csproj `
-            -p:CustomAfterMicrosoftCommonTargets=$targets `
-            -p:TensorsSourceRoot=$tensorsRoot
+        run: dotnet restore tests/AiDotNet.Tests/AiDotNetTests.csproj
 
       - name: Build fixture assembly once
         shell: pwsh
         run: |
-          $targets = Join-Path $env:GITHUB_WORKSPACE '.github/ci/aidotnet-tensors-unreleased.targets'
-          $tensorsRoot = Join-Path $env:RUNNER_TEMP 'AiDotNet.Tensors'
           dotnet build tests/AiDotNet.Tests/AiDotNetTests.csproj -c Release `
-            --framework net10.0 --no-restore `
-            -p:CustomAfterMicrosoftCommonTargets=$targets `
-            -p:TensorsSourceRoot=$tensorsRoot
+            --framework net10.0 --no-restore
 
       - name: Build exact-fixture performance host
         shell: pwsh
         run: |
-          $targets = Join-Path $env:GITHUB_WORKSPACE '.github/ci/aidotnet-tensors-unreleased.targets'
-          $tensorsRoot = Join-Path $env:RUNNER_TEMP 'AiDotNet.Tensors'
-          dotnet restore tools/ModelPerfFixtureRunner/ModelPerfFixtureRunner.csproj `
-            -p:CustomAfterMicrosoftCommonTargets=$targets `
-            -p:TensorsSourceRoot=$tensorsRoot
+          dotnet restore tools/ModelPerfFixtureRunner/ModelPerfFixtureRunner.csproj
           dotnet build tools/ModelPerfFixtureRunner/ModelPerfFixtureRunner.csproj -c Release `
-            --framework net10.0 --no-restore `
-            -p:CustomAfterMicrosoftCommonTargets=$targets `
-            -p:TensorsSourceRoot=$tensorsRoot
+            --framework net10.0 --no-restore
 
       - name: Create Linux test dependency bundle
         shell: pwsh
