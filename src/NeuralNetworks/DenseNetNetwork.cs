@@ -63,7 +63,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Densely Connected Convolutional Networks", "https://arxiv.org/abs/1608.06993", Year = 2017, Authors = "Gao Huang, Zhuang Liu, Laurens van der Maaten, Kilian Q. Weinberger")]
-public class DenseNetNetwork<T> : NeuralNetworkBase<T>
+public class DenseNetNetwork<T> : ImageClassifierModelLayoutBase<T>
 {
     private readonly DenseNetOptions _options;
 

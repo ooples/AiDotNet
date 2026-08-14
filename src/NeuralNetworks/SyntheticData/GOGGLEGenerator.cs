@@ -81,7 +81,7 @@ namespace AiDotNet.NeuralNetworks.SyntheticData;
     "https://arxiv.org/abs/2210.12007",
     Year = 2023,
     Authors = "Tennison Liu, Zhaozhi Qian, Jeroen Berrevoets, Mihaela van der Schaar")]
-public partial class GOGGLEGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerator<T>
+public partial class GOGGLEGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>, ISyntheticTabularGenerator<T>
 {
     private readonly GOGGLEOptions<T> _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;

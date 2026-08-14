@@ -54,7 +54,7 @@ namespace AiDotNet.NeuralNetworks.Tabular;
     "https://arxiv.org/abs/2207.08548",
     Year = 2022,
     Authors = "Joseph, R. & Raj, H.")]
-public class GANDALFNetwork<T> : NeuralNetworkBase<T>
+public class GANDALFNetwork<T> : TabularNeuralNetworkBase<T>
 {
     private readonly GANDALFOptions<T> _options;
 

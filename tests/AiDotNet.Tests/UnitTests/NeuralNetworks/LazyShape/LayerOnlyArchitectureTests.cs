@@ -26,7 +26,7 @@ public class LayerOnlyArchitectureTests
     /// Implements the minimum abstract surface so the layer-only path is
     /// observable from a test.
     /// </summary>
-    private sealed class LayerOnlyNetwork : NeuralNetworkBase<float>
+    private sealed class LayerOnlyNetwork : VectorModelLayoutBase<float>
     {
         public LayerOnlyNetwork()
             : base(lossFunction: new MeanSquaredErrorLoss<float>(), maxGradNorm: 1.0)

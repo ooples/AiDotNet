@@ -56,7 +56,7 @@ namespace AiDotNet.NeuralNetworks.Tabular;
     "https://arxiv.org/abs/2408.06291",
     Year = 2024,
     Authors = "Thielmann, A., Kruse, R., Samiee, S., & Kleyko, D.")]
-public class MambularNetwork<T> : NeuralNetworkBase<T>
+public class MambularNetwork<T> : TabularNeuralNetworkBase<T>
 {
     private readonly MambularOptions<T> _options;
 

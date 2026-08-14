@@ -52,7 +52,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ModelInputShapeConstraint(ExactRank = 1)]
 [ResearchPaper("Memory Networks", "https://arxiv.org/abs/1410.3916", Year = 2015, Authors = "Jason Weston, Sumit Chopra, Antoine Bordes")]
-public partial class MemoryNetwork<T> : NeuralNetworkBase<T>
+public partial class MemoryNetwork<T> : SequenceModelLayoutBase<T>
 {
     private readonly MemoryNetworkOptions _options;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;

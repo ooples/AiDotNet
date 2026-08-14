@@ -52,7 +52,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Wasserstein GAN", "https://arxiv.org/abs/1701.07875", Year = 2017, Authors = "Martin Arjovsky, Soumith Chintala, Leon Bottou")]
-public partial class WGAN<T> : NeuralNetworkBase<T>
+public partial class WGAN<T> : ImageGeneratorModelLayoutBase<T>
 {
     private readonly WGANOptions _options;
 

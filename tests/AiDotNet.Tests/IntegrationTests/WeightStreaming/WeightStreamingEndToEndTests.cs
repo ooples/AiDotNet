@@ -87,7 +87,7 @@ public sealed class WeightStreamingEndToEndTests : IDisposable
     /// per-layer prefetch + materialize-scope orchestration without
     /// needing real-world dimensions.
     /// </summary>
-    private sealed class SmallStreamableNetwork : NeuralNetworkBase<float>
+    private sealed class SmallStreamableNetwork : VectorModelLayoutBase<float>
     {
         public SmallStreamableNetwork()
             : base(lossFunction: new MeanSquaredErrorLoss<float>(), maxGradNorm: 1.0)

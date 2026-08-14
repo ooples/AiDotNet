@@ -42,6 +42,9 @@ namespace AiDotNet.Audio.Fingerprinting;
     "https://arxiv.org/abs/2104.01778",
     Year = 2021,
     Authors = "Yuan Gong, Yu-An Chung, James Glass")]
+[PreprocessesInput("PreprocessAudio converts the caller's waveform into a rank-4 log-mel spectrogram before the AST patch embedding runs.")]
+[StackInputLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    BatchOptional = true)]
 public class ASTModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
 {
     /// <inheritdoc />

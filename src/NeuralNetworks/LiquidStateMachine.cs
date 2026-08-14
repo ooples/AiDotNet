@@ -53,7 +53,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     [ResearchPaper("Real-Time Computing Without Stable States", "https://doi.org/10.1162/089976602760407955")]
-public class LiquidStateMachine<T> : NeuralNetworkBase<T>
+public class LiquidStateMachine<T> : SequenceModelLayoutBase<T>
 {
     private readonly LiquidStateMachineOptions _options;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;

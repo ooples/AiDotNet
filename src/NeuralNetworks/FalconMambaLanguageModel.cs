@@ -39,7 +39,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Falcon Mamba: The First Competitive Attention-free 7B Language Model", "https://arxiv.org/abs/2410.05355", Year = 2024, Authors = "Jingwei Zuo, Younes Belkada, Paul Music, Rouven Bauer, Komal Kumar Bein, Yago Gimenez")]
-public class FalconMambaLanguageModel<T> : NeuralNetworkBase<T>
+public class FalconMambaLanguageModel<T> : TokenLanguageModelLayoutBase<T>
 {
     private readonly FalconMambaOptions _options;
     private readonly int _vocabSize;

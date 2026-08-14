@@ -53,7 +53,10 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Improved Training of Wasserstein GANs", "https://arxiv.org/abs/1704.00028", Year = 2017, Authors = "Ishaan Gulrajani, Faruk Ahmed, Martin Arjovsky, Vincent Dumoulin, Aaron Courville")]
-public partial class WGANGP<T> : NeuralNetworkBase<T>
+[PreprocessesInput("ShapeAsGeneratorInput reshapes latent vectors to the generator architecture before Layers[0] runs.")]
+[StackInputLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    BatchOptional = true)]
+public partial class WGANGP<T> : ImageGeneratorModelLayoutBase<T>
 {
 
     // ParameterCount was Generator.GetParameterCount() + Critic.GetParameterCount(), which the

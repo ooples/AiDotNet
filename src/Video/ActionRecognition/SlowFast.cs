@@ -59,6 +59,10 @@ namespace AiDotNet.Video.ActionRecognition;
     "https://arxiv.org/abs/1812.03982",
     Year = 2019,
     Authors = "Christoph Feichtenhofer, Haoqi Fan, Jitendra Malik, Kaiming He")]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Frames, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Input, BatchOptional = true)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Classes,
+    Direction = TensorLayoutDirection.Output, BatchOptional = true)]
 public partial class SlowFast<T> : NeuralNetworkBase<T>
 {
     private readonly SlowFastOptions _options;

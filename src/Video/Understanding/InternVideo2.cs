@@ -68,6 +68,10 @@ namespace AiDotNet.Video.Understanding;
     "https://arxiv.org/abs/2403.15377",
     Year = 2024,
     Authors = "Yi Wang, Kunchang Li, Xinhao Li, Jiashuo Yu, Yinan He, Guo Chen, Baoqi Pei, Rongkun Zheng, Jilan Xu, Zun Wang, Yansong Shi, Tianxiang Jiang, Songze Li, Hongjie Zhang, Yifei Huang, Yu Qiao, Yali Wang, Limin Wang")]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Frames, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Input, BatchOptional = true)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Output, BatchOptional = true)]
 public class InternVideo2<T> : NeuralNetworkBase<T>
 {
     private readonly InternVideo2Options _options;

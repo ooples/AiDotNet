@@ -61,6 +61,10 @@ namespace AiDotNet.Video.Matting;
     "https://arxiv.org/abs/2108.11515",
     Year = 2021,
     Authors = "Shanchuan Lin, Linjie Yang, Imran Saleemi, Soumyadip Sengupta")]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Frames, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Input, BatchOptional = true)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Frames, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Output, BatchOptional = true)]
 public class RVM<T> : NeuralNetworkBase<T>
 {
     private readonly RVMOptions _options;

@@ -70,7 +70,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("A Style-Based Generator Architecture for Generative Adversarial Networks", "https://arxiv.org/abs/1812.04948", Year = 2019, Authors = "Tero Karras, Samuli Laine, Timo Aila")]
-public partial class StyleGAN<T> : NeuralNetworkBase<T>
+public partial class StyleGAN<T> : ImageGeneratorModelLayoutBase<T>
 {
 
     // MappingNetwork, SynthesisNetwork and Discriminator are discovered as sub-network members, in

@@ -162,7 +162,7 @@ public class DeferredRestoreGateTests
         Assert.Equal(checkpoint.ToArray(), target.GetParameters().ToArray());
     }
 
-    private sealed class ExtraLayerRestoreNetwork : NeuralNetworkBase<double>
+    private sealed class ExtraLayerRestoreNetwork : VectorModelLayoutBase<double>
     {
         private TransformerEncoderLayer<double>? _extraLayer;
 

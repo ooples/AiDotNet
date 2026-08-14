@@ -58,7 +58,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Image-to-Image Translation with Conditional Adversarial Networks", "https://arxiv.org/abs/1611.07004", Year = 2017, Authors = "Phillip Isola, Jun-Yan Zhu, Tinghui Zhou, Alexei A. Efros")]
-public partial class Pix2Pix<T> : NeuralNetworkBase<T>
+public partial class Pix2Pix<T> : ImageTranslationModelLayoutBase<T>
 {
 
     // Generator then Discriminator are discovered as sub-network members, in declaration order,

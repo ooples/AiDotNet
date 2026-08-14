@@ -98,7 +98,7 @@ public class ModelInputMeetsFirstLayerTests
 
         int checkedCount = 0, modelUndeclared = 0, layerUndeclared = 0;
         var mismatched = new List<string>();
-        var exempted = new List<string>();
+        var preprocessed = new List<string>();
         var skipped = new List<string>();
         var slow = new List<(string Name, TimeSpan Elapsed)>();
 
@@ -113,20 +113,27 @@ public class ModelInputMeetsFirstLayerTests
             var modelRanks = AcceptedRanks(open);
             if (modelRanks.Count == 0) { modelUndeclared++; continue; }
 
-            // The model's OWN statement that its stack does not see Predict's input. Chronos tokenizes
-            // first - Forward(Tokenize(input)) - so its EmbeddingLayer receives token indices and the two
-            // declarations describe different tensors. Read off the OPEN type and BEFORE construction:
-            // an exemption that needed an instance would silently lapse the day the model stopped
-            // constructing, and the flag is a property of the type, not of the numeric type it closes
-            // over. Reasons are printed, so an exemption is visible rather than absent from the total.
-            var exemption = open.GetCustomAttributes(typeof(PreprocessesInputAttribute), inherit: true)
-                                .Cast<PreprocessesInputAttribute>().FirstOrDefault();
-            if (exemption is not null)
+            // A preprocessing declaration changes which boundary must meet Layers[0], but it does
+            // not exempt that boundary from validation. The caller-facing model layout still describes
+            // Predict's input; [StackInputLayout] separately describes the transformed tensor delivered
+            // to the first layer. ADNSHAPE010 makes that second declaration mandatory at compile time.
+            var preprocessing = open.GetCustomAttributes(typeof(PreprocessesInputAttribute), inherit: true)
+                                    .Cast<PreprocessesInputAttribute>().FirstOrDefault();
+            var boundaryRanks = modelRanks;
+            string boundaryName = "caller-facing input";
+            if (preprocessing is not null)
             {
-                exempted.Add($"{open.Name}: {exemption.Reason}");
-                continue;
+                boundaryRanks = AcceptedStackRanks(open);
+                boundaryName = "preprocessed stack input";
+                preprocessed.Add($"{open.Name}: caller [{Fmt(modelRanks)}] -> stack "
+                    + $"[{Fmt(boundaryRanks)}] ({preprocessing.Reason})");
+                if (boundaryRanks.Count == 0)
+                {
+                    mismatched.Add($"{open.Name}: [PreprocessesInput] has no effective "
+                        + "[StackInputLayout]");
+                    continue;
+                }
             }
-
             log?.WriteLine($"[constructing] {open.Name}");
 
             // TIMED PER MODEL, because "764 constructions at 25 minutes" does not say whether the cost
@@ -158,12 +165,13 @@ public class ModelInputMeetsFirstLayerTests
                 if (layerRanks.Count == 0) { layerUndeclared++; continue; }
 
                 checkedCount++;
-                if (modelRanks.Overlaps(layerRanks)) continue;
+                if (boundaryRanks.Overlaps(layerRanks)) continue;
 
                 // Written to the log AS FOUND, not only in the summary below: the findings are the
                 // deliverable, and a run that dies part-way should still hand over what it proved.
-                string finding = $"{open.Name}: declares input rank(s) [{Fmt(modelRanks)}] but its first "
-                    + $"layer {first.GetType().Name} accepts [{Fmt(layerRanks)}]";
+                string finding = $"{open.Name}: {boundaryName} declares rank(s) "
+                    + $"[{Fmt(boundaryRanks)}] but its first layer {first.GetType().Name} "
+                    + $"accepts [{Fmt(layerRanks)}]";
                 mismatched.Add(finding);
                 log?.WriteLine($"MISMATCH {finding}");
             }
@@ -187,7 +195,7 @@ public class ModelInputMeetsFirstLayerTests
         _out.WriteLine($"models checked                        : {checkedCount}");
         _out.WriteLine($"model declares no input layout (backlog): {modelUndeclared}");
         _out.WriteLine($"first layer declares no input layout  : {layerUndeclared}");
-        _out.WriteLine($"exempt: [PreprocessesInput]            : {exempted.Count}");
+        _out.WriteLine($"validated: [PreprocessesInput]         : {preprocessed.Count}");
         _out.WriteLine($"MISMATCHED                            : {mismatched.Count}");
         _out.WriteLine($"skipped                               : {skipped.Count}");
 
@@ -200,7 +208,7 @@ public class ModelInputMeetsFirstLayerTests
                        + $" (accounting for {slowTotal.TotalSeconds:0}s)");
         foreach (var s in slow.OrderByDescending(x => x.Elapsed).Take(40))
             _out.WriteLine($"  SLOW: {s.Name} {s.Elapsed.TotalSeconds:0.0}s");
-        foreach (var e in exempted) _out.WriteLine($"  EXEMPT: {e}");
+        foreach (var e in preprocessed) _out.WriteLine($"  PREPROCESSED: {e}");
         foreach (var m in mismatched) _out.WriteLine($"  MISMATCH: {m}");
 
         // Assert the EXERCISED count. A run where nothing constructed would otherwise pass while
@@ -210,7 +218,7 @@ public class ModelInputMeetsFirstLayerTests
         Assert.True(checkedCount > 0,
             "no model was checked, so this proves nothing about the declared-input boundary");
 
-        // A RATCHET, NOT A GATE - YET. Measured 2026-08-10: 764 constructed, 24 mismatched, 2 exempt.
+        // A RATCHET, NOT A GATE - YET. Measured 2026-08-10: 764 constructed, 24 mismatched.
         // Failing on 24 would redden the branch against work that is unfinished rather than wrong,
         // which is the exact reason ADNSHAPE006 entered as a suppressed warning at 85 of ~270 layers
         // and was promoted to Error only once it reached zero. Same ladder: the count is printed every
@@ -253,6 +261,19 @@ public class ModelInputMeetsFirstLayerTests
             // reconstructable from Axes.Length alone.
             for (int r = 1; r <= 6; r++)
                 if (l.AcceptsRank(r)) ranks.Add(r);
+        }
+        return ranks;
+    }
+
+    /// <summary>Ranks a model's declared post-preprocessing stack-entry layouts accept.</summary>
+    private static HashSet<int> AcceptedStackRanks(Type type)
+    {
+        var ranks = new HashSet<int>();
+        foreach (var layout in type.GetCustomAttributes(typeof(StackInputLayoutAttribute), inherit: true)
+                                   .Cast<StackInputLayoutAttribute>())
+        {
+            for (int rank = 1; rank <= 6; rank++)
+                if (layout.AcceptsRank(rank)) ranks.Add(rank);
         }
         return ranks;
     }

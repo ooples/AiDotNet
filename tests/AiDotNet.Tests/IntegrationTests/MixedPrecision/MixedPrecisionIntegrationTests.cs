@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Enums;
 using AiDotNet.LinearAlgebra;
@@ -1634,6 +1635,7 @@ public class MixedPrecisionIntegrationTests
     /// <summary>
     /// Test layer for verifying mixed precision integration.
     /// </summary>
+    [ElementWiseShape]
     private class TestLayer : AiDotNet.NeuralNetworks.Layers.LayerBase<float>
     {
         private readonly string? _customName;

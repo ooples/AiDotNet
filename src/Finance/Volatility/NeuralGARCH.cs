@@ -49,6 +49,10 @@ namespace AiDotNet.Finance.Volatility;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Generalized Autoregressive Conditional Heteroskedasticity", "https://doi.org/10.1016/0304-4076(86)90063-1", Year = 1986, Authors = "Tim Bollerslev")]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Input, BatchOptional = true)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Output, BatchOptional = true)]
 public partial class NeuralGARCH<T> : FinancialModelBase<T>, IVolatilityModel<T>
 {
     #region Native Mode Fields

@@ -4285,7 +4285,6 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             : new[] { currentShape, lastGoodShape };
         foreach (var tryShape in candidates)
         {
-            bool inputShapeAccepted = false;
             try
             {
                 if (layer is LayerBase<T> lb && !lb.IsShapeResolved)
@@ -4295,7 +4294,6 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                     // allocation still happens lazily on the first real Forward.
                     lb.ResolveShapesOnly(tryShape);
                 }
-                inputShapeAccepted = true;
                 int[] outShape = layer.GetOutputShape();
 
                 // Shadow the contract against the field HERE, where the answer actually propagates.
@@ -4326,27 +4324,12 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             }
             catch
             {
-                // Imperative shape fields can legitimately decline before first forward even when
-                // a verified declarative contract has a complete answer. Reshape is canonical: its
-                // input field is unresolved while its constructor-fixed output is already known.
-                // This is fallback-only, so a successful imperative answer always remains primary.
-                // A declarative output can fill in a missing imperative output only after the layer
-                // accepted the candidate input. It must never overrule an input-validation failure:
-                // doing so pinned downstream weights to a geometry the real forward rejects.
-                int[]? declaredOutput = inputShapeAccepted
-                    ? SafeInfer(layer, tryShape, isBatched: false)
-                        ?? SafeInfer(layer, tryShape, isBatched: true)
-                    : null;
-                if (declaredOutput is not null
-                    && declaredOutput.Length > 0
-                    && System.Array.TrueForAll(declaredOutput, d => d > 0))
-                {
-                    currentShape = declaredOutput;
-                    if (declaredOutput.Length >= 2) lastGoodShape = declaredOutput;
-                    return true;
-                }
-
-                // Running shape and its declaration both declined — try the fallback shape, if any.
+                // A declarative contract is an assertion about the imperative implementation, not
+                // authority to overwrite a shape the implementation rejected. In particular, the
+                // contract APIs describe batched tensors while this walk may carry per-sample shapes;
+                // accepting either interpretation here pinned downstream lazy normalization layers
+                // to the wrong width across hundreds of model-family tests. Try the already-vetted
+                // fallback shape, if any, and otherwise stop the walk without mutating later layers.
             }
         }
         return false;
@@ -14758,8 +14741,11 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             // optimizer buffers after the owning model has been disposed.
             if (Layers is not null)
             {
-                var ownedTrainableLayers = Training.TapeTrainingStep<T>.CollectTrainableLayers(
-                    Layers, _layerStructureVersion);
+                // Ownership comparison needs reference identities only. The ordinary cached collector
+                // fingerprints ParameterCount, and some paper-scale lazy layers materialize weights
+                // from that getter; cleanup must never allocate the model it is tearing down.
+                var ownedTrainableLayers = Training.TapeTrainingStep<T>
+                    .SnapshotTrainableLayerIdentities(Layers);
                 Training.CompiledTapeTrainingStep<T>.InvalidateIfOwnedBy(ownedTrainableLayers);
             }
             Training.TapeTrainingStep<T>.InvalidateCache();

@@ -103,6 +103,10 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
     [ModelComplexity(ModelComplexity.VeryHigh)]
     [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     [ResearchPaper("Fourier Neural Operator for Parametric Partial Differential Equations", "https://doi.org/10.48550/arXiv.2010.08895", Year = 2021, Authors = "Zongyi Li, Nikola Kovachki, Kamyar Azizzadenesheli, Burigede Liu, Kaushik Bhattacharya, Andrew Stuart, Anima Anandkumar")]
+    [TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+        Direction = TensorLayoutDirection.Input, BatchOptional = true)]
+    [TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+        Direction = TensorLayoutDirection.Output, BatchOptional = true)]
     public partial class FourierNeuralOperator<T> : NeuralNetworkBase<T>
     {
         private readonly FourierNeuralOperatorOptions _options;

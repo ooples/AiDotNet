@@ -26,7 +26,7 @@ public sealed class LsuvInitTests : IDisposable
     public void Dispose() => NeuralNetworkBase<float>.LsuvInitEnabled = false;
 
     /// <summary>Two bare Dense layers — enough for the per-layer calibration walk to compound.</summary>
-    private sealed class TwoLayerNet : NeuralNetworkBase<float>
+    private sealed class TwoLayerNet : VectorModelLayoutBase<float>
     {
         public TwoLayerNet()
             : base(lossFunction: new MeanSquaredErrorLoss<float>(), maxGradNorm: 1.0)

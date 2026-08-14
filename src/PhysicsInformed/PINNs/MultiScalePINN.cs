@@ -75,6 +75,10 @@ namespace AiDotNet.PhysicsInformed.PINNs
     [ModelComplexity(ModelComplexity.VeryHigh)]
     [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     [ResearchPaper("Multi-scale Physics-Informed Neural Networks for Stiff Chemical Kinetics", "https://doi.org/10.1021/acs.jpca.1c05102", Year = 2022, Authors = "Weiqi Ji, Wai Tong Chung, Sili Deng")]
+    [TensorLayout(TensorAxis.Batch, TensorAxis.Features,
+        Direction = TensorLayoutDirection.Input, BatchOptional = true)]
+    [TensorLayout(TensorAxis.Batch, TensorAxis.Features,
+        Direction = TensorLayoutDirection.Output, BatchOptional = true)]
     public partial class MultiScalePINN<T> : NeuralNetworkBase<T>
     {
         private readonly MultiScalePINNOptions _options;

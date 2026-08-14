@@ -142,7 +142,7 @@ public class NeuralNetworkBaseIntegrationTests
         Assert.Contains("Arrays cannot shrink", arrayException.Message, StringComparison.Ordinal);
     }
 
-    private sealed class TestNeuralNetwork : NeuralNetworkBase<float>
+    private sealed class TestNeuralNetwork : VectorModelLayoutBase<float>
     {
         public TestNeuralNetwork(NeuralNetworkArchitecture<float> architecture)
             : base(architecture, new MeanSquaredErrorLoss<float>())

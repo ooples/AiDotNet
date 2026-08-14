@@ -56,7 +56,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Attention Is All You Need", "https://arxiv.org/abs/1706.03762", Year = 2017, Authors = "Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N. Gomez, Lukasz Kaiser, Illia Polosukhin")]
-public class Transformer<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>, AiDotNet.Interfaces.ILanguageModel<T>
+public class Transformer<T> : TokenLanguageModelLayoutBase<T>, IAuxiliaryLossLayer<T>, AiDotNet.Interfaces.ILanguageModel<T>
 {
     private readonly TransformerOptions _options;
 

@@ -68,7 +68,7 @@ namespace AiDotNet.NeuralNetworks.Tabular;
     "https://arxiv.org/abs/2106.01342",
     Year = 2021,
     Authors = "Somepalli, G., Goldblum, M., Schwarzschild, A., Bruss, C. B., & Goldstein, T.")]
-public class SAINTNetwork<T> : NeuralNetworkBase<T>
+public class SAINTNetwork<T> : TabularNeuralNetworkBase<T>
 {
     private readonly SAINTOptions<T> _options;
 

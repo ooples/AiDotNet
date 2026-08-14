@@ -303,17 +303,26 @@ public static class TapeTrainingStep<T>
             return _cachedTrainableLayers;
         }
 
-        var trainableLayers = new List<ITrainableLayer<T>>();
-        var seen = new HashSet<ILayer<T>>(TensorReferenceComparer<ILayer<T>>.Instance);
-        CollectTrainableRecursive(layerList, trainableLayers, seen);
-
-        var result = trainableLayers.ToArray();
+        var result = SnapshotTrainableLayerIdentities(layerList);
         _cachedTrainableLayers = result;
         _cachedTrainableVersion = structureVersion;
         _cachedTrainableLayerCount = layerList.Count;
         _cachedTrainableFirstLayer = firstLayer;
         _cachedTrainableTopologyFingerprint = fingerprint;
         return result;
+    }
+
+    /// <summary>
+    /// Recursively snapshots trainable-layer identities without reading parameter counts or
+    /// materializing lazy weights. Disposal uses this path solely to compare cache ownership.
+    /// </summary>
+    internal static ITrainableLayer<T>[] SnapshotTrainableLayerIdentities(
+        IEnumerable<ILayer<T>> layers)
+    {
+        var trainableLayers = new List<ITrainableLayer<T>>();
+        var seen = new HashSet<ILayer<T>>(TensorReferenceComparer<ILayer<T>>.Instance);
+        CollectTrainableRecursive(layers, trainableLayers, seen);
+        return trainableLayers.ToArray();
     }
 
     private static void CollectTrainableRecursive(

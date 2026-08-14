@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Models.Parameters;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors.Engines;
@@ -97,6 +98,7 @@ public sealed class LayerBufferRegistryTests
             layer.Add(new Tensor<double>([1]), "state"));
     }
 
+    [ElementWiseShape]
     private sealed class BufferProbeLayer : LayerBase<double>
     {
         public BufferProbeLayer() : base([1], [1])

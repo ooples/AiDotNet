@@ -68,6 +68,10 @@ namespace AiDotNet.Video.Generation;
     "https://arxiv.org/abs/2205.15868",
     Year = 2022,
     Authors = "Wenyi Hong, Ming Ding, Wendi Zheng, Xinghan Liu, Jie Tang")]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Input, BatchOptional = true)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Frames, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Output, BatchOptional = true)]
 public class CogVideo<T> : NeuralNetworkBase<T>
 {
     private readonly CogVideoOptions _options;

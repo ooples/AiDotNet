@@ -55,6 +55,10 @@ namespace AiDotNet.Safety.Adversarial;
     "https://arxiv.org/abs/1704.01155",
     Year = 2018,
     Authors = "Weilin Xu, David Evans, Yanjun Qi")]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Input, BatchOptional = true)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Output, BatchOptional = true)]
 public partial class AdversarialImageEvaluator<T> : NeuralNetworkBase<T>, IImageSafetyModule<T>
 {
     private const int FeatureCount = 3;  // HF energy, histogram, feature-squeezing

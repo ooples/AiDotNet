@@ -53,7 +53,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Evolving Neural Networks through Augmenting Topologies", "https://nn.cs.utexas.edu/downloads/papers/stanley.ec02.pdf", Year = 2002, Authors = "Kenneth O. Stanley, Risto Miikkulainen")]
-public partial class NEAT<T> : NeuralNetworkBase<T>
+public partial class NEAT<T> : VectorModelLayoutBase<T>
 {
     private readonly NEATOptions _options;
 

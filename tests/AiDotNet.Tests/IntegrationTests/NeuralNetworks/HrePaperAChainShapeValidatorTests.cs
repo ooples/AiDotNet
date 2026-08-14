@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using AiDotNet.ActivationFunctions;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
@@ -227,7 +228,15 @@ public class HrePaperAChainShapeValidatorTests
     /// validator-only regression tests. Forward is identity so we can run a
     /// real <c>Predict</c> through the chain without depending on HRE math.
     /// </summary>
-    private sealed class FixedShapeRank2Layer : LayerBase<float>
+    [TensorLayout(TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+    [TensorLayout(TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
+    [TensorLayout(TensorAxis.Batch, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+    [TensorLayout(TensorAxis.Batch, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
+    [TensorLayout(TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+        Direction = TensorLayoutDirection.Input)]
+    [TensorLayout(TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+        Direction = TensorLayoutDirection.Output)]
+    private sealed class FixedShapeRank2Layer : LayerBase<float>, IShapeContract
     {
         public FixedShapeRank2Layer(int[] inputShape, int[] outputShape)
             : base(inputShape, outputShape)
@@ -236,6 +245,31 @@ public class HrePaperAChainShapeValidatorTests
 
         public override long ParameterCount => 0;
         public override bool SupportsTraining => false;
+
+        public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+        {
+            if (inputRank != GetInputShape().Length)
+                return null;
+
+            int[] shape = GetOutputShape();
+            TensorAxis[] axes = shape.Length switch
+            {
+                1 => [TensorAxis.Features],
+                2 => [TensorAxis.Batch, TensorAxis.Features],
+                3 => [TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width],
+                _ => []
+            };
+
+            if (axes.Length == 0)
+                return null;
+
+            return axes.Select((axis, index) => new OutputAxisContract(
+                axis,
+                shape[index] > 0
+                    ? AxisRelation.Fixed(shape[index])
+                    : AxisRelation.Unknown("test fixture output contains an unresolved wildcard")))
+                .ToArray();
+        }
 
         protected override Tensor<float> ForwardTraced(Tensor<float> input)
         {

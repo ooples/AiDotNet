@@ -87,7 +87,7 @@ namespace AiDotNet.NeuralNetworks.SyntheticData;
     "https://arxiv.org/abs/1906.09338",
     Year = 2019,
     Authors = "James Jordon, Jinsung Yoon, Mihaela van der Schaar")]
-public partial class PATEGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerator<T>
+public partial class PATEGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>, ISyntheticTabularGenerator<T>
 {
     private readonly PATEGANOptions<T> _options;
     // One dedicated optimizer per sub-network (Jordon et al. 2019 PATE-GAN trains

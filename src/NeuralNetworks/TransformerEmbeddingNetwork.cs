@@ -49,7 +49,7 @@ namespace AiDotNet.NeuralNetworks
     [ModelComplexity(ModelComplexity.High)]
     [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     [ResearchPaper("Attention Is All You Need", "https://arxiv.org/abs/1706.03762")]
-    public class TransformerEmbeddingNetwork<T> : NeuralNetworkBase<T>, IEmbeddingModel<T>
+    public class TransformerEmbeddingNetwork<T> : TextEmbeddingModelLayoutBase<T>, IEmbeddingModel<T>
     {
         private readonly TransformerEmbeddingOptions _options;
 

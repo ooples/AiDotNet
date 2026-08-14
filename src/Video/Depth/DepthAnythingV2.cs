@@ -65,6 +65,10 @@ namespace AiDotNet.Video.Depth;
     "https://arxiv.org/abs/2406.09414",
     Year = 2024,
     Authors = "Lihe Yang, Bingyi Kang, Zilong Huang, Zhen Zhao, Xiaogang Xu, Jiashi Feng, Hengshuang Zhao")]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Input, BatchOptional = true)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Output, BatchOptional = true)]
 public class DepthAnythingV2<T> : NeuralNetworkBase<T>
 {
     private readonly DepthAnythingV2Options _options;

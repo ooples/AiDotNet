@@ -58,7 +58,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("VideoCLIP: Contrastive Pre-training for Zero-shot Video-Text Understanding", "https://arxiv.org/abs/2109.14084", Year = 2021, Authors = "Hu Xu, Gargi Ghosh, Po-Yao Huang, Dmytro Okhonko, Arber Zela, Florian Metze, Luke Zettlemoyer, Christoph Feichtenhofer")]
-public partial class VideoCLIPNeuralNetwork<T> : NeuralNetworkBase<T>, IVideoCLIPModel<T>
+public partial class VideoCLIPNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IVideoCLIPModel<T>
 {
     private readonly VideoCLIPOptions _options;
 
