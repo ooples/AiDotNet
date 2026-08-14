@@ -18,7 +18,7 @@ using System.Threading.Tasks;
 namespace AiDotNet.Tests.IntegrationTests.ReinforcementLearning;
 
 [Collection("NonParallelIntegration")]
-public class BaseClassesIntegrationTests
+public partial class BaseClassesIntegrationTests
 {
     [Fact(Timeout = 120000)]
     public async Task PolicyBase_ValidateStateAndAction_ThrowsForInvalidInput()
@@ -308,7 +308,7 @@ public class BaseClassesIntegrationTests
         }
     }
 
-    private sealed class TestBaseAgent : ReinforcementLearningAgentBase<double>
+    private sealed partial class TestBaseAgent : ReinforcementLearningAgentBase<double>
     {
         private Vector<double> _parameters;
         private bool _deserializeCalled;

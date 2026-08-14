@@ -22,7 +22,7 @@ namespace AiDotNet.Tests.Helpers;
 /// Tests run sequentially via [Collection] to avoid env var races.
 /// </remarks>
 [Collection("License")]
-public class ModelPersistenceGuardTests : IDisposable
+public partial class ModelPersistenceGuardTests : IDisposable
 {
     private readonly string _tempDir;
     private readonly string _trialFilePath;
@@ -870,7 +870,7 @@ public class ModelPersistenceGuardTests : IDisposable
     /// DeepCopy's serialization path does NOT invoke this override — i.e.
     /// the user override is only reachable from the public virtual call.
     /// </summary>
-    private sealed class ExfilTrackingFeedForward : FeedForwardNeuralNetwork<double>
+    private sealed partial class ExfilTrackingFeedForward : FeedForwardNeuralNetwork<double>
     {
         public int SerializeOverrideCalls { get; private set; }
 

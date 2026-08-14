@@ -172,15 +172,16 @@ public class ModelStateGenerator : IIncrementalGenerator
 
         if (members.Count == 0) return;
 
-        if (!type.DeclaringSyntaxReferences
-                .Select(r => r.GetSyntax())
-                .OfType<ClassDeclarationSyntax>()
-                .Any(d => d.Modifiers.Any(m => m.ValueText == "partial")))
+        // The type AND everything containing it. A nested partial can only be reopened inside partial
+        // outers, so reporting only the inner one would name a fix that does not compile on its own.
+        for (var scope = type; scope is not null; scope = scope.ContainingType)
         {
+            if (IsPartial(scope)) continue;
+
             spc.ReportDiagnostic(Diagnostic.Create(
                 MustBePartial,
-                type.Locations.FirstOrDefault(),
-                type.Name,
+                scope.Locations.FirstOrDefault(),
+                scope.Name,
                 string.Join(", ", members.Select(m => m.Name))));
             return;
         }
@@ -313,27 +314,62 @@ public class ModelStateGenerator : IIncrementalGenerator
             sb.AppendLine();
         }
 
-        var typeParams = type.TypeParameters.Length > 0
-            ? "<" + string.Join(", ", type.TypeParameters.Select(p => p.Name)) + ">"
-            : string.Empty;
+        // A NESTED type has to be reopened through the types that contain it. Emitting `partial class
+        // Inner` at namespace level declares a DIFFERENT type -- one with no base -- and the override
+        // then has nothing to override, which is what CS0115 was reporting for five model classes
+        // declared inside their test fixtures. Outermost first, so the chain reads the way it is
+        // written in the source.
+        var chain = new List<INamedTypeSymbol>();
+        for (var outer = type.ContainingType; outer is not null; outer = outer.ContainingType)
+        {
+            chain.Insert(0, outer);
+        }
 
-        sb.AppendLine($"partial class {type.Name}{typeParams}");
-        sb.AppendLine("{");
-        sb.AppendLine("    /// <summary>Auto-generated state declarations for this model's own members.</summary>");
-        sb.AppendLine($"    protected override void RegisterGeneratedState(global::AiDotNet.Models.ModelStateRegistry<{numeric}> state)");
-        sb.AppendLine("    {");
-        sb.AppendLine("        base.RegisterGeneratedState(state);");
+        var indent = string.Empty;
+
+        foreach (var outer in chain)
+        {
+            sb.AppendLine($"{indent}partial class {outer.Name}{TypeParametersOf(outer)}");
+            sb.AppendLine($"{indent}{{");
+            indent += "    ";
+        }
+
+        sb.AppendLine($"{indent}partial class {type.Name}{TypeParametersOf(type)}");
+        sb.AppendLine($"{indent}{{");
+        sb.AppendLine($"{indent}    /// <summary>Auto-generated state declarations for this model's own members.</summary>");
+        sb.AppendLine($"{indent}    protected override void RegisterGeneratedState(global::AiDotNet.Models.ModelStateRegistry<{numeric}> state)");
+        sb.AppendLine($"{indent}    {{");
+        sb.AppendLine($"{indent}        base.RegisterGeneratedState(state);");
 
         // Ordered by name so the payload does not depend on declaration order, which a refactor can
         // change without anybody meaning to.
         foreach (var member in members.OrderBy(m => m.Name, System.StringComparer.Ordinal))
         {
-            sb.AppendLine($"        {member.Call}");
+            sb.AppendLine($"{indent}        {member.Call}");
         }
 
-        sb.AppendLine("    }");
-        sb.AppendLine("}");
+        sb.AppendLine($"{indent}    }}");
+        sb.AppendLine($"{indent}}}");
+
+        for (var i = chain.Count - 1; i >= 0; i--)
+        {
+            indent = indent.Substring(0, indent.Length - 4);
+            sb.AppendLine($"{indent}}}");
+        }
 
         return sb.ToString();
+    }
+
+    private static bool IsPartial(INamedTypeSymbol type)
+        => type.DeclaringSyntaxReferences
+            .Select(r => r.GetSyntax())
+            .OfType<ClassDeclarationSyntax>()
+            .Any(d => d.Modifiers.Any(m => m.ValueText == "partial"));
+
+    private static string TypeParametersOf(INamedTypeSymbol type)
+    {
+        return type.TypeParameters.Length > 0
+            ? "<" + string.Join(", ", type.TypeParameters.Select(p => p.Name)) + ">"
+            : string.Empty;
     }
 }
