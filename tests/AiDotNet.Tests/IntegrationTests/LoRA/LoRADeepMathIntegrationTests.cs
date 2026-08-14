@@ -432,6 +432,7 @@ public class LoRADeepMathIntegrationTests
     public async Task DoRA_ParameterCount_IncludesMagnitude()
     {
         var baseLayer = new DenseLayer<double>(5);
+        baseLayer.ResolveFromShape(new[] { 10 });
         var adapter = new DoRAAdapter<double>(baseLayer, rank: 2, alpha: 2.0);
 
         // frozen: loraParams + magnitude = (10*2 + 2*5) + 5 = 35
@@ -502,6 +503,7 @@ public class LoRADeepMathIntegrationTests
     public async Task StandardAdapter_FrozenParamCount_OnlyLoRA()
     {
         var baseLayer = new DenseLayer<double>(5);
+        baseLayer.ResolveFromShape(new[] { 10 });
         var adapter = new StandardLoRAAdapter<double>(baseLayer, rank: 3, freezeBaseLayer: true);
 
         int loraOnly = 10 * 3 + 3 * 5;
@@ -512,6 +514,7 @@ public class LoRADeepMathIntegrationTests
     public async Task StandardAdapter_UnfrozenParamCount_BaseAndLoRA()
     {
         var baseLayer = new DenseLayer<double>(5);
+        baseLayer.ResolveFromShape(new[] { 10 });
         int baseParams = (int)baseLayer.ParameterCount;
         var adapter = new StandardLoRAAdapter<double>(baseLayer, rank: 3, freezeBaseLayer: false);
 
@@ -589,6 +592,7 @@ public class LoRADeepMathIntegrationTests
 
         // 2 * rank * inputSize * outputSize (frozen)
         var baseLayer = new DenseLayer<double>(5);
+        baseLayer.ResolveFromShape(new[] { 10 });
         var adapter = new LoHaAdapter<double>(baseLayer, rank: 3, alpha: 3.0);
 
         Assert.Equal(2 * 3 * 10 * 5, (int)adapter.ParameterCount);

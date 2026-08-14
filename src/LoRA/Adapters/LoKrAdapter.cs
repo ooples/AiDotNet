@@ -56,6 +56,7 @@ public partial class LoKrAdapter<T> : LoRAAdapterBase<T>
     /// <remarks>
     /// This is one of the two matrices used in the Kronecker product decomposition.
     /// </remarks>
+    [TrainableParameter]
     private Tensor<T> _matrixA;
 
     /// <summary>
@@ -65,6 +66,7 @@ public partial class LoKrAdapter<T> : LoRAAdapterBase<T>
     /// This is the second matrix used in the Kronecker product decomposition.
     /// The Kronecker product A ⊗ B produces a (m×p) × (n×q) matrix.
     /// </remarks>
+    [TrainableParameter]
     private Tensor<T> _matrixB;
 
     /// <summary>
@@ -80,16 +82,19 @@ public partial class LoKrAdapter<T> : LoRAAdapterBase<T>
     /// <summary>
     /// Gradients for matrix A computed during backpropagation.
     /// </summary>
+    [Scratch]
     private Matrix<T>? _gradientA;
 
     /// <summary>
     /// Gradients for matrix B computed during backpropagation.
     /// </summary>
+    [Scratch]
     private Matrix<T>? _gradientB;
 
     /// <summary>
     /// Stored input from the forward pass, needed for gradient computation.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastInput;
 
     /// <summary>
@@ -182,8 +187,8 @@ public partial class LoKrAdapter<T> : LoRAAdapterBase<T>
             }
         }
 
-        // Initialize parameter vector
-        Parameters = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
+        // LoKr replaces the standard LoRA factors with its Kronecker factors.
+        FreezeSubLayerParameters(_loraLayer);
     }
 
     /// <summary>

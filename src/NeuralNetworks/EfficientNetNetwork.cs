@@ -69,7 +69,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("EfficientNet: Rethinking Model Scaling for Convolutional Neural Networks", "https://arxiv.org/abs/1905.11946", Year = 2019, Authors = "Mingxing Tan, Quoc V. Le")]
-public class EfficientNetNetwork<T> : NeuralNetworkBase<T>
+public class EfficientNetNetwork<T> : ImageClassifierModelLayoutBase<T>
 {
     private readonly EfficientNetOptions _options;
 

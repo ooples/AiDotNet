@@ -47,7 +47,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("An Image is Worth 16x16 Words: Transformers for Image Recognition at Scale", "https://arxiv.org/abs/2010.11929", Year = 2021, Authors = "Alexey Dosovitskiy, Lucas Beyer, Alexander Kolesnikov, Dirk Weissenborn, Xiaohua Zhai, Thomas Unterthiner, Mostafa Dehghani, Matthias Minderer, Georg Heigold, Sylvain Gelly, Jakob Uszkoreit, Neil Houlsby")]
-public partial class VisionTransformer<T> : NeuralNetworkBase<T>
+public partial class VisionTransformer<T> : ImageClassifierModelLayoutBase<T>
 {
     private readonly VisionTransformerOptions _options;
 

@@ -69,16 +69,18 @@ public partial class LayerNormalizationLayer<T> : LayerBase<T>, IShapeContract
     /// <summary>
     /// The scale parameters learned during training.
     /// </summary>
-    [TrainableParameter(Role = PersistentTensorRole.NormalizationParams,
-        Shape = "InputShape[0]")]
-
+    // Deliberately has no static Shape declaration. The parameterless constructor resolves the
+    // normalized width from the actual first input's last axis. A model's architecture shape can
+    // describe the public input before an upstream projection, so using it to materialize gamma
+    // during parameter inspection can permanently lock this layer to the wrong feature width.
+    // The eager featureSize constructor already materializes both tensors and needs no formula.
+    [TrainableParameter(Role = PersistentTensorRole.NormalizationParams)]
     private Tensor<T> _gamma;
 
     /// <summary>
     /// The shift parameters learned during training.
     /// </summary>
-    [TrainableParameter(Role = PersistentTensorRole.NormalizationParams,
-        Shape = "InputShape[0]")]
+    [TrainableParameter(Role = PersistentTensorRole.NormalizationParams)]
     private Tensor<T> _beta;
 
     /// <summary>
@@ -292,6 +294,16 @@ public partial class LayerNormalizationLayer<T> : LayerBase<T>, IShapeContract
     /// </summary>
     protected override void OnFirstForward(Tensor<T> input)
     {
+        // A chain-level shape walk is only a projection. LayerNorm is rank-agnostic and its
+        // normalized width is the last axis of the tensor that reaches it in the model's real
+        // topology; a custom forward may not follow the public Layers list sequentially. An
+        // explicit [SubLayerInput] supplied by the owning composite is different: that declaration
+        // describes the real internal edge and is authoritative. This provenance distinction keeps
+        // model-level probes deferred while letting generated composites expose a complete parameter
+        // surface without asking their authors for any normalization-specific plumbing.
+        if (IsResolvingShapesOnly && !IsResolvingDeclaredSubLayerShapeOnly)
+            return;
+
         int featureSize = input.Shape[input.Shape.Length - 1];
         if (featureSize <= 0)
         {

@@ -76,6 +76,10 @@ namespace AiDotNet.PhysicsInformed.PINNs
     [ModelComplexity(ModelComplexity.High)]
     [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     [ResearchPaper("The Deep Ritz Method: A Deep Learning-Based Numerical Method for Solving Variational Problems", "https://doi.org/10.1007/s40304-018-0127-z", Year = 2018, Authors = "Weinan E, Bing Yu")]
+    [TensorLayout(TensorAxis.Batch, TensorAxis.Features,
+        Direction = TensorLayoutDirection.Input, BatchOptional = true)]
+    [TensorLayout(TensorAxis.Batch, TensorAxis.Features,
+        Direction = TensorLayoutDirection.Output, BatchOptional = true)]
     public class DeepRitzMethod<T> : NeuralNetworkBase<T>
     {
         private readonly DeepRitzMethodOptions _options;

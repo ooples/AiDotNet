@@ -67,6 +67,10 @@ namespace AiDotNet.Video.ActionRecognition;
     "https://arxiv.org/abs/2203.12602",
     Year = 2022,
     Authors = "Zhan Tong, Yibing Song, Jue Wang, Limin Wang")]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Frames, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Input, BatchOptional = true)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Classes,
+    Direction = TensorLayoutDirection.Output, BatchOptional = true)]
 public class VideoMAE<T> : NeuralNetworkBase<T>
 {
     private readonly VideoMAEOptions _options;

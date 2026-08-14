@@ -70,6 +70,10 @@ namespace AiDotNet.ComputerVision.OCR.EndToEnd;
     "https://arxiv.org/abs/2002.10200",
     Year = 2020,
     Authors = "Yuliang Liu, Hao Chen, Chunhua Shen, Tong He, Lianwen Jin, Liangwei Wang")]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Input, BatchOptional = true)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Classes,
+    Direction = TensorLayoutDirection.Output, BatchOptional = true)]
 public class ABCNet<T> : NeuralNetworkBase<T>, ICompositeLoss<T>
 {
     /// <summary>Coordinates the Bezier head regresses: 8 control points, (x, y) each.</summary>

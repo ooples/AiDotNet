@@ -57,7 +57,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Conditional Image Synthesis with Auxiliary Classifier GANs", "https://arxiv.org/abs/1610.09585", Year = 2017, Authors = "Augustus Odena, Christopher Olah, Jonathon Shlens")]
-public partial class ACGAN<T> : NeuralNetworkBase<T>
+public partial class ACGAN<T> : ImageGeneratorModelLayoutBase<T>
 {
 
     // Generator and Discriminator are discovered as sub-network members and their layers surfaced

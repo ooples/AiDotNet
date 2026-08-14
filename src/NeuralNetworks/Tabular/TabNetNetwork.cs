@@ -59,7 +59,7 @@ namespace AiDotNet.NeuralNetworks.Tabular;
     "https://arxiv.org/abs/1908.07442",
     Year = 2021,
     Authors = "Arik, S. O. & Pfister, T.")]
-public class TabNetNetwork<T> : NeuralNetworkBase<T>
+public class TabNetNetwork<T> : TabularNeuralNetworkBase<T>
 {
     private readonly TabNetOptions<T> _options;
 

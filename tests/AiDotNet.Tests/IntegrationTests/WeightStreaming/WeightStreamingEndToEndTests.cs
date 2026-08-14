@@ -87,7 +87,7 @@ public sealed class WeightStreamingEndToEndTests : IDisposable
     /// per-layer prefetch + materialize-scope orchestration without
     /// needing real-world dimensions.
     /// </summary>
-    private sealed class SmallStreamableNetwork : NeuralNetworkBase<float>
+    private sealed class SmallStreamableNetwork : VectorModelLayoutBase<float>
     {
         public SmallStreamableNetwork()
             : base(lossFunction: new MeanSquaredErrorLoss<float>(), maxGradNorm: 1.0)
@@ -120,6 +120,10 @@ public sealed class WeightStreamingEndToEndTests : IDisposable
             => new SmallStreamableNetwork();
     }
 
+    [AiDotNet.Attributes.TensorLayout(AiDotNet.Enums.TensorAxis.Batch, AiDotNet.Enums.TensorAxis.Time,
+        AiDotNet.Enums.TensorAxis.Features, Direction = AiDotNet.Attributes.TensorLayoutDirection.Input)]
+    [AiDotNet.Attributes.TensorLayout(AiDotNet.Enums.TensorAxis.Batch, AiDotNet.Enums.TensorAxis.Time,
+        AiDotNet.Enums.TensorAxis.Features, Direction = AiDotNet.Attributes.TensorLayoutDirection.Output)]
     private sealed class ConstructionSizedStreamableNetwork : NeuralNetworkBase<float>
     {
         public ConstructionSizedStreamableNetwork()
@@ -137,6 +141,10 @@ public sealed class WeightStreamingEndToEndTests : IDisposable
             new ConstructionSizedStreamableNetwork();
     }
 
+    [AiDotNet.Attributes.TensorLayout(AiDotNet.Enums.TensorAxis.Batch, AiDotNet.Enums.TensorAxis.Time,
+        AiDotNet.Enums.TensorAxis.Features, Direction = AiDotNet.Attributes.TensorLayoutDirection.Input)]
+    [AiDotNet.Attributes.TensorLayout(AiDotNet.Enums.TensorAxis.Batch, AiDotNet.Enums.TensorAxis.Time,
+        AiDotNet.Enums.TensorAxis.Features, Direction = AiDotNet.Attributes.TensorLayoutDirection.Output)]
     private sealed class CompositeStreamableNetwork : NeuralNetworkBase<float>
     {
         public CompositeStreamableNetwork()
@@ -153,6 +161,10 @@ public sealed class WeightStreamingEndToEndTests : IDisposable
             new CompositeStreamableNetwork();
     }
 
+    [AiDotNet.Attributes.TensorLayout(AiDotNet.Enums.TensorAxis.Batch, AiDotNet.Enums.TensorAxis.Time,
+        AiDotNet.Enums.TensorAxis.Features, Direction = AiDotNet.Attributes.TensorLayoutDirection.Input)]
+    [AiDotNet.Attributes.TensorLayout(AiDotNet.Enums.TensorAxis.Batch, AiDotNet.Enums.TensorAxis.Time,
+        AiDotNet.Enums.TensorAxis.Features, Direction = AiDotNet.Attributes.TensorLayoutDirection.Output)]
     private sealed class ThrowBeforeLazyLayerNetwork : NeuralNetworkBase<float>
     {
         public ThrowBeforeLazyLayerNetwork()
@@ -170,6 +182,7 @@ public sealed class WeightStreamingEndToEndTests : IDisposable
             new ThrowBeforeLazyLayerNetwork();
     }
 
+    [AiDotNet.Attributes.ElementWiseShape]
     private sealed class ThrowingForwardLayer : LayerBase<float>
     {
         public ThrowingForwardLayer() : base([4, 64], [4, 64]) { }

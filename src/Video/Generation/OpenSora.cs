@@ -65,6 +65,10 @@ namespace AiDotNet.Video.Generation;
     "https://arxiv.org/abs/2412.20404",
     Year = 2024,
     Authors = "Zangwei Zheng, Xiangyu Peng, Tianji Yang, Chenhui Shen, Shenggui Li, Hongxin Liu, Yukun Zhou, Tianyi Li, Yang You")]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Input, BatchOptional = true)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Frames, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Output, BatchOptional = true)]
 public partial class OpenSora<T> : NeuralNetworkBase<T>
 {
     private readonly OpenSoraOptions _options;

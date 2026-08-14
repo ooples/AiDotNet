@@ -51,7 +51,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Generative Adversarial Nets", "https://arxiv.org/abs/1406.2661", Year = 2014, Authors = "Ian J. Goodfellow, Jean Pouget-Abadie, Mehdi Mirza, Bing Xu, David Warde-Farley, Sherjil Ozair, Aaron Courville, Yoshua Bengio")]
-public partial class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
+public partial class GenerativeAdversarialNetwork<T> : ImageGeneratorModelLayoutBase<T>, IAuxiliaryLossLayer<T>
 {
 
     // Generator then Discriminator are discovered as sub-network members, in declaration order,

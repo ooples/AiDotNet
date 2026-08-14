@@ -48,39 +48,25 @@ public class ShapeDeclarationValidationGenerator : IIncrementalGenerator
 {
     private const string LayoutAttributeName = "AiDotNet.Attributes.TensorLayoutAttribute";
     private const string LayerPropertyAttributeName = "AiDotNet.Attributes.LayerPropertyAttribute";
+    private const string PreprocessesInputAttributeName = "AiDotNet.Attributes.PreprocessesInputAttribute";
+    private const string StackInputLayoutAttributeName = "AiDotNet.Attributes.StackInputLayoutAttribute";
 
-    /// <summary>
-    /// Marker for "this type belongs to a model family whose base carries a shape contract".
-    /// </summary>
-    /// <remarks>
-    /// Segmentation is the first family brought in, so the prefix names it explicitly rather than
-    /// guessing from interface naming. Widening this is a deliberate act - each family's law has to be
-    /// MEASURED first, and of the families measured since, forecasting, vision-language and the
-    /// vocoders all turned out NOT to share one law, which is a decline rather than a declaration.
-    /// </remarks>
-    private const string FamilyInterfacePrefix = "AiDotNet.Interfaces.ISegmentationModel";
-
+    /// <summary>Reports a concrete neural-network model that publishes no caller-facing shape manifest.</summary>
     private static readonly DiagnosticDescriptor ModelWithoutShapeContractDescriptor = new(
         id: "ADNSHAPE007",
-        title: "Model implements a family interface but inherits no shape contract",
-        messageFormat: "'{0}' implements '{1}' but derives from no base that declares a shape contract, "
-                       + "so nothing can reason about its output shape. Derive from the family base "
-                       + "(SegmentationModelBase and its eight family bases carry the contract) and "
-                       + "override OutputAxesFor only where this model genuinely differs - as SAM does "
-                       + "for its /16 encoder and SegMamba for its volumetric "
-                       + "[Classes, Depth, Height, Width] output, both found by the conformance sweep.",
+        title: "Concrete model publishes no shape manifest",
+        messageFormat: "'{0}' derives from NeuralNetworkBase but publishes neither an input nor an "
+                       + "output [TensorLayout]. Every concrete model must declare the caller-facing "
+                       + "ranks and semantic axes it supports, either on a measured family base or on "
+                       + "the model itself.",
         category: "AiDotNet.Shapes",
-        // Enforced as an ERROR via TreatWarningsAsErrors, and that is only safe because the rule is
-        // SCOPED to one family already at zero: all 70 concrete segmentation models derive from
-        // SegmentationModelBase. No backlog means no ladder - unlike ADNSHAPE006, which entered at
-        // 85 of ~270 layers and needed one.
-        defaultSeverity: DiagnosticSeverity.Warning,
+        defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true,
         description:
-            "A model contract is worth something only because the conformance sweep verifies it against "
-            + "a real Predict. This rule is the other half: it stops a NEW model silently opting out of "
-            + "a family law its siblings all satisfy, which is how the layer inventory drifted to 268 "
-            + "undeclared types before ADNSHAPE006 existed.");
+            "The generated model-family tests can only choose a correct tensor when the model names its "
+            + "supported layouts. Symbolic IShapeContract relations remain valuable where output sizes "
+            + "are statically expressible, but a layout manifest is mandatory even when dimensions are "
+            + "data-dependent.");
 
     private static readonly DiagnosticDescriptor LayerWithoutShapeContractDescriptor = new(
         id: "ADNSHAPE006",
@@ -97,7 +83,39 @@ public class ShapeDeclarationValidationGenerator : IIncrementalGenerator
         // declared and reached 0; removing its <WarningsNotAsErrors> entry is what makes it fail the
         // build. A permanent warning is exactly what let 244 layers sit undeclared while the shape
         // system was assumed to cover them.
-        defaultSeverity: DiagnosticSeverity.Warning,
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true);
+
+    private static readonly DiagnosticDescriptor ModelWithoutInputLayoutDescriptor = new(
+        id: "ADNSHAPE008",
+        title: "Concrete model declares no caller-facing input layout",
+        messageFormat: "'{0}' publishes a partial shape manifest but no effective "
+                       + "[TensorLayout(Direction = Input)]. "
+                       + "Declare the tensor ranks and semantic axes accepted by Predict on the model "
+                       + "or on a measured family base.",
+        category: "AiDotNet.Shapes",
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true);
+
+    private static readonly DiagnosticDescriptor ModelWithoutOutputLayoutDescriptor = new(
+        id: "ADNSHAPE009",
+        title: "Concrete model declares no caller-facing output layout",
+        messageFormat: "'{0}' publishes a partial shape manifest but no effective "
+                       + "[TensorLayout(Direction = Output)]. "
+                       + "Declare the semantic axes returned by Predict; OutputAxesFor supplies sizes, "
+                       + "but callers also need the supported output layout.",
+        category: "AiDotNet.Shapes",
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true);
+
+    private static readonly DiagnosticDescriptor PreprocessorWithoutStackLayoutDescriptor = new(
+        id: "ADNSHAPE010",
+        title: "Input preprocessing omits the layer-stack entry layout",
+        messageFormat: "'{0}' uses [PreprocessesInput] but declares no [StackInputLayout]. The attribute "
+                       + "would otherwise suppress the model-to-first-layer check without declaring the "
+                       + "transformed tensor that Layers[0] actually receives.",
+        category: "AiDotNet.Shapes",
+        defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true);
 
     private static readonly DiagnosticDescriptor LayerPropertyContradictsLayoutDescriptor = new(
@@ -160,26 +178,10 @@ public class ShapeDeclarationValidationGenerator : IIncrementalGenerator
                        + "- silently, because the trace still succeeds and simply omits it. Rename the "
                        + "override to 'protected override Tensor<T> ForwardTraced'.",
         category: "AiDotNet.Shapes",
-        // WARNING UNTIL THE CONVERSION LANDS, THEN ERROR.
-        //
-        // This rule fires on 873 layers, and the commits that rename those overrides to
-        // ForwardTraced are spread across the later slices of the #1789 split. At Error severity
-        // it GATES THE BUILD, so slice 01 -- which introduces the rule -- makes every intermediate
-        // merge state of the split red by construction: measured on integration/1789, merging
-        // slice 01 alone produced 873 ADNSHAPE004 errors, and merging 02 and 03 on top did not
-        // clear them because their conversions are not the ones this rule is waiting for.
-        //
-        // The consequence is not cosmetic. No slice can be built, so no slice can be
-        // build-verified before merge, per-slice CI reports a failure that says nothing about the
-        // slice, and any tooling that checks a branch compiles is useless across the whole split.
-        //
-        // Warning keeps every diagnostic visible and every intermediate state buildable. The final
-        // slice of the split flips this back to Error, at the point where the violation count is
-        // zero and the gate can hold. See the sibling entry in AnalyzerReleases.Unshipped.md.
-        //
-        // Note the asymmetry with ADNSHAPE001/002, which stay Error: those describe a contract
-        // that is self-inconsistent right now, not one the split is mid-way through satisfying.
-        defaultSeverity: DiagnosticSeverity.Warning,
+        // A layer that bypasses ForwardTraced makes graph recovery silently incomplete. The
+        // migration backlog is zero, so this is a permanent compiler gate rather than advisory
+        // debt that can silently accumulate again.
+        defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true);
 
     private static readonly DiagnosticDescriptor ContractWithoutInputLayoutDescriptor = new(
@@ -189,7 +191,7 @@ public class ShapeDeclarationValidationGenerator : IIncrementalGenerator
                        + "Resolving a contract starts by NAMING the input axes, so without an input layout "
                        + "the contract can never fire and the type infers nothing.",
         category: "AiDotNet.Shapes",
-        defaultSeverity: DiagnosticSeverity.Warning,
+        defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true);
 
     /// <inheritdoc />
@@ -268,16 +270,8 @@ public class ShapeDeclarationValidationGenerator : IIncrementalGenerator
             // it. Demanding a [TensorLayout] as well would mean writing a FIXED set of ranks onto a
             // layer documented to accept any -- narrowing a correct contract into a false one, and
             // making a rank-5 input violate a rule the layer does not actually have.
-            bool declaresInputLayout = false;
-            for (var t = type; t is not null && !declaresInputLayout; t = t.BaseType)
-            {
-                declaresInputLayout =
-                    t.GetAttributes().Any(a => a.AttributeClass?.ToDisplayString() == ElementWiseAttributeName)
-                    || t.GetAttributes()
-                        .Where(a => a.AttributeClass?.ToDisplayString() == LayoutAttributeName)
-                        .Select(Parse)
-                        .Any(l => l.Axes.Count > 0 && l.IsInput);
-            }
+            bool declaresInputLayout = HasEffectiveLayout(type, isInput: true);
+            bool declaresOutputLayout = HasEffectiveLayout(type, isInput: false);
 
             // Interfaces are excluded: IMultiPortShapeContract and friends REFINE IShapeContract
             // rather than implement it for a concrete tensor, so there is no layout for them to
@@ -354,22 +348,37 @@ public class ShapeDeclarationValidationGenerator : IIncrementalGenerator
                     LayerWithoutShapeContractDescriptor, type.Locations.FirstOrDefault(), type.Name));
             }
 
-            // ADNSHAPE007 - the MODEL-side counterpart. A model implementing a family interface while
-            // deriving from no contract-declaring base has silently opted out of its family's law. That
-            // is the exact defect the segmentation refactor fixed: 70 models implemented the family
-            // interfaces while deriving straight from NeuralNetworkBase, leaving SegmentationModelBase
-            // and its eight family bases with ZERO users.
-            if (!type.IsAbstract && !hasContract)
+            // ADNSHAPE007-009 - every concrete model must publish its caller-facing layout even when
+            // no universally correct symbolic dimension relation exists. Requiring IShapeContract here
+            // would force data-dependent models to lie; requiring input/output TensorLayout declarations
+            // gives the test generator the ranks and semantic axes it needs without inventing dimensions.
+            bool isConcreteModel = DerivesFromNeuralNetworkBase(type) && !type.IsAbstract;
+            if (isConcreteModel && !declaresInputLayout && !declaresOutputLayout)
             {
-                var familyInterface = type.AllInterfaces.FirstOrDefault(i =>
-                    i.ConstructedFrom.ToDisplayString().StartsWith(FamilyInterfacePrefix, System.StringComparison.Ordinal));
-
-                if (familyInterface is not null)
+                spc.ReportDiagnostic(new ShapeFinding(
+                    ModelWithoutShapeContractDescriptor, type.Locations.FirstOrDefault(), type.Name));
+            }
+            else if (isConcreteModel)
+            {
+                if (!declaresInputLayout)
                 {
                     spc.ReportDiagnostic(new ShapeFinding(
-                        ModelWithoutShapeContractDescriptor, type.Locations.FirstOrDefault(),
-                        type.Name, familyInterface.Name));
+                        ModelWithoutInputLayoutDescriptor, type.Locations.FirstOrDefault(), type.Name));
                 }
+
+                if (!declaresOutputLayout)
+                {
+                    spc.ReportDiagnostic(new ShapeFinding(
+                        ModelWithoutOutputLayoutDescriptor, type.Locations.FirstOrDefault(), type.Name));
+                }
+            }
+
+            if (isConcreteModel
+                && HasEffectiveAttribute(type, PreprocessesInputAttributeName)
+                && !HasEffectiveAttribute(type, StackInputLayoutAttributeName))
+            {
+                spc.ReportDiagnostic(new ShapeFinding(
+                    PreprocessorWithoutStackLayoutDescriptor, type.Locations.FirstOrDefault(), type.Name));
             }
 
             // A layer that overrides Forward is invisible to tracing. Caught at BUILD time because the
@@ -554,6 +563,54 @@ public class ShapeDeclarationValidationGenerator : IIncrementalGenerator
         return false;
     }
 
+    /// <summary>True for a concrete neural-network model rather than an ordinary model or layer.</summary>
+    private static bool DerivesFromNeuralNetworkBase(INamedTypeSymbol type)
+    {
+        for (var b = type.BaseType; b is not null; b = b.BaseType)
+        {
+            if (b.ConstructedFrom.ToDisplayString(NamespaceQualifiedNoGenerics)
+                == "AiDotNet.NeuralNetworks.NeuralNetworkBase")
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool HasEffectiveLayout(INamedTypeSymbol type, bool isInput)
+    {
+        for (var current = type; current is not null; current = current.BaseType)
+        {
+            if (current.GetAttributes().Any(
+                    a => a.AttributeClass?.ToDisplayString() == ElementWiseAttributeName))
+            {
+                return true;
+            }
+
+            if (current.GetAttributes()
+                .Where(a => a.AttributeClass?.ToDisplayString() == LayoutAttributeName)
+                .Select(Parse)
+                .Any(layout => layout.Axes.Count > 0 && layout.IsInput == isInput))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool HasEffectiveAttribute(INamedTypeSymbol type, string attributeName)
+    {
+        for (var current = type; current is not null; current = current.BaseType)
+        {
+            if (current.GetAttributes().Any(a => a.AttributeClass?.ToDisplayString() == attributeName))
+                return true;
+        }
+
+        return false;
+    }
+
     private readonly struct Layout
     {
         public Layout(List<string> axes, bool isInput, bool batchOptional, Location? location)
@@ -623,8 +680,16 @@ public class ShapeDeclarationValidationGenerator : IIncrementalGenerator
         foreach (var named in attribute.NamedArguments)
         {
             if (named.Key == "BatchOptional" && named.Value.Value is bool b) batchOptional = b;
-            // TensorLayoutDirection.Output == 1; Input (the default) == 0.
-            if (named.Key == "Direction" && named.Value.Value is int d) isInput = d == 0;
+            // Roslyn exposes an enum constant using its declared underlying integral type. Do not
+            // assume that boxed value is always Int32: analyzer test compilations and consumer-defined
+            // metadata can surface another integral type even though the enum members are 0 and 1.
+            if (named.Key == "Direction" && named.Value.Value is not null)
+            {
+                // TensorLayoutDirection.Output == 1; Input (the default) == 0.
+                isInput = System.Convert.ToInt64(
+                    named.Value.Value,
+                    System.Globalization.CultureInfo.InvariantCulture) == 0;
+            }
         }
 
         return new Layout(axes, isInput, batchOptional, attribute.ApplicationSyntaxReference?.GetSyntax().GetLocation());

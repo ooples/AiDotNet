@@ -587,7 +587,8 @@ public sealed class ParameterComponentRegistry<T> : IParameterManifestProvider
                     role == localSlot.Role ? localSlot.UpdatePolicy : null,
                     role == localSlot.Role ? localSlot.Persistence : null,
                     role == localSlot.Role ? localSlot.Ownership : null,
-                    entry.Availability));
+                    entry.Availability,
+                    materializedParameterCount: localSlot.MaterializedParameterCount));
 
                 if (normalizedCount.HasValue)
                 {

@@ -57,6 +57,10 @@ namespace AiDotNet.Video.Tracking;
     "https://arxiv.org/abs/2110.06864",
     Year = 2022,
     Authors = "Yifu Zhang, Peize Sun, Yi Jiang, Dongdong Yu, Fucheng Weng, Zehuan Yuan, Ping Luo, Wenyu Liu, Xinggang Wang")]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Frames, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Input, BatchOptional = true)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Frames, TensorAxis.Length, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Output, BatchOptional = true)]
 public class ByteTrack<T> : NeuralNetworkBase<T>
 {
     private readonly ByteTrackOptions _options;

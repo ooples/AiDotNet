@@ -85,7 +85,20 @@ public partial class HRAAdapter<T> : LoRAAdapterBase<T>
     /// saving memory.
     /// </para>
     /// </remarks>
-    private Dictionary<(int row, int col), T> _sparseFullRankUpdates;
+    [TrainableParameter]
+    private Tensor<T> _sparseValues;
+
+    /// <summary>Row coordinate for each compact sparse value.</summary>
+    [Buffer]
+    private Tensor<T> _sparseRows;
+
+    /// <summary>Column coordinate for each compact sparse value.</summary>
+    [Buffer]
+    private Tensor<T> _sparseColumns;
+
+    /// <summary>Number of populated entries in the fixed-capacity sparse tensors.</summary>
+    [Buffer]
+    private Tensor<T> _activeSparseCount;
 
     /// <summary>
     /// Importance scores for each parameter in the weight matrix.
@@ -101,16 +114,19 @@ public partial class HRAAdapter<T> : LoRAAdapterBase<T>
     /// Low score = this parameter is fine with a low-rank approximation.
     /// </para>
     /// </remarks>
+    [Buffer]
     private Matrix<T> _parameterImportance;
 
     /// <summary>
     /// Gradient accumulator for the sparse full-rank component.
     /// </summary>
-    private Dictionary<(int row, int col), T>? _sparseGradients;
+    [Scratch]
+    private Tensor<T>? _sparseGradients;
 
     /// <summary>
     /// Cached input from forward pass for computing sparse gradients in backward pass.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _cachedInput;
 
     /// <summary>
@@ -169,7 +185,15 @@ public partial class HRAAdapter<T> : LoRAAdapterBase<T>
     /// <summary>
     /// Gets the number of active sparse full-rank parameters.
     /// </summary>
-    public int ActiveSparseParams => _sparseFullRankUpdates.Count;
+    public int ActiveSparseParams
+    {
+        get
+        {
+            int count = (int)Convert.ToDouble(_activeSparseCount[0]);
+            if (count < 0) return 0;
+            return count > _sparseValues.Length ? _sparseValues.Length : count;
+        }
+    }
 
     /// <summary>
     /// Gets the maximum allowed sparse parameters.
@@ -244,8 +268,14 @@ public partial class HRAAdapter<T> : LoRAAdapterBase<T>
         _useDynamicAllocation = useDynamicAllocation;
         _stepCount = 0;
 
-        // Initialize sparse full-rank updates (empty initially)
-        _sparseFullRankUpdates = new Dictionary<(int row, int col), T>();
+        // Keep sparse values and their coordinates in explicit tensors. Values are trainable;
+        // coordinates and active length are persistent buffers, so a fresh clone can restore the
+        // exact sparse layout without a hand-written flat-vector override.
+        _sparseValues = new Tensor<T>([_maxSparseParams]);
+        _sparseRows = new Tensor<T>([_maxSparseParams]);
+        _sparseColumns = new Tensor<T>([_maxSparseParams]);
+        _activeSparseCount = new Tensor<T>([1]);
+        _activeSparseCount[0] = NumOps.Zero;
 
         // Initialize importance scores (uniform initially)
         _parameterImportance = new Matrix<T>(outputSize, inputSize);
@@ -260,8 +290,7 @@ public partial class HRAAdapter<T> : LoRAAdapterBase<T>
         // Sparse scaling factor (typically smaller than LoRA scaling)
         _sparseScaling = NumOps.FromDouble(0.1);
 
-        // Initialize parameters
-        Parameters = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
+        // The inherited LoRA tensors and the compact sparse tensors now form one generated manifest.
     }
 
     /// <summary>
@@ -323,7 +352,7 @@ public partial class HRAAdapter<T> : LoRAAdapterBase<T>
     /// This is a standard matrix multiplication but using a sparse weight matrix.
     /// </para>
     /// <para><b>For Beginners:</b> This applies the "specialist" updates.
-    /// Only the VIP parameters (stored in _sparseFullRankUpdates) are used here.
+    /// Only the VIP parameters in the compact sparse tensors are used here.
     /// Everything else is treated as zero, maintaining efficiency.
     /// </para>
     /// </remarks>
@@ -334,7 +363,8 @@ public partial class HRAAdapter<T> : LoRAAdapterBase<T>
         int outputSize = GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0];
 
         // If no sparse parameters, return zeros
-        if (_sparseFullRankUpdates.Count == 0)
+        int activeCount = ActiveSparseParams;
+        if (activeCount == 0)
         {
             Vector<T> zeroData = new Vector<T>(batchSize * outputSize);
             return new Tensor<T>(new[] { batchSize, outputSize }, zeroData);
@@ -352,11 +382,11 @@ public partial class HRAAdapter<T> : LoRAAdapterBase<T>
 
         // Compute sparse matrix multiplication
         Matrix<T> output = new Matrix<T>(batchSize, outputSize);
-        foreach (var kvp in _sparseFullRankUpdates)
+        for (int sparseIndex = 0; sparseIndex < activeCount; sparseIndex++)
         {
-            int row = kvp.Key.row;
-            int col = kvp.Key.col;
-            T weight = NumOps.Multiply(kvp.Value, _sparseScaling);
+            int row = (int)Convert.ToDouble(_sparseRows[sparseIndex]);
+            int col = (int)Convert.ToDouble(_sparseColumns[sparseIndex]);
+            T weight = NumOps.Multiply(_sparseValues[sparseIndex], _sparseScaling);
 
             // output[b, row] += weight * input[b, col]
             for (int b = 0; b < batchSize; b++)
@@ -392,10 +422,11 @@ public partial class HRAAdapter<T> : LoRAAdapterBase<T>
         int inputSize = GetInputShape()[0];
 
         // Initialize sparse gradients
-        _sparseGradients = new Dictionary<(int row, int col), T>();
+        _sparseGradients = new Tensor<T>([_maxSparseParams]);
 
         // If no sparse parameters, return zeros
-        if (_sparseFullRankUpdates.Count == 0)
+        int activeCount = ActiveSparseParams;
+        if (activeCount == 0)
         {
             Vector<T> zeroData = new Vector<T>(batchSize * inputSize);
             return new Tensor<T>(new[] { batchSize, inputSize }, zeroData);
@@ -430,11 +461,11 @@ public partial class HRAAdapter<T> : LoRAAdapterBase<T>
         // Compute input gradients and parameter gradients
         Matrix<T> inputGradMatrix = new Matrix<T>(batchSize, inputSize);
 
-        foreach (var kvp in _sparseFullRankUpdates)
+        for (int sparseIndex = 0; sparseIndex < activeCount; sparseIndex++)
         {
-            int row = kvp.Key.row;
-            int col = kvp.Key.col;
-            T weight = NumOps.Multiply(kvp.Value, _sparseScaling);
+            int row = (int)Convert.ToDouble(_sparseRows[sparseIndex]);
+            int col = (int)Convert.ToDouble(_sparseColumns[sparseIndex]);
+            T weight = NumOps.Multiply(_sparseValues[sparseIndex], _sparseScaling);
 
             T paramGrad = NumOps.Zero;
 
@@ -452,7 +483,7 @@ public partial class HRAAdapter<T> : LoRAAdapterBase<T>
                 paramGrad = NumOps.Add(paramGrad, gradContribution);
             }
 
-            _sparseGradients[kvp.Key] = NumOps.Multiply(paramGrad, _sparseScaling);
+            _sparseGradients[sparseIndex] = NumOps.Multiply(paramGrad, _sparseScaling);
         }
 
         // Convert input gradients back to tensor
@@ -582,27 +613,37 @@ public partial class HRAAdapter<T> : LoRAAdapterBase<T>
             Convert.ToDouble(b.importance).CompareTo(Convert.ToDouble(a.importance)));
 
         // Select top-k positions for sparse full-rank updates
-        var newSparseUpdates = new Dictionary<(int row, int col), T>();
-        for (int i = 0; i < Math.Min(_maxSparseParams, importanceList.Count); i++)
+        var existingSparseUpdates = GetSparseUpdates();
+        int selectedCount = Math.Min(_maxSparseParams, importanceList.Count);
+        for (int i = 0; i < selectedCount; i++)
         {
             var entry = importanceList[i];
             var key = (entry.row, entry.col);
 
             // Preserve existing values if already allocated, otherwise initialize small random
-            if (_sparseFullRankUpdates.ContainsKey(key))
+            if (existingSparseUpdates.TryGetValue(key, out var existingValue))
             {
-                newSparseUpdates[key] = _sparseFullRankUpdates[key];
+                _sparseValues[i] = existingValue;
             }
             else
             {
                 // Initialize new sparse parameter with small random value
                 Random rng = RandomHelper.CreateSecureRandom();
                 double randVal = (rng.NextDouble() - 0.5) * 0.02; // Small initialization
-                newSparseUpdates[key] = NumOps.FromDouble(randVal);
+                _sparseValues[i] = NumOps.FromDouble(randVal);
             }
+
+            _sparseRows[i] = NumOps.FromDouble(entry.row);
+            _sparseColumns[i] = NumOps.FromDouble(entry.col);
         }
 
-        _sparseFullRankUpdates = newSparseUpdates;
+        for (int i = selectedCount; i < _maxSparseParams; i++)
+        {
+            _sparseValues[i] = NumOps.Zero;
+            _sparseRows[i] = NumOps.Zero;
+            _sparseColumns[i] = NumOps.Zero;
+        }
+        _activeSparseCount[0] = NumOps.FromDouble(selectedCount);
     }
 
     /// <summary>
@@ -617,16 +658,12 @@ public partial class HRAAdapter<T> : LoRAAdapterBase<T>
         // Update sparse full-rank parameters
         if (_sparseGradients != null)
         {
-            var updatedSparse = new Dictionary<(int row, int col), T>();
-            foreach (var kvp in _sparseFullRankUpdates)
+            int activeCount = ActiveSparseParams;
+            for (int i = 0; i < activeCount; i++)
             {
-                T currentValue = kvp.Value;
-                T gradient = _sparseGradients.ContainsKey(kvp.Key) ? _sparseGradients[kvp.Key] : NumOps.Zero;
-                T update = NumOps.Multiply(gradient, learningRate);
-                T newValue = NumOps.Subtract(currentValue, update);
-                updatedSparse[kvp.Key] = newValue;
+                T update = NumOps.Multiply(_sparseGradients[i], learningRate);
+                _sparseValues[i] = NumOps.Subtract(_sparseValues[i], update);
             }
-            _sparseFullRankUpdates = updatedSparse;
         }
 
         // Update base layer if not frozen
@@ -693,15 +730,16 @@ public partial class HRAAdapter<T> : LoRAAdapterBase<T>
         }
 
         // Add sparse full-rank contribution
-        foreach (var kvp in _sparseFullRankUpdates)
+        int activeCount = ActiveSparseParams;
+        for (int sparseIndex = 0; sparseIndex < activeCount; sparseIndex++)
         {
-            int row = kvp.Key.row;
-            int col = kvp.Key.col;
+            int row = (int)Convert.ToDouble(_sparseRows[sparseIndex]);
+            int col = (int)Convert.ToDouble(_sparseColumns[sparseIndex]);
             int paramIndex = row * inputSize + col;
 
             if (paramIndex < weightCount)
             {
-                T sparseContribution = NumOps.Multiply(kvp.Value, _sparseScaling);
+                T sparseContribution = NumOps.Multiply(_sparseValues[sparseIndex], _sparseScaling);
                 mergedParams[paramIndex] = NumOps.Add(mergedParams[paramIndex], sparseContribution);
             }
         }
@@ -737,7 +775,15 @@ public partial class HRAAdapter<T> : LoRAAdapterBase<T>
     /// </remarks>
     public Dictionary<(int row, int col), T> GetSparseUpdates()
     {
-        return new Dictionary<(int row, int col), T>(_sparseFullRankUpdates);
+        var updates = new Dictionary<(int row, int col), T>();
+        int activeCount = ActiveSparseParams;
+        for (int i = 0; i < activeCount; i++)
+        {
+            int row = (int)Convert.ToDouble(_sparseRows[i]);
+            int col = (int)Convert.ToDouble(_sparseColumns[i]);
+            updates[(row, col)] = _sparseValues[i];
+        }
+        return updates;
     }
 
 }

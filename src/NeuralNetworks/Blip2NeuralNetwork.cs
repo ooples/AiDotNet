@@ -66,7 +66,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("BLIP-2: Bootstrapping Language-Image Pre-training with Frozen Image Encoders and Large Language Models", "https://arxiv.org/abs/2301.12597", Year = 2023, Authors = "Junnan Li, Dongxu Li, Silvio Savarese, Steven Hoi")]
-public partial class Blip2NeuralNetwork<T> : NeuralNetworkBase<T>, IBlip2Model<T>
+public partial class Blip2NeuralNetwork<T> : MultimodalModelLayoutBase<T>, IBlip2Model<T>
 {
     private readonly Blip2Options _options;
 

@@ -83,3 +83,39 @@ public sealed class PreprocessesInputAttribute : Attribute
     /// </summary>
     public string Reason { get; }
 }
+
+/// <summary>
+/// Declares the tensor layout produced by a model's preprocessing step and consumed by
+/// <c>Layers[0]</c>.
+/// </summary>
+/// <remarks>
+/// This is the other half of <see cref="PreprocessesInputAttribute"/>. The caller-facing
+/// <see cref="TensorLayoutAttribute"/> remains the public input contract; this declaration makes the
+/// transformed stack boundary equally explicit so preprocessing cannot become an unchecked exemption.
+/// Multiple declarations are allowed when the preprocessing method supports more than one layout.
+/// </remarks>
+[AttributeUsage(AttributeTargets.Class, AllowMultiple = true, Inherited = true)]
+public sealed class StackInputLayoutAttribute : Attribute
+{
+    /// <summary>Creates a stack-entry layout from its ordered semantic axes.</summary>
+    public StackInputLayoutAttribute(params TensorAxis[] axes)
+    {
+        Axes = axes ?? throw new ArgumentNullException(nameof(axes));
+        if (axes.Length == 0)
+            throw new ArgumentException("A stack-input layout must declare at least one axis.", nameof(axes));
+    }
+
+    /// <summary>The ordered axes delivered to the first layer after preprocessing.</summary>
+    public TensorAxis[] Axes { get; }
+
+    /// <summary>Whether the leading batch axis may be omitted.</summary>
+    public bool BatchOptional { get; set; }
+
+    /// <summary>Whether the declaration accepts <paramref name="rank"/>.</summary>
+    public bool AcceptsRank(int rank)
+        => rank == Axes.Length
+           || (BatchOptional
+               && Axes.Length > 1
+               && Axes[0] == TensorAxis.Batch
+               && rank == Axes.Length - 1);
+}

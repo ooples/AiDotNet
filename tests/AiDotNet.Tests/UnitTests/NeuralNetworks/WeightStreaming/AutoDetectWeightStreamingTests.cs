@@ -39,7 +39,7 @@ public class AutoDetectWeightStreamingTests
     /// call. Overriding is the least-invasive way to drive a deterministic
     /// above/below-threshold check without inflating real layer weights.
     /// </summary>
-    private sealed class FixedParamCountNetwork : NeuralNetworkBase<float>
+    private sealed class FixedParamCountNetwork : VectorModelLayoutBase<float>
     {
         private readonly long _fixedCount;
         private long _parameterCountReads;
@@ -206,7 +206,7 @@ public class AutoDetectWeightStreamingTests
         Assert.False(net.WeightStreamingAutoDetected);
     }
 
-    private sealed class ThrowingParamCountNetwork : NeuralNetworkBase<float>
+    private sealed class ThrowingParamCountNetwork : VectorModelLayoutBase<float>
     {
         public ThrowingParamCountNetwork()
             : base(lossFunction: new MeanSquaredErrorLoss<float>(), maxGradNorm: 1.0)
@@ -239,6 +239,10 @@ public class AutoDetectWeightStreamingTests
         Assert.Equal(0L, net.ParameterCountReadCount);
     }
 
+    [AiDotNet.Attributes.TensorLayout(AiDotNet.Enums.TensorAxis.Batch, AiDotNet.Enums.TensorAxis.Features,
+        Direction = AiDotNet.Attributes.TensorLayoutDirection.Input)]
+    [AiDotNet.Attributes.TensorLayout(AiDotNet.Enums.TensorAxis.Batch, AiDotNet.Enums.TensorAxis.Features,
+        Direction = AiDotNet.Attributes.TensorLayoutDirection.Output)]
     private sealed class StructuralEstimateNetwork : NeuralNetworkBase<float>
     {
         private long _parameterCountReads;

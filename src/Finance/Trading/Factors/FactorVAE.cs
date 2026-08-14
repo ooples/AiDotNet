@@ -87,6 +87,10 @@ namespace AiDotNet.Finance.Trading.Factors;
     "https://doi.org/10.1609/aaai.v36i4.20369",
     Year = 2022,
     Authors = "Yitong Duan, Lei Wang, Qizhong Zhang, Jian Li")]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Input, BatchOptional = true)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Output, BatchOptional = true)]
 public class FactorVAE<T> : FinancialModelBase<T>, IFactorModel<T>
 {
     #region Execution Mode

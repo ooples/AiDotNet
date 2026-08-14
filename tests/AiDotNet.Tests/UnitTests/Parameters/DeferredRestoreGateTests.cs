@@ -60,7 +60,8 @@ public class DeferredRestoreGateTests
     }
 
     /// <summary>
-    /// The parked payload must survive to materialization, not be truncated to a placeholder.
+    /// A shape-describing payload must resolve the declared layout and restore every value without
+    /// creating a second live flat slot.
     /// </summary>
     /// <remarks>
     /// This is the half that the readiness guard alone would have broken. Letting a deferred layer
@@ -70,7 +71,7 @@ public class DeferredRestoreGateTests
     /// action, and this asserts the payload is still intact afterwards rather than silently shortened.
     /// </remarks>
     [Fact(Timeout = 60000)]
-    public async Task DeferredLayer_ParksTheWholePayload_WithoutTruncatingToAPlaceholder()
+    public async Task DeferredLayer_InfersDeclaredShape_AndRestoresWithoutGrowing()
     {
         await Task.Yield();
         var layer = new DenseLayer<double>(4);
@@ -81,11 +82,46 @@ public class DeferredRestoreGateTests
         layer.SetParameters(payload);
 
         var readBack = layer.GetParameters();
+        Assert.True(layer.IsShapeResolved);
+        Assert.Equal(2, layer.GetInputShape()[0]);
+        Assert.Equal(payload.Length, layer.ParameterCount);
         Assert.Equal(payload.Length, readBack.Length);
         for (int i = 0; i < payload.Length; i++)
         {
             Assert.Equal(payload[i], readBack[i]);
         }
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task DeferredPayload_IsPendingState_NotALiveParameterSlot()
+    {
+        await Task.Yield();
+        var layer = new DenseLayer<double>(4);
+
+        // 11 cannot describe Dense weights+biases: (input * 4) + 4. The layer therefore has to
+        // wait for a real input shape and must not expose the waiting payload as live parameters.
+        layer.SetParameters(new Vector<double>(11));
+
+        Assert.False(layer.IsShapeResolved);
+        Assert.Equal(0, layer.ParameterCount);
+        Assert.Empty(layer.GetParameters());
+        Assert.Equal(
+            AiDotNet.Models.Parameters.ParameterReadiness.ShapeDeferred,
+            Assert.Single(layer.GetParameterLayout()).Readiness);
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task DeferredPayload_WithWrongLength_FailsWhenTheRealShapeArrives()
+    {
+        await Task.Yield();
+        var layer = new DenseLayer<double>(4);
+        layer.SetParameters(new Vector<double>(11));
+
+        var error = Assert.Throws<System.ArgumentException>(
+            () => layer.Forward(new Tensor<double>([1, 2])));
+
+        Assert.Contains("11 parameters", error.Message);
+        Assert.Contains("requires 12", error.Message);
     }
 
     /// <summary>
@@ -126,7 +162,7 @@ public class DeferredRestoreGateTests
         Assert.Equal(checkpoint.ToArray(), target.GetParameters().ToArray());
     }
 
-    private sealed class ExtraLayerRestoreNetwork : NeuralNetworkBase<double>
+    private sealed class ExtraLayerRestoreNetwork : VectorModelLayoutBase<double>
     {
         private TransformerEncoderLayer<double>? _extraLayer;
 

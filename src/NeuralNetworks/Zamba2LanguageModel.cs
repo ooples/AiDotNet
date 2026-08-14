@@ -39,7 +39,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("The Zamba2 Suite: Technical Report", "https://arxiv.org/abs/2411.15242", Year = 2024, Authors = "Paolo Glorioso, Quentin Anthony, Yury Tokpanov, Anna Golubeva, Vasudev Shyam, James Whittington, Jonathan Pilault, Beren Millidge")]
-public class Zamba2LanguageModel<T> : NeuralNetworkBase<T>
+public class Zamba2LanguageModel<T> : TokenLanguageModelLayoutBase<T>
 {
     private readonly Zamba2Options _options;
     private readonly int _vocabSize;

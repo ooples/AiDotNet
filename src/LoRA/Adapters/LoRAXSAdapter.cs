@@ -176,29 +176,34 @@ public partial class LoRAXSAdapter<T> : LoRAAdapterBase<T>
     /// minimal parameters.
     /// </para>
     /// </remarks>
+    [TrainableParameter]
     private Tensor<T> _trainableR;
 
     /// <summary>
     /// Gradient of the trainable R matrix computed during backpropagation.
     /// </summary>
+    [Scratch]
     private Matrix<T>? _trainableRGradient;
 
     /// <summary>
     /// Intermediate result from forward pass: V_r^T * input
     /// Cached for use in backward pass.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _cachedVtInput;
 
     /// <summary>
     /// Intermediate result from forward pass: R * (V_r^T * input)
     /// Cached for use in backward pass.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _cachedRVtInput;
 
     /// <summary>
     /// Intermediate result from forward pass: Σ_r * R * (V_r^T * input)
     /// Cached for use in backward pass.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _cachedSigmaRVtInput;
 
     /// <summary>
@@ -279,8 +284,9 @@ public partial class LoRAXSAdapter<T> : LoRAAdapterBase<T>
 
         _initializedFromSVD = false;
 
-        // Update parameters to reflect only R matrix
-        Parameters = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
+        // LoRA-XS trains only R; U, Sigma and Vt are generated buffers and the inherited standard
+        // LoRA factors do not participate in this adapter.
+        FreezeSubLayerParameters(_loraLayer);
     }
 
     /// <summary>

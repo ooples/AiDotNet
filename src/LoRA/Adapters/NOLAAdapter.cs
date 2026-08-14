@@ -64,36 +64,43 @@ public partial class NOLAAdapter<T> : LoRAAdapterBase<T>
     /// <summary>
     /// Trainable coefficients for matrix A basis combination (size: numBasis).
     /// </summary>
+    [TrainableParameter]
     private Tensor<T> _coefficientsA;
 
     /// <summary>
     /// Trainable coefficients for matrix B basis combination (size: numBasis).
     /// </summary>
+    [TrainableParameter]
     private Tensor<T> _coefficientsB;
 
     /// <summary>
     /// Gradients for coefficients A computed during backpropagation.
     /// </summary>
+    [Scratch]
     private Vector<T>? _coefficientsAGradient;
 
     /// <summary>
     /// Gradients for coefficients B computed during backpropagation.
     /// </summary>
+    [Scratch]
     private Vector<T>? _coefficientsBGradient;
 
     /// <summary>
     /// Cached matrix A from last forward pass (used in backward pass).
     /// </summary>
+    [Scratch]
     private Matrix<T>? _cachedMatrixA;
 
     /// <summary>
     /// Cached matrix B from last forward pass (used in backward pass).
     /// </summary>
+    [Scratch]
     private Matrix<T>? _cachedMatrixB;
 
     /// <summary>
     /// Cached input from last forward pass (needed for gradient computation).
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastInput;
 
     /// <summary>
@@ -200,10 +207,9 @@ public partial class NOLAAdapter<T> : LoRAAdapterBase<T>
             _coefficientsB[i] = NumOps.Zero;
         }
 
-        // Update parameter count to reflect NOLA compression
-        // Parameters: coefficientsA + coefficientsB (+ base layer if not frozen)
-        int nolaParams = 2 * _numBasis;
-        Parameters = new Vector<T>(_freezeBaseLayer ? nolaParams : (int)(_baseLayer.ParameterCount + nolaParams));
+        // NOLA trains only its coefficient tensors; random bases are reproducibly derived from the
+        // seed and the inherited standard LoRA factors are unused.
+        FreezeSubLayerParameters(_loraLayer);
     }
 
     /// <summary>

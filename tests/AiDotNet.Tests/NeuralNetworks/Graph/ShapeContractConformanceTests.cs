@@ -306,6 +306,7 @@ public class ShapeContractConformanceTests
         Assert.Equal("in.Batch", AxisRelation.Same(TensorAxis.Batch).ToString());
     }
 
+    [TensorLayout(TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
     private class ExplicitlyUnavailableContract : IShapeContract
     {
         [ShapeContractUnavailable("This fixture represents a base that has no safe family-wide law.")]
@@ -322,6 +323,7 @@ public class ShapeContractConformanceTests
             Array.Empty<OutputAxisContract>();
     }
 
+    [TensorLayout(TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
     private class ConditionalContract : IShapeContract
     {
         protected virtual int OutputWidth => 0;

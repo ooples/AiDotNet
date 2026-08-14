@@ -133,6 +133,10 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
     [ModelComplexity(ModelComplexity.High)]
     [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     [ResearchPaper("Learning nonlinear operators via DeepONet based on the universal approximation theorem of operators", "https://doi.org/10.1038/s42256-021-00302-5", Year = 2021, Authors = "Lu Lu, Pengzhan Jin, Guofei Pang, Zhongqiang Zhang, George Em Karniadakis")]
+    [TensorLayout(TensorAxis.Batch, TensorAxis.Features,
+        Direction = TensorLayoutDirection.Input, BatchOptional = true)]
+    [TensorLayout(TensorAxis.Batch, TensorAxis.Features,
+        Direction = TensorLayoutDirection.Output, BatchOptional = true)]
     public partial class DeepOperatorNetwork<T> : NeuralNetworkBase<T>
     {
 

@@ -1,6 +1,8 @@
 using System;
+using System.Collections.Generic;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.ActivationFunctions;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralRadianceFields.Models;
@@ -251,5 +253,133 @@ public class NeuralNetworkBaseResolveShapesTests
         Assert.Equal(checkpoint.Length, restored.Length);
         for (int i = 0; i < checkpoint.Length; i++)
             Assert.Equal(checkpoint[i], restored[i]);
+    }
+
+    [Fact]
+    public void ShapeContractFallback_DoesNotOverrideRejectedInputGeometry()
+    {
+        // This is the model-agnostic shape pattern used by SALMONN and similar projection-based
+        // architectures. The public input is [..., 4], but the first projection changes the
+        // internal feature width to 8 before attention sees it.
+        var downstreamProjection = new FullyConnectedLayer<double>(16);
+        using var network = new NeuralNetwork<double>(
+            new NeuralNetworkArchitecture<double>(
+                inputType: InputType.TwoDimensional,
+                taskType: NeuralNetworkTaskType.Regression,
+                inputHeight: 3,
+                inputWidth: 4,
+                outputSize: 8,
+                layers:
+                [
+                    new FullyConnectedLayer<double>(8),
+                    new LayerNormalizationLayer<double>(),
+                    new FullyConnectedLayer<double>(8),
+                    new LayerNormalizationLayer<double>(),
+                    new MultiHeadAttentionLayer<double>(headCount: 2, headDimension: 4),
+                    new LayerNormalizationLayer<double>(),
+                    downstreamProjection,
+                    new FullyConnectedLayer<double>(8)
+                ]));
+
+        // The speculative architecture walk reaches attention with two invalid candidates:
+        // rank-1 [8] and stale [..., 4]. Its declarative output must not overrule either input
+        // rejection and pin downstreamProjection to the stale width.
+        network.SetTrainingMode(false);
+        Assert.False(downstreamProjection.IsShapeResolved);
+
+        var output = network.Predict(new Tensor<double>([1, 3, 4]));
+
+        Assert.Equal(new[] { 1, 3, 8 }, output.Shape.ToArray());
+        Assert.True(downstreamProjection.IsShapeResolved);
+        Assert.Equal(8, downstreamProjection.GetInputShape()[0]);
+    }
+
+    [Fact]
+    public void Dispose_DoesNotReadParameterCountOrMaterializeLazyWeights()
+    {
+        var layer = new ParameterCountBombLayer();
+        var model = new NeuralNetwork<double>(
+            new NeuralNetworkArchitecture<double>(
+                inputType: InputType.OneDimensional,
+                taskType: NeuralNetworkTaskType.Regression,
+                inputSize: 1,
+                outputSize: 1,
+                layers: [layer]));
+        layer.ParameterCountReads = 0;
+        layer.ThrowOnParameterCountRead = true;
+
+        model.Dispose();
+
+        Assert.Equal(0, layer.ParameterCountReads);
+    }
+
+    [Fact]
+    public void DeclarativeContract_CannotOverrideImperativeShapeRejection()
+    {
+        var model = BuildLazyDenseNetwork();
+        using var layer = new RejectingDeclaredLayer();
+        int[] running = [32];
+        int[] lastGood = running;
+        object?[] arguments = [layer, running, lastGood];
+
+        var advance = typeof(NeuralNetworkBase<double>).GetMethod(
+            "TryAdvanceLayerShape",
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+
+        Assert.NotNull(advance);
+        bool advanced = (bool)advance!.Invoke(model, arguments)!;
+
+        Assert.False(advanced);
+        Assert.Equal(new[] { 32 }, (int[])arguments[1]!);
+        Assert.False(layer.IsShapeResolved);
+    }
+
+    [ElementWiseShape]
+    private sealed class ParameterCountBombLayer : LayerBase<double>
+    {
+        public ParameterCountBombLayer() : base([1], [1]) { }
+
+        public int ParameterCountReads { get; set; }
+        public bool ThrowOnParameterCountRead { get; set; }
+
+        public override long ParameterCount
+        {
+            get
+            {
+                ParameterCountReads++;
+                if (ThrowOnParameterCountRead)
+                    throw new InvalidOperationException("Dispose read ParameterCount.");
+                return 0;
+            }
+        }
+
+        protected override Tensor<double> ForwardTraced(Tensor<double> input) => input;
+        public override bool SupportsTraining => false;
+        public override void ResetState() { }
+    }
+
+    [TensorLayout(TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+    [TensorLayout(TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
+    private sealed class RejectingDeclaredLayer : LayerBase<double>, IShapeContract
+    {
+        public RejectingDeclaredLayer() : base([-1], [-1])
+        {
+        }
+
+        public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+            => inputRank == 1
+                ? [new OutputAxisContract(TensorAxis.Features, AxisRelation.Fixed(256))]
+                : null;
+
+        protected override void OnFirstForward(Tensor<double> input)
+            => throw new InvalidOperationException("The imperative implementation rejects this shape.");
+
+        protected override Tensor<double> ForwardTraced(Tensor<double> input) => input;
+
+        public override bool SupportsTraining => false;
+
+        public override void ResetState()
+        {
+        }
     }
 }

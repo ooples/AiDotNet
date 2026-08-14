@@ -39,7 +39,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     [ResearchPaper("Learning Internal Representations by Error Propagation", "https://doi.org/10.21236/ADA164453")]
-public class FeedForwardNeuralNetwork<T> : NeuralNetworkBase<T>
+public class FeedForwardNeuralNetwork<T> : VectorModelLayoutBase<T>
 {
     private readonly FeedForwardNeuralNetworkOptions _options;
 

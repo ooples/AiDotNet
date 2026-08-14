@@ -51,7 +51,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Semi-Supervised Classification with Graph Convolutional Networks", "https://arxiv.org/abs/1609.02907", Year = 2017, Authors = "Thomas N. Kipf, Max Welling")]
-public class GraphNeuralNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
+public class GraphNeuralNetwork<T> : GraphModelLayoutBase<T>, IAuxiliaryLossLayer<T>
 {
     private readonly GraphNeuralNetworkOptions _options;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;

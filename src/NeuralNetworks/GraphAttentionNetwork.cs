@@ -69,7 +69,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Graph Attention Networks", "https://arxiv.org/abs/1710.10903", Year = 2018, Authors = "Petar Velickovic, Guillem Cucurull, Arantxa Casanova, Adriana Romero, Pietro Lio, Yoshua Bengio")]
-public class GraphAttentionNetwork<T> : NeuralNetworkBase<T>
+public class GraphAttentionNetwork<T> : GraphModelLayoutBase<T>
 {
     private readonly GraphAttentionNetworkOptions _options;
 

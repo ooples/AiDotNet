@@ -1258,11 +1258,12 @@ public class DiffusionModelContractTests : DiffusionUnitTestBase
         // GetParameterChunks() call is a value read and is therefore intentionally
         // allowed to materialize lazy weights; it must not be used as a metadata
         // probe on a multi-billion-parameter default.
-        Assert.True(model.ParameterCount > 0,
-            "Sora's ParameterCount should be positive (foundation-scale ~5.4 B per the paper).");
+        Assert.True(model.ParameterLayout.DeclaredParameterCount > 0,
+            "Sora's declared parameter capacity should be positive (foundation-scale ~5.4 B per the paper).");
         Assert.DoesNotContain(model.ParameterLayout.Slots,
             slot => slot.Readiness == AiDotNet.Models.Parameters.ParameterReadiness.ShapeDeferred);
-        Assert.Equal(model.ParameterCount, model.ParameterLayout.ParameterCount);
+        Assert.Equal(model.ParameterCount, model.ParameterLayout.DeclaredParameterCount);
+        Assert.Equal(0L, model.ParameterLayout.MaterializedParameterCount);
     }
 
     [Fact(Timeout = 120000)]
@@ -1285,12 +1286,13 @@ public class DiffusionModelContractTests : DiffusionUnitTestBase
         await Task.Yield();
         var model = new UdioModel<float>();
 
-        Assert.True(model.ParameterCount > int.MaxValue,
+        Assert.True(model.ParameterLayout.DeclaredParameterCount > int.MaxValue,
             "Udio's paper-scale DiT backbone should report a foundation-scale parameter count.");
 
         Assert.DoesNotContain(model.ParameterLayout.Slots,
             slot => slot.Readiness == AiDotNet.Models.Parameters.ParameterReadiness.ShapeDeferred);
-        Assert.Equal(model.ParameterCount, model.ParameterLayout.ParameterCount);
+        Assert.Equal(model.ParameterCount, model.ParameterLayout.DeclaredParameterCount);
+        Assert.Equal(0L, model.ParameterLayout.MaterializedParameterCount);
     }
 
     [Fact(Timeout = 120000)]

@@ -59,7 +59,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Deep Residual Learning for Image Recognition", "https://arxiv.org/abs/1512.03385", Year = 2016, Authors = "Kaiming He, Xiangyu Zhang, Shaoqing Ren, Jian Sun")]
-public class ResNetNetwork<T> : NeuralNetworkBase<T>
+public class ResNetNetwork<T> : ImageClassifierModelLayoutBase<T>
 {
     private readonly ResNetOptions _options;
 

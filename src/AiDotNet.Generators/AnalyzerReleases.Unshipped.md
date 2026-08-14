@@ -37,8 +37,14 @@ ADNTEST002 | AiDotNet.TestScaffold | Disabled | TestScaffoldGenerator, Generated
 ADNTEST003 | AiDotNet.TestScaffold | Error | TestScaffoldGenerator, Two models share a simple name with no registered owner
 ADNSHAPE001 | AiDotNet.Shapes | Error | ShapeDeclarationValidationGenerator, Two tensor layouts accept the same rank with different axis names
 ADNSHAPE002 | AiDotNet.Shapes | Error | ShapeDeclarationValidationGenerator, A tensor layout repeats an axis role
-ADNSHAPE003 | AiDotNet.Shapes | Warning | ShapeDeclarationValidationGenerator, Type implements IShapeContract but declares no input layout
-ADNSHAPE004 | AiDotNet.Shapes | Warning | ShapeDeclarationValidationGenerator, Layer overrides Forward instead of ForwardTraced and is invisible to graph tracing (Warning until the #1789 conversion completes; the final slice raises it to Error)
+ADNSHAPE003 | AiDotNet.Shapes | Error | ShapeDeclarationValidationGenerator, Type implements IShapeContract but declares no input layout
+ADNSHAPE004 | AiDotNet.Shapes | Error | ShapeDeclarationValidationGenerator, Layer overrides Forward instead of ForwardTraced and is invisible to graph tracing
+ADNSHAPE005 | AiDotNet.Shapes | Error | ShapeDeclarationValidationGenerator, LayerProperty rank metadata contradicts TensorLayout
+ADNSHAPE006 | AiDotNet.Shapes | Error | ShapeDeclarationValidationGenerator, Concrete layer declares no shape contract
+ADNSHAPE007 | AiDotNet.Shapes | Error | ShapeDeclarationValidationGenerator, Concrete neural-network model publishes no caller-facing shape manifest
+ADNSHAPE008 | AiDotNet.Shapes | Error | ShapeDeclarationValidationGenerator, Concrete model declares no caller-facing input layout
+ADNSHAPE009 | AiDotNet.Shapes | Error | ShapeDeclarationValidationGenerator, Concrete model declares no caller-facing output layout
+ADNSHAPE010 | AiDotNet.Shapes | Error | ShapeDeclarationValidationGenerator, Input preprocessing omits the layer-stack entry layout
 ADNPORT001 | AiDotNet.TensorPorts | Error | TensorPortContractGenerator, Integer-index port does not declare its legal upper bound
 ADNPORT002 | AiDotNet.TensorPorts | Error | TensorPortContractGenerator, Tensor-port contract references a missing member
 ADNPORT003 | AiDotNet.TensorPorts | Error | TensorPortContractGenerator, Duplicate input or output port name

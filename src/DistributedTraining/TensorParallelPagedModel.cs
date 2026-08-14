@@ -69,7 +69,7 @@ internal sealed class TensorParallelLayerWeights<T>
 [ModelComplexity(ModelComplexity.VeryHigh)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Megatron-LM: Training Multi-Billion Parameter Language Models", "https://arxiv.org/abs/1909.08053")]
-internal sealed partial class TensorParallelPagedModel<T> : NeuralNetworkBase<T>
+internal sealed partial class TensorParallelPagedModel<T> : TokenLanguageModelLayoutBase<T>
 {
     private const double LayerNormEpsilon = 1e-5;
 

@@ -32,6 +32,10 @@ namespace AiDotNet.ComputerVision.Detection.Backbones;
     "https://arxiv.org/abs/2103.14030",
     Year = 2021,
     Authors = "Ze Liu, Yutong Lin, Yue Cao, Han Hu, Yixuan Wei, Zheng Zhang, Stephen Lin, Baining Guo")]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Input, BatchOptional = true)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Output, BatchOptional = true)]
 public class SwinTransformer<T> : NeuralNetworkBase<T>, IDetectionBackbone<T>
 {
 

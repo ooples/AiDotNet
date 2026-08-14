@@ -192,6 +192,15 @@ namespace AiDotNet.NeuralNetworks
         }
 
         /// <inheritdoc/>
+        protected override Tensor<T> PredictCore(Tensor<T> input)
+        {
+            // The transformer backbone produces token-level [Batch, Seq, Dim] representations,
+            // but Matryoshka's public contract is one nested embedding per input. Returning the
+            // unpooled sequence multiplied the declared embedding width by the token count.
+            return PoolBatchOutput(base.PredictCore(input));
+        }
+
+        /// <inheritdoc/>
         protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
         {
             return new MatryoshkaEmbedding<T>(

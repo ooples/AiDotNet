@@ -75,6 +75,10 @@ namespace AiDotNet.PhysicsInformed.ScientificML
     [ModelComplexity(ModelComplexity.High)]
     [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     [ResearchPaper("Universal Differential Equations for Scientific Machine Learning", "https://doi.org/10.48550/arXiv.2001.04385", Year = 2021, Authors = "Christopher Rackauckas, Yingbo Ma, Julius Martensen, Collin Warner, Kirill Zubov, Rohit Supekar, Dominic Skinner, Ali Ramadhan, Alan Edelman")]
+    [TensorLayout(TensorAxis.Batch, TensorAxis.Features,
+        Direction = TensorLayoutDirection.Input, BatchOptional = true)]
+    [TensorLayout(TensorAxis.Batch, TensorAxis.Features,
+        Direction = TensorLayoutDirection.Output, BatchOptional = true)]
     public class UniversalDifferentialEquation<T> : NeuralNetworkBase<T>
     {
         private readonly UniversalDifferentialEquationsOptions _options;
