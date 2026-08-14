@@ -837,13 +837,17 @@ public class ParameterManifestTests
         var second = layer.GetTrainableParameters();
         Assert.Same(first, second);
 
+#if NET5_0_OR_GREATER
         long before = GC.GetAllocatedBytesForCurrentThread();
+#endif
         for (int i = 0; i < 1_024; i++)
             _ = layer.GetTrainableParameters();
+#if NET5_0_OR_GREATER
         long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
 
         Assert.True(allocated <= 128,
             $"Warm generated parameter views allocated {allocated:N0} bytes.");
+#endif
     }
 
     [Fact]
@@ -861,17 +865,23 @@ public class ParameterManifestTests
 
         var snapshot = network.ParameterLayout;
         _ = network.ParameterCount;
+#if NET5_0_OR_GREATER
         long before = GC.GetAllocatedBytesForCurrentThread();
+#endif
         for (int i = 0; i < 1_024; i++)
         {
             _ = network.ParameterLayout;
             _ = network.ParameterCount;
         }
+#if NET5_0_OR_GREATER
         long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+#endif
 
         Assert.Same(snapshot, network.ParameterLayout);
+#if NET5_0_OR_GREATER
         Assert.True(allocated <= 128,
             $"Warm layout/count reads allocated {allocated:N0} bytes.");
+#endif
     }
 
     [Fact]

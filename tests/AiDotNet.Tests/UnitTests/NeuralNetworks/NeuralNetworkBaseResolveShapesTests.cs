@@ -287,7 +287,7 @@ public class NeuralNetworkBaseResolveShapesTests
 
         var output = network.Predict(new Tensor<double>([1, 3, 4]));
 
-        Assert.Equal(new[] { 1, 3, 8 }, output.Shape);
+        Assert.Equal(new[] { 1, 3, 8 }, output.Shape.ToArray());
         Assert.True(downstreamProjection.IsShapeResolved);
         Assert.Equal(8, downstreamProjection.GetInputShape()[0]);
     }
