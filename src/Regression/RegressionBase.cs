@@ -388,6 +388,16 @@ public abstract class RegressionBase<T> : IRegression<T>, IConfigurableModel<T>,
     protected virtual void RegisterState(ModelStateRegistry<T> state)
     {
     }
+    /// <summary>Generated state declarations for fields declared across this model's hierarchy.</summary>
+    /// <param name="state">The registry to declare into.</param>
+    /// <remarks>
+    /// Emitted by ModelStateGenerator into the partial model, so a model author declares nothing. The
+    /// hand-written <c>RegisterState</c> beside it exists only for state the classifier genuinely
+    /// cannot place; anything it CAN place belongs here, where it cannot be forgotten.
+    /// </remarks>
+    protected virtual void RegisterGeneratedState(AiDotNet.Models.ModelStateRegistry<T> state)
+    {
+    }
 
     private ModelStateRegistry<T> State
     {
@@ -396,6 +406,7 @@ public abstract class RegressionBase<T> : IRegression<T>, IConfigurableModel<T>,
             if (!_stateRegistered)
             {
                 _stateRegistered = true;
+                RegisterGeneratedState(_stateRegistry);
                 RegisterState(_stateRegistry);
             }
             return _stateRegistry;

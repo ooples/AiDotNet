@@ -58,7 +58,7 @@ namespace AiDotNet.Audio.Enhancement;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("CMGAN: Conformer-based Metric GAN for Speech Enhancement", "https://arxiv.org/abs/2203.15149", Year = 2022, Authors = "Ruizhe Cao, Sherif Abdulatif, Bin Yang")]
-public class CMGAN<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
+public partial class CMGAN<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
 {
     /// <inheritdoc />
     /// <remarks>

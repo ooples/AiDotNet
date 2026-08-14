@@ -47,7 +47,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Neural Turing Machines", "https://arxiv.org/abs/1410.5401", Year = 2014, Authors = "Alex Graves, Greg Wayne, Ivo Danihelka")]
-public class NeuralTuringMachine<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
+public partial class NeuralTuringMachine<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
 {
     private readonly NeuralTuringMachineOptions _options;
 

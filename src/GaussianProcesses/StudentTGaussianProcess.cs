@@ -37,7 +37,7 @@ namespace AiDotNet.GaussianProcesses;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("Gaussian Process Regression with Student-t Likelihood", "https://doi.org/10.5555/2986459.2986589", Year = 2011, Authors = "Jarno Vanhatalo, Pasi Jylänki, Aki Vehtari")]
-public class StudentTGaussianProcess<T> : GaussianProcessBase<T>
+public partial class StudentTGaussianProcess<T> : GaussianProcessBase<T>
 {
     /// <summary>
     /// Operations for performing numeric calculations with type T.

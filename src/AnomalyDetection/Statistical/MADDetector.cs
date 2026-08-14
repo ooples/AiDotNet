@@ -46,7 +46,7 @@ namespace AiDotNet.AnomalyDetection.Statistical;
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("Detecting outliers: Do not use standard deviation around the mean, use absolute deviation around the median", "https://doi.org/10.1016/j.jesp.2013.03.013", Year = 2013, Authors = "Christophe Leys, Christophe Ley, Olivier Klein, Philippe Bernard, Laurent Licata")]
-public class MADDetector<T> : AnomalyDetectorBase<T>
+public partial class MADDetector<T> : AnomalyDetectorBase<T>
 {
     private readonly double _madThreshold;
     private readonly double _scaleFactor;

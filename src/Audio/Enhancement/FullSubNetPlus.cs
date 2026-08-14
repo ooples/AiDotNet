@@ -57,7 +57,7 @@ namespace AiDotNet.Audio.Enhancement;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("FullSubNet+: Channel Attention FullSubNet with Complex Spectrograms for Speech Enhancement", "https://arxiv.org/abs/2203.12188", Year = 2022, Authors = "Jun Chen, Zilin Wang, Deyi Tuo, Zhiyong Wu, Shiyin Kang, Helen Meng")]
-public class FullSubNetPlus<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
+public partial class FullSubNetPlus<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
 {
     /// <inheritdoc />
     /// <remarks>
