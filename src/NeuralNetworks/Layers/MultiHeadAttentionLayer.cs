@@ -1214,13 +1214,13 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
 
     private Tensor<T> ForwardInternal(Tensor<T> query, Tensor<T> key, Tensor<T> value)
     {
-        // If the layer was constructed with a lazy init strategy, the Q/K/V/O
-        // weight tensors are still at shape [0,0]. Materialize them now, before any
-        // of the projection matmuls run — same guarantee DenseLayer gives. We also
-        // still call the generated EnsureInitialized so sub-layer registration
-        // happens (the ROPE/ALiBi fields this layer owns).
-        EnsureWeightsAllocated();
-        EnsureInitialized();
+        // Enter the common lazy-initialization gate rather than calling the private allocator
+        // directly. Besides resolving and allocating Q/K/V/O, the gate commits streaming
+        // allocations to WeightRegistry immediately. Custom model forward loops do not pass
+        // through NeuralNetworkBase.PredictEagerStreaming's post-layer registration hook; the old
+        // direct calls therefore left every attention matrix as an outstanding reservation, with
+        // nothing evictable, until a paper-scale VLM exhausted the host.
+        EnsureInitializedFromInput(query);
 
         // Fused inference fast path: pure self-attention with no positional bias
         // collapses Q/K/V projection + multi-head SDPA + output projection into ONE

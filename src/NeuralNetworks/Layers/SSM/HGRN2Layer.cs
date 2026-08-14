@@ -129,7 +129,6 @@ public partial class HGRN2Layer<T> : LayerBase<T>, IShapeContract
     private Tensor<T>? _lastForgetGate;
     private Tensor<T>? _lastGate;
     private Tensor<T>? _lastGateRaw;
-    private Tensor<T>? _lastStates;
     private Tensor<T>? _lastRecurrenceOutput;
     private int[]? _originalInputShape;
 
@@ -334,71 +333,17 @@ public partial class HGRN2Layer<T> : LayerBase<T>, IShapeContract
         Tensor<T> forgetGate,
         int batchSize, int seqLen)
     {
-        var output = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
-
-        // State matrix per head: [batch, numHeads, headDim, headDim]
-        var state = TensorAllocator.Rent<T>(new[] { batchSize, _numHeads, _headDimension, _headDimension });
-        // Save all states for backward pass: [batch, seqLen+1, numHeads, headDim, headDim]
-        var allStates = TensorAllocator.Rent<T>(new[] { batchSize, seqLen + 1, _numHeads, _headDimension, _headDimension });
-
         T scale = NumOps.FromDouble(1.0 / Math.Sqrt(_headDimension));
+        var scaledKey = Engine.TensorMultiplyScalar(k, scale);
 
-        for (int t = 0; t < seqLen; t++)
-        {
-            for (int hi = 0; hi < _numHeads; hi++)
-            {
-                int dimStart = hi * _headDimension;
-
-                for (int bi = 0; bi < batchSize; bi++)
-                {
-                    T gVal = forgetGate[new[] { bi, t, hi }];
-
-                    // State update: S_t = g_t * S_{t-1} + k_t * v_t^T
-                    for (int di = 0; di < _headDimension; di++)
-                    {
-                        int flatDi = dimStart + di;
-                        T kVal = NumOps.Multiply(k[new[] { bi, t, flatDi }], scale);
-
-                        for (int vi = 0; vi < _headDimension; vi++)
-                        {
-                            int flatVi = dimStart + vi;
-                            T vVal = v[new[] { bi, t, flatVi }];
-
-                            T prevS = state[new[] { bi, hi, di, vi }];
-                            // outer product: k[di] * v[vi]
-                            T outerProd = NumOps.Multiply(kVal, vVal);
-                            T newS = NumOps.Add(NumOps.Multiply(gVal, prevS), outerProd);
-                            state[new[] { bi, hi, di, vi }] = newS;
-                        }
-                    }
-
-                    // Output readout: o_t = S_t * q_t
-                    for (int di = 0; di < _headDimension; di++)
-                    {
-                        int flatDi = dimStart + di;
-                        T oVal = NumOps.Zero;
-                        for (int qi = 0; qi < _headDimension; qi++)
-                        {
-                            int flatQi = dimStart + qi;
-                            T qVal = q[new[] { bi, t, flatQi }];
-                            oVal = NumOps.Add(oVal,
-                                NumOps.Multiply(state[new[] { bi, hi, di, qi }], qVal));
-                        }
-                        output[new[] { bi, t, flatDi }] = oVal;
-                    }
-                }
-            }
-
-            // Save state snapshot for backward pass
-            for (int bi = 0; bi < batchSize; bi++)
-                for (int hi2 = 0; hi2 < _numHeads; hi2++)
-                    for (int di = 0; di < _headDimension; di++)
-                        for (int vi = 0; vi < _headDimension; vi++)
-                            allStates[new[] { bi, t + 1, hi2, di, vi }] = state[new[] { bi, hi2, di, vi }];
-        }
-
-        _lastStates = allStates;
-        return output;
+        // GLA stores S[row,col] = value[row] * key[col] and reads S*q. HGRN2's
+        // documented state is S[row,col] = scaledKey[row] * value[col]. Swapping
+        // the GLA key/value streams therefore gives the exact HGRN2 recurrence:
+        //   Gla(q, key=v, value=scaledKey, g)
+        //     => S = g*S + scaledKey*v^T; output = S*q.
+        // This replaces the detached scalar/indexer loops with one tape-recorded
+        // operation whose analytic BPTT and native kernels cover all six backends.
+        return Engine.GlaScanForward(q, v, scaledKey, forgetGate, _numHeads);
     }
 
     private Tensor<T> ComputeSiLUDerivative(Tensor<T> x)
@@ -492,7 +437,6 @@ public partial class HGRN2Layer<T> : LayerBase<T>, IShapeContract
         _lastForgetGate = null;
         _lastGate = null;
         _lastGateRaw = null;
-        _lastStates = null;
         _lastRecurrenceOutput = null;
         _originalInputShape = null;
         _queryWeightsGradient = null;

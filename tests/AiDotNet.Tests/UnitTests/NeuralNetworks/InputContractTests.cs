@@ -56,6 +56,24 @@ public class InputContractTests
     }
 
     [Fact]
+    public async Task ContinuousSynthesis_ExercisesBothSigns()
+    {
+        await Task.Yield();
+        var tensor = InputContractTensorFactory.CreateValid<double>(
+            [64],
+            LayerInputDomain.Continuous,
+            new Random(42));
+
+        Assert.Contains(tensor.ToArray(), value => value < 0.0);
+        Assert.Contains(tensor.ToArray(), value => value > 0.0);
+        InputContractValidator.ValidateValues(
+            tensor,
+            LayerInputDomain.Continuous,
+            "PiecewiseLayer",
+            "input");
+    }
+
+    [Fact]
     public async Task NegativeSynthesis_IsRejectedBySameValidator()
     {
         await Task.Yield();

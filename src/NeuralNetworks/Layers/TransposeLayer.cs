@@ -155,6 +155,19 @@ public partial class TransposeLayer<T> : LayerBase<T>, IShapeContract
     /// </summary>
     protected override void OnFirstForward(Tensor<T> input)
     {
+        BindToActualInput(input);
+    }
+
+    /// <inheritdoc />
+    protected override void ReconcileShapeOnlyResolution(Tensor<T> input)
+    {
+        // A custom model forward can feed a different sequence extent than the architecture's
+        // sequential shape walk predicted. The permutation is fixed, but the extents are not.
+        BindToActualInput(input);
+    }
+
+    private void BindToActualInput(Tensor<T> input)
+    {
         // Treat the leading axis of input as the batch axis; logical input shape is the rest.
         var fullShape = input.Shape.ToArray();
         if (fullShape.Length < 1 + _permutation.Length)

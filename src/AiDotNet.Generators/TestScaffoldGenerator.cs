@@ -496,22 +496,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // nightly HeavyTimeout lane. Paper defaults intact and user-customizable.
         "MelGAN", "MemFlow", "LegalBERTNER", "KMaXDeepLab",
         // Generated A-M shard foundation-scale training timeouts (#1719): DPT-Large depth, 768-dim VLMs.
-        "MiDaS", "METER", "DocPedia", "MERT", "LXMERT",
-        // GradientFlow_ShouldBeNonZeroAndFinite timed out at the 120s gate for these two. Measured
-        // on the sibling hand-written fixture (Phi3Vision, same class of paper-scale VLM): a SINGLE
-        // Predict is 131s, plus 17s in the constructor -- the warmup forward alone exceeds the whole
-        // budget before any gradient work starts. So this is the correct-but-too-slow case this list
-        // exists for, not a fast-failing bug, which must never be tagged.
-        //
-        // The ladder was walked, not assumed: float is already applied (they emit as <base><float>),
-        // and shrink was MEASURED rather than guessed -- cutting Phi3Vision's resolution 336 -> 112,
-        // a 9x reduction in image area, moved Predict only 131s -> 105s. The cost is the paper-scale
-        // 3072-wide decoder, not the vision tower, so the only shrink that would fit the gate would
-        // leave the PR shard exercising a model that is no longer the published architecture.
-        // (LLaVAVideo is already listed above; Phi3Vision and Transfusion carry the trait directly
-        // on their hand-written fixtures. Those three only appeared in a local sweep because the
-        // filter omitted &Category!=HeavyTimeout -- they were never running in the PR shard.)
-        "ClaudeVision", "VoiceCraft",
+        "MiDaS", "METER", "DocPedia", "LXMERT",
         // Shard M MedS-Meta. These three exhausted the float -> cap -> shrink ladder, each rung
         // measured rather than assumed:
         //   float  - all three already emit as <base>TestBase<float> via the A-Z shard rule.
@@ -539,28 +524,17 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // layers, 25 heads (Chen et al. 2024, InternVL). A single fp32 CPU forward over 112px/14px = 64
         // patch tokens through 48 layers of 3200-dim O(n^2) attention inherently exceeds the 120s per-test
         // timeout — genuine foundation-scale compute, not a correctness bug (gradients flow; the ViT stack
-        // is paper-faithful). Runs in the nightly heavy lane, matching its VLM sibling Phi3Vision.
+        // is paper-faithful). Runs in the nightly heavy lane.
         "InternViT",
         // #1719 follow-up (#1694 endgame): verified-genuine foundation-scale OOM/120s-timeout on the gate
         // box — 9B-class generative VLM (same family as LXMERT/METER/SmolVLM) and an audio-LM. The
         // gradients DO flow; the footprint simply exceeds the runner, so they run in the nightly heavy lane.
         "IDEFICS", "MusicFlamingo",
-        // LLaVAVideo: foundation-scale video-language model — 336px frames / 16px patches = 441 vision
-        // tokens x up to 64 frames (~28K tokens) at VisionDim 1024 with 32-head O(n^2) attention, so a
-        // single CPU forward inherently exceeds the 120s per-test timeout. Not a correctness bug (same
-        // class as IDEFICS/MusicFlamingo); runs in the nightly heavy lane rather than the default shard.
-        "LLaVAVideo",
         // MGLDVSR: motion-guided LATENT DIFFUSION for video super-resolution (Yang 2024). Each forward
         // runs 20 denoising steps (20 U-Net passes) over video latents, and the training invariants
         // (MoreData = 200 iterations) multiply that out well past the 120s per-test timeout on CPU.
         // Genuine foundation-scale diffusion compute, not a correctness bug — same heavy lane.
         "MGLDVSR",
-        // Llasa (Ye et al. 2025): LLaMA-based foundation TTS over XCodec2 tokens. Its single-forward
-        // tests pass, but even the TTS-branch smoke-capped MoreData (3+10 iters) exceeds the 120s gate at
-        // this paper-scale codec-LM's per-step cost (verified: MoreData_ShouldNotDegrade times out at
-        // exactly 120000 ms with no assertion — a pure timeout, not divergence). Genuine foundation-scale
-        // compute, deferred to the nightly heavy lane like its codec-TTS peers FireRedTTS / MegaTTS3.
-        "Llasa",
         // LISA (Lai et al. 2024): referring-segmentation FOUNDATION model = a multimodal LLM + SAM mask
         // decoder. Its single-forward tests pass, but MULTIPLE multi-iteration training invariants
         // (MoreData_ShouldNotDegrade timed out at 120s; LossStrictlyDecreasesOnMemorizationTask and
@@ -572,15 +546,11 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // (verified: System.OutOfMemoryException in TensorAllocator.RentUninitialized during the train
         // step) — the activation/gradient footprint, not a correctness bug. Same heavy lane.
         "InternVideo2",
-        // MegaTTS3: foundation-scale TTS. The training invariants exceed the 120s per-test timeout on
-        // CPU (verified: Training_ShouldChangeParameters times out). Genuine foundation-scale compute,
-        // not a correctness bug — same heavy lane.
-        "MegaTTS3",
         // TortoiseTTS (Betker 2023): foundation-scale codec-LM TTS — a 1024-dim / 12-layer decoder with
         // an 8x1024-token codebook head (~150M params). Its <double> training invariants OOM the runner
         // (verified: System.OutOfMemoryException in the train step) and even <float> can't fit the
         // ~150M-param forward+backward + AdamW moments in the 120s gate. Genuine foundation-scale
-        // compute, not a correctness bug — deferred to the nightly heavy lane like FireRedTTS/MegaTTS3.
+        // compute, not a correctness bug — deferred to the nightly heavy lane.
         "TortoiseTTS", "FastSpeech", "FastSpeech2",
         // MaskDINO: foundation-scale unified DETR detection+segmentation transformer (Li 2023, in the
         // Segmentation/Foundation namespace). The training invariants exceed the 120s per-test timeout
@@ -594,26 +564,12 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // 120s on CPU (verified from the Generated N-P shard). Genuine foundation-scale compute — nightly
         // heavy lane, matching its MaskDINO sibling.
         "OMGSeg",
-        // KOSMOS2: foundation-scale vision-language model (Peng 2023) — paper-scale CLIP-ViT-L vision
-        // encoder (VisionDim=1024, 24 layers, 32 heads) + a 2048-dim/24-layer text decoder (~300M params).
-        // Each test must construct that full stack; the construction footprint alone makes the 25-test
-        // class take ~6.5 min, and the multi-iteration training invariants exceed the 120s per-test gate
-        // on CPU. Genuine foundation-scale compute, same class as IDEFICS/LLaVAVideo — runs in the nightly
-        // heavy lane rather than the default PR shard.
-        "KOSMOS2",
-        // KOSMOS1: same paper-scale stack as KOSMOS2 (Peng 2023) — VisionDim=1024/24-layer CLIP-ViT-L
-        // vision encoder + 2048-dim/24-layer causal decoder (~300M params). Its whole-class crash (a
-        // missing vision input projection in CreateDefaultCausalMultimodalLayers) is fixed at the source
-        // in this PR; what remains is the same genuine foundation-scale timeout as KOSMOS2 (a single
-        // warm-up forward exceeds 120s on CPU — verified: Metadata_ShouldExist times out at 120000ms).
-        // Runs in the nightly heavy lane, matching its KOSMOS2 sibling.
-        "KOSMOS1",
         // MIAVSR: video super-resolution. Its default stack (CreateDefaultVideoSuperResolutionLayers)
         // is a 30 residual-block CNN with 4x pixel-shuffle upsampling, run over a multi-frame video
         // clip — genuine heavy conv compute (NOT an O(n^2)-attention pathology: the factory is
         // conv-only), so a 10-iteration Training_ShouldReduceLoss exceeds the 120s per-test budget on
         // CPU (verified: it, MoreData and Metadata all time out at 120000ms). Same class as the
-        // already-tagged video models (MGLDVSR / InternVideo2 / LLaVAVideo) — runs in the nightly heavy
+        // already-tagged video models (MGLDVSR / InternVideo2) — runs in the nightly heavy
         // lane. (A separate fidelity follow-up tracks wiring the paper's masked inter/intra-frame
         // attention, which the default factory does not yet build.)
         "MIAVSR",
@@ -1138,7 +1094,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         "WhisperModel",
         // TTS: TorToise (Betker 2023) codec-LM decoder — LLMDim 1024 x 12 layers with an 8x1024
         // codebook head is ~150M params; <double> training OOMs. Deferred to the nightly heavy lane
-        // (HeavyTimeoutTestClassNames) like its foundation-TTS peers FireRedTTS / MegaTTS3, where
+        // (HeavyTimeoutTestClassNames), where
         // <float> halves the footprint for the full-fidelity run.
         "TortoiseTTS",
         // ViLBERT (Lu et al. 2019): paper-scale dual-stream co-attention VLM — VisionDim=1024 with
@@ -3378,7 +3334,10 @@ public class TestScaffoldGenerator : IIncrementalGenerator
          // Size matters here beyond matching: at 32px SAM's stride-16 stem yields a 2x2 feature map,
          // a step away from the 1x1 collapse that made a 32px XDecoder fixture produce silently zero
          // gradients. 112 keeps it at 7x7, which is a real test.
-         : className is "DEVA" or "DepthAnythingV2" or "FLIP" or "GeminiVision" or "Gemma3" or "ImageBindNeuralNetwork" or "InternVL" or "InternVL2" or "InternVL25" or "InternVL3"
+         : className == "Phi3Vision" ? 28
+         : className is "ClaudeVision" or "DEVA" or "DepthAnythingV2" or "FLIP" or "GeminiVision"
+             or "GrokVision" or "LLaVAVideo" or "Gemma3" or "ImageBindNeuralNetwork"
+             or "InternVL" or "InternVL2" or "InternVL25" or "InternVL3"
              or "OneFormer" or "OpenCLIP" or "Pix2Struct"
              or "SEEM" or "ShowO" or "ShowO2" or "SigLIP2" or "MetaCLIP" ? 32
          // Shard M MedS-Meta: these three are already <float> AND already carry iteration caps from
@@ -3851,7 +3810,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // 768, 12+12 transformer layers, ~93M params) whose per-step CPU cost times out MoreData.
             // The [1,4,16] token InputShape stays in lockstep with that smoke OctoOptions width.
             "Octo" => 16,
-            "KOSMOS1" or "KOSMOS2" => 1024, // KOSMOS1Options / KOSMOS2Options VisionDim
+            // Both KOSMOS fixtures are constructed at 32-wide census/test scale above; production
+            // options remain 1024-wide. The emitted token input must follow the fixture constructor.
+            "KOSMOS1" or "KOSMOS2" => 32,
             // Encoder-decoder VLMs (PaLI/PaLI-X/PaLI-3/CoCa/GIT) are built at CI-smoke width
             // VisionDim=128 (their paper defaults are 768-4096, PaLI-X = 55B params, OOM on
             // construction). Keep the [1,4,128] token InputShape in lockstep with that config.
@@ -4334,20 +4295,95 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "NumFlowSteps = 1, InterChannels = 32, FilterChannels = 64, " +
                     "EncoderDim = 32, DecoderDim = 32 })";
             }
-            else if (model.ClassName == "GeminiVision" && model.TypeParameterCount == 1)
+            else if ((model.ClassName is "ClaudeVision" or "GeminiVision" or "GrokVision")
+                     && model.TypeParameterCount == 1)
             {
-                // Gemini's production options retain the paper-scale 1024/8192-wide, 32+64-layer
-                // MoE reference defaults. That graph cannot fit a generated invariant's warm-up on
-                // a 16 GB runner even in float. Exercise the same public native-layer path at bounded
-                // width/depth/vocabulary; GetVisionSpatialSize emits the matching 32x32 input.
+                // The proprietary VLM references share CreateDefaultProprietaryAPILayers and the
+                // same 1024/8192-wide, 32+64-layer defaults. The all-model fresh-process census
+                // proved the former split policy was unsafe: Gemini happened to use a bounded
+                // fixture, while Claude and the hand-written Grok fixture caused their hosted
+                // runners to shut down during a single cold forward. Exercise the complete shared
+                // projection -> vision transformer -> decoder topology at one block per side.
+                // Production defaults remain full scale; generated correctness and performance
+                // coverage now use one family policy instead of three drifting per-provider rules.
+                string proprietaryOptionsType = model.ClassName switch
+                {
+                    "ClaudeVision" => "AiDotNet.VisionLanguage.Proprietary.ClaudeVisionOptions",
+                    "GrokVision" => "AiDotNet.VisionLanguage.Proprietary.GrokVisionOptions",
+                    _ => "AiDotNet.VisionLanguage.Proprietary.GeminiVisionOptions",
+                };
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
                     "inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 4), " +
-                    "new AiDotNet.VisionLanguage.Proprietary.GeminiVisionOptions { ImageSize = 32, " +
+                    $"new {proprietaryOptionsType} {{ ImageSize = 32, " +
                     "VisionDim = 32, DecoderDim = 32, NumVisionLayers = 1, NumDecoderLayers = 1, " +
                     "NumHeads = 4, VocabSize = 64, MaxSequenceLength = 16, MaxGenerationLength = 8, " +
-                    "MaxContextLength = 16, MaxContextTokens = 16, NumExperts = 2, DropoutRate = 0.0 })";
+                    "MaxContextLength = 16, DropoutRate = 0.0 })";
+            }
+            else if ((model.ClassName is "KOSMOS1" or "KOSMOS2")
+                     && model.TypeParameterCount == 1)
+            {
+                // KOSMOS-1/2 use the same causal multimodal vision/decoder topology. Their
+                // 1024/2048-wide 24+24-layer defaults both hit the 180-second cold-forward
+                // watchdog in the first complete model census. Keep grounding enabled for
+                // KOSMOS-2 while bounding only public width/depth/vocabulary controls.
+                string kosmosOptionsType = model.ClassName == "KOSMOS2"
+                    ? "AiDotNet.VisionLanguage.Generative.KOSMOS2Options"
+                    : "AiDotNet.VisionLanguage.Generative.KOSMOS1Options";
+                string kosmosSpecific = model.ClassName == "KOSMOS2"
+                    ? "EnableGroundingTokens = true, NumLocationBins = 16, "
+                    : string.Empty;
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputSize: 32, outputSize: 32), " +
+                    $"new {kosmosOptionsType} {{ {kosmosSpecific}" +
+                    "ImageSize = 32, VisionDim = 32, DecoderDim = 32, NumVisionLayers = 1, " +
+                    "NumDecoderLayers = 1, NumHeads = 4, VocabSize = 64, MaxSequenceLength = 16, " +
+                    "MaxGenerationLength = 8, DropoutRate = 0.0 })";
+            }
+            else if (model.ClassName == "Phi3Vision" && model.TypeParameterCount == 1)
+            {
+                // Replace the former hand-written 4.2B-parameter fixture with generator-owned
+                // coverage of the identical patch encoder -> gated adapter -> decoder topology.
+                // The fresh-process census measured the hand-written fixture at 14.6 GiB before
+                // its cold forward timed out; the model's production defaults are unchanged.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.ImageClassification, " +
+                    "inputHeight: 28, inputWidth: 28, inputDepth: 3, outputSize: 32), " +
+                    "new AiDotNet.VisionLanguage.InstructionTuned.Phi3VisionOptions { ImageSize = 28, " +
+                    "VisionDim = 32, ProjectionDim = 32, DecoderDim = 32, NumVisionLayers = 1, " +
+                    "NumDecoderLayers = 1, NumHeads = 4, VocabSize = 64, MaxSequenceLength = 16, " +
+                    "MaxGenerationLength = 8, MaxVisualTokens = 4, DropoutRate = 0.0 })";
+            }
+            else if (model.ClassName == "LLaVAVideo" && model.TypeParameterCount == 1)
+            {
+                // Preserve patch embedding, per-frame vision attention, temporal aggregation,
+                // projector and decoder while bounding the foundation-scale 1024/4096, 24+32
+                // default that reached 11.1 GiB and timed out in cold forward.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 32), " +
+                    "new AiDotNet.VisionLanguage.VideoLanguage.LLaVAVideoOptions { ImageSize = 32, " +
+                    "ImageChannels = 3, PatchSize = 8, VisionDim = 32, ProjectionDim = 32, DecoderDim = 32, " +
+                    "NumVisionLayers = 1, NumDecoderLayers = 1, NumHeads = 4, MaxFrames = 2, " +
+                    "VocabSize = 64, MaxSequenceLength = 16, MaxGenerationLength = 8, DropoutRate = 0.0 })";
+            }
+            else if (model.ClassName == "MERT" && model.TypeParameterCount == 1)
+            {
+                // MERT's default transformer is 768-wide and twelve layers deep. The generated
+                // audio architecture is 32 features wide, so leaving the paper defaults also
+                // produced a real 768x32 projection mismatch before the census could measure it.
+                // Run the same input projection and transformer stack at aligned smoke dimensions.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Embedding, " +
+                    "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 32), " +
+                    "new AiDotNet.Audio.Foundations.MERTOptions { HiddenDim = 32, NumLayers = 1, " +
+                    "NumHeads = 4, FeedForwardDim = 64, DropoutRate = 0.0 })";
             }
             else if (model.ClassName == "GLaMM" && model.TypeParameterCount == 1 &&
                      model.FullyQualifiedName.IndexOf(
@@ -5097,6 +5133,18 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "MaxSequenceLength = 16, MaxGenerationLength = 8, MaxVisualTokens = 16, " +
                     "DropoutRate = 0.0 })";
             }
+            else if (model.ClassName == "ABINet" && model.TypeParameterCount == 1)
+            {
+                // ABINet's explicit training branch consumes the supplied tensor directly. Build
+                // the complete vision -> language -> iterative-fusion topology at bounded public
+                // dimensions and pair it with the canonical batched NCHW fixture emitted below.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.SequenceToSequence, " +
+                    "inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 97), " +
+                    "imageWidth: 32, imageHeight: 32, maxSequenceLength: 8, visionDim: 64, " +
+                    "languageDim: 64, visionLayers: 1, languageLayers: 1, numIterations: 1)";
+            }
             else if (model.ClassName == "FinancialBERT" && model.TypeParameterCount == 1)
             {
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
@@ -5278,6 +5326,30 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "NumAcousticHeads = 4, LyricsVocabSize = 64, SemanticVocabSize = 64, " +
                     "AcousticCodebookSize = 32, NumAcousticQuantizers = 2, NumStyleTags = 8, " +
                     "StyleEmbeddingDim = 32, DropoutRate = 0.0 })";
+            }
+            else if ((model.ClassName is "Llasa" or "MegaTTS3")
+                     && model.TypeParameterCount == 1
+                     && typeName.StartsWith(
+                         "AiDotNet.TextToSpeech.", System.StringComparison.Ordinal))
+            {
+                // Both models build the shared embedding -> text encoder -> codec LM -> token
+                // head graph. Their paper defaults are 2048-wide, 24-layer decoders with 4K/8K
+                // token heads; the complete fresh-process census measured Llasa at 7.3 GiB in
+                // repeated inference and MegaTTS3 at 13.7 GiB in one train step before each hit
+                // the 180-second watchdog. Exercise every stage with the smallest useful public
+                // configuration, leaving production defaults untouched.
+                string codecOptionsType = model.ClassName == "Llasa"
+                    ? "AiDotNet.TextToSpeech.CodecBased.LlasaOptions"
+                    : "AiDotNet.TextToSpeech.Latest.MegaTTS3Options";
+                pinInitSeed = true;
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.TextGeneration, " +
+                    "inputSize: 4, outputSize: 16), " +
+                    $"new {codecOptionsType} {{ NumCodebooks = 1, CodebookSize = 16, " +
+                    "TextEncoderDim = 32, LLMDim = 64, NumEncoderLayers = 1, NumLLMLayers = 2, " +
+                    "NumHeads = 4, VocabSize = 64, MaxTextLength = 8, MaxCodecFrames = 8, " +
+                    "DropoutRate = 0.0 })";
             }
             else if ((model.ClassName == "FireRedTTS" || model.ClassName == "SparkTTS"
                       || model.ClassName == "SPEARTTS")
@@ -6576,20 +6648,16 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 // sampled trajectories per forecast — so a single Predict is 20 passes through
                 // the whole stack. At that scale its memorization probe times out at 180 s.
                 //
-                // Bound only the INTERNALS. ContextLength and ForecastHorizon deliberately keep
-                // their paper values, because Chronos is tokenization-based and its training path
-                // emits rank-2/rank-3 [seq, vocab] logits: an earlier attempt routed it through
-                // TimeGPT's reduced rank-1 "8" forecast geometry and produced "Chronos training
-                // expects rank-2 or rank-3 vocabulary logits, got rank 1" on every training
-                // invariant. Leaving the two length options alone keeps the shape contract
-                // exactly as the forecasting branch already computes it, while NumSamples and the
-                // transformer width carry essentially all of the cost.
+                // Keep the token-logit training contract but bound both public sequence extents.
+                // ForecastHorizon=8 remains below the generated 32-token discrete input after
+                // ClampDiscreteInputAxes; the old horizon of 64 rejected the fixture before the
+                // census could measure its taped forward or backward pass.
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
-                    "inputSize: 512, outputSize: 64), " +
-                    "new AiDotNet.Models.Options.ChronosFinanceOptions<double> { ContextLength = 512, " +
-                    "ForecastHorizon = 64, NumTokens = 64, HiddenDimension = 32, NumLayers = 2, " +
+                    "inputSize: 64, outputSize: 8), " +
+                    "new AiDotNet.Models.Options.ChronosFinanceOptions<double> { ContextLength = 64, " +
+                    "ForecastHorizon = 8, NumTokens = 64, HiddenDimension = 32, NumLayers = 2, " +
                     "NumHeads = 4, IntermediateSize = 64, NumSamples = 2, DropoutRate = 0.0 })";
             }
             else if (model.ClassName == "LLMTime" && model.TypeParameterCount == 1)
@@ -6816,12 +6884,17 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 // Demucs. Because the native ctor's architecture parameter is followed by optional
                 // params it is not detected as an "architecture-only" ctor, so the scaffold fell back
                 // to the (options) ONNX ctor — and every training invariant threw "Training is not
-                // supported in ONNX inference mode". Force the native training ctor. The waveform-Demucs
-                // InitializeLayers hardcodes its conv-U-Net dims, so any valid architecture works.
+                // supported in ONNX inference mode". Force the native training ctor and exercise the
+                // same configurable Demucs topology at smoke scale. Leaving paper defaults here creates
+                // a 100.6M-parameter double fixture whose one census pass peaks at 4.4 GiB and 15 s;
+                // production defaults remain untouched.
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
-                    "inputSize: 64, outputSize: 256))";
+                    "inputSize: 64, outputSize: 256), " +
+                    "new AiDotNet.Audio.SourceSeparation.SourceSeparationOptions { " +
+                    "DemucsDepth = 2, DemucsBaseChannels = 8, DemucsKernelSize = 8, " +
+                    "DemucsStride = 4, DemucsPadding = 2, StemCount = 4 })";
             }
             else if (model.ClassName == "E2TTS" && model.TypeParameterCount == 1)
             {
@@ -7260,6 +7333,25 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "TextEncoderDim = 32, LLMDim = 32, NumEncoderLayers = 1, NumLLMLayers = 2, " +
                     "NumHeads = 4, NumCodebooks = 1, CodebookSize = 80, " +
                     "MaxTextLength = 8, MaxCodecFrames = 8, DropoutRate = 0.0 })";
+            }
+            else if (model.ClassName == "AudioLM" && model.TypeParameterCount == 1
+                     && typeName.StartsWith(
+                         "AiDotNet.Audio.Generation.", System.StringComparison.Ordinal))
+            {
+                // This is the generated-census collision owner. The bounded CodecBased AudioLM
+                // branch below does not apply to it; as a result the census silently constructed
+                // the 152.2M-parameter, 12x1024 semantic model and peaked at 6.2 GiB for one fixture.
+                // Exercise the identical semantic projection/attention/MLP/vocabulary topology
+                // through its public options while keeping paper-scale production defaults intact.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.SequenceToSequence, " +
+                    "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 64), " +
+                    "new AiDotNet.Audio.Generation.AudioLMOptions { SemanticDim = 32, " +
+                    "NumSemanticLayers = 2, NumSemanticHeads = 4, SemanticVocabSize = 64, " +
+                    "CoarseDim = 32, NumCoarseLayers = 2, CoarseCodebookSize = 64, " +
+                    "FineDim = 32, NumFineLayers = 2, FineCodebookSize = 64, " +
+                    "NumCoarseQuantizers = 1, NumFineQuantizers = 1, DropoutRate = 0.0 })";
             }
             else if (model.ClassName == "AudioLM" && model.TypeParameterCount == 1
                      && typeName.StartsWith(
@@ -8257,6 +8349,21 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "LLMDim = 32, NumEncoderLayers = 1, NumLLMLayers = 1, NumHeads = 2, " +
                     "VocabSize = 64, MaxTextLength = 8, MaxCodecFrames = 8, DropoutRate = 0.0, " +
                     "LearningRate = 1e-3, WeightDecay = 0.0 })";
+            }
+            else if (model.ClassName == "VoiceCraft" && model.TypeParameterCount == 1
+                     && typeName.StartsWith("AiDotNet.Audio.Generation.", System.StringComparison.Ordinal))
+            {
+                // CollisionOwners assigns VoiceCraftTests to Audio.Generation.VoiceCraft. The
+                // bounded CodecBased branch below cannot affect that owner, so it silently retained
+                // a 2048-wide, 16-layer model and reached 19.6 GiB in the exact-model census.
+                pinInitSeed = true;
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.SequenceToSequence, " +
+                    "inputHeight: 8, inputWidth: 32, inputDepth: 1, outputSize: 32), " +
+                    "new AiDotNet.Audio.Generation.VoiceCraftOptions { HiddenDim = 32, NumLayers = 1, " +
+                    "NumHeads = 4, CodebookSize = 32, NumQuantizers = 1, CodecEmbeddingDim = 16, " +
+                    "MaxDurationSeconds = 1.0, DropoutRate = 0.0 })";
             }
             else if (model.ClassName == "VoiceCraft" && model.TypeParameterCount == 1 && typeName.Contains("CodecBased"))
             {
@@ -11100,11 +11207,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // -SerialCollection documents: with maxParallelThreads at all 16 logical cores, N classes x
         // N managed BLAS threads far exceeds the cores. Serializing gives each the whole machine.
         //
-        // Deliberately NOT routed through IsHeavyTimeoutGeneratedModel: that also stamps the
-        // HeavyTimeout trait, which would move these out of the default PR shard into the nightly
-        // lane. They are not foundation-scale and belong in the PR gate; they only need to not run
-        // sixteen-wide against other heavy classes. Same split the ConvergenceSensitive entries
-        // above use - serialize without relegating.
+        // These are serialized without a HeavyTimeout trait: they belong in the default PR gate
+        // and only need to avoid running sixteen-wide against other memory-heavy classes.
         // Mask2Former joins them for a DIFFERENT reason and the distinction matters: the three above
         // are innocent bystanders with 4-8x headroom, whereas Mask2Former is genuinely heavy. Once
         // its declared shapes were corrected to the 128x128 the fixture actually feeds, its probes
@@ -11113,11 +11217,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // it passes comfortably given dedicated cores.
         if (model.ClassName is "ISTFTNet" or "PartitionMCMCAlgorithm" or "VFIMamba" or "Mask2Former")
             sb.AppendLine("[Xunit.Collection(\"FoundationScaleSerial\")]");
-        if (IsHeavyTimeoutGeneratedModel(model.ClassName))
-        {
-            sb.AppendLine("[Xunit.Collection(\"FoundationScaleSerial\")]");
-            heavyTimeout = true;
-        }
         if (heavyTimeout)
             sb.AppendLine("[Xunit.Trait(\"Category\", \"HeavyTimeout\")]");
         sb.AppendLine($"public class {testClassName} : {baseClassName}");
@@ -12114,6 +12213,13 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             sb.AppendLine("        return target;");
             sb.AppendLine("    }");
         }
+        else if (model.ClassName == "ABINet")
+        {
+            // ForwardForTraining is an explicit branch runner and receives the fixture tensor
+            // directly. Predict still applies its public normalization to this canonical image.
+            sb.AppendLine("    protected override int[] InputShape => new[] { 1, 3, 32, 32 };");
+            sb.AppendLine("    protected override int[] OutputShape => new[] { 1, 8, 97 };");
+        }
         else if (isVisionModel && IsTokenConsumingVisionLanguageModel(model.ClassName))
         {
             // These VisionLanguage models (GPT4Point — Qi et al. 2024;
@@ -12445,7 +12551,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     sb.AppendLine();
                 }
                 bool useCodecSmokeIterations =
-                    model.ClassName is "Bark" or "BarkModel" or "FishSpeech" or "VALLE2" or "XTTSv2Clone"
+                    model.ClassName is "Bark" or "BarkModel" or "FishSpeech" or "Llasa" or "MegaTTS3"
+                        or "VALLE2" or "XTTSv2Clone"
                         or "GLM4Voice" or "IndexTTS2" or "SeedTTS" or "SoundStorm";
                 sb.AppendLine(useCodecSmokeIterations
                     ? "    protected override int MoreDataShortIterations => 1;"
@@ -12453,7 +12560,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 sb.AppendLine(useCodecSmokeIterations
                     ? "    protected override int MoreDataLongIterations => 2;"
                     : "    protected override int MoreDataLongIterations => 10;");
-                if (model.ClassName is "Bark" or "BarkModel" or "VALLE2" or "GLM4Voice" or "IndexTTS2" or "SeedTTS" or "SoundStorm"
+                if (model.ClassName is "Bark" or "BarkModel" or "Llasa" or "MegaTTS3" or "VALLE2"
+                    or "GLM4Voice" or "IndexTTS2" or "SeedTTS" or "SoundStorm"
                     || IsValleCodecLMModel(model.ClassName))
                 {
                     sb.AppendLine("    protected override int TrainingIterations => 2;");
@@ -12719,7 +12827,18 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         }
         else if (isAudioModel)
         {
-            if (model.ClassName == "CTCDecoder")
+            if (model.ClassName == "VoiceCraft")
+            {
+                // Audio.Generation.VoiceCraft's bounded codec-LM maps each 32-wide token feature
+                // to one 32-way codebook logit vector without changing batch or sequence axes.
+                sb.AppendLine("    protected override int[] InputShape => new[] { 1, 8, 32 };");
+                sb.AppendLine("    protected override int[] OutputShape => new[] { 1, 8, 32 };");
+                sb.AppendLine("    protected override int TrainingIterations => 1;");
+                sb.AppendLine("    protected override int MoreDataShortIterations => 1;");
+                sb.AppendLine("    protected override int MoreDataLongIterations => 2;");
+                sb.AppendLine("    protected override int MemorizationTaskIterations => 2;");
+            }
+            else if (model.ClassName == "CTCDecoder")
             {
                 // #1789 Generated C: MoreData_ShouldNotDegrade was the only CTCDecoder test to
                 // fail, and it failed on the 120 s per-test gate rather than on the invariant.
@@ -12956,6 +13075,14 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 sb.AppendLine("    protected override int[] OutputShape => new[] { 4, 64 };");
                 sb.AppendLine("    protected override double MoreDataTolerance => 0.5;");
             }
+            else if (model.ClassName == "AudioLM")
+            {
+                // The collision owner is AiDotNet.Audio.Generation.AudioLM. Its bounded public
+                // options above project the 32-wide semantic stream to a 64-token vocabulary.
+                sb.AppendLine("    protected override int[] InputShape => new[] { 1, 64, 32 };");
+                sb.AppendLine("    protected override int[] OutputShape => new[] { 1, 64, 64 };");
+                sb.AppendLine("    protected override int VariableLengthAxis => 1;");
+            }
             else
             {
                 sb.AppendLine("    protected override int[] InputShape => new[] { 1, 64, 32 };");
@@ -13163,7 +13290,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             sb.AppendLine("        using var network = CreateNetwork();");
             sb.AppendLine("        var trainInput = CreateRandomTensor(InputShape, rng);");
             sb.AppendLine("        var trainTarget = CreateRandomTargetTensor(EffectiveOutputShape, rng);");
-            sb.AppendLine("        for (int i = 0; i < TrainingIterations; i++) network.Train(trainInput, trainTarget);");
+            sb.AppendLine("        int iterations = ResolveConformanceTrainingIterations(network, TrainingIterations);");
+            sb.AppendLine("        for (int i = 0; i < iterations; i++) network.Train(trainInput, trainTarget);");
             sb.AppendLine("        var input1 = CreateConstantTensor(InputShape, 0.1);");
             sb.AppendLine("        var input2 = CreateConstantTensor(InputShape, 0.9);");
             sb.AppendLine("        var output1 = network.Predict(input1);");
@@ -13202,6 +13330,12 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             {
                 sb.AppendLine("    protected override int[] InputShape => new[] { 1, 1, 8, 8 };");
                 sb.AppendLine("    protected override int[] OutputShape => new[] { 1, 1, 8, 8 };");
+            }
+            else if (model.ClassName == "TabPFNNetwork")
+            {
+                // Transformer attention consumes [batch, features], not a bare feature vector.
+                sb.AppendLine("    protected override int[] InputShape => new[] { 1, 10 };");
+                sb.AppendLine("    protected override int[] OutputShape => new[] { 1, 10 };");
             }
             else
             {
@@ -13326,7 +13460,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 sb.AppendLine("        using var network = CreateNetwork();");
                 sb.AppendLine("        var trainInput = CreateRandomTensor(InputShape, rng);");
                 sb.AppendLine("        var trainTarget = CreateRandomTargetTensor(EffectiveOutputShape, rng);");
-                sb.AppendLine("        for (int i = 0; i < TrainingIterations; i++) network.Train(trainInput, trainTarget);");
+                sb.AppendLine("        int iterations = ResolveConformanceTrainingIterations(network, TrainingIterations);");
+                sb.AppendLine("        for (int i = 0; i < iterations; i++) network.Train(trainInput, trainTarget);");
                 sb.AppendLine("        // Build two DIFFERENT integer-token sequences so EmbeddingLayer's");
                 sb.AppendLine("        // int-truncation produces distinct lookups (constant float inputs all");
                 sb.AppendLine("        // collapse to token 0 under (int) truncation).");
@@ -13865,17 +14000,16 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // training-path shapes align (e.g. ChronosBolt outputs
             // [B, ForecastHorizon, NumQuantiles], not the default [1, 1]).
             bool usesReducedChronosBoltFixture = model.ClassName == "ChronosBolt";
+            bool usesReducedChronosFixture = model.ClassName == "Chronos";
             bool usesReducedSundialFixture = model.ClassName == "Sundial";
             // LLMTime shares TimeGPT's reduced geometry exactly (ContextLength 64 / ForecastHorizon 8
             // in its constructorExpr), so it takes the same ctx/output-shape pair. Without this the
             // fixture kept feeding the paper-scale 512-element context into a 64-context model and
             // every invariant failed with "ReshapeLayer per-sample input element count (512) does not
             // match output element count (64)".
-            // Chronos is deliberately NOT in this group. It is tokenization-based: its training
-            // path emits rank-2/rank-3 [seq, vocab] logits and detokenizes them, so the rank-1
-            // "8" forecast shape TimeGPT/LLMTime use is not a legal contract for it. Routing it
-            // here produced "Chronos training expects rank-2 or rank-3 vocabulary logits, got
-            // rank 1" across all five of its training invariants on the local 16 GB run.
+            // Chronos remains tokenization-based. Reducing its public forecast OutputShape does
+            // not alter the internal rank-2/rank-3 vocabulary logits used by ForwardForTraining;
+            // the shared objective funnel derives its target from that exact training output.
             // LLMTime and TimeGPT retain their paper defaults in production, but their generated
             // smoke constructors deliberately use different bounded contexts. Keep each emitted
             // fixture in lockstep with its constructor rather than grouping them by model family.
@@ -13883,8 +14017,10 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             bool usesReducedTimeGptFixture = model.ClassName == "TimeGPT";
             bool usesReducedRwkvFixture = model.ClassName == "RWKVForecaster";
             bool usesReducedAutoformerFixture = model.ClassName == "Autoformer";
-            int paperCtx = usesReducedChronosBoltFixture
+            int paperCtx = usesReducedChronosFixture
                 ? 64
+                : usesReducedChronosBoltFixture
+                    ? 64
                 : usesReducedSundialFixture
                     ? 64
                 : usesReducedLlmTimeFixture
@@ -13896,8 +14032,10 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 : usesReducedAutoformerFixture
                     ? 4
                 : GetForecastingPaperContextLength(model.ClassName);
-            string paperOutputShape = usesReducedChronosBoltFixture
-                ? "8, 3"
+            string paperOutputShape = usesReducedChronosFixture
+                ? "8"
+                : usesReducedChronosBoltFixture
+                    ? "8, 3"
                 : usesReducedSundialFixture
                     ? "8"
                 : usesReducedLlmTimeFixture || usesReducedTimeGptFixture || usesReducedRwkvFixture
@@ -16664,7 +16802,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             or "SpeechGPT" or "SpiritLM" or "SoundStorm"
             or "Amphion" or "Dia" or "GLM4Voice" or "WhisperSpeech"
             // SparkTTS and SPEAR-TTS expose the same discrete codec-token contract.
-            or "SparkTTS" or "SPEARTTS"
+            or "SparkTTS" or "SPEARTTS" or "Llasa" or "MegaTTS3"
             || IsValleCodecLMModel(className);
     }
 
@@ -16707,6 +16845,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // so their codec head is 1 x 16 wide (production stays 1 x 4096 / 8 x 1024).
             "SparkTTS" => 16,
             "SPEARTTS" => 16,
+            "Llasa" => 16,
+            "MegaTTS3" => 16,
             "F5TTS" => 16,
             "FishSpeech" or "FishSpeechV15" => 32,
             "GLM4Voice" => 32,
@@ -16734,7 +16874,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             || className is "Bark" or "BarkModel"
             || className is "GLM4Voice" or "IndexTTS" or "IndexTTS2" or "OuteTTS"
                 or "KaniTTS" or "KaniTTS2" or "SeedTTS" or "SeedTTSClone"
-                or "SpeechGPT" or "SpiritLM" or "SoundStorm" or "Zonos" ? 64 : 256;
+                or "SpeechGPT" or "SpiritLM" or "SoundStorm" or "Zonos"
+                or "Llasa" or "MegaTTS3" ? 64 : 256;
     }
 
     private static string GetValleCodecLMOptionsType(string className)
@@ -16847,18 +16988,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
     /// whose <c>Training_*</c> invariants exceed the 120 s timeout because
     /// the encoder is wide / deep enough to make a full step take ≳ 1 s.
     /// </remarks>
-    // Generated models whose tests are CORRECT but foundation-scale: a single
-    // forward at their paper-scale width (e.g. the proprietary VLMs at
-    // VisionDim=1024) exceeds the 120 s per-test gate. Tagged HeavyTimeout so the
-    // default sharded run skips them (it filters Category!=HeavyTimeout) and they
-    // run in the nightly lane. Drop a model from here once it fits the budget.
-    private static bool IsHeavyTimeoutGeneratedModel(string className)
-    {
-        int tickIdx = className.IndexOf('`');
-        if (tickIdx > 0) className = className.Substring(0, tickIdx);
-        return className is "ClaudeVision" or "GeminiVision" or "GrokVision";
-    }
-
     private static bool IsPaperScaleVisionLanguageModel(string className)
     {
         int tickIdx = className.IndexOf('`');
@@ -17075,7 +17204,12 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // NHiTSFinance: NHiTSOptions.ForecastHorizon = 24. Pairs with
             // GetForecastingPaperContextLength returning 48 for NHiTSFinance
             // so the lookback window matches the model's configured default.
-            "NHiTSFinance" => "24",
+            "NHiTSFinance" => "1, 24",
+
+            // N-HiTS and Non-stationary Transformer both preserve an explicit batch axis in
+            // native training. Keep output declarations aligned with the batched inputs emitted
+            // below so the generated fixture exercises the real training contract.
+            "NonStationaryTransformer" => "1, 24, 7",
 
             // STGNN (Yu et al. 2018): per-node output [numNodes, forecastHorizon*
             // numFeatures] = [207, 12] (METR-LA defaults numNodes=207,
@@ -17119,6 +17253,15 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // TimesNet (Wu et al. 2023): paper-faithful multivariate input
             // [B, S, M]. M = TimesNetOptions.NumFeatures default 7.
             "TimesNet" => $"1, {ctx}, 7",
+
+            // N-HiTS pooling slices axis 1 in its native tape path. A flat [48] public probe is
+            // accepted by Predict (which promotes it), but BuildTrainingObjective receives the
+            // unpromoted tensor. Emit the ordinary batched time-series form once in the generator.
+            "NHiTSFinance" => $"1, {ctx}",
+
+            // The model's documented contract is [batch, sequence=96, features=7]. The former
+            // family fallback emitted a rank-1 [512] vector and failed in the first attention.
+            "NonStationaryTransformer" => "1, 96, 7",
 
             // Kronos (financial OHLCV decoder): paper-faithful multi-feature
             // candlestick input. KronosOptions.NumCandlestickFeatures = 5

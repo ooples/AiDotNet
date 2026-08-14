@@ -828,31 +828,34 @@ public partial class Autoformer<T> : ForecastingModelBase<T>
     /// </remarks>
     private Tensor<T> MovingAverage(Tensor<T> input, int kernelSize)
     {
-        var result = new Tensor<T>(input._shape);
+        if (input.Rank != 3)
+            throw new ArgumentException("Autoformer moving average expects [batch, time, features].", nameof(input));
+
         int seqLen = input.Shape[1];
         int halfKernel = kernelSize / 2;
+        int window = (2 * halfKernel) + 1;
 
-        for (int b = 0; b < input.Shape[0]; b++)
+        // TensorAvgPool1D consumes [batch, channels, width], while Autoformer carries
+        // [batch, time, features]. Zero-pad the time axis, pool every position, and
+        // compensate at the boundaries so the divisor remains the number of real samples
+        // (the exact historical forward contract). Every transformation is an IEngine op,
+        // keeping the trend branch connected to the gradient tape.
+        var channelsFirst = Engine.TensorPermute(input, new[] { 0, 2, 1 });
+        var padded = Engine.TensorConstantPad(
+            channelsFirst, new[] { halfKernel, halfKernel }, NumOps.Zero);
+        var averaged = Engine.TensorAvgPool1D(padded, window, stride: 1);
+
+        var boundaryScale = new Tensor<T>(new[] { 1, 1, seqLen });
+        for (int t = 0; t < seqLen; t++)
         {
-            for (int t = 0; t < seqLen; t++)
-            {
-                int start = Math.Max(0, t - halfKernel);
-                int end = Math.Min(seqLen, t + halfKernel + 1);
-                int count = end - start;
-
-                for (int f = 0; f < input.Shape[2]; f++)
-                {
-                    T sum = NumOps.Zero;
-                    for (int i = start; i < end; i++)
-                    {
-                        sum = NumOps.Add(sum, input[b, i, f]);
-                    }
-                    result[b, t, f] = NumOps.Divide(sum, NumOps.FromDouble(count));
-                }
-            }
+            int start = Math.Max(0, t - halfKernel);
+            int end = Math.Min(seqLen, t + halfKernel + 1);
+            boundaryScale[0, 0, t] = NumOps.FromDouble((double)window / (end - start));
         }
 
-        return result;
+        return Engine.TensorPermute(
+            Engine.TensorBroadcastMultiply(averaged, boundaryScale),
+            new[] { 0, 2, 1 });
     }
 
     /// <summary>

@@ -540,6 +540,36 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IShap
     }
 
     /// <summary>
+    /// Rebinds an unmaterialized lazy Dense layer to the feature width of its first real tensor
+    /// after an approximate shape-only network walk.
+    /// </summary>
+    /// <remarks>
+    /// Reconciliation happens before <see cref="EnsureInitialized"/>, so the persistent weight
+    /// matrix is allocated once at the real width. Without it, the guessed width was materialized
+    /// and immediately resized on the first forward; for streamed foundation-scale weights that
+    /// also attempted to copy from an evicted backing buffer.
+    /// </remarks>
+    protected override void ReconcileShapeOnlyResolution(Tensor<T> input)
+    {
+        int rank = input.Shape.Length;
+        if (rank < 1)
+            throw new ArgumentException(
+                $"DenseLayer requires rank>=1 input; got rank {rank}.", nameof(input));
+
+        int inputSize = input.Shape[rank - 1];
+        if (!_isInitialized)
+        {
+            ResolveShapes([inputSize], [OutputShape[0]]);
+            return;
+        }
+
+        // A caller may have explicitly materialized the shape-only manifest before execution.
+        // Preserve DenseLayer's documented adaptive-width behavior in that case.
+        if (_weights.Shape[0] != inputSize)
+            EnsureWeightShapeForInput(inputSize);
+    }
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="DenseLayer{T}"/> class with the specified
     /// input and output sizes and a vector activation function.
     /// </summary>

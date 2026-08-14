@@ -671,7 +671,13 @@ public static class InputContractTensorFactory
                     random.Next(domain.MinInclusive, domain.MaxExclusive),
                 LayerInputDomainKind.BooleanMask => random.Next(0, 2),
                 LayerInputDomainKind.AdditiveMask => random.Next(0, 2) == 0 ? 0.0 : -10_000.0,
-                _ => random.NextDouble()
+                // Unconstrained continuous means any real value. Generate a symmetric probe so
+                // shared conformance tests exercise both halves of piecewise layers (PReLU,
+                // thresholds, signed gates) instead of silently making their trainable negative
+                // branch unreachable with the former [0, 1) distribution. Probability/unit-range
+                // consumers must declare a bounded custom domain rather than relying on this
+                // unconstrained default.
+                _ => random.NextDouble() * 2.0 - 1.0
             };
             tensor[i] = numOps.FromDouble(value);
         }

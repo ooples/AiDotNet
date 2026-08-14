@@ -1327,8 +1327,10 @@ jobs:
             # tracked in the umbrella timeout issue and exercised by the heavy-timeout-nightly
             # workflow with a long budget. Wrapping the per-shard filter here applies the exclusion
             # across all matrix entries in one place; it is a no-op for any test not tagged
-            # [Trait("Category","HeavyTimeout")].
-            '--filter', '(${{ matrix.shard.filter }})&Category!=HeavyTimeout'
+            # [Trait("Category","HeavyTimeout")]. ModelPerformanceCensus is likewise an explicit,
+            # serial, artifact-producing lane; discovering it in the normal shards would add 863
+            # opt-out skips and no measurements because its output directory is intentionally unset.
+            '--filter', '(${{ matrix.shard.filter }})&Category!=HeavyTimeout&Category!=ModelPerformanceCensus'
           )
           if ($collectCoverage) {
             $dotnetArgs += @(

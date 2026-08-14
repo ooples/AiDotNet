@@ -1135,17 +1135,18 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     /// </summary>
     internal bool TryGetOwnDeclaredParameterCount(out long count, out bool materialized)
     {
-        count = Parameters.Length;
+        count = 0;
         materialized = true;
 
         var declared = DeclaredParameterShapes();
         var countShapes = DeclaredParameterCountShapes();
-        bool hasDistinctCountShapes = countShapes.Count == declared.Count;
-        if (declared is not null && declared.Count > 0)
+        int declaredCount = declared?.Count ?? 0;
+        bool hasDistinctCountShapes = countShapes.Count == declaredCount;
+        if (declaredCount > 0)
         {
-            for (int i = 0; i < declared.Count; i++)
+            for (int i = 0; i < declaredCount; i++)
             {
-                var (tensor, expected, _) = declared[i];
+                var (tensor, expected, _) = declared![i];
                 if (tensor is not null && tensor.Length > 0 && tensor.Shape.Length > 0)
                 {
                     count = checked(count + TrainableScalarCount(tensor));
@@ -1172,35 +1173,63 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
                 materialized = false;
                 return false;
             }
-
-            var trainable = GetTrainableParametersUnmaterialized();
-            if ((trainable is null || trainable.Count == 0) && HasUninitializedParameters)
-                return false;
-            if (trainable is not null)
-            {
-                for (int i = 0; i < trainable.Count; i++)
-                {
-                    var tensor = trainable[i];
-                    if (tensor is null || tensor.Length == 0 || tensor.Shape.Length == 0)
-                    {
-                        if (HasUninitializedParameters) return false;
-                        materialized = false;
-                        continue;
-                    }
-                    count = checked(count + TrainableScalarCount(tensor));
-                }
-            }
         }
 
-        var buffers = GetRegisteredBuffers();
-        if (buffers is not null)
+        // Generated shape declarations can coexist with compatibility/runtime registrations.
+        // The declaration list describes the fields the generator understands; it is not an
+        // exhaustive replacement for the ordered value surface. APNet2, for example, materializes
+        // additional trainable tensors on its first real forward. Ignoring those tensors here made
+        // the manifest declare fewer values than GetParameters/GetParameterStateChunks emitted.
+        // Fold every remaining OWN component from the same canonical enumeration as the value
+        // walk, deduplicating declared tensors by reference and excluding child layers (the owner
+        // recursively emits those as independent slots).
+        var components = GetOrderedParameterComponents();
+        bool sawOwnTrainableComponent = false;
+        for (int componentIndex = 0; componentIndex < components.Length; componentIndex++)
         {
-            for (int i = 0; i < buffers.Count; i++)
+            var component = components[componentIndex];
+            if (component.Kind == DeclaredParameterComponentKind.Legacy)
             {
-                var tensor = buffers[i].Tensor;
-                if (tensor is not null) count = checked(count + TrainableScalarCount(tensor));
+                count = checked(count + Parameters.Length);
+                continue;
             }
+
+            if (component.Kind == DeclaredParameterComponentKind.SubLayer)
+                continue;
+
+            var tensor = component.Tensor;
+            if (tensor is null)
+                continue;
+
+            if (component.Kind == DeclaredParameterComponentKind.Trainable)
+            {
+                sawOwnTrainableComponent = true;
+                bool alreadyDeclared = false;
+                for (int declaredIndex = 0; declaredIndex < declaredCount; declaredIndex++)
+                {
+                    if (ReferenceEquals(declared![declaredIndex].Tensor, tensor))
+                    {
+                        alreadyDeclared = true;
+                        break;
+                    }
+                }
+                if (alreadyDeclared)
+                    continue;
+            }
+
+            if (tensor.Length == 0 || tensor.Shape.Length == 0)
+            {
+                if (component.Kind == DeclaredParameterComponentKind.Trainable
+                    && HasUninitializedParameters)
+                    return false;
+                materialized = false;
+                continue;
+            }
+
+            count = checked(count + TrainableScalarCount(tensor));
         }
+        if (declaredCount == 0 && !sawOwnTrainableComponent && HasUninitializedParameters)
+            return false;
 
         // A generated shape declaration predicts the complete local surface, while the ordered
         // component walk observes what is live now. Migration-era mixed layers can expose either a
@@ -1732,6 +1761,13 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     /// </remarks>
     private bool _firstForwardRan;
 
+    // Shape-only resolution deliberately does not mean that a real input has been observed. The
+    // network-level shape walker can only approximate a custom/branched forward as a sequential
+    // chain, so a layer that derives runtime state from the input must get one reconciliation hook
+    // before its first real compute. Without this distinction, a guessed shape can permanently size
+    // LayerNorm parameters or structural output metadata even though _firstForwardRan is still false.
+    private bool _shapeOnlyResolutionPendingFirstForward;
+
     /// <summary>
     /// Proactively declares this layer's parameter shapes WITHOUT requiring a forward pass.
     /// Returns <c>true</c> if the layer is in a state where shape-dependent post-processing
@@ -1820,6 +1856,20 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         var perSample = new int[shape.Length - 1];
         Array.Copy(shape, 1, perSample, 0, perSample.Length);
         ResolveShapes(perSample, perSample);
+    }
+
+    /// <summary>
+    /// Reconciles state derived during shape-only propagation with the first tensor the layer
+    /// actually receives. The default is a no-op because constructor-sized and ordinary lazy
+    /// layers have no runtime-only state to revise. Shape-polymorphic layers override this hook.
+    /// </summary>
+    /// <remarks>
+    /// This hook is invoked only when <see cref="ResolveShapesOnly(int[])"/> ran before the first
+    /// real forward. It does not weaken eager constructor contracts: an eagerly resolved layer
+    /// that was never shape-walked continues to treat its construction-time dimensions as binding.
+    /// </remarks>
+    protected virtual void ReconcileShapeOnlyResolution(Tensor<T> input)
+    {
     }
 
     /// <summary>
@@ -2151,6 +2201,32 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     internal bool UseStreamingAllocator { get; set; }
 
     /// <summary>
+    /// Applies the network's streaming-allocation mode to this layer and every currently registered
+    /// descendant. Composite children may own the actual lazy weights, so setting only the outer
+    /// layer leaves those allocations on the ordinary GC heap.
+    /// </summary>
+    internal void SetStreamingAllocatorRecursively(bool useStreamingAllocator)
+    {
+        // Use the repository comparer rather than the .NET 5+ BCL comparer so this shared base
+        // path compiles for the net471 target as well as modern runtimes.
+        var visited = new HashSet<LayerBase<T>>(TensorReferenceComparer<LayerBase<T>>.Instance);
+        SetStreamingAllocatorRecursively(useStreamingAllocator, visited);
+    }
+
+    private void SetStreamingAllocatorRecursively(
+        bool useStreamingAllocator,
+        HashSet<LayerBase<T>> visited)
+    {
+        if (!visited.Add(this)) return;
+        UseStreamingAllocator = useStreamingAllocator;
+        foreach (var subLayer in GetSubLayers())
+        {
+            if (subLayer is LayerBase<T> child)
+                child.SetStreamingAllocatorRecursively(useStreamingAllocator, visited);
+        }
+    }
+
+    /// <summary>
     /// Inference-only: keep this layer's large weight matrices RESIDENT at half precision (fp16) and
     /// upcast to the compute type transiently per forward. Halves resident weight memory for a
     /// foundation-scale tower (a 5.75B-param DiT: 23 GB fp32 → ~11.5 GB fp16) so it fits a memory-
@@ -2282,10 +2358,19 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
             if (_disposed)
                 throw new ObjectDisposedException(GetType().Name,
                     "A disposed layer cannot execute a forward pass.");
-            if (!_firstForwardRan && !IsShapeResolved)
+            if (!_firstForwardRan)
             {
-                OnFirstForward(input);
+                if (!IsShapeResolved)
+                {
+                    OnFirstForward(input);
+                }
+                else if (_shapeOnlyResolutionPendingFirstForward)
+                {
+                    ReconcileShapeOnlyResolution(input);
+                }
+
                 _firstForwardRan = true;
+                _shapeOnlyResolutionPendingFirstForward = false;
                 RegisterStreamingWeightsWithPool();
             }
             EnsureInitializationCore();
@@ -2409,6 +2494,13 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         if (!IsShapeResolved)
         {
             OnFirstForward(input);
+            // This is the topology-aware counterpart of ResolveShapesOnly: OnFirstForward saw a
+            // zero-filled shape probe, not a real activation. Custom forwards and preprocessing
+            // pipelines can legitimately feed a different extent at execution time, so the first
+            // real forward must be allowed to reconcile any state derived from this estimate.
+            // Without this provenance marker, Flatten/Transpose/normalization layers remained
+            // permanently bound to the shape-inference probe and failed far from the pre-walk.
+            _shapeOnlyResolutionPendingFirstForward = true;
         }
 
         // A shape-preserving layer's strongest contract is the concrete input itself. Its
@@ -2592,6 +2684,7 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         {
             IsResolvingShapesOnly = false;
         }
+        _shapeOnlyResolutionPendingFirstForward = true;
         // Intentionally NOT calling EnsureInitialized — weights stay deferred until
         // the first real forward pass so RNG state is preserved.
     }
@@ -6642,6 +6735,13 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
                 return;
         }
         _registeredSubLayers.Add(subLayer);
+
+        // A lazy composite can create children during its first Forward, after its parent network
+        // already enabled streaming. Inherit the allocation mode immediately; otherwise the child
+        // allocates its real weights on the ordinary GC heap and a foundation model retains every
+        // block despite the outer layer reporting that streaming is active.
+        if (subLayer is LayerBase<T> childLayer)
+            childLayer.SetStreamingAllocatorRecursively(UseStreamingAllocator);
 
         // Lazy composite layers can create children during their first
         // Forward, after the parent has already been switched to evaluation

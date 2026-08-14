@@ -96,6 +96,55 @@ public class NeuralNetworkBaseIntegrationTests
     }
 
     [Fact(Timeout = 120000)]
+    public async Task BuildTrainingObjective_AfterInference_EntersTrainingMode()
+    {
+        await Task.Yield();
+        using var network = BuildNetwork();
+        var input = CreateRandomTensor(new[] { 2, 4 });
+        var target = CreateRandomTensor(new[] { 2, 2 }, seed: 43);
+
+        network.SetTrainingMode(false);
+        Assert.False(network.IsTrainingMode);
+
+        _ = network.BuildTrainingObjective(input, target);
+
+        Assert.True(network.IsTrainingMode);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task BuildTrainingObjective_UsesFamilyInputPreparationHook()
+    {
+        await Task.Yield();
+        using var network = BuildNetwork();
+        var input = CreateRandomTensor(new[] { 2, 4 });
+        var target = CreateRandomTensor(new[] { 2, 2 }, seed: 44);
+
+        _ = network.BuildTrainingObjective(input, target);
+
+        Assert.Equal(1, network.TrainingInputPreparationCount);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task Predict_WhenPredictCoreIsOverridden_EntersEvalModeAndRestoresCallerMode()
+    {
+        await Task.Yield();
+        var architecture = new NeuralNetworkArchitecture<float>(
+            inputType: InputType.OneDimensional,
+            taskType: NeuralNetworkTaskType.Regression,
+            complexity: NetworkComplexity.Simple,
+            inputSize: 4,
+            outputSize: 4);
+        using var network = new PredictCoreOverrideNetwork(architecture);
+        var input = CreateRandomTensor(new[] { 1, 4 });
+
+        Assert.True(network.IsTrainingMode);
+        _ = network.Predict(input);
+
+        Assert.False(network.ObservedTrainingModeInsidePredictCore);
+        Assert.True(network.IsTrainingMode);
+    }
+
+    [Fact(Timeout = 120000)]
     public async Task GeneratedLayerAliases_RebindByIdentityAcrossTopologyChanges()
     {
         await Task.Yield();
@@ -150,6 +199,13 @@ public class NeuralNetworkBaseIntegrationTests
         }
 
         public override bool SupportsTraining => true;
+        public int TrainingInputPreparationCount { get; private set; }
+
+        protected override Tensor<float> PrepareInputForTraining(Tensor<float> input)
+        {
+            TrainingInputPreparationCount++;
+            return input;
+        }
 
         public void AddLayer(ILayer<float> layer)
         {
@@ -242,5 +298,44 @@ public class NeuralNetworkBaseIntegrationTests
         {
             return new TestNeuralNetwork(Architecture);
         }
+    }
+
+    [AiDotNet.Attributes.TensorLayout(AiDotNet.Enums.TensorAxis.Batch, AiDotNet.Enums.TensorAxis.Features,
+        Direction = AiDotNet.Attributes.TensorLayoutDirection.Input)]
+    [AiDotNet.Attributes.TensorLayout(AiDotNet.Enums.TensorAxis.Batch, AiDotNet.Enums.TensorAxis.Features,
+        Direction = AiDotNet.Attributes.TensorLayoutDirection.Output)]
+    private sealed class PredictCoreOverrideNetwork : NeuralNetworkBase<float>
+    {
+        public PredictCoreOverrideNetwork(NeuralNetworkArchitecture<float> architecture)
+            : base(architecture, new MeanSquaredErrorLoss<float>())
+        {
+        }
+
+        public bool ObservedTrainingModeInsidePredictCore { get; private set; }
+        public override bool SupportsTraining => true;
+
+        protected override void InitializeLayers()
+        {
+        }
+
+        protected override Tensor<float> PredictCore(Tensor<float> input)
+        {
+            ObservedTrainingModeInsidePredictCore = IsTrainingMode;
+            return input;
+        }
+
+        public override ModelMetadata<float> GetModelMetadata()
+            => new() { Name = "PredictCoreOverrideNetwork", Version = "1.0" };
+
+        protected override void SerializeNetworkSpecificData(BinaryWriter writer)
+        {
+        }
+
+        protected override void DeserializeNetworkSpecificData(BinaryReader reader)
+        {
+        }
+
+        protected override IFullModel<float, Tensor<float>, Tensor<float>> CreateNewInstance()
+            => new PredictCoreOverrideNetwork(Architecture);
     }
 }

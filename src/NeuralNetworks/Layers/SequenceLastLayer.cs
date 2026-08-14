@@ -118,7 +118,10 @@ public partial class SequenceLastLayer<T> : LayerBase<T>, IShapeContract
         }
         else
         {
-            // Higher rank (>= 4): treat dim[0] as seqLen, extract last slice with remaining dims
+            // Treat dimension 0 as the sequence axis and preserve every remaining
+            // dimension. Going through the engine is essential here: copying Data
+            // into a new Tensor detaches the result from an active gradient tape and
+            // silently turns every upstream recurrent gradient into zero.
             int seqLen = input.Shape[0];
             _lastSequenceLength = seqLen;
             return Engine.TensorSliceAxis(input, axis: 0, index: seqLen - 1);

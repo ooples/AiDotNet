@@ -5401,6 +5401,26 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
 
     public virtual Tensor<T> Predict(Tensor<T> input)
     {
+        // Inference semantics belong in the NON-VIRTUAL funnel. Keeping this transition inside the
+        // default PredictCore meant every model that correctly overrode PredictCore (diffusion,
+        // multimodal, structured-output models) bypassed eval/no-grad mode entirely. Besides making
+        // Dropout/BatchNorm behave as training, that finalized auto-streaming as mutable/lossless and
+        // disabled the int8/int4 no-upcast kernels on the largest models.
+        bool wasTraining = IsTrainingMode;
+        if (wasTraining) SetTrainingMode(false);
+        using var noGrad = new NoGradScope<T>();
+        try
+        {
+            return PredictInInferenceMode(input);
+        }
+        finally
+        {
+            if (wasTraining) SetTrainingMode(true);
+        }
+    }
+
+    private Tensor<T> PredictInInferenceMode(Tensor<T> input)
+    {
         BindInputContract(input.Shape.ToArray()).Validate(input);
 
         // ONE-SHOT chain validation, on the first real forward rather than at construction.
@@ -5904,7 +5924,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// involved in Predict. Returns the original tensor if the architecture
     /// has no usable input shape or if input is already batched.
     /// </summary>
-    private Tensor<T> NormalizeInputBatchDim(Tensor<T> input)
+    protected Tensor<T> NormalizeInputBatchDim(Tensor<T> input)
     {
         int expectedUnbatchedRank = GetExpectedUnbatchedInputRank();
         if (expectedUnbatchedRank <= 0) return input;
@@ -6743,7 +6763,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     {
         if (layerIndex < 0 || layerIndex >= Layers.Count) return false;
         if (Layers[layerIndex] is not LayerBase<T> layer) return false;
-        foreach (var tensor in layer.GetTrainableParameters())
+        foreach (var tensor in layer.GetTrainableParametersWithoutMaterialization())
         {
             if (tensor is not null && tensor.Length > 0) return true;
         }
@@ -6823,7 +6843,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     {
         if (layerIndex < 0 || layerIndex >= Layers.Count) return;
         if (Layers[layerIndex] is not LayerBase<T> layer) return;
-        foreach (var tensor in layer.GetTrainableParameters())
+        foreach (var tensor in layer.GetTrainableParametersWithoutMaterialization())
         {
             if (tensor is null || tensor.Length == 0) continue;
             // Already-registered tensors (StreamingPoolHandle >= 0)
@@ -6917,7 +6937,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     private static void CollectStreamingHandles(ILayer<T> layer, System.Collections.Generic.List<long> order)
     {
         if (layer is not LayerBase<T> lb) return;
-        foreach (var t in lb.GetTrainableParameters())
+        foreach (var t in lb.GetTrainableParametersWithoutMaterialization())
             if (t is not null && t.StreamingPoolHandle >= 0) order.Add(t.StreamingPoolHandle);
     }
 
@@ -6943,7 +6963,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     {
         if (layerIndex < 0 || layerIndex >= Layers.Count) return;
         if (Layers[layerIndex] is not LayerBase<T> layer) return;
-        var tensors = layer.GetTrainableParameters();
+        var tensors = layer.GetTrainableParametersWithoutMaterialization();
         if (tensors is null) return;
         foreach (var tensor in tensors)
         {
@@ -6972,7 +6992,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     private IDisposable BeginLayerMaterializeScope(int layerIndex)
     {
         if (Layers[layerIndex] is not LayerBase<T> layer) return NoOpDisposable.Instance;
-        var tensors = layer.GetTrainableParameters();
+        var tensors = layer.GetTrainableParametersWithoutMaterialization();
         if (tensors is null || tensors.Count == 0) return NoOpDisposable.Instance;
 
         // Fast path — common case after first forward: all trainable
@@ -7099,6 +7119,10 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // path callers in one place. Both calls are idempotent (gated by
         // _layerShapesResolved / _streamingAutoDetectFinalized) so the
         // hot path is one branch + early-return after the first call.
+        // Give structural estimates a chance to engage streaming BEFORE lazy shape resolution can
+        // allocate a foundation model's native weights. Models without an estimate safely defer;
+        // the second attempt after resolution observes their exact ParameterCount.
+        TryAutoEnableWeightStreaming(isTrainingOverride: isTraining);
         ResolveLazyLayerShapes();
         // Pass the INCOMING mode explicitly: this runs before IsTrainingMode is updated below,
         // so relying on the field would finalize the streaming store dtype from the prior mode.
@@ -7409,8 +7433,15 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         for (int i = 0; i < Layers.Count; i++)
         {
             if (Layers[i] is not LayerBase<T> layer) continue;
-            layer.UseStreamingAllocator = useStreamingAlloc;
-            foreach (var tensor in layer.GetTrainableParameters())
+            layer.SetStreamingAllocatorRecursively(useStreamingAlloc);
+            // Configuration is an observation boundary, not a materialization boundary. Generated
+            // GetTrainableParameters() initializes constructor-sized lazy layers on the way past;
+            // doing that here allocated and initialized every Q/K/V/O matrix in a foundation model
+            // before its first forward. Besides making configuration take tens of seconds, it defeated
+            // streaming's layer-at-a-time peak-memory contract. Register only tensors that already
+            // exist; the first-forward allocation path uses the streaming allocator and the refresh
+            // pass registers each tensor after it materializes.
+            foreach (var tensor in layer.GetTrainableParametersWithoutMaterialization())
             {
                 if (tensor is null || tensor.Length == 0) continue;
                 // Already-registered tensors (StreamingPoolHandle >= 0
@@ -7445,8 +7476,8 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         foreach (var extra in GetExtraTrainableLayers())
         {
             if (extra is null) continue;
-            extra.UseStreamingAllocator = useStreamingAlloc;
-            foreach (var tensor in extra.GetTrainableParameters())
+            extra.SetStreamingAllocatorRecursively(useStreamingAlloc);
+            foreach (var tensor in extra.GetTrainableParametersWithoutMaterialization())
             {
                 if (tensor is null || tensor.Length == 0) continue;
                 if (tensor.StreamingPoolHandle >= 0) continue;
@@ -7537,30 +7568,34 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
 
     /// <summary>
     /// Quant-resident inference store selection (Tier 1 / AiDotNet#1622). Picks the streaming-store
-    /// precision for a foundation-scale model in INFERENCE so its weight set stays RESIDENT — no
-    /// per-forward paging I/O, which is the dominant cost of the multi-forward Predict the
-    /// ModelFamily tests run — at the best accuracy that fits <paramref name="residentBudgetBytes"/>:
+    /// precision for a foundation-scale model in INFERENCE so its executable weight set stays
+    /// RESIDENT — no per-forward paging I/O or full-weight decode, which dominate the multi-forward
+    /// Predict workload in the ModelFamily census — at the best accuracy that fits
+    /// <paramref name="residentBudgetBytes"/>:
     /// <list type="bullet">
-    /// <item>bf16 (2 B/param) when it fits — least lossy, and the current Auto-inference behaviour,
-    /// so models that already fit bf16-resident are unchanged.</item>
-    /// <item>int8-resident (1 B/param, 4x vs fp32, fed by the no-upcast int8 GEMM) when bf16 will
-    /// not fit but int8 will — this is the lever that keeps the mid-size OOM models resident.</item>
-    /// <item>int4-resident (0.5 B/param, 8x) slots in here once the Tensors package exposes
-    /// <c>StreamingStoreDtype.Int4</c>; until then the &gt;int8 case falls through.</item>
-    /// <item>If even the tightest available precision will not fit, return bf16 and let the pool
-    /// page to stay under budget (the existing streaming fallback).</item>
+    /// <item>bf16 when the native execution footprint (4 B/float parameter) fits. The current CPU
+    /// bf16 store decodes weights to fp32 for GEMM, so testing only the 2 B backing-store footprint
+    /// undercounts the live working set and can select a slower tier that immediately pages.</item>
+    /// <item>int8-resident (1 B/param, fed directly by the no-upcast int8 GEMM) when native execution
+    /// does not fit but int8 will.</item>
+    /// <item>int4-resident (packed 0.5 B/param backing store, fed by the no-upcast int4 GEMM) when
+    /// int8 will not fit but int4 will.</item>
+    /// <item>If even int4 will not fit, retain int4 and let the pool page the smallest representation.
+    /// Falling back to bf16 here quadruples backing-store I/O and reintroduces fp32 decode.</item>
     /// </list>
     /// Inference-only: training keeps the Auto policy so fp/bf16 masters are preserved.
     /// </summary>
     internal static StreamingStoreDtype ResolveInferenceStoreDtype(long paramCount, long residentBudgetBytes)
     {
         if (paramCount <= 0 || residentBudgetBytes <= 0) return StreamingStoreDtype.Auto;
-        long bf16Bytes = paramCount * 2L;
-        if (bf16Bytes <= residentBudgetBytes) return StreamingStoreDtype.Bf16; // bf16-resident
+        // Use division rather than multiplication so hostile/estimated parameter counts cannot
+        // overflow. Although the backing store is bf16, the CPU GEMM consumes a decoded fp32
+        // owner; require that native execution footprint to fit before choosing the bf16 tier.
+        if (paramCount <= residentBudgetBytes / sizeof(float)) return StreamingStoreDtype.Bf16;
         if (paramCount <= residentBudgetBytes) return StreamingStoreDtype.Int8; // int8-resident (1 B/param)
-        // int4-resident (paramCount/2 bytes) is the next rung — enabled once the int4-capable
-        // Tensors release is consumed; until then, fall back to bf16 + paging.
-        return StreamingStoreDtype.Bf16;
+        // ceil(paramCount / 2) <= budget, expressed without an overflowing +1.
+        if (paramCount / 2 + paramCount % 2 <= residentBudgetBytes) return StreamingStoreDtype.Int4;
+        return StreamingStoreDtype.Int4;
     }
 
     /// <summary>
@@ -7773,6 +7808,13 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     internal void TryAutoEnableWeightStreaming(bool? isTrainingOverride = null)
     {
         if (_streamingAutoDetectFinalized) return;
+        // The default construction flag is training=true for backward compatibility, but a newly
+        // constructed model has not declared whether its first operation will be Predict or Train.
+        // Finalizing a permanent store dtype from that ambiguous flag made constructor-time probes
+        // choose lossless training storage for later inference. Explicit SetTrainingMode transitions
+        // pass an override and are handled immediately; the public Predict/Train funnels do so before
+        // their first allocation-heavy forward.
+        if (isTrainingOverride is null && !_firstForwardCompleted && IsTrainingMode) return;
         if (_weightLifetimeConfigured)
         {
             // User opted in explicitly via ConfigureWeightLifetime. Catch
@@ -7804,54 +7846,47 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         }
         if (_streamingAutoDetectDisabled) { _streamingAutoDetectFinalized = true; return; }
 
-        long paramCount;
-        try
-        {
-            paramCount = PlanningParameterCount;
-        }
-        catch (Exception ex) when (
-            ex is InvalidOperationException ||
-            ex is OverflowException ||
-            ex is NullReferenceException)
-        {
-            // ParameterCount can throw on partially-constructed models in
-            // these specific ways:
-            //   - InvalidOperationException: subclass ctor failing before
-            //     InitializeLayers completes (most common).
-            //   - OverflowException: int sum wraps mid-property; the
-            //     caller can fix it but we shouldn't crash auto-detect.
-            //   - NullReferenceException: a sublayer field is still null
-            //     during partial construction.
-            // Other exceptions (real bugs, GPU faults, etc.) propagate so
-            // they aren't hidden behind a silent skip. Don't finalize
-            // either: we want to retry once the model is fully built.
-            // Surface to System.Diagnostics so telemetry pipelines can see
-            // that auto-detect bailed.
-            System.Diagnostics.Debug.WriteLine(
-                $"[NeuralNetworkBase] WeightStreaming auto-detect deferred — " +
-                $"ParameterCount threw {ex.GetType().Name}: {ex.Message}");
-            return;
-        }
-
         long threshold = _streamingThresholdOverride ?? s_streamingThresholdParams;
 
-        // Lazy models (Transformer/VLM decoders built from FullyConnected /
-        // MultiHeadAttention layers that resolve their input dim on first
-        // forward) report ParameterCount == 0 here because no weight tensor
-        // has materialized yet. Relying on the post-first-forward retry is
-        // too late: that first forward is exactly what allocates the entire
-        // (multi-GB) weight set on the GC heap and OOMs on a memory-bounded
-        // runner BEFORE the retry can engage streaming. So when the
-        // materialized count is below threshold, fall back to the model's
-        // structural estimate (computed from its architecture/options, no
-        // materialization required) so streaming turns on in the ctor and
-        // the lazy weights stream as they materialize. See
-        // EstimateStructuralParameterCount.
-        long effectiveCount = paramCount;
+        // Consult the allocation-free structural estimate FIRST. Foundation models already know
+        // they cross the threshold from their options, so walking a hundreds-of-layers parameter
+        // manifest cannot improve the decision and used to add substantial constructor latency.
+        // Models without an estimate (the normal case) still use the exact, allocation-free
+        // planning count supplied by the parameter manifest.
+        long structuralCount = SafeEstimateStructuralParameterCount();
+        long effectiveCount = structuralCount;
         if (effectiveCount < threshold)
         {
-            long structural = SafeEstimateStructuralParameterCount();
-            if (structural > effectiveCount) effectiveCount = structural;
+            long paramCount;
+            try
+            {
+                paramCount = PlanningParameterCount;
+            }
+            catch (Exception ex) when (
+                ex is InvalidOperationException ||
+                ex is OverflowException ||
+                ex is NullReferenceException)
+            {
+                // ParameterCount can throw on partially-constructed models in
+                // these specific ways:
+                //   - InvalidOperationException: subclass ctor failing before
+                //     InitializeLayers completes (most common).
+                //   - OverflowException: int sum wraps mid-property; the
+                //     caller can fix it but we shouldn't crash auto-detect.
+                //   - NullReferenceException: a sublayer field is still null
+                //     during partial construction.
+                // Other exceptions (real bugs, GPU faults, etc.) propagate so
+                // they aren't hidden behind a silent skip. Don't finalize
+                // either: we want to retry once the model is fully built.
+                // Surface to System.Diagnostics so telemetry pipelines can see
+                // that auto-detect bailed.
+                System.Diagnostics.Debug.WriteLine(
+                    $"[NeuralNetworkBase] WeightStreaming auto-detect deferred — " +
+                    $"PlanningParameterCount threw {ex.GetType().Name}: {ex.Message}");
+                return;
+            }
+
+            if (paramCount > effectiveCount) effectiveCount = paramCount;
         }
 
         if (effectiveCount < threshold)
@@ -14585,6 +14620,88 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     }
 
     /// <summary>
+    /// Converts a public model input into the tensor consumed by the trainable layer graph.
+    /// </summary>
+    /// <remarks>
+    /// Models that inherit the base <see cref="PredictCore"/> receive the same single-sample batch
+    /// promotion as inference. A custom <c>PredictCore</c> owns its public-input convention, so the
+    /// default leaves that input unchanged instead of guessing from architecture metadata that the
+    /// custom forward may use only as a shape-capacity declaration. Model-family bases with one
+    /// uniform, deterministic front end can still override this hook once for the whole family.
+    /// </remarks>
+    protected virtual Tensor<T> PrepareInputForTraining(Tensor<T> input)
+        => PredictCoreOwnsPublicInputPreparation()
+            ? input
+            : NormalizeInputBatchDim(input);
+
+    private bool? _predictCoreOwnsPublicInputPreparation;
+
+    /// <summary>
+    /// Reports whether the concrete model replaced the base public-input inference funnel.
+    /// </summary>
+    private bool PredictCoreOwnsPublicInputPreparation()
+    {
+        if (_predictCoreOwnsPublicInputPreparation.HasValue)
+            return _predictCoreOwnsPublicInputPreparation.Value;
+
+        var method = GetType().GetMethod(
+            nameof(PredictCore),
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+        bool ownsPreparation = method is not null
+            && method.DeclaringType != typeof(NeuralNetworkBase<T>);
+        _predictCoreOwnsPublicInputPreparation = ownsPreparation;
+        return ownsPreparation;
+    }
+
+    private bool? _forwardForTrainingOwnsPublicInputPreparation;
+
+    /// <summary>
+    /// Reports whether the concrete model replaced <see cref="ForwardForTraining"/> and therefore
+    /// owns the conversion from its public input to its trainable graph input.
+    /// </summary>
+    /// <remarks>
+    /// A training-forward override is the model's complete public-input contract. Running the family
+    /// preparation hook before such an override applies deterministic front ends twice: PANNs, for
+    /// example, converted a waveform to log-mel in <c>PrepareInputForTraining</c> and then treated that
+    /// log-mel tensor as another waveform in its override. Models that inherit the base forward keep
+    /// using <see cref="PrepareInputForTraining"/> exactly once.
+    /// </remarks>
+    private bool ForwardForTrainingOwnsPublicInputPreparation()
+    {
+        if (_forwardForTrainingOwnsPublicInputPreparation.HasValue)
+            return _forwardForTrainingOwnsPublicInputPreparation.Value;
+
+        var method = GetType().GetMethod(
+            nameof(ForwardForTraining),
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public);
+        bool ownsPreparation = method is not null
+            && method.DeclaringType != typeof(NeuralNetworkBase<T>);
+        _forwardForTrainingOwnsPublicInputPreparation = ownsPreparation;
+        return ownsPreparation;
+    }
+
+    /// <summary>
+    /// Enters the training contract, prepares a public input, and evaluates the differentiable
+    /// forward path used by the objective.
+    /// </summary>
+    /// <remarks>
+    /// Keeping these three steps in one internal funnel prevents conformance and performance
+    /// diagnostics from probing <see cref="ForwardForTraining"/> with an unprepared public input.
+    /// Audio models are the canonical example: their public waveform is converted to a compact
+    /// spectral representation before the trainable graph runs. This method is internal so the
+    /// generated test assembly can observe the exact objective-output contract without exposing a
+    /// second production API.
+    /// </remarks>
+    internal Tensor<T> ForwardPreparedForTraining(Tensor<T> input)
+    {
+        SetTrainingMode(true);
+        var trainingInput = ForwardForTrainingOwnsPublicInputPreparation()
+            ? input
+            : PrepareInputForTraining(input);
+        return ForwardForTraining(trainingInput);
+    }
+
+    /// <summary>
     /// Builds the exact scalar objective differentiated by every tape-based training path.
     /// </summary>
     /// <param name="input">The model input.</param>
@@ -14602,7 +14719,12 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         Tensor<T> target,
         ILossFunction<T>? lossFunction = null)
     {
-        var prediction = ForwardForTraining(input);
+        // This is the common entry point for every analytical-gradient and numerical
+        // conformance path, including callers that do not enter through Train(). Establish the
+        // training contract here so trainable layers, autodiff, and streaming storage all see a
+        // consistent mode. In particular, an inference-first model may have read-only quantized
+        // streaming snapshots that must be promoted before its weights participate in backward.
+        var prediction = ForwardPreparedForTraining(input);
         target = AlignTargetToOutputShape(prediction, target);
 
         var resolved = lossFunction ?? LossFunction;
@@ -14630,6 +14752,61 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         using var _ = new NoGradScope<T>();
         var objective = BuildTrainingObjective(input, target, lossFunction);
         return objective.Length > 0 ? objective[0] : NumOps.Zero;
+    }
+
+    /// <summary>
+    /// Evaluates the training objective for a finite-difference gradient oracle without
+    /// quantizing the final MSE reduction to <typeparamref name="T"/>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The forward pass, target alignment, and parameter precision remain exactly those of the
+    /// model under test. Only the final scalar reference reduction is accumulated in <see cref="double"/>.
+    /// This matters for deep FP32 models: a valid parameter perturbation can change individual
+    /// predictions while the rounded scalar MSE remains bit-identical, making a central difference
+    /// spuriously zero. The derivative of that rounded scalar is not a useful gradient oracle.
+    /// </para>
+    /// <para>
+    /// Composite objectives and non-MSE losses retain the normal objective funnel because their
+    /// semantics cannot be reconstructed generically. This method is internal and exists solely for
+    /// conformance diagnostics; production training still uses <see cref="BuildTrainingObjective"/>.
+    /// </para>
+    /// </remarks>
+    internal double EvaluateTrainingObjectiveForNumericalGradient(
+        Tensor<T> input,
+        Tensor<T> target,
+        ILossFunction<T>? lossFunction = null)
+    {
+        using var _ = new NoGradScope<T>();
+
+        var resolved = lossFunction ?? LossFunction;
+        bool usesCompositeObjective = this is ICompositeLoss<T> && _compositeTargetsAreReal;
+        if (resolved is LossFunctions.MeanSquaredErrorLoss<T> && !usesCompositeObjective)
+        {
+            var prediction = ForwardPreparedForTraining(input);
+            target = AlignTargetToOutputShape(prediction, target);
+            if (prediction.Length == 0) return 0.0;
+
+            // Neumaier summation also keeps the double reference stable when the squared residuals
+            // have very different magnitudes. The operands deliberately remain T-precision values.
+            double sum = 0.0;
+            double compensation = 0.0;
+            for (int i = 0; i < prediction.Length; i++)
+            {
+                double residual = NumOps.ToDouble(prediction[i]) - NumOps.ToDouble(target[i]);
+                double term = residual * residual;
+                double next = sum + term;
+                compensation += System.Math.Abs(sum) >= System.Math.Abs(term)
+                    ? (sum - next) + term
+                    : (term - next) + sum;
+                sum = next;
+            }
+
+            return (sum + compensation) / prediction.Length;
+        }
+
+        var objective = BuildTrainingObjective(input, target, resolved);
+        return objective.Length > 0 ? NumOps.ToDouble(objective[0]) : 0.0;
     }
 
     /// <summary>
@@ -14670,12 +14847,34 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         var lossTensor = BuildTrainingObjective(input, target, lossFunction);
 
         // Collect parameters AFTER the objective's forward so lazy-initialized layers are included.
-        var trainableParams = Training.TapeTrainingStep<T>.CollectParameters(Layers);
+        // The source set must mirror GetParameterStateChunks: model-owned tensors and layers kept
+        // outside Layers are just as trainable as ordinary layer parameters. Previously those extras
+        // were numerically perturbed and serialized, but omitted from reverse-mode sources, so their
+        // analytic gradients were silently zero-padded.
+        var trainableParams = new List<Tensor<T>>();
+        var seenTrainable = new HashSet<Tensor<T>>(Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
+        void AddTrainable(Tensor<T>? tensor)
+        {
+            if (tensor is not null && tensor.Length > 0 && seenTrainable.Add(tensor))
+                trainableParams.Add(tensor);
+        }
+
+        foreach (var tensor in Training.TapeTrainingStep<T>.CollectParameters(Layers))
+            AddTrainable(tensor);
+        foreach (var extraLayer in GetExtraTrainableLayers())
+        {
+            if (extraLayer is null) continue;
+            foreach (var tensor in extraLayer.GetTrainableParameters())
+                AddTrainable(tensor);
+        }
+        foreach (var tensor in GetExtraTrainableTensors())
+            AddTrainable(tensor);
+
         if (trainableParams.Count == 0)
         {
             throw new InvalidOperationException(
                 "No trainable parameters found. ComputeGradients requires at least one " +
-                "layer implementing ITrainableLayer<T> with registered parameters.");
+                "registered layer or model-owned trainable tensor.");
         }
 
         var resolved = lossFunction ?? LossFunction;

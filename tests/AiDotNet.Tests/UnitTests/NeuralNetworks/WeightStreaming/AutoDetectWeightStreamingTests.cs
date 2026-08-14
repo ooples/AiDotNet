@@ -225,4 +225,53 @@ public class AutoDetectWeightStreamingTests
         protected override IFullModel<float, Tensor<float>, Tensor<float>> CreateNewInstance()
             => new ThrowingParamCountNetwork();
     }
+
+    [Fact]
+    public void AboveThresholdStructuralEstimate_EngagesWithoutParameterCountWalk()
+    {
+        var net = new StructuralEstimateNetwork();
+        net.SetThresholdForTest(10_000_000_000L);
+
+        net.TryAutoEnableWeightStreaming();
+
+        Assert.True(net.WeightStreamingAutoDetected);
+        Assert.True(net.IsWeightStreamingActive);
+        Assert.Equal(0L, net.ParameterCountReadCount);
+    }
+
+    [AiDotNet.Attributes.TensorLayout(AiDotNet.Enums.TensorAxis.Batch, AiDotNet.Enums.TensorAxis.Features,
+        Direction = AiDotNet.Attributes.TensorLayoutDirection.Input)]
+    [AiDotNet.Attributes.TensorLayout(AiDotNet.Enums.TensorAxis.Batch, AiDotNet.Enums.TensorAxis.Features,
+        Direction = AiDotNet.Attributes.TensorLayoutDirection.Output)]
+    private sealed class StructuralEstimateNetwork : NeuralNetworkBase<float>
+    {
+        private long _parameterCountReads;
+
+        public StructuralEstimateNetwork()
+            : base(lossFunction: new MeanSquaredErrorLoss<float>(), maxGradNorm: 1.0)
+        {
+            Layers.Add(new DenseLayer<float>(outputSize: 1));
+        }
+
+        public override long ParameterCount
+        {
+            get
+            {
+                Interlocked.Increment(ref _parameterCountReads);
+                return 1L;
+            }
+        }
+
+        public long ParameterCountReadCount => Interlocked.Read(ref _parameterCountReads);
+        public void SetThresholdForTest(long thresholdParams) =>
+            ApplyAutoDetectThresholdOverride(thresholdParams);
+        protected override long EstimateStructuralParameterCount() => 50_000_000_000L;
+        protected override void InitializeLayers() { }
+        public override void UpdateParameters(Vector<float> parameters) { }
+        public override ModelMetadata<float> GetModelMetadata() => new() { Name = "StructuralEstimate" };
+        protected override void SerializeNetworkSpecificData(BinaryWriter writer) { }
+        protected override void DeserializeNetworkSpecificData(BinaryReader reader) { }
+        protected override IFullModel<float, Tensor<float>, Tensor<float>> CreateNewInstance() =>
+            new StructuralEstimateNetwork();
+    }
 }

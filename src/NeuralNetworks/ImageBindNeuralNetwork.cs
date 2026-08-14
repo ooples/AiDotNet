@@ -806,32 +806,25 @@ public partial class ImageBindNeuralNetwork<T> : MultimodalModelLayoutBase<T>, I
             throw new InvalidOperationException("ImageBind positional or CLS embedding dimensions do not match the image encoder output.");
         }
 
-        int[] clsShape = patches.Rank == 3 ? [batch, 1, hiddenDim] : [1, hiddenDim];
-        var cls = Tensor<T>.CreateDefault(clsShape, NumOps.Zero);
-        for (int b = 0; b < batch; b++)
-        {
-            for (int d = 0; d < hiddenDim; d++)
-            {
-                int offset = patches.Rank == 3 ? b * hiddenDim + d : d;
-                cls[offset] = _imageClsToken[0, d];
-            }
-        }
+        // Keep the model-owned CLS and positional tables on the active tape.
+        // Copying their Data into fresh tensors makes the forward numerically
+        // correct but leaves those registered trainable tensors unreachable.
+        var clsRow = Engine.TensorSlice(
+            _imageClsToken,
+            [0, 0],
+            [1, hiddenDim]);
+        var cls = patches.Rank == 3
+            ? Engine.TensorTile(Engine.Reshape(clsRow, [1, 1, hiddenDim]), [batch, 1, 1])
+            : clsRow;
 
         var withCls = Engine.TensorConcatenate([cls, patches], axis: patches.Rank == 3 ? 1 : 0);
-        var positional = Tensor<T>.CreateDefault(withCls.Shape.ToArray(), NumOps.Zero);
-        for (int b = 0; b < batch; b++)
-        {
-            for (int token = 0; token < sequenceLength; token++)
-            {
-                for (int d = 0; d < hiddenDim; d++)
-                {
-                    int offset = patches.Rank == 3
-                        ? (b * sequenceLength + token) * hiddenDim + d
-                        : token * hiddenDim + d;
-                    positional[offset] = _imagePositionalEmbeddings[token, d];
-                }
-            }
-        }
+        var positionalRows = Engine.TensorSlice(
+            _imagePositionalEmbeddings,
+            [0, 0],
+            [sequenceLength, hiddenDim]);
+        var positional = patches.Rank == 3
+            ? Engine.TensorTile(Engine.Reshape(positionalRows, [1, sequenceLength, hiddenDim]), [batch, 1, 1])
+            : positionalRows;
         var positioned = Engine.TensorAdd(withCls, positional);
         if (activations is not null) activations["Image/PositionedTokens"] = positioned.Clone();
 

@@ -284,8 +284,13 @@ public partial class RebasedLayer<T> : LayerBase<T>, IShapeContract
         _lastOutputGate = outputGate;
         _lastOutputGateRaw = gateRaw;
 
-        // Step 3: Apply squared ReLU feature map and run linear attention recurrence
-        var linearOutput = SquaredReluLinearAttentionForward(q, k, v, batchSize, seqLen);
+        // Step 3: Apply squared ReLU feature maps and run the shared, vectorized causal
+        // recurrence. Prefix sums preserve the exact running-state semantics while keeping the
+        // tape graph independent of sequence length.
+        var phiQ = ApplySquaredReluFeatureMap(q, batchSize, seqLen);
+        var phiK = ApplySquaredReluFeatureMap(k, batchSize, seqLen);
+        var linearOutput = CausalLinearAttention.Normalized(
+            Engine, phiQ, phiK, v, _numHeads, NumOps.FromDouble(1e-6));
         _lastLinearAttnOutput = linearOutput;
 
         // Step 4: Gated output
@@ -310,6 +315,24 @@ public partial class RebasedLayer<T> : LayerBase<T>, IShapeContract
         outputShape[rank - 2] = seqLen;
         outputShape[rank - 1] = _modelDimension;
         return Engine.Reshape(result, outputShape);
+    }
+
+    private Tensor<T> ApplySquaredReluFeatureMap(
+        Tensor<T> input, int batchSize, int seqLen)
+    {
+        var heads = Engine.Reshape(
+            input,
+            new[] { batchSize, seqLen, _numHeads, _headDimension });
+        var relu = Engine.ReLU(heads);
+        var squared = Engine.TensorSquare(relu);
+        var fourthPower = Engine.TensorSquare(squared);
+        var norm = Engine.TensorSqrt(
+            Engine.TensorAddScalar(
+                Engine.ReduceSum(fourthPower, new[] { 3 }, keepDims: true),
+                NumOps.FromDouble(1e-8)));
+        return Engine.Reshape(
+            Engine.TensorBroadcastDivide(squared, norm),
+            new[] { batchSize, seqLen, _modelDimension });
     }
 
     /// <summary>

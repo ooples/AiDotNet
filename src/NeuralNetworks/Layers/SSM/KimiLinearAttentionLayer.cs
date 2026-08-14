@@ -256,7 +256,34 @@ public partial class KimiLinearAttentionLayer<T> : LayerBase<T>, IShapeContract
         _lastOutputGateRaw = gateRaw;
 
         // Step 3: KV-driven gated linear attention recurrence
-        var recurrenceOutput = KVGatedRecurrence(q, k, v, batchSize, seqLen);
+        // Compute the KV-driven scalar gate without leaving the tape, then use
+        // the fused GLA recurrence for the state update and readout.
+        var kHeads = Engine.Reshape(
+            k,
+            new[] { batchSize, seqLen, _numHeads, _headDimension });
+        var vHeads = Engine.Reshape(
+            v,
+            new[] { batchSize, seqLen, _numHeads, _headDimension });
+        var scaledKeyHeads = Engine.TensorMultiplyScalar(
+            kHeads,
+            NumOps.FromDouble(1.0 / Math.Sqrt(_headDimension)));
+        var gateRawHeads = Engine.TensorBroadcastAdd(
+            Engine.ReduceSum(
+                Engine.TensorMultiply(scaledKeyHeads, vHeads),
+                new[] { 3 },
+                keepDims: false),
+            Engine.Reshape(_gateKVBias, new[] { 1, 1, _numHeads }));
+        var kvGate = Engine.Sigmoid(gateRawHeads);
+        _lastKVGateRaw = gateRawHeads;
+        _lastKVGate = kvGate;
+        var recurrenceOutput = Engine.GlaScanForward(
+            q,
+            Engine.Reshape(
+                scaledKeyHeads,
+                new[] { batchSize, seqLen, _modelDimension }),
+            v,
+            kvGate,
+            _numHeads);
         _lastRecurrenceOutput = recurrenceOutput;
 
         // Step 4: Gated output

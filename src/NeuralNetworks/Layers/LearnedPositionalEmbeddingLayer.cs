@@ -69,7 +69,10 @@ public partial class LearnedPositionalEmbeddingLayer<T> : LayerBase<T>
     public LearnedPositionalEmbeddingLayer(
         [LayerState] int maxSequenceLength = 512,
         [LayerState] int embeddingDim = 768)
-        : base([maxSequenceLength, embeddingDim], [maxSequenceLength, embeddingDim])
+        // MaxSequenceLength sizes the lookup table; it is a capacity, not a promise that every
+        // caller supplies exactly that many positions. The layer is element-wise and preserves the
+        // real sequence extent, while the feature width is the one binding dimension.
+        : base([-1, embeddingDim], [-1, embeddingDim])
     {
         if (maxSequenceLength <= 0) throw new ArgumentOutOfRangeException(nameof(maxSequenceLength));
         if (embeddingDim <= 0) throw new ArgumentOutOfRangeException(nameof(embeddingDim));

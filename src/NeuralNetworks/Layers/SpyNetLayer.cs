@@ -665,37 +665,10 @@ public partial class SpyNetLayer<T> : LayerBase<T>, IShapeContract
 
     private (Tensor<T> frame1, Tensor<T> frame2) SplitFrames(Tensor<T> input, int channels, bool hasBatch)
     {
-        int height = hasBatch ? input.Shape[2] : input.Shape[1];
-        int width = hasBatch ? input.Shape[3] : input.Shape[2];
-        int batch = hasBatch ? input.Shape[0] : 1;
-
-        var shape = hasBatch ? new[] { batch, channels, height, width } : new[] { channels, height, width };
-        var frame1 = new Tensor<T>(shape);
-        var frame2 = new Tensor<T>(shape);
-
-        int pixelsPerChannel = height * width;
-        var inputData = input.Data.ToArray();
-
-        var frame1Data = frame1.Data.Span;
-        var frame2Data = frame2.Data.Span;
-        for (int b = 0; b < batch; b++)
-        {
-            int batchOffset = b * 2 * channels * pixelsPerChannel;
-            int outBatchOffset = b * channels * pixelsPerChannel;
-
-            // Copy first frame channels
-            for (int i = 0; i < channels * pixelsPerChannel; i++)
-            {
-                frame1Data[outBatchOffset + i] = inputData[batchOffset + i];
-            }
-            // Copy second frame channels
-            for (int i = 0; i < channels * pixelsPerChannel; i++)
-            {
-                frame2Data[outBatchOffset + i] = inputData[batchOffset + channels * pixelsPerChannel + i];
-            }
-        }
-
-        return (frame1, frame2);
+        int channelAxis = hasBatch ? 1 : 0;
+        return (
+            Engine.TensorNarrow(input, channelAxis, 0, channels),
+            Engine.TensorNarrow(input, channelAxis, channels, channels));
     }
 
     private List<Tensor<T>> BuildPyramid(Tensor<T> image, bool hasBatch)
@@ -718,45 +691,13 @@ public partial class SpyNetLayer<T> : LayerBase<T>, IShapeContract
         int channels = hasBatch ? input.Shape[1] : input.Shape[0];
         int height = hasBatch ? input.Shape[2] : input.Shape[1];
         int width = hasBatch ? input.Shape[3] : input.Shape[2];
-
-        int newH = height / 2;
-        int newW = width / 2;
-
-        var outShape = hasBatch ? new[] { batch, channels, newH, newW } : new[] { channels, newH, newW };
-        var output = TensorAllocator.Rent<T>(outShape);
-
-        // Simple average pooling 2x2
-        for (int b = 0; b < batch; b++)
-        {
-            for (int c = 0; c < channels; c++)
-            {
-                for (int h = 0; h < newH; h++)
-                {
-                    for (int w = 0; w < newW; w++)
-                    {
-                        T sum = NumOps.Zero;
-                        for (int dh = 0; dh < 2; dh++)
-                        {
-                            for (int dw = 0; dw < 2; dw++)
-                            {
-                                int ih = h * 2 + dh;
-                                int iw = w * 2 + dw;
-                                int idx = hasBatch
-                                    ? b * channels * height * width + c * height * width + ih * width + iw
-                                    : c * height * width + ih * width + iw;
-                                sum = NumOps.Add(sum, input.Data.Span[idx]);
-                            }
-                        }
-                        int outIdx = hasBatch
-                            ? b * channels * newH * newW + c * newH * newW + h * newW + w
-                            : c * newH * newW + h * newW + w;
-                        output.Data.Span[outIdx] = NumOps.Divide(sum, NumOps.FromDouble(4.0));
-                    }
-                }
-            }
-        }
-
-        return output;
+        var input4D = hasBatch
+            ? input
+            : Engine.Reshape(input, new[] { 1, channels, height, width });
+        var output4D = Engine.AvgPool2D(input4D, poolSize: 2, stride: 2, padding: 0);
+        return hasBatch
+            ? output4D
+            : Engine.Reshape(output4D, new[] { channels, height / 2, width / 2 });
     }
 
     private Tensor<T> UpsampleFlow(Tensor<T> flow, int targetH, int targetW, bool hasBatch)
@@ -764,63 +705,21 @@ public partial class SpyNetLayer<T> : LayerBase<T>, IShapeContract
         int batch = hasBatch ? flow.Shape[0] : 1;
         int height = hasBatch ? flow.Shape[2] : flow.Shape[1];
         int width = hasBatch ? flow.Shape[3] : flow.Shape[2];
-
-        var outShape = hasBatch ? new[] { batch, 2, targetH, targetW } : new[] { 2, targetH, targetW };
-        var output = TensorAllocator.Rent<T>(outShape);
-
-        // Bilinear upsampling with scale factor for flow values
-        double scaleH = (double)targetH / height;
-        double scaleW = (double)targetW / width;
-
-        for (int b = 0; b < batch; b++)
-        {
-            for (int c = 0; c < 2; c++)
+        var flow4D = hasBatch
+            ? flow
+            : Engine.Reshape(flow, new[] { 1, 2, height, width });
+        var upsampled = Engine.TensorUpsampleBilinear(flow4D, new[] { targetH, targetW });
+        var channelScale = new Tensor<T>(
+            new[]
             {
-                for (int h = 0; h < targetH; h++)
-                {
-                    for (int w = 0; w < targetW; w++)
-                    {
-                        double srcH = h / scaleH;
-                        double srcW = w / scaleW;
-
-                        int h0 = (int)Math.Floor(srcH);
-                        int w0 = (int)Math.Floor(srcW);
-                        int h1 = Math.Min(h0 + 1, height - 1);
-                        int w1 = Math.Min(w0 + 1, width - 1);
-
-                        double hWeight = srcH - h0;
-                        double wWeight = srcW - w0;
-
-                        // Bilinear interpolation
-                        T v00 = GetFlowValue(flow, b, c, h0, w0, hasBatch, height, width);
-                        T v01 = GetFlowValue(flow, b, c, h0, w1, hasBatch, height, width);
-                        T v10 = GetFlowValue(flow, b, c, h1, w0, hasBatch, height, width);
-                        T v11 = GetFlowValue(flow, b, c, h1, w1, hasBatch, height, width);
-
-                        T top = NumOps.Add(
-                            NumOps.Multiply(v00, NumOps.FromDouble(1 - wWeight)),
-                            NumOps.Multiply(v01, NumOps.FromDouble(wWeight)));
-                        T bottom = NumOps.Add(
-                            NumOps.Multiply(v10, NumOps.FromDouble(1 - wWeight)),
-                            NumOps.Multiply(v11, NumOps.FromDouble(wWeight)));
-                        T value = NumOps.Add(
-                            NumOps.Multiply(top, NumOps.FromDouble(1 - hWeight)),
-                            NumOps.Multiply(bottom, NumOps.FromDouble(hWeight)));
-
-                        // Scale flow value by upsample factor
-                        double flowScale = c == 0 ? scaleW : scaleH;
-                        value = NumOps.Multiply(value, NumOps.FromDouble(flowScale));
-
-                        int outIdx = hasBatch
-                            ? b * 2 * targetH * targetW + c * targetH * targetW + h * targetW + w
-                            : c * targetH * targetW + h * targetW + w;
-                        output.Data.Span[outIdx] = value;
-                    }
-                }
-            }
-        }
-
-        return output;
+                NumOps.FromDouble((double)targetW / width),
+                NumOps.FromDouble((double)targetH / height),
+            },
+            new[] { 1, 2, 1, 1 });
+        var scaled = Engine.TensorBroadcastMultiply(upsampled, channelScale);
+        return hasBatch
+            ? scaled
+            : Engine.Reshape(scaled, new[] { 2, targetH, targetW });
     }
 
     private T GetFlowValue(Tensor<T> flow, int b, int c, int h, int w, bool hasBatch, int height, int width)
@@ -846,51 +745,36 @@ public partial class SpyNetLayer<T> : LayerBase<T>, IShapeContract
         int height = hasBatch ? image.Shape[2] : image.Shape[1];
         int width = hasBatch ? image.Shape[3] : image.Shape[2];
 
-        // Create grid tensor: [batch, height, width, 2] where last dim is (x, y) in [-1, 1]
-        var gridShape = new[] { batch, height, width, 2 };
-        var grid = new Tensor<T>(gridShape);
-
-        // Build sampling grid from flow
-        // Grid coordinates are normalized to [-1, 1]
-        // Flow is in pixel coordinates, need to convert:
-        // grid_x = (x + flow_x) / (width - 1) * 2 - 1
-        // grid_y = (y + flow_y) / (height - 1) * 2 - 1
-        T widthNorm = NumOps.FromDouble(2.0 / (width - 1));
-        T heightNorm = NumOps.FromDouble(2.0 / (height - 1));
-        T one = NumOps.One;
-
-        for (int b = 0; b < batch; b++)
+        // Construct the align-corners identity grid as a constant, then add the
+        // flow displacement through recorded tensor operations. The previous
+        // scalar writes detached the entire warp from both the input and flow.
+        double widthNormValue = width > 1 ? 2.0 / (width - 1) : 0.0;
+        double heightNormValue = height > 1 ? 2.0 / (height - 1) : 0.0;
+        var identityValues = new T[height * width * 2];
+        for (int h = 0; h < height; h++)
         {
-            for (int h = 0; h < height; h++)
+            for (int w = 0; w < width; w++)
             {
-                for (int w = 0; w < width; w++)
-                {
-                    // Get flow at this position
-                    int flowIdxX = hasBatch
-                        ? b * 2 * height * width + 0 * height * width + h * width + w
-                        : 0 * height * width + h * width + w;
-                    int flowIdxY = hasBatch
-                        ? b * 2 * height * width + 1 * height * width + h * width + w
-                        : 1 * height * width + h * width + w;
-
-                    T dx = flow.Data.Span[flowIdxX];
-                    T dy = flow.Data.Span[flowIdxY];
-
-                    // Source coordinates (pixel space)
-                    T srcX = NumOps.Add(NumOps.FromDouble(w), dx);
-                    T srcY = NumOps.Add(NumOps.FromDouble(h), dy);
-
-                    // Convert to normalized coordinates [-1, 1]
-                    T gridX = NumOps.Subtract(NumOps.Multiply(srcX, widthNorm), one);
-                    T gridY = NumOps.Subtract(NumOps.Multiply(srcY, heightNorm), one);
-
-                    // Store in grid
-                    int gridIdx = b * height * width * 2 + h * width * 2 + w * 2;
-                    grid.Data.Span[gridIdx] = gridX;
-                    grid.Data.Span[gridIdx + 1] = gridY;
-                }
+                int index = (h * width + w) * 2;
+                identityValues[index] = NumOps.FromDouble(width > 1 ? w * widthNormValue - 1.0 : 0.0);
+                identityValues[index + 1] = NumOps.FromDouble(height > 1 ? h * heightNormValue - 1.0 : 0.0);
             }
         }
+        var identity = Engine.TensorBroadcastTo(
+            Engine.Reshape(
+                new Tensor<T>(identityValues, new[] { height, width, 2 }),
+                new[] { 1, height, width, 2 }),
+            new[] { batch, height, width, 2 });
+        var flow4D = hasBatch
+            ? flow
+            : Engine.Reshape(flow, new[] { 1, 2, height, width });
+        var flowNhwc = Engine.TensorPermute(flow4D, new[] { 0, 2, 3, 1 });
+        var normalization = new Tensor<T>(
+            new[] { NumOps.FromDouble(widthNormValue), NumOps.FromDouble(heightNormValue) },
+            new[] { 1, 1, 1, 2 });
+        var grid = Engine.TensorAdd(
+            identity,
+            Engine.TensorBroadcastMultiply(flowNhwc, normalization));
 
         // Engine.GridSample is NCHW (PyTorch F.grid_sample convention, standardized in Tensors #777):
         // input [batch, C, H, W], grid [batch, outH, outW, 2] -> output [batch, C, outH, outW]. SpyNet
@@ -1000,94 +884,14 @@ public partial class SpyNetLayer<T> : LayerBase<T>, IShapeContract
 
     private Tensor<T> ConcatenateForModule(Tensor<T> img1, Tensor<T> warped2, Tensor<T> flow, bool hasBatch)
     {
-        int batch = hasBatch ? img1.Shape[0] : 1;
-        int channels = hasBatch ? img1.Shape[1] : img1.Shape[0];
-        int height = hasBatch ? img1.Shape[2] : img1.Shape[1];
-        int width = hasBatch ? img1.Shape[3] : img1.Shape[2];
-
-        int outChannels = 2 * channels + 2;
-        var outShape = hasBatch
-            ? new[] { batch, outChannels, height, width }
-            : new[] { outChannels, height, width };
-        var output = TensorAllocator.Rent<T>(outShape);
-
-        int pixelsPerChannel = height * width;
-
-        var outputData = output.Data.Span;
-        var img1Data = img1.Data.Span;
-        var warped2Data = warped2.Data.Span;
-        var flowData = flow.Data.Span;
-
-        for (int b = 0; b < batch; b++)
-        {
-            int batchOffset = b * outChannels * pixelsPerChannel;
-
-            // Copy img1
-            for (int c = 0; c < channels; c++)
-            {
-                int srcOffset = hasBatch ? b * channels * pixelsPerChannel + c * pixelsPerChannel : c * pixelsPerChannel;
-                int dstOffset = batchOffset + c * pixelsPerChannel;
-                for (int i = 0; i < pixelsPerChannel; i++)
-                {
-                    outputData[dstOffset + i] = img1Data[srcOffset + i];
-                }
-            }
-
-            // Copy warped2
-            for (int c = 0; c < channels; c++)
-            {
-                int srcOffset = hasBatch ? b * channels * pixelsPerChannel + c * pixelsPerChannel : c * pixelsPerChannel;
-                int dstOffset = batchOffset + (channels + c) * pixelsPerChannel;
-                for (int i = 0; i < pixelsPerChannel; i++)
-                {
-                    outputData[dstOffset + i] = warped2Data[srcOffset + i];
-                }
-            }
-
-            // Copy flow
-            for (int c = 0; c < 2; c++)
-            {
-                int srcOffset = hasBatch ? b * 2 * pixelsPerChannel + c * pixelsPerChannel : c * pixelsPerChannel;
-                int dstOffset = batchOffset + (2 * channels + c) * pixelsPerChannel;
-                for (int i = 0; i < pixelsPerChannel; i++)
-                {
-                    outputData[dstOffset + i] = flowData[srcOffset + i];
-                }
-            }
-        }
-
-        return output;
+        return Engine.TensorConcatenate(
+            new[] { img1, warped2, flow },
+            axis: hasBatch ? 1 : 0);
     }
 
     private Tensor<T> AddResidualFlow(Tensor<T> flow, Tensor<T> residual, bool hasBatch)
     {
-        // Extract first 2 channels from residual (flow residual)
-        int batch = hasBatch ? flow.Shape[0] : 1;
-        int height = hasBatch ? flow.Shape[2] : flow.Shape[1];
-        int width = hasBatch ? flow.Shape[3] : flow.Shape[2];
-
-        var output = TensorAllocator.Rent<T>(flow._shape);
-        int pixelsPerChannel = height * width;
-
-        for (int b = 0; b < batch; b++)
-        {
-            for (int c = 0; c < 2; c++)
-            {
-                for (int i = 0; i < pixelsPerChannel; i++)
-                {
-                    int flowIdx = hasBatch
-                        ? b * 2 * pixelsPerChannel + c * pixelsPerChannel + i
-                        : c * pixelsPerChannel + i;
-                    int residualIdx = hasBatch
-                        ? b * residual.Shape[1] * pixelsPerChannel + c * pixelsPerChannel + i
-                        : c * pixelsPerChannel + i;
-
-                    output.Data.Span[flowIdx] = NumOps.Add(flow.Data.Span[flowIdx], residual.Data.Span[residualIdx]);
-                }
-            }
-        }
-
-        return output;
+        return Engine.TensorAdd(flow, residual);
     }
 
     #endregion

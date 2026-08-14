@@ -1,5 +1,6 @@
 using AiDotNet.NeuralNetworks.Layers.SSM;
 using AiDotNet.Tensors;
+using AiDotNet.Tensors.Engines.Autodiff;
 using Xunit;
 using System.Threading.Tasks;
 
@@ -86,6 +87,16 @@ public class GatedLinearAttentionLayerTests
 
         Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
         Assert.False(ContainsNaN(output));
+    }
+
+    [Fact]
+    public void Forward_TapeGraphDoesNotGrowWithSequenceLength()
+    {
+        int shortCount = CountTapeEntries(sequenceLength: 4);
+        int longCount = CountTapeEntries(sequenceLength: 32);
+
+        Assert.InRange(shortCount, 1, 48);
+        Assert.Equal(shortCount, longCount);
     }
 
 
@@ -234,6 +245,16 @@ public class GatedLinearAttentionLayerTests
             tensor[i] = (float)(random.NextDouble() * 2 - 1);
         }
         return tensor;
+    }
+
+    private static int CountTapeEntries(int sequenceLength)
+    {
+        var layer = new GatedLinearAttentionLayer<float>(
+            sequenceLength, modelDimension: 32, numHeads: 4);
+        var input = CreateRandomTensor(new[] { 1, sequenceLength, 32 });
+        using var tape = new GradientTape<float>();
+        _ = layer.Forward(input);
+        return tape.EntryCount;
     }
 
     private static Tensor<double> CreateRandomDoubleTensor(int[] shape)

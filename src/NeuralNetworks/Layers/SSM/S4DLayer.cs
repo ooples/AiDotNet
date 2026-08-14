@@ -134,11 +134,10 @@ public partial class S4DLayer<T> : LayerBase<T>, IShapeContract
 
     /// <inheritdoc />
     /// <summary>
-    /// Training is not yet supported. The backward pass uses simplified gradient paths and skips
-    /// the chain rule through exp(delta*A) and delta*B discretization. Full backpropagation through
-    /// the S4D recurrence is required before enabling training.
+    /// Training uses the fused complex diagonal SSM scan's analytic BPTT node. The ZOH
+    /// discretization remains expressed through differentiable engine operations.
     /// </summary>
-    public override bool SupportsTraining => false;
+    public override bool SupportsTraining => true;
 
     /// <summary>
     /// Gets the model dimension (d_model) of this S4D layer.
@@ -382,11 +381,8 @@ public partial class S4DLayer<T> : LayerBase<T>, IShapeContract
         var projected3D = Engine.Reshape(projectedWithBias, new[] { batchSize, seqLen, _innerDimension });
         _lastProjectedInput = projected3D;
 
-        // Step 2: Compute SSM via kernel convolution (numerically stable for training)
-        // Following S4D paper: K[l] = 2 * Re(sum_n C_eff_n * A_bar_n^l)
-        // where C_eff = C * (A_bar - 1) / A * B = C * B_bar
-        // y = causal_conv1d(x, K) + D * x
-        var scanOutput = KernelBasedForward(projected3D, batchSize, seqLen);
+        // Step 2: ZOH discretization followed by one fused differentiable grouped scan.
+        var scanOutput = FusedScanForward(projected3D, batchSize, seqLen);
         _lastScanOutputReal = scanOutput;
 
         // Step 3: Output projection [batch*seq, innerDim] -> [batch*seq, modelDim]
@@ -427,127 +423,54 @@ public partial class S4DLayer<T> : LayerBase<T>, IShapeContract
     /// </para>
     /// </remarks>
     /// <summary>
-    /// Kernel-based S4D forward (from the paper). Computes the SSM kernel
-    /// K[d,l] = Re(sum_n C_eff[d,n] * A_bar[d,n]^l) and convolves with input.
-    /// This is numerically stable because the backward through conv1d doesn't
-    /// involve BPTT through the recurrence.
+    /// Discretizes the continuous SSM parameters and evaluates the recurrence through
+    /// the engine's fused, tape-aware complex diagonal scan.
     /// </summary>
-    private Tensor<T> KernelBasedForward(Tensor<T> x, int batchSize, int seqLen)
+    private Tensor<T> FusedScanForward(Tensor<T> x, int batchSize, int seqLen)
     {
         var delta = Engine.TensorExp(_logDelta);
-
-        // Compute kernel K[d, l] for l = 0..seqLen-1
-        // K[d, l] = Re(sum_n C_eff[d,n] * A_bar[d,n]^l)
-        // where C_eff = C * B_bar = C * (A_bar - 1) / A * B
-        var kernel = new Tensor<T>([_innerDimension, seqLen]);
-
-        // Cache intermediates for backward
         _cachedKernelDelta = delta;
-        _cachedKernelSeqLen = seqLen;
-
-        // Accumulate the kernel into a raw double row buffer so the inner
-        // power-series loop (O(stateDim * seqLen) per channel) avoids the
-        // per-element tensor indexer + NumOps virtual calls; write the row
-        // back to the kernel tensor once per channel.
-        var kAcc = new double[seqLen];
-        for (int d = 0; d < _innerDimension; d++)
-        {
-            System.Array.Clear(kAcc, 0, seqLen);
-            double dt = NumOps.ToDouble(delta[d]);
-
-            for (int n = 0; n < _stateDimension; n++)
-            {
-                double ar = NumOps.ToDouble(_aReal[d, n]);
-                double ai = NumOps.ToDouble(_aImag[d, n]);
-                double br = NumOps.ToDouble(_bReal[d, n]);
-                double bi = NumOps.ToDouble(_bImag[d, n]);
-                double cr = NumOps.ToDouble(_cReal[d, n]);
-                double ci = NumOps.ToDouble(_cImag[d, n]);
-
-                // A_bar = exp(dt * A)
-                double expR = Math.Exp(dt * ar);
-                double abar_r = expR * Math.Cos(dt * ai);
-                double abar_i = expR * Math.Sin(dt * ai);
-
-                // B_bar = (A_bar - 1) / A * B
-                var bbar = ComputeBBar(dt, ar, ai, br, bi);
-
-                // C_eff = C * B_bar (complex multiply)
-                double ceff_r = cr * bbar.r - ci * bbar.i;
-                double ceff_i = cr * bbar.i + ci * bbar.r;
-
-                // Accumulate kernel: K[d, l] += Re(C_eff * A_bar^l)
-                double pow_r = 1.0, pow_i = 0.0; // A_bar^0 = 1
-                for (int l = 0; l < seqLen; l++)
-                {
-                    // Re(C_eff * A_bar^l) = ceff_r * pow_r - ceff_i * pow_i
-                    kAcc[l] += ceff_r * pow_r - ceff_i * pow_i;
-
-                    // Update power: A_bar^(l+1) = A_bar^l * A_bar
-                    double new_pow_r = pow_r * abar_r - pow_i * abar_i;
-                    double new_pow_i = pow_r * abar_i + pow_i * abar_r;
-                    pow_r = new_pow_r;
-                    pow_i = new_pow_i;
-                }
-            }
-
-            for (int l = 0; l < seqLen; l++)
-                kernel[d, l] = NumOps.FromDouble(kAcc[l]);
-
-            // Multiply by 2 per S4D paper (conjugate pairs)
-            // Note: only needed if using N//2 complex states representing N real states.
-            // Our code uses full complex states, so no factor of 2.
-        }
-
-        _cachedKernel = kernel;
-
-        // Causal convolution: y[b, t, d] = sum_{l=0}^{t} K[d, l] * x[b, t-l, d] + D[d] * x[b, t, d]
-        var output = TensorAllocator.Rent<T>([batchSize, seqLen, _innerDimension]);
-
-        // The convolution is O(seqLen^2) per (batch, channel). Hoist the kernel
-        // row and the input column into raw double buffers once per (b, d) so
-        // the hot inner loop is pure double arithmetic — the per-element tensor
-        // indexer + NumOps virtual calls would otherwise dominate (~seqLen^2 *
-        // innerDim * batch of them), making paper-scale sequences untrainable.
-        var kRow = new double[seqLen];
-        var xCol = new double[seqLen];
-        var outCol = new double[seqLen];
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int d = 0; d < _innerDimension; d++)
-            {
-                double dSkip = NumOps.ToDouble(_dParam[d]);
-                for (int i = 0; i < seqLen; i++)
-                {
-                    kRow[i] = NumOps.ToDouble(kernel[d, i]);
-                    xCol[i] = NumOps.ToDouble(x[b, i, d]);
-                }
-
-                for (int t = 0; t < seqLen; t++)
-                {
-                    double sum = 0;
-                    for (int l = 0; l <= t; l++)
-                    {
-                        sum += kRow[l] * xCol[t - l];
-                    }
-                    // Add skip connection D * x
-                    outCol[t] = sum + dSkip * xCol[t];
-                }
-
-                for (int t = 0; t < seqLen; t++)
-                {
-                    output[b, t, d] = NumOps.FromDouble(outCol[t]);
-                }
-            }
-        }
-
-        return output;
+        var delta2D = Engine.Reshape(delta, new[] { _innerDimension, 1 });
+        var scaledReal = Engine.TensorBroadcastMultiply(_aReal, delta2D);
+        var scaledImag = Engine.TensorBroadcastMultiply(_aImag, delta2D);
+        var expReal = Engine.TensorExp(scaledReal);
+        var aBarReal = Engine.TensorMultiply(expReal, Engine.TensorCos(scaledImag));
+        var aBarImag = Engine.TensorMultiply(expReal, Engine.TensorSin(scaledImag));
+        var diffReal = Engine.TensorSubtractScalar(aBarReal, NumOps.One);
+        var denominator = Engine.TensorAddScalar(
+            Engine.TensorAdd(
+                Engine.TensorMultiply(_aReal, _aReal),
+                Engine.TensorMultiply(_aImag, _aImag)),
+            NumOps.FromDouble(1e-12));
+        var quotientReal = Engine.TensorDivide(
+            Engine.TensorAdd(
+                Engine.TensorMultiply(diffReal, _aReal),
+                Engine.TensorMultiply(aBarImag, _aImag)), denominator);
+        var quotientImag = Engine.TensorDivide(
+            Engine.TensorSubtract(
+                Engine.TensorMultiply(aBarImag, _aReal),
+                Engine.TensorMultiply(diffReal, _aImag)), denominator);
+        var bBarReal = Engine.TensorSubtract(
+            Engine.TensorMultiply(quotientReal, _bReal),
+            Engine.TensorMultiply(quotientImag, _bImag));
+        var bBarImag = Engine.TensorAdd(
+            Engine.TensorMultiply(quotientReal, _bImag),
+            Engine.TensorMultiply(quotientImag, _bReal));
+        var groupedInput = Engine.Reshape(x, new[] { batchSize, seqLen, _innerDimension, 1 });
+        var inputMapReal = Engine.Reshape(bBarReal, new[] { _innerDimension, _stateDimension, 1 });
+        var inputMapImag = Engine.Reshape(bBarImag, new[] { _innerDimension, _stateDimension, 1 });
+        var outputMapReal = Engine.Reshape(_cReal, new[] { _innerDimension, 1, _stateDimension });
+        var outputMapImag = Engine.Reshape(_cImag, new[] { _innerDimension, 1, _stateDimension });
+        var skip = Engine.Reshape(_dParam, new[] { _innerDimension, 1 });
+        var output = Engine.ComplexDiagonalSsmScanForward(
+            groupedInput, aBarReal, aBarImag, inputMapReal, inputMapImag,
+            outputMapReal, outputMapImag, skip);
+        return Engine.Reshape(output, new[] { batchSize, seqLen, _innerDimension });
     }
 
     // Cached values for kernel-based backward
-    private Tensor<T>? _cachedKernel;
+    private Tensor<T>? _cachedKernel = null;
     private Tensor<T>? _cachedKernelDelta;
-    private int _cachedKernelSeqLen;
 
     private Tensor<T> ComplexRecurrentScan(Tensor<T> x, int batchSize, int seqLen)
     {

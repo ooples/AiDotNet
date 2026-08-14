@@ -308,11 +308,32 @@ public partial class FlattenLayer<T> : LayerBase<T>, IBatchAwareShapeContract
     /// </summary>
     protected override void OnFirstForward(Tensor<T> input)
     {
+        BindToActualInput(input);
+    }
+
+    /// <inheritdoc />
+    protected override void ReconcileShapeOnlyResolution(Tensor<T> input)
+    {
+        // ResolveLazyLayerShapes receives per-sample shapes, while the real forward receives a
+        // batched tensor and Flatten(start_dim=1) preserves its leading axis. Recompute from the
+        // tensor that will actually be flattened instead of retaining a sequential-walk estimate
+        // from a custom/branched model forward.
+        BindToActualInput(input);
+    }
+
+    private void BindToActualInput(Tensor<T> input)
+    {
         var shape = input.Shape.ToArray();
-        _inputShape = shape;
+        if (shape.Length == 0)
+            throw new ArgumentException("FlattenLayer cannot flatten a rank-0 tensor.", nameof(input));
+
+        int firstFeatureAxis = shape.Length == 1 ? 0 : 1;
+        _inputShape = shape.Skip(firstFeatureAxis).ToArray();
         _outputSize = 1;
-        for (int i = 0; i < shape.Length; i++) _outputSize *= shape[i];
-        ResolveShapes(shape, new[] { _outputSize });
+        for (int i = firstFeatureAxis; i < shape.Length; i++)
+            _outputSize = checked(_outputSize * shape[i]);
+
+        ResolveShapes(_inputShape, new[] { _outputSize });
     }
 
     /// <summary>
@@ -349,6 +370,25 @@ public partial class FlattenLayer<T> : LayerBase<T>, IBatchAwareShapeContract
     protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         EnsureInitializedFromInput(input);
+
+        // Flatten has no weights and is intentionally shape-polymorphic. A model can legitimately
+        // use the same instance for different public-input layouts (for example, a fused inference
+        // path followed by the canonical training path). Keep the reported per-sample contract in
+        // lockstep with every real tensor, not only the first one; otherwise the reshape succeeds
+        // while the layer continues to report a stale feature width to downstream validation.
+        int firstFeatureAxis = input.Rank == 1 ? 0 : 1;
+        int actualOutputSize = 1;
+        for (int i = firstFeatureAxis; i < input.Shape.Length; i++)
+            actualOutputSize = checked(actualOutputSize * input.Shape[i]);
+        bool inputExtentsMatch = _inputShape.Length == input.Rank - firstFeatureAxis;
+        for (int i = 0; inputExtentsMatch && i < _inputShape.Length; i++)
+            inputExtentsMatch = _inputShape[i] == input.Shape[i + firstFeatureAxis];
+        if (_outputSize != actualOutputSize
+            || !inputExtentsMatch)
+        {
+            BindToActualInput(input);
+        }
+
         _lastInput = ShouldCacheForBackward ? input : null; // #1668: skip in inference (arena safety)
 
         // Handle truly unbatched 1D input
@@ -362,12 +402,6 @@ public partial class FlattenLayer<T> : LayerBase<T>, IBatchAwareShapeContract
         // For rank >= 2: preserve first dimension (batch) and flatten the rest
         // This matches PyTorch nn.Flatten(start_dim=1) behavior
         int batchSize = input.Shape[0];
-        // Calculate actual flattened size from input dimensions, not pre-computed _outputSize
-        int actualOutputSize = 1;
-        for (int i = 1; i < input.Shape.Length; i++)
-        {
-            actualOutputSize *= input.Shape[i];
-        }
         _outputSize = actualOutputSize;
         return Engine.Reshape(input, [batchSize, actualOutputSize]);
     }

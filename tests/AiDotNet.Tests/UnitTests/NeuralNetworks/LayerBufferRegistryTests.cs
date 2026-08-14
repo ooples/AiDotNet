@@ -2,6 +2,7 @@ using AiDotNet.Attributes;
 using AiDotNet.Models.Parameters;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
 
 namespace AiDotNet.Tests.UnitTests.NeuralNetworks;
@@ -98,6 +99,21 @@ public sealed class LayerBufferRegistryTests
             layer.Add(new Tensor<double>([1]), "state"));
     }
 
+    [Fact]
+    public void DeclaredCount_IncludesAdditionalRuntimeTrainablesWithoutDoubleCountingDeclarations()
+    {
+        using var layer = new MixedDeclarationProbeLayer();
+
+        bool known = layer.TryGetOwnDeclaredParameterCount(
+            out long declaredCount,
+            out bool materialized);
+
+        Assert.True(known);
+        Assert.True(materialized);
+        Assert.Equal(5, declaredCount);
+        Assert.Equal(5, layer.GetParameters().Length);
+    }
+
     [ElementWiseShape]
     private sealed class BufferProbeLayer : LayerBase<double>
     {
@@ -111,6 +127,33 @@ public sealed class LayerBufferRegistryTests
             PersistentTensorRole persistenceRole = PersistentTensorRole.Constant,
             ParameterSlotRole stateRole = ParameterSlotRole.Buffer) =>
             RegisterBuffer(tensor, name, persistenceRole, stateRole);
+
+        protected override Tensor<double> ForwardTraced(Tensor<double> input) => input;
+
+        public override bool SupportsTraining => false;
+
+        public override void ResetState()
+        {
+        }
+    }
+
+    [ElementWiseShape]
+    private sealed class MixedDeclarationProbeLayer : LayerBase<double>
+    {
+        private readonly Tensor<double> _declared = new([2]);
+        private readonly Tensor<double> _runtime = new([3]);
+
+        public MixedDeclarationProbeLayer() : base([1], [1])
+        {
+            RegisterTrainableParameter(_declared, PersistentTensorRole.Weights);
+            RegisterTrainableParameter(_runtime, PersistentTensorRole.Biases);
+        }
+
+        protected override IReadOnlyList<(
+            Tensor<double>? Tensor,
+            TensorShape Expected,
+            PersistentTensorRole Role)> DeclaredParameterShapes()
+            => [(_declared, ShapeOf(2), PersistentTensorRole.Weights)];
 
         protected override Tensor<double> ForwardTraced(Tensor<double> input) => input;
 
