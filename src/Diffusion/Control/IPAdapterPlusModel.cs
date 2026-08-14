@@ -148,27 +148,6 @@ public partial class IPAdapterPlusModel<T> : LatentDiffusionModelBase<T>
 
 
     /// <inheritdoc />
-    public override IDiffusionModel<T> Clone()
-    {
-        // Clone the ACTUAL baseUNet/VAE (see InstaFlowModel/MultiDiffusionModel): passing only
-        // conditioner/ipAdapterScale/seed rebuilt InitializeLayers' DEFAULT-sized, lazily-unresolved
-        // sub-models, so once the source resolved its lazy layers via a forward pass the trainable-layer
-        // shapes no longer lined up 1:1 and Clone diverged. Cloning the resolved baseUNet/VAE (+ same
-        // architecture/options/scheduler) makes the clone structurally identical.
-        var clone = new IPAdapterPlusModel<T>(
-            architecture: Architecture,
-            options: Options as DiffusionModelOptions<T>,
-            scheduler: Scheduler,
-            baseUNet: (UNetNoisePredictor<T>)_baseUNet.Clone(),
-            vae: (StandardVAE<T>)_vae.Clone(),
-            conditioner: _conditioner,
-            ipAdapterScale: _ipAdapterScale,
-            seed: null);
-        if (!clone.TryShareParametersFrom(this)) clone.SetParameterChunks(GetParameterChunks());
-        return clone;
-    }
-
-    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
         var metadata = new ModelMetadata<T>

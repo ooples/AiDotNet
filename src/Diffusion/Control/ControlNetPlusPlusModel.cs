@@ -176,29 +176,6 @@ public partial class ControlNetPlusPlusModel<T> : LatentDiffusionModelBase<T>
     }
 
     /// <inheritdoc />
-    public override IDiffusionModel<T> Clone()
-    {
-        // Clone the ACTUAL baseUNet and VAE (mirrors InstaFlowModel/MultiDiffusionModel): passing only
-        // controlType/conditioner/rewardWeight/seed rebuilt InitializeLayers' DEFAULT-sized, lazily-
-        // unresolved sub-models, so once the source resolved its lazy layers via a forward pass the
-        // trainable-layer shapes no longer lined up 1:1 — TryShareParametersFrom bailed and the chunk
-        // fallback ran. Cloning the resolved baseUNet/VAE makes the clone structurally identical so the
-        // copy-on-write share succeeds (which also transfers the control encoder, walked by reflection).
-        var clone = new ControlNetPlusPlusModel<T>(
-            architecture: Architecture,
-            options: Options as DiffusionModelOptions<T>,
-            scheduler: Scheduler,
-            baseUNet: (UNetNoisePredictor<T>)_baseUNet.Clone(),
-            vae: (StandardVAE<T>)_vae.Clone(),
-            conditioner: _conditioner,
-            controlType: _controlType,
-            rewardWeight: _rewardWeight,
-            seed: null);
-        if (!clone.TryShareParametersFrom(this)) clone.SetParameterChunks(GetParameterChunks());
-        return clone;
-    }
-
-    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
         var metadata = new ModelMetadata<T>

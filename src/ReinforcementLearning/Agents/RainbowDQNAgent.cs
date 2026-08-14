@@ -700,14 +700,6 @@ public partial class RainbowDQNAgent<T> : DeepReinforcementLearningAgentBase<T>,
 
     public override int FeatureCount => _options.StateSize;
 
-    public override IFullModel<T, Vector<T>, Vector<T>> Clone()
-    {
-        var clone = new RainbowDQNAgent<T>(_options, _optimizer);
-        // Copy learned network parameters to preserve trained state
-        clone.SetParameters(GetParameters());
-        return clone;
-    }
-
     /// <summary>
     /// Computes gradients of the loss with respect to this agent's parameters, without updating them.
     /// </summary>

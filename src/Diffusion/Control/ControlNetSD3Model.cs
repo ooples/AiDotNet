@@ -163,28 +163,6 @@ public partial class ControlNetSD3Model<T> : LatentDiffusionModelBase<T>
     }
 
     /// <inheritdoc />
-    public override IDiffusionModel<T> Clone()
-    {
-        // Clone the ACTUAL predictor and VAE (mirrors InstaFlowModel/MultiDiffusionModel): passing only
-        // controlType/conditioner/seed rebuilt InitializeLayers' DEFAULT-sized, lazily-unresolved MMDiT-X
-        // predictor and VAE, so once the source resolved its lazy layers via a forward pass the
-        // trainable-layer shapes no longer lined up 1:1 — TryShareParametersFrom bailed and the chunk
-        // fallback ran. Cloning the resolved predictor/VAE makes the clone structurally identical so the
-        // copy-on-write share succeeds (which also transfers the control encoder, walked by reflection).
-        var clone = new ControlNetSD3Model<T>(
-            architecture: Architecture,
-            options: Options as DiffusionModelOptions<T>,
-            scheduler: Scheduler,
-            predictor: (MMDiTXNoisePredictor<T>)_predictor.Clone(),
-            vae: (StandardVAE<T>)_vae.Clone(),
-            conditioner: _conditioner,
-            controlType: _controlType,
-            seed: null);
-        if (!clone.TryShareParametersFrom(this)) clone.SetParameterChunks(GetParameterChunks());
-        return clone;
-    }
-
-    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
         var metadata = new ModelMetadata<T>

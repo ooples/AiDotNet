@@ -268,27 +268,6 @@ public partial class UniVSTModel<T> : LatentDiffusionModelBase<T>
     // QkvTransform and Smoothing.
 
     /// <inheritdoc />
-    public override IDiffusionModel<T> Clone()
-    {
-        // Fast path: an O(1) copy-on-write share when the default clone is structurally identical.
-        var clone = new UniVSTModel<T>(univstOptions: _univstOptions, conditioner: _conditioner, seed: null);
-        if (clone.TryShareParametersFrom(this)) return clone;
-
-        // Structure mismatch means a custom architecture/predictor/VAE the default clone cannot
-        // reproduce; rebuild from this instance's configuration so the clone is observationally
-        // identical instead of throwing on a parameter-count mismatch.
-        return new UniVSTModel<T>(
-            architecture: Architecture,
-            options: (DiffusionModelOptions<T>)Options,
-            univstOptions: _univstOptions,
-            scheduler: Scheduler,
-            predictor: (UNetNoisePredictor<T>)_predictor.Clone(),
-            vae: (StandardVAE<T>)_vae.Clone(),
-            conditioner: _conditioner,
-            seed: null);
-    }
-
-    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
         var m = new ModelMetadata<T>

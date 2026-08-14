@@ -196,6 +196,31 @@ public class CloneAutomationAnalyzer : DiagnosticAnalyzer
     /// </summary>
     /// <param name="method">The override to inspect.</param>
     /// <returns><see langword="true"/> when the body reconstructs and does nothing else.</returns>
+    /// <summary>
+    /// Determines whether a call only moves parameters onto a freshly built copy.
+    /// </summary>
+    /// <param name="call">The invocation to classify.</param>
+    /// <returns><see langword="true"/> when it is one of the base's own parameter-transfer methods.</returns>
+    /// <remarks>
+    /// By simple name, because the receiver varies -- <c>clone.SetParameters(...)</c>,
+    /// <c>clone._projectionLayer.SetParameters(...)</c>, a bare <c>TryShareParametersFrom(this)</c> --
+    /// and the receiver is not what makes the call redundant. What makes it redundant is that
+    /// Serialize already carries every declared parameter, so restating the transfer by hand restates
+    /// the payload. The list is closed on purpose: a fourth name is a decision to make deliberately,
+    /// not something to add because a body happened to contain it.
+    /// </remarks>
+    private static bool IsParameterTransfer(InvocationExpressionSyntax call)
+    {
+        var name = call.Expression switch
+        {
+            MemberAccessExpressionSyntax member => member.Name.Identifier.ValueText,
+            IdentifierNameSyntax identifier => identifier.Identifier.ValueText,
+            _ => null,
+        };
+
+        return name is "SetParameters" or "SetParameterChunks" or "TryShareParametersFrom";
+    }
+
     private static bool IsSingleReturnOfNewObject(MethodDeclarationSyntax method)
     {
         var expression = method.ExpressionBody?.Expression;
@@ -222,6 +247,21 @@ public class CloneAutomationAnalyzer : DiagnosticAnalyzer
         // invisible to the deletion loop.
         var returns = 0;
 
+        // Which locals hold a plain construction, so `return clone;` can be told apart from
+        // `return _cachedThing;`. Only the former is still pure reconstruction.
+        var constructed = new System.Collections.Generic.HashSet<string>(System.StringComparer.Ordinal);
+
+        foreach (var local in method.Body.DescendantNodes().OfType<LocalDeclarationStatementSyntax>())
+        {
+            foreach (var declarator in local.Declaration.Variables)
+            {
+                if (declarator.Initializer?.Value is ObjectCreationExpressionSyntax { Initializer: null })
+                {
+                    constructed.Add(declarator.Identifier.ValueText);
+                }
+            }
+        }
+
         foreach (var statement in method.Body.DescendantNodes().OfType<StatementSyntax>())
         {
             switch (statement)
@@ -230,15 +270,39 @@ public class CloneAutomationAnalyzer : DiagnosticAnalyzer
                     returns++;
                     break;
 
-                // A local holding a constructor argument, e.g. `var options = new ASTOptions(_options);`.
+                // `return clone;` where clone was built above and nothing else was done to it.
+                case ReturnStatementSyntax { Expression: IdentifierNameSyntax id }
+                    when constructed.Contains(id.Identifier.ValueText):
+                    returns++;
+                    break;
+
+                // A local holding a constructor argument, e.g. `var options = new ASTOptions(_options);`
+                // or `var unetClone = (UNetNoisePredictor<T>)_unet.Clone();`.
                 case LocalDeclarationStatementSyntax:
                 // The branch itself; its own statements are visited separately.
                 case IfStatementSyntax:
                 case BlockSyntax:
                     break;
 
-                // An assignment, a loop, a call -- anything that does work the constructor did not --
-                // means the body is not pure reconstruction and the base cannot stand in for it.
+                // MOVING PARAMETERS ACROSS IS NOT EXTRA WORK -- it is the copy the base already makes.
+                // The diffusion family's Clone overrides construct, then transfer, then return:
+                //
+                //     var clone = new OSDSModel<T>(...);
+                //     if (!clone.TryShareParametersFrom(this)) clone.SetParameterChunks(GetParameterChunks());
+                //     return clone;
+                //
+                // DeepCopy routes through Serialize and Deserialize, which carry every parameter the
+                // model declared, so those two lines restate what the payload does. They were written
+                // because the engine handed sub-modules across by reference and the copy shared its
+                // U-Net with the original -- and the engine now clones them. The allowlist is
+                // deliberately these three names and nothing else: anything further is real work the
+                // base cannot know about, and still disqualifies the body.
+                case ExpressionStatementSyntax { Expression: InvocationExpressionSyntax call }
+                    when IsParameterTransfer(call):
+                    break;
+
+                // An assignment, a loop, any other call -- work the constructor did not do -- means the
+                // body is not pure reconstruction and the base cannot stand in for it.
                 default:
                     return false;
             }

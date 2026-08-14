@@ -377,19 +377,6 @@ public partial class FinancialDQNAgent<T> : TradingAgentBase<T>, IGradientComput
     /// <inheritdoc/>
     /// <remarks>
     /// <para>
-    /// <b>For Beginners:</b> In the FinancialDQNAgent model, Clone performs a supporting step in the workflow. It keeps the FinancialDQNAgent architecture pipeline consistent.
-    /// </para>
-    /// </remarks>
-    public override IFullModel<T, Vector<T>, Vector<T>> Clone()
-    {
-        var clone = new FinancialDQNAgent<T>(_architecture, TradingOptions);
-        clone.SetParameters(GetParameters());
-        return clone;
-    }
-
-    /// <inheritdoc/>
-    /// <remarks>
-    /// <para>
     /// <b>For Beginners:</b> In the FinancialDQNAgent model, ComputeGradients performs a supporting step in the workflow. It keeps the FinancialDQNAgent architecture pipeline consistent.
     /// </para>
     /// </remarks>

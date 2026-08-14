@@ -305,34 +305,6 @@ public partial class DuelingDQNAgent<T> : DeepReinforcementLearningAgentBase<T>,
         _targetNetwork.Deserialize(targetNetworkBytes);
     }
 
-    /// <inheritdoc/>
-    public override IFullModel<T, Vector<T>, Vector<T>> Clone()
-    {
-        var clonedOptions = new DuelingDQNOptions<T>
-        {
-            StateSize = _options.StateSize,
-            ActionSize = _options.ActionSize,
-            LearningRate = LearningRate,
-            DiscountFactor = DiscountFactor,
-            LossFunction = LossFunction,
-            EpsilonStart = _epsilon,
-            EpsilonEnd = _options.EpsilonEnd,
-            EpsilonDecay = _options.EpsilonDecay,
-            BatchSize = _options.BatchSize,
-            ReplayBufferSize = _options.ReplayBufferSize,
-            TargetUpdateFrequency = _options.TargetUpdateFrequency,
-            WarmupSteps = _options.WarmupSteps,
-            SharedLayers = _options.SharedLayers,
-            ValueStreamLayers = _options.ValueStreamLayers,
-            AdvantageStreamLayers = _options.AdvantageStreamLayers,
-            Seed = _options.Seed
-        };
-
-        var clone = new DuelingDQNAgent<T>(clonedOptions);
-        clone.SetParameters(GetParameters());
-        return clone;
-    }
-
 
 
     // Helper methods

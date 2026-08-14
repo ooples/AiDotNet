@@ -502,24 +502,6 @@ public partial class AutoencoderKL<T> : VAEModelBase<T>
 
     #region Cloning
 
-    /// <inheritdoc />
-    public override IVAEModel<T> Clone()
-    {
-        var clone = new AutoencoderKL<T>(
-            _inputChannels,
-            _latentChannels,
-            _baseChannels,
-            _channelMults,
-            numResBlocks: 2,
-            numGroups: 32,
-            _latentScaleFactor,
-            inputSpatialSize: 512,
-            LossFunction);
-
-        if (!clone.TryShareParametersFrom(this)) clone.SetParameterChunks(GetParameterChunks());
-        return clone;
-    }
-
     #endregion
 
     /// <summary>

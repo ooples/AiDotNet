@@ -237,15 +237,6 @@ public partial class LiteVAEModel<T> : VAEModelBase<T>
     }
 
 
-    /// <inheritdoc />
-    public override IVAEModel<T> Clone()
-    {
-        var clone = new LiteVAEModel<T>(
-            _inputChannels, _latentChannels, _baseChannels, LossFunction);
-        if (!clone.TryShareParametersFrom(this)) clone.SetParameterChunks(GetParameterChunks());
-        return clone;
-    }
-
     protected override Vector<T> GetParameterGradients()
     {
         var gradients = new List<T>();

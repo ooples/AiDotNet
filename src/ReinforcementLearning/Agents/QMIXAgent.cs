@@ -733,17 +733,6 @@ public partial class QMIXAgent<T> : DeepReinforcementLearningAgentBase<T>, IGrad
         }
     }
 
-    public override IFullModel<T, Vector<T>, Vector<T>> Clone()
-    {
-        var clonedAgent = new QMIXAgent<T>(_options, _optimizer);
-
-        // Copy trained network parameters to the cloned agent
-        var currentParams = GetParameters();
-        clonedAgent.SetParameters(currentParams);
-
-        return clonedAgent;
-    }
-
     /// <summary>
     /// Computes gradients of the loss with respect to this agent's parameters, without updating them.
     /// </summary>

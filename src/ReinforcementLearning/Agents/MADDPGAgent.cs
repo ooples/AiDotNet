@@ -748,25 +748,6 @@ public partial class MADDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
     }
 
     /// <summary>
-    /// Creates a deep copy of this MADDPG agent including all trained network weights.
-    /// </summary>
-    /// <returns>A new MADDPG agent with the same configuration and trained parameters.</returns>
-    /// <remarks>
-    /// Issue #5 fix: Clone now properly copies all trained weights from actor and critic networks
-    /// using GetParameters() and SetParameters(), ensuring the cloned agent has the same learned behavior.
-    /// </remarks>
-    public override IFullModel<T, Vector<T>, Vector<T>> Clone()
-    {
-        var clonedAgent = new MADDPGAgent<T>(_options, _optimizer);
-
-        // Copy all trained parameters to the cloned agent
-        var currentParams = GetParameters();
-        clonedAgent.SetParameters(currentParams);
-
-        return clonedAgent;
-    }
-
-    /// <summary>
     /// Saves the trained model to a file.
     /// </summary>
     /// <param name="filepath">Path to save the model.</param>

@@ -283,16 +283,6 @@ public partial class ImprovedVideoVAE<T> : VAEModelBase<T>
     }
 
 
-    /// <inheritdoc />
-    public override IVAEModel<T> Clone()
-    {
-        var clone = new ImprovedVideoVAE<T>(
-            _inputChannels, _latentChannels, _baseChannels,
-            _temporalDownsample, LossFunction);
-        if (!clone.TryShareParametersFrom(this)) clone.SetParameterChunks(GetParameterChunks());
-        return clone;
-    }
-
     protected override Vector<T> GetParameterGradients()
     {
         var gradients = new List<T>();

@@ -373,21 +373,6 @@ public partial class MarketMakingAgent<T> : TradingAgentBase<T>, IGradientComput
     }
 
     /// <summary>
-    /// Executes Clone for the MarketMakingAgent.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the MarketMakingAgent model, Clone performs a supporting step in the workflow. It keeps the MarketMakingAgent architecture pipeline consistent.
-    /// </para>
-    /// </remarks>
-    public override IFullModel<T, Vector<T>, Vector<T>> Clone()
-    {
-        var clone = new MarketMakingAgent<T>(_architecture, _mmOptions);
-        clone.SetParameters(GetParameters());
-        return clone;
-    }
-
-    /// <summary>
     /// Executes ComputeGradients for the MarketMakingAgent.
     /// </summary>
     /// <remarks>

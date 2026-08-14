@@ -278,19 +278,6 @@ public partial class FinRLAgent<T> : TradingAgentBase<T>
         return innerMetadata;
     }
 
-    /// <inheritdoc/>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the FinRLAgent model, Clone performs a supporting step in the workflow. It keeps the FinRLAgent architecture pipeline consistent.
-    /// </para>
-    /// </remarks>
-    public override IFullModel<T, Vector<T>, Vector<T>> Clone()
-    {
-        var clone = new FinRLAgent<T>(_primaryArchitecture, TradingOptions, _algorithm, _secondaryArchitecture);
-        clone.SetParameters(GetParameters());
-        return clone;
-    }
-
 
 
     #endregion

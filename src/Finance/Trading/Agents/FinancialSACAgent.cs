@@ -318,21 +318,6 @@ public partial class FinancialSACAgent<T> : TradingAgentBase<T>, IGradientComput
     }
 
     /// <summary>
-    /// Executes Clone for the FinancialSACAgent.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the FinancialSACAgent model, Clone performs a supporting step in the workflow. It keeps the FinancialSACAgent architecture pipeline consistent.
-    /// </para>
-    /// </remarks>
-    public override IFullModel<T, Vector<T>, Vector<T>> Clone()
-    {
-        var clone = new FinancialSACAgent<T>(_actorArchitecture, _criticArchitecture, TradingOptions);
-        clone.SetParameters(GetParameters());
-        return clone;
-    }
-
-    /// <summary>
     /// Executes ComputeGradients for the FinancialSACAgent.
     /// </summary>
     /// <remarks>

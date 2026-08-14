@@ -375,13 +375,6 @@ public class BaseClassesIntegrationTests
 
         public override int FeatureCount => 2;
 
-        public override IFullModel<double, Vector<double>, Vector<double>> Clone()
-        {
-            var clone = new TestBaseAgent(Options);
-            clone.SetParameters(GetParameters());
-            return clone;
-        }
-
         public Vector<double> ComputeGradients(
             Vector<double> input,
             Vector<double> target,

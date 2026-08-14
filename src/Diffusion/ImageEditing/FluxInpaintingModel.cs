@@ -115,24 +115,6 @@ public partial class FluxInpaintingModel<T> : LatentDiffusionModelBase<T>
 
 
     /// <inheritdoc />
-    public override IDiffusionModel<T> Clone()
-    {
-        // Clone the resolved predictor/VAE via their own Clone() (+ same architecture/options/scheduler).
-        // The sub-model Clone()s already deep-copy the ~12B FLUX-scale weights, so no field-by-field
-        // SetParameters(GetParameters()) is needed — which also avoids the int-bounded flat Vector<T>
-        // round-trip ("Array dimensions exceeded" / OOM) at that scale.
-        var clone = new FluxInpaintingModel<T>(
-            architecture: Architecture,
-            options: Options as DiffusionModelOptions<T>,
-            scheduler: Scheduler,
-            predictor: (FluxDoubleStreamPredictor<T>)_predictor.Clone(),
-            vae: (StandardVAE<T>)_vae.Clone(),
-            conditioner: _conditioner,
-            seed: null); // predictor+vae are cloned & passed, so InitializeLayers ignores seed — do not advance the source RNG
-        return clone;
-    }
-
-    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
         var m = new ModelMetadata<T>

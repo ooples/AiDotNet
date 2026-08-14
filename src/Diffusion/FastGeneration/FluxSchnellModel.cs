@@ -124,25 +124,6 @@ public partial class FluxSchnellModel<T> : LatentDiffusionModelBase<T>
 
 
     /// <inheritdoc />
-    public override IDiffusionModel<T> Clone()
-    {
-        // Reuse THIS model's resolved construction seed (not a fresh one): a never-forwarded predictor is
-        // still lazy, so the clone must materialize from the SAME seed to stay equivalent — a fresh seed
-        // would later materialize different weights and break Clone() equivalence.
-        var clone = new FluxSchnellModel<T>(conditioner: _conditioner, seed: _layerSeed);
-        // Scale-safe + lazy-preserving: only copy the foundation-scale (~12B-param FLUX) predictor's
-        // weights if they were actually materialized. A never-forwarded model's weights are still lazy, so
-        // the clone reconstructs them from the shared seed above (nothing to copy) — copying would
-        // pointlessly materialize the predictor twice (source + clone) and OOM. When a copy IS needed it
-        // streams per-tensor chunks (#1624), never the int-bounded flat Vector<T> that
-        // SetParameters(GetParameters()) builds (which threw "Array dimensions exceeded supported range").
-        if (_predictor.WeightsMaterialized)
-            clone._predictor.SetParameterChunks(_predictor.GetParameterChunks());
-        clone._vae.SetParameters(_vae.GetParameters());
-        return clone;
-    }
-
-    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
         var m = new ModelMetadata<T>

@@ -117,14 +117,6 @@ public partial class LinearVectorModel : ModelBase<double, Matrix<double>, Vecto
         return model;
     }
 
-    /// <inheritdoc/>
-    public override IFullModel<double, Matrix<double>, Vector<double>> DeepCopy()
-    {
-        var copy = new LinearVectorModel(_inputDim, _learningRate);
-        copy.SetParameters(_parameters);
-        return copy;
-    }
-
     object ICloneable.Clone() => DeepCopy();
 
     /// <inheritdoc/>

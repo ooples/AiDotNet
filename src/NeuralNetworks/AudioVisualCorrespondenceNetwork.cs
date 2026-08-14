@@ -1145,21 +1145,5 @@ public partial class AudioVisualCorrespondenceNetwork<T> : NeuralNetworkBase<T>,
         }
     }
 
-    /// <inheritdoc/>
-    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
-    {
-        // Create a new instance without passing optimizer/loss to get fresh instances
-        // Passing the same optimizer would share mutable state (momentum, etc.)
-        var copy = new AudioVisualCorrespondenceNetwork<T>(
-            Architecture,
-            _embeddingDimension,
-            _audioSampleRate,
-            _videoFrameRate,
-            _numEncoderLayers);
-
-        copy.SetParameters(GetParameters());
-        return copy;
-    }
-
     #endregion
 }

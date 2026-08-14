@@ -706,24 +706,6 @@ public partial class HopeNetwork<T> : NeuralNetworkBase<T>
     }
 
     /// <summary>
-    /// Creates a new instance of HopeNetwork with the same architecture.
-    /// </summary>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        // Create new Hope network with same architecture
-        var newHope = new HopeNetwork<T>(
-            architecture: Architecture,
-            optimizer: null, // Will be set separately if needed
-            lossFunction: LossFunction,
-            hiddenDim: _hiddenDim,
-            numCMSLevels: _numCMSLevels,
-            numRecurrentLayers: _numRecurrentLayers,
-            inContextLearningLevels: _inContextLearningLevels);
-
-        return newHope;
-    }
-
-    /// <summary>
     /// Cloning HopeNetwork via the default DeepCopy path (serialize/deserialize)
     /// produces a network whose Predict output drifts from the original by
     /// roughly 1e-7 even though every parameter and meta-state value matches

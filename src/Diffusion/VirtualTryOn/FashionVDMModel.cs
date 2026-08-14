@@ -91,26 +91,6 @@ public partial class FashionVDMModel<T> : LatentDiffusionModelBase<T>
 
 
 
-    public override IDiffusionModel<T> Clone()
-    {
-        // Clone the ACTUAL predictor and VAE (mirrors InstaFlowModel/MultiDiffusionModel):
-        // passing only conditioner/seed rebuilt InitializeLayers' DEFAULT-sized (and lazily
-        // unresolved) UNet/VAE, so once the source resolved its lazy layers via a forward pass
-        // its GetParameters() returned a larger count than the clone could accept — SetParameters
-        // threw / Clone produced divergent output. Cloning the resolved predictor/VAE (+ same
-        // architecture/options/scheduler) makes the clone structurally identical to the source.
-        var clone = new FashionVDMModel<T>(
-            architecture: Architecture,
-            options: Options as DiffusionModelOptions<T>,
-            scheduler: Scheduler,
-            predictor: (UNetNoisePredictor<T>)_predictor.Clone(),
-            vae: (StandardVAE<T>)_vae.Clone(),
-            conditioner: _conditioner,
-            seed: null);
-        if (!clone.TryShareParametersFrom(this)) clone.SetParameterChunks(GetParameterChunks());
-        return clone;
-    }
-
     public override ModelMetadata<T> GetModelMetadata()
     {
         var m = new ModelMetadata<T> { Name = "FashionVDM", Version = "1.0",

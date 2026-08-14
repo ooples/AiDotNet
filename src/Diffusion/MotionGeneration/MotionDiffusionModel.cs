@@ -97,18 +97,6 @@ public partial class MotionDiffusionModel<T> : LatentDiffusionModelBase<T>
 
 
 
-    public override IDiffusionModel<T> Clone()
-    {
-        // #1711: delegate to predictor/VAE Clone (probe-forward + copy); DiT LazyDense weights resolve
-        // via the FORWARD path so a model-level SetParameters(GetParameters()) clone re-RNG-initialized.
-        var clone = new MotionDiffusionModel<T>(
-            conditioner: _conditioner,
-            predictor: (SiTPredictor<T>)_predictor.Clone(),
-            vae: (StandardVAE<T>)_vae.Clone(),
-            seed: null);
-        return clone;
-    }
-
     public override ModelMetadata<T> GetModelMetadata()
     {
         var m = new ModelMetadata<T> { Name = "MDM", Version = "1.0",

@@ -97,26 +97,6 @@ public partial class MultiDiffusionModel<T> : LatentDiffusionModelBase<T>
 
 
 
-    public override IDiffusionModel<T> Clone()
-    {
-        // Clone the ACTUAL predictor and VAE — the previous code passed neither, so the new instance
-        // rebuilt InitializeLayers' DEFAULT foundation-scale UNet (320 base channels, ~643 M params)
-        // while this model may hold a small/custom predictor (e.g. a test-scale UNet, ~10 M params).
-        // GetParameters() then returned the source's param count and clone.SetParameters threw
-        // "Expected 643774499 parameters, got 10342915". Passing the cloned predictor/VAE (and the
-        // same architecture/options/scheduler) makes the clone structurally identical to the source.
-        var clone = new MultiDiffusionModel<T>(
-            architecture: Architecture,
-            options: Options as DiffusionModelOptions<T>,
-            scheduler: Scheduler,
-            predictor: (UNetNoisePredictor<T>)_predictor.Clone(),
-            vae: (StandardVAE<T>)_vae.Clone(),
-            conditioner: _conditioner,
-            seed: null);
-        if (!clone.TryShareParametersFrom(this)) clone.SetParameterChunks(GetParameterChunks());
-        return clone;
-    }
-
     public override ModelMetadata<T> GetModelMetadata()
     {
         var m = new ModelMetadata<T> { Name = "MultiDiffusion", Version = "1.0",

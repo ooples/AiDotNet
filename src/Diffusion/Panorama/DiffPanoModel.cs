@@ -114,26 +114,6 @@ public partial class DiffPanoModel<T> : LatentDiffusionModelBase<T>
 
 
     /// <inheritdoc />
-    public override IDiffusionModel<T> Clone()
-    {
-        // Fast path: O(1) copy-on-write share when the default clone is structurally identical
-        // (the common foundation-scale case the COW lever targets — no re-materialization/OOM).
-        var clone = new DiffPanoModel<T>(conditioner: _conditioner, seed: null);
-        if (clone.TryShareParametersFrom(this)) return clone;
-        // Structure mismatch ⇒ custom architecture/predictor/VAE the default clone can't reproduce;
-        // rebuild faithfully from this instance's configuration so the clone is observationally
-        // identical instead of throwing on a parameter-count mismatch.
-        return new DiffPanoModel<T>(
-            architecture: Architecture,
-            options: (DiffusionModelOptions<T>)Options,
-            scheduler: Scheduler,
-            predictor: (UNetNoisePredictor<T>)_predictor.Clone(),
-            vae: (StandardVAE<T>)_vae.Clone(),
-            conditioner: _conditioner,
-            seed: null);
-    }
-
-    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
         var m = new ModelMetadata<T> { Name = "DiffPano", Version = "1.0",

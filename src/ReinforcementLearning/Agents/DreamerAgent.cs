@@ -480,18 +480,6 @@ public partial class DreamerAgent<T> : DeepReinforcementLearningAgentBase<T>
             "or load individual network weights separately.");
     }
 
-    public override IFullModel<T, Vector<T>, Vector<T>> Clone()
-    {
-        // FIX ISSUE 7: Clone should copy learned network parameters
-        var clone = new DreamerAgent<T>(_options, _optimizer);
-
-        // Copy all network parameters
-        var parameters = GetParameters();
-        clone.SetParameters(parameters);
-
-        return clone;
-    }
-
     public override void SaveModel(string filepath)
     {
         // FIX ISSUE 8: Throw NotSupportedException since Serialize is not supported
