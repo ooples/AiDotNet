@@ -517,16 +517,21 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
     /// runner. At least one complete optimizer step always runs; sustained throughput belongs to
     /// the performance census.
     /// </summary>
-    private static int ResolveConformanceTrainingIterations(
+    protected static int ResolveConformanceTrainingIterations(
         INeuralNetworkModel<T> network,
         int requestedIterations)
     {
         Assert.True(requestedIterations > 0,
             $"Requested training iterations must be > 0; got {requestedIterations}.");
 
-        // Three update-equivalents for a 25M-parameter model preserve a short recovery trajectory
-        // after Adam's first-step transient, while a 300M foundation fixture still runs exactly one
-        // complete step. The census records the unprojected per-step cost for both.
+        // Correctness probes answer whether an update is connected, finite and directionally useful;
+        // sustained convergence belongs to the performance lane. Cap both dimensions of work:
+        // no inherited invariant performs more than ten optimizer steps, and the cumulative tensor
+        // update surface is at most three 25M-parameter equivalents. Three steps preserve the short
+        // recovery trajectory after Adam's first-step transient for mid-sized models, while a
+        // foundation-sized fixture still runs exactly one complete step. This remains deterministic
+        // across machines, unlike elapsed-time early exits.
+        const int MaximumConformanceSteps = 10;
         const long ParameterUpdateBudget = 75_000_000L;
         long parameterCount = 0;
         foreach (var chunk in EnumerateParameterChunks(network))
@@ -536,9 +541,10 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
                 : parameterCount + chunk.Length;
         }
 
-        if (parameterCount <= 0) return requestedIterations;
+        int boundedRequest = System.Math.Min(requestedIterations, MaximumConformanceSteps);
+        if (parameterCount <= 0) return boundedRequest;
         long affordable = System.Math.Max(1L, ParameterUpdateBudget / parameterCount);
-        return (int)System.Math.Min(requestedIterations, affordable);
+        return (int)System.Math.Min(boundedRequest, affordable);
     }
 
     /// <inheritdoc />
@@ -1172,7 +1178,8 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         // value in any chunk.
         var preHashes = ComputeChunkHashes(network);
 
-        for (int i = 0; i < TrainingIterations; i++)
+        int iterations = ResolveConformanceTrainingIterations(network, TrainingIterations);
+        for (int i = 0; i < iterations; i++)
             network.Train(input, target);
 
         var postHashes = ComputeChunkHashes(network);
@@ -1304,7 +1311,8 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         // emitted random floats and tripped strict label validation
         // in the CRF NLL path.
         var trainTarget = CreateRandomTargetTensor(ShapeCheckedOutputShape, rng);
-        for (int i = 0; i < TrainingIterations; i++)
+        int iterations = ResolveConformanceTrainingIterations(network, TrainingIterations);
+        for (int i = 0; i < iterations; i++)
             network.Train(trainInput, trainTarget);
 
         // Two distinct test inputs that differ in every position. Use
@@ -1386,14 +1394,15 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         var input = CreateRandomTensor(EffectiveInputShape, rng);
         var target = CreateRandomTargetTensor(ShapeCheckedOutputShape, rng);
 
-        for (int i = 0; i < TrainingIterations; i++)
+        int iterations = ResolveConformanceTrainingIterations(network, TrainingIterations);
+        for (int i = 0; i < iterations; i++)
             network.Train(input, target);
 
         var output = network.Predict(input);
         for (int i = 0; i < output.Length; i++)
         {
             Assert.False(double.IsNaN(ConvertToDouble(output[i])),
-                $"Output[{i}] is NaN after {TrainingIterations} training iterations.");
+                $"Output[{i}] is NaN after {iterations} training iterations.");
             Assert.False(double.IsInfinity(ConvertToDouble(output[i])),
                 $"Output[{i}] is Infinity after training — potential gradient explosion.");
         }
@@ -1940,7 +1949,8 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         // emitted random floats and tripped strict label validation
         // in the CRF NLL path.
         var trainTarget = CreateRandomTargetTensor(ShapeCheckedOutputShape, rng);
-        for (int i = 0; i < TrainingIterations; i++)
+        int iterations = ResolveConformanceTrainingIterations(network, TrainingIterations);
+        for (int i = 0; i < iterations; i++)
             network.Train(trainInput, trainTarget);
 
         // Force eval mode before capturing the trained baseline so layers
@@ -2303,6 +2313,13 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
             CreateRandomTargetTensor(measuredOutputShape, rng),
             rng);
 
+        // Each sample represents an independent production request. Rewind scratch between
+        // requests after copying the only retained information (the output shape). Without this,
+        // the benchmark itself kept every intermediate from every Predict alive in the arena and
+        // reported O(number of samples * model activation memory) as the model's steady footprint.
+        // Registered parameters and persistent buffers remain pinned across Reset.
+        _arena.Reset();
+
         const int steadyForwardSamples = 3;
         var steadyForwardMs = new double[steadyForwardSamples];
         for (int i = 0; i < steadyForwardSamples; i++)
@@ -2312,6 +2329,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
             _ = network.Predict(input);
             timer.Stop();
             steadyForwardMs[i] = timer.Elapsed.TotalMilliseconds;
+            _arena.Reset();
         }
 
         int tapeEntries = 0;
@@ -2319,7 +2337,10 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         double backwardMs = 0.0;
         int gradientTensorCount = 0;
         double targetPreparationMs = 0.0;
+        bool canonicalTapeObjective = network is AiDotNet.NeuralNetworks.NeuralNetworkBase<T> tapeNetwork
+            && HasCanonicalTapeTrainingObjective(tapeNetwork);
         if (!TrainingInvariantsNotApplicable(network)
+            && canonicalTapeObjective
             && network is AiDotNet.NeuralNetworks.NeuralNetworkBase<T> nn)
         {
             // Predict and ForwardForTraining are two distinct public contracts. Decoders,
@@ -2354,6 +2375,11 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
             targetPreparationTimer.Stop();
             targetPreparationMs = targetPreparationTimer.Elapsed.TotalMilliseconds;
 
+            // The probe tape is disposed and objectiveTarget owns independent storage. Recycle the
+            // probe forward before measuring the real taped objective so target discovery is not
+            // charged as retained training memory.
+            _arena.Reset();
+
             WritePerformanceProgress(outputDirectory!, performanceFileName, "tape-forward");
             using var tape = new GradientTape<T>();
             var tapeForwardTimer = System.Diagnostics.Stopwatch.StartNew();
@@ -2370,6 +2396,11 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
             gradientTensorCount = gradients.Count;
         }
 
+        // The objective tape and gradient dictionary are now out of scope. A real training loop
+        // starts its next step from a reset scratch arena; mirror that lifecycle before timing the
+        // public Train operation instead of accumulating the entire diagnostic graph beside it.
+        _arena.Reset();
+
         double trainStepMs = 0.0;
         if (!TrainingInvariantsNotApplicable(network))
         {
@@ -2378,7 +2409,16 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
             network.Train(input, target);
             trainTimer.Stop();
             trainStepMs = trainTimer.Elapsed.TotalMilliseconds;
+            _arena.Reset();
         }
+
+        int requestedTrainingIterations = TrainingIterations;
+        int requestedTrainingReduceLossIterations = checked(TrainingIterations * 3);
+        int requestedMoreDataIterations = MoreDataLongIterations;
+        int trainingIterations = ResolveConformanceTrainingIterations(network, requestedTrainingIterations);
+        int trainingReduceLossIterations = ResolveConformanceTrainingIterations(
+            network, requestedTrainingReduceLossIterations);
+        int moreDataIterations = ResolveConformanceTrainingIterations(network, requestedMoreDataIterations);
 
         long parameterCount = 0;
         int parameterSlots = 0;
@@ -2430,10 +2470,17 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
             steadyForwardMedianMs = steadyForwardMs[steadyForwardSamples / 2],
             steadyForwardP95Ms = steadyForwardMs[steadyForwardSamples - 1],
             tapeForwardMs,
+            canonicalTapeObjective,
             tapeEntries,
             backwardMs,
             gradientTensorCount,
             trainStepMs,
+            requestedTrainingIterations,
+            requestedTrainingReduceLossIterations,
+            requestedMoreDataIterations,
+            trainingIterations,
+            trainingReduceLossIterations,
+            moreDataIterations,
             allocatedBytes,
             gen0Collections = GC.CollectionCount(0) - gen0Start,
             gen1Collections = GC.CollectionCount(1) - gen1Start,
@@ -2441,8 +2488,8 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
             cpuMs,
             wallMs,
             cpuToWallRatio = wallMs > 0.0 ? cpuMs / wallMs : 0.0,
-            projectedTrainingReduceLossMs = trainStepMs * System.Math.Max(1, TrainingIterations * 3),
-            projectedMoreDataMs = trainStepMs * System.Math.Max(1, MoreDataLongIterations),
+            projectedTrainingReduceLossMs = trainStepMs * trainingReduceLossIterations,
+            projectedMoreDataMs = trainStepMs * moreDataIterations,
         };
 
         Directory.CreateDirectory(outputDirectory!);
@@ -2453,6 +2500,34 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         File.WriteAllText(temporary, json);
         if (File.Exists(destination)) File.Delete(destination);
         File.Move(temporary, destination);
+    }
+
+    /// <summary>
+    /// Returns whether the generic differentiable ForwardForTraining surface is the model's real
+    /// training objective. A model that overrides Train(input,target) while inheriting the base
+    /// sequential forward owns a different algorithm (GAN minimax, graph ELBO, and similar
+    /// composites). Running its published Layers list as one chain is not a weaker approximation;
+    /// it is a different and often invalid graph. The performance census still executes and times
+    /// the real Train override, but reports zero tape metrics with canonicalTapeObjective=false.
+    /// </summary>
+    private static bool HasCanonicalTapeTrainingObjective(
+        AiDotNet.NeuralNetworks.NeuralNetworkBase<T> network)
+    {
+        var runtimeType = network.GetType();
+        var tensorType = typeof(Tensor<T>);
+        var trainMethod = runtimeType.GetMethod(
+            nameof(INeuralNetworkModel<T>.Train),
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public,
+            binder: null,
+            types: new[] { tensorType, tensorType },
+            modifiers: null);
+
+        // An override owns the public-input preprocessing and objective boundary. Even when that
+        // type also exposes ForwardForTraining, the latter may consume the internal representation
+        // produced by Train (DCCRN consumes a complex STFT, while its public Train input is a raw
+        // waveform). The census measures the real override below; it must not independently feed
+        // public fixture input into an internal-only tape surface.
+        return trainMethod?.DeclaringType == typeof(AiDotNet.NeuralNetworks.NeuralNetworkBase<T>);
     }
 
     private sealed class BlasDeterminismScope : IDisposable
@@ -3410,6 +3485,47 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         => (CreateRandomTensor(EffectiveInputShape, rng),
             CreateRandomTargetTensor(ShapeCheckedOutputShape, rng));
 
+    /// <summary>
+    /// Reduces only the spatial extent of a topology whose complete layer graph is spatially
+    /// polymorphic. Finite differences validate the same parameters and operations at either
+    /// resolution, while bounding reverse-mode and repeated-forward cost quadratically.
+    /// </summary>
+    private Tensor<T> BoundGradientInputForSpatiallyPolymorphicTopology(
+        AiDotNet.NeuralNetworks.NeuralNetworkBase<T> network,
+        Tensor<T> input,
+        Random rng)
+    {
+        const int MaximumGradientSpatialExtent = 64;
+        if (input.Rank is not (3 or 4) ||
+            input.Shape[^2] <= MaximumGradientSpatialExtent ||
+            input.Shape[^1] <= MaximumGradientSpatialExtent)
+        {
+            return input;
+        }
+
+        // This is deliberately capability-based, not a model-name roster. Convolution and batch
+        // normalization parameters do not depend on H/W, and both engine ops accept dynamic spatial
+        // extents. Any flatten, dense, attention, reshape, pooling, or custom layer keeps the declared
+        // fixture because its parameter geometry or semantics may depend on the original resolution.
+        if (network.Layers.Count == 0 || network.Layers.Any(layer =>
+                layer is not AiDotNet.NeuralNetworks.Layers.ConvolutionalLayer<T> and
+                not AiDotNet.NeuralNetworks.Layers.BatchNormalizationLayer<T>))
+        {
+            return input;
+        }
+
+        var boundedShape = input.Shape.ToArray();
+        boundedShape[^2] = MaximumGradientSpatialExtent;
+        boundedShape[^1] = MaximumGradientSpatialExtent;
+        ReportGradientFinding(
+            GradientReportFile,
+            GetType().FullName ?? GetType().Name,
+            $"RUN: finite differences use the topology-equivalent spatial fixture " +
+            $"[{string.Join(", ", boundedShape)}] instead of [{string.Join(", ", input.Shape.ToArray())}]. " +
+            "Every layer is Conv2D or BatchNorm, so parameter geometry and operation coverage are unchanged.");
+        return CreateRandomTensor(boundedShape, rng);
+    }
+
     [Fact(Timeout = 120000)]
     public async Task Gradients_MatchFiniteDifference()
     {
@@ -3441,6 +3557,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
 
         var rng = ModelTestHelpers.CreateSeededRandom();
         var (input, target) = CreateGradientCheckExample(rng);
+        input = BoundGradientInputForSpatiallyPolymorphicTopology(nn, input, rng);
 
         // Deterministic forward: eval mode turns Dropout into an identity, so the loss is a
         // fixed function of the parameters. A stochastic training-mode mask would make the
@@ -3661,29 +3778,90 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
             double analytic = ConvertToDouble(analytical[i]);
             double denom = System.Math.Max(absFloor, System.Math.Abs(numeric) + System.Math.Abs(analytic));
             double relErr = System.Math.Abs(numeric - analytic) / denom;
+            string numericalDetail = string.Empty;
 
-            // Only pay for the epsilon ladder when the primary estimate disagrees. Two wider
-            // central differences identify the numerically stable adjacent pair; Richardson
-            // extrapolation then removes its leading O(h^2) truncation term. This distinguishes
-            // float cancellation from a real derivative defect without globally loosening the bound.
+            // Only pay for the epsilon ladder when the primary estimate disagrees. Search on BOTH
+            // sides of the default step: wider differences can escape FP32 output quantization, while
+            // smaller differences stay inside the same piecewise-linear ReLU region. The old ladder
+            // searched only 2h and 4h, so a deep ReLU stack whose h probe crossed activation boundaries
+            // was forced even farther away from the local derivative. PointTransformerV3/Concerto/
+            // Sonata all exposed that defect through their shared Conv-BN-ReLU backbone.
+            //
+            // Select the FIRST sufficiently stable adjacent (h, 2h) pair without consulting the
+            // analytical answer. Locality matters for piecewise-linear networks: choosing the global
+            // minimum disagreement can prefer two mutually similar but nonlocal secants after both
+            // probes have crossed several ReLU boundaries. If no pair reaches the stability target,
+            // retain the least-noisy pair as a diagnostic fallback. Pairs whose centered loss span is
+            // exactly zero are excluded: two quantized zeros would otherwise look perfectly stable
+            // and win. This strengthens the numerical oracle rather than weakening rtol/atol or
+            // teaching it the expected answer.
             double usedStep = eps;
             if (relErr > relTol && gradCheckClock.Elapsed.TotalSeconds < GradCheckBudgetSeconds)
             {
-                var (lp2, lm2, p2, m2) = GradientCheckLossPairAt(nn, loss, input, target, theta, i, orig, eps * 2.0);
-                var (lp4, lm4, p4, m4) = GradientCheckLossPairAt(nn, loss, input, target, theta, i, orig, eps * 4.0);
-                double d2 = (lp2 - lm2) / (p2 - m2);
-                double d4 = (lp4 - lm4) / (p4 - m4);
-                if (IsFinite(d2) && IsFinite(d4))
+                var estimates = new List<(double Step, double Derivative, double LossSpan)>();
+                double primaryLossSpan = System.Math.Abs(lp - lm);
+                if (primaryLossSpan > 0.0)
+                    estimates.Add((eps, numeric, primaryLossSpan));
+
+                double bestStability = double.PositiveInfinity;
+                double bestDerivative = numeric;
+                double bestStep = eps;
+                bool foundStableLocalPair = false;
+                // Visit fine probes first. As soon as two adjacent, non-zero secants agree, their
+                // local Richardson estimate is sufficient; do not pay for every wider probe. A
+                // zero-signal FP32 coordinate is allowed to widen farther because no derivative can
+                // be inferred from two identical scalar losses.
+                for (int exponent = -4; exponent <= 5; exponent++)
                 {
-                    if (System.Math.Abs(numeric - d2) <= System.Math.Abs(d2 - d4))
+                    if (exponent == 0) continue;
+                    if (gradCheckClock.Elapsed.TotalSeconds > GradCheckBudgetSeconds) break;
+                    double candidateStep = eps * System.Math.Pow(2.0, exponent);
+                    var pair = GradientCheckLossPairAt(
+                        nn, loss, input, target, theta, i, orig, candidateStep);
+                    double parameterSpan = pair.PlusParameter - pair.MinusParameter;
+                    if (parameterSpan == 0.0) continue;
+                    double derivative = (pair.Plus - pair.Minus) / parameterSpan;
+                    double lossSpan = System.Math.Abs(pair.Plus - pair.Minus);
+                    if (IsFinite(derivative) && IsFinite(lossSpan) && lossSpan > 0.0)
                     {
-                        numeric = ((4.0 * numeric) - d2) / 3.0;
+                        estimates.Add((candidateStep, derivative, lossSpan));
+                        estimates.Sort((left, right) => left.Step.CompareTo(right.Step));
+
+                        for (int estimateIndex = 0; estimateIndex + 1 < estimates.Count; estimateIndex++)
+                        {
+                            var smaller = estimates[estimateIndex];
+                            var wider = estimates[estimateIndex + 1];
+                            double stepRatio = wider.Step / smaller.Step;
+                            if (System.Math.Abs(stepRatio - 2.0) > 1e-9) continue;
+
+                            double stability = System.Math.Abs(smaller.Derivative - wider.Derivative) /
+                                System.Math.Max(absFloor,
+                                    System.Math.Abs(smaller.Derivative) + System.Math.Abs(wider.Derivative));
+                            if (stability < bestStability)
+                            {
+                                bestStability = stability;
+                                bestDerivative = ((4.0 * smaller.Derivative) - wider.Derivative) / 3.0;
+                                bestStep = smaller.Step;
+                            }
+                            if (stability <= relTol)
+                            {
+                                foundStableLocalPair = true;
+                                break;
+                            }
+                        }
+
+                        if (foundStableLocalPair) break;
                     }
-                    else
-                    {
-                        numeric = ((4.0 * d2) - d4) / 3.0;
-                        usedStep = eps * 2.0;
-                    }
+                }
+
+                estimates.Sort((left, right) => left.Step.CompareTo(right.Step));
+                numericalDetail = $", ladder=[{string.Join(", ", estimates.Select(estimate =>
+                    $"{estimate.Step:E2}:{estimate.Derivative:E4}/{estimate.LossSpan:E3}"))}]";
+
+                if (IsFinite(bestDerivative))
+                {
+                    numeric = bestDerivative;
+                    usedStep = bestStep;
                     denom = System.Math.Max(absFloor, System.Math.Abs(numeric) + System.Math.Abs(analytic));
                     relErr = System.Math.Abs(numeric - analytic) / denom;
                 }
@@ -3695,7 +3873,8 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
                 mismatches++;
                 if (firstFail.Length == 0)
                     firstFail = $"{slot.StableId}[{localIndex}] ({slot.Owner}, flat {i}): analytic={analytic:E4}, " +
-                        $"numeric={numeric:E4}, step={usedStep:E2}, relErr={relErr:F4}";
+                        $"numeric={numeric:E4}, step={usedStep:E2}, relErr={relErr:F4}, " +
+                        $"loss-={lm:E9}, base={objectiveAfterParameterRoundTrip:E9}, loss+={lp:E9}{numericalDetail}";
             }
         }
 

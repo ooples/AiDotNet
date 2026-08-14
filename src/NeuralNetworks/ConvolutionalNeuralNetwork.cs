@@ -396,6 +396,11 @@ public class ConvolutionalNeuralNetwork<T> : ImageClassifierModelLayoutBase<T>
                 }
                 var w = dense.GetWeights();
                 if (w.Rank != 2 || w.Shape[0] == 0 || w.Shape[1] == 0) return false;   // lazy → bail
+                // The fused path bypasses DenseLayer.Forward and therefore also bypasses its
+                // first-real-input reconciliation. A shape-only topology walk may have sized the
+                // dense tail from an approximate Flatten declaration. Fall back once so the eager
+                // layer path can bind the real width; subsequent inference calls use this fast path.
+                if (w.Shape[0] != t.Shape[t.Rank - 1]) return false;
                 t = Engine.FusedLinear(t, w, dense.GetBiases(), act);
             }
 

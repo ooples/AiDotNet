@@ -241,10 +241,6 @@ public abstract class AudioNeuralNetworkBase<T> : NeuralNetworkBase<T>, IShapeCo
     /// </remarks>
     protected abstract Tensor<T> PreprocessAudio(Tensor<T> rawAudio);
 
-    /// <inheritdoc />
-    protected override Tensor<T> PrepareInputForTraining(Tensor<T> input)
-        => PreprocessAudio(input);
-
     /// <summary>
     /// Postprocesses model output into the final result format.
     /// </summary>

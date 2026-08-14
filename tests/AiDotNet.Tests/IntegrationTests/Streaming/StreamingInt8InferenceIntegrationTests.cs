@@ -129,7 +129,8 @@ public class StreamingInt8InferenceIntegrationTests
         {
             var int8 = net.Predict(input);
             Assert.Equal(fp32.Shape.ToArray(), int8.Shape.ToArray());
-            Assert.All(int8.ToArray(), value => Assert.True(float.IsFinite(value)));
+            Assert.All(int8.ToArray(), value =>
+                Assert.True(!float.IsNaN(value) && !float.IsInfinity(value)));
         }
         finally
         {

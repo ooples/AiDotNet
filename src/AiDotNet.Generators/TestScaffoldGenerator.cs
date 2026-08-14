@@ -497,8 +497,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         "MelGAN", "MemFlow", "LegalBERTNER", "KMaXDeepLab",
         // Generated A-M shard foundation-scale training timeouts (#1719): DPT-Large depth, 768-dim VLMs.
         "MiDaS", "METER", "DocPedia", "LXMERT",
-        // VoiceCraft retains its full paper-scale codec-language-model fixture in the nightly lane.
-        "VoiceCraft",
         // Shard M MedS-Meta. These three exhausted the float -> cap -> shrink ladder, each rung
         // measured rather than assumed:
         //   float  - all three already emit as <base>TestBase<float> via the A-Z shard rule.
@@ -5131,6 +5129,18 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "MaxSequenceLength = 16, MaxGenerationLength = 8, MaxVisualTokens = 16, " +
                     "DropoutRate = 0.0 })";
             }
+            else if (model.ClassName == "ABINet" && model.TypeParameterCount == 1)
+            {
+                // ABINet's explicit training branch consumes the supplied tensor directly. Build
+                // the complete vision -> language -> iterative-fusion topology at bounded public
+                // dimensions and pair it with the canonical batched NCHW fixture emitted below.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.SequenceToSequence, " +
+                    "inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 97), " +
+                    "imageWidth: 32, imageHeight: 32, maxSequenceLength: 8, visionDim: 64, " +
+                    "languageDim: 64, visionLayers: 1, languageLayers: 1, numIterations: 1)";
+            }
             else if (model.ClassName == "FinancialBERT" && model.TypeParameterCount == 1)
             {
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
@@ -6634,20 +6644,16 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 // sampled trajectories per forecast — so a single Predict is 20 passes through
                 // the whole stack. At that scale its memorization probe times out at 180 s.
                 //
-                // Bound only the INTERNALS. ContextLength and ForecastHorizon deliberately keep
-                // their paper values, because Chronos is tokenization-based and its training path
-                // emits rank-2/rank-3 [seq, vocab] logits: an earlier attempt routed it through
-                // TimeGPT's reduced rank-1 "8" forecast geometry and produced "Chronos training
-                // expects rank-2 or rank-3 vocabulary logits, got rank 1" on every training
-                // invariant. Leaving the two length options alone keeps the shape contract
-                // exactly as the forecasting branch already computes it, while NumSamples and the
-                // transformer width carry essentially all of the cost.
+                // Keep the token-logit training contract but bound both public sequence extents.
+                // ForecastHorizon=8 remains below the generated 32-token discrete input after
+                // ClampDiscreteInputAxes; the old horizon of 64 rejected the fixture before the
+                // census could measure its taped forward or backward pass.
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
-                    "inputSize: 512, outputSize: 64), " +
-                    "new AiDotNet.Models.Options.ChronosFinanceOptions<double> { ContextLength = 512, " +
-                    "ForecastHorizon = 64, NumTokens = 64, HiddenDimension = 32, NumLayers = 2, " +
+                    "inputSize: 64, outputSize: 8), " +
+                    "new AiDotNet.Models.Options.ChronosFinanceOptions<double> { ContextLength = 64, " +
+                    "ForecastHorizon = 8, NumTokens = 64, HiddenDimension = 32, NumLayers = 2, " +
                     "NumHeads = 4, IntermediateSize = 64, NumSamples = 2, DropoutRate = 0.0 })";
             }
             else if (model.ClassName == "LLMTime" && model.TypeParameterCount == 1)
@@ -6874,12 +6880,17 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 // Demucs. Because the native ctor's architecture parameter is followed by optional
                 // params it is not detected as an "architecture-only" ctor, so the scaffold fell back
                 // to the (options) ONNX ctor — and every training invariant threw "Training is not
-                // supported in ONNX inference mode". Force the native training ctor. The waveform-Demucs
-                // InitializeLayers hardcodes its conv-U-Net dims, so any valid architecture works.
+                // supported in ONNX inference mode". Force the native training ctor and exercise the
+                // same configurable Demucs topology at smoke scale. Leaving paper defaults here creates
+                // a 100.6M-parameter double fixture whose one census pass peaks at 4.4 GiB and 15 s;
+                // production defaults remain untouched.
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
-                    "inputSize: 64, outputSize: 256))";
+                    "inputSize: 64, outputSize: 256), " +
+                    "new AiDotNet.Audio.SourceSeparation.SourceSeparationOptions { " +
+                    "DemucsDepth = 2, DemucsBaseChannels = 8, DemucsKernelSize = 8, " +
+                    "DemucsStride = 4, DemucsPadding = 2, StemCount = 4 })";
             }
             else if (model.ClassName == "E2TTS" && model.TypeParameterCount == 1)
             {
@@ -7318,6 +7329,25 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "TextEncoderDim = 32, LLMDim = 32, NumEncoderLayers = 1, NumLLMLayers = 2, " +
                     "NumHeads = 4, NumCodebooks = 1, CodebookSize = 80, " +
                     "MaxTextLength = 8, MaxCodecFrames = 8, DropoutRate = 0.0 })";
+            }
+            else if (model.ClassName == "AudioLM" && model.TypeParameterCount == 1
+                     && typeName.StartsWith(
+                         "AiDotNet.Audio.Generation.", System.StringComparison.Ordinal))
+            {
+                // This is the generated-census collision owner. The bounded CodecBased AudioLM
+                // branch below does not apply to it; as a result the census silently constructed
+                // the 152.2M-parameter, 12x1024 semantic model and peaked at 6.2 GiB for one fixture.
+                // Exercise the identical semantic projection/attention/MLP/vocabulary topology
+                // through its public options while keeping paper-scale production defaults intact.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.SequenceToSequence, " +
+                    "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 64), " +
+                    "new AiDotNet.Audio.Generation.AudioLMOptions { SemanticDim = 32, " +
+                    "NumSemanticLayers = 2, NumSemanticHeads = 4, SemanticVocabSize = 64, " +
+                    "CoarseDim = 32, NumCoarseLayers = 2, CoarseCodebookSize = 64, " +
+                    "FineDim = 32, NumFineLayers = 2, FineCodebookSize = 64, " +
+                    "NumCoarseQuantizers = 1, NumFineQuantizers = 1, DropoutRate = 0.0 })";
             }
             else if (model.ClassName == "AudioLM" && model.TypeParameterCount == 1
                      && typeName.StartsWith(
@@ -8319,6 +8349,21 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "LLMDim = 32, NumEncoderLayers = 1, NumLLMLayers = 1, NumHeads = 2, " +
                     "VocabSize = 64, MaxTextLength = 8, MaxCodecFrames = 8, DropoutRate = 0.0, " +
                     "LearningRate = 1e-3, WeightDecay = 0.0 })";
+            }
+            else if (model.ClassName == "VoiceCraft" && model.TypeParameterCount == 1
+                     && typeName.StartsWith("AiDotNet.Audio.Generation.", System.StringComparison.Ordinal))
+            {
+                // CollisionOwners assigns VoiceCraftTests to Audio.Generation.VoiceCraft. The
+                // bounded CodecBased branch below cannot affect that owner, so it silently retained
+                // a 2048-wide, 16-layer model and reached 19.6 GiB in the exact-model census.
+                pinInitSeed = true;
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.SequenceToSequence, " +
+                    "inputHeight: 8, inputWidth: 32, inputDepth: 1, outputSize: 32), " +
+                    "new AiDotNet.Audio.Generation.VoiceCraftOptions { HiddenDim = 32, NumLayers = 1, " +
+                    "NumHeads = 4, CodebookSize = 32, NumQuantizers = 1, CodecEmbeddingDim = 16, " +
+                    "MaxDurationSeconds = 1.0, DropoutRate = 0.0 })";
             }
             else if (model.ClassName == "VoiceCraft" && model.TypeParameterCount == 1 && typeName.Contains("CodecBased"))
             {
@@ -12168,6 +12213,13 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             sb.AppendLine("        return target;");
             sb.AppendLine("    }");
         }
+        else if (model.ClassName == "ABINet")
+        {
+            // ForwardForTraining is an explicit branch runner and receives the fixture tensor
+            // directly. Predict still applies its public normalization to this canonical image.
+            sb.AppendLine("    protected override int[] InputShape => new[] { 1, 3, 32, 32 };");
+            sb.AppendLine("    protected override int[] OutputShape => new[] { 1, 8, 97 };");
+        }
         else if (isVisionModel && IsTokenConsumingVisionLanguageModel(model.ClassName))
         {
             // These VisionLanguage models (GPT4Point — Qi et al. 2024;
@@ -12777,7 +12829,18 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         }
         else if (isAudioModel)
         {
-            if (model.ClassName == "CTCDecoder")
+            if (model.ClassName == "VoiceCraft")
+            {
+                // Audio.Generation.VoiceCraft's bounded codec-LM maps each 32-wide token feature
+                // to one 32-way codebook logit vector without changing batch or sequence axes.
+                sb.AppendLine("    protected override int[] InputShape => new[] { 1, 8, 32 };");
+                sb.AppendLine("    protected override int[] OutputShape => new[] { 1, 8, 32 };");
+                sb.AppendLine("    protected override int TrainingIterations => 1;");
+                sb.AppendLine("    protected override int MoreDataShortIterations => 1;");
+                sb.AppendLine("    protected override int MoreDataLongIterations => 2;");
+                sb.AppendLine("    protected override int MemorizationTaskIterations => 2;");
+            }
+            else if (model.ClassName == "CTCDecoder")
             {
                 // #1789 Generated C: MoreData_ShouldNotDegrade was the only CTCDecoder test to
                 // fail, and it failed on the 120 s per-test gate rather than on the invariant.
@@ -13014,6 +13077,14 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 sb.AppendLine("    protected override int[] OutputShape => new[] { 4, 64 };");
                 sb.AppendLine("    protected override double MoreDataTolerance => 0.5;");
             }
+            else if (model.ClassName == "AudioLM")
+            {
+                // The collision owner is AiDotNet.Audio.Generation.AudioLM. Its bounded public
+                // options above project the 32-wide semantic stream to a 64-token vocabulary.
+                sb.AppendLine("    protected override int[] InputShape => new[] { 1, 64, 32 };");
+                sb.AppendLine("    protected override int[] OutputShape => new[] { 1, 64, 64 };");
+                sb.AppendLine("    protected override int VariableLengthAxis => 1;");
+            }
             else
             {
                 sb.AppendLine("    protected override int[] InputShape => new[] { 1, 64, 32 };");
@@ -13221,7 +13292,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             sb.AppendLine("        using var network = CreateNetwork();");
             sb.AppendLine("        var trainInput = CreateRandomTensor(InputShape, rng);");
             sb.AppendLine("        var trainTarget = CreateRandomTargetTensor(EffectiveOutputShape, rng);");
-            sb.AppendLine("        for (int i = 0; i < TrainingIterations; i++) network.Train(trainInput, trainTarget);");
+            sb.AppendLine("        int iterations = ResolveConformanceTrainingIterations(network, TrainingIterations);");
+            sb.AppendLine("        for (int i = 0; i < iterations; i++) network.Train(trainInput, trainTarget);");
             sb.AppendLine("        var input1 = CreateConstantTensor(InputShape, 0.1);");
             sb.AppendLine("        var input2 = CreateConstantTensor(InputShape, 0.9);");
             sb.AppendLine("        var output1 = network.Predict(input1);");
@@ -13260,6 +13332,12 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             {
                 sb.AppendLine("    protected override int[] InputShape => new[] { 1, 1, 8, 8 };");
                 sb.AppendLine("    protected override int[] OutputShape => new[] { 1, 1, 8, 8 };");
+            }
+            else if (model.ClassName == "TabPFNNetwork")
+            {
+                // Transformer attention consumes [batch, features], not a bare feature vector.
+                sb.AppendLine("    protected override int[] InputShape => new[] { 1, 10 };");
+                sb.AppendLine("    protected override int[] OutputShape => new[] { 1, 10 };");
             }
             else
             {
@@ -13384,7 +13462,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 sb.AppendLine("        using var network = CreateNetwork();");
                 sb.AppendLine("        var trainInput = CreateRandomTensor(InputShape, rng);");
                 sb.AppendLine("        var trainTarget = CreateRandomTargetTensor(EffectiveOutputShape, rng);");
-                sb.AppendLine("        for (int i = 0; i < TrainingIterations; i++) network.Train(trainInput, trainTarget);");
+                sb.AppendLine("        int iterations = ResolveConformanceTrainingIterations(network, TrainingIterations);");
+                sb.AppendLine("        for (int i = 0; i < iterations; i++) network.Train(trainInput, trainTarget);");
                 sb.AppendLine("        // Build two DIFFERENT integer-token sequences so EmbeddingLayer's");
                 sb.AppendLine("        // int-truncation produces distinct lookups (constant float inputs all");
                 sb.AppendLine("        // collapse to token 0 under (int) truncation).");
@@ -13923,17 +14002,16 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // training-path shapes align (e.g. ChronosBolt outputs
             // [B, ForecastHorizon, NumQuantiles], not the default [1, 1]).
             bool usesReducedChronosBoltFixture = model.ClassName == "ChronosBolt";
+            bool usesReducedChronosFixture = model.ClassName == "Chronos";
             bool usesReducedSundialFixture = model.ClassName == "Sundial";
             // LLMTime shares TimeGPT's reduced geometry exactly (ContextLength 64 / ForecastHorizon 8
             // in its constructorExpr), so it takes the same ctx/output-shape pair. Without this the
             // fixture kept feeding the paper-scale 512-element context into a 64-context model and
             // every invariant failed with "ReshapeLayer per-sample input element count (512) does not
             // match output element count (64)".
-            // Chronos is deliberately NOT in this group. It is tokenization-based: its training
-            // path emits rank-2/rank-3 [seq, vocab] logits and detokenizes them, so the rank-1
-            // "8" forecast shape TimeGPT/LLMTime use is not a legal contract for it. Routing it
-            // here produced "Chronos training expects rank-2 or rank-3 vocabulary logits, got
-            // rank 1" across all five of its training invariants on the local 16 GB run.
+            // Chronos remains tokenization-based. Reducing its public forecast OutputShape does
+            // not alter the internal rank-2/rank-3 vocabulary logits used by ForwardForTraining;
+            // the shared objective funnel derives its target from that exact training output.
             // LLMTime and TimeGPT retain their paper defaults in production, but their generated
             // smoke constructors deliberately use different bounded contexts. Keep each emitted
             // fixture in lockstep with its constructor rather than grouping them by model family.
@@ -13941,8 +14019,10 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             bool usesReducedTimeGptFixture = model.ClassName == "TimeGPT";
             bool usesReducedRwkvFixture = model.ClassName == "RWKVForecaster";
             bool usesReducedAutoformerFixture = model.ClassName == "Autoformer";
-            int paperCtx = usesReducedChronosBoltFixture
+            int paperCtx = usesReducedChronosFixture
                 ? 64
+                : usesReducedChronosBoltFixture
+                    ? 64
                 : usesReducedSundialFixture
                     ? 64
                 : usesReducedLlmTimeFixture
@@ -13954,8 +14034,10 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 : usesReducedAutoformerFixture
                     ? 4
                 : GetForecastingPaperContextLength(model.ClassName);
-            string paperOutputShape = usesReducedChronosBoltFixture
-                ? "8, 3"
+            string paperOutputShape = usesReducedChronosFixture
+                ? "8"
+                : usesReducedChronosBoltFixture
+                    ? "8, 3"
                 : usesReducedSundialFixture
                     ? "8"
                 : usesReducedLlmTimeFixture || usesReducedTimeGptFixture || usesReducedRwkvFixture

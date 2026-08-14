@@ -83,6 +83,18 @@ public abstract class ImageClassifierModelLayoutBase<T> : DeclaredModelLayoutBas
         double maxGradNorm = 1.0) : base(architecture, lossFunction, maxGradNorm) { }
     protected ImageClassifierModelLayoutBase(ILossFunction<T> lossFunction, double maxGradNorm = 1.0)
         : base(lossFunction, maxGradNorm) { }
+
+    /// <summary>
+    /// Promotes an unbatched image to the canonical NCHW training layout.
+    /// </summary>
+    /// <remarks>
+    /// Image classifiers commonly replace <c>PredictCore</c> only to install a fused inference fast
+    /// path, while their trainable layer graph still requires the same unit-batch promotion as the
+    /// base eager path. State that family contract here so objective probes and public training use
+    /// identical shapes without repeating it in every ResNet/MobileNet/EfficientNet implementation.
+    /// </remarks>
+    protected override Tensor<T> PrepareInputForTraining(Tensor<T> input)
+        => NormalizeInputBatchDim(input);
 }
 
 [TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,

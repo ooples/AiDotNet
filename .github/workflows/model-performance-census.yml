@@ -30,7 +30,7 @@ permissions:
 env:
   PERF_SHARD_COUNT: 32
   PERF_MODEL_TIMEOUT_SECONDS: 180
-  TENSORS_COMMIT: c7d9a96bb41eec4dba103df7b40430ccf5f3f4ec
+  TENSORS_COMMIT: 35aae6d02e23f548366b35cb83c9b47b22ffeaae
 
 jobs:
   prepare:
@@ -302,6 +302,15 @@ jobs:
             '--expected-count', '${{ steps.inventory.outputs.count }}',
             '--max-regression-ratio', '1.25',
             '--max-train-step-ms', '120000',
+            '--max-steady-forward-p95-ms', '30000',
+            '--max-fixture-wall-ms', '120000',
+            # Ordinary models must stay below roughly half of a 16 GiB runner. Foundation models
+            # additionally receive at most 32 bytes per trainable fp32 parameter (8x the weight
+            # payload) for weights, gradients, optimizer state and execution packs. The baseline
+            # comparison still rejects any environment-matched metric regression above 25%.
+            '--max-peak-working-set-bytes', '8589934592',
+            '--max-peak-private-memory-bytes', '9663676416',
+            '--max-peak-bytes-per-parameter', '32',
             '--max-correctness-probe-ms', '120000')
           if ('${{ steps.baseline.outputs.present }}' -eq 'true') {
             $arguments += @('--baseline', '${{ steps.baseline.outputs.path }}')

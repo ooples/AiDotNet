@@ -232,6 +232,47 @@ internal static class Program
                 diagnostics.Add(Diagnostic.Error(record.Fixture, "trainStepMs",
                     $"single train step {trainStep:F0} ms exceeds {options.MaxTrainStepMs:F0} ms ceiling"));
             }
+            double steadyForwardP95 = record.Metric("steadyForwardP95Ms");
+            if (steadyForwardP95 > options.MaxSteadyForwardP95Ms)
+            {
+                diagnostics.Add(Diagnostic.Error(record.Fixture, "steadyForwardP95Ms",
+                    $"steady forward p95 {steadyForwardP95:F0} ms exceeds " +
+                    $"{options.MaxSteadyForwardP95Ms:F0} ms ceiling"));
+            }
+            double wall = record.Metric("wallMs");
+            if (wall > options.MaxFixtureWallMs)
+            {
+                diagnostics.Add(Diagnostic.Error(record.Fixture, "wallMs",
+                    $"fixture workload {wall:F0} ms exceeds {options.MaxFixtureWallMs:F0} ms ceiling"));
+            }
+            // A fixed process ceiling alone is not dimensionally valid across this inventory:
+            // the same lane covers tiny classifiers and 500M+ parameter foundation models. An
+            // fp32 training step necessarily carries weights plus some combination of gradients,
+            // optimizer state and packed execution weights. Bound ordinary models by the fixed
+            // floor and large models by a strict bytes-per-parameter amplification envelope. The
+            // environment-qualified baseline above remains the tighter regression detector.
+            double parameterScaledCeiling = record.ParameterCount > 0
+                ? record.ParameterCount * options.MaxPeakBytesPerParameter
+                : 0.0;
+            double workingSetCeiling = Math.Max(options.MaxPeakWorkingSetBytes, parameterScaledCeiling);
+            double privateMemoryCeiling = Math.Max(options.MaxPeakPrivateMemoryBytes, parameterScaledCeiling);
+
+            double peakWorkingSet = record.Metric("peakWorkingSetBytes");
+            if (peakWorkingSet > workingSetCeiling)
+            {
+                diagnostics.Add(Diagnostic.Error(record.Fixture, "peakWorkingSetBytes",
+                    $"peak working set {peakWorkingSet / (1024.0 * 1024.0):F1} MiB exceeds " +
+                    $"{workingSetCeiling / (1024.0 * 1024.0):F1} MiB model-scaled ceiling " +
+                    $"({options.MaxPeakBytesPerParameter:F0} bytes/parameter)"));
+            }
+            double peakPrivateMemory = record.Metric("peakPrivateMemoryBytes");
+            if (peakPrivateMemory > privateMemoryCeiling)
+            {
+                diagnostics.Add(Diagnostic.Error(record.Fixture, "peakPrivateMemoryBytes",
+                    $"peak private memory {peakPrivateMemory / (1024.0 * 1024.0):F1} MiB exceeds " +
+                    $"{privateMemoryCeiling / (1024.0 * 1024.0):F1} MiB model-scaled ceiling " +
+                    $"({options.MaxPeakBytesPerParameter:F0} bytes/parameter)"));
+            }
             if (record.Metric("projectedTrainingReduceLossMs") > options.MaxCorrectnessProbeMs)
             {
                 diagnostics.Add(Diagnostic.Warning(record.Fixture, "projectedTrainingReduceLossMs",
@@ -372,7 +413,10 @@ internal static class Program
     {
         Console.WriteLine("ModelPerfProbe --results DIR --output FILE [--expected-count N]");
         Console.WriteLine("  [--baseline FILE] [--write-baseline FILE] [--max-regression-ratio 1.25]");
-        Console.WriteLine("  [--max-train-step-ms 120000] [--max-correctness-probe-ms 120000]");
+        Console.WriteLine("  [--max-train-step-ms 120000] [--max-steady-forward-p95-ms 30000]");
+        Console.WriteLine("  [--max-fixture-wall-ms 120000] [--max-peak-working-set-bytes 8589934592]");
+        Console.WriteLine("  [--max-peak-private-memory-bytes 9663676416] [--max-peak-bytes-per-parameter 32]");
+        Console.WriteLine("  [--max-correctness-probe-ms 120000]");
         Console.WriteLine("ModelPerfProbe --self-test");
         return 2;
     }
@@ -386,6 +430,11 @@ internal static class Program
         public int? ExpectedCount { get; private set; }
         public double MaxRegressionRatio { get; private set; } = 1.25;
         public double MaxTrainStepMs { get; private set; } = 120_000.0;
+        public double MaxSteadyForwardP95Ms { get; private set; } = 30_000.0;
+        public double MaxFixtureWallMs { get; private set; } = 120_000.0;
+        public double MaxPeakWorkingSetBytes { get; private set; } = 8_589_934_592.0;
+        public double MaxPeakPrivateMemoryBytes { get; private set; } = 9_663_676_416.0;
+        public double MaxPeakBytesPerParameter { get; private set; } = 32.0;
         public double MaxCorrectnessProbeMs { get; private set; } = 120_000.0;
         public bool SelfTest { get; private set; }
 
@@ -404,6 +453,11 @@ internal static class Program
                     case "--expected-count": options.ExpectedCount = int.Parse(Next(), CultureInfo.InvariantCulture); break;
                     case "--max-regression-ratio": options.MaxRegressionRatio = double.Parse(Next(), CultureInfo.InvariantCulture); break;
                     case "--max-train-step-ms": options.MaxTrainStepMs = double.Parse(Next(), CultureInfo.InvariantCulture); break;
+                    case "--max-steady-forward-p95-ms": options.MaxSteadyForwardP95Ms = double.Parse(Next(), CultureInfo.InvariantCulture); break;
+                    case "--max-fixture-wall-ms": options.MaxFixtureWallMs = double.Parse(Next(), CultureInfo.InvariantCulture); break;
+                    case "--max-peak-working-set-bytes": options.MaxPeakWorkingSetBytes = double.Parse(Next(), CultureInfo.InvariantCulture); break;
+                    case "--max-peak-private-memory-bytes": options.MaxPeakPrivateMemoryBytes = double.Parse(Next(), CultureInfo.InvariantCulture); break;
+                    case "--max-peak-bytes-per-parameter": options.MaxPeakBytesPerParameter = double.Parse(Next(), CultureInfo.InvariantCulture); break;
                     case "--max-correctness-probe-ms": options.MaxCorrectnessProbeMs = double.Parse(Next(), CultureInfo.InvariantCulture); break;
                     case "--self-test": options.SelfTest = true; break;
                     default: return null;

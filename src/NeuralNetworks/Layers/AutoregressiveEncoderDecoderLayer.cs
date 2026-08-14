@@ -32,7 +32,7 @@ public abstract class AutoregressiveEncoderDecoderLayer<T> : LayerBase<T>
         int encoderVocabularySize,
         int decoderVocabularySize,
         int maximumDecoderLength)
-        : base([1], [1])
+        : base([-1], [decoderVocabularySize])
     {
         _encoderLayers = encoderLayers?.ToList()
             ?? throw new ArgumentNullException(nameof(encoderLayers));

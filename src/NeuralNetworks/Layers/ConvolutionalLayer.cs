@@ -1024,6 +1024,16 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>, IShapeContract
             new[] { OutputDepth, outH, outW });
     }
 
+    /// <inheritdoc />
+    protected override void ReconcileShapeOnlyResolution(Tensor<T> input)
+    {
+        // A topology-only walk can reach a convolution through an approximate sequential path,
+        // while the real model routes a different branch or batch layout into it. No weights have
+        // been allocated at that point, so bind the lazy convolution once to the first real tensor.
+        // Explicitly-sized convolutions never carry shape-only provenance and remain strict.
+        OnFirstForward(input);
+    }
+
     protected override void EnsureInitialized()
     {
         if (_isInitialized) return;
@@ -1280,6 +1290,23 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>, IShapeContract
 
         // Resolve deferred shape (PyTorch LazyConv2d-style) and allocate weights on first call.
         EnsureInitializedFromInput(input);
+
+        // Convolution weights are bound to channel counts, not to one image resolution. Callers
+        // can legitimately materialize a lazy head from [C,1,1] for parameter initialization and
+        // later execute it on [B,C,H,W]. Keep the reported spatial contract synchronized with the
+        // real tensor while preserving the strict InputDepth check below. Without this, the
+        // convolution computed the correct HxW result but continued reporting the materialization
+        // probe's 1x1 extent to shape validation, serialization, and downstream layer sizing.
+        int[] reportedInputShape = GetInputShape();
+        int spatialShapeOffset = input.Rank == 4 ? 1 : 0;
+        if ((input.Rank == 3 || input.Rank == 4)
+            && reportedInputShape.Length == 3
+            && reportedInputShape[0] == input.Shape[spatialShapeOffset]
+            && (reportedInputShape[1] != input.Shape[spatialShapeOffset + 1]
+                || reportedInputShape[2] != input.Shape[spatialShapeOffset + 2]))
+        {
+            OnFirstForward(input);
+        }
 
         // Accept any rank and canonicalize to 4D [B, C, H, W]. The library's
         // design principle is rank-agnostic ops — a flat feature vector

@@ -5751,7 +5751,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// involved in Predict. Returns the original tensor if the architecture
     /// has no usable input shape or if input is already batched.
     /// </summary>
-    private Tensor<T> NormalizeInputBatchDim(Tensor<T> input)
+    protected Tensor<T> NormalizeInputBatchDim(Tensor<T> input)
     {
         int expectedUnbatchedRank = GetExpectedUnbatchedInputRank();
         if (expectedUnbatchedRank <= 0) return input;
@@ -14479,13 +14479,62 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// Converts a public model input into the tensor consumed by the trainable layer graph.
     /// </summary>
     /// <remarks>
-    /// The default is identity. Model-family bases whose public input requires a deterministic,
-    /// differentiable front end override this once for the whole family. Keeping the conversion in
-    /// the objective funnel ensures Train, analytical gradients, and numerical-gradient oracles all
-    /// differentiate the same function; previously audio inference applied PreprocessAudio while the
-    /// common training path bypassed it and fed raw waveforms into layers resolved for spectrograms.
+    /// Models that inherit the base <see cref="PredictCore"/> receive the same single-sample batch
+    /// promotion as inference. A custom <c>PredictCore</c> owns its public-input convention, so the
+    /// default leaves that input unchanged instead of guessing from architecture metadata that the
+    /// custom forward may use only as a shape-capacity declaration. Model-family bases with one
+    /// uniform, deterministic front end can still override this hook once for the whole family.
     /// </remarks>
-    protected virtual Tensor<T> PrepareInputForTraining(Tensor<T> input) => input;
+    protected virtual Tensor<T> PrepareInputForTraining(Tensor<T> input)
+        => PredictCoreOwnsPublicInputPreparation()
+            ? input
+            : NormalizeInputBatchDim(input);
+
+    private bool? _predictCoreOwnsPublicInputPreparation;
+
+    /// <summary>
+    /// Reports whether the concrete model replaced the base public-input inference funnel.
+    /// </summary>
+    private bool PredictCoreOwnsPublicInputPreparation()
+    {
+        if (_predictCoreOwnsPublicInputPreparation.HasValue)
+            return _predictCoreOwnsPublicInputPreparation.Value;
+
+        var method = GetType().GetMethod(
+            nameof(PredictCore),
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+        bool ownsPreparation = method is not null
+            && method.DeclaringType != typeof(NeuralNetworkBase<T>);
+        _predictCoreOwnsPublicInputPreparation = ownsPreparation;
+        return ownsPreparation;
+    }
+
+    private bool? _forwardForTrainingOwnsPublicInputPreparation;
+
+    /// <summary>
+    /// Reports whether the concrete model replaced <see cref="ForwardForTraining"/> and therefore
+    /// owns the conversion from its public input to its trainable graph input.
+    /// </summary>
+    /// <remarks>
+    /// A training-forward override is the model's complete public-input contract. Running the family
+    /// preparation hook before such an override applies deterministic front ends twice: PANNs, for
+    /// example, converted a waveform to log-mel in <c>PrepareInputForTraining</c> and then treated that
+    /// log-mel tensor as another waveform in its override. Models that inherit the base forward keep
+    /// using <see cref="PrepareInputForTraining"/> exactly once.
+    /// </remarks>
+    private bool ForwardForTrainingOwnsPublicInputPreparation()
+    {
+        if (_forwardForTrainingOwnsPublicInputPreparation.HasValue)
+            return _forwardForTrainingOwnsPublicInputPreparation.Value;
+
+        var method = GetType().GetMethod(
+            nameof(ForwardForTraining),
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public);
+        bool ownsPreparation = method is not null
+            && method.DeclaringType != typeof(NeuralNetworkBase<T>);
+        _forwardForTrainingOwnsPublicInputPreparation = ownsPreparation;
+        return ownsPreparation;
+    }
 
     /// <summary>
     /// Enters the training contract, prepares a public input, and evaluates the differentiable
@@ -14502,7 +14551,10 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     internal Tensor<T> ForwardPreparedForTraining(Tensor<T> input)
     {
         SetTrainingMode(true);
-        return ForwardForTraining(PrepareInputForTraining(input));
+        var trainingInput = ForwardForTrainingOwnsPublicInputPreparation()
+            ? input
+            : PrepareInputForTraining(input);
+        return ForwardForTraining(trainingInput);
     }
 
     /// <summary>
