@@ -8397,10 +8397,17 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         if (typeof(T) != typeof(float) && typeof(T) != typeof(double))
             return EmitFusedMissAndFallback($"numeric type {typeof(T).Name} not supported by fused kernel");
 
-        if (!TryMapToFusedOptimizerConfig(
-                resolvedOptimizer, out var fusedType, out float lr, out float b1, out float b2, out float eps, out float wd,
-                out AiDotNet.Tensors.Engines.Compilation.LrSchedule? lrSched, out bool useBf16Moments))
+        if (!TryMapToFusedOptimizerConfig(resolvedOptimizer, out var fusedCfg))
             return EmitFusedMissAndFallback($"optimizer {resolvedOptimizer.GetType().Name} not compatible with fused kernel");
+
+        var fusedType = fusedCfg.Type;
+        float lr = fusedCfg.LearningRate;
+        float b1 = fusedCfg.Beta1;
+        float b2 = fusedCfg.Beta2;
+        float eps = fusedCfg.Epsilon;
+        float wd = fusedCfg.WeightDecay;
+        var lrSched = fusedCfg.Schedule;
+        bool useBf16Moments = fusedCfg.UseBf16Moments;
 
         // Use the existing recursive trainable-layer collector instead of the
         // top-level-only scan — composite layers with trainable children (e.g.,
@@ -8496,7 +8503,8 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 // Lets the compiled FP16-activation path (AIDOTNET_FP16_ACTIVATIONS=1) cover
                 // fused optimizers beyond the inline Adam/SGD fast paths by applying this
                 // optimizer's own master update to the FP16-computed FP32 gradients.
-                eagerOptimizer: resolvedOptimizer);
+                eagerOptimizer: resolvedOptimizer,
+                fusedExtras: fusedCfg.Extras);
         }
         finally
         {
@@ -8805,12 +8813,34 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     }
 
     /// <summary>
-    /// Inspects a pluggable optimizer and maps it onto the fixed set supported
-    /// by the Tensors-side fused kernel (<c>SGD</c>, <c>Adam</c>, <c>AdamW</c>).
-    /// Returns <c>false</c> when the optimizer is outside that set OR when
-    /// per-step hyperparameter mutation would defeat the fused plan's
-    /// configure-once contract: adaptive learning rates, attached LR schedulers,
-    /// or AMSGrad mode (which the fused kernel doesn't model).
+    /// Asks a pluggable optimizer to describe itself for the Tensors-side fused kernel, returning the
+    /// whole <see cref="Optimizers.Fused.FusedOptimizerConfig"/>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Returns <c>false</c> when the optimizer has no fused kernel, or when per-step hyperparameter
+    /// mutation would defeat the plan's configure-once contract — adaptive learning rates, adaptive
+    /// momentum, or an LR scheduler the fused side cannot express.
+    /// </para>
+    /// <para>
+    /// This returns the config rather than a list of <c>out</c> parameters so that optimizer-specific
+    /// fields — <c>Extras</c> for LARS/FTRL/ASGD/Rprop, <c>UseBf16Moments</c> — ride along without
+    /// changing the signature and every call site again. The previous shape had eight <c>out</c>
+    /// parameters and most callers discarded half of them with <c>out _</c>.
+    /// </para>
+    /// </remarks>
+    internal static bool TryMapToFusedOptimizerConfig(
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> optimizer,
+        out Optimizers.Fused.FusedOptimizerConfig config)
+    {
+        config = default;
+        return optimizer is Optimizers.Fused.IFusedOptimizerSpec spec
+            && spec.TryGetFusedOptimizerConfig(out config);
+    }
+
+    /// <summary>
+    /// Legacy out-parameter shape, retained so the existing fused call sites keep compiling while they
+    /// migrate to the config-returning overload above. New code should use that one.
     /// </summary>
     internal static bool TryMapToFusedOptimizerConfig(
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> optimizer,

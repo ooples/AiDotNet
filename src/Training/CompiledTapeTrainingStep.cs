@@ -434,7 +434,12 @@ public static class CompiledTapeTrainingStep<T>
         AiDotNet.Tensors.Engines.Compilation.LrSchedule? lrSchedule = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? eagerOptimizer = null,
         bool useBf16Moments = false,
-        IReadOnlyList<Tensor<T>>? extraTensors = null)
+        IReadOnlyList<Tensor<T>>? extraTensors = null,
+        // Optimizer-specific coefficients for the kernels that do not read them from the
+        // beta/epsilon slots: LARS (momentum, trust coefficient), FTRL (L1, L2, lr power),
+        // ASGD and Rprop. Null for every other kernel — see FusedOptimizerConfig.Extras for
+        // why this is not defaulted to a fresh instance.
+        AiDotNet.Tensors.Engines.Compilation.FusedOptimizerExtras? fusedExtras = null)
     {
         lossValue = MathHelper.GetNumericOperations<T>().Zero;
         // AiDotNet#1395: clear the previous-call's exception buffer so the
@@ -799,7 +804,8 @@ public static class CompiledTapeTrainingStep<T>
                         beta1,
                         beta2,
                         epsilon,
-                        weightDecay);
+                        weightDecay,
+                        fusedExtras);
                 }
                 else
                 {
@@ -809,7 +815,8 @@ public static class CompiledTapeTrainingStep<T>
                         beta1,
                         beta2,
                         epsilon,
-                        weightDecay);
+                        weightDecay,
+                        fusedExtras);
                 }
                 _configuredPlan = plan;
                 _configuredOptimizerConfig = currentConfig;

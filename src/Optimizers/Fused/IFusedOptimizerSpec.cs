@@ -37,6 +37,26 @@ internal readonly record struct FusedOptimizerConfig(
     /// </para>
     /// </summary>
     public bool UseBf16Moments { get; init; }
+
+    /// <summary>
+    /// Optimizer-specific coefficients for the kernels that do not read them from the beta/epsilon
+    /// slots: LARS (momentum, trust coefficient), FTRL (L1, L2, lr power), ASGD (lambd, alpha, t0) and
+    /// Rprop (eta+/eta-, step bounds). Null for every other kernel, which needs none.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Init-only for the same reason as <see cref="UseBf16Moments"/>: adding it does not change the
+    /// record's <c>Deconstruct</c> arity or force existing positional construction sites to pass an
+    /// extra argument.
+    /// </para>
+    /// <para>
+    /// Deliberately NOT defaulted to a fresh instance. <c>FusedOptimizerExtras</c> carries non-zero
+    /// defaults (LARS trust coefficient 0.001, Rprop step bounds, ASGD t0 1e6), so handing the plan a
+    /// default-constructed one for an optimizer that has no extras would silently feed it another
+    /// optimizer's constants. Null means "this kernel needs none".
+    /// </para>
+    /// </remarks>
+    public AiDotNet.Tensors.Engines.Compilation.FusedOptimizerExtras? Extras { get; init; }
 }
 
 /// <summary>
