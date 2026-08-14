@@ -1832,7 +1832,9 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     /// </summary>
     internal void SetStreamingAllocatorRecursively(bool useStreamingAllocator)
     {
-        var visited = new HashSet<LayerBase<T>>(ReferenceEqualityComparer.Instance);
+        // Use the repository comparer rather than the .NET 5+ BCL comparer so this shared base
+        // path compiles for the net471 target as well as modern runtimes.
+        var visited = new HashSet<LayerBase<T>>(TensorReferenceComparer<LayerBase<T>>.Instance);
         SetStreamingAllocatorRecursively(useStreamingAllocator, visited);
     }
 
