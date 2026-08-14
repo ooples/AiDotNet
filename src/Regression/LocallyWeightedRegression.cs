@@ -65,7 +65,15 @@ public partial class LocallyWeightedRegression<T> : NonLinearRegressionBase<T>
     /// <summary>
     /// Configuration options for the Locally Weighted Regression algorithm.
     /// </summary>
-    private readonly LocallyWeightedRegressionOptions _options;
+    /// <remarks>
+    /// A VIEW of the base's options, not a second reference to them. Holding its own field meant that
+    /// after Deserialize replaced <c>base.Options</c> the model went on reading the object it was
+    /// constructed with -- so loading a saved model into a default-constructed instance restored the
+    /// training set and kept the wrong span, and predictions differed while everything looked
+    /// restored. Anything that shadows configuration this way has the same defect waiting in it.
+    /// </remarks>
+    private LocallyWeightedRegressionOptions _options
+        => (LocallyWeightedRegressionOptions)Options;
 
     /// <summary>
     /// Tolerance below which total kernel weight is treated as zero (no neighbors in bandwidth).
@@ -128,7 +136,6 @@ public partial class LocallyWeightedRegression<T> : NonLinearRegressionBase<T>
     public LocallyWeightedRegression(LocallyWeightedRegressionOptions? options = null, IRegularization<T, Matrix<T>, Vector<T>>? regularization = null)
         : base(options, regularization)
     {
-        _options = options ?? new LocallyWeightedRegressionOptions();
         _xTrain = Matrix<T>.Empty();
         _yTrain = Vector<T>.Empty();
     }

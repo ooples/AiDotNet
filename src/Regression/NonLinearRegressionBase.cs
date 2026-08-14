@@ -999,28 +999,23 @@ public abstract class NonLinearRegressionBase<T> : INonLinearRegression<T>, ICon
     /// </remarks>
     public virtual IFullModel<T, Matrix<T>, Vector<T>> DeepCopy()
     {
-        // Create a new instance through cloning
-        var clone = (NonLinearRegressionBase<T>)this.Clone();
-
-        // Perform deep copy of all mutable fields
-        clone.SupportVectors = SupportVectors.Clone();
-        clone.Alphas = Alphas.Clone();
-        clone.B = B; // Value types are copied by value
-        // Use TypeNameHandling.All to preserve derived Options type during deep copy
-        var serializerSettings = new JsonSerializerSettings
+        // THROUGH THE PAYLOAD, not through a hand-written list of fields. This used to copy exactly
+        // SupportVectors, Alphas, B, Options and Regularization -- correct for a support-vector model
+        // and silently wrong for every subclass whose state is something else. LocallyWeightedRegression
+        // keeps its training set in _xTrain/_yTrain; those were declared, they round-tripped through
+        // Serialize perfectly, and DeepCopy dropped them anyway because it was never told they exist.
+        // Its clone predicted 59.3 where the original predicted 64.6.
+        //
+        // Serialize already carries whatever this model declared, so routing the copy through it means
+        // a subclass adding state gets a correct DeepCopy for free -- which is the whole point of
+        // declaring state rather than enumerating it in a base that cannot know its subclasses.
+        using (ModelPersistenceGuard.InternalOperation())
         {
-            TypeNameHandling = TypeNameHandling.All,
-            SerializationBinder = new SafeSerializationBinder()
-        };
-        var optionsObj = JsonConvert.DeserializeObject(
-            JsonConvert.SerializeObject(Options, serializerSettings), typeof(NonLinearRegressionOptions), serializerSettings);
-        clone.Options = (NonLinearRegressionOptions)(optionsObj ?? new NonLinearRegressionOptions());
-
-        // Create a new regularization instance with the same options
-        var regularizationOptions = Regularization.GetOptions();
-        clone.Regularization = RegularizationFactory.CreateRegularization<T, Matrix<T>, Vector<T>>(regularizationOptions);
-
-        return clone;
+            byte[] state = Serialize();
+            var clone = (NonLinearRegressionBase<T>)AiDotNet.Models.CloneEngine.CopyConfiguration(this);
+            clone.Deserialize(state);
+            return clone;
+        }
     }
 
     /// <summary>
