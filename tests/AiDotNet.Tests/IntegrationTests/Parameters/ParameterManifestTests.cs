@@ -4,7 +4,9 @@ using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
 using AiDotNet.Models;
 using AiDotNet.Models.Parameters;
+using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Regression;
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.TimeSeries;
 using Xunit;
 
@@ -703,6 +705,23 @@ public class ParameterManifestTests
 
         source.SetParameters(new Vector<double>(new[] { 4d, 5d, 6d }));
         Assert.Equal(new[] { 4d, 5d, 6d }, member.LastRestored);
+    }
+
+    [Fact]
+    public async Task LayerManifest_DoesNotDuplicateRegisteredSubLayerParameters()
+    {
+        await Task.Yield();
+        var layer = new BidirectionalLayer<double>(
+            new RecurrentLayer<double>(8),
+            activationFunction: (IActivationFunction<double>?)null);
+        var input = Tensor<double>.CreateRandom(2, 3, 4);
+
+        layer.Forward(input);
+
+        Assert.Equal(layer.GetParameters().Length, layer.ParameterCount);
+        Assert.Equal(
+            layer.GetParameters().Length,
+            layer.GetParameterLayout().Sum(slot => slot.ParameterCount ?? 0));
     }
 
     [Fact]

@@ -1062,28 +1062,6 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
                 materialized = false;
             }
 
-            // Generated declarations are authoritative for field order, but migration is
-            // intentionally incremental: a layer may still register additional tensors at
-            // runtime. Count those compatibility supplements here with the same reference-
-            // identity de-duplication used by the value walk. Without this, a mixed layer such
-            // as NBEATSBlock declared only its generated basis tensors while GetParameters also
-            // emitted its manually registered fully-connected weights and biases.
-            for (int i = 0; i < _registeredTensors.Count; i++)
-            {
-                var registered = _registeredTensors[i];
-                bool alreadyDeclared = false;
-                for (int j = 0; j < declared.Count; j++)
-                {
-                    if (ReferenceEquals(declared[j].Tensor, registered))
-                    {
-                        alreadyDeclared = true;
-                        break;
-                    }
-                }
-
-                if (!alreadyDeclared)
-                    count = checked(count + TrainableScalarCount(registered));
-            }
         }
         else
         {
@@ -1122,13 +1100,14 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
             }
         }
 
-        // A declaration may conservatively project future storage, but it can never describe less
-        // than the state the canonical value walk can already read. Mixed generated/runtime
-        // registrations and replacement epochs are migration paths where the live walk is the more
-        // complete source. Preserve a larger lazy declaration while flooring the snapshot at the
-        // currently materialized surface.
+        // A generated shape declaration predicts the complete local surface, while the ordered
+        // component walk observes what is live now. Migration-era mixed layers can expose either a
+        // larger lazy declaration or additional runtime-registered tensors, so choose the larger
+        // complete view rather than adding them: generated and registered views commonly describe
+        // the same storage and summing them double-counts recurrent and composite layers.
         long materializedCount = GetOwnMaterializedParameterCount();
         if (materializedCount > count) count = materializedCount;
+
         return true;
     }
 
