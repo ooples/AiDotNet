@@ -74,7 +74,7 @@ public static class SegmentationRenderer
         SegmentationVisualizationConfig config)
     {
         if (config is null) throw new ArgumentNullException(nameof(config));
-        RejectUnrenderableOptions(config);
+        RejectLabelsWithoutInstanceContext(config);
 
         return Draw(
             image ?? throw new ArgumentNullException(nameof(image)),
@@ -103,15 +103,19 @@ public static class SegmentationRenderer
         if (output is null) throw new ArgumentNullException(nameof(output));
 
         config ??= new SegmentationVisualizationConfig();
-        RejectUnrenderableOptions(config);
 
         var numOps = MathHelper.GetNumericOperations<T>();
         byte[,] palette = ResolvePalette(config) ?? BuildPalette(Math.Max(output.NumClasses, 1));
 
         Tensor<T> masks;
+        // Kept instance indices, so labels can be looked up against the ORIGINAL arrays after
+        // low-scoring instances are filtered out. Null when drawing a class map instead.
+        List<int>? keptInstances = null;
+
         if (output.InstanceMasks is not null && output.NumInstances > 0)
         {
-            masks = FilterInstancesByScore(output, config, numOps);
+            keptInstances = SelectInstancesToDraw(output, config, numOps);
+            masks = SelectMasks(output.InstanceMasks, keptInstances);
         }
         else if (output.ClassMap is not null)
         {
@@ -129,18 +133,27 @@ public static class SegmentationRenderer
         if (config.ShowBoundingBoxes && output.InstanceBoxes is not null)
             DrawBoxes(rendered, output.InstanceBoxes, palette, numOps);
 
+        if ((config.ShowLabels || config.ShowScores) && keptInstances is not null)
+            DrawInstanceLabels(rendered, masks, output, keptInstances, config, palette, numOps);
+
         return rendered;
     }
 
-    private static void RejectUnrenderableOptions(SegmentationVisualizationConfig config)
+    /// <summary>
+    /// Labels need a per-instance class and position, which only <see cref="Render{T}"/> has. The
+    /// mask-only overloads therefore reject the flags rather than ignoring them: a silently dropped
+    /// setting is the defect AIDN090 exists to prevent, and here the caller simply needs the overload
+    /// that carries the information labels require.
+    /// </summary>
+    private static void RejectLabelsWithoutInstanceContext(SegmentationVisualizationConfig config)
     {
         if (config.ShowLabels || config.ShowScores)
         {
             throw new NotSupportedException(
-                "ShowLabels/ShowScores require rendering text, which needs a glyph rasterizer this " +
-                "library does not depend on. Draw the overlay here and composite labels in your own " +
-                "UI layer, or leave both flags off. They are rejected rather than ignored so the " +
-                "setting cannot be silently dropped.");
+                "ShowLabels/ShowScores need per-instance classes and scores, which a bare mask stack " +
+                "does not carry. Call Render(image, SegmentationOutput, config) instead — it has the " +
+                "class ids, names and scores to label. The flags are rejected rather than ignored so " +
+                "the setting cannot be silently dropped.");
         }
     }
 
@@ -410,15 +423,16 @@ public static class SegmentationRenderer
         return unbatched;
     }
 
-    private static Tensor<T> FilterInstancesByScore<T>(
+    /// <summary>
+    /// Chooses which instances to draw, dropping any scoring below
+    /// <see cref="SegmentationVisualizationConfig.MinDisplayConfidence"/>. Instances with no score are
+    /// kept, since an absent score is not evidence of a weak detection.
+    /// </summary>
+    private static List<int> SelectInstancesToDraw<T>(
         SegmentationOutput<T> output, SegmentationVisualizationConfig config, INumericOperations<T> numOps)
     {
-        var masks = output.InstanceMasks!;
         var scores = output.InstanceScores;
-        int count = masks.Shape[0];
-        int height = masks.Shape[1];
-        int width = masks.Shape[2];
-
+        int count = output.InstanceMasks!.Shape[0];
         var keep = new List<int>(count);
         for (int i = 0; i < count; i++)
         {
@@ -428,15 +442,111 @@ public static class SegmentationRenderer
                 keep.Add(i);
             }
         }
+        return keep;
+    }
 
+    private static Tensor<T> SelectMasks<T>(Tensor<T> masks, List<int> keep)
+    {
+        int count = masks.Shape[0];
         if (keep.Count == count) return masks;
 
+        int height = masks.Shape[1];
+        int width = masks.Shape[2];
         var filtered = new Tensor<T>([keep.Count, height, width]);
         for (int k = 0; k < keep.Count; k++)
             for (int y = 0; y < height; y++)
                 for (int x = 0; x < width; x++)
                     filtered[k, y, x] = masks[keep[k], y, x];
         return filtered;
+    }
+
+    /// <summary>
+    /// Draws a text label for each drawn instance, anchored just above its mask's top-left extent so
+    /// the label sits outside the region it names wherever there is room.
+    /// </summary>
+    private static void DrawInstanceLabels<T>(
+        Tensor<T> rgb,
+        Tensor<T> drawnMasks,
+        SegmentationOutput<T> output,
+        List<int> keptInstances,
+        SegmentationVisualizationConfig config,
+        byte[,] palette,
+        INumericOperations<T> numOps)
+    {
+        int height = rgb.Shape[1];
+        int width = rgb.Shape[2];
+        double scaleRange = DetectScale(rgb, numOps);
+        var half = numOps.FromDouble(0.5);
+        int paletteSize = palette.GetLength(0);
+
+        for (int drawn = 0; drawn < keptInstances.Count && drawn < drawnMasks.Shape[0]; drawn++)
+        {
+            int original = keptInstances[drawn];
+
+            // Top-left extent of this mask; skip empty masks, which have nothing to label.
+            int minY = int.MaxValue, minX = int.MaxValue;
+            for (int y = 0; y < height; y++)
+            {
+                for (int x = 0; x < width; x++)
+                {
+                    if (numOps.LessThanOrEquals(drawnMasks[drawn, y, x], half)) continue;
+                    if (y < minY) minY = y;
+                    if (x < minX) minX = x;
+                }
+            }
+            if (minY == int.MaxValue) continue;
+
+            string text = BuildLabelText(output, original, config);
+            if (text.Length == 0) continue;
+
+            // Prefer just above the mask; fall back to inside it when there is no room.
+            int textHeight = BitmapFont5x7.MeasureHeight(1);
+            int originY = minY - textHeight - 1;
+            if (originY < 0) originY = minY + 1;
+
+            double r = palette[drawn % paletteSize, 0] * scaleRange / 255.0;
+            double g = palette[drawn % paletteSize, 1] * scaleRange / 255.0;
+            double b = palette[drawn % paletteSize, 2] * scaleRange / 255.0;
+
+            BitmapFont5x7.DrawText(rgb, numOps, text, minX, originY, r, g, b);
+        }
+    }
+
+    private static string BuildLabelText<T>(
+        SegmentationOutput<T> output, int instanceIndex, SegmentationVisualizationConfig config)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        string label = string.Empty;
+
+        if (config.ShowLabels)
+        {
+            string? name = output.Segments is not null && instanceIndex < output.Segments.Count
+                ? output.Segments[instanceIndex].ClassName
+                : null;
+
+            if (!string.IsNullOrEmpty(name))
+            {
+                label = name!;
+            }
+            else if (output.InstanceClasses is not null && instanceIndex < output.InstanceClasses.Length)
+            {
+                label = $"class {output.InstanceClasses[instanceIndex]}";
+            }
+            else
+            {
+                label = $"#{instanceIndex}";
+            }
+        }
+
+        if (config.ShowScores && output.InstanceScores is not null
+            && instanceIndex < output.InstanceScores.Length)
+        {
+            double score = numOps.ToDouble(output.InstanceScores[instanceIndex]);
+            string scoreText = score.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture);
+            label = label.Length == 0 ? scoreText : $"{label} {scoreText}";
+        }
+
+        return label;
     }
 
     /// <summary>

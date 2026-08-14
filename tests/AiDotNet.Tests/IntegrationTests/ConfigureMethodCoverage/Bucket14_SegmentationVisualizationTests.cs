@@ -176,19 +176,21 @@ public class Bucket14_SegmentationVisualizationTests : ConfigureMethodTestBase
     }
 
     /// <summary>
-    /// ShowLabels/ShowScores need a glyph rasterizer this library does not depend on. They must throw
-    /// rather than no-op: silently ignoring them would be the very defect this PR exists to remove.
+    /// A bare mask stack carries no classes or scores, so the mask-only overload cannot label. It must
+    /// throw and point at the overload that can, rather than no-op — silently ignoring the setting is
+    /// the defect this PR exists to remove.
     /// </summary>
     [Fact]
     [Trait("category", "integration-configure-method")]
-    public void ShowLabels_ThrowsRatherThanSilentlyIgnoringTheSetting()
+    public void ShowLabels_OnTheMaskOnlyOverload_ThrowsRatherThanSilentlyIgnoringTheSetting()
     {
         var image = SolidImage(4, 4, 0.5f);
         var masks = OnesMask(4, 4);
 
         var withLabels = new SegmentationVisualizationConfig { ShowLabels = true };
-        Assert.Throws<NotSupportedException>(
+        var ex = Assert.Throws<NotSupportedException>(
             () => SegmentationRenderer.DrawSegmentationMasks(image, masks, withLabels));
+        Assert.Contains("Render(image, SegmentationOutput, config)", ex.Message);
 
         var withScores = new SegmentationVisualizationConfig { ShowLabels = false, ShowScores = true };
         Assert.Throws<NotSupportedException>(
@@ -197,6 +199,74 @@ public class Bucket14_SegmentationVisualizationTests : ConfigureMethodTestBase
         // ...and with both off it renders normally, so the guard is not simply rejecting everything.
         var plain = new SegmentationVisualizationConfig { ShowLabels = false, ShowScores = false };
         var rendered = SegmentationRenderer.DrawSegmentationMasks(image, masks, plain);
+        Assert.Equal(3, rendered.Shape[0]);
+    }
+
+    /// <summary>
+    /// Labels genuinely render through <see cref="SegmentationRenderer.Render{T}"/>, using the embedded
+    /// 5x7 bitmap font. Asserted by comparing against the same render with labels off: enabling labels
+    /// must change pixels OUTSIDE the mask (the text sits above it), which a no-op cannot do.
+    /// </summary>
+    [Fact]
+    [Trait("category", "integration-configure-method")]
+    public void Render_WithShowLabels_ActuallyDrawsText()
+    {
+        var image = SolidImage(32, 48, 0.0f);
+        var instanceMasks = new Tensor<float>([1, 32, 48]);
+        for (int y = 12; y < 20; y++)
+            for (int x = 4; x < 30; x++)
+                instanceMasks[0, y, x] = 1.0f;
+
+        var output = new SegmentationOutput<float>
+        {
+            InstanceMasks = instanceMasks,
+            InstanceClasses = new[] { 7 },
+            InstanceScores = new[] { 0.87f },
+            NumClasses = 10,
+            ImageHeight = 32,
+            ImageWidth = 48,
+        };
+
+        var withoutLabels = SegmentationRenderer.Render(image, output,
+            new SegmentationVisualizationConfig { Alpha = 1.0, DrawContours = false, ShowLabels = false });
+        var withLabels = SegmentationRenderer.Render(image, output,
+            new SegmentationVisualizationConfig { Alpha = 1.0, DrawContours = false, ShowLabels = true, ShowScores = true });
+
+        int changedOutsideMask = 0;
+        for (int y = 0; y < 32; y++)
+            for (int x = 0; x < 48; x++)
+                if (instanceMasks[0, y, x] == 0f
+                    && withLabels[0, y, x] != withoutLabels[0, y, x])
+                    changedOutsideMask++;
+
+        Assert.True(changedOutsideMask > 0,
+            "Enabling ShowLabels/ShowScores changed no pixel outside the mask — the label was not drawn.");
+    }
+
+    /// <summary>
+    /// The default config is renderable. ShowLabels defaults to true, so a renderer that could not draw
+    /// text would make the most obvious call — Render(image, output) — throw.
+    /// </summary>
+    [Fact]
+    [Trait("category", "integration-configure-method")]
+    public void Render_WithDefaultConfig_Succeeds()
+    {
+        var image = SolidImage(24, 24, 0.2f);
+        var instanceMasks = new Tensor<float>([1, 24, 24]);
+        for (int y = 8; y < 16; y++)
+            for (int x = 8; x < 16; x++)
+                instanceMasks[0, y, x] = 1.0f;
+
+        var output = new SegmentationOutput<float>
+        {
+            InstanceMasks = instanceMasks,
+            InstanceClasses = new[] { 1 },
+            NumClasses = 2,
+            ImageHeight = 24,
+            ImageWidth = 24,
+        };
+
+        var rendered = SegmentationRenderer.Render(image, output);
         Assert.Equal(3, rendered.Shape[0]);
     }
 
