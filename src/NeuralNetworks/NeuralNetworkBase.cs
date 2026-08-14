@@ -43,7 +43,8 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     ISupportsLossFunction<T>, AiDotNet.Models.Parameters.IParameterManifestProvider,
     AiDotNet.Models.Parameters.IParameterLayoutSource,
     AiDotNet.Models.Parameters.IParameterChunkSource<T>,
-    AiDotNet.Models.Parameters.IParameterMaterializationSource
+    AiDotNet.Models.Parameters.IParameterMaterializationSource,
+    AiDotNet.Models.Parameters.IParameterSurfaceLifecycle
 {
     /// <summary>
     /// Disposes a rejected copy-on-write candidate without crossing an ownership boundary back
@@ -4204,6 +4205,19 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         {
             if (extra is LayerBase<T> extraLayer) extraLayer.MaterializeParameters();
         }
+    }
+
+    /// <inheritdoc />
+    void AiDotNet.Models.Parameters.IParameterSurfaceLifecycle.PrepareParameterSurface(
+        AiDotNet.Models.Parameters.ParameterSurfaceIntent intent)
+    {
+        EnsureParametersReady();
+        ResolveLazyLayerShapes();
+        if (intent != AiDotNet.Models.Parameters.ParameterSurfaceIntent.Describe)
+            MaterializeParameters();
+
+        _ = ParameterComponents;
+        _parameterRegistry.PrepareParameterSurface(intent);
     }
 
     /// <summary>

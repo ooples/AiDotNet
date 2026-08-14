@@ -551,6 +551,56 @@ public interface IParameterMaterializationSource
     void MaterializeParameters();
 }
 
+/// <summary>Identifies why a caller is preparing a parameter surface.</summary>
+/// <remarks>
+/// A shape-only metadata query and a concrete value read are deliberately different operations.
+/// Treating both as "materialize everything" makes foundation-scale model inspection allocate
+/// billions of values; treating both as "describe whatever exists now" lets the first value read
+/// grow the manifest after its offsets have already been captured. This intent is the common
+/// vocabulary used by generated component accessors, model bases and the registry transaction.
+/// </remarks>
+public enum ParameterSurfaceIntent
+{
+    /// <summary>Resolve construction-known structure and shapes without allocating values.</summary>
+    Describe,
+
+    /// <summary>Prepare all shape-resolved values for one exact flat read.</summary>
+    Read,
+
+    /// <summary>Prepare values for stable-ID ordered, potentially streaming enumeration.</summary>
+    EnumerateChunks,
+
+    /// <summary>Prepare a destination before applying an exact checkpoint payload.</summary>
+    Restore,
+
+    /// <summary>Prepare durable state before a checkpoint manifest is captured.</summary>
+    Checkpoint,
+
+    /// <summary>Prepare optimizer-visible state before the first training snapshot.</summary>
+    Train
+}
+
+/// <summary>
+/// Implemented by parameter sources whose structure or storage becomes ready in lifecycle stages.
+/// </summary>
+/// <remarks>
+/// <para>
+/// This is a capability contract, not a trainability inference. A source may contain trainable,
+/// frozen, fitted, buffered, or external slots; their explicit manifest roles remain authoritative.
+/// </para>
+/// <para>
+/// Implementations must be idempotent. <see cref="ParameterSurfaceIntent.Describe"/> must not
+/// allocate parameter storage, while concrete intents may materialize only slots whose shapes are
+/// already resolved. Truly data-dependent shapes remain deferred and produce the normal readiness
+/// diagnostic rather than being guessed from a dummy forward.
+/// </para>
+/// </remarks>
+public interface IParameterSurfaceLifecycle
+{
+    /// <summary>Advances this source only as far as the requested operation requires.</summary>
+    void PrepareParameterSurface(ParameterSurfaceIntent intent);
+}
+
 /// <summary>
 /// Implemented by generated partial classes so automated registration composes with hand-written
 /// exceptional registration instead of either surface suppressing the other.

@@ -33,9 +33,8 @@ namespace AiDotNet.Generators;
 /// diagnostic in this repo (AIDN050-052 and friends) uses this shape.
 /// </para>
 /// <para>
-/// Warning severity during migration so the build stays green while layers are converted. These
-/// become errors once the count reaches zero, at which point forgetting is impossible rather than
-/// merely detectable.
+/// Manual parameter surfaces are compiler errors. The migration count reached zero, so reintroducing
+/// one now fails at authoring time instead of waiting for a count/vector/restore shard to find drift.
 /// </para>
 /// </remarks>
 [Generator]
@@ -48,7 +47,7 @@ public class ParameterAutomationAnalyzer : IIncrementalGenerator
         title: "Parameter surface is derived and should not be overridden",
         messageFormat: "'{0}' overrides {1}; LayerBase derives it from the same registry, so this can only restate the fold or drift from it",
         category: Category,
-        defaultSeverity: DiagnosticSeverity.Warning,
+        defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true,
         description: "Delete the override and let LayerBase derive the value. ParameterCount, GetParameters and " +
                      "SetParameters fold one enumeration in one order, so they cannot disagree.");
@@ -58,7 +57,7 @@ public class ParameterAutomationAnalyzer : IIncrementalGenerator
         title: "Model parameter surface is derived and should not be overridden",
         messageFormat: "'{0}' overrides {1}; the model base derives it from the registered components, so this can only restate the fold or drift from it",
         category: Category,
-        defaultSeverity: DiagnosticSeverity.Warning,
+        defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true,
         description: "Declare the model's components in RegisterComponents and delete the override. " +
                      "A hand-written model surface is how a count and a vector come to disagree: 44 " +
@@ -501,7 +500,8 @@ public class ParameterAutomationAnalyzer : IIncrementalGenerator
                             if (ms is null) continue;
                             var mloc = member.Locations.FirstOrDefault(l => l.IsInSource);
                             if (mloc is not null)
-                                spc.ReportDiagnostic(Diagnostic.Create(RedundantModelSurface, mloc, type.Name, ms));
+                                spc.ReportDiagnostic(Diagnostic.Create(
+                                    RedundantModelSurface, mloc, type.Name, ms));
                         }
 
                         // AIDN084: weights the model owns but never declares. The count-vs-vector
@@ -620,7 +620,8 @@ public class ParameterAutomationAnalyzer : IIncrementalGenerator
                     if (surface is null) continue;
                     var ml = member.Locations.FirstOrDefault(l => l.IsInSource);
                     if (ml is null) continue;
-                    spc.ReportDiagnostic(Diagnostic.Create(RedundantParameterSurface, ml, type.Name, surface));
+                    spc.ReportDiagnostic(Diagnostic.Create(
+                        RedundantParameterSurface, ml, type.Name, surface));
                 }
             }
         });

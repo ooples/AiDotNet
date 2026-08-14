@@ -854,6 +854,91 @@ public class ParameterManifestTests
     }
 
     [Fact]
+    public async Task Describe_PreparesEveryComponentBeforeCapturingOneTransactionalLayout()
+    {
+        await Task.Yield();
+        var deferred = new AlwaysDeferredLifecycleSource();
+        var resolved = new LifecycleProbeSource();
+        var registry = new ParameterComponentRegistry<double>();
+        registry.Register("a-deferred", deferred);
+        registry.Register("z-resolved", resolved);
+
+        var error = Assert.Throws<ParameterLayoutNotReadyException>(() => _ = registry.ParameterCount);
+
+        Assert.Equal(1, deferred.DescribeCount);
+        Assert.Equal(1, resolved.DescribeCount);
+        Assert.Equal(0, resolved.AllocationCount);
+        Assert.Equal(
+            ParameterReadiness.ShapeDeferred,
+            Assert.Single(error.Layout.Slots, slot => slot.StableId == "a-deferred").Readiness);
+        Assert.All(
+            error.Layout.Slots.Where(slot => slot.StableId.StartsWith("z-resolved/", StringComparison.Ordinal)),
+            slot =>
+            {
+                Assert.Equal(ParameterReadiness.ShapeResolvedUnmaterialized, slot.Readiness);
+                Assert.NotNull(slot.ParameterCount);
+            });
+    }
+
+    [Fact]
+    public async Task GeneratedComponentLifecycle_DescribeIsAllocationFreeAndReadIsIdempotent()
+    {
+        await Task.Yield();
+        var component = new LifecycleProbeSource();
+        var registry = new ParameterComponentRegistry<double>();
+        registry.Register("owner", new ComponentAccessorParameterSource<double>(() => component));
+
+        var described = registry.ParameterLayout;
+        Assert.Equal(3, registry.ParameterCount);
+        Assert.Equal(ParameterReadiness.ShapeResolvedUnmaterialized, described.Readiness);
+        Assert.Equal(0, component.AllocationCount);
+        Assert.Equal(new[] { "owner/running", "owner/weight" },
+            described.Slots.Select(slot => slot.StableId).OrderBy(id => id, StringComparer.Ordinal));
+        Assert.Equal(ParameterSlotRole.Buffer,
+            Assert.Single(described.Slots, slot => slot.StableId == "owner/running").Role);
+        Assert.Equal(ParameterSlotRole.Trainable,
+            Assert.Single(described.Slots, slot => slot.StableId == "owner/weight").Role);
+
+        var first = registry.GetParameters();
+        var second = registry.GetParameters();
+
+        Assert.Equal(new[] { 1d, 2d, 3d }, first.ToArray());
+        Assert.Equal(first.ToArray(), second.ToArray());
+        Assert.Equal(1, component.AllocationCount);
+        Assert.Equal(3, registry.ParameterCount);
+    }
+
+    [Fact]
+    public async Task GeneratedComponentLifecycle_RestorePreparesDestinationBeforeApplyingValues()
+    {
+        await Task.Yield();
+        var component = new LifecycleProbeSource();
+        var registry = new ParameterComponentRegistry<double>();
+        registry.Register("owner", new ComponentAccessorParameterSource<double>(() => component));
+
+        registry.SetParameters(new Vector<double>(new[] { 4d, 5d, 6d }));
+
+        Assert.Equal(1, component.AllocationCount);
+        Assert.Equal(1, component.RestoreCount);
+        Assert.Equal(new[] { 4d, 5d, 6d }, registry.GetParameters().ToArray());
+    }
+
+    [Fact]
+    public async Task GeneratedComponentLifecycle_ConcurrentReadsMaterializeOnceAndStayStable()
+    {
+        await Task.Yield();
+        var component = new LifecycleProbeSource();
+        var registry = new ParameterComponentRegistry<double>();
+        registry.Register("owner", new ComponentAccessorParameterSource<double>(() => component));
+
+        var reads = await Task.WhenAll(Enumerable.Range(0, 12)
+            .Select(_ => Task.Run(() => registry.GetParameters().ToArray())));
+
+        Assert.Equal(1, component.AllocationCount);
+        Assert.All(reads, values => Assert.Equal(new[] { 1d, 2d, 3d }, values));
+    }
+
+    [Fact]
     public async Task NeuralNetworkManifest_DescribesTheCompletePublicSurface()
     {
         await Task.Yield();
@@ -992,10 +1077,16 @@ public class ParameterManifestTests
         var policy = new AiDotNet.ReinforcementLearning.Policies.BetaPolicy<double>();
 
         var parameters = policy.GetParameters();
+        var layout = policy.ParameterLayout;
 
         Assert.Equal(policy.ParameterCount, parameters.Length);
-        Assert.Equal(policy.ParameterCount, policy.ParameterLayout.ParameterCount);
-        Assert.Single(policy.ParameterLayout.Slots);
+        Assert.Equal(policy.ParameterCount, layout.ParameterCount);
+        Assert.Single(policy.GetNetworks());
+        Assert.True(layout.Slots.Count > 1);
+        Assert.Equal(layout.Slots.Count,
+            layout.Slots.Select(slot => slot.StableId).Distinct(StringComparer.Ordinal).Count());
+        Assert.Equal(policy.ParameterCount,
+            layout.Slots.Sum(slot => slot.ParameterCount.GetValueOrDefault()));
     }
 
     [Fact]
@@ -1053,6 +1144,114 @@ internal sealed class ContractProbeSource : IParameterSource<double>, IParameter
     public void SetParameters(Vector<double> parameters)
     {
         LastRestored = parameters.ToArray();
+    }
+}
+
+internal sealed class AlwaysDeferredLifecycleSource :
+    IParameterSource<double>, IParameterLayoutSource, IParameterSurfaceLifecycle
+{
+    public int DescribeCount { get; private set; }
+
+    public long ParameterCount => 0;
+
+    public void PrepareParameterSurface(ParameterSurfaceIntent intent)
+    {
+        if (intent == ParameterSurfaceIntent.Describe) DescribeCount++;
+    }
+
+    public IReadOnlyList<ParameterSlotDescriptor> GetParameterLayout() =>
+        new[]
+        {
+            new ParameterSlotDescriptor(
+                "$", ParameterSlotRole.Trainable, ParameterReadiness.ShapeDeferred, null)
+        };
+
+    public Vector<double> GetParameters() =>
+        throw new InvalidOperationException("A genuinely deferred source cannot be read.");
+
+    public void SetParameters(Vector<double> parameters) =>
+        throw new InvalidOperationException("A genuinely deferred source cannot be restored.");
+}
+
+internal sealed class LifecycleProbeSource :
+    IParameterSource<double>, IParameterLayoutSource, IParameterSurfaceLifecycle
+{
+    private readonly object _gate = new();
+    private bool _structureReady;
+    private bool _materialized;
+    private double[] _values = new[] { 1d, 2d, 3d };
+
+    public int DescribeCount { get; private set; }
+    public int AllocationCount { get; private set; }
+    public int RestoreCount { get; private set; }
+    public long ParameterCount => _structureReady ? 3 : 0;
+
+    public void PrepareParameterSurface(ParameterSurfaceIntent intent)
+    {
+        lock (_gate)
+        {
+            _structureReady = true;
+            if (intent == ParameterSurfaceIntent.Describe)
+            {
+                DescribeCount++;
+                return;
+            }
+
+            if (_materialized) return;
+            _materialized = true;
+            AllocationCount++;
+        }
+    }
+
+    public IReadOnlyList<ParameterSlotDescriptor> GetParameterLayout()
+    {
+        lock (_gate)
+        {
+            if (!_structureReady)
+            {
+                return new[]
+                {
+                    new ParameterSlotDescriptor(
+                        "$", ParameterSlotRole.Trainable, ParameterReadiness.ShapeDeferred, null)
+                };
+            }
+
+            var readiness = _materialized
+                ? ParameterReadiness.Materialized
+                : ParameterReadiness.ShapeResolvedUnmaterialized;
+            return new[]
+            {
+                new ParameterSlotDescriptor(
+                    "weight", ParameterSlotRole.Trainable, readiness, 2,
+                    shape: new[] { 2 }, elementType: typeof(double).FullName),
+                new ParameterSlotDescriptor(
+                    "running", ParameterSlotRole.Buffer, readiness, 1,
+                    shape: new[] { 1 }, elementType: typeof(double).FullName)
+            };
+        }
+    }
+
+    public Vector<double> GetParameters()
+    {
+        lock (_gate)
+        {
+            if (!_materialized)
+                throw new InvalidOperationException("Read must prepare the component first.");
+            return new Vector<double>(_values);
+        }
+    }
+
+    public void SetParameters(Vector<double> parameters)
+    {
+        lock (_gate)
+        {
+            if (!_materialized)
+                throw new InvalidOperationException("Restore must prepare the component first.");
+            if (parameters.Length != 3)
+                throw new ArgumentException("Expected three parameters.", nameof(parameters));
+            _values = parameters.ToArray();
+            RestoreCount++;
+        }
     }
 }
 

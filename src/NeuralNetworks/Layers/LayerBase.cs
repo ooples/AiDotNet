@@ -38,7 +38,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSource<T>,
-    IParameterLayoutSource, IDisposable
+    IParameterLayoutSource, IParameterSurfaceLifecycle, IDisposable
 {
     /// <summary>
     /// Counter for generating unique instance IDs across all layer instances.
@@ -895,6 +895,14 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     /// have nothing to allocate until their first real forward).
     /// </remarks>
     internal void MaterializeParameters() => EnsureParametersMaterialized();
+
+    /// <inheritdoc />
+    void IParameterSurfaceLifecycle.PrepareParameterSurface(ParameterSurfaceIntent intent)
+    {
+        EnsureDeclaredSubLayerStructure();
+        if (intent != ParameterSurfaceIntent.Describe)
+            EnsureMaterializedForParameterSurface();
+    }
 
     /// <summary>
     /// Brings a sub-layer all the way up -- shape first, then weights -- so a composite's parameter

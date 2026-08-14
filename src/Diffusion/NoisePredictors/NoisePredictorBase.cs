@@ -30,7 +30,8 @@ namespace AiDotNet.Diffusion.NoisePredictors;
 /// </para>
 /// </remarks>
 public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape,
-    AiDotNet.Models.Parameters.IParameterLayoutSource, IDisposable
+    AiDotNet.Models.Parameters.IParameterLayoutSource,
+    AiDotNet.Models.Parameters.IParameterSurfaceLifecycle, IDisposable
 {
     /// <summary>
     /// Provides access to the hardware-accelerated tensor engine.
@@ -674,6 +675,21 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape,
         }
     }
 
+    /// <inheritdoc />
+    void AiDotNet.Models.Parameters.IParameterSurfaceLifecycle.PrepareParameterSurface(
+        AiDotNet.Models.Parameters.ParameterSurfaceIntent intent)
+    {
+        EnsureParameterStructureReady();
+        if (intent == AiDotNet.Models.Parameters.ParameterSurfaceIntent.Describe) return;
+
+        EnsureParametersReadyGuarded();
+        foreach (var layer in ReflectInstanceLayers(this))
+        {
+            if (layer is AiDotNet.Models.Parameters.IParameterSurfaceLifecycle lifecycle)
+                lifecycle.PrepareParameterSurface(intent);
+        }
+    }
+
     /// <summary>
     /// Streams the predictor's trainable weight tensors per-tensor without
     /// materialising a flat aggregate, mirroring PyTorch's
@@ -1311,6 +1327,24 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape,
         // tensor allocated by ResolveFromShape is discarded; only the shape is used.
         ln.ResolveFromShape(new[] { 1, featureSize });
         return ln;
+    }
+
+    /// <summary>
+    /// Creates a layer normalization whose architecture-known width is visible to the parameter
+    /// manifest without allocating gamma or beta until a concrete value operation or forward pass.
+    /// </summary>
+    protected static LayerNormalizationLayer<T> LazyLayerNorm(int featureSize)
+    {
+        if (featureSize <= 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(featureSize),
+                $"LazyLayerNorm requires a positive feature size; got {featureSize}.");
+        }
+
+        var layer = new LayerNormalizationLayer<T>();
+        layer.ResolveShapesOnly(new[] { featureSize });
+        return layer;
     }
 
     /// <summary>

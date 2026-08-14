@@ -312,13 +312,34 @@ public partial class LayerNormalizationLayer<T> : LayerBase<T>, IShapeContract
                 nameof(input));
         }
 
+        if (IsResolvingShapesOnly)
+        {
+            ResolveShapes(new[] { featureSize }, new[] { featureSize });
+            return;
+        }
+
+        EnsureAffineParameters(featureSize);
+        ResolveShapes(new[] { featureSize }, new[] { featureSize });
+    }
+
+    /// <inheritdoc />
+    protected override void EnsureInitialized()
+    {
+        if (_gamma.Length > 0 || !IsShapeResolved) return;
+
+        int featureSize = InputShape[InputShape.Length - 1];
+        if (featureSize > 0)
+            EnsureAffineParameters(featureSize);
+    }
+
+    private void EnsureAffineParameters(int featureSize)
+    {
+        if (_gamma.Length > 0) return;
+
         _gamma = Tensor<T>.CreateDefault([featureSize], NumOps.One);
         _beta = Tensor<T>.CreateDefault([featureSize], NumOps.Zero);
-
         RegisterTrainableParameter(_gamma, PersistentTensorRole.NormalizationParams);
         RegisterTrainableParameter(_beta, PersistentTensorRole.NormalizationParams);
-
-        ResolveShapes(new[] { featureSize }, new[] { featureSize });
     }
 
     /// <summary>

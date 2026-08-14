@@ -476,7 +476,7 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
             _labelEmbed = LazyDense(numClasses, timeEmbedDim);
         }
 
-        _finalNorm = new LayerNormalizationLayer<T>();
+        _finalNorm = LazyLayerNorm(_hiddenSize);
         _adaln_modulation = LazyDense(timeEmbedDim, _hiddenSize * 2);
         _outputProj = LazyDense(_hiddenSize, patchDim);
 
@@ -501,13 +501,13 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
 
                 _blocks.Add(new DiTBlock
                 {
-                    Norm1 = new LayerNormalizationLayer<T>(),
+                    Norm1 = LazyLayerNorm(_hiddenSize),
                     Attention = CreateAttentionLayer(),
-                    Norm2 = new LayerNormalizationLayer<T>(),
+                    Norm2 = LazyLayerNorm(_hiddenSize),
                     MLP1 = mlp1,
                     MLP2 = LazyDense((int)(_hiddenSize * _mlpRatio), _hiddenSize),
                     AdaLNModulation = LazyDense(timeEmbedDim, _hiddenSize * 6),
-                    CrossAttnNorm = new LayerNormalizationLayer<T>(),
+                    CrossAttnNorm = LazyLayerNorm(_hiddenSize),
                     CrossAttnQ = LazyDense(_hiddenSize, _hiddenSize),
                     CrossAttnK = LazyDense(_contextDim, _hiddenSize),
                     CrossAttnV = LazyDense(_contextDim, _hiddenSize),
@@ -532,13 +532,13 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
         {
             _blocks.Add(new DiTBlock
             {
-                Norm1 = new LayerNormalizationLayer<T>(),
+                Norm1 = LazyLayerNorm(_hiddenSize),
                 Attention = CreateAttentionLayer(),
-                Norm2 = new LayerNormalizationLayer<T>(),
+                Norm2 = LazyLayerNorm(_hiddenSize),
                 MLP1 = LazyDense(_hiddenSize, mlpHidden, new GELUActivation<T>()),
                 MLP2 = LazyDense(mlpHidden, _hiddenSize),
                 AdaLNModulation = LazyDense(timeEmbedDim, _hiddenSize * 6),
-                CrossAttnNorm = new LayerNormalizationLayer<T>(),
+                CrossAttnNorm = LazyLayerNorm(_hiddenSize),
                 CrossAttnQ = LazyDense(_hiddenSize, _hiddenSize),
                 CrossAttnK = LazyDense(_contextDim, _hiddenSize),
                 CrossAttnV = LazyDense(_contextDim, _hiddenSize),

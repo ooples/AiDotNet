@@ -58,6 +58,7 @@ public sealed class ParameterComponentRegistry<T> : IParameterManifestProvider
 
     private readonly List<Entry> _entries = new();
     private readonly Dictionary<string, int> _legacyOccurrences = new(StringComparer.Ordinal);
+    private readonly object _surfaceGate = new();
 
     /// <summary>The registered, currently present sources in stable-ID order.</summary>
     public IReadOnlyList<IParameterSource<T>> Components
@@ -198,7 +199,16 @@ public sealed class ParameterComponentRegistry<T> : IParameterManifestProvider
 
     /// <inheritdoc />
     public ParameterLayoutSnapshot ParameterLayout
-        => CaptureLayout().Snapshot;
+    {
+        get
+        {
+            lock (_surfaceGate)
+            {
+                PrepareSources(ParameterSurfaceIntent.Describe);
+                return CaptureLayout().Snapshot;
+            }
+        }
+    }
 
     /// <summary>
     /// The exact resolved count. An unresolved layout throws rather than masquerading as a partial
@@ -208,94 +218,47 @@ public sealed class ParameterComponentRegistry<T> : IParameterManifestProvider
     {
         get
         {
-            if (TryComputeCount(out long total)) return total;
-            throw new ParameterLayoutNotReadyException("count", ParameterLayout);
-        }
-    }
-
-    /// <summary>
-    /// Sums the same slots <see cref="ParameterLayout"/> describes, without materializing them.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// Applies the identical deferred rule the snapshot applies -- a slot defers the whole model if
-    /// its readiness says <see cref="ParameterReadiness.ShapeDeferred"/> OR it carries no count --
-    /// so this and the snapshot cannot disagree about either the number or whether there is one.
-    /// </para>
-    /// <para>
-    /// Exists because building the snapshot allocates a descriptor per slot, and the surfaces this
-    /// registry replaced were a plain sum that callers read once per training step. The full
-    /// snapshot is still built on the failure path, where the caller wants it for diagnostics.
-    /// </para>
-    /// </remarks>
-    private bool TryComputeCount(out long total)
-    {
-        total = 0;
-        var ordered = OrderedEntries();
-
-        for (int i = 0; i < ordered.Count; i++)
-        {
-            var entry = ordered[i];
-            var source = entry.Source;
-            if (source is null) return false;
-
-            if (source is IParameterLayoutSource layoutSource)
+            lock (_surfaceGate)
             {
-                var local = layoutSource.GetParameterLayout();
-                for (int j = 0; j < local.Count; j++)
-                {
-                    var slot = local[j];
-                    if (slot.Readiness == ParameterReadiness.ShapeDeferred
-                        || !slot.ParameterCount.HasValue)
-                    {
-                        bool concreteAbsence = entry.Availability == ParameterAvailability.Conditional
-                            || entry.Availability == ParameterAvailability.External
-                            || (entry.Role == ParameterSlotRole.Buffer
-                                && entry.Availability != ParameterAvailability.Fit);
-                        if (concreteAbsence)
-                            continue;
-                        return false;
-                    }
-
-                    total = checked(total + slot.ParameterCount.Value);
-                }
-            }
-            else
-            {
-                total = checked(total + source.ParameterCount);
+                PrepareSources(ParameterSurfaceIntent.Describe);
+                var layout = CaptureLayout().Snapshot;
+                if (layout.ParameterCount.HasValue) return layout.ParameterCount.Value;
+                throw new ParameterLayoutNotReadyException("count", layout);
             }
         }
-
-        return true;
     }
 
     /// <summary>Concatenates the same stable-ID ordered entries described by the manifest.</summary>
     public Vector<T> GetParameters()
     {
-        var captured = CaptureLayout();
-        var layout = captured.Snapshot;
-        if (!layout.ParameterCount.HasValue)
-            throw new ParameterLayoutNotReadyException("read", layout);
-
-        int total = checked((int)layout.ParameterCount.Value);
-        var result = new Vector<T>(total);
-        int offset = 0;
-        for (int i = 0; i < captured.Entries.Count; i++)
+        lock (_surfaceGate)
         {
-            var item = captured.Entries[i];
-            var source = item.Entry.Source;
-            if (source is null) continue;
-            int expected = checked((int)item.ParameterCount!.Value);
-            if (expected == 0) continue;
-            var part = source.GetParameters();
-            if (part.Length != expected)
-                throw new ParameterContractViolationException(
-                    "read", item.Entry.StableId, expected, part.Length);
+            PrepareSources(ParameterSurfaceIntent.Read);
+            var captured = CaptureLayout();
+            var layout = captured.Snapshot;
+            if (!layout.ParameterCount.HasValue)
+                throw new ParameterLayoutNotReadyException("read", layout);
 
-            part.AsSpan().CopyTo(result.AsWritableSpan().Slice(offset, expected));
-            offset += expected;
+            int total = checked((int)layout.ParameterCount.Value);
+            var result = new Vector<T>(total);
+            int offset = 0;
+            for (int i = 0; i < captured.Entries.Count; i++)
+            {
+                var item = captured.Entries[i];
+                var source = item.Entry.Source;
+                if (source is null) continue;
+                int expected = checked((int)item.ParameterCount!.Value);
+                if (expected == 0) continue;
+                var part = source.GetParameters();
+                if (part.Length != expected)
+                    throw new ParameterContractViolationException(
+                        "read", item.Entry.StableId, expected, part.Length);
+
+                part.AsSpan().CopyTo(result.AsWritableSpan().Slice(offset, expected));
+                offset += expected;
+            }
+            return result;
         }
-        return result;
     }
 
     /// <summary>
@@ -304,9 +267,14 @@ public sealed class ParameterComponentRegistry<T> : IParameterManifestProvider
     /// </summary>
     public IEnumerable<ParameterChunk<T>> GetParameterStateChunks()
     {
-        var captured = CaptureLayout();
-        if (!captured.Snapshot.ParameterCount.HasValue)
-            throw new ParameterLayoutNotReadyException("enumerate chunks", captured.Snapshot);
+        CapturedLayout captured;
+        lock (_surfaceGate)
+        {
+            PrepareSources(ParameterSurfaceIntent.EnumerateChunks);
+            captured = CaptureLayout();
+            if (!captured.Snapshot.ParameterCount.HasValue)
+                throw new ParameterLayoutNotReadyException("enumerate chunks", captured.Snapshot);
+        }
 
         for (int i = 0; i < captured.Entries.Count; i++)
         {
@@ -389,6 +357,16 @@ public sealed class ParameterComponentRegistry<T> : IParameterManifestProvider
     public void SetParameters(Vector<T> parameters)
     {
         if (parameters is null) throw new ArgumentNullException(nameof(parameters));
+
+        lock (_surfaceGate)
+        {
+            PrepareSources(ParameterSurfaceIntent.Restore);
+            SetParametersCore(parameters);
+        }
+    }
+
+    private void SetParametersCore(Vector<T> parameters)
+    {
 
         var captured = CaptureLayout();
         int variableIndex = FindVariableEntryIndex(captured.Entries);
@@ -483,10 +461,17 @@ public sealed class ParameterComponentRegistry<T> : IParameterManifestProvider
     /// </remarks>
     public void MaterializeCheckpointSources()
     {
-        foreach (var entry in OrderedEntries())
+        PrepareParameterSurface(ParameterSurfaceIntent.Checkpoint);
+    }
+
+    /// <summary>
+    /// Advances every generated or manually registered component to one common lifecycle boundary.
+    /// </summary>
+    public void PrepareParameterSurface(ParameterSurfaceIntent intent)
+    {
+        lock (_surfaceGate)
         {
-            if (TryGetNetwork(entry.Source, out var network))
-                network.MaterializeParameters();
+            PrepareSources(intent);
         }
     }
 
@@ -665,11 +650,16 @@ public sealed class ParameterComponentRegistry<T> : IParameterManifestProvider
     /// values. The manifest property itself remains allocation-free, so callers can still inspect
     /// readiness without paying for storage.
     /// </summary>
-    private void MaterializeSources()
+    private void PrepareSources(ParameterSurfaceIntent intent)
     {
-        for (int i = 0; i < _entries.Count; i++)
+        var ordered = OrderedEntries();
+        for (int i = 0; i < ordered.Count; i++)
         {
-            if (_entries[i].Source is IParameterMaterializationSource materializer)
+            var source = ordered[i].Source;
+            if (source is IParameterSurfaceLifecycle lifecycle)
+                lifecycle.PrepareParameterSurface(intent);
+            else if (intent != ParameterSurfaceIntent.Describe
+                && source is IParameterMaterializationSource materializer)
                 materializer.MaterializeParameters();
         }
     }

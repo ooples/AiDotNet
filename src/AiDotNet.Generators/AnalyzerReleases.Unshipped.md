@@ -59,6 +59,8 @@ ADNPORT011 | AiDotNet.TensorPorts | Error | TensorPortContractGenerator, Derived
 ADNPORT012 | AiDotNet.TensorPorts | Error | TensorPortContractGenerator, Input variants have indistinguishable required external signatures
 ADNBUF001 | AiDotNet.ParameterAutomation | Error | TrainableParameterGenerator, Distinct persistent fields declare the same generated buffer identity
 ADNGEN001 | AiDotNet.TestScaffold | Warning | TestScaffoldGenerator, Model cannot be auto-generated a test and therefore has NO coverage
+AIDN081 | AiDotNet.ParameterAutomation | Error | ParameterAutomationAnalyzer, Layer parameter surfaces are derived by LayerBase and cannot be overridden
+AIDN082 | AiDotNet.ParameterAutomation | Error | ParameterAutomationAnalyzer, Model parameter surfaces are derived from registered components and cannot be overridden
 AIDN085 | AiDotNet.ParameterAutomation | Warning | ParameterAutomationAnalyzer, Model owns weights outside Layers but is not partial, so the generator cannot register them
 AIDN086 | AiDotNet.ComponentMetadata | Error | ComponentMetadataValidationGenerator, Layer declares a contradictory gradient contract
 AIDN087 | AiDotNet.ParameterAutomation | Warning | ParameterAutomationAnalyzer, ParameterCount compared against zero as a readiness test (Warning while the backlog is non-zero; promote to Error at zero per the ADNSHAPE006/007 ladder)

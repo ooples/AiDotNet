@@ -40,7 +40,8 @@ namespace AiDotNet.Diffusion;
 /// their unique noise prediction architectures.</para>
 /// </remarks>
 public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableModel<T>, IModelShape, IDisposable,
-    AiDotNet.Interfaces.ISelfSupervisedModel, AiDotNet.Models.Parameters.IParameterManifestProvider
+    AiDotNet.Interfaces.ISelfSupervisedModel, AiDotNet.Models.Parameters.IParameterManifestProvider,
+    AiDotNet.Models.Parameters.IParameterSurfaceLifecycle
 {
     /// <summary>
     /// Concrete diffusion models can override this method to yield the components
@@ -430,6 +431,14 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
     public AiDotNet.Models.Parameters.ParameterLayoutSnapshot ParameterLayout
     {
         get { EnsureComponentsRegistered(); return _parameterRegistry.ParameterLayout; }
+    }
+
+    /// <inheritdoc />
+    void AiDotNet.Models.Parameters.IParameterSurfaceLifecycle.PrepareParameterSurface(
+        AiDotNet.Models.Parameters.ParameterSurfaceIntent intent)
+    {
+        EnsureComponentsRegistered();
+        _parameterRegistry.PrepareParameterSurface(intent);
     }
 
     /// <inheritdoc />

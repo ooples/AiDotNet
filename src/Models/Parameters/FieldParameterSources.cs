@@ -357,7 +357,8 @@ public sealed class VectorFieldWriteThroughSource<T> : IParameterSource<T>, IPar
 /// which for an ensemble is the normal case, not an edge one.
 /// </para>
 /// </remarks>
-public sealed class ComponentCollectionParameterSource<T> : IParameterSource<T>, IParameterLayoutSource
+public sealed class ComponentCollectionParameterSource<T> : IParameterSource<T>, IParameterLayoutSource,
+    IParameterSurfaceLifecycle
 {
     private readonly Func<IEnumerable<IParameterSource<T>>?> _get;
 
@@ -374,6 +375,19 @@ public sealed class ComponentCollectionParameterSource<T> : IParameterSource<T>,
         foreach (var m in items)
         {
             if (m is not null) yield return m;
+        }
+    }
+
+    /// <inheritdoc />
+    public void PrepareParameterSurface(ParameterSurfaceIntent intent)
+    {
+        foreach (var member in Members())
+        {
+            if (member is IParameterSurfaceLifecycle lifecycle)
+                lifecycle.PrepareParameterSurface(intent);
+            else if (intent != ParameterSurfaceIntent.Describe
+                && member is IParameterMaterializationSource materializer)
+                materializer.MaterializeParameters();
         }
     }
 
@@ -531,7 +545,8 @@ public sealed class ComponentCollectionParameterSource<T> : IParameterSource<T>,
 /// <summary>
 /// A lazily obtained component whose identity is registered before the component itself exists.
 /// </summary>
-public sealed class ComponentAccessorParameterSource<T> : IParameterSource<T>, IParameterLayoutSource
+public sealed class ComponentAccessorParameterSource<T> : IParameterSource<T>, IParameterLayoutSource,
+    IParameterSurfaceLifecycle
 {
     private readonly Func<IParameterSource<T>?> _get;
 
@@ -543,6 +558,17 @@ public sealed class ComponentAccessorParameterSource<T> : IParameterSource<T>, I
 
     /// <summary>The current component, used internally to deduplicate and materialize its storage.</summary>
     internal IParameterSource<T>? Current => _get();
+
+    /// <inheritdoc />
+    public void PrepareParameterSurface(ParameterSurfaceIntent intent)
+    {
+        var component = _get();
+        if (component is IParameterSurfaceLifecycle lifecycle)
+            lifecycle.PrepareParameterSurface(intent);
+        else if (intent != ParameterSurfaceIntent.Describe
+            && component is IParameterMaterializationSource materializer)
+            materializer.MaterializeParameters();
+    }
 
     /// <inheritdoc />
     public long ParameterCount => _get()?.ParameterCount ?? 0;
@@ -560,25 +586,26 @@ public sealed class ComponentAccessorParameterSource<T> : IParameterSource<T>, I
             };
         }
 
-        if (component is NeuralNetworks.NeuralNetworkBase<T> network)
-        {
-            var layout = network.ParameterLayout;
-            return new[]
-            {
-                new ParameterSlotDescriptor(
-                    "$", ParameterSlotRole.Trainable, layout.Readiness,
-                    network.ParameterVectorLength)
-            };
-        }
-
         if (component is IParameterManifestProvider manifest)
         {
             var layout = manifest.ParameterLayout;
-            return new[]
+            var slots = new List<ParameterSlotDescriptor>(layout.Slots.Count);
+            for (int i = 0; i < layout.Slots.Count; i++)
             {
-                new ParameterSlotDescriptor(
-                    "$", ParameterSlotRole.Trainable, layout.Readiness, layout.ParameterCount)
-            };
+                var slot = layout.Slots[i];
+                slots.Add(new ParameterSlotDescriptor(
+                    slot.StableId,
+                    slot.Role,
+                    slot.Readiness,
+                    slot.ParameterCount,
+                    shape: slot.Shape,
+                    elementType: slot.ElementType,
+                    updatePolicy: slot.UpdatePolicy,
+                    persistence: slot.Persistence,
+                    ownership: slot.Ownership,
+                    availability: slot.Availability));
+            }
+            return slots;
         }
         if (component is IParameterLayoutSource source)
             return source.GetParameterLayout();
