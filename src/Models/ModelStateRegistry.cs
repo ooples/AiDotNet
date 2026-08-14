@@ -460,9 +460,51 @@ public sealed class ModelStateRegistry<T>
                 {
                     int length = r.ReadInt32();
                     var bytes = r.ReadBytes(length);
-                    if (length > 0 && children is not null && i < children.Count) children[i]?.Deserialize(bytes);
+                    if (length == 0 || children is null) continue;
+
+                    // GROW THE LIST. Restoring in place is right when the parent rebuilt its children
+                    // first, and silently wrong the moment it did not: a CLONE is constructed empty, so
+                    // `i < children.Count` was false for every child and the whole payload was read and
+                    // dropped. RandomForest, ExtremelyRandomizedTrees and AdaBoostR2 all round-tripped
+                    // through Serialize and Deserialize perfectly and still cloned into a forest with no
+                    // trees, which is exactly the silent loss this work exists to remove -- the bytes
+                    // were there, and nothing was listening.
+                    while (children.Count <= i)
+                    {
+                        children.Add(CreateChild(name));
+                    }
+
+                    children[i]?.Deserialize(bytes);
                 }
             });
+
+    /// <summary>Builds an empty child for a restored list to fill.</summary>
+    /// <param name="name">The state name, for the error message when it cannot be built.</param>
+    /// <returns>A new child.</returns>
+    /// <remarks>
+    /// LOUD when it cannot. Returning null here, or skipping the child, would put back the silent drop
+    /// this exists to fix -- and it would look like a model that restored fine and predicts wrongly,
+    /// which is the hardest kind of defect to find. A child that cannot be built without arguments
+    /// needs its parent to build the list before restoring, and the message says so.
+    /// </remarks>
+    private static TChild CreateChild<TChild>(string name)
+        where TChild : class, IModelSerializer
+    {
+        try
+        {
+            if (Activator.CreateInstance(typeof(TChild), nonPublic: true) is TChild child) return child;
+        }
+        catch (MissingMethodException)
+        {
+            // Falls through to the same message; the cause is the same either way.
+        }
+
+        throw new InvalidOperationException(
+            $"State '{name}' carries a list of {typeof(TChild).Name}, and the model being restored has "
+            + "fewer of them than the payload holds. Restoring cannot create one because "
+            + $"{typeof(TChild).Name} has no constructor callable without arguments. Either give it one, "
+            + "or have the model build its list before Deserialize runs.");
+    }
 
     /// <summary>Declares an integer vector, such as a set of selected feature indices.</summary>
     /// <param name="name">A stable name, unique within the model.</param>
