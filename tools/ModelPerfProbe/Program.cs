@@ -19,6 +19,7 @@ internal static class Program
     {
         "constructMs", "targetPreparationMs", "coldForwardMs", "steadyForwardMedianMs", "steadyForwardP95Ms",
         "tapeForwardMs", "backwardMs", "trainStepMs", "allocatedBytes", "wallMs",
+        "runnerElapsedMs", "peakWorkingSetBytes", "peakPrivateMemoryBytes", "runnerCpuMs", "runnerCpuToWallRatio",
     };
 
     private static int Main(string[] args)
@@ -106,8 +107,12 @@ internal static class Program
             {
                 string phase = string.IsNullOrWhiteSpace(record.Phase) ? "unknown" : record.Phase;
                 string detail = string.IsNullOrWhiteSpace(record.Error) ? "no process diagnostic" : record.Error;
+                string resources = double.IsFinite(record.Metric("peakWorkingSetBytes"))
+                    ? $"; peak working set {record.Metric("peakWorkingSetBytes") / (1024.0 * 1024.0):F1} MiB, " +
+                      $"CPU/wall {record.Metric("runnerCpuToWallRatio"):F2}x"
+                    : "";
                 diagnostics.Add(Diagnostic.Error(record.Fixture, "status",
-                    $"status is '{record.Status}' after {record.ElapsedMs:F0} ms in phase '{phase}': {detail}"));
+                    $"status is '{record.Status}' after {record.ElapsedMs:F0} ms in phase '{phase}'{resources}: {detail}"));
                 continue;
             }
 
@@ -146,9 +151,17 @@ internal static class Program
 
             foreach ((string metric, double current) in record.Metrics)
             {
+                // Utilization ratios are diagnostic direction signals, not monotonic costs: a
+                // higher CPU/wall ratio generally means the engine used the machine better.
+                if (metric.EndsWith("Ratio", StringComparison.Ordinal)) continue;
                 if (!prior.Metrics.TryGetValue(metric, out double previous) || previous <= 0.0) continue;
                 double ratio = current / previous;
-                double noiseFloor = metric == "allocatedBytes" ? 1_048_576.0 : 25.0;
+                double noiseFloor = metric switch
+                {
+                    "allocatedBytes" => 1_048_576.0,
+                    "peakWorkingSetBytes" or "peakPrivateMemoryBytes" => 67_108_864.0,
+                    _ => 25.0,
+                };
                 if (ratio > options.MaxRegressionRatio && current - previous > noiseFloor)
                 {
                     diagnostics.Add(Diagnostic.Error(record.Fixture, metric,
@@ -183,6 +196,27 @@ internal static class Program
                 }
             }
         }
+
+        foreach (IGrouping<string, CensusRecord> cohort in records
+                     .Where(r => r.Status == "ok" && r.ParameterCount > 0 && r.Metric("peakWorkingSetBytes") > 0.0)
+                     .GroupBy(r => r.Cohort))
+        {
+            double[] values = cohort.Select(r => Math.Log(1.0 + r.Metric("peakWorkingSetBytes"))).OrderBy(v => v).ToArray();
+            if (values.Length < 5) continue;
+            double median = Median(values);
+            double mad = Median(values.Select(v => Math.Abs(v - median)).OrderBy(v => v).ToArray());
+            if (mad <= 1e-9) continue;
+
+            foreach (CensusRecord record in cohort)
+            {
+                double robustZ = 0.6745 * (Math.Log(1.0 + record.Metric("peakWorkingSetBytes")) - median) / mad;
+                if (robustZ > 6.0)
+                {
+                    diagnostics.Add(Diagnostic.Warning(record.Fixture, "peakWorkingSetBytes",
+                        $"robust cohort memory outlier (z={robustZ:F1}, cohort={cohort.Key})"));
+                }
+            }
+        }
     }
 
     private static void ValidateAbsoluteCeilings(
@@ -213,6 +247,8 @@ internal static class Program
     {
         CensusRecord[] slowest = records.Where(r => r.Status == "ok")
             .OrderByDescending(r => r.Metric("trainStepMs")).Take(25).ToArray();
+        CensusRecord[] largest = records.Where(r => r.Status == "ok")
+            .OrderByDescending(r => r.Metric("peakWorkingSetBytes")).Take(25).ToArray();
         return new SummaryDocument
         {
             SchemaVersion = 1,
@@ -233,6 +269,18 @@ internal static class Program
                 BackwardMs = r.Metric("backwardMs"),
                 TapeEntries = r.Metric("tapeEntries"),
                 AllocatedBytes = r.Metric("allocatedBytes"),
+                PeakWorkingSetBytes = r.Metric("peakWorkingSetBytes"),
+            }).ToArray(),
+            LargestPeakWorkingSets = largest.Select(r => new RankedRecord
+            {
+                Fixture = r.Fixture,
+                Model = r.Model,
+                ParameterCount = r.ParameterCount,
+                TrainStepMs = r.Metric("trainStepMs"),
+                BackwardMs = r.Metric("backwardMs"),
+                TapeEntries = r.Metric("tapeEntries"),
+                AllocatedBytes = r.Metric("allocatedBytes"),
+                PeakWorkingSetBytes = r.Metric("peakWorkingSetBytes"),
             }).ToArray(),
         };
     }
@@ -264,6 +312,9 @@ internal static class Program
         Console.WriteLine($"diagnostics: {summary.ErrorCount} error(s), {summary.WarningCount} warning(s)");
         foreach (RankedRecord record in summary.SlowestTrainSteps.Take(10))
             Console.WriteLine($"{record.TrainStepMs,10:F1} ms  {record.ParameterCount,14:N0} params  {record.Fixture}");
+        Console.WriteLine("largest peak working sets:");
+        foreach (RankedRecord record in summary.LargestPeakWorkingSets.Take(10))
+            Console.WriteLine($"{record.PeakWorkingSetBytes / (1024.0 * 1024.0),10:F1} MiB  {record.ParameterCount,14:N0} params  {record.Fixture}");
         Console.WriteLine($"summary: {outputPath}");
     }
 
@@ -282,6 +333,8 @@ internal static class Program
              "parameterCount":10,"engine":"Cpu","framework":".NET","os":"test","processArchitecture":"X64","processorCount":1,
              "constructMs":1,"targetPreparationMs":0,"coldForwardMs":2,"steadyForwardMedianMs":1,"steadyForwardP95Ms":1,
              "tapeForwardMs":1,"tapeEntries":2,"backwardMs":2,"trainStepMs":3,"allocatedBytes":4,"wallMs":5,
+             "runnerElapsedMs":6,"peakWorkingSetBytes":104857600,"peakPrivateMemoryBytes":125829120,
+             "runnerCpuMs":5,"runnerCpuToWallRatio":0.83,
              "projectedTrainingReduceLossMs":90}
             """;
             File.WriteAllText(Path.Combine(directory, "record.json"), record);
@@ -449,6 +502,7 @@ internal static class Program
         [JsonPropertyName("statusCounts")] public Dictionary<string, int> StatusCounts { get; set; } = new();
         [JsonPropertyName("diagnostics")] public Diagnostic[] Diagnostics { get; set; } = Array.Empty<Diagnostic>();
         [JsonPropertyName("slowestTrainSteps")] public RankedRecord[] SlowestTrainSteps { get; set; } = Array.Empty<RankedRecord>();
+        [JsonPropertyName("largestPeakWorkingSets")] public RankedRecord[] LargestPeakWorkingSets { get; set; } = Array.Empty<RankedRecord>();
     }
 
     private sealed class Diagnostic
@@ -470,6 +524,7 @@ internal static class Program
         [JsonPropertyName("backwardMs")] public double BackwardMs { get; set; }
         [JsonPropertyName("tapeEntries")] public double TapeEntries { get; set; }
         [JsonPropertyName("allocatedBytes")] public double AllocatedBytes { get; set; }
+        [JsonPropertyName("peakWorkingSetBytes")] public double PeakWorkingSetBytes { get; set; }
     }
 
     private static readonly JsonSerializerOptions JsonOptions = new()

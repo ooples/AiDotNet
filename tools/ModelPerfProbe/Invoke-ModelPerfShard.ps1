@@ -20,7 +20,10 @@ param(
     [int] $ShardCount,
 
     [ValidateRange(1, 86400)]
-    [int] $TimeoutSeconds = 180
+    [int] $TimeoutSeconds = 180,
+
+    [ValidateRange(1, 600)]
+    [int] $CleanupGraceSeconds = 30
 )
 
 $ErrorActionPreference = 'Stop'
@@ -104,19 +107,75 @@ foreach ($testName in $assigned) {
     [void]$process.Start()
     $stdout = $process.StandardOutput.ReadToEndAsync()
     $stderr = $process.StandardError.ReadToEndAsync()
-    $completed = $process.WaitForExit($TimeoutSeconds * 1000)
+    # Poll rather than blocking for the entire ceiling so both successful and timed-out
+    # fixtures retain peak-memory and CPU-utilization evidence. A timeout without these
+    # measurements only says that a model was slow; it cannot distinguish compute saturation
+    # from runaway materialization / paging, which are very different engine regressions.
+    [long]$peakWorkingSetBytes = 0
+    [long]$peakPrivateMemoryBytes = 0
+    [double]$runnerCpuMs = 0
+    $completed = $false
+    while ($stopwatch.Elapsed.TotalSeconds -lt $TimeoutSeconds) {
+        if ($process.WaitForExit(250)) {
+            $completed = $true
+            break
+        }
+        try {
+            $process.Refresh()
+            $peakWorkingSetBytes = [Math]::Max($peakWorkingSetBytes, $process.WorkingSet64)
+            $peakPrivateMemoryBytes = [Math]::Max($peakPrivateMemoryBytes, $process.PrivateMemorySize64)
+            $runnerCpuMs = [Math]::Max($runnerCpuMs, $process.TotalProcessorTime.TotalMilliseconds)
+        } catch {
+            # The process can exit between WaitForExit and Refresh. The next loop observes exit.
+        }
+    }
+
+    # The workload writes its result atomically before fixture/network disposal. Treat that durable
+    # record as the measurement boundary and allow a short, separately-bounded teardown grace. This
+    # prevents a model that completed every measured phase inside the ceiling from being mislabeled
+    # as a compute timeout merely because a compacting LOH collection takes a few more seconds. A
+    # fixture that has not produced its record at the deadline receives no grace and is killed below.
+    $workloadCompletedAtDeadline = Test-Path -LiteralPath $recordPath
+    if (-not $completed -and $workloadCompletedAtDeadline) {
+        $cleanupDeadlineMs = $stopwatch.Elapsed.TotalMilliseconds + ($CleanupGraceSeconds * 1000.0)
+        while ($stopwatch.Elapsed.TotalMilliseconds -lt $cleanupDeadlineMs) {
+            if ($process.WaitForExit(250)) {
+                $completed = $true
+                break
+            }
+            try {
+                $process.Refresh()
+                $peakWorkingSetBytes = [Math]::Max($peakWorkingSetBytes, $process.WorkingSet64)
+                $peakPrivateMemoryBytes = [Math]::Max($peakPrivateMemoryBytes, $process.PrivateMemorySize64)
+                $runnerCpuMs = [Math]::Max($runnerCpuMs, $process.TotalProcessorTime.TotalMilliseconds)
+            } catch {
+                # The process can exit between WaitForExit and Refresh. The next loop observes exit.
+            }
+        }
+    }
     $status = 'ok'
     $exitCode = $null
     if (-not $completed) {
-        $status = 'timeout'
+        $status = if ($workloadCompletedAtDeadline) { 'cleanup-timeout' } else { 'timeout' }
         try { $process.Kill($true) } catch { Write-Warning "Could not kill $fixture process tree: $_" }
         $process.WaitForExit()
     } else {
         $exitCode = $process.ExitCode
     }
+    try {
+        $process.Refresh()
+        $peakWorkingSetBytes = [Math]::Max($peakWorkingSetBytes, $process.PeakWorkingSet64)
+        $peakPrivateMemoryBytes = [Math]::Max($peakPrivateMemoryBytes, $process.PrivateMemorySize64)
+        $runnerCpuMs = [Math]::Max($runnerCpuMs, $process.TotalProcessorTime.TotalMilliseconds)
+    } catch {
+        # The polling samples above remain durable even if final process metrics are unavailable.
+    }
     $standardOutput = $stdout.GetAwaiter().GetResult()
     $standardError = $stderr.GetAwaiter().GetResult()
     $stopwatch.Stop()
+    $runnerCpuToWallRatio = if ($stopwatch.Elapsed.TotalMilliseconds -gt 0) {
+        $runnerCpuMs / $stopwatch.Elapsed.TotalMilliseconds
+    } else { 0.0 }
     @($standardOutput, $standardError) | Set-Content -LiteralPath $logPath -Encoding utf8
 
     if ($status -eq 'ok' -and $exitCode -ne 0) {
@@ -154,11 +213,31 @@ foreach ($testName in $assigned) {
             startedUtc = $start
             elapsedMs = $stopwatch.Elapsed.TotalMilliseconds
             timeoutSeconds = $TimeoutSeconds
+            cleanupGraceSeconds = $CleanupGraceSeconds
+            workloadCompletedAtDeadline = $workloadCompletedAtDeadline
+            peakWorkingSetBytes = $peakWorkingSetBytes
+            peakPrivateMemoryBytes = $peakPrivateMemoryBytes
+            runnerCpuMs = $runnerCpuMs
+            runnerCpuToWallRatio = $runnerCpuToWallRatio
             exitCode = $exitCode
             phase = $phase
             error = $combined
         }
         Write-AtomicJson $recordPath $failure
+    } else {
+        # The in-process sample owns operation/phase timings. Add the supervising process's
+        # resource envelope atomically so successful fixtures and timeout records have the same
+        # comparable memory/CPU fields without coupling the test assembly to OS polling APIs.
+        $record = Get-Content -LiteralPath $recordPath -Raw | ConvertFrom-Json
+        $record | Add-Member -NotePropertyName runnerElapsedMs -NotePropertyValue $stopwatch.Elapsed.TotalMilliseconds -Force
+        $record | Add-Member -NotePropertyName timeoutSeconds -NotePropertyValue $TimeoutSeconds -Force
+        $record | Add-Member -NotePropertyName cleanupGraceSeconds -NotePropertyValue $CleanupGraceSeconds -Force
+        $record | Add-Member -NotePropertyName workloadCompletedAtDeadline -NotePropertyValue $workloadCompletedAtDeadline -Force
+        $record | Add-Member -NotePropertyName peakWorkingSetBytes -NotePropertyValue $peakWorkingSetBytes -Force
+        $record | Add-Member -NotePropertyName peakPrivateMemoryBytes -NotePropertyValue $peakPrivateMemoryBytes -Force
+        $record | Add-Member -NotePropertyName runnerCpuMs -NotePropertyValue $runnerCpuMs -Force
+        $record | Add-Member -NotePropertyName runnerCpuToWallRatio -NotePropertyValue $runnerCpuToWallRatio -Force
+        Write-AtomicJson $recordPath $record
     }
 
     Write-Host "[$([DateTimeOffset]::UtcNow.ToString('u'))] $($status.ToUpperInvariant()) $fixture ($([Math]::Round($stopwatch.Elapsed.TotalSeconds, 1)) s)"

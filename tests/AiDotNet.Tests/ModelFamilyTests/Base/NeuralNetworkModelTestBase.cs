@@ -2250,6 +2250,13 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
             $"Fixture is assigned to performance shard {assignedShard}/{shardCount}.");
 
         await Task.Yield();
+        // Correctness fixtures intentionally pin single-threaded BLAS in InitializeAsync so
+        // reduction order is bit-exact. This method is a PERFORMANCE census, run in its own OS
+        // process by ModelPerfFixtureRunner; measuring the deterministic debug configuration made
+        // transformer GEMMs appear 10-30x slower than production and manufactured timeout results.
+        // Restore the prior setting on exit so an explicitly-invoked census remains isolated even
+        // when a developer runs it inside the normal xUnit process.
+        using var _productionBlas = new BlasDeterminismScope(deterministic: false);
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom(42);
         var process = System.Diagnostics.Process.GetCurrentProcess();
@@ -2271,6 +2278,14 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
 
         WritePerformanceProgress(outputDirectory!, performanceFileName, "cold-forward");
         var coldForwardTimer = System.Diagnostics.Stopwatch.StartNew();
+        // Benchmark a persistent production inference session. A one-off Predict from the default
+        // training state intentionally restores that state on return; for a streamed foundation
+        // model the restore must promote read-only quantized weights back to writable masters, which
+        // is training preparation rather than inference latency. Include the initial eval/streaming
+        // transition in cold-forward, then keep eval mode across steady samples exactly as a serving
+        // process does. The later BuildTrainingObjective transition is measured in tapeForwardMs.
+        if (network is AiDotNet.NeuralNetworks.NeuralNetworkBase<T> inferenceNetwork)
+            inferenceNetwork.SetTrainingMode(false);
         var coldOutput = network.Predict(input);
         coldForwardTimer.Stop();
         int[] measuredOutputShape = coldOutput.Shape.ToArray();
@@ -2376,6 +2391,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
             parameterCount,
             parameterSlots,
             engine = AiDotNet.Tensors.Engines.AiDotNetEngine.Current.GetType().FullName,
+            deterministicMode = AiDotNet.Tensors.Helpers.BlasProvider.IsDeterministicMode,
             framework = System.Runtime.InteropServices.RuntimeInformation.FrameworkDescription,
             frameworkMajor = Environment.Version.Major,
             os = System.Runtime.InteropServices.RuntimeInformation.OSDescription,
@@ -2417,6 +2433,20 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         File.WriteAllText(temporary, json);
         if (File.Exists(destination)) File.Delete(destination);
         File.Move(temporary, destination);
+    }
+
+    private sealed class BlasDeterminismScope : IDisposable
+    {
+        private readonly bool _prior;
+
+        public BlasDeterminismScope(bool deterministic)
+        {
+            _prior = AiDotNet.Tensors.Helpers.BlasProvider.IsDeterministicMode;
+            AiDotNet.Tensors.Helpers.BlasProvider.SetDeterministicMode(deterministic);
+        }
+
+        public void Dispose()
+            => AiDotNet.Tensors.Helpers.BlasProvider.SetDeterministicMode(_prior);
     }
 
     private static void WritePerformanceProgress(string outputDirectory, string safeName, string phase)
