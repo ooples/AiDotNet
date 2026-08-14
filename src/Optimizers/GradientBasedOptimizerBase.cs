@@ -2193,6 +2193,19 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     /// </remarks>
     /// <param name="gradient">The current gradient.</param>
     /// <returns>The gradient adjusted for momentum.</returns>
+    /// <remarks>
+    /// <para>
+    /// Implements classical momentum, <c>v ← μ·v + g</c>, matching PyTorch's <c>SGD(momentum=…)</c> and
+    /// the fused <c>SGDMomentum</c> kernel so the eager and compiled paths agree.
+    /// </para>
+    /// <para>
+    /// This previously computed <c>v ← v + μ·g</c> (#2008), putting the coefficient on the wrong term.
+    /// Nothing decayed <c>v</c>, so it was an unbounded running sum: at the default μ=0.9 a constant
+    /// gradient drove the velocity to <c>0.9·n·g</c>, growing linearly with the step count instead of
+    /// converging to <c>g/(1−μ)</c>. The effective step size therefore grew the longer training ran,
+    /// which is the opposite of what momentum is for.
+    /// </para>
+    /// </remarks>
     protected virtual Vector<T> ApplyMomentum(Vector<T> gradient)
     {
         if (_previousGradient == null || _previousGradient.Length == 0 || _previousGradient.Length != gradient.Length)
@@ -2201,7 +2214,8 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
             return gradient;
         }
 
-        var momentumGradient = _previousGradient.Add(gradient.Multiply(NumOps.FromDouble(_currentMomentum)));
+        // v <- mu*v + g. The coefficient decays the accumulated velocity, NOT the incoming gradient.
+        var momentumGradient = _previousGradient.Multiply(NumOps.FromDouble(_currentMomentum)).Add(gradient);
         _previousGradient = momentumGradient;
         return momentumGradient;
     }
