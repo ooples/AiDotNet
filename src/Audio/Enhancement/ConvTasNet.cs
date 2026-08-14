@@ -801,6 +801,7 @@ public class ConvTasNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
             var predicted = PredictCore(input);
             _ = ComputeSiSnrLoss(predicted, expected);
             var gradients = ComputeGradients(predicted, expected);
+            PublishComputedGradients(gradients);
             UpdateWeights(gradients);
         }
         finally
@@ -904,6 +905,24 @@ public class ConvTasNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
         }
 
         return gradients;
+    }
+
+    /// <summary>Publishes the hand-derived Conv-TasNet gradients to the shared model surface.</summary>
+    private void PublishComputedGradients(Dictionary<string, T[]> gradients)
+    {
+        var published = new Dictionary<Tensor<T>, Tensor<T>>(
+            Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
+
+        void Add(string name, Tensor<T> parameter)
+        {
+            if (gradients.TryGetValue(name, out var values) && values.Length == parameter.Length)
+                published[parameter] = new Tensor<T>(values, parameter._shape);
+        }
+
+        Add("encoder", _encoderWeight);
+        Add("decoder", _decoderWeight);
+        Add("mask", _maskWeight);
+        PublishParameterGradients(published);
     }
 
     /// <summary>

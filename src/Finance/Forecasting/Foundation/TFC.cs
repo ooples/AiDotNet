@@ -335,7 +335,8 @@ public partial class TFC<T> : TimeSeriesFoundationModelBase<T>
                     forward: ForwardCombined, computeLoss: ComputeLossCombined,
                     optimizerType: AiDotNet.Tensors.Engines.Compilation.OptimizerType.SGD,
                     learningRate: 0.001f, beta1: 0.9f, beta2: 0.999f, epsilon: 1e-8f, weightDecay: 0f,
-                    out T fusedLoss))
+                    out T fusedLoss,
+                    onGradients: gradients => PublishParameterGradients(gradients)))
             {
                 LastLoss = fusedLoss;
                 return;
@@ -379,7 +380,7 @@ public partial class TFC<T> : TimeSeriesFoundationModelBase<T>
         }
         var totalLoss = Engine.TensorAdd(supervisedLoss, contrastiveLoss);
 
-        var allGrads = tape.ComputeGradients(totalLoss, sources: null);
+        var allGrads = ComputeAndPublishParameterGradients(tape, totalLoss, sources: null);
         var grads = new Dictionary<Tensor<T>, Tensor<T>>(
             Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
         foreach (var param in trainableParams)

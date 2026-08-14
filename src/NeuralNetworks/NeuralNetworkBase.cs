@@ -3769,6 +3769,18 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     private bool _gradientSurfaceUnavailable;
 
     /// <summary>
+    /// Published gradients for raw trainable tensors that live outside layers, keyed by the exact
+    /// tensor reference exposed through <see cref="GetExtraTrainableTensors"/>.
+    /// </summary>
+    private Dictionary<Tensor<T>, Vector<T>>? _publishedExtraTensorGradients;
+
+    /// <summary>True when the most recent publication matched at least one real gradient.</summary>
+    private bool _hasPublishedParameterGradients;
+
+    /// <summary>A directly-published flat gradient from a non-tape training algorithm.</summary>
+    private Vector<T>? _publishedFlatParameterGradients;
+
+    /// <summary>
     /// Opens gradient retention for one streaming step, if this model is small enough to afford it.
     /// </summary>
     private void BeginStreamingGradientRetention()
@@ -3800,9 +3812,9 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     {
         var bag = _retainedStreamingGrads;
         _retainedStreamingGrads = null;
-        if (bag is null || bag.Count == 0) return;
+        if (bag is null) return;
 
-        ScatterParameterGradientsToLayers(bag);
+        PublishParameterGradients(bag);
         bag.Clear();
     }
 
@@ -3817,32 +3829,154 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// </remarks>
     private void ScatterFusedGradients(IReadOnlyDictionary<Tensor<T>, Tensor<T>> grads)
     {
-        ScatterParameterGradientsToLayers(grads);
+        PublishParameterGradients(grads);
+    }
+
+    private void ClearPublishedLayerGradientSlices()
+    {
+        for (int i = 0; i < Layers.Count; i++)
+        {
+            if (Layers[i] is LayerBase<T> layer) layer.ClearScatteredParameterGradients();
+        }
+        foreach (var layer in GetExtraTrainableLayers())
+        {
+            layer?.ClearScatteredParameterGradients();
+        }
     }
 
     protected int ScatterParameterGradientsToLayers(IReadOnlyDictionary<Tensor<T>, Tensor<T>> grads)
     {
         if (grads is null || grads.Count == 0) return 0;
 
-        var layers = Layers;
-        if (layers is null || layers.Count == 0) return 0;
-
         int matched = 0;
-        for (int i = 0; i < layers.Count; i++)
+        for (int i = 0; i < Layers.Count; i++)
         {
-            if (layers[i] is LayerBase<T> layer)
+            if (Layers[i] is LayerBase<T> layer)
             {
                 matched += layer.ScatterParameterGradients(grads);
             }
         }
 
+        foreach (var layer in GetExtraTrainableLayers())
+        {
+            if (layer is not null) matched += layer.ScatterParameterGradients(grads);
+        }
+
         return matched;
+    }
+
+    /// <summary>Publishes one backward pass to the public model and layer gradient surfaces.</summary>
+    protected int PublishParameterGradients(IReadOnlyDictionary<Tensor<T>, Tensor<T>> grads)
+    {
+        _gradientSurfaceUnavailable = false;
+        _publishedExtraTensorGradients = null;
+        _publishedFlatParameterGradients = null;
+        _hasPublishedParameterGradients = false;
+        ClearPublishedLayerGradientSlices();
+
+        if (grads is null || grads.Count == 0) return 0;
+
+        int matched = ScatterParameterGradientsToLayers(grads);
+        Dictionary<Tensor<T>, Vector<T>>? extras = null;
+        foreach (var tensor in GetExtraTrainableTensors())
+        {
+            if (tensor is null || tensor.Length == 0 ||
+                !grads.TryGetValue(tensor, out var gradient) || gradient is null ||
+                gradient.Length != tensor.Length)
+            {
+                continue;
+            }
+
+            extras ??= new Dictionary<Tensor<T>, Vector<T>>(
+                Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
+            var copy = new Vector<T>(gradient.Length);
+            gradient.AsSpan().CopyTo(copy.AsWritableSpan());
+            extras[tensor] = copy;
+            matched += gradient.Length;
+        }
+
+        _publishedExtraTensorGradients = extras;
+        _hasPublishedParameterGradients = matched > 0;
+        return matched;
+    }
+
+    /// <summary>Publishes a real gradient from a non-tape algorithm in parameter order.</summary>
+    protected void PublishFlatParameterGradients(Vector<T> gradients)
+    {
+        if (gradients is null) throw new ArgumentNullException(nameof(gradients));
+        long expectedLength = ParameterCount;
+        if (gradients.Length != expectedLength)
+        {
+            throw new ArgumentException(
+                $"Flat gradient length ({gradients.Length}) must match ParameterCount ({expectedLength}).",
+                nameof(gradients));
+        }
+
+        _gradientSurfaceUnavailable = false;
+        _publishedExtraTensorGradients = null;
+        _hasPublishedParameterGradients = gradients.Length > 0;
+        ClearPublishedLayerGradientSlices();
+        if (gradients.Length == 0)
+        {
+            _publishedFlatParameterGradients = null;
+            return;
+        }
+
+        var copy = new Vector<T>(gradients.Length);
+        gradients.AsSpan().CopyTo(copy.AsWritableSpan());
+        _publishedFlatParameterGradients = copy;
+    }
+
+    /// <summary>Collects every trainable tensor owned by this model in canonical order.</summary>
+    protected IReadOnlyList<Tensor<T>> CollectModelTrainableTensors()
+    {
+        var result = new List<Tensor<T>>();
+        var seen = new HashSet<Tensor<T>>(Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
+
+        void Add(Tensor<T>? tensor)
+        {
+            if (tensor is not null && tensor.Length > 0 && seen.Add(tensor)) result.Add(tensor);
+        }
+
+        foreach (var tensor in Training.TapeTrainingStep<T>.CollectParameters(Layers, _layerStructureVersion))
+            Add(tensor);
+        foreach (var layer in GetExtraTrainableLayers())
+        {
+            if (layer is null) continue;
+            foreach (var tensor in layer.GetTrainableParameters()) Add(tensor);
+        }
+        foreach (var tensor in GetExtraTrainableTensors()) Add(tensor);
+
+        return result;
+    }
+
+    /// <summary>Runs reverse-mode autodiff and atomically publishes parameter gradients.</summary>
+    protected Dictionary<Tensor<T>, Tensor<T>> ComputeAndPublishParameterGradients(
+        GradientTape<T> tape,
+        Tensor<T> loss,
+        IReadOnlyList<Tensor<T>>? sources = null,
+        bool createGraph = false)
+    {
+        if (tape is null) throw new ArgumentNullException(nameof(tape));
+        if (loss is null) throw new ArgumentNullException(nameof(loss));
+
+        var gradients = tape.ComputeGradients(loss, sources, createGraph);
+        PublishParameterGradients(gradients);
+        return gradients;
     }
 
     public virtual Vector<T> GetParameterGradients()
     {
-        // Collect gradients from all layers
-        List<Vector<T>> allGradients = new List<Vector<T>>();
+        if (_gradientSurfaceUnavailable)
+        {
+            throw new NotSupportedException(
+                "The most recent streaming step deliberately did not retain its full gradient set. " +
+                "Raise MaxRetainedGradientScalars only when the model can afford that retention.");
+        }
+
+        if (_publishedFlatParameterGradients is not null) return _publishedFlatParameterGradients;
+
+        var allGradients = new List<Vector<T>>();
 
         foreach (var layer in Layers.Where(l => l.SupportsTraining && l.ParameterCount > 0))
         {
@@ -3853,7 +3987,31 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             // all of them; a layer the scatter never reached still falls back to its own accessor,
             // so nothing that works today regresses.
             var scattered = (layer as LayerBase<T>)?.ScatteredParameterGradients;
-            allGradients.Add(scattered ?? layer.GetParameterGradients());
+            allGradients.Add(scattered ?? (_hasPublishedParameterGradients
+                ? new Vector<T>(ParameterCountHelper.ToFlatVectorSize(layer.ParameterCount))
+                : layer.GetParameterGradients()));
+        }
+
+        foreach (var layer in GetExtraTrainableLayers())
+        {
+            if (layer is null || !layer.SupportsTraining || layer.ParameterCount <= 0) continue;
+            allGradients.Add(layer.ScatteredParameterGradients ?? (_hasPublishedParameterGradients
+                ? new Vector<T>(ParameterCountHelper.ToFlatVectorSize(layer.ParameterCount))
+                : layer.GetParameterGradients()));
+        }
+
+        foreach (var tensor in GetExtraTrainableTensors())
+        {
+            if (tensor is null || tensor.Length == 0) continue;
+            if (_publishedExtraTensorGradients is not null &&
+                _publishedExtraTensorGradients.TryGetValue(tensor, out var gradient))
+            {
+                allGradients.Add(gradient);
+            }
+            else if (_hasPublishedParameterGradients)
+            {
+                allGradients.Add(new Vector<T>(tensor.Length));
+            }
         }
 
         // Concatenate all gradients into a single vector
@@ -5686,6 +5844,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             {
                 ApplyGradientClipping(avgGrads, maxGradNorm, paramsList);
             }
+            PublishParameterGradients(avgGrads);
             // Include extra trainable tensors in the optimizer's
             // parameter list too, so its update step (and any per-
             // parameter state it maintains) covers them.
@@ -8315,7 +8474,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         SetTrainingMode(true);
         try
         {
-            var trainableParams = Training.TapeTrainingStep<T>.CollectParameters(Layers);
+            var trainableParams = CollectModelTrainableTensors();
             // Subclasses may own raw trainable tensors outside Layers
             // (e.g. ViT's cls_token / positional_embeddings). Treat
             // their presence as also satisfying the trainable-params
@@ -9593,14 +9752,6 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                     grads[param] = grad;
             }
 
-            // Publish the tape's gradients onto the per-layer surface BEFORE the optimizer runs.
-            // The optimizer consumes `grads` directly and never writes them back, so without this
-            // GetParameterGradients() had nothing to report and manufactured zeros instead --
-            // 24% of every CI failure in run 31356312540. Scattering off the same dictionary the
-            // optimizer is about to use means the reported gradients are exactly the ones actually
-            // applied, rather than a second, separately-derived answer that could disagree.
-            ScatterParameterGradientsToLayers(allGrads);
-
             T lossValue = lossTensor.Length > 0 ? lossTensor[0] : NumOps.Zero;
             LastLoss = lossValue;
 
@@ -9748,6 +9899,10 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 // clip scale per process → non-deterministic training).
                 ApplyGradientClipping(grads, maxGradNorm, trainableParams);
             }
+
+            // Publish after loss-scale removal and global clipping so the surface is the exact
+            // derivative field handed to the optimizer, not a scaled or unclipped intermediate.
+            PublishParameterGradients(allGrads);
 
             var context = new TapeStepContext<T>(
                 trainableParams, grads, lossValue,
@@ -10519,14 +10674,8 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         if (loss is null)
             return EmitFusedMissAndFallback("loss function not derived from LossFunctionBase<T>");
 
-        // Mirror the eager path's bidirectional shape alignment exactly:
-        // (a) forward has extra leading dim → reshape FORWARD to target shape
-        // (b) target has extra leading dim → reshape TARGET to forward shape
-        // The eager path at TrainWithTape reshapes target down to forward's
-        // shape in branch (b); doing it the other way (reshape forward up to
-        // target's shape) makes the loss compute in a different space and
-        // produces different gradients. Apply the same direction-aware fix
-        // inside computeLoss where both tensors are in scope.
+        // Match eager TrainWithTape: reshape the leaf target to the prediction whenever element
+        // counts agree, and never reshape the tape-tracked prediction merely to satisfy a leaf.
         // #1624 / #1640: reclaim this training step's transient activations instead of
         // letting them accumulate across steps. This is how PyTorch bounds training
         // memory: its caching allocator returns each iteration's freed blocks to a reuse
@@ -10588,20 +10737,10 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 trainableLayers,
                 input,
                 expected,
-                forward: inp =>
-                {
-                    var fwd = ForwardForTraining(inp);
-                    // Branch (a): fwd has extra leading batch dim.
-                    if (fwd.Rank > expected.Rank && fwd.Shape[0] == 1 && fwd.Length == expected.Length)
-                        return Engine.Reshape(fwd, expected._shape);
-                    return fwd;
-                },
+                forward: ForwardForTraining,
                 computeLoss: (pred, tgt) =>
                 {
-                    // Branch (b): target has extra leading batch dim → reshape TARGET
-                    // (matches the eager path's direction at TrainWithTape:2509-2512).
-                    if (tgt.Rank > pred.Rank && tgt.Shape[0] == 1 && tgt.Length == pred.Length)
-                        tgt = Engine.Reshape(tgt, pred._shape);
+                    tgt = AlignTargetToOutputShape(pred, tgt);
                     return ApplyCompositeObjective(loss.ComputeTapeLoss(pred, tgt), pred);
                 },
                 optimizerType: fusedType,
@@ -11031,7 +11170,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             var output = ForwardForTraining(input);
             var lossTensor = computeLoss(output);
 
-            var grads = tape.ComputeGradients(lossTensor, trainableParams);
+            var grads = ComputeAndPublishParameterGradients(tape, lossTensor, trainableParams);
 
             T lossValue = lossTensor.Length > 0 ? lossTensor[0] : NumOps.Zero;
             LastLoss = lossValue;
@@ -11119,29 +11258,10 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // GetExtraTrainableTensors() would silently skip those updates here
         // while TrainWithTape would still update them — divergent semantics
         // between the two training entry points.
-        var layerParams = Training.TapeTrainingStep<T>.CollectParameters(Layers);
-        var extraTrainableTensors = new List<Tensor<T>>();
-        foreach (var t in GetExtraTrainableTensors())
-        {
-            if (t is not null && t.Length > 0) extraTrainableTensors.Add(t);
-        }
-
-        // Same gap as the tape path: layers declared through GetExtraTrainableLayers were counted
-        // and serialized but never received gradients, because collection read Layers alone.
-        foreach (var extraLayer in GetExtraTrainableLayers())
-        {
-            if (extraLayer is null) continue;
-            foreach (var p in extraLayer.GetTrainableParameters())
-            {
-                if (p is not null && p.Length > 0) extraTrainableTensors.Add(p);
-            }
-        }
-        var trainableParams = extraTrainableTensors.Count == 0
-            ? layerParams
-            : layerParams.Concat(extraTrainableTensors).ToList();
+        var trainableParams = CollectModelTrainableTensors();
         var opt = optimizer ?? GetOrCreateBaseOptimizer();
 
-        var grads = tape.ComputeGradients(lossTensor, trainableParams);
+        var grads = ComputeAndPublishParameterGradients(tape, lossTensor, trainableParams);
         T lossValue = lossTensor.Length > 0 ? lossTensor[0] : NumOps.Zero;
         LastLoss = lossValue;
 
@@ -11504,6 +11624,16 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         _baseTrainOptimizer = optimizer;
         _baseTrainOptimizerExplicitlyConfigured = optimizer is not null;
         _baseTrainOptimizerLearningRate = null;
+    }
+
+    /// <summary>
+    /// Clears momentum and other optimizer history while preserving the configured optimizer.
+    /// Deterministic conformance probes use this when replaying independent trajectories from
+    /// one parameter snapshot; restoring weights alone does not reset an adaptive optimizer.
+    /// </summary>
+    internal void ResetBaseTrainOptimizerState()
+    {
+        _baseTrainOptimizer?.Reset();
     }
 
     /// <summary>
@@ -14565,9 +14695,11 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // reason — surfaced by ResNet's
         // GradientFlow_ShouldBeNonZeroAndFinite, then locked in here
         // for the IGradientComputable contract.
-        // Ask the tape only for declared trainable leaves. The returned dictionary remains
-        // reference-keyed, and genuinely detached slots are zero-padded in manifest order below.
-        var allGrads = tape.ComputeGradients(lossTensor, sources: trainableParams);
+        // Walk the complete tape, then filter by the canonical trainable references below.
+        // Restricting sources here drops legitimate leaves reached through view operations such
+        // as recurrent-weight permutes. The normal training funnel already uses this full-walk
+        // pattern for the same reason, so ComputeGradients must not implement a weaker derivative.
+        var allGrads = ComputeAndPublishParameterGradients(tape, lossTensor, sources: null);
         var grads = allGrads;
 
         // Use GetParameterChunks to keep gradient/parameter ordering

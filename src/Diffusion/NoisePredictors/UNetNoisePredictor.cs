@@ -516,8 +516,9 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
     public override Tensor<T> PredictNoise(Tensor<T> noisySample, int timestep, Tensor<T>? conditioning = null)
     {
         EnsureLayersInitialized();
-        using var streaming = BeginWeightStreamingForward();
-        _preserveMaterializedParameters = true;
+        using var streaming = LayerBase<T>.IsInferringShapes ? null : BeginWeightStreamingForward();
+        if (!LayerBase<T>.IsInferringShapes)
+            _preserveMaterializedParameters = true;
         _lastInput = noisySample;
 
         // #638/#1650: genuine inference runs in eval mode so every Conv / Dense layer takes
@@ -529,9 +530,9 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
         // numerically identical to training mode here. Skipped when a gradient tape is
         // active (training-time sampling) so eager backward state is retained. Restored in
         // the finally so the model's steady-state (training) is preserved for the next step.
-        bool evalForInference =
-            AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>.Current is null
-            || AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>.IsSuppressed;
+        bool evalForInference = !LayerBase<T>.IsInferringShapes
+            && (AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>.Current is null
+                || AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>.IsSuppressed);
         if (evalForInference) SetAllLayersTrainingMode(false);
         try
         {
@@ -567,7 +568,7 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
         }
 
         _lastOutput = output;
-        return streaming.Complete(output);
+        return streaming is null ? output : streaming.Complete(output);
 
         }
         finally
@@ -750,8 +751,9 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
     public override Tensor<T> PredictNoiseWithEmbedding(Tensor<T> noisySample, Tensor<T> timeEmbedding, Tensor<T>? conditioning = null)
     {
         EnsureLayersInitialized();
-        using var streaming = BeginWeightStreamingForward();
-        _preserveMaterializedParameters = true;
+        using var streaming = LayerBase<T>.IsInferringShapes ? null : BeginWeightStreamingForward();
+        if (!LayerBase<T>.IsInferringShapes)
+            _preserveMaterializedParameters = true;
         _lastInput = noisySample;
 
         // Project time embedding
@@ -762,7 +764,7 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
         SaveForwardState(skips, timeEmbed);
 
         _lastOutput = output;
-        return streaming.Complete(output);
+        return streaming is null ? output : streaming.Complete(output);
     }
 
     /// <summary>

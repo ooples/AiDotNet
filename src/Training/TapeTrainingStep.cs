@@ -158,7 +158,8 @@ public static class TapeTrainingStep<T>
         Tensor<T> target,
         T learningRate,
         Func<Tensor<T>, Tensor<T>> forward,
-        Func<Tensor<T>, Tensor<T>, Tensor<T>> computeLoss)
+        Func<Tensor<T>, Tensor<T>, Tensor<T>> computeLoss,
+        Action<IReadOnlyDictionary<Tensor<T>, Tensor<T>>>? onGradients = null)
     {
         var numOps = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
         var engine = AiDotNetEngine.Current;
@@ -189,6 +190,12 @@ public static class TapeTrainingStep<T>
             // 4. Compute gradients (PyTorch: loss.backward())
             grads = tape.ComputeGradients(loss, paramArray);
         }
+
+        // Publish before the update while every gradient buffer is still valid. The callback keeps
+        // this low-level training primitive model-agnostic; NeuralNetworkBase owns the public
+        // gradient surface and custom recurrent trainers can opt into the same base publication
+        // gateway without duplicating the backward pass.
+        onGradients?.Invoke(grads);
 
         // 5. Update parameters with SGD (PyTorch: optimizer.step())
         foreach (var param in paramArray)

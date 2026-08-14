@@ -98,19 +98,24 @@ public class ShapeContractGenerator : IIncrementalGenerator
             if (type is null) continue;
             if (!seen.Add(type.ToDisplayString())) continue;
 
-            if (!type.AllInterfaces.Any(i => i.ToDisplayString() == ShapeContractName)) continue;
+            var elementWise = type.GetAttributes()
+                .FirstOrDefault(a => a.AttributeClass?.ToDisplayString() == ElementWiseAttributeName);
+            bool implementsShapeContract = type.AllInterfaces.Any(i => i.ToDisplayString() == ShapeContractName);
+            bool canAugmentRuntimeType = type.ContainingType is null
+                && type.DeclaringSyntaxReferences.Any(reference =>
+                    reference.GetSyntax() is Microsoft.CodeAnalysis.CSharp.Syntax.TypeDeclarationSyntax declaration
+                    && declaration.Modifiers.Any(modifier => modifier.Text == "partial"));
+            if (!implementsShapeContract && (elementWise is null || !canAugmentRuntimeType)) continue;
 
             // A hand-written contract always wins - see the remarks. Only fill the gap.
-            if (type.GetMembers("OutputAxesFor").Any()) continue;
+            bool declaresOutputAxes = type.GetMembers("OutputAxesFor").Any();
+            if (declaresOutputAxes && elementWise is null) continue;
 
             var arms = new List<string>();
 
             // [ElementWiseShape]: shape in equals shape out, at every rank. Emitted directly rather
             // than derived from layouts, because such a layer HAS no meaningful layout to declare -
             // naming its axes would invent meanings it does not have.
-            var elementWise = type.GetAttributes()
-                .FirstOrDefault(a => a.AttributeClass?.ToDisplayString() == ElementWiseAttributeName);
-
             if (elementWise is not null)
             {
                 int maxRank = 6;
@@ -159,7 +164,15 @@ public class ShapeContractGenerator : IIncrementalGenerator
                     }
                 }
 
-                EmitPartial(spc, type, arms, attributes);
+                EmitPartial(
+                    spc,
+                    type,
+                    arms,
+                    attributes,
+                    emitShapePreserving: canAugmentRuntimeType
+                        && !type.GetMembers("IsShapePreserving").Any(),
+                    emitOutputAxes: !declaresOutputAxes,
+                    addShapeContractInterface: canAugmentRuntimeType && !implementsShapeContract);
                 continue;
             }
 
@@ -216,7 +229,10 @@ public class ShapeContractGenerator : IIncrementalGenerator
         SourceProductionContext spc,
         INamedTypeSymbol type,
         List<string> arms,
-        List<string>? attributes = null)
+        List<string>? attributes = null,
+        bool emitShapePreserving = false,
+        bool emitOutputAxes = true,
+        bool addShapeContractInterface = false)
     {
         {
             string ns = type.ContainingNamespace.IsGlobalNamespace
@@ -244,19 +260,29 @@ public class ShapeContractGenerator : IIncrementalGenerator
                 foreach (var attribute in attributes) sb.AppendLine(attribute);
             }
 
-            sb.AppendLine($"partial class {type.Name}{typeParams}");
+            string interfaceClause = addShapeContractInterface ? " : IShapeContract" : string.Empty;
+            sb.AppendLine($"partial class {type.Name}{typeParams}{interfaceClause}");
             sb.AppendLine("{");
-            sb.AppendLine("    /// <summary>Derived from this type's [TensorLayout] declarations.</summary>");
-            sb.AppendLine("    /// <remarks>");
-            sb.AppendLine("    /// Generated so the contract cannot drift from the layouts it restates. Ranks whose");
-            sb.AppendLine("    /// axes are not all carried through are omitted rather than guessed - declare");
-            sb.AppendLine("    /// OutputAxesFor by hand on this type to override the whole method.");
-            sb.AppendLine("    /// </remarks>");
-            sb.AppendLine("    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank) => inputRank switch");
-            sb.AppendLine("        {");
-            foreach (var arm in arms) sb.AppendLine(arm);
-            sb.AppendLine("            _ => null,");
-            sb.AppendLine("        };");
+            if (emitOutputAxes)
+            {
+                sb.AppendLine("    /// <summary>Derived from this type's [TensorLayout] declarations.</summary>");
+                sb.AppendLine("    /// <remarks>");
+                sb.AppendLine("    /// Generated so the contract cannot drift from the layouts it restates. Ranks whose");
+                sb.AppendLine("    /// axes are not all carried through are omitted rather than guessed - declare");
+                sb.AppendLine("    /// OutputAxesFor by hand on this type to override the whole method.");
+                sb.AppendLine("    /// </remarks>");
+                sb.AppendLine("    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank) => inputRank switch");
+                sb.AppendLine("        {");
+                foreach (var arm in arms) sb.AppendLine(arm);
+                sb.AppendLine("            _ => null,");
+                sb.AppendLine("        };");
+            }
+            if (emitShapePreserving)
+            {
+                sb.AppendLine();
+                sb.AppendLine("    /// <summary>Generated from [ElementWiseShape]: the output shape is exactly the concrete input shape.</summary>");
+                sb.AppendLine("    protected override bool IsShapePreserving => true;");
+            }
             sb.AppendLine("}");
 
             string hint = (ns.Length > 0 ? ns.Replace('.', '_') + "_" : string.Empty)

@@ -223,6 +223,12 @@ public abstract class SegmentationModelBase<T> : NeuralNetworkBase<T>, ISegmenta
 
     #region Constructors
 
+    /// <summary>Chooses a non-degenerate default objective for the declared mask shape.</summary>
+    private static ILossFunction<T> CreateDefaultSegmentationLoss(int numClasses)
+        => numClasses == 1
+            ? new BinaryCrossEntropyWithLogitsLoss<T>()
+            : new CrossEntropyWithLogitsLoss<T>();
+
     /// <summary>
     /// Initializes the base in native (trainable) mode.
     /// </summary>
@@ -235,7 +241,7 @@ public abstract class SegmentationModelBase<T> : NeuralNetworkBase<T>, ISegmenta
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer,
         ILossFunction<T>? lossFunction,
         int numClasses)
-        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>())
+        : base(architecture, lossFunction ?? CreateDefaultSegmentationLoss(numClasses))
     {
         if (numClasses <= 0)
             throw new ArgumentOutOfRangeException(nameof(numClasses), "numClasses must be > 0.");
@@ -261,7 +267,7 @@ public abstract class SegmentationModelBase<T> : NeuralNetworkBase<T>, ISegmenta
         NeuralNetworkArchitecture<T> architecture,
         string onnxModelPath,
         int numClasses)
-        : base(architecture, new CrossEntropyWithLogitsLoss<T>())
+        : base(architecture, CreateDefaultSegmentationLoss(numClasses))
     {
         if (numClasses <= 0)
             throw new ArgumentOutOfRangeException(nameof(numClasses), "numClasses must be > 0.");

@@ -1490,6 +1490,35 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     /// </remarks>
     protected virtual void EnsureParametersMaterialized()
     {
+        EnsureOwnParametersMaterialized();
+
+        // Then the children, because a composite's parameter surface IS its children's:
+        // ParameterCount, GetParameters and SetParameters all fold GetSubLayers(). Materializing
+        // only the parent leaves that surface partial in exactly the way a checkpoint cannot
+        // tolerate -- a fresh TransformerEncoderLayer answered 36 where a trained one holds 576,
+        // and the 540 restored values had nowhere to go. Recursing here is what lets a composite
+        // stay correct with NO override of its own: the base already knows the children, so
+        // asking each of them the same question is the whole implementation. EnsureInitialized
+        // is idempotent, so re-entry through a diamond costs a branch.
+        var subs = GetSubLayers();
+        if (subs is not null)
+        {
+            for (int i = 0; i < subs.Count; i++)
+            {
+                if (subs[i] is LayerBase<T> child) child.EnsureParametersMaterialized();
+            }
+        }
+
+        TryApplyPendingParameterRestore();
+    }
+
+    /// <summary>
+    /// Materializes only the state owned directly by this layer, leaving child layers deferred.
+    /// The chunked model surface uses this boundary so asking for the first chunk does not bring an
+    /// entire paper-scale hierarchy into memory before the iterator can yield.
+    /// </summary>
+    private void EnsureOwnParametersMaterialized()
+    {
         // NOT gated on IsInitialized. The base declares `public virtual bool IsInitialized => true;`
         // and only 6 of ~201 layers override it, so `!IsInitialized` was false for almost every
         // layer in the library and this hook did nothing: measured 0 of VideoCLIP's 80 layers
@@ -1520,25 +1549,6 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
             // (UseStreamingAllocator false) or the weights aren't streaming-backed (idempotent).
             RegisterStreamingWeightsWithPool();
         }
-
-        // Then the children, because a composite's parameter surface IS its children's:
-        // ParameterCount, GetParameters and SetParameters all fold GetSubLayers(). Materializing
-        // only the parent leaves that surface partial in exactly the way a checkpoint cannot
-        // tolerate -- a fresh TransformerEncoderLayer answered 36 where a trained one holds 576,
-        // and the 540 restored values had nowhere to go. Recursing here is what lets a composite
-        // stay correct with NO override of its own: the base already knows the children, so
-        // asking each of them the same question is the whole implementation. EnsureInitialized
-        // is idempotent, so re-entry through a diamond costs a branch.
-        var subs = GetSubLayers();
-        if (subs is not null)
-        {
-            for (int i = 0; i < subs.Count; i++)
-            {
-                if (subs[i] is LayerBase<T> child) child.EnsureParametersMaterialized();
-            }
-        }
-
-        TryApplyPendingParameterRestore();
     }
 
     /// <inheritdoc />
@@ -2298,6 +2308,14 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         {
             OnFirstForward(input);
         }
+
+        // A shape-preserving layer's strongest contract is the concrete input itself. Its
+        // construction-time OutputShape may intentionally describe a capacity (attention sequence
+        // length is the common case), so rebuilding from that declaration can expand a shorter
+        // runtime input during shape traversal. Returning an equal-shaped placeholder is exact and
+        // avoids requiring every normalization/attention/activation leaf to repeat this override.
+        if (IsShapePreserving)
+            return new Tensor<T>(input.Shape.ToArray());
 
         // Default: forward output is [batch, ...OutputShape] — correct for layers like
         // Conv/Deconv whose OutputShape carries the full per-sample output dims. Layers
@@ -3280,6 +3298,15 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
             || ports[0].ShapeConstraint.IsConstrained;
         if (needsContractValidation)
             BindInputContract(input.Shape.ToArray()).Validate(input);
+
+        // Shape-only model traversal must stop at leaves. Composite layers still execute their
+        // real topology so every child receives the exact runtime shape, but executing a leaf can
+        // only materialize weights and perform arithmetic that cannot reveal any additional graph
+        // structure. Keeping this boundary in the framework means a new leaf layer automatically
+        // participates in allocation-free manifest discovery; authors only describe their unique
+        // output shape through OutputShape / OnFirstForward / ShapeInferenceOutput.
+        if (IsInferringShapes && GetSubLayers().Count == 0)
+            return ShapeInferenceOutput(input);
 
         var observer = LayerForwardObserver<T>.Current;
         if (observer is null) return ForwardTraced(input);
@@ -5360,6 +5387,34 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         // both surfaces project the same materialized manifest.
         EnsureParametersMaterialized();
 
+        foreach (var chunk in EnumerateParameterStateChunks(stablePrefix, includeChildren: true))
+            yield return chunk;
+    }
+
+    /// <summary>
+    /// Enumerates only state owned directly by this layer. The reflection-based predictor manifest
+    /// visits every layer object exactly once, so recursing here would duplicate child tensors. More
+    /// importantly, keeping this boundary lazy lets a caller inspect an initial chunk prefix without
+    /// materializing every descendant first.
+    /// </summary>
+    internal IEnumerable<ParameterChunk<T>> GetOwnParameterStateChunks(string stablePrefix)
+    {
+        // A parked flat restore may span this layer and its children. In that uncommon lifecycle the
+        // restore must be replayed as one atomic surface before any values are exposed. Ordinary lazy
+        // construction has no parked payload and can safely materialize only this layer.
+        if (_pendingParameterRestore is not null)
+            EnsureParametersMaterialized();
+        else
+            EnsureOwnParametersMaterialized();
+
+        foreach (var chunk in EnumerateParameterStateChunks(stablePrefix, includeChildren: false))
+            yield return chunk;
+    }
+
+    private IEnumerable<ParameterChunk<T>> EnumerateParameterStateChunks(
+        string stablePrefix,
+        bool includeChildren)
+    {
         var components = GetOrderedParameterComponents();
         for (int i = 0; i < components.Length; i++)
         {
@@ -5394,7 +5449,7 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
             }
 
             var sub = component.Layer;
-            if (sub is null || IsSubLayerParameterFrozen(sub)) continue;
+            if (!includeChildren || sub is null || IsSubLayerParameterFrozen(sub)) continue;
             if (sub is LayerBase<T> layerBase)
             {
                 foreach (var chunk in layerBase.GetParameterStateChunks(componentPrefix + "/child"))
@@ -5581,6 +5636,14 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     /// model-level surface be correct before those overrides have been deleted.
     /// </remarks>
     public Vector<T>? ScatteredParameterGradients => ParameterGradients;
+
+    /// <summary>Clears the tape-published slice before a new backward pass is scattered.</summary>
+    /// <remarks>
+    /// Publication is a snapshot, not an accumulator. Without clearing first, a parameter omitted
+    /// from a later backward pass retained the previous step's derivative and made the model-level
+    /// gradient vector combine values from two different optimization steps.
+    /// </remarks>
+    internal void ClearScatteredParameterGradients() => ParameterGradients = null;
 
     public int ScatterParameterGradients(IReadOnlyDictionary<Tensor<T>, Tensor<T>> grads)
     {
