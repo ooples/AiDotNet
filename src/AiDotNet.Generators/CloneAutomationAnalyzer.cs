@@ -196,19 +196,51 @@ public class CloneAutomationAnalyzer : DiagnosticAnalyzer
     {
         var expression = method.ExpressionBody?.Expression;
 
-        if (expression is null)
+        if (expression is not null)
         {
-            if (method.Body is null || method.Body.Statements.Count != 1) return false;
-            if (method.Body.Statements[0] is not ReturnStatementSyntax { Expression: { } returned })
-            {
-                return false;
-            }
-
-            expression = returned;
+            return expression is ObjectCreationExpressionSyntax { Initializer: null };
         }
 
-        // An object initializer sets state the constructor did not, which the plan does not replay.
-        return expression is ObjectCreationExpressionSyntax { Initializer: null };
+        if (method.Body is null || method.Body.Statements.Count == 0) return false;
+
+        // EVERY return must hand back a plain construction, and nothing else may happen. A body that
+        // only chooses BETWEEN constructors is still pure reconstruction, and that is by far the
+        // commonest shape here: 584 of these pick an ONNX constructor when a model path is present
+        // and a native one when it is not.
+        //
+        //     if (!_useNativeMode && _options.ModelPath is { } mp) return new AudioMAE<T>(Architecture, mp, _options);
+        //     return new AudioMAE<T>(Architecture, _options);
+        //
+        // The plan already decides that at runtime -- it records every satisfiable constructor and
+        // picks the one the INSTANCE can supply, which is exactly what taking the widest one
+        // unconditionally got wrong when it passed null for onnxModelPath and made 51 models throw.
+        // So the base reproduces this body, and reporting only the one-liner left 584 of them
+        // invisible to the deletion loop.
+        var returns = 0;
+
+        foreach (var statement in method.Body.DescendantNodes().OfType<StatementSyntax>())
+        {
+            switch (statement)
+            {
+                case ReturnStatementSyntax { Expression: ObjectCreationExpressionSyntax { Initializer: null } }:
+                    returns++;
+                    break;
+
+                // A local holding a constructor argument, e.g. `var options = new ASTOptions(_options);`.
+                case LocalDeclarationStatementSyntax:
+                // The branch itself; its own statements are visited separately.
+                case IfStatementSyntax:
+                case BlockSyntax:
+                    break;
+
+                // An assignment, a loop, a call -- anything that does work the constructor did not --
+                // means the body is not pure reconstruction and the base cannot stand in for it.
+                default:
+                    return false;
+            }
+        }
+
+        return returns > 0;
     }
 
     /// <summary>
