@@ -20,7 +20,7 @@ namespace AiDotNet.SelfSupervisedLearning;
 /// <para>Derived classes (SimCLR, MoCo, BYOL, etc.) implement the specific training logic
 /// in the <see cref="TrainStepCore"/> method.</para>
 /// </remarks>
-public abstract class SelfSupervisedLearningMethodBase<T> : ModelBase<T, Tensor<T>, Tensor<T>>, ISelfSupervisedLearningMethod<T>
+public abstract partial class SelfSupervisedLearningMethodBase<T> : ModelBase<T, Tensor<T>, Tensor<T>>, ISelfSupervisedLearningMethod<T>
 {
     // NumOps and Engine are inherited from ModelBase
 

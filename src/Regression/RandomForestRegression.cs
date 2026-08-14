@@ -52,7 +52,7 @@ namespace AiDotNet.Regression;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("Random Forests", "https://doi.org/10.1023/A:1010933404324", Year = 2001, Authors = "Leo Breiman")]
-public class RandomForestRegression<T> : AsyncDecisionTreeRegressionBase<T>
+public partial class RandomForestRegression<T> : AsyncDecisionTreeRegressionBase<T>
 {
     /// <summary>
     /// Initializes a new instance with default settings.
@@ -341,88 +341,6 @@ public class RandomForestRegression<T> : AsyncDecisionTreeRegressionBase<T>
         }
 
         FeatureImportances = new Vector<T>(importances);
-    }
-
-    /// <summary>
-    /// Serializes the model to a byte array.
-    /// </summary>
-    /// <returns>A byte array containing the serialized model data.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method serializes the model's parameters, including options, trees, and regularization type,
-    /// to a JSON format and then converts it to a byte array.
-    /// </para>
-    /// <para>
-    /// <b>For Beginners:</b>
-    /// Serialization converts the model's internal state into a format that can be saved to disk or
-    /// transmitted over a network. This allows you to save a trained model and load it later without
-    /// having to retrain it. Think of it like saving your progress in a video game.
-    /// </para>
-    /// </remarks>
-    public override byte[] Serialize()
-    {
-        var serializableModel = new
-        {
-            Options = _options,
-            Trees = _trees.Select(tree => Convert.ToBase64String(tree.Serialize())).ToList(),
-            Regularization = Regularization.GetType().Name
-        };
-
-        var json = JsonConvert.SerializeObject(serializableModel, Formatting.None);
-        return Encoding.UTF8.GetBytes(json);
-    }
-
-    /// <summary>
-    /// Deserializes the model from a byte array.
-    /// </summary>
-    /// <param name="data">The byte array containing the serialized model data.</param>
-    /// <exception cref="InvalidOperationException">Thrown when deserialization fails.</exception>
-    /// <remarks>
-    /// <para>
-    /// This method reconstructs the model's parameters from a serialized byte array, including options,
-    /// trees, and regularization type.
-    /// </para>
-    /// <para>
-    /// <b>For Beginners:</b>
-    /// Deserialization is the opposite of serialization - it takes the saved model data and reconstructs
-    /// the model's internal state. This allows you to load a previously trained model and use it to make
-    /// predictions without having to retrain it. It's like loading a saved game to continue where you left off.
-    /// </para>
-    /// </remarks>
-    public override void Deserialize(byte[] data)
-    {
-        var json = Encoding.UTF8.GetString(data);
-        var deserializedModel = JsonConvert.DeserializeAnonymousType(json, new
-        {
-            Options = new RandomForestRegressionOptions(),
-            Trees = new List<string>(),
-            Regularization = ""
-        });
-
-        if (deserializedModel == null)
-        {
-            throw new InvalidOperationException("Failed to deserialize the model");
-        }
-
-        _options = deserializedModel.Options;
-
-        _trees = [.. deserializedModel.Trees.Select(treeData =>
-        {
-            var treeOptions = new DecisionTreeOptions
-            {
-                MaxDepth = _options.MaxDepth,
-                MinSamplesSplit = _options.MinSamplesSplit,
-                MaxFeatures = _options.MaxFeatures,
-                Seed = _options.Seed,
-                SplitCriterion = _options.SplitCriterion
-            };
-            var tree = new DecisionTreeRegression<T>(treeOptions, Regularization);
-            tree.Deserialize(Convert.FromBase64String(treeData));
-            return tree;
-        })];
-
-        // Reinitialize other fields
-        _random = _options.Seed.HasValue ? RandomHelper.CreateSeededRandom(_options.Seed.Value) : RandomHelper.CreateSecureRandom();
     }
 
     /// <summary>

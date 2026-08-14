@@ -45,7 +45,7 @@ namespace AiDotNet.Document;
     Direction = TensorLayoutDirection.Output,
     Note = "One class distribution per decode step: MaxSequenceLength steps, OutputClassCount "
          + "classes. Both are model constants, so neither spatial axis reaches the output.")]
-public abstract class DocumentNeuralNetworkBase<T> : NeuralNetworkBase<T>, IShapeContract
+public abstract partial class DocumentNeuralNetworkBase<T> : NeuralNetworkBase<T>, IShapeContract
 {
     /// <summary>
     /// The number of classes this model emits per decode step, or 0 for "not stated".

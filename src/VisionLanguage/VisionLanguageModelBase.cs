@@ -43,7 +43,7 @@ namespace AiDotNet.VisionLanguage;
     Direction = TensorLayoutDirection.Output,
     Note = "The pooled joint-embedding law: one EmbeddingDim-wide vector per sample. Two other "
          + "measured laws exist in this family - see PatchTokenContract and TrailingFeatureContract.")]
-public abstract class VisionLanguageModelBase<T> : NeuralNetworkBase<T>, IShapeContract
+public abstract partial class VisionLanguageModelBase<T> : NeuralNetworkBase<T>, IShapeContract
 {
     /// <summary>
     /// The family's default output law: one pooled <see cref="EmbeddingDim"/>-wide embedding per sample.

@@ -24,7 +24,7 @@ namespace AiDotNet.Finance.Base;
 /// can focus on the actual math of predicting risk.
 /// </para>
 /// </remarks>
-public abstract class RiskModelBase<T> : FinancialModelBase<T>, IRiskModel<T>
+public abstract partial class RiskModelBase<T> : FinancialModelBase<T>, IRiskModel<T>
 {
     /// <summary>
     /// The confidence level used for risk calculations (e.g., 0.95 or 0.99).

@@ -33,7 +33,7 @@ namespace AiDotNet.Diffusion.Conditioning;
 /// fabricates token IDs from characters.
 /// </para>
 /// </remarks>
-public abstract class TextConditioningBase<T> : NeuralNetworkBase<T>, IConditioningModule<T>
+public abstract partial class TextConditioningBase<T> : NeuralNetworkBase<T>, IConditioningModule<T>
 {
     /// <summary>The injected tokenizer for this conditioner's text input.</summary>
     protected ITokenizer Tokenizer { get; }

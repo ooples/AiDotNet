@@ -766,40 +766,6 @@ public partial class GAMLSSRegression<T> : AsyncDecisionTreeRegressionBase<T>
         };
     }
 
-    /// <inheritdoc/>
-    public override byte[] Serialize()
-    {
-        using var ms = new MemoryStream();
-        using var writer = new BinaryWriter(ms);
-
-        byte[] baseData = base.Serialize();
-        writer.Write(baseData.Length);
-        writer.Write(baseData);
-
-        // Options
-        writer.Write((int)_options.DistributionFamily);
-        writer.Write((int)_options.LocationModelType);
-        writer.Write((int)_options.ScaleModelType);
-        writer.Write((int)_options.ShapeModelType);
-
-        // Y standardization
-        writer.Write(NumOps.ToDouble(_yMean));
-        writer.Write(NumOps.ToDouble(_yStd));
-
-        // State
-        writer.Write(_numFeatures);
-        writer.Write(NumOps.ToDouble(_locationIntercept));
-        writer.Write(NumOps.ToDouble(_scaleIntercept));
-        writer.Write(NumOps.ToDouble(_shapeIntercept));
-
-        // Coefficients
-        SerializeVector(writer, _locationCoefficients);
-        SerializeVector(writer, _scaleCoefficients);
-        SerializeVector(writer, _shapeCoefficients);
-
-        return ms.ToArray();
-    }
-
     private void SerializeVector(BinaryWriter writer, Vector<T>? vec)
     {
         writer.Write(vec != null);
@@ -811,38 +777,6 @@ public partial class GAMLSSRegression<T> : AsyncDecisionTreeRegressionBase<T>
                 writer.Write(NumOps.ToDouble(vec[i]));
             }
         }
-    }
-
-    /// <inheritdoc/>
-    public override void Deserialize(byte[] modelData)
-    {
-        using var ms = new MemoryStream(modelData);
-        using var reader = new BinaryReader(ms);
-
-        int baseLen = reader.ReadInt32();
-        byte[] baseData = reader.ReadBytes(baseLen);
-        base.Deserialize(baseData);
-
-        // Options
-        _options.DistributionFamily = (GAMLSSDistributionFamily)reader.ReadInt32();
-        _options.LocationModelType = (GAMLSSModelType)reader.ReadInt32();
-        _options.ScaleModelType = (GAMLSSModelType)reader.ReadInt32();
-        _options.ShapeModelType = (GAMLSSModelType)reader.ReadInt32();
-
-        // Y standardization
-        _yMean = NumOps.FromDouble(reader.ReadDouble());
-        _yStd = NumOps.FromDouble(reader.ReadDouble());
-
-        // State
-        _numFeatures = reader.ReadInt32();
-        _locationIntercept = NumOps.FromDouble(reader.ReadDouble());
-        _scaleIntercept = NumOps.FromDouble(reader.ReadDouble());
-        _shapeIntercept = NumOps.FromDouble(reader.ReadDouble());
-
-        // Coefficients
-        _locationCoefficients = DeserializeVector(reader);
-        _scaleCoefficients = DeserializeVector(reader);
-        _shapeCoefficients = DeserializeVector(reader);
     }
 
     private Vector<T>? DeserializeVector(BinaryReader reader)

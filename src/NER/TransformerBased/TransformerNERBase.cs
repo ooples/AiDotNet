@@ -46,7 +46,7 @@ namespace AiDotNet.NER.TransformerBased;
 /// slightly differently, leading to different strengths.
 /// </para>
 /// </remarks>
-public abstract class TransformerNERBase<T> : SequenceLabeling.SequenceLabelingNERBase<T>, INERModel<T>
+public abstract partial class TransformerNERBase<T> : SequenceLabeling.SequenceLabelingNERBase<T>, INERModel<T>
 {
     #region Fields
 

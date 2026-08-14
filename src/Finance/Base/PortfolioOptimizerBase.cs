@@ -23,7 +23,7 @@ namespace AiDotNet.Finance.Base;
 /// (stocks, bonds, etc.) to achieve the best balance of risk and return.
 /// </para>
 /// </remarks>
-public abstract class PortfolioOptimizerBase<T> : FinancialModelBase<T>, IPortfolioOptimizer<T>
+public abstract partial class PortfolioOptimizerBase<T> : FinancialModelBase<T>, IPortfolioOptimizer<T>
 {
     /// <summary>
     /// The number of assets in the portfolio universe.

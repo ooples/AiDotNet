@@ -17,7 +17,7 @@ namespace AiDotNet.ComputerVision.Segmentation.Common;
 /// Models extending this base class: Mask2Former, kMaX-DeepLab, OneFormer, ODISE.
 /// </para>
 /// </remarks>
-public abstract class PanopticSegmentationBase<T> : SegmentationModelBase<T>, IPanopticSegmentation<T>
+public abstract partial class PanopticSegmentationBase<T> : SegmentationModelBase<T>, IPanopticSegmentation<T>
 {
     // protected, and NOT readonly, for the same reason _optimizer on SegmentationModelBase is not: a
     // base field a derived model can neither read nor restore makes the base unadoptable. XDecoder

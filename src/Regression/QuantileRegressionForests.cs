@@ -53,7 +53,7 @@ namespace AiDotNet.Regression;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("Quantile Regression Forests", "https://jmlr.org/papers/v7/meinshausen06a.html", Year = 2006, Authors = "Nicolai Meinshausen")]
-public class QuantileRegressionForests<T> : AsyncDecisionTreeRegressionBase<T>
+public partial class QuantileRegressionForests<T> : AsyncDecisionTreeRegressionBase<T>
 {
     /// <summary>
     /// Initializes a new instance with default settings.

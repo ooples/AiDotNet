@@ -28,7 +28,7 @@ namespace AiDotNet.Video;
 /// consistent across the whole video.
 /// </para>
 /// </remarks>
-public abstract class VideoInpaintingBase<T> : VideoNeuralNetworkBase<T>
+public abstract partial class VideoInpaintingBase<T> : VideoNeuralNetworkBase<T>
 {
     /// <summary>
     /// Gets whether this model supports temporal propagation for inpainting.

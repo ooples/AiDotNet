@@ -21,7 +21,7 @@ namespace AiDotNet.ComputerVision.Detection.Necks;
 /// - BiFPN (Bidirectional FPN): Weighted bidirectional fusion
 /// </para>
 /// </remarks>
-public abstract class NeckBase<T> : ModelBase<T, Tensor<T>, Tensor<T>>
+public abstract partial class NeckBase<T> : ModelBase<T, Tensor<T>, Tensor<T>>
 {
     // NumOps and Engine inherited from ModelBase
 

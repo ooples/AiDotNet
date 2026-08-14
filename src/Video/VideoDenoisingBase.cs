@@ -27,7 +27,7 @@ namespace AiDotNet.Video;
 /// (different in each frame) while real content is consistent across frames.
 /// </para>
 /// </remarks>
-public abstract class VideoDenoisingBase<T> : VideoNeuralNetworkBase<T>
+public abstract partial class VideoDenoisingBase<T> : VideoNeuralNetworkBase<T>
 {
     /// <summary>
     /// Gets or sets the noise sigma level for non-blind denoising.

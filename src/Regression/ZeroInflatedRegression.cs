@@ -774,29 +774,6 @@ public partial class ZeroInflatedRegression<T> : AsyncDecisionTreeRegressionBase
         };
     }
 
-    /// <inheritdoc/>
-    public override byte[] Serialize()
-    {
-        using var ms = new MemoryStream();
-        using var writer = new BinaryWriter(ms);
-
-        byte[] baseData = base.Serialize();
-        writer.Write(baseData.Length);
-        writer.Write(baseData);
-
-        writer.Write((int)_options.DistributionFamily);
-        writer.Write(_options.ModelZeroInflation);
-        writer.Write(_numFeatures);
-        writer.Write(NumOps.ToDouble(_countIntercept));
-        writer.Write(NumOps.ToDouble(_zeroIntercept));
-        writer.Write(NumOps.ToDouble(_dispersion));
-
-        WriteVec(writer, _countCoefficients);
-        WriteVec(writer, _zeroCoefficients);
-
-        return ms.ToArray();
-    }
-
     private void WriteVec(BinaryWriter w, Vector<T>? v)
     {
         w.Write(v != null);
@@ -805,26 +782,6 @@ public partial class ZeroInflatedRegression<T> : AsyncDecisionTreeRegressionBase
             w.Write(v.Length);
             for (int i = 0; i < v.Length; i++) w.Write(NumOps.ToDouble(v[i]));
         }
-    }
-
-    /// <inheritdoc/>
-    public override void Deserialize(byte[] modelData)
-    {
-        using var ms = new MemoryStream(modelData);
-        using var reader = new BinaryReader(ms);
-
-        int baseLen = reader.ReadInt32();
-        base.Deserialize(reader.ReadBytes(baseLen));
-
-        _options.DistributionFamily = (ZeroInflatedDistributionFamily)reader.ReadInt32();
-        _options.ModelZeroInflation = reader.ReadBoolean();
-        _numFeatures = reader.ReadInt32();
-        _countIntercept = NumOps.FromDouble(reader.ReadDouble());
-        _zeroIntercept = NumOps.FromDouble(reader.ReadDouble());
-        _dispersion = NumOps.FromDouble(reader.ReadDouble());
-
-        _countCoefficients = ReadVec(reader);
-        _zeroCoefficients = ReadVec(reader);
     }
 
     private Vector<T>? ReadVec(BinaryReader r)

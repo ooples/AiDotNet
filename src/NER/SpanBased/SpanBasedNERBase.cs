@@ -40,7 +40,7 @@ namespace AiDotNet.NER.SpanBased;
 /// into a fixed-size vector for classification.
 /// </para>
 /// </remarks>
-public abstract class SpanBasedNERBase<T> : SequenceLabeling.SequenceLabelingNERBase<T>, INERModel<T>
+public abstract partial class SpanBasedNERBase<T> : SequenceLabeling.SequenceLabelingNERBase<T>, INERModel<T>
 {
     #region Fields
 

@@ -42,7 +42,7 @@ namespace AiDotNet.Finance.Base;
 /// - ONNX mode: Faster inference, pretrained, read-only
 /// </para>
 /// </remarks>
-public abstract class FinancialModelBase<T> : NeuralNetworkBase<T>, IFinancialModel<T>
+public abstract partial class FinancialModelBase<T> : NeuralNetworkBase<T>, IFinancialModel<T>
 {
     /// <summary>
     /// Gets the model-specific optimizer used by the common tape training path.

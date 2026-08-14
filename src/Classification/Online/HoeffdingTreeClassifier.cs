@@ -70,7 +70,7 @@ namespace AiDotNet.Classification.Online;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("Mining High-Speed Data Streams", "https://doi.org/10.1145/347090.347107", Year = 2000, Authors = "Pedro Domingos, Geoff Hulten")]
-public class HoeffdingTreeClassifier<T> : ClassifierBase<T>, IOnlineClassifier<T>
+public partial class HoeffdingTreeClassifier<T> : ClassifierBase<T>, IOnlineClassifier<T>
 {
 
     // Its own comment: "Tree-based model - structure cannot be set from flat parameters".

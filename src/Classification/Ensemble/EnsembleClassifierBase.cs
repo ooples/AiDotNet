@@ -31,7 +31,7 @@ namespace AiDotNet.Classification.Ensemble;
 /// - Voting: Let classifiers vote on the answer
 /// </para>
 /// </remarks>
-public abstract class EnsembleClassifierBase<T> : ProbabilisticClassifierBase<T>
+public abstract partial class EnsembleClassifierBase<T> : ProbabilisticClassifierBase<T>
 {
     /// <summary>
     /// The base estimators in the ensemble.

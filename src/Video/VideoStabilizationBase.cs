@@ -27,7 +27,7 @@ namespace AiDotNet.Video;
 /// stabilization), while advanced neural methods can fill in the missing edges.
 /// </para>
 /// </remarks>
-public abstract class VideoStabilizationBase<T> : VideoNeuralNetworkBase<T>
+public abstract partial class VideoStabilizationBase<T> : VideoNeuralNetworkBase<T>
 {
     /// <summary>
     /// Gets the crop ratio used for stabilization (fraction of frame that may be cropped).

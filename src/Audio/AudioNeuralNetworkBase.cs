@@ -40,7 +40,7 @@ namespace AiDotNet.Audio;
 // Batch tracks the input; the feature width is model-specific and comes from OutputFeatureWidth below.
 [TensorLayout(TensorAxis.Batch, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
 [TensorLayout(TensorAxis.Batch, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
-public abstract class AudioNeuralNetworkBase<T> : NeuralNetworkBase<T>, IShapeContract
+public abstract partial class AudioNeuralNetworkBase<T> : NeuralNetworkBase<T>, IShapeContract
 {
     /// <summary>
     /// The width of this model's output feature axis, or 0 when it has not been stated.

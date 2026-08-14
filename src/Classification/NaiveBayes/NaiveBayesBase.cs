@@ -25,7 +25,7 @@ namespace AiDotNet.Classification.NaiveBayes;
 /// and picks the class with the highest probability.
 /// </para>
 /// </remarks>
-public abstract class NaiveBayesBase<T> : ProbabilisticClassifierBase<T>,
+public abstract partial class NaiveBayesBase<T> : ProbabilisticClassifierBase<T>,
     IParameterizable<T, Matrix<T>, Vector<T>>
 {
 

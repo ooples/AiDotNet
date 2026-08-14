@@ -72,7 +72,13 @@ public class ModelStateGenerator : IIncrementalGenerator
 
     private static void Emit(SourceProductionContext spc, INamedTypeSymbol type)
     {
-        if (type.IsAbstract || type.IsStatic) return;
+        // ABSTRACT BASES ARE INCLUDED. Skipping them meant state declared on a shared base was never
+        // generated for anyone: every decision-tree model keeps its structure in
+        // DecisionTreeRegressionBase.Root, and no concrete model declares it, so nothing persisted it
+        // and each model wrote its own Serialize to walk the tree by hand. An abstract class can carry
+        // an override perfectly well, and RegisterGeneratedState chains through base calls, so putting
+        // the declaration where the member actually lives is both correct and the only place it can go.
+        if (type.IsStatic) return;
 
         // The numeric type comes from the base hook's own signature rather than from a guess about
         // which type parameter is "the" numeric one.
@@ -275,6 +281,16 @@ public class ModelStateGenerator : IIncrementalGenerator
             // to say that it is there. Restored IN PLACE, because the parent builds it and what
             // travels is its state rather than its identity.
             // A parameter source keeps its state in a vector rather than a payload.
+            // A RECURSIVE NODE GRAPH -- a decision tree. The registry has carried these all along
+            // through DeclareGraph; nothing could reach it, because describing a node meant writing the
+            // description by hand, which is the boilerplate this work removes rather than relocates.
+            // The node type says everything needed: its own properties give the fields, the ones typed
+            // as itself give the children, and its parameterless constructor gives Create. Eight
+            // tree and ensemble model families hand-wrote a Serialize to walk this structure, and
+            // deleting those pairs without this failed 26 tests -- exactly the silent state loss the
+            // deleter's own design warns about.
+            _ when IsRecursiveNode(memberType) is { } node => GraphCall(id, name, node, numeric),
+
             // THE CHILD PATHS STAY OPT-IN even though storage is now opt-out, and the difference is
             // real rather than cautious. Storage is state by its nature -- a Matrix<T> a model holds
             // between calls is something it learned. An object is not: a model also holds its
@@ -292,7 +308,13 @@ public class ModelStateGenerator : IIncrementalGenerator
 
             // A list of nested models -- an agent's per-actor target networks, a mixer's per-agent
             // heads. Same rule as a single child: each carries its own state, restored in place.
-            _ when annotated && memberType is INamedTypeSymbol { Name: "List", TypeArguments.Length: 1 } list
+            // A LIST of models is carried by default, unlike a single one, and the split is not
+            // arbitrary. The reason single children stay opt-in is the optimizer a model holds, and an
+            // optimizer is held in a field of its own -- nobody keeps a list of them. A list of models
+            // is an ensemble's members: a random forest IS its trees, and dropping them leaves a
+            // forest that restores with nothing to predict from. RandomForest, DART and
+            // ExtremelyRandomizedTrees all failed their round trip on exactly that.
+            _ when memberType is INamedTypeSymbol { Name: "List", TypeArguments.Length: 1 } list
                    && IsSerializableModel(list.TypeArguments[0]) =>
                 $"state.DeclareChildList<{list.TypeArguments[0].ToDisplayString().TrimEnd('?')}>(\"{id}\", {getter});",
 
@@ -358,6 +380,74 @@ public class ModelStateGenerator : IIncrementalGenerator
         }
 
         return sb.ToString();
+    }
+
+    /// <summary>The node type, when a member holds the root of a graph whose nodes point at their own kind.</summary>
+    /// <remarks>
+    /// Recognised by shape rather than by name, so a consumer's own tree is carried on the same terms
+    /// as ours. Three things have to hold: it is a class, it can be built with no arguments -- the
+    /// registry has to make one per node on restore -- and at least one settable property is typed as
+    /// the node itself, which is what makes it a graph rather than a plain object.
+    /// </remarks>
+    private static INamedTypeSymbol? IsRecursiveNode(ITypeSymbol memberType)
+    {
+        if (memberType is not INamedTypeSymbol { TypeKind: TypeKind.Class } named) return null;
+        if (named.IsAbstract) return null;
+
+        var self = named.ToDisplayString().TrimEnd('?');
+
+        if (!named.InstanceConstructors.Any(c => c.Parameters.Length == 0 && c.DeclaredAccessibility == Accessibility.Public))
+        {
+            return null;
+        }
+
+        var recursive = named.GetMembers().OfType<IPropertySymbol>().Any(p =>
+            !p.IsStatic && p.SetMethod is not null && p.GetMethod is not null
+            && p.Type.ToDisplayString().TrimEnd('?') == self);
+
+        return recursive ? named : null;
+    }
+
+    /// <summary>Builds the DeclareGraph call that carries a node graph.</summary>
+    /// <remarks>
+    /// Only the property shapes NodeShape can carry are described. What is left out is left out on
+    /// purpose: a decision node also holds the training samples that produced it and, in a model-tree,
+    /// a fitted sub-model, and neither is needed to reproduce a prediction. Carrying the samples would
+    /// put the training set inside every saved model.
+    /// </remarks>
+    private static string GraphCall(string id, string name, INamedTypeSymbol node, string numeric)
+    {
+        var self = node.ToDisplayString().TrimEnd('?');
+        var qualified = "global::" + self;
+        var shape = new StringBuilder();
+
+        shape.Append($".Create(() => new {qualified}())");
+
+        foreach (var property in node.GetMembers().OfType<IPropertySymbol>()
+            .Where(p => !p.IsStatic && p.GetMethod is not null && p.SetMethod is not null)
+            .OrderBy(p => p.Name, System.StringComparer.Ordinal))
+        {
+            var propertyType = property.Type.ToDisplayString().TrimEnd('?');
+            var bare = System.Text.RegularExpressions.Regex
+                .Replace(propertyType, @"\b[A-Za-z_][A-Za-z0-9_]*\.", string.Empty)
+                .Replace($"<{numeric}>", "<T>");
+
+            var call = propertyType == self ? "Child"
+                : bare switch
+                {
+                    "int" => "Int32",
+                    "bool" => "Boolean",
+                    "T" => "Scalar",
+                    "Vector<T>" => "Vector",
+                    _ => null,
+                };
+
+            if (call is null) continue;
+
+            shape.Append($".{call}(n => n.{property.Name}, (n, v) => n.{property.Name} = v)");
+        }
+
+        return $"state.DeclareGraph<{qualified}>(\"{id}\", () => {name}, v => {name} = v, n => n{shape});";
     }
 
     private static bool IsPartial(INamedTypeSymbol type)

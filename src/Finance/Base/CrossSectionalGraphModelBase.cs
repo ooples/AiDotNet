@@ -42,7 +42,7 @@ namespace AiDotNet.Finance.Base;
 /// stocks inform each other, instead of treating each in isolation. This is the shared foundation for
 /// those, including the part where they answer more than one question at a time.</para>
 /// </remarks>
-public abstract class CrossSectionalGraphModelBase<T> : FinancialModelBase<T>
+public abstract partial class CrossSectionalGraphModelBase<T> : FinancialModelBase<T>
 {
     /// <summary>
     /// Initializes the shared cross-sectional state.

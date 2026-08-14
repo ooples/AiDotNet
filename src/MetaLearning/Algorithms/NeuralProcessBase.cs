@@ -41,7 +41,7 @@ namespace AiDotNet.MetaLearning.Algorithms;
 /// - ANP: Adds attention for better predictions
 /// </para>
 /// </remarks>
-public abstract class NeuralProcessBase<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
+public abstract partial class NeuralProcessBase<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
     private IParameterizable<T, TInput, TOutput>? _cachedParamModel;
     private IParameterizable<T, TInput, TOutput> ParamModel => _cachedParamModel ??= InterfaceGuard.Parameterizable(MetaModel);

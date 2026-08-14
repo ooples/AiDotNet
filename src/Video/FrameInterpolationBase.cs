@@ -44,7 +44,7 @@ namespace AiDotNet.Video;
 [TensorLayout(TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
     Direction = TensorLayoutDirection.Output,
     Note = "One interpolated frame, so the doubled channel axis halves back.")]
-public abstract class FrameInterpolationBase<T> : VideoNeuralNetworkBase<T>, IShapeContract
+public abstract partial class FrameInterpolationBase<T> : VideoNeuralNetworkBase<T>, IShapeContract
 {
     /// <summary>
     /// The interpolation family's law: <c>(F - 1) * TemporalScaleFactor + 1</c> output frames.

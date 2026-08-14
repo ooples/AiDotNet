@@ -36,7 +36,7 @@ namespace AiDotNet.ReinforcementLearning.Agents;
 /// <c>TensorCodecOptions.Current.EnableCompilation = false</c>.
 /// </para>
 /// </remarks>
-public abstract class DeepReinforcementLearningAgentBase<T> : ReinforcementLearningAgentBase<T>
+public abstract partial class DeepReinforcementLearningAgentBase<T> : ReinforcementLearningAgentBase<T>
 {
     /// <summary>
     /// Gets the global execution engine for hardware-accelerated vector operations.

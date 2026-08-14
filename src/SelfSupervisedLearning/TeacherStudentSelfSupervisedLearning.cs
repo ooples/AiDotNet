@@ -24,7 +24,7 @@ namespace AiDotNet.SelfSupervisedLearning;
 ///
 /// <para><b>Methods using this pattern:</b> DINO, iBOT, EsViT, DINOv2</para>
 /// </remarks>
-public abstract class TeacherStudentSSL<T> : SelfSupervisedLearningMethodBase<T>
+public abstract partial class TeacherStudentSSL<T> : SelfSupervisedLearningMethodBase<T>
 {
     /// <summary>
     /// The teacher encoder (momentum-updated copy of student).

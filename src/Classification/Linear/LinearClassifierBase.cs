@@ -39,7 +39,7 @@ namespace AiDotNet.Classification.Linear;
 /// - Often surprisingly effective
 /// </para>
 /// </remarks>
-public abstract class LinearClassifierBase<T> : ProbabilisticClassifierBase<T>,
+public abstract partial class LinearClassifierBase<T> : ProbabilisticClassifierBase<T>,
     IParameterizable<T, Matrix<T>, Vector<T>>, IGradientComputable<T, Matrix<T>, Vector<T>>
 {
 
