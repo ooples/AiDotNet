@@ -24,6 +24,7 @@ internal static class Program
         }
 
         object? fixture = null;
+        int exitCode = 0;
         try
         {
             Assembly tests = Assembly.Load("AiDotNetTests");
@@ -36,7 +37,6 @@ internal static class Program
                 BindingFlags.Instance | BindingFlags.Public)
                 ?? throw new MissingMethodException(fixtureType.FullName, "ModelPerformanceCensus");
             await AwaitResult(census.Invoke(fixture, null)).ConfigureAwait(false);
-            return 0;
         }
         catch (Exception ex)
         {
@@ -44,7 +44,7 @@ internal static class Program
                 ? invocation.InnerException!
                 : ex;
             Console.Error.WriteLine(diagnostic);
-            return 1;
+            exitCode = 1;
         }
         finally
         {
@@ -62,9 +62,12 @@ internal static class Program
                 catch (Exception ex)
                 {
                     Console.Error.WriteLine($"Fixture disposal failed: {ex}");
+                    exitCode = 1;
                 }
             }
         }
+
+        return exitCode;
     }
 
     private static object ConstructFixture(Type fixtureType)
