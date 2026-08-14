@@ -42,7 +42,7 @@ namespace AiDotNet.Audio.Fingerprinting;
     "https://arxiv.org/abs/2104.01778",
     Year = 2021,
     Authors = "Yuan Gong, Yu-An Chung, James Glass")]
-public class ASTModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
+public partial class ASTModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
 {
     /// <inheritdoc />
     /// <remarks>

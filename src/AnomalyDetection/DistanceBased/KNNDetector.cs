@@ -40,7 +40,7 @@ namespace AiDotNet.AnomalyDetection.DistanceBased;
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("Efficient Algorithms for Mining Outliers from Large Data Sets", "https://doi.org/10.1145/335191.335437", Year = 2000, Authors = "Sridhar Ramaswamy, Rajeev Rastogi, Kyuseok Shim")]
-public class KNNDetector<T> : AnomalyDetectorBase<T>
+public partial class KNNDetector<T> : AnomalyDetectorBase<T>
 {
     private readonly int _k;
     [Buffer]

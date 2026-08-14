@@ -37,7 +37,7 @@ namespace AiDotNet.AnomalyDetection.Statistical;
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
     [ResearchPaper("Exploratory Data Analysis", "https://doi.org/10.1002/bimj.4710230408")]
-public class IQRDetector<T> : AnomalyDetectorBase<T>
+public partial class IQRDetector<T> : AnomalyDetectorBase<T>
 {
     private readonly double _multiplier;
     [Buffer]
