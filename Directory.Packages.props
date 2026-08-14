@@ -304,12 +304,12 @@
          accumulator ownership, nested backward scopes, differentiable tensor views, compiled-plan
          topology identity, and composite gradients used by the generated model-shape shards. -->
 
-    <!-- 0.123.0 includes AiDotNet.Tensors #935: exact fan-out ownership, composite-gradient
-         contracts, and saved metadata snapshots. The Native backends are coreleased in lockstep. -->
-    <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.123.0" />
-    <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.123.0" />
-    <PackageVersion Include="AiDotNet.Tensors" Version="0.123.0" />
-    <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.123.0" />
+    <!-- 0.125.0 includes AiDotNet.Tensors #944: fused Mesa and routed SSM scans used by
+         the generated model families in this branch. The Native backends are coreleased in lockstep. -->
+    <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.125.0" />
+    <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.125.0" />
+    <PackageVersion Include="AiDotNet.Tensors" Version="0.125.0" />
+    <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.125.0" />
     <!-- Microsoft / .NET -->
     <PackageVersion Include="Microsoft.CSharp" Version="4.7.0" />
     <PackageVersion Include="Microsoft.Data.Sqlite" Version="10.0.10" />
