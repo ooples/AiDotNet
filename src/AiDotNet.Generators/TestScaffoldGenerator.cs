@@ -1601,6 +1601,29 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         => IsPatchVisionModel(className) ? 112 : 128;
 
     /// <summary>
+    /// Resolves the input fixture from the architecture that the generated constructor actually
+    /// instantiates. The class-family size remains the fallback for constructors without explicit
+    /// literal image dimensions.
+    /// </summary>
+    private static void GetVisionFixtureSpatialSize(
+        string constructorExpression,
+        string className,
+        out int height,
+        out int width)
+    {
+        if (GeneratedVisionFixtureContract.TryGetArchitectureSpatialSize(
+                constructorExpression,
+                out height,
+                out width))
+        {
+            return;
+        }
+
+        height = GetVisionSpatialSize(className);
+        width = height;
+    }
+
+    /// <summary>
     /// Checks if a type IS exactly <c>NeuralNetworkArchitecture&lt;T&gt;</c> (not a derived type).
     /// Uses <see cref="SymbolEqualityComparer"/> for cross-assembly robustness, with a
     /// metadata-name fallback when the resolved compilation symbol is unavailable.
@@ -3364,16 +3387,17 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // backbone's strided 3x3 conv → max-pool stem sees the shape it
             // expects per the standard CV literature
             // (He et al. 2016 ResNet, Tan & Le 2019 EfficientNet, etc.).
-            int spatial = GetVisionSpatialSize(model.ClassName);
-            sb.AppendLine($"    protected override int[] InputShape => new[] {{ 1, 3, {spatial}, {spatial} }};");
+            GetVisionFixtureSpatialSize(constructorExpr, model.ClassName, out int height, out int width);
+            sb.AppendLine($"    protected override int[] InputShape => new[] {{ 1, 3, {height}, {width} }};");
             sb.AppendLine("    protected override int[] OutputShape => new[] { 4 };");
         }
         else if (isVisionModel)
         {
-            // Must match the architecture's inputHeight/inputWidth emitted above. Use
-            // the same helper so the two emission sites cannot drift apart.
-            int spatial = GetVisionSpatialSize(model.ClassName);
-            sb.AppendLine($"    protected override int[] InputShape => new[] {{ 3, {spatial}, {spatial} }};");
+            // The emitted constructor is authoritative. Selecting a second size from the class
+            // name can feed a bounded patch model thousands of extra tokens and manufacture a
+            // quadratic attention outlier unrelated to either the smoke topology or paper default.
+            GetVisionFixtureSpatialSize(constructorExpr, model.ClassName, out int height, out int width);
+            sb.AppendLine($"    protected override int[] InputShape => new[] {{ 3, {height}, {width} }};");
             sb.AppendLine("    protected override int[] OutputShape => new[] { 4 };");
 
             // Paper-scale vision / vision-language encoders use the original
