@@ -193,26 +193,15 @@ public partial class LocallyWeightedRegression<T> : NonLinearRegressionBase<T>
         _xTrain = x;
         _yTrain = y;
 
-        // Auto-scale bandwidth if using the default value of 1.0.
-        // The tricube kernel returns 0 for |distance/bandwidth| > 1,
-        // so bandwidth must be large enough relative to typical inter-point distances.
-        if (Math.Abs(_options.Bandwidth - 1.0) < 1e-10)
-        {
-            // Use the median of pairwise distances as a robust bandwidth estimate
-            double totalDist = 0;
-            int count = 0;
-            int sampleSize = Math.Min(50, x.Rows);
-            for (int i = 0; i < sampleSize; i++)
-            {
-                for (int j = i + 1; j < sampleSize; j++)
-                {
-                    totalDist += NumOps.ToDouble(VectorHelper.EuclideanDistance(x.GetRow(i), x.GetRow(j)));
-                    count++;
-                }
-            }
-            double meanDist = count > 0 ? totalDist / count : 1.0;
-            _options.Bandwidth = Math.Max(meanDist, 0.1);
-        }
+        // Nothing else to do. The scale of each local fit is decided per query point from the span,
+        // in LocalBandwidth, which is where Cleveland and Devlin put it.
+        //
+        // This used to derive one global bandwidth here and WRITE IT BACK INTO _options, which was
+        // wrong three ways: a single scale is fixed-bandwidth kernel regression rather than LOESS;
+        // the estimate came from the arithmetic mean of the first fifty rows' pairwise distances,
+        // while the comment beside it claimed a median and the "sample" was whatever order the rows
+        // arrived in; and writing to _options mutated the CALLER's object, so two models handed the
+        // same options instance silently retrained each other's smoothing.
     }
 
     /// <summary>
@@ -353,15 +342,58 @@ public partial class LocallyWeightedRegression<T> : NonLinearRegressionBase<T>
     private Vector<T> ComputeWeights(Vector<T> input)
     {
         var weights = new Vector<T>(_xTrain.Rows);
-        var bandwidth = NumOps.FromDouble(_options.Bandwidth);
+
+        var distances = new double[_xTrain.Rows];
+        for (int i = 0; i < _xTrain.Rows; i++)
+        {
+            distances[i] = Convert.ToDouble(VectorHelper.EuclideanDistance(input, _xTrain.GetRow(i)));
+        }
+
+        double bandwidth = LocalBandwidth(distances);
+        if (bandwidth <= 0) bandwidth = MinimumStabilityStrength;
 
         for (int i = 0; i < _xTrain.Rows; i++)
         {
-            var distance = VectorHelper.EuclideanDistance(input, _xTrain.GetRow(i));
-            weights[i] = KernelFunction(NumOps.Divide(distance, bandwidth));
+            weights[i] = KernelFunction(NumOps.FromDouble(distances[i] / bandwidth));
         }
 
         return weights;
+    }
+
+    /// <summary>
+    /// The bandwidth for ONE query point: the distance to its q-th nearest neighbour.
+    /// </summary>
+    /// <param name="distances">Distances from the query point to every training sample.</param>
+    /// <returns>The local bandwidth, or the configured override when one was set.</returns>
+    /// <remarks>
+    /// <para>
+    /// This is what makes the method locally weighted. Cleveland and Devlin define the smoothing
+    /// parameter as a SPAN f: each local fit uses the q = floor(f*n) nearest neighbours, and the
+    /// scale at a query point is the distance to the q-th of them, so the neighbourhood is wide where
+    /// the data are sparse and narrow where they are dense.
+    /// </para>
+    /// <para>
+    /// A single global bandwidth -- which is what this used, taken from the mean of the first fifty
+    /// rows' pairwise distances -- is fixed-bandwidth kernel regression instead, and it degrades
+    /// exactly where LOESS is supposed to earn its keep: in regions whose density differs from the
+    /// average. An explicitly configured Bandwidth still forces that older behaviour, so callers who
+    /// tuned one keep their numbers.
+    /// </para>
+    /// </remarks>
+    private double LocalBandwidth(double[] distances)
+    {
+        if (_options.Bandwidth > 0) return _options.Bandwidth;
+        if (distances.Length == 0) return MinimumStabilityStrength;
+
+        double span = _options.Span > 0 ? _options.Span : 0.75;
+        int q = (int)Math.Floor(span * distances.Length);
+        q = Math.Max(1, Math.Min(q, distances.Length));
+
+        // Only the q-th smallest is needed, but n is the training-set size and a sort here is clearer
+        // than a selection algorithm at this scale; revisit if a profile says otherwise.
+        var ordered = (double[])distances.Clone();
+        Array.Sort(ordered);
+        return ordered[q - 1];
     }
 
 
