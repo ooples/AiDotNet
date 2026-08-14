@@ -598,10 +598,12 @@ public partial class PatchEmbeddingLayer<T> : LayerBase<T>, IShapeContract
         // registration. Engine.TensorMatMul above rehydrates _projectionWeights transparently
         // on access, but Engine.Reshape views the storage directly and does NOT trip the
         // transparent-streaming rehydrate gate — so reshaping a paged-out bias would view empty
-        // storage and throw ("View exceeds storage bounds ... storage [0, -1]"). Touch .Data
-        // first: the 0.95.x rehydrate gate fires on .Data/.Memory access and brings the bias
-        // resident. Cheap (a property read) for the non-streaming common case.
-        _ = _projectionBias.Data;
+        // storage and throw ("View exceeds storage bounds ... storage [0, -1]"). Materialize
+        // through the READ-ONLY span surface before creating the view. Touching .Data here claimed
+        // mutable access and correctly failed for bf16/int8/int4 inference stores, even though this
+        // forward never writes the bias. AsSpan dequantizes only this tiny bias when necessary and
+        // preserves the read-only contract of the projection weights' no-upcast matmul path.
+        _ = _projectionBias.AsSpan();
 
         // Add bias (broadcast) — reshape bias fresh each call to keep the tape
         // GradFn chain alive (a cached reshape primed during inference would

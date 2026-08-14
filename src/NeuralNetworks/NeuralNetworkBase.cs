@@ -5142,6 +5142,26 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
 
     public virtual Tensor<T> Predict(Tensor<T> input)
     {
+        // Inference semantics belong in the NON-VIRTUAL funnel. Keeping this transition inside the
+        // default PredictCore meant every model that correctly overrode PredictCore (diffusion,
+        // multimodal, structured-output models) bypassed eval/no-grad mode entirely. Besides making
+        // Dropout/BatchNorm behave as training, that finalized auto-streaming as mutable/lossless and
+        // disabled the int8/int4 no-upcast kernels on the largest models.
+        bool wasTraining = IsTrainingMode;
+        if (wasTraining) SetTrainingMode(false);
+        using var noGrad = new NoGradScope<T>();
+        try
+        {
+            return PredictInInferenceMode(input);
+        }
+        finally
+        {
+            if (wasTraining) SetTrainingMode(true);
+        }
+    }
+
+    private Tensor<T> PredictInInferenceMode(Tensor<T> input)
+    {
         BindInputContract(input.Shape.ToArray()).Validate(input);
 
         // ONE-SHOT chain validation, on the first real forward rather than at construction.
@@ -6839,6 +6859,10 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // path callers in one place. Both calls are idempotent (gated by
         // _layerShapesResolved / _streamingAutoDetectFinalized) so the
         // hot path is one branch + early-return after the first call.
+        // Give structural estimates a chance to engage streaming BEFORE lazy shape resolution can
+        // allocate a foundation model's native weights. Models without an estimate safely defer;
+        // the second attempt after resolution observes their exact ParameterCount.
+        TryAutoEnableWeightStreaming(isTrainingOverride: isTraining);
         ResolveLazyLayerShapes();
         // Pass the INCOMING mode explicitly: this runs before IsTrainingMode is updated below,
         // so relying on the field would finalize the streaming store dtype from the prior mode.
@@ -7284,30 +7308,34 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
 
     /// <summary>
     /// Quant-resident inference store selection (Tier 1 / AiDotNet#1622). Picks the streaming-store
-    /// precision for a foundation-scale model in INFERENCE so its weight set stays RESIDENT — no
-    /// per-forward paging I/O, which is the dominant cost of the multi-forward Predict the
-    /// ModelFamily tests run — at the best accuracy that fits <paramref name="residentBudgetBytes"/>:
+    /// precision for a foundation-scale model in INFERENCE so its executable weight set stays
+    /// RESIDENT — no per-forward paging I/O or full-weight decode, which dominate the multi-forward
+    /// Predict workload in the ModelFamily census — at the best accuracy that fits
+    /// <paramref name="residentBudgetBytes"/>:
     /// <list type="bullet">
-    /// <item>bf16 (2 B/param) when it fits — least lossy, and the current Auto-inference behaviour,
-    /// so models that already fit bf16-resident are unchanged.</item>
-    /// <item>int8-resident (1 B/param, 4x vs fp32, fed by the no-upcast int8 GEMM) when bf16 will
-    /// not fit but int8 will — this is the lever that keeps the mid-size OOM models resident.</item>
-    /// <item>int4-resident (0.5 B/param, 8x) slots in here once the Tensors package exposes
-    /// <c>StreamingStoreDtype.Int4</c>; until then the &gt;int8 case falls through.</item>
-    /// <item>If even the tightest available precision will not fit, return bf16 and let the pool
-    /// page to stay under budget (the existing streaming fallback).</item>
+    /// <item>bf16 when the native execution footprint (4 B/float parameter) fits. The current CPU
+    /// bf16 store decodes weights to fp32 for GEMM, so testing only the 2 B backing-store footprint
+    /// undercounts the live working set and can select a slower tier that immediately pages.</item>
+    /// <item>int8-resident (1 B/param, fed directly by the no-upcast int8 GEMM) when native execution
+    /// does not fit but int8 will.</item>
+    /// <item>int4-resident (packed 0.5 B/param backing store, fed by the no-upcast int4 GEMM) when
+    /// int8 will not fit but int4 will.</item>
+    /// <item>If even int4 will not fit, retain int4 and let the pool page the smallest representation.
+    /// Falling back to bf16 here quadruples backing-store I/O and reintroduces fp32 decode.</item>
     /// </list>
     /// Inference-only: training keeps the Auto policy so fp/bf16 masters are preserved.
     /// </summary>
     internal static StreamingStoreDtype ResolveInferenceStoreDtype(long paramCount, long residentBudgetBytes)
     {
         if (paramCount <= 0 || residentBudgetBytes <= 0) return StreamingStoreDtype.Auto;
-        long bf16Bytes = paramCount * 2L;
-        if (bf16Bytes <= residentBudgetBytes) return StreamingStoreDtype.Bf16; // bf16-resident
+        // Use division rather than multiplication so hostile/estimated parameter counts cannot
+        // overflow. Although the backing store is bf16, the CPU GEMM consumes a decoded fp32
+        // owner; require that native execution footprint to fit before choosing the bf16 tier.
+        if (paramCount <= residentBudgetBytes / sizeof(float)) return StreamingStoreDtype.Bf16;
         if (paramCount <= residentBudgetBytes) return StreamingStoreDtype.Int8; // int8-resident (1 B/param)
-        // int4-resident (paramCount/2 bytes) is the next rung — enabled once the int4-capable
-        // Tensors release is consumed; until then, fall back to bf16 + paging.
-        return StreamingStoreDtype.Bf16;
+        // ceil(paramCount / 2) <= budget, expressed without an overflowing +1.
+        if (paramCount / 2 + paramCount % 2 <= residentBudgetBytes) return StreamingStoreDtype.Int4;
+        return StreamingStoreDtype.Int4;
     }
 
     /// <summary>
@@ -7520,6 +7548,13 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     internal void TryAutoEnableWeightStreaming(bool? isTrainingOverride = null)
     {
         if (_streamingAutoDetectFinalized) return;
+        // The default construction flag is training=true for backward compatibility, but a newly
+        // constructed model has not declared whether its first operation will be Predict or Train.
+        // Finalizing a permanent store dtype from that ambiguous flag made constructor-time probes
+        // choose lossless training storage for later inference. Explicit SetTrainingMode transitions
+        // pass an override and are handled immediately; the public Predict/Train funnels do so before
+        // their first allocation-heavy forward.
+        if (isTrainingOverride is null && !_firstForwardCompleted && IsTrainingMode) return;
         if (_weightLifetimeConfigured)
         {
             // User opted in explicitly via ConfigureWeightLifetime. Catch
@@ -14353,6 +14388,18 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     }
 
     /// <summary>
+    /// Converts a public model input into the tensor consumed by the trainable layer graph.
+    /// </summary>
+    /// <remarks>
+    /// The default is identity. Model-family bases whose public input requires a deterministic,
+    /// differentiable front end override this once for the whole family. Keeping the conversion in
+    /// the objective funnel ensures Train, analytical gradients, and numerical-gradient oracles all
+    /// differentiate the same function; previously audio inference applied PreprocessAudio while the
+    /// common training path bypassed it and fed raw waveforms into layers resolved for spectrograms.
+    /// </remarks>
+    protected virtual Tensor<T> PrepareInputForTraining(Tensor<T> input) => input;
+
+    /// <summary>
     /// Builds the exact scalar objective differentiated by every tape-based training path.
     /// </summary>
     /// <param name="input">The model input.</param>
@@ -14370,7 +14417,15 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         Tensor<T> target,
         ILossFunction<T>? lossFunction = null)
     {
-        var prediction = ForwardForTraining(input);
+        // This is the common entry point for every analytical-gradient and numerical
+        // conformance path, including callers that do not enter through Train(). Establish the
+        // training contract here so trainable layers, autodiff, and streaming storage all see a
+        // consistent mode. In particular, an inference-first model may have read-only quantized
+        // streaming snapshots that must be promoted before its weights participate in backward.
+        SetTrainingMode(true);
+
+        var trainingInput = PrepareInputForTraining(input);
+        var prediction = ForwardForTraining(trainingInput);
         target = AlignTargetToOutputShape(prediction, target);
 
         var resolved = lossFunction ?? LossFunction;
@@ -14429,7 +14484,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         bool usesCompositeObjective = this is ICompositeLoss<T> && _compositeTargetsAreReal;
         if (resolved is LossFunctions.MeanSquaredErrorLoss<T> && !usesCompositeObjective)
         {
-            var prediction = ForwardForTraining(input);
+            var prediction = ForwardForTraining(PrepareInputForTraining(input));
             target = AlignTargetToOutputShape(prediction, target);
             if (prediction.Length == 0) return 0.0;
 

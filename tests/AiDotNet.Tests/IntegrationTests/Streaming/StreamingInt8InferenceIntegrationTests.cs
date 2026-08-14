@@ -37,6 +37,23 @@ public class StreamingInt8InferenceIntegrationTests
         return new NeuralNetwork<float>(arch);
     }
 
+    private static NeuralNetwork<float> BuildPatchEmbeddingNet()
+    {
+        var layers = new List<ILayer<float>>
+        {
+            new PatchEmbeddingLayer<float>(patchSize: 2, embeddingDim: 8),
+        };
+        var arch = new NeuralNetworkArchitecture<float>(
+            inputType: InputType.ThreeDimensional,
+            taskType: NeuralNetworkTaskType.Regression,
+            inputHeight: 8,
+            inputWidth: 8,
+            inputDepth: 3,
+            outputSize: 8,
+            layers: layers);
+        return new NeuralNetwork<float>(arch);
+    }
+
     [Fact]
     public void Int8StreamingInference_TransparentlyRoutesAndMatchesFp32()
     {
@@ -81,6 +98,38 @@ public class StreamingInt8InferenceIntegrationTests
             Assert.True(rel < 0.08, $"int8 streaming inference should match fp32 within ~8% (rel {rel:E3}).");
             // ...and it actually quantized (not a silent fp32 fallback).
             Assert.True(diffs > 0, "int8 path should differ from fp32 (proves quantization ran, not a fallback).");
+        }
+        finally
+        {
+            WeightRegistry.SetStreamingExecutionTraining(null);
+            WeightRegistry.Reset();
+            if (Directory.Exists(dir)) Directory.Delete(dir, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void Int8StreamingInference_PatchEmbeddingBiasUsesReadOnlyMaterialization()
+    {
+        using var net = BuildPatchEmbeddingNet();
+        net.SetTrainingMode(false);
+        var input = new Tensor<float>(new[] { 1, 3, 8, 8 });
+        for (int i = 0; i < input.Length; i++) input[i] = (i % 17 - 8) * 0.01f;
+
+        var fp32 = net.Predict(input);
+        var dir = Path.Combine(Path.GetTempPath(), $"aidotnet-int8patch-{Guid.NewGuid():N}");
+        net.ConfigureWeightLifetime(new GpuOffloadOptions
+        {
+            StreamingBackingStorePath = dir,
+            StreamingPoolMaxResidentBytes = 64L * 1024,
+            StreamingStoreDtype = StreamingStoreDtype.Int8,
+        });
+        net.SetTrainingMode(false);
+
+        try
+        {
+            var int8 = net.Predict(input);
+            Assert.Equal(fp32.Shape.ToArray(), int8.Shape.ToArray());
+            Assert.All(int8.ToArray(), value => Assert.True(float.IsFinite(value)));
         }
         finally
         {
