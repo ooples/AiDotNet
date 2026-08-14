@@ -27,8 +27,36 @@ namespace AiDotNet.Optimizers;
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 [ComponentType(ComponentType.Optimizer)]
 [PipelineStage(PipelineStage.Training)]
-public class MomentumOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TInput, TOutput>
+public class MomentumOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TInput, TOutput>, Fused.IFusedOptimizerSpec
 {
+    /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// Maps onto the fused <c>SGDMomentum</c> kernel, which carries the momentum coefficient in
+    /// <c>Beta1</c> — see <c>CompiledTrainingPlan</c>'s SGDMomentum case, which calls
+    /// <c>SgdMomentumUpdateSimd(param, grad, velocity, len, lr, b1, nesterov: false)</c>.
+    /// </para>
+    /// <para>
+    /// Returns false when this instance adapts its learning rate OR its momentum during training. The
+    /// fused plan bakes both values in when the plan is built, so an adapting instance would silently
+    /// train at whatever the values happened to be at build time — the eager tape is correct for it.
+    /// </para>
+    /// </remarks>
+    bool Fused.IFusedOptimizerSpec.TryGetFusedOptimizerConfig(out Fused.FusedOptimizerConfig config)
+    {
+        config = default;
+        if (_options.UseAdaptiveLearningRate) return false;
+        if (_options.UseAdaptiveMomentum) return false;
+        if (!TryGetFusedLrSchedule(out var schedule)) return false;
+
+        config = new Fused.FusedOptimizerConfig(
+            Tensors.Engines.Compilation.OptimizerType.SGDMomentum,
+            (float)GetCurrentLearningRate(),
+            (float)Convert.ToDouble(CurrentMomentum),   // Beta1 carries the momentum coefficient
+            0f, 0f, 0f, schedule);
+        return true;
+    }
+
     /// <summary>
     /// The configuration options specific to the Momentum optimizer.
     /// </summary>

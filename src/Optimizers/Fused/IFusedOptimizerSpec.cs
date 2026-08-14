@@ -46,15 +46,37 @@ internal readonly record struct FusedOptimizerConfig(
 /// </summary>
 /// <remarks>
 /// <para>
-/// Open/closed-compliant by construction: having a fused SIMD kernel
-/// (<c>FusedOptimizer.{SGD,Adam,AdamW,AMSGrad}UpdateSimd</c>) is intrinsic to an
+/// Open/closed-compliant by construction: having a fused SIMD kernel is intrinsic to an
 /// optimizer, so the optimizer declares it. Only the optimizers that actually have
 /// a kernel implement this interface — there is no central catalog and no
 /// <c>OptimizerType is (… or … or …)</c> whitelist to keep in sync. An optimizer
 /// without a fused kernel simply doesn't implement it and uses the eager tape;
 /// adding a kernel later means implementing this interface, with no change to the
-/// dispatcher. This is also why only a handful of the ~20 optimizers are
-/// fuse-able: the rest have no SIMD kernel.
+/// dispatcher.
+/// </para>
+/// <para>
+/// <b>Which optimizers can fuse.</b> Do not guess from a list here — <c>CompiledTrainingPlan</c> in
+/// AiDotNet.Tensors is the authority, and a type is fuse-able only if that plan has a
+/// <c>case OptimizerType.X</c> for it. As of Tensors 0.122 <c>FusedOptimizer</c> ships ~34 kernels
+/// and the plan dispatches seventeen types: SGD, SGDMomentum, Adam, AdamW, Adagrad, RMSprop, Lion,
+/// AdaMax, AMSGrad, Nadam, AdaDelta, LARS, LAMB, FTRL, RAdam, ASGD and Rprop.
+/// </para>
+/// <para>
+/// An earlier version of this remark claimed only SGD/Adam/AdamW/AMSGrad had kernels, and that "only
+/// a handful of the ~20 optimizers are fuse-able: the rest have no SIMD kernel". That was already
+/// false, and it caused issue #1930 to be scoped as "write new SIMD kernels" when the kernels existed
+/// all along and the real gap was optimizers not implementing this interface. Second-order and
+/// proximal methods (BFGS, LBFGS, DFP, Newton, LevenbergMarquardt, TrustRegion, ConjugateGradient,
+/// CoordinateDescent, ADMM, ProximalGradientDescent) genuinely have no fused equivalent: their
+/// updates are not SGD-shaped, so declaring this interface on them would run a plain SGD step in
+/// place of the real algorithm — silently wrong training, worse than the eager fallback.
+/// </para>
+/// <para>
+/// <b>Optimizer-specific parameters.</b> LARS, FTRL, ASGD and Rprop read their coefficients from
+/// <c>FusedOptimizerExtras</c> rather than from the beta/epsilon slots on
+/// <see cref="FusedOptimizerConfig"/>, so they additionally require that channel to be populated.
+/// SGDMomentum is the exception needing no extras: the plan reads its momentum coefficient from
+/// <see cref="FusedOptimizerConfig.Beta1"/>.
 /// </para>
 /// <para>
 /// <see cref="TryGetFusedOptimizerConfig"/> returns <c>false</c> when THIS
