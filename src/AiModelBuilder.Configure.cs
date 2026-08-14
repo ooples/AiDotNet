@@ -233,7 +233,6 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     public IAiModelBuilder<T, TInput, TOutput> ConfigureFitnessCalculator(IFitnessCalculator<T, TInput, TOutput> calculator)
     {
         _trainingCore.ConfigureFitnessCalculator(calculator);
-        _fitnessCalculator = _trainingCore.FitnessCalculator;
         return this;
     }
 
@@ -250,7 +249,6 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     public IAiModelBuilder<T, TInput, TOutput> ConfigureFitDetector(IFitDetector<T, TInput, TOutput> detector)
     {
         _trainingCore.ConfigureFitDetector(detector);
-        _fitDetector = _trainingCore.FitDetector;
         return this;
     }
 

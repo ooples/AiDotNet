@@ -190,8 +190,9 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     /// </summary>
     private int? _postprocessingFitMaxRows;
     private IRegularization<T, TInput, TOutput>? _regularization;
-    private IFitnessCalculator<T, TInput, TOutput>? _fitnessCalculator;
-    private IFitDetector<T, TInput, TOutput>? _fitDetector;
+    // No _fitnessCalculator / _fitDetector mirrors here: ConfigureFitnessCalculator and
+    // ConfigureFitDetector delegate to _trainingCore, which owns that state. A local copy would
+    // be a second source of truth that nothing reads and that silently drifts (AIDN090).
     private IFullModel<T, TInput, TOutput>? _model;
 
     /// <summary>

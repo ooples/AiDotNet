@@ -20,7 +20,6 @@ namespace AiDotNet;
 /// <typeparam name="TOutput">The output type.</typeparam>
 public partial class AiModelBuilder<T, TInput, TOutput>
 {
-    private IAudioEffect<T>? _configuredAudioEffect;
     private IActiveLearningStrategy<T>? _configuredActiveLearningStrategy;
     private Tensor<T>? _activeLearningPool;
     private int _activeLearningBatchSize = 10;
@@ -47,8 +46,9 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     /// </remarks>
     public IAiModelBuilder<T, TInput, TOutput> ConfigureAudioEffect(IAudioEffect<T> audioEffect)
     {
-        _configuredAudioEffect = audioEffect;
         // Apply the effect as a composable preprocessing step (augmentation) over audio-tensor inputs.
+        // The pipeline step IS the configuration: the effect is recoverable from the named step, so
+        // there is deliberately no separate _configuredAudioEffect mirror to fall out of sync (AIDN090).
         _dataPipeline.AddPreprocessingStep(
             new Preprocessing.Audio.AudioEffectTransformer<T, TInput>(audioEffect), "audio_effect");
         _preprocessingPipeline = _dataPipeline.PreprocessingPipeline;
