@@ -5719,7 +5719,19 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
                     ? existing
                     : new Tensor<T>(shapes[i]);
             }
-            SetTrainableParameters(rebuilt);
+            // Rebind only when the runtime registry actually has slots to rebind. A shape-deferred
+            // layer (BatchNorm/LayerNorm resolving their width from the first real input) is still
+            // unmaterialized here -- EnsureMaterializedForParameterSurface cannot size it, because
+            // nothing has told it the channel width yet -- so its registry is empty while
+            // GetTrainableParameters already reports the lazy fields. That divergence is by design;
+            // it is the same one the generated SetTrainableParameters guards against.
+            //
+            // Calling the base setter across it threw "has 0 registered parameters but received N"
+            // and failed the whole deserialize/clone. Skipping the rebind is safe: OwnLength was
+            // applied to Parameters above, so the restored values are carried by the parameter
+            // vector and land when the layer materializes and pulls its slice.
+            if (RegisteredTrainableParameterCount == rebuilt.Length)
+                SetTrainableParameters(rebuilt);
         }
 
         foreach (var entry in layout.Buffers)
@@ -7035,14 +7047,62 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     public virtual void SetTrainableParameters(IReadOnlyList<Tensor<T>> parameters)
     {
         if (parameters.Count != _registeredTensors.Count)
+        {
+            // A count mismatch is not automatically an error: a caller may have asked
+            // CanAdoptTrainableParametersWithoutMaterialization first and been told yes.
+            // That predicate answers from the DECLARED shapes, which a lazy layer publishes
+            // before it has allocated -- and registered -- anything, so a shape-deferred layer
+            // legitimately arrives here with an empty registry and a full parameter list.
+            //
+            // Honour that answer instead of throwing over it. Before declared shapes existed the
+            // predicate returned false for these layers and the copy-on-write clone path bailed
+            // out to a materializing fallback, so this branch was unreachable; publishing shapes
+            // made it reachable without giving it an implementation, which is why adoption failed
+            // with "has 0 registered parameters but received N".
+            //
+            // Append rather than Register: declared parameters routinely share one role
+            // (gamma and beta are both NormalizationParams), and replace-by-role would collapse
+            // them to a single entry.
+            if (CanAdoptTrainableParametersWithoutMaterialization(parameters))
+            {
+                var declared = DeclaredParameterShapes();
+                ClearRegisteredParameters();
+                for (int i = 0; i < parameters.Count; i++)
+                    AppendTrainableParameter(parameters[i], declared[i].Role);
+
+                AdoptTrainableParameterTensors(parameters);
+                _cachedParameterCount = -1;
+                BumpParameterEpoch();
+                return;
+            }
+
             throw new ArgumentException(
                 $"{GetType().Name} has {_registeredTensors.Count} registered parameters but received {parameters.Count}.");
+        }
 
         for (int i = 0; i < parameters.Count; i++)
             _registeredTensors[i] = parameters[i];
 
         _cachedParameterCount = -1;
         BumpParameterEpoch();
+    }
+
+    /// <summary>
+    /// Points this layer's own parameter fields at tensors adopted without materialization.
+    /// </summary>
+    /// <param name="parameters">
+    /// The adopted tensors, in <see cref="DeclaredParameterShapes"/> order.
+    /// </param>
+    /// <remarks>
+    /// Registering an adopted tensor updates the registry, but a layer that also holds its
+    /// parameters in private fields would keep computing against the tensors it allocated for
+    /// itself while the registry points somewhere else. Source-generated
+    /// <c>SetTrainableParameters</c> overrides assign those fields directly; layers that reach
+    /// the base setter instead override this hook. The default is a no-op, which is correct for
+    /// layers whose only handle on a parameter IS its registry entry.
+    /// </remarks>
+    protected virtual void AdoptTrainableParameterTensors(IReadOnlyList<Tensor<T>> parameters)
+    {
     }
 
     /// <summary>
