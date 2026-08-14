@@ -697,6 +697,45 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape,
         // param-count/memory threshold, so tractable predictors stay fully resident.
         MaybeEngageWeightStreaming();
 
+        // The generated layer manifest can prove the complete parameter width before any values are
+        // allocated. Stream each reflected layer's OWN manifest entries in the same reflection order
+        // used by ParameterCount and GetParameters. This is deliberately lazy: MoveNext materializes
+        // only the layer that owns the next chunk, so inspecting four chunks of an 865M-parameter
+        // U-Net does not first allocate the other hundreds of tensors.
+        //
+        // Validate the completed stream against the declaration. A partial consumer may stop early by
+        // design; a full consumer can never silently receive an incomplete or duplicated surface.
+        EnsureParameterStructureReady();
+        if (TryGetDeclaredParameterCount(out long declaredCount, out _))
+        {
+            long actualCount = 0;
+            int layerIndex = 0;
+            foreach (var layer in ReflectInstanceLayers(this))
+            {
+                if (layer is not LayerBase<T> layerBase) continue;
+                foreach (var chunk in layerBase.GetOwnParameterStateChunks($"layers/{layerIndex:D8}"))
+                {
+                    var tensor = chunk.Tensor;
+                    if (tensor is null || tensor.Length == 0) continue;
+                    actualCount = checked(actualCount + tensor.Length);
+                    if (actualCount > declaredCount)
+                    {
+                        throw new AiDotNet.Models.Parameters.ParameterContractViolationException(
+                            "enumerate chunks", GetType().Name, declaredCount, actualCount);
+                    }
+                    yield return tensor;
+                }
+                layerIndex++;
+            }
+
+            if (actualCount != declaredCount)
+            {
+                throw new AiDotNet.Models.Parameters.ParameterContractViolationException(
+                    "enumerate chunks", GetType().Name, declaredCount, actualCount);
+            }
+            yield break;
+        }
+
         // Flat-free default: when reflection sees the FULL parameter set — every trainable weight
         // lives in a reflectable LayerBase field and is already resolved, so the reflected lengths
         // sum EXACTLY to ParameterCount — yield each weight tensor per-tensor, so a foundation-scale

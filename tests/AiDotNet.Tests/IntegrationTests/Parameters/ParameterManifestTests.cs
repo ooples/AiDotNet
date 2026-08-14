@@ -4,7 +4,9 @@ using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
 using AiDotNet.Models;
 using AiDotNet.Models.Parameters;
+using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Regression;
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.TimeSeries;
 using Xunit;
 
@@ -683,6 +685,43 @@ public class ParameterManifestTests
 
         Assert.Null(first.LastRestored);
         Assert.Null(second.LastRestored);
+    }
+
+    [Fact]
+    public async Task ComponentCollection_PreservesDeclaredMemberLayoutAcrossReadAndRestore()
+    {
+        await Task.Yield();
+        var member = new ContractProbeSource(
+            declaredCount: 3,
+            values: new[] { 1d, 2d, 3d },
+            reportedParameterCount: 2);
+        var source = new ComponentCollectionParameterSource<double>(() => new[] { member });
+
+        var slot = Assert.Single(source.GetParameterLayout());
+        Assert.Equal("index=00000000", slot.StableId);
+        Assert.Equal(3, slot.ParameterCount);
+        Assert.Equal(3, source.ParameterCount);
+        Assert.Equal(new[] { 1d, 2d, 3d }, source.GetParameters().ToArray());
+
+        source.SetParameters(new Vector<double>(new[] { 4d, 5d, 6d }));
+        Assert.Equal(new[] { 4d, 5d, 6d }, member.LastRestored);
+    }
+
+    [Fact]
+    public async Task LayerManifest_DoesNotDuplicateRegisteredSubLayerParameters()
+    {
+        await Task.Yield();
+        var layer = new BidirectionalLayer<double>(
+            new RecurrentLayer<double>(8),
+            activationFunction: (IActivationFunction<double>?)null);
+        var input = Tensor<double>.CreateRandom(2, 3, 4);
+
+        layer.Forward(input);
+
+        Assert.Equal(layer.GetParameters().Length, layer.ParameterCount);
+        Assert.Equal(
+            layer.GetParameters().Length,
+            layer.GetParameterLayout().Sum(slot => slot.ParameterCount ?? 0));
     }
 
     [Fact]

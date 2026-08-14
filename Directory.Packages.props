@@ -302,10 +302,14 @@
 
          Bumped 0.122.0 -> 0.123.0: brings AiDotNet.Tensors #935, which hardens fan-out
          accumulator ownership, nested backward scopes, differentiable tensor views, compiled-plan
-         topology identity, and composite gradients used by the generated model-shape shards. -->
+         topology identity, and composite gradients used by the generated model-shape shards.
 
-    <!-- 0.125.0 includes AiDotNet.Tensors #944: fused Mesa and routed SSM scans used by
-         the generated model families in this branch. The Native backends are coreleased in lockstep. -->
+         Bumped 0.123.0 -> 0.125.0: keeps the core and native packages on the latest published
+         lockstep release, including residency-correct engine dispatch, lazy in-place gradient
+         materialization, and the fused complex-diagonal/Mesa/routed SSM scan operations used by
+         the generated model families in this branch. -->
+
+    <!-- These packages are published and consumed as a lockstep release set. -->
     <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.125.0" />
     <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.125.0" />
     <PackageVersion Include="AiDotNet.Tensors" Version="0.125.0" />

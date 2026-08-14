@@ -102,6 +102,20 @@ public partial class SequenceLastLayer<T> : LayerBase<T>, IShapeContract
             _lastSequenceLength = 1;
             return input;
         }
+        else if (rank == 2)
+        {
+            // Shape: [seqLen, features] -> [features]
+            int seqLen = input.Shape[0];
+            _lastSequenceLength = seqLen;
+            return Engine.TensorSliceAxis(input, axis: 0, index: seqLen - 1);
+        }
+        else if (rank == 3)
+        {
+            // Shape: [seqLen, batch, features] -> [batch, features]
+            int seqLen = input.Shape[0];
+            _lastSequenceLength = seqLen;
+            return Engine.TensorSliceAxis(input, axis: 0, index: seqLen - 1);
+        }
         else
         {
             // Treat dimension 0 as the sequence axis and preserve every remaining

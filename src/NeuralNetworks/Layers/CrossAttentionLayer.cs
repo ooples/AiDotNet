@@ -71,21 +71,24 @@ public partial class CrossAttentionLayer<T> : LayerBase<T>, IShapeContract
     private readonly int _headDim;
 
     // Query projection: queryDim -> queryDim
-    [TrainableParameter(Role = PersistentTensorRole.Weights)]
-
+    [TrainableParameter(Role = PersistentTensorRole.Weights, Shape = "_queryDim, _queryDim")]
     private Tensor<T> _queryWeights;
 
     // Key projection: contextDim -> queryDim
+    [TrainableParameter(Role = PersistentTensorRole.Weights, Shape = "_contextDim, _queryDim")]
     private Tensor<T> _keyWeights;
 
     // Value projection: contextDim -> queryDim
+    [TrainableParameter(Role = PersistentTensorRole.Weights, Shape = "_contextDim, _queryDim")]
     private Tensor<T> _valueWeights;
 
     // Output projection: queryDim -> queryDim
+    [TrainableParameter(Role = PersistentTensorRole.Weights, Shape = "_queryDim, _queryDim")]
     private Tensor<T> _outputWeights;
-    [TrainableParameter(Role = PersistentTensorRole.Biases)]
-
+    [TrainableParameter(Role = PersistentTensorRole.Biases, Shape = "_queryDim")]
     private Tensor<T> _outputBias;
+
+    private bool _isInitialized;
 
     // Cached values for backward pass
     private Tensor<T>? _lastQuery;
@@ -165,26 +168,52 @@ public partial class CrossAttentionLayer<T> : LayerBase<T>, IShapeContract
             throw new ArgumentException($"Query dimension ({queryDim}) must be divisible by head count ({headCount}).");
         }
 
-        // Initialize projection matrices
-        // Q projection: queryDim -> queryDim (same dimension)
-        _queryWeights = new Tensor<T>(new[] { queryDim, queryDim });
+        // Projection dimensions are completely known at construction, but their values are not
+        // needed for shape discovery or parameter manifests. Empty placeholders preserve a stable
+        // generated parameter surface while deferring the potentially foundation-scale allocation
+        // until forward/value access or chunk enumeration reaches this layer.
+        _queryWeights = new Tensor<T>([0, 0]);
+        _keyWeights = new Tensor<T>([0, 0]);
+        _valueWeights = new Tensor<T>([0, 0]);
+        _outputWeights = new Tensor<T>([0, 0]);
+        _outputBias = new Tensor<T>([0]);
+        _isInitialized = false;
+    }
 
-        // K and V projections: contextDim -> queryDim (different input/output dims)
-        _keyWeights = new Tensor<T>(new[] { contextDim, queryDim });
-        _valueWeights = new Tensor<T>(new[] { contextDim, queryDim });
+    protected override bool ParametersAreConstructionSized => true;
 
-        // Output projection: queryDim -> queryDim
-        _outputWeights = new Tensor<T>(new[] { queryDim, queryDim });
-        _outputBias = new Tensor<T>(new[] { queryDim });
+    protected override void EnsureInitialized()
+    {
+        if (_isInitialized) return;
 
-        InitializeParameters();
+        lock (InitializationLock)
+        {
+            if (_isInitialized) return;
 
-        // Register trainable parameters for GPU memory optimization
-        RegisterTrainableParameter(_queryWeights, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_keyWeights, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_valueWeights, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_outputWeights, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_outputBias, PersistentTensorRole.Biases);
+            if (WeightsAlreadyAllocated(_queryWeights, _queryDim, _queryDim)
+                && WeightsAlreadyAllocated(_keyWeights, _contextDim, _queryDim)
+                && WeightsAlreadyAllocated(_valueWeights, _contextDim, _queryDim)
+                && WeightsAlreadyAllocated(_outputWeights, _queryDim, _queryDim)
+                && WeightsAlreadyAllocated(_outputBias, _queryDim))
+            {
+                _isInitialized = true;
+                return;
+            }
+
+            _queryWeights = AllocateLazyWeight([_queryDim, _queryDim]);
+            _keyWeights = AllocateLazyWeight([_contextDim, _queryDim]);
+            _valueWeights = AllocateLazyWeight([_contextDim, _queryDim]);
+            _outputWeights = AllocateLazyWeight([_queryDim, _queryDim]);
+            _outputBias = AllocateLazyWeight([_queryDim]);
+            InitializeParameters();
+
+            RegisterTrainableParameter(_queryWeights, PersistentTensorRole.Weights);
+            RegisterTrainableParameter(_keyWeights, PersistentTensorRole.Weights);
+            RegisterTrainableParameter(_valueWeights, PersistentTensorRole.Weights);
+            RegisterTrainableParameter(_outputWeights, PersistentTensorRole.Weights);
+            RegisterTrainableParameter(_outputBias, PersistentTensorRole.Biases);
+            _isInitialized = true;
+        }
     }
 
     /// <summary>
@@ -314,6 +343,11 @@ public partial class CrossAttentionLayer<T> : LayerBase<T>, IShapeContract
     /// <returns>Output tensor with same shape as query.</returns>
     private Tensor<T> ForwardCrossAttention(Tensor<T> query, Tensor<T> context)
     {
+        if (IsInferringShapes)
+            return ShapeInferenceOutput(query);
+
+        EnsureInitializationSerialized();
+
         // Store original shape for any-rank tensor support
         _originalQueryShape = query._shape;
         var queryShape = query._shape;
@@ -660,6 +694,8 @@ public partial class CrossAttentionLayer<T> : LayerBase<T>, IShapeContract
 
         if (Engine is not DirectGpuTensorEngine gpuEngine)
             throw new InvalidOperationException("ForwardGpu requires DirectGpuTensorEngine.");
+
+        EnsureInitializationSerialized();
 
         // Handle single or dual input
         Tensor<T> query = inputs[0];

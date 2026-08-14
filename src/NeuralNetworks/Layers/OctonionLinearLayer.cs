@@ -260,11 +260,10 @@ public partial class OctonionLinearLayer<T> : LayerBase<T>, IShapeContract
         // Tensor-based octonion matrix multiplication — no Octonion<T> allocation
         var output3D = Engine.OctonionMatMulTensor(input3D, _weights);
 
-        // Add biases through a recorded broadcast. Scalar mutation of output3D
-        // detached the bias from the tape and left its published gradient zero.
-        output3D = Engine.TensorBroadcastAdd(
-            output3D,
-            Engine.Reshape(_biases, [1, OutputFeatures, 8]));
+        // Add biases through the engine so the tape retains the route to _biases.
+        // Indexer mutation writes values into the matmul result but creates no backward op,
+        // which made every octonion bias look detached to reverse-mode autodiff.
+        output3D = Engine.TensorBroadcastAdd(output3D, _biases);
 
         _lastOutput = output3D;
 

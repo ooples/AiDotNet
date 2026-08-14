@@ -1085,6 +1085,13 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         "StyDiffModel",
         // VisionLanguage family
         "SmolVLM",
+        // WhisperModel owns the Generated Layers W shard failure in run 31797679144: its
+        // MoreData_ShouldNotDegrade hit the 120000 ms gate and took the test host down with it
+        // ("Test host process crashed : Fatal error."), so the shard's other 150 tests reported
+        // nothing. Rung 1: an encoder-decoder speech transformer computes in float32 in practice,
+        // and <float> halves every activation, gradient and Adam moment buffer -- the dominant
+        // resident cost of the 50+200-iteration probe.
+        "WhisperModel",
         // TTS: TorToise (Betker 2023) codec-LM decoder — LLMDim 1024 x 12 layers with an 8x1024
         // codebook head is ~150M params; <double> training OOMs. Deferred to the nightly heavy lane
         // (HeavyTimeoutTestClassNames), where

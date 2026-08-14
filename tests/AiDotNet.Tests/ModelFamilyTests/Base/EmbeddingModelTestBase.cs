@@ -87,8 +87,9 @@ public abstract class EmbeddingModelTestBase<T> : NeuralNetworkModelTestBase<T>
 
     // =====================================================
     // EMBEDDING INVARIANT: Output Dimensionality
-    // The output length should match the expected embedding dimension
-    // (product of OutputShape dimensions).
+    // The trailing output axis should match the expected embedding dimension.
+    // Predict may preserve batch and token axes (for example [batch, tokens, dim]);
+    // those axes describe how many embeddings were produced, not their dimensionality.
     // =====================================================
 
     [Fact(Timeout = 60000)]
@@ -102,11 +103,9 @@ public abstract class EmbeddingModelTestBase<T> : NeuralNetworkModelTestBase<T>
 
         var embedding = network.Predict(input);
 
-        int expectedLength = 1;
-        foreach (var dim in OutputShape)
-            expectedLength *= dim;
-
-        Assert.Equal(expectedLength, embedding.Length);
+        Assert.NotEmpty(OutputShape);
+        Assert.True(embedding.Shape.Length > 0, "Embedding output must have at least one axis.");
+        Assert.Equal(OutputShape[^1], embedding.Shape[^1]);
     }
 }
 

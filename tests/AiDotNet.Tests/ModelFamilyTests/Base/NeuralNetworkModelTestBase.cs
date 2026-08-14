@@ -3728,8 +3728,9 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
             System.Math.Min(GradientCheckSampleCount, trainableScalarCount), budgetSamples));
         int stride = System.Math.Max(1, trainableScalarCount / samples);
 
-        int checkedCount = 0, mismatches = 0;
+        int checkedCount = 0, mismatches = 0, kinkCoordinates = 0;
         string firstFail = string.Empty;
+        string firstKink = string.Empty;
         for (int s = 0; s < samples; s++)
         {
             // Hard elapsed backstop: stop finite-differencing once the test's wall-clock nears the
@@ -3753,7 +3754,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
             int i = slot.Offset + localIndex;
             T orig = theta[i];
 
-            double lp, lm, actualParameterSpan;
+            double lp, lm, plusParameter, minusParameter, actualParameterSpan;
             // Perturb via GetParameters/UpdateParameters. A model whose flat parameter round-trip
             // is internally inconsistent (its own UpdateParameters mis-slices the vector it just
             // handed out via GetParameters, e.g. "Expected 4, got 33" / "gradient length must match
@@ -3764,6 +3765,8 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
                 var pair = GradientCheckLossPairAt(nn, loss, input, target, theta, i, orig, eps);
                 lp = pair.Plus;
                 lm = pair.Minus;
+                plusParameter = pair.PlusParameter;
+                minusParameter = pair.MinusParameter;
                 actualParameterSpan = pair.PlusParameter - pair.MinusParameter;
                 if (actualParameterSpan == 0.0) continue;
             }
@@ -3779,6 +3782,10 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
             double denom = System.Math.Max(absFloor, System.Math.Abs(numeric) + System.Math.Abs(analytic));
             double relErr = System.Math.Abs(numeric - analytic) / denom;
             string numericalDetail = string.Empty;
+            double usedPlus = lp;
+            double usedMinus = lm;
+            double usedPlusParameter = plusParameter;
+            double usedMinusParameter = minusParameter;
 
             // Only pay for the epsilon ladder when the primary estimate disagrees. Search on BOTH
             // sides of the default step: wider differences can escape FP32 output quantization, while
@@ -3798,10 +3805,12 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
             double usedStep = eps;
             if (relErr > relTol && gradCheckClock.Elapsed.TotalSeconds < GradCheckBudgetSeconds)
             {
-                var estimates = new List<(double Step, double Derivative, double LossSpan)>();
+                var estimates = new List<(double Step, double Derivative, double LossSpan,
+                    double Plus, double Minus, double PlusParameter, double MinusParameter)>();
                 double primaryLossSpan = System.Math.Abs(lp - lm);
                 if (primaryLossSpan > 0.0)
-                    estimates.Add((eps, numeric, primaryLossSpan));
+                    estimates.Add((eps, numeric, primaryLossSpan,
+                        lp, lm, plusParameter, minusParameter));
 
                 double bestStability = double.PositiveInfinity;
                 double bestDerivative = numeric;
@@ -3824,7 +3833,8 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
                     double lossSpan = System.Math.Abs(pair.Plus - pair.Minus);
                     if (IsFinite(derivative) && IsFinite(lossSpan) && lossSpan > 0.0)
                     {
-                        estimates.Add((candidateStep, derivative, lossSpan));
+                        estimates.Add((candidateStep, derivative, lossSpan,
+                            pair.Plus, pair.Minus, pair.PlusParameter, pair.MinusParameter));
                         estimates.Sort((left, right) => left.Step.CompareTo(right.Step));
 
                         for (int estimateIndex = 0; estimateIndex + 1 < estimates.Count; estimateIndex++)
@@ -3842,6 +3852,10 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
                                 bestStability = stability;
                                 bestDerivative = ((4.0 * smaller.Derivative) - wider.Derivative) / 3.0;
                                 bestStep = smaller.Step;
+                                usedPlus = smaller.Plus;
+                                usedMinus = smaller.Minus;
+                                usedPlusParameter = smaller.PlusParameter;
+                                usedMinusParameter = smaller.MinusParameter;
                             }
                             if (stability <= relTol)
                             {
@@ -3870,15 +3884,65 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
             checkedCount++;
             if (relErr > relTol)
             {
-                mismatches++;
-                if (firstFail.Length == 0)
-                    firstFail = $"{slot.StableId}[{localIndex}] ({slot.Owner}, flat {i}): analytic={analytic:E4}, " +
-                        $"numeric={numeric:E4}, step={usedStep:E2}, relErr={relErr:F4}, " +
-                        $"loss-={lm:E9}, base={objectiveAfterParameterRoundTrip:E9}, loss+={lp:E9}{numericalDetail}";
+                double originalParameter = ConvertToDouble(orig);
+                double rightSpan = usedPlusParameter - originalParameter;
+                double leftSpan = originalParameter - usedMinusParameter;
+                double rightSlope = rightSpan == 0.0
+                    ? double.NaN
+                    : (usedPlus - objectiveAfterParameterRoundTrip) / rightSpan;
+                double leftSlope = leftSpan == 0.0
+                    ? double.NaN
+                    : (objectiveAfterParameterRoundTrip - usedMinus) / leftSpan;
+                double sideDenom = System.Math.Max(
+                    absFloor, System.Math.Abs(rightSlope) + System.Math.Abs(leftSlope));
+                double sideDisagreement = System.Math.Abs(rightSlope - leftSlope) / sideDenom;
+                double leftError = System.Math.Abs(leftSlope - analytic) / System.Math.Max(
+                    absFloor, System.Math.Abs(leftSlope) + System.Math.Abs(analytic));
+                double rightError = System.Math.Abs(rightSlope - analytic) / System.Math.Max(
+                    absFloor, System.Math.Abs(rightSlope) + System.Math.Abs(analytic));
+
+                // ReLU/LeakyReLU/max objectives are piecewise differentiable. Reverse AD returns
+                // the derivative of the active branch, whereas a central difference that crosses
+                // the boundary averages two different branches. Classify that case only when the
+                // analytical derivative independently agrees with at least one one-sided slope under
+                // the SAME tolerance and the two sides demonstrably disagree. A missing/scaled tape
+                // path that matches neither side remains a hard mismatch; no tolerance is widened.
+                bool isKink = IsFinite(leftSlope)
+                    && IsFinite(rightSlope)
+                    && sideDisagreement > relTol
+                    && System.Math.Min(leftError, rightError) <= relTol;
+                if (isKink)
+                {
+                    kinkCoordinates++;
+                    if (firstKink.Length == 0)
+                        firstKink = $"{slot.StableId}[{localIndex}] ({slot.Owner}, flat {i}): " +
+                            $"analytic={analytic:E4}, central={numeric:E4}, left={leftSlope:E4}, " +
+                            $"right={rightSlope:E4}, step={usedStep:E2}";
+                }
+                else
+                {
+                    mismatches++;
+                    if (firstFail.Length == 0)
+                        firstFail = $"{slot.StableId}[{localIndex}] ({slot.Owner}, flat {i}): " +
+                            $"analytic={analytic:E4}, numeric={numeric:E4}, left={leftSlope:E4}, " +
+                            $"right={rightSlope:E4}, step={usedStep:E2}, relErr={relErr:F4}, " +
+                            $"loss-={usedMinus:E9}, base={objectiveAfterParameterRoundTrip:E9}, " +
+                            $"loss+={usedPlus:E9}{numericalDetail}";
+                }
             }
         }
 
         if (checkedCount == 0) return;   // every perturbation produced a NaN loss — inconclusive
+
+        if (kinkCoordinates > 0)
+        {
+            ReportGradientFinding(
+                GradientReportFile,
+                GetType().FullName ?? GetType().Name,
+                $"PASS WITH NON-SMOOTH COORDINATES: {kinkCoordinates}/{checkedCount} central " +
+                $"differences crossed an activation boundary, but reverse AD agreed with a " +
+                $"one-sided derivative under the unchanged {relTol:P0} tolerance. First: {firstKink}");
+        }
 
         // One deterministic coordinate from EVERY trainable slot forms a normalized direction.
         // This covers the whole manifest with two loss evaluations per step, so a dropped slot cannot
@@ -5306,6 +5370,8 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         ParameterProbe probe, INeuralNetworkModel<T> network, Tensor<T> input, Tensor<T> target)
     {
         probe.Restore();
+        if (network is AiDotNet.NeuralNetworks.NeuralNetworkBase<T> neuralNetwork)
+            neuralNetwork.ResetBaseTrainOptimizerState();
         int steps = Math.Max(1, TargetDependenceStepCount);
         for (int i = 0; i < steps; i++) network.Train(input, target);
         return probe.SampleCurrent();

@@ -922,6 +922,32 @@ public class RestrictedBoltzmannMachine<T> : VectorModelLayoutBase<T>
         T batchNormalization = NumOps.FromDouble(1.0 / batchSize);
         T learningFactor = NumOps.Multiply(_learningRate, batchNormalization);
 
+        // Contrastive divergence computes an ascent direction (positive phase minus negative
+        // phase). Publish the equivalent loss gradient in the exact parameter order so the update
+        // below is W -= learningRate * gradient and callers observe the signal actually applied.
+        var publishedGradients = new Vector<T>(
+            HiddenSize * VisibleSize + VisibleSize + HiddenSize);
+        int gradientOffset = 0;
+        for (int i = 0; i < HiddenSize; i++)
+        {
+            for (int j = 0; j < VisibleSize; j++)
+            {
+                publishedGradients[gradientOffset++] = NumOps.Negate(
+                    NumOps.Multiply(weightUpdates[i, j], batchNormalization));
+            }
+        }
+        for (int i = 0; i < VisibleSize; i++)
+        {
+            publishedGradients[gradientOffset++] = NumOps.Negate(
+                NumOps.Multiply(visibleBiasUpdates[i], batchNormalization));
+        }
+        for (int i = 0; i < HiddenSize; i++)
+        {
+            publishedGradients[gradientOffset++] = NumOps.Negate(
+                NumOps.Multiply(hiddenBiasUpdates[i], batchNormalization));
+        }
+        PublishFlatParameterGradients(publishedGradients);
+
         // Update weights
         for (int i = 0; i < HiddenSize; i++)
         {
