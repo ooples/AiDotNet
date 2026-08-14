@@ -944,6 +944,50 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     /// are actually requested.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// This layer's own parameter storage state, as a single authoritative answer.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <see cref="IsShapeResolved"/> answers a question about SHAPES. It was also being read as
+    /// though it answered a question about STORAGE, and those two stopped agreeing the moment
+    /// <see cref="ResolveShapesOnly(int[])"/> began resolving shapes while deliberately leaving
+    /// weights unallocated. A boolean cannot express the resulting middle state, so every consumer
+    /// that inferred storage from it silently took the wrong branch -- restoring into a layer that
+    /// had no tensors to restore into.
+    /// </para>
+    /// <para>
+    /// Consumers at a value boundary (count, read, restore, clone, serialize) must switch on this
+    /// rather than on <see cref="IsShapeResolved"/>, so that a future state added to
+    /// <see cref="ParameterReadiness"/> surfaces as a compiler-visible gap instead of a silently
+    /// mistaken branch.
+    /// </para>
+    /// </remarks>
+    internal ParameterReadiness OwnParameterReadiness
+    {
+        get
+        {
+            if (RegisteredTrainableParameterCount > 0) return ParameterReadiness.Materialized;
+
+            // No registered storage. Distinguish "nothing to store" from "not stored YET", and
+            // within the latter distinguish a resolvable shape from one still awaiting an input.
+            bool hasCountableDeclaredParameters =
+                TryGetOwnDeclaredParameterCount(out long declaredParameterCount, out _)
+                && declaredParameterCount > 0;
+
+            if (IsShapeResolved || ParametersAreConstructionSized || hasCountableDeclaredParameters)
+            {
+                return SupportsTraining || hasCountableDeclaredParameters
+                    ? ParameterReadiness.ShapeResolvedUnmaterialized
+                    : ParameterReadiness.ParameterFree;
+            }
+
+            return SupportsTraining
+                ? ParameterReadiness.ShapeDeferred
+                : ParameterReadiness.ParameterFree;
+        }
+    }
+
     private void EnsureMaterializedForParameterSurface()
         // Delegates rather than repeating the gate, so the write path and the explicit
         // MaterializeParameters() entry point cannot drift apart again -- and so this one
@@ -5704,6 +5748,19 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     internal void ApplyParameterLayout(ParameterLayoutNode layout)
     {
         EnsureMaterializedForParameterSurface();
+
+        // A restore is a VALUE boundary, so it needs storage, not merely a known shape.
+        // ResolveShapesOnly deliberately produces the in-between state -- it runs OnFirstForward
+        // to fix the shapes and then, by design, does NOT call EnsureInitialized so RNG draws are
+        // deferred to the first real forward. That leaves IsShapeResolved true with no allocated
+        // or registered tensors: ParameterReadiness.ShapeResolvedUnmaterialized.
+        //
+        // Every restore path here predates that state and reads IsShapeResolved as a proxy for
+        // "parameters exist". Ask the readiness gateway instead, and force materialization before
+        // rebinding. Deciding it here rather than at each rebind site is what stops the same
+        // divergence reappearing at the next value boundary.
+        if (OwnParameterReadiness == ParameterReadiness.ShapeResolvedUnmaterialized)
+            EnsureInitializationSerialized();
 
         if (Parameters.Length != layout.OwnLength) Parameters = new Vector<T>(layout.OwnLength);
 
