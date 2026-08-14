@@ -69,18 +69,21 @@ public partial class LayerNormalizationLayer<T> : LayerBase<T>, IShapeContract
     /// <summary>
     /// The scale parameters learned during training.
     /// </summary>
-    // Deliberately has no static Shape declaration. The parameterless constructor resolves the
-    // normalized width from the actual first input's last axis. A model's architecture shape can
-    // describe the public input before an upstream projection, so using it to materialize gamma
-    // during parameter inspection can permanently lock this layer to the wrong feature width.
-    // The eager featureSize constructor already materializes both tensors and needs no formula.
-    [TrainableParameter(Role = PersistentTensorRole.NormalizationParams)]
+    // The parameterless constructor still resolves the normalized width from the actual first
+    // input's last axis. This declaration describes that width only AFTER the layer itself is
+    // resolved; it never materializes gamma from a model's public architecture shape. That lets a
+    // generated manifest validate lazy restore/COW without locking LayerNorm to an upstream width.
+    [TrainableParameter(
+        Role = PersistentTensorRole.NormalizationParams,
+        Shape = "OutputShape[0]")]
     private Tensor<T> _gamma;
 
     /// <summary>
     /// The shift parameters learned during training.
     /// </summary>
-    [TrainableParameter(Role = PersistentTensorRole.NormalizationParams)]
+    [TrainableParameter(
+        Role = PersistentTensorRole.NormalizationParams,
+        Shape = "OutputShape[0]")]
     private Tensor<T> _beta;
 
     /// <summary>
@@ -312,13 +315,67 @@ public partial class LayerNormalizationLayer<T> : LayerBase<T>, IShapeContract
                 nameof(input));
         }
 
-        _gamma = Tensor<T>.CreateDefault([featureSize], NumOps.One);
-        _beta = Tensor<T>.CreateDefault([featureSize], NumOps.Zero);
+        if (IsResolvingShapesOnly)
+        {
+            ResolveShapes(new[] { featureSize }, new[] { featureSize });
+            return;
+        }
 
-        RegisterTrainableParameter(_gamma, PersistentTensorRole.NormalizationParams);
-        RegisterTrainableParameter(_beta, PersistentTensorRole.NormalizationParams);
+        EnsureAffineParameters(featureSize);
+        ResolveShapes(new[] { featureSize }, new[] { featureSize });
+    }
+
+    /// <summary>
+    /// Resolves an architecture-declared normalization width without allocating affine parameters.
+    /// </summary>
+    /// <remarks>
+    /// This is the authoritative counterpart to a speculative chain-level
+    /// <see cref="LayerBase{T}.ResolveShapesOnly(int[])"/> walk. Composite base factories call it
+    /// when their own topology fixes the LayerNorm width, allowing generated parameter manifests
+    /// and copy-on-write clones to reason about gamma and beta before materialization.
+    /// </remarks>
+    internal void ResolveArchitectureFeatureSizeOnly(int featureSize)
+    {
+        if (featureSize <= 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(featureSize),
+                $"Layer normalization requires a positive feature size; got {featureSize}.");
+        }
+
+        if (IsShapeResolved)
+        {
+            int resolvedFeatureSize = InputShape[InputShape.Length - 1];
+            if (resolvedFeatureSize != featureSize)
+            {
+                throw new InvalidOperationException(
+                    $"Layer normalization is already resolved for width {resolvedFeatureSize} and cannot be rebound to {featureSize}.");
+            }
+
+            return;
+        }
 
         ResolveShapes(new[] { featureSize }, new[] { featureSize });
+    }
+
+    /// <inheritdoc />
+    protected override void EnsureInitialized()
+    {
+        if (_gamma.Length > 0 || !IsShapeResolved) return;
+
+        int featureSize = InputShape[InputShape.Length - 1];
+        if (featureSize > 0)
+            EnsureAffineParameters(featureSize);
+    }
+
+    private void EnsureAffineParameters(int featureSize)
+    {
+        if (_gamma.Length > 0) return;
+
+        _gamma = Tensor<T>.CreateDefault([featureSize], NumOps.One);
+        _beta = Tensor<T>.CreateDefault([featureSize], NumOps.Zero);
+        RegisterTrainableParameter(_gamma, PersistentTensorRole.NormalizationParams);
+        RegisterTrainableParameter(_beta, PersistentTensorRole.NormalizationParams);
     }
 
     /// <summary>

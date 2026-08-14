@@ -24,6 +24,7 @@ namespace AiDotNet.Attributes
         public bool Optional { get; set; }
         public string? Condition { get; set; }
         public string? Shape { get; set; }
+        public string? LowPrecisionBacking { get; set; }
         public int Availability { get; set; }
     }
     [AttributeUsage(AttributeTargets.Field | AttributeTargets.Property)] public sealed class FittedParameterAttribute : Attribute { }
@@ -536,6 +537,30 @@ public partial class ConditionalLayer<T> : AiDotNet.NeuralNetworks.Layers.LayerB
             "if (Affine) DeclareTrainableParameter(components, _gamma);",
             generated,
             StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task LayerGenerator_LowPrecisionBackingFlowsThroughLogicalParameterSurfaces()
+    {
+        await Task.Yield();
+        const string source = @"
+using AiDotNet.Attributes;
+public partial class ResidentLayer<T> : AiDotNet.NeuralNetworks.Layers.LayerBase<T>
+{
+    [TrainableParameter(
+        Shape = ""4, 4"",
+        LowPrecisionBacking = nameof(_weightHalf))]
+    private AiDotNet.Tensors.LinearAlgebra.Tensor<T> _weight = new();
+    private AiDotNet.Tensors.LinearAlgebra.Tensor<System.Half>? _weightHalf;
+}";
+
+        string generated = Run(new AiDotNet.Generators.TrainableParameterGenerator(), source);
+        Assert.Contains(
+            "DeclareTrainableParameter(components, _weight, _weightHalf);",
+            generated,
+            StringComparison.Ordinal);
+        Assert.Contains("_weightHalf = null;", generated, StringComparison.Ordinal);
+        Assert.Contains("MarkTrainableParametersRebound();", generated, StringComparison.Ordinal);
     }
 
     [Fact]

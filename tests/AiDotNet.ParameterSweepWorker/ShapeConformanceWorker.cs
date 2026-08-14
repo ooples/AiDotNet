@@ -162,10 +162,30 @@ internal static class ShapeConformanceWorker
             bool isClassCount = parameter.ParameterType == typeof(int)
                 && (parameter.Name?.IndexOf("numClasses", StringComparison.OrdinalIgnoreCase) >= 0
                     || parameter.Name?.IndexOf("classCount", StringComparison.OrdinalIgnoreCase) >= 0);
-            arguments[i] = isClassCount ? classes : parameter.DefaultValue;
+            arguments[i] = isClassCount ? classes : ResolveProbeArgument(parameter);
         }
 
         return ctor.Invoke(arguments);
+    }
+
+    /// <summary>
+    /// Uses an options type's faithful small profile for bounded CI probes when it publishes one.
+    /// The convention keeps the worker model-agnostic and prevents production-scale defaults from
+    /// turning structural conformance into an allocation benchmark.
+    /// </summary>
+    private static object? ResolveProbeArgument(ParameterInfo parameter)
+    {
+        var factory = parameter.ParameterType
+            .GetMethods(BindingFlags.Public | BindingFlags.Static)
+            .FirstOrDefault(method =>
+                method.Name == "TinyForTests"
+                && parameter.ParameterType.IsAssignableFrom(method.ReturnType)
+                && method.GetParameters().All(p => p.HasDefaultValue));
+
+        if (factory is null) return parameter.DefaultValue;
+
+        object?[] arguments = factory.GetParameters().Select(p => p.DefaultValue).ToArray();
+        return factory.Invoke(null, arguments);
     }
 
     private static int[]? TryArchitectureInputShape(object model)

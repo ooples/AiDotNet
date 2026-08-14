@@ -139,4 +139,23 @@ public sealed class TrainableParameterAttribute : Attribute
     /// </para>
     /// </remarks>
     public string? Shape { get; set; }
+
+    /// <summary>
+    /// Gets or sets the name of an optional <c>Tensor&lt;Half&gt;</c> field that becomes the
+    /// authoritative value store when this parameter is kept resident at low precision.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Use <c>nameof(...)</c>. The parameter remains one logical optimizer/checkpoint slot: the
+    /// generator reads and writes the low-precision backing while it is present, and falls back to
+    /// the ordinary <c>Tensor&lt;T&gt;</c> field otherwise. Rebinding the ordinary parameter clears the
+    /// backing automatically, so a restored or copy-on-write tensor cannot be shadowed by stale
+    /// resident values.
+    /// </para>
+    /// <para>
+    /// This is an explicit storage declaration, not an inference from type, nullability, or field
+    /// name. AIDN094 rejects missing, ambiguous, static, or non-<c>Tensor&lt;Half&gt;</c> backing members.
+    /// </para>
+    /// </remarks>
+    public string? LowPrecisionBacking { get; set; }
 }

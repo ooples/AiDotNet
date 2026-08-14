@@ -33,9 +33,8 @@ namespace AiDotNet.Generators;
 /// diagnostic in this repo (AIDN050-052 and friends) uses this shape.
 /// </para>
 /// <para>
-/// Warning severity during migration so the build stays green while layers are converted. These
-/// become errors once the count reaches zero, at which point forgetting is impossible rather than
-/// merely detectable.
+/// Manual parameter surfaces are compiler errors. The migration count reached zero, so reintroducing
+/// one now fails at authoring time instead of waiting for a count/vector/restore shard to find drift.
 /// </para>
 /// </remarks>
 [Generator]
@@ -48,7 +47,7 @@ public class ParameterAutomationAnalyzer : IIncrementalGenerator
         title: "Parameter surface is derived and should not be overridden",
         messageFormat: "'{0}' overrides {1}; LayerBase derives it from the same registry, so this can only restate the fold or drift from it",
         category: Category,
-        defaultSeverity: DiagnosticSeverity.Warning,
+        defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true,
         description: "Delete the override and let LayerBase derive the value. ParameterCount, GetParameters and " +
                      "SetParameters fold one enumeration in one order, so they cannot disagree.");
@@ -58,7 +57,7 @@ public class ParameterAutomationAnalyzer : IIncrementalGenerator
         title: "Model parameter surface is derived and should not be overridden",
         messageFormat: "'{0}' overrides {1}; the model base derives it from the registered components, so this can only restate the fold or drift from it",
         category: Category,
-        defaultSeverity: DiagnosticSeverity.Warning,
+        defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true,
         description: "Declare the model's components in RegisterComponents and delete the override. " +
                      "A hand-written model surface is how a count and a vector come to disagree: 44 " +
@@ -191,6 +190,19 @@ public class ParameterAutomationAnalyzer : IIncrementalGenerator
                    + "preserves adaptive restore validation while the binding gives the allocation-free "
                    + "manifest an exact current width. Use bare * only when the axis is still unknown.");
 
+    private static readonly DiagnosticDescriptor InvalidLowPrecisionBacking = new(
+        id: "AIDN094",
+        title: "Trainable parameter low-precision backing is invalid",
+        messageFormat: "'{0}.{1}' declares low-precision backing '{2}', but {3}",
+        category: Category,
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "TrainableParameter.LowPrecisionBacking must name one instance Tensor<Half> "
+                   + "field on the declaring layer, and one backing may represent only one logical "
+                   + "parameter. Use nameof(...) so renames remain compiler-safe. The generated "
+                   + "manifest then keeps count, checkpoint, chunk, restore, and clone surfaces "
+                   + "bound to the authoritative resident values.");
+
     /// <inheritdoc />
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
@@ -254,6 +266,12 @@ public class ParameterAutomationAnalyzer : IIncrementalGenerator
                 {
                     var registrations =
                         ParameterMemberSemanticModel.GetRegistrationClassifications(type);
+                    var lowPrecisionBackingNames = new System.Collections.Generic.HashSet<string>(
+                        type.GetMembers()
+                            .Select(GetTrainableLowPrecisionBacking)
+                            .Where(name => !string.IsNullOrWhiteSpace(name))
+                            .Select(name => name!),
+                        System.StringComparer.Ordinal);
                     foreach (var member in type.GetMembers())
                     {
                         var memberType = ParameterMemberSemanticModel.GetMemberType(member);
@@ -270,7 +288,8 @@ public class ParameterAutomationAnalyzer : IIncrementalGenerator
                         var memberLocation = member.Locations.FirstOrDefault(location => location.IsInSource);
                         if (memberLocation is null) continue;
 
-                        if (classification.Kind == ParameterMemberSemanticModel.Kind.Unclassified)
+                        if (classification.Kind == ParameterMemberSemanticModel.Kind.Unclassified
+                            && !lowPrecisionBackingNames.Contains(member.Name))
                         {
                             spc.ReportDiagnostic(Diagnostic.Create(
                                 UnclassifiedNumericState, memberLocation,
@@ -298,6 +317,45 @@ public class ParameterAutomationAnalyzer : IIncrementalGenerator
 
                         if (classification.Kind == ParameterMemberSemanticModel.Kind.Trainable)
                         {
+                            string? backingName = GetTrainableLowPrecisionBacking(member);
+                            if (backingName is not null)
+                            {
+                                var backings = type.GetMembers(backingName)
+                                    .Where(candidate => candidate is IFieldSymbol)
+                                    .ToArray();
+                                int referenceCount = type.GetMembers()
+                                    .Count(candidate => string.Equals(
+                                        GetTrainableLowPrecisionBacking(candidate),
+                                        backingName,
+                                        System.StringComparison.Ordinal));
+                                string? reason = null;
+                                if (string.IsNullOrWhiteSpace(backingName))
+                                    reason = "the backing name is empty";
+                                else if (member is not IFieldSymbol trainableField
+                                    || !IsTensorFieldType(trainableField.Type))
+                                    reason = "only one tensor field can declare alternate resident storage";
+                                else if (string.Equals(backingName, member.Name,
+                                    System.StringComparison.Ordinal))
+                                    reason = "a parameter cannot use itself as alternate storage";
+                                else if (backings.Length != 1)
+                                    reason = backings.Length == 0
+                                        ? "no such field exists on the declaring type"
+                                        : "the backing name is ambiguous";
+                                else if (backings[0].IsStatic)
+                                    reason = "the backing must be instance-specific, not static";
+                                else if (!IsHalfTensor(((IFieldSymbol)backings[0]).Type))
+                                    reason = "the named field is not Tensor<Half>";
+                                else if (referenceCount != 1)
+                                    reason = "the same backing is assigned to more than one trainable parameter";
+
+                                if (reason is not null)
+                                {
+                                    spc.ReportDiagnostic(Diagnostic.Create(
+                                        InvalidLowPrecisionBacking, memberLocation,
+                                        type.Name, member.Name, backingName, reason));
+                                }
+                            }
+
                             string? conditionName = GetTrainableCondition(member);
                             if (conditionName is not null)
                             {
@@ -501,7 +559,8 @@ public class ParameterAutomationAnalyzer : IIncrementalGenerator
                             if (ms is null) continue;
                             var mloc = member.Locations.FirstOrDefault(l => l.IsInSource);
                             if (mloc is not null)
-                                spc.ReportDiagnostic(Diagnostic.Create(RedundantModelSurface, mloc, type.Name, ms));
+                                spc.ReportDiagnostic(Diagnostic.Create(
+                                    RedundantModelSurface, mloc, type.Name, ms));
                         }
 
                         // AIDN084: weights the model owns but never declares. The count-vs-vector
@@ -620,7 +679,8 @@ public class ParameterAutomationAnalyzer : IIncrementalGenerator
                     if (surface is null) continue;
                     var ml = member.Locations.FirstOrDefault(l => l.IsInSource);
                     if (ml is null) continue;
-                    spc.ReportDiagnostic(Diagnostic.Create(RedundantParameterSurface, ml, type.Name, surface));
+                    spc.ReportDiagnostic(Diagnostic.Create(
+                        RedundantParameterSurface, ml, type.Name, surface));
                 }
             }
         });
@@ -711,6 +771,49 @@ public class ParameterAutomationAnalyzer : IIncrementalGenerator
             }
         }
         return null;
+    }
+
+    private static string? GetTrainableLowPrecisionBacking(ISymbol member)
+    {
+        foreach (var attribute in member.GetAttributes())
+        {
+            if (attribute.AttributeClass?.ToDisplayString()
+                != ParameterMemberSemanticModel.TrainableAttribute) continue;
+            foreach (var argument in attribute.NamedArguments)
+            {
+                if (argument.Key == "LowPrecisionBacking"
+                    && argument.Value.Value is string backing)
+                    return backing;
+            }
+        }
+        return null;
+    }
+
+    private static bool IsHalfTensor(ITypeSymbol type)
+    {
+        var bare = type.WithNullableAnnotation(NullableAnnotation.NotAnnotated);
+        if (bare is not INamedTypeSymbol named || named.TypeArguments.Length != 1)
+            return false;
+        return named.OriginalDefinition.ToDisplayString().StartsWith(
+                   "AiDotNet.Tensors.LinearAlgebra.Tensor<",
+                   System.StringComparison.Ordinal)
+            && string.Equals(named.TypeArguments[0].ToDisplayString(), "System.Half",
+                System.StringComparison.Ordinal);
+    }
+
+    private static bool IsTensorFieldType(ITypeSymbol type)
+    {
+        ITypeSymbol? current = type.WithNullableAnnotation(NullableAnnotation.NotAnnotated);
+        while (current is INamedTypeSymbol named)
+        {
+            string open = named.OriginalDefinition.ToDisplayString();
+            if (open.StartsWith(
+                "AiDotNet.Tensors.LinearAlgebra.Tensor<",
+                System.StringComparison.Ordinal))
+                return true;
+            current = named.BaseType;
+        }
+        return false;
     }
 
     private static bool DeclaresStableParameterRegistration(INamedTypeSymbol type, string stableId)

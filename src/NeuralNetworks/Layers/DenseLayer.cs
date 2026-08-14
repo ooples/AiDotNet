@@ -237,7 +237,10 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IShap
     /// and weights close to zero mean the connection is weak or unimportant.
     /// </para>
     /// </remarks>
-    [TrainableParameter(Role = PersistentTensorRole.Weights, Shape = "InputShape[0], OutputShape[0]")]
+    [TrainableParameter(
+        Role = PersistentTensorRole.Weights,
+        Shape = "InputShape[0], OutputShape[0]",
+        LowPrecisionBacking = nameof(_weightsHalf))]
 
     private Tensor<T> _weights;
 

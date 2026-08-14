@@ -38,7 +38,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSource<T>,
-    IParameterLayoutSource, IDisposable
+    IParameterLayoutSource, IParameterSurfaceLifecycle, IDisposable
 {
     /// <summary>
     /// Counter for generating unique instance IDs across all layer instances.
@@ -218,12 +218,14 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         internal DeclaredParameterComponent(
             DeclaredParameterComponentKind kind,
             Tensor<T>? tensor = null,
+            Tensor<Half>? lowPrecisionTensor = null,
             ILayer<T>? layer = null,
             string? name = null,
             ParameterSlotRole stateRole = ParameterSlotRole.Trainable)
         {
             Kind = kind;
             Tensor = tensor;
+            LowPrecisionTensor = lowPrecisionTensor;
             Layer = layer;
             Name = name;
             StateRole = stateRole;
@@ -231,6 +233,7 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
 
         internal DeclaredParameterComponentKind Kind { get; }
         internal Tensor<T>? Tensor { get; }
+        internal Tensor<Half>? LowPrecisionTensor { get; }
         internal ILayer<T>? Layer { get; }
         internal string? Name { get; }
         internal ParameterSlotRole StateRole { get; }
@@ -587,6 +590,48 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         // Layers with lazy initialization override this to allocate weights.
     }
 
+    // Generated setters raise this signal after atomically validating and rebinding the declared
+    // trainable fields. The base initialization lifecycle then adopts those tensors before a lazy
+    // layer's allocator can overwrite them. This is deliberately policy in LayerBase: individual
+    // layer authors declare shapes, but never have to remember a clone/restore-specific guard.
+    private bool _trainableParametersRebound;
+    private bool _reboundParametersAdopted;
+
+    /// <summary>
+    /// Notifies the common initialization lifecycle that generated trainable fields were rebound.
+    /// </summary>
+    protected void MarkTrainableParametersRebound()
+    {
+        _reboundParametersAdopted = false;
+        _trainableParametersRebound = true;
+        BumpParameterEpoch();
+    }
+
+    /// <summary>
+    /// Runs generated rebind adoption before the layer-specific allocation hook.
+    /// </summary>
+    private void EnsureInitializationCore()
+    {
+        if (_reboundParametersAdopted) return;
+
+        if (_trainableParametersRebound)
+        {
+            if (TryAdoptRestoredParameters())
+            {
+                _trainableParametersRebound = false;
+                _reboundParametersAdopted = true;
+                return;
+            }
+
+            // A generated setter may legally rebind zero-sized placeholders for a branch the source
+            // has not materialized yet. That is not restored state; let the ordinary initializer own
+            // the first real forward and do not repeatedly probe the placeholders afterwards.
+            _trainableParametersRebound = false;
+        }
+
+        EnsureInitialized();
+    }
+
     /// <summary>
     /// Executes the layer's lazy-initialization hook under the common initialization gate.
     /// Generated parameter surfaces and base forward/materialization paths use this method so
@@ -599,7 +644,7 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
             if (_disposed)
                 throw new ObjectDisposedException(GetType().Name,
                     "A disposed layer cannot be initialized or registered again.");
-            EnsureInitialized();
+            EnsureInitializationCore();
         }
     }
 
@@ -657,6 +702,24 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         if (tensor is not null)
             components.Add(new DeclaredParameterComponent(
                 DeclaredParameterComponentKind.Trainable, tensor: tensor));
+    }
+
+    /// <summary>
+    /// Adds one generated trainable declaration whose logical values may be held by an
+    /// fp16-resident backing tensor. The two fields are one parameter slot, never two.
+    /// </summary>
+    protected static void DeclareTrainableParameter(
+        List<DeclaredParameterComponent> components,
+        Tensor<T>? tensor,
+        Tensor<Half>? lowPrecisionTensor)
+    {
+        if (tensor is not null || lowPrecisionTensor is not null)
+        {
+            components.Add(new DeclaredParameterComponent(
+                DeclaredParameterComponentKind.Trainable,
+                tensor: tensor,
+                lowPrecisionTensor: lowPrecisionTensor));
+        }
     }
 
     /// <summary>Adds a generated persistent-buffer declaration.</summary>
@@ -833,6 +896,37 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         GetTrainableParametersUnmaterialized();
 
     /// <summary>
+    /// Determines whether this shape-resolved layer can safely adopt the supplied trainable tensors
+    /// without first allocating its own lazy placeholders.
+    /// </summary>
+    /// <remarks>
+    /// Copy-on-write cloning uses the generator's parameter-shape declarations as the structural
+    /// contract. A fresh lazy layer intentionally still owns zero-sized placeholders, so comparing
+    /// only its current tensor shapes rejects an otherwise exact clone and forces an eager allocation
+    /// and copy. This method validates the source tensors against the same declarations used by
+    /// restore, allowing the generated <see cref="SetTrainableParameters"/> override to bind them
+    /// directly. No tensor is allocated and no state is changed by this check.
+    /// </remarks>
+    internal bool CanAdoptTrainableParametersWithoutMaterialization(
+        IReadOnlyList<Tensor<T>> parameters)
+    {
+        var declared = DeclaredParameterShapes();
+        if (declared is null || declared.Count == 0 || declared.Count != parameters.Count)
+            return false;
+
+        for (int i = 0; i < declared.Count; i++)
+        {
+            var parameter = parameters[i];
+            if (parameter is null || parameter.Length == 0 || parameter.Shape.Length == 0)
+                return false;
+            if (!ShapeMatchesDeclared(parameter, declared[i].Expected))
+                return false;
+        }
+
+        return true;
+    }
+
+    /// <summary>
     /// Materializes this layer, if it can be, before its parameter values are read or written.
     /// </summary>
     /// <remarks>
@@ -895,6 +989,14 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     /// have nothing to allocate until their first real forward).
     /// </remarks>
     internal void MaterializeParameters() => EnsureParametersMaterialized();
+
+    /// <inheritdoc />
+    void IParameterSurfaceLifecycle.PrepareParameterSurface(ParameterSurfaceIntent intent)
+    {
+        EnsureDeclaredSubLayerStructure();
+        if (intent != ParameterSurfaceIntent.Describe)
+            EnsureMaterializedForParameterSurface();
+    }
 
     /// <summary>
     /// Brings a sub-layer all the way up -- shape first, then weights -- so a composite's parameter
@@ -1136,6 +1238,7 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         // the same storage and summing them double-counts recurrent and composite layers.
         long materializedCount = GetOwnMaterializedParameterCount();
         if (materializedCount > count) count = materializedCount;
+        if (materializedCount >= count) materialized = true;
 
         return true;
     }
@@ -1250,8 +1353,7 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
             else if (component.Kind is DeclaredParameterComponentKind.Trainable
                      or DeclaredParameterComponentKind.Buffer)
             {
-                if (component.Tensor is not null)
-                    count = checked(count + TrainableScalarCount(component.Tensor));
+                count = checked(count + ParameterComponentScalarCount(component));
             }
         }
 
@@ -2271,7 +2373,7 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
                 _shapeOnlyResolutionPendingFirstForward = false;
                 RegisterStreamingWeightsWithPool();
             }
-            EnsureInitialized();
+            EnsureInitializationCore();
             TryApplyPendingParameterRestore();
         }
     }
@@ -5111,8 +5213,7 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
                         break;
                     case DeclaredParameterComponentKind.Trainable:
                     case DeclaredParameterComponentKind.Buffer:
-                        if (component.Tensor is not null)
-                            total += TrainableScalarCount(component.Tensor);
+                        total += ParameterComponentScalarCount(component);
                         break;
                     case DeclaredParameterComponentKind.SubLayer:
                         if (component.Layer is not null && !IsSubLayerParameterFrozen(component.Layer))
@@ -5348,6 +5449,147 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     private static int TrainableScalarCount(Tensor<T> t)
         => t is SparseTensor<T> sp ? sp.NonZeroCount : t.Length;
 
+    /// <summary>
+    /// One logical trainable slot, independent of whether its authoritative values currently live
+    /// in the ordinary compute tensor or an fp16-resident backing tensor.
+    /// </summary>
+    internal readonly struct TrainableParameterValueSlot
+    {
+        private readonly Tensor<T>? _tensor;
+        private readonly Tensor<Half>? _lowPrecisionTensor;
+
+        internal TrainableParameterValueSlot(
+            Tensor<T>? tensor,
+            Tensor<Half>? lowPrecisionTensor)
+        {
+            _tensor = tensor;
+            _lowPrecisionTensor = lowPrecisionTensor;
+        }
+
+        internal int ScalarCount => _lowPrecisionTensor?.Length
+            ?? (_tensor is null ? 0 : TrainableScalarCount(_tensor));
+
+        internal T ReadScalar(int index)
+        {
+            if (_lowPrecisionTensor is not null)
+            {
+                return MathHelper.GetNumericOperations<T>().FromDouble(
+                    (double)(float)_lowPrecisionTensor.GetFlat(index));
+            }
+
+            if (_tensor is null)
+                throw new InvalidOperationException("A parameter value slot has no active storage.");
+            return ReadTrainableScalar(_tensor, index);
+        }
+
+        internal void WriteScalar(int index, T value)
+        {
+            if (_lowPrecisionTensor is not null)
+            {
+                _lowPrecisionTensor.SetFlat(
+                    index,
+                    (Half)(float)MathHelper.GetNumericOperations<T>().ToDouble(value));
+                return;
+            }
+
+            if (_tensor is null)
+                throw new InvalidOperationException("A parameter value slot has no active storage.");
+            WriteTrainableScalar(_tensor, index, value);
+        }
+
+        internal Tensor<T> Snapshot()
+        {
+            if (_lowPrecisionTensor is null)
+            {
+                return _tensor
+                    ?? throw new InvalidOperationException("A parameter value slot has no active storage.");
+            }
+
+            int[] shape = new int[_lowPrecisionTensor.Rank];
+            for (int i = 0; i < shape.Length; i++) shape[i] = _lowPrecisionTensor.Shape[i];
+            var snapshot = new Tensor<T>(shape);
+            MathHelper.GetNumericOperations<T>().FromHalfSpan(
+                _lowPrecisionTensor.AsSpan(), snapshot.AsWritableSpan());
+            return snapshot;
+        }
+
+        internal void CopyFrom(Tensor<T> source)
+        {
+            if (source is null) throw new ArgumentNullException(nameof(source));
+            if (source.Length != ScalarCount)
+            {
+                throw new ArgumentException(
+                    $"Source tensor has {source.Length} values but the parameter slot requires {ScalarCount}.",
+                    nameof(source));
+            }
+
+            if (_lowPrecisionTensor is not null)
+            {
+                MathHelper.GetNumericOperations<T>().ToHalfSpan(
+                    source.AsSpan(), _lowPrecisionTensor.AsWritableSpan());
+                return;
+            }
+
+            if (_tensor is null)
+                throw new InvalidOperationException("A parameter value slot has no active storage.");
+            if (_tensor is SparseTensor<T> sparse)
+            {
+                for (int i = 0; i < sparse.NonZeroCount; i++)
+                    sparse.DataVector[i] = source.GetFlat(i);
+                return;
+            }
+            source.AsSpan().CopyTo(_tensor.AsWritableSpan());
+        }
+    }
+
+    private static TrainableParameterValueSlot ValueSlot(
+        DeclaredParameterComponent component)
+        => new(component.Tensor, component.LowPrecisionTensor);
+
+    private static int ParameterComponentScalarCount(
+        DeclaredParameterComponent component)
+        => component.LowPrecisionTensor?.Length
+            ?? (component.Tensor is null ? 0 : TrainableScalarCount(component.Tensor));
+
+    private static T ReadParameterComponentScalar(
+        DeclaredParameterComponent component,
+        int index)
+        => ValueSlot(component).ReadScalar(index);
+
+    private static void WriteParameterComponentScalar(
+        DeclaredParameterComponent component,
+        int index,
+        T value)
+        => ValueSlot(component).WriteScalar(index, value);
+
+    /// <summary>
+    /// Returns this layer's own trainable slots in generated manifest order. Child layers are
+    /// intentionally excluded because graph owners already enumerate each reflected layer once.
+    /// </summary>
+    internal IReadOnlyList<TrainableParameterValueSlot> GetOwnTrainableParameterValueSlots()
+    {
+        var components = GetOrderedParameterComponents();
+        var slots = new List<TrainableParameterValueSlot>();
+        for (int i = 0; i < components.Length; i++)
+        {
+            if (components[i].Kind == DeclaredParameterComponentKind.Trainable)
+                slots.Add(ValueSlot(components[i]));
+        }
+        return slots;
+    }
+
+    /// <summary>
+    /// Produces the authoritative value tensors used by copy-on-write validation. Ordinary slots
+    /// return their existing tensor; resident fp16 slots return a transient full-precision snapshot.
+    /// </summary>
+    internal IReadOnlyList<Tensor<T>> GetOwnTrainableParameterValueTensors()
+    {
+        var slots = GetOwnTrainableParameterValueSlots();
+        var tensors = new List<Tensor<T>>(slots.Count);
+        for (int i = 0; i < slots.Count; i++) tensors.Add(slots[i].Snapshot());
+        return tensors;
+    }
+
     /// <summary>Reads the i-th trainable scalar, honouring sparse payload layout.</summary>
     /// <remarks>
     /// Sparse reads go through <c>DataVector</c>, never the <c>Values</c> property: that property
@@ -5394,10 +5636,15 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         // and is what PyTorch saves for a lazy module that has never run a forward.
         writer.Write(Parameters.Length);
 
-        var trainable = GetTrainableParametersUnmaterialized();
-        writer.Write(trainable?.Count ?? 0);
-        if (trainable is not null)
-            foreach (var t in trainable) WriteShape(writer, t);
+        var components = GetOrderedParameterComponents();
+        int trainableCount = 0;
+        for (int i = 0; i < components.Length; i++)
+            if (components[i].Kind == DeclaredParameterComponentKind.Trainable)
+                trainableCount++;
+        writer.Write(trainableCount);
+        for (int i = 0; i < components.Length; i++)
+            if (components[i].Kind == DeclaredParameterComponentKind.Trainable)
+                WriteShape(writer, components[i]);
 
         var buffers = GetRegisteredBuffers();
         writer.Write(buffers?.Count ?? 0);
@@ -5424,6 +5671,20 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         var shape = tensor.Shape;
         writer.Write(shape.Length);
         for (int i = 0; i < shape.Length; i++) writer.Write(shape[i]);
+    }
+
+    private static void WriteShape(
+        System.IO.BinaryWriter writer,
+        DeclaredParameterComponent component)
+    {
+        if (component.LowPrecisionTensor is not null)
+        {
+            var shape = component.LowPrecisionTensor.Shape;
+            writer.Write(shape.Length);
+            for (int i = 0; i < shape.Length; i++) writer.Write(shape[i]);
+            return;
+        }
+        WriteShape(writer, component.Tensor);
     }
 
     private static void WriteEmptyLayout(System.IO.BinaryWriter writer)
@@ -5590,8 +5851,8 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
             if (component.Kind is DeclaredParameterComponentKind.Trainable
                 or DeclaredParameterComponentKind.Buffer)
             {
-                var tensor = component.Tensor;
-                if (tensor is null || TrainableScalarCount(tensor) == 0) continue;
+                int count = ParameterComponentScalarCount(component);
+                if (count == 0) continue;
                 yield return new ParameterChunk<T>(
                     componentPrefix + (component.Kind == DeclaredParameterComponentKind.Buffer
                         ? "/buffer/" + (component.Name ?? "unnamed")
@@ -5599,7 +5860,9 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
                     component.Kind == DeclaredParameterComponentKind.Buffer
                         ? component.StateRole
                         : ParameterSlotRole.Trainable,
-                    AsStoredScalarChunk(tensor));
+                    component.LowPrecisionTensor is not null
+                        ? ValueSlot(component).Snapshot()
+                        : AsStoredScalarChunk(component.Tensor!));
                 continue;
             }
 
@@ -5657,12 +5920,10 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
             if (component.Kind is DeclaredParameterComponentKind.Trainable
                 or DeclaredParameterComponentKind.Buffer)
             {
-                var tensor = component.Tensor;
-                if (tensor is null) continue;
-                int count = TrainableScalarCount(tensor);
+                int count = ParameterComponentScalarCount(component);
                 if (dest is null) { offset += count; continue; }
                 for (int j = 0; j < count; j++)
-                    dest[offset++] = ReadTrainableScalar(tensor, j);
+                    dest[offset++] = ReadParameterComponentScalar(component, j);
                 continue;
             }
 
@@ -5727,18 +5988,18 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
 
             if (component.Kind == DeclaredParameterComponentKind.Buffer)
             {
-                if (component.Tensor is not null)
-                    offset += TrainableScalarCount(component.Tensor);
+                offset += ParameterComponentScalarCount(component);
                 continue;
             }
 
             if (component.Kind == DeclaredParameterComponentKind.Trainable)
             {
                 var tensor = component.Tensor;
-                if (tensor is null) continue;
-                int count = TrainableScalarCount(tensor);
+                int count = ParameterComponentScalarCount(component);
+                if (count == 0) continue;
                 if (dest is null) { offset += count; continue; }
-                if (grads.TryGetValue(tensor, out var gradient)
+                if (tensor is not null
+                    && grads.TryGetValue(tensor, out var gradient)
                     && gradient is not null
                     && TrainableScalarCount(gradient) == count)
                 {
@@ -5961,11 +6222,9 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
             if (component.Kind is DeclaredParameterComponentKind.Trainable
                 or DeclaredParameterComponentKind.Buffer)
             {
-                var tensor = component.Tensor;
-                if (tensor is null) continue;
-                int count = TrainableScalarCount(tensor);
+                int count = ParameterComponentScalarCount(component);
                 for (int j = 0; j < count; j++)
-                    WriteTrainableScalar(tensor, j, parameters[index++]);
+                    WriteParameterComponentScalar(component, j, parameters[index++]);
                 continue;
             }
 

@@ -1,4 +1,6 @@
 using System;
+using System.Linq;
+using AiDotNet.Diffusion.NoisePredictors;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.NeuralNetworks;
@@ -194,6 +196,91 @@ public class CopyOnWriteCloneTests
         Assert.Equal(expected.Length, actual.Length);
         for (int i = 0; i < expected.Length; i++)
             Assert.Equal(expected[i], actual[i], 6);
+    }
+
+    [Fact]
+    public async Task MaterializedDiT_CanShareIntoShapeResolvedLazyDestination()
+    {
+        await Task.Yield();
+
+        using var source = new DiTNoisePredictor<float>(
+            inputChannels: 2,
+            hiddenSize: 8,
+            numLayers: 1,
+            numHeads: 2,
+            patchSize: 1,
+            contextDim: 8,
+            latentSpatialSize: 2,
+            seed: 17);
+        using var destination = new DiTNoisePredictor<float>(
+            inputChannels: 2,
+            hiddenSize: 8,
+            numLayers: 1,
+            numHeads: 2,
+            patchSize: 1,
+            contextDim: 8,
+            latentSpatialSize: 2,
+            seed: 91);
+        using var input = new Tensor<float>(new[] { 1, 2, 2, 2 });
+
+        var expected = source.PredictNoise(input, timestep: 3, conditioning: null);
+        long destinationCount = destination.ParameterCount; // resolves structure, not lazy weight storage
+        var countDiagnostics = string.Join("; ",
+            CopyOnWriteCloneHelper.CollectTrainableLayers<float>(destination)
+                .OfType<LayerBase<float>>()
+                .Select(layer =>
+                    $"{layer.GetType().Name}: count={layer.ParameterCount}, " +
+                    $"tensors=[{string.Join(",", layer.GetTrainableParametersWithoutMaterialization().Select(t => t.Length))}], " +
+                    $"layout=[{string.Join(",", layer.GetParameterLayout().Select(slot => $"{slot.Readiness}:{slot.ParameterCount}"))}]"));
+        Assert.True(destinationCount > 0, countDiagnostics);
+
+        bool sharedParameters = CopyOnWriteCloneHelper.TryShareTrainableParameters<float>(source, destination);
+        var sourceLayers = CopyOnWriteCloneHelper.CollectTrainableLayers<float>(source);
+        var destinationLayers = CopyOnWriteCloneHelper.CollectTrainableLayers<float>(destination);
+        var shareDiagnostics = string.Join("; ", sourceLayers.Zip(destinationLayers, (sourceLayer, destinationLayer) =>
+        {
+            var sourceValues = ((LayerBase<float>)sourceLayer).GetOwnTrainableParameterValueTensors();
+            var destinationBase = (LayerBase<float>)destinationLayer;
+            return $"{sourceLayer.GetType().Name}: source=[{string.Join(",", sourceValues.Select(t => string.Join("x", t.Shape.ToArray())))}], " +
+                   $"destination=[{string.Join(",", destinationBase.GetTrainableParametersWithoutMaterialization().Select(t => string.Join("x", t.Shape.ToArray())))}], " +
+                   $"canAdopt={destinationBase.CanAdoptTrainableParametersWithoutMaterialization(sourceValues)}";
+        }));
+        Assert.True(
+            sharedParameters,
+            $"Generated shape declarations should authorize COW binding into lazy DiT placeholders. {shareDiagnostics}");
+
+        for (int layerIndex = 0; layerIndex < sourceLayers.Count; layerIndex++)
+        {
+            var sourceValues = ((LayerBase<float>)sourceLayers[layerIndex]).GetOwnTrainableParameterValueTensors();
+            var destinationValues = ((LayerBase<float>)destinationLayers[layerIndex]).GetOwnTrainableParameterValueTensors();
+            Assert.Equal(sourceValues.Count, destinationValues.Count);
+            for (int parameterIndex = 0; parameterIndex < sourceValues.Count; parameterIndex++)
+            {
+                Assert.Equal(sourceValues[parameterIndex].Shape.ToArray(), destinationValues[parameterIndex].Shape.ToArray());
+                Assert.Equal(sourceValues[parameterIndex].AsSpan().ToArray(), destinationValues[parameterIndex].AsSpan().ToArray());
+            }
+        }
+
+        var sourceAfterShare = source.PredictNoise(input, timestep: 3, conditioning: null);
+        Assert.Equal(expected.Length, sourceAfterShare.Length);
+        for (int i = 0; i < expected.Length; i++)
+            Assert.Equal(expected[i], sourceAfterShare[i], 5);
+
+        var actual = destination.PredictNoise(input, timestep: 3, conditioning: null);
+        for (int layerIndex = 0; layerIndex < sourceLayers.Count; layerIndex++)
+        {
+            var sourceValues = ((LayerBase<float>)sourceLayers[layerIndex]).GetOwnTrainableParameterValueTensors();
+            var destinationValues = ((LayerBase<float>)destinationLayers[layerIndex]).GetOwnTrainableParameterValueTensors();
+            for (int parameterIndex = 0; parameterIndex < sourceValues.Count; parameterIndex++)
+            {
+                Assert.True(
+                    sourceValues[parameterIndex].AsSpan().SequenceEqual(destinationValues[parameterIndex].AsSpan()),
+                    $"{sourceLayers[layerIndex].GetType().Name} parameter {parameterIndex} changed during destination first-forward initialization.");
+            }
+        }
+        Assert.Equal(expected.Length, actual.Length);
+        for (int i = 0; i < expected.Length; i++)
+            Assert.Equal(expected[i], actual[i], 5);
     }
 
     [Fact]
