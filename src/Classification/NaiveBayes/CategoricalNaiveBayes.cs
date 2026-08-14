@@ -269,18 +269,6 @@ public partial class CategoricalNaiveBayes<T> : NaiveBayesBase<T>
         }
         return metadata;
     }
-    /// <inheritdoc/>
-    /// <remarks>
-    /// One probability table per feature, and the category counts that say how wide each table
-    /// is. Restoring the tables without the counts leaves the model indexing them by a shape it
-    /// no longer knows.
-    /// </remarks>
-    protected override void RegisterState(AiDotNet.Models.ModelStateRegistry<T> state)
-    {
-        base.RegisterState(state);
-        state.Declare("categoryLogProbs", () => _categoryLogProbs, v => _categoryLogProbs = v);
-        state.Declare("numCategories", () => _numCategories, v => _numCategories = v);
-    }
 
     private void SerializeMatrix(Dictionary<string, object> data, string name, Matrix<T>? matrix)
     {

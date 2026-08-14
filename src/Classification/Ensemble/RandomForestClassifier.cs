@@ -459,14 +459,4 @@ public class RandomForestClassifier<T> : EnsembleClassifierBase<T>, ITreeBasedCl
         metadata.AdditionalInfo["TotalLeaves"] = LeafCount;
         return metadata;
     }
-    /// <inheritdoc/>
-    /// <remarks>
-    /// The out-of-bag score is measured during training and cannot be recomputed from the
-    /// forest alone, because the bootstrap indices that defined "out of bag" are gone.
-    /// </remarks>
-    protected override void RegisterState(AiDotNet.Models.ModelStateRegistry<T> state)
-    {
-        base.RegisterState(state);
-        state.DeclareDouble("oobScore", () => OobScore_, v => OobScore_ = v);
-    }
 }

@@ -288,19 +288,6 @@ public partial class BernoulliNaiveBayes<T> : NaiveBayesBase<T>
         metadata.AdditionalInfo["BinarizeThreshold"] = NumOps.ToDouble(_binarizeThreshold);
         return metadata;
     }
-    /// <inheritdoc/>
-    /// <remarks>
-    /// Both tables are needed: Bernoulli scores presence AND absence, and restoring one leaves
-    /// half the likelihood at its constructed default. The threshold decides which of the two a
-    /// feature lands in, so it is state as much as they are.
-    /// </remarks>
-    protected override void RegisterState(AiDotNet.Models.ModelStateRegistry<T> state)
-    {
-        base.RegisterState(state);
-        state.Declare("logFeatureProbsPresent", () => _logFeatureProbsPresent, v => _logFeatureProbsPresent = v);
-        state.Declare("logFeatureProbsAbsent", () => _logFeatureProbsAbsent, v => _logFeatureProbsAbsent = v);
-        state.DeclareScalar("binarizeThreshold", () => _binarizeThreshold, v => _binarizeThreshold = v);
-    }
 
     private void SerializeMatrix(Dictionary<string, object> data, string name, Matrix<T>? matrix)
     {

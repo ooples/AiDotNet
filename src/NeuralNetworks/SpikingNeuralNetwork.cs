@@ -30,7 +30,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     [ResearchPaper("Networks of Spiking Neurons: The Third Generation of Neural Network Models", "https://doi.org/10.1016/S0893-6080(97)00011-7")]
-public class SpikingNeuralNetwork<T> : NeuralNetworkBase<T>
+public partial class SpikingNeuralNetwork<T> : NeuralNetworkBase<T>
 {
     private readonly SpikingNeuralNetworkOptions _options;
 

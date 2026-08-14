@@ -306,14 +306,4 @@ public partial class GaussianNaiveBayes<T> : NaiveBayesBase<T>
         metadata.AdditionalInfo["MinVariance"] = Options.MinVariance;
         return metadata;
     }
-    /// <inheritdoc/>
-    /// <remarks>
-    /// A Gaussian likelihood is exactly its per-class means and variances.
-    /// </remarks>
-    protected override void RegisterState(AiDotNet.Models.ModelStateRegistry<T> state)
-    {
-        base.RegisterState(state);
-        state.Declare("means", () => _means, v => _means = v);
-        state.Declare("variances", () => _variances, v => _variances = v);
-    }
 }

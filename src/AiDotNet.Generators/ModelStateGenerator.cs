@@ -46,6 +46,17 @@ public class ModelStateGenerator : IIncrementalGenerator
         DiagnosticSeverity.Error,
         isEnabledByDefault: true);
 
+    /// <summary>State was annotated, and the registry has no way to carry its type.</summary>
+    private static readonly DiagnosticDescriptor UnsupportedStateShape = new(
+        "ADN0062",
+        "Declared state has a shape the registry cannot carry",
+        "'{0}.{1}' is annotated as state but its type '{2}' has no ModelStateRegistry declaration, so "
+            + "nothing would persist it. Add an overload for that shape, or hold the value in one the "
+            + "registry already carries",
+        "AiDotNet.Serialization",
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true);
+
     /// <inheritdoc/>
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
@@ -101,7 +112,23 @@ public class ModelStateGenerator : IIncrementalGenerator
             var call = DeclareCall(member.Name, memberType, numeric,
                 nullableTarget: memberType.NullableAnnotation == NullableAnnotation.Annotated
                     || memberType.IsValueType);
-            if (call is null) continue;
+
+            if (call is null)
+            {
+                // LOUD, NOT SILENT. This member was CLASSIFIED as state -- somebody annotated it --
+                // and the generator cannot express its type. Skipping quietly would drop annotated
+                // state from the payload and produce a model that restores almost everything, which
+                // is the exact failure this work exists to remove. GeneralizedAdditiveModel proved
+                // it: its List<Vector<T>> knots were annotated, silently skipped, and Predict then
+                // refused with "loaded without its fitted knot vectors".
+                spc.ReportDiagnostic(Diagnostic.Create(
+                    UnsupportedStateShape,
+                    member.Locations.FirstOrDefault() ?? type.Locations.FirstOrDefault(),
+                    type.Name,
+                    member.Name,
+                    memberType.ToDisplayString()));
+                continue;
+            }
 
             members.Add((member.Name, call));
         }
@@ -125,6 +152,18 @@ public class ModelStateGenerator : IIncrementalGenerator
             Render(type, numeric, members));
     }
 
+    /// <summary>True when the member is itself something that can serialize its own state.</summary>
+    private static bool IsSerializableModel(ITypeSymbol type)
+    {
+        if (type.AllInterfaces.Any(i => i.Name is "IModelSerializer" or "IFullModel" or "INeuralNetwork")
+            || type.Name is "IModelSerializer" or "IFullModel" or "INeuralNetwork")
+        {
+            return true;
+        }
+
+        return false;
+    }
+
     /// <summary>Finds the inherited hook this generator overrides, and with it the numeric type.</summary>
     private static IMethodSymbol? FindHook(INamedTypeSymbol type)
     {
@@ -146,8 +185,13 @@ public class ModelStateGenerator : IIncrementalGenerator
     /// </remarks>
     private static string? DeclareCall(string name, ITypeSymbol memberType, string numeric, bool nullableTarget)
     {
+        // Namespaces stripped before matching. The display string is fully qualified, so
+        // List<AiDotNet.Tensors.LinearAlgebra.Vector<T>> does not end with "List<Vector<T>>" and a
+        // naive suffix test silently declined it -- which is how the knots got dropped.
         var display = memberType.ToDisplayString().TrimEnd('?');
-        var key = display.Replace($"<{numeric}>", "<T>");
+        var key = System.Text.RegularExpressions.Regex
+            .Replace(display, @"\b[A-Za-z_][A-Za-z0-9_]*\.", string.Empty)
+            .Replace($"<{numeric}>", "<T>");
 
         // A non-nullable field cannot be handed a null, and the null-forgiving operator is not an
         // option here -- AIDN071 rejects it precisely because it suppresses the question rather than
@@ -163,6 +207,12 @@ public class ModelStateGenerator : IIncrementalGenerator
             var k when k.EndsWith(".Vector<T>") || k == "Vector<T>" => $"state.Declare(\"{name}\", {getter}, {setter});",
             var k when k.EndsWith(".Matrix<T>") || k == "Matrix<T>" => $"state.Declare(\"{name}\", {getter}, {setter});",
             var k when k.EndsWith(".Tensor<T>") || k == "Tensor<T>" => $"state.Declare(\"{name}\", {getter}, {setter});",
+            "List<Vector<T>>" => $"state.Declare(\"{name}\", {getter}, {setter});",
+            "List<Matrix<T>>" => $"state.Declare(\"{name}\", {getter}, {setter});",
+            "Matrix<T>[]" => $"state.Declare(\"{name}\", {getter}, {setter});",
+            "Vector<int>" => $"state.Declare(\"{name}\", {getter}, {setter});",
+            "Dictionary<int, Vector<T>>" => $"state.Declare(\"{name}\", {getter}, {setter});",
+            "Vector<T>[]" => $"state.Declare(\"{name}\", {getter}, {setter});",
             "int[]" => $"state.Declare(\"{name}\", {getter}, {setter});",
             "double[]" => $"state.Declare(\"{name}\", {getter}, {setter});",
             "T[]" => $"state.DeclareArray(\"{name}\", {getter}, {setter});",
@@ -171,6 +221,24 @@ public class ModelStateGenerator : IIncrementalGenerator
             "bool" => $"state.DeclareBoolean(\"{name}\", {getter}, {setter});",
             "string" => $"state.DeclareString(\"{name}\", {getter}, {setter});",
             "T" => $"state.DeclareScalar(\"{name}\", {getter}, {setter});",
+
+            // A nested model carries its own state through its own Serialize, so the parent only has
+            // to say that it is there. Restored IN PLACE, because the parent builds it and what
+            // travels is its state rather than its identity.
+            // A parameter source keeps its state in a vector rather than a payload.
+            _ when memberType.AllInterfaces.Any(i => i.Name == "IParameterSource")
+                   && !IsSerializableModel(memberType) =>
+                $"state.DeclareParameterSource(\"{name}\", {getter});",
+
+            _ when IsSerializableModel(memberType) =>
+                $"state.DeclareChild<{memberType.ToDisplayString().TrimEnd('?')}>(\"{name}\", {getter});",
+
+            // A list of nested models -- an agent's per-actor target networks, a mixer's per-agent
+            // heads. Same rule as a single child: each carries its own state, restored in place.
+            _ when memberType is INamedTypeSymbol { Name: "List", TypeArguments.Length: 1 } list
+                   && IsSerializableModel(list.TypeArguments[0]) =>
+                $"state.DeclareChildList<{list.TypeArguments[0].ToDisplayString().TrimEnd('?')}>(\"{name}\", {getter});",
+
             _ => null,
         };
     }

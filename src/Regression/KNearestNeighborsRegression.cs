@@ -58,7 +58,7 @@ namespace AiDotNet.Regression;
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
     [ResearchPaper("Nearest Neighbor Pattern Classification", "https://doi.org/10.1109/TIT.1967.1053964")]
-public class KNearestNeighborsRegression<T> : NonLinearRegressionBase<T>
+public partial class KNearestNeighborsRegression<T> : NonLinearRegressionBase<T>
 {
     /// <summary>
     /// Configuration options for the K-Nearest Neighbors algorithm.
@@ -71,11 +71,13 @@ public class KNearestNeighborsRegression<T> : NonLinearRegressionBase<T>
     /// <summary>
     /// Matrix containing the feature vectors of the training samples.
     /// </summary>
+    [Buffer]
     private Matrix<T> _xTrain;
 
     /// <summary>
     /// Vector containing the target values of the training samples.
     /// </summary>
+    [Buffer]
     private Vector<T> _yTrain;
 
     /// <summary>
@@ -366,21 +368,6 @@ public class KNearestNeighborsRegression<T> : NonLinearRegressionBase<T>
     /// Gets the model type of the K-Nearest Neighbors Regression model.
     /// </summary>
     /// <returns>The model type enumeration value.</returns>
-
-    /// <inheritdoc/>
-    /// <remarks>
-    /// The training set IS this model: a k-nearest-neighbours prediction is a lookup, so nothing it
-    /// learned lives in the parameter vector. K belongs here too -- restoring the training set and
-    /// letting K fall back to the constructor default gave a model that voted over the wrong number
-    /// of neighbours and predicted differently while looking fully restored.
-    /// </remarks>
-    protected override void RegisterState(AiDotNet.Models.ModelStateRegistry<T> state)
-    {
-        base.RegisterState(state);
-        state.DeclareInt32("k", () => _options.K, v => _options.K = v);
-        state.Declare("xTrain", () => _xTrain, v => _xTrain = v ?? new Matrix<T>(0, 0));
-        state.Declare("yTrain", () => _yTrain, v => _yTrain = v ?? new Vector<T>(0));
-    }
 
     /// <summary>
     /// Creates a new instance of the KNearestNeighborsRegression with the same configuration as the current instance.

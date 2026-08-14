@@ -53,7 +53,7 @@ namespace AiDotNet.Regression;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
     [ResearchPaper("Radial Basis Functions", "https://doi.org/10.1017/CBO9780511543241")]
-public class RadialBasisFunctionRegression<T> : NonLinearRegressionBase<T>
+public partial class RadialBasisFunctionRegression<T> : NonLinearRegressionBase<T>
 {
     /// <summary>
     /// Configuration options for the radial basis function regression model.
@@ -82,6 +82,7 @@ public class RadialBasisFunctionRegression<T> : NonLinearRegressionBase<T>
     /// <value>
     /// A matrix where each row represents a center point in the input space.
     /// </value>
+    [Buffer]
     private Matrix<T> _centers;
 
     /// <summary>
@@ -90,6 +91,7 @@ public class RadialBasisFunctionRegression<T> : NonLinearRegressionBase<T>
     /// <value>
     /// A vector of weights, including a bias term.
     /// </value>
+    [Buffer]
     private Vector<T> _weights;
 
     /// <summary>
@@ -734,18 +736,6 @@ public class RadialBasisFunctionRegression<T> : NonLinearRegressionBase<T>
                 return false;
         }
         return true;
-    }
-    /// <inheritdoc/>
-    /// <remarks>
-    /// The centres are chosen during training and the weights are fitted against them, so a
-    /// restore that keeps one without the other predicts from a basis it was never fitted to.
-    /// </remarks>
-    protected override void RegisterState(AiDotNet.Models.ModelStateRegistry<T> state)
-    {
-        base.RegisterState(state);
-        state.Declare("centers", () => _centers, v => _centers = v ?? new Matrix<T>(0, 0));
-        state.Declare("weights", () => _weights, v => _weights = v ?? new Vector<T>(0));
-        state.DeclareDouble("gamma", () => _options.Gamma, v => _options.Gamma = v);
     }
 
     /// <summary>

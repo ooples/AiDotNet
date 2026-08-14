@@ -285,17 +285,6 @@ public partial class ComplementNaiveBayes<T> : NaiveBayesBase<T>
         metadata.AdditionalInfo["Normalize"] = _normalize;
         return metadata;
     }
-    /// <inheritdoc/>
-    /// <remarks>
-    /// Normalisation changes the scores it produces, so it travels with them.
-    /// </remarks>
-    protected override void RegisterState(AiDotNet.Models.ModelStateRegistry<T> state)
-    {
-        base.RegisterState(state);
-        state.Declare("complementLogProbs", () => _complementLogProbs, v => _complementLogProbs = v);
-        state.DeclareArray("featureMinShift", () => _featureMinShift, v => _featureMinShift = v);
-        state.DeclareBoolean("normalize", () => _normalize, v => _normalize = v);
-    }
 
     private void SerializeMatrix(Dictionary<string, object> data, string name, Matrix<T>? matrix)
     {

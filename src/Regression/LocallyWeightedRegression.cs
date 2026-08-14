@@ -60,7 +60,7 @@ namespace AiDotNet.Regression;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
     [ResearchPaper("Locally Weighted Regression: An Approach to Regression Analysis by Local Fitting", "https://doi.org/10.1080/01621459.1988.10478639")]
-public class LocallyWeightedRegression<T> : NonLinearRegressionBase<T>
+public partial class LocallyWeightedRegression<T> : NonLinearRegressionBase<T>
 {
     /// <summary>
     /// Configuration options for the Locally Weighted Regression algorithm.
@@ -85,11 +85,13 @@ public class LocallyWeightedRegression<T> : NonLinearRegressionBase<T>
     /// <summary>
     /// Matrix containing the feature vectors of the training samples.
     /// </summary>
+    [Buffer]
     private Matrix<T> _xTrain;
 
     /// <summary>
     /// Vector containing the target values of the training samples.
     /// </summary>
+    [Buffer]
     private Vector<T> _yTrain;
 
     /// <summary>
@@ -376,24 +378,6 @@ public class LocallyWeightedRegression<T> : NonLinearRegressionBase<T>
             return NumOps.Zero;
         var temp = NumOps.Subtract(NumOps.One, NumOps.Power(absU, NumOps.FromDouble(3)));
         return NumOps.Power(temp, NumOps.FromDouble(3));
-    }
-
-    /// <summary>
-    /// Gets the model type of the Locally Weighted Regression model.
-    /// </summary>
-    /// <returns>The model type enumeration value.</returns>
-    /// <inheritdoc/>
-    /// <remarks>
-    /// The training set IS this model: locally weighted regression fits at prediction time, so
-    /// nothing it learned lives in the parameter vector. Bandwidth decides how far that fit
-    /// reaches and is just as much state as the points it reaches over.
-    /// </remarks>
-    protected override void RegisterState(AiDotNet.Models.ModelStateRegistry<T> state)
-    {
-        base.RegisterState(state);
-        state.DeclareDouble("bandwidth", () => _options.Bandwidth, v => _options.Bandwidth = v);
-        state.Declare("xTrain", () => _xTrain, v => _xTrain = v ?? new Matrix<T>(0, 0));
-        state.Declare("yTrain", () => _yTrain, v => _yTrain = v ?? new Vector<T>(0));
     }
 
     /// <summary>

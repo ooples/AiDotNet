@@ -289,15 +289,4 @@ public partial class MultinomialNaiveBayes<T> : NaiveBayesBase<T>
         metadata.AdditionalInfo["DistributionType"] = "Multinomial";
         return metadata;
     }
-    /// <inheritdoc/>
-    /// <remarks>
-    /// The shift is applied to features before the log probabilities are read, so restoring the
-    /// probabilities without it evaluates them against differently shifted inputs.
-    /// </remarks>
-    protected override void RegisterState(AiDotNet.Models.ModelStateRegistry<T> state)
-    {
-        base.RegisterState(state);
-        state.Declare("logFeatureProbs", () => _logFeatureProbs, v => _logFeatureProbs = v);
-        state.DeclareArray("featureMinShift", () => _featureMinShift, v => _featureMinShift = v);
-    }
 }

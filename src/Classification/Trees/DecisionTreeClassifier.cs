@@ -62,39 +62,6 @@ public class DecisionTreeClassifier<T> : ProbabilisticClassifierBase<T>, ITreeBa
     /// </summary>
     private DecisionNode<T>? _root;
 
-    /// <inheritdoc/>
-    /// <remarks>
-    /// <para>
-    /// The tree IS the model. Describing one node is the whole declaration -- the registry walks the
-    /// graph, marks absent children and rebuilds it, so nothing here touches a reader or a writer.
-    /// </para>
-    /// <para>
-    /// The hand-written pair this replaces was four methods and about 180 lines: Serialize,
-    /// SerializeNode, Deserialize and DeserializeNode, half of it recursion and half of it turning
-    /// each field into JSON and back. It was correct. That is the point -- correct and 180 lines,
-    /// against correct and one description, with no second copy to keep in step.
-    /// </para>
-    /// </remarks>
-    protected override void RegisterState(AiDotNet.Models.ModelStateRegistry<T> state)
-    {
-        base.RegisterState(state);
-
-        state.DeclareGraph<DecisionNode<T>>(
-            "tree",
-            () => _root,
-            v => _root = v,
-            node => node
-                .Create(() => new DecisionNode<T>())
-                .Boolean(n => n.IsLeaf, (n, v) => n.IsLeaf = v)
-                .Int32(n => n.FeatureIndex, (n, v) => n.FeatureIndex = v)
-                .Scalar(n => n.Threshold, (n, v) => n.Threshold = v)
-                .Int32(n => n.PredictedClass, (n, v) => n.PredictedClass = v)
-                .Int32(n => n.NumSamples, (n, v) => n.NumSamples = v)
-                .Vector(n => n.ClassProbabilities, (n, v) => n.ClassProbabilities = v)
-                .Child(n => n.Left, (n, v) => n.Left = v)
-                .Child(n => n.Right, (n, v) => n.Right = v));
-    }
-
     /// <summary>
     /// Random number generator for feature selection when MaxFeatures is set.
     /// </summary>

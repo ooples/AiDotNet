@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -380,6 +381,166 @@ public sealed class ModelStateRegistry<T>
                 var list = new List<Matrix<T>>(count);
                 for (int i = 0; i < count; i++) list.Add(ReadMatrix(r) ?? new Matrix<T>(0, 0));
                 set(list);
+            });
+
+    /// <summary>Declares a single nested model, such as a DQN agent's target network.</summary>
+    /// <typeparam name="TChild">The child's type.</typeparam>
+    /// <param name="name">A stable name, unique within the model.</param>
+    /// <param name="get">Reads the child.</param>
+    /// <remarks>
+    /// The child is restored IN PLACE, not replaced: the parent builds it in its constructor, so what
+    /// travels is its state and not its identity. A target network that came back as a fresh instance
+    /// would leave the agent bootstrapping from an untrained copy of itself.
+    /// </remarks>
+    public void DeclareChild<TChild>(string name, Func<TChild?> get)
+        where TChild : class, IModelSerializer
+        => Add(name,
+            w =>
+            {
+                var child = get();
+                if (child is null) { w.Write(-1); return; }
+                var bytes = child.Serialize();
+                w.Write(bytes.Length);
+                w.Write(bytes);
+            },
+            r =>
+            {
+                int length = r.ReadInt32();
+                if (length < 0) return;
+                var bytes = r.ReadBytes(length);
+                if (length > 0) get()?.Deserialize(bytes);
+            });
+
+    /// <summary>Declares a nested parameter source, such as a duelling agent's target network.</summary>
+    /// <param name="name">A stable name, unique within the model.</param>
+    /// <param name="get">Reads the source.</param>
+    /// <remarks>
+    /// A parameter source carries its state as a vector rather than as a serialized payload, so that
+    /// is what travels. Restored in place: the parent constructed it, and a target network that came
+    /// back as a fresh instance would leave the agent bootstrapping from an untrained copy of itself.
+    /// </remarks>
+    public void DeclareParameterSource(string name, Func<IParameterSource<T>?> get)
+        => Add(name,
+            w => WriteVector(w, get()?.GetParameters()),
+            r =>
+            {
+                var values = ReadVector(r);
+                if (values is not null) get()?.SetParameters(values);
+            });
+
+    /// <summary>Declares a list of nested models, such as an agent's per-actor target networks.</summary>
+    /// <typeparam name="TChild">The child type.</typeparam>
+    /// <param name="name">A stable name, unique within the model.</param>
+    /// <param name="get">Reads the children, in a stable order.</param>
+    /// <remarks>
+    /// Restored in place and by position, because the parent builds these in its constructor: how
+    /// many there are is configuration, and configuration is replayed by the recorded constructor.
+    /// </remarks>
+    public void DeclareChildList<TChild>(string name, Func<List<TChild>?> get)
+        where TChild : class, IModelSerializer
+        => Add(name,
+            w =>
+            {
+                var children = get();
+                if (children is null) { w.Write(-1); return; }
+                w.Write(children.Count);
+                foreach (var child in children)
+                {
+                    var bytes = child?.Serialize() ?? Array.Empty<byte>();
+                    w.Write(bytes.Length);
+                    w.Write(bytes);
+                }
+            },
+            r =>
+            {
+                int count = r.ReadInt32();
+                if (count < 0) return;
+                var children = get();
+                for (int i = 0; i < count; i++)
+                {
+                    int length = r.ReadInt32();
+                    var bytes = r.ReadBytes(length);
+                    if (length > 0 && children is not null && i < children.Count) children[i]?.Deserialize(bytes);
+                }
+            });
+
+    /// <summary>Declares an integer vector, such as a set of selected feature indices.</summary>
+    /// <param name="name">A stable name, unique within the model.</param>
+    /// <param name="get">Reads the current value.</param>
+    /// <param name="set">Installs a restored value.</param>
+    public void Declare(string name, Func<Vector<int>?> get, Action<Vector<int>?> set)
+        => Add(name,
+            w =>
+            {
+                var v = get();
+                if (v is null) { w.Write(-1); return; }
+                w.Write(v.Length);
+                for (int i = 0; i < v.Length; i++) w.Write(v[i]);
+            },
+            r =>
+            {
+                int length = r.ReadInt32();
+                if (length < 0) { set(null); return; }
+                var v = new Vector<int>(length);
+                for (int i = 0; i < length; i++) v[i] = r.ReadInt32();
+                set(v);
+            });
+
+    /// <summary>Declares a keyed set of vectors, such as per-layer optimiser moments.</summary>
+    /// <param name="name">A stable name, unique within the model.</param>
+    /// <param name="get">Reads the current value.</param>
+    /// <param name="set">Installs a restored value.</param>
+    /// <remarks>
+    /// Written key-first so the restore rebuilds the same mapping. Dictionary order is not stable,
+    /// so the pairs are sorted by key -- otherwise the same model could produce two different
+    /// payloads and neither would be wrong.
+    /// </remarks>
+    public void Declare(string name, Func<Dictionary<int, Vector<T>>?> get, Action<Dictionary<int, Vector<T>>?> set)
+        => Add(name,
+            w =>
+            {
+                var map = get();
+                if (map is null) { w.Write(-1); return; }
+                w.Write(map.Count);
+                foreach (var pair in map.OrderBy(p => p.Key))
+                {
+                    w.Write(pair.Key);
+                    WriteVector(w, pair.Value);
+                }
+            },
+            r =>
+            {
+                int count = r.ReadInt32();
+                if (count < 0) { set(null); return; }
+                var map = new Dictionary<int, Vector<T>>(count);
+                for (int i = 0; i < count; i++)
+                {
+                    int key = r.ReadInt32();
+                    map[key] = ReadVector(r) ?? new Vector<T>(0);
+                }
+                set(map);
+            });
+
+    /// <summary>Declares an array of vectors, such as per-feature sorted values or per-point distances.</summary>
+    /// <param name="name">A stable name, unique within the model.</param>
+    /// <param name="get">Reads the current value.</param>
+    /// <param name="set">Installs a restored value.</param>
+    public void Declare(string name, Func<Vector<T>[]?> get, Action<Vector<T>[]?> set)
+        => Add(name,
+            w =>
+            {
+                var a = get();
+                if (a is null) { w.Write(-1); return; }
+                w.Write(a.Length);
+                foreach (var v in a) WriteVector(w, v);
+            },
+            r =>
+            {
+                int count = r.ReadInt32();
+                if (count < 0) { set(null); return; }
+                var a = new Vector<T>[count];
+                for (int i = 0; i < count; i++) a[i] = ReadVector(r) ?? new Vector<T>(0);
+                set(a);
             });
 
     /// <summary>Declares an array of matrices, such as one probability table per category.</summary>

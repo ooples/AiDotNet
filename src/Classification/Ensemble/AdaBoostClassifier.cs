@@ -449,14 +449,4 @@ public partial class AdaBoostClassifier<T> : EnsembleClassifierBase<T>
         metadata.AdditionalInfo["ActualEstimators"] = Estimators.Count;
         return metadata;
     }
-    /// <inheritdoc/>
-    /// <remarks>
-    /// The estimator weights are the whole of boosting: the members are useless without the
-    /// weights that say how much each one is trusted.
-    /// </remarks>
-    protected override void RegisterState(AiDotNet.Models.ModelStateRegistry<T> state)
-    {
-        base.RegisterState(state);
-        state.Declare("estimatorWeights", () => _estimatorWeights, v => _estimatorWeights = v);
-    }
 }

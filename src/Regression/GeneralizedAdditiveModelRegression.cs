@@ -80,6 +80,7 @@ public partial class GeneralizedAdditiveModel<T> : RegressionBase<T>
     /// <summary>
     /// Vector of model coefficients for the basis functions.
     /// </summary>
+    [Buffer]
     private Vector<T> _coefficients;
     [Buffer]
     private Vector<T> _basisScales = new Vector<T>(0);
@@ -177,6 +178,7 @@ public partial class GeneralizedAdditiveModel<T> : RegressionBase<T>
     public override bool SupportsParameterInitialization => false;
 
     /// <summary>Tracks whether OLS fallback was used.</summary>
+    [Buffer]
     private bool _useOLS;
 
     public override void Train(Matrix<T> x, Vector<T> y)
@@ -497,27 +499,5 @@ public partial class GeneralizedAdditiveModel<T> : RegressionBase<T>
         }
 
         return importances;
-    }
-    /// <inheritdoc/>
-    /// <remarks>
-    /// The fitted basis functions and their coefficients are the model. Restoring the
-    /// coefficients without the basis they were fitted against evaluates them on a different
-    /// set of splines and quietly returns different numbers.
-    /// </remarks>
-    protected override void RegisterState(AiDotNet.Models.ModelStateRegistry<T> state)
-    {
-        base.RegisterState(state);
-        state.Declare("basisFunctions", () => _basisFunctions, v => _basisFunctions = v ?? new Matrix<T>(0, 0));
-        state.Declare("gamCoefficients", () => _coefficients, v => _coefficients = v ?? new Vector<T>(0));
-        state.DeclareBoolean("useOLS", () => _useOLS, v => _useOLS = v);
-        // The spline count and degree DESCRIBE the fitted basis. Restoring the basis while these fall
-        // back to their constructor defaults leaves the model evaluating a basis it did not fit.
-        state.DeclareInt32("numSplines", () => _options.NumSplines, v => _options.NumSplines = v);
-        state.DeclareInt32("splineDegree", () => _options.Degree, v => _options.Degree = v);
-        // The knots and the scales are what the basis was fitted AGAINST. Predict refuses without
-        // them by name -- "loaded without its fitted knot vectors" -- which is the model telling us
-        // exactly what its state is.
-        state.Declare("basisScales", () => _basisScales, v => _basisScales = v ?? new Vector<T>(0));
-        state.Declare("trainingKnots", () => _trainingKnots, v => _trainingKnots = v);
     }
 }

@@ -61,7 +61,7 @@ namespace AiDotNet.Regression;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
     [ResearchPaper("Kernel Methods for Pattern Analysis", "https://doi.org/10.1017/CBO9780511809682")]
-public class KernelRidgeRegression<T> : NonLinearRegressionBase<T>
+public partial class KernelRidgeRegression<T> : NonLinearRegressionBase<T>
 {
     /// <summary>
     /// Initializes a new instance with default settings.
@@ -74,12 +74,15 @@ public class KernelRidgeRegression<T> : NonLinearRegressionBase<T>
     /// <summary>
     /// The Gram matrix (kernel matrix) that represents pairwise similarities between all training points.
     /// </summary>
+    [Buffer]
     private Matrix<T> _gramMatrix;
 
     /// <summary>
     /// The dual coefficients used for making predictions.
     /// </summary>
+    [Buffer]
     private Vector<T> _dualCoefficients;
+    [Buffer]
     private T _yMean;
     private Vector<T>? _linearCoefficients;
     private T _linearIntercept;
@@ -376,18 +379,6 @@ public class KernelRidgeRegression<T> : NonLinearRegressionBase<T>
         metadata.AdditionalInfo["RegularizationType"] = Regularization.GetType().Name;
 
         return metadata;
-    }
-    /// <inheritdoc/>
-    /// <remarks>
-    /// A kernel ridge model predicts from its Gram matrix and dual coefficients, not from a
-    /// coefficient vector, so the parameter surface carries none of what it learned.
-    /// </remarks>
-    protected override void RegisterState(AiDotNet.Models.ModelStateRegistry<T> state)
-    {
-        base.RegisterState(state);
-        state.Declare("gramMatrix", () => _gramMatrix, v => _gramMatrix = v ?? new Matrix<T>(0, 0));
-        state.Declare("dualCoefficients", () => _dualCoefficients, v => _dualCoefficients = v ?? new Vector<T>(0));
-        state.DeclareScalar("yMean", () => _yMean, v => _yMean = v);
     }
 
     /// <summary>
