@@ -194,19 +194,31 @@ public static class CloneEngine
             // ordinary -- a model taking (options, regularization) beside one taking
             // (options, lossFunction) -- and picking by count alone would pass each value to
             // whichever overload reflection happened to return first.
-            var withArgs = type.GetConstructors(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance)
-                .FirstOrDefault(c =>
+            // ARITY FIRST, NAMES ONLY TO BREAK A TIE. The plan records members in constructor-parameter
+            // ORDER, so position already carries the mapping. Re-deriving it from names here could not
+            // work for a member the generator sourced by TYPE rather than by name: BayesianRegression
+            // takes bayesianOptions and stores it in _bayesOptions, which FindUniqueByType matched on
+            // the type alone and no name rule can reproduce. The engine then rejected a member the
+            // generator had certified, and reported "every member read, so the constructor could not
+            // be matched by name" -- true, and beside the point.
+            //
+            // Arity is safe to rely on because the generator refuses to record two constructors of the
+            // same arity: an ambiguous overload set is left unrecorded rather than guessed at. Names
+            // still decide when several constructors share an arity in some future shape.
+            var byArity = type.GetConstructors(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance)
+                .Where(c => c.GetParameters().Length == arguments.Length)
+                .ToList();
+
+            var withArgs = byArity.FirstOrDefault(c =>
+            {
+                var parameters = c.GetParameters();
+                for (int i = 0; i < parameters.Length; i++)
                 {
-                    var parameters = c.GetParameters();
-                    if (parameters.Length != arguments.Length) return false;
+                    if (!NamesTheSameValue(parameters[i].Name, candidate[i])) return false;
+                }
 
-                    for (int i = 0; i < parameters.Length; i++)
-                    {
-                        if (!NamesTheSameValue(parameters[i].Name, candidate[i])) return false;
-                    }
-
-                    return true;
-                });
+                return true;
+            }) ?? (byArity.Count == 1 ? byArity[0] : null);
 
             if (withArgs is null) continue;
 
@@ -430,7 +442,17 @@ public static class CloneEngine
         if (member == UseDefault) return true;
 
         var trimmed = member.StartsWith("_", StringComparison.Ordinal) ? member.Substring(1) : member;
-        return string.Equals(parameter, trimmed, StringComparison.OrdinalIgnoreCase);
+        if (string.Equals(parameter, trimmed, StringComparison.OrdinalIgnoreCase)) return true;
+
+        // THE SUFFIX RULE, because the generator uses it when it sources the member. FindByNameSuffix
+        // accepts a member whose name ENDS with the parameter's -- BayesianRegression keeps its
+        // options in _bayesOptions, AttentiveNAS keeps its searchSpace in _nasSearchSpace -- and
+        // records it in the plan. Matching only on equality here made the engine reject a member the
+        // generator had just certified, so the plan was right and the rebuild refused it: "every
+        // member read, so the constructor could not be matched by name". Two rules for one question
+        // is one rule too many; this is the same one.
+        return trimmed.Length > parameter.Length
+            && trimmed.EndsWith(parameter, StringComparison.OrdinalIgnoreCase);
     }
 
 }

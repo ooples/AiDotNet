@@ -85,6 +85,28 @@ public class BayesianRegression<T> : RegressionBase<T>
     [Buffer]
     private Matrix<T> _posteriorCovariance;
 
+    /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// The posterior covariance is what makes this Bayesian: it is fitted during training, it is not
+    /// part of the coefficient vector, and predictive uncertainty is read straight out of it. It had
+    /// no Serialize override to carry it and no declaration either, so it only ever survived a clone
+    /// by accident -- the reflection fallback copied fields wholesale.
+    /// </para>
+    /// <para>
+    /// Fixing the CloneRegistry race moved this type onto its generated plan, which rebuilds through
+    /// the constructor instead of copying fields, and the covariance stopped surviving. That is the
+    /// race fix doing its job: it did not break cloning here, it revealed that this state was never
+    /// declared.
+    /// </para>
+    /// </remarks>
+    protected override void RegisterState(AiDotNet.Models.ModelStateRegistry<T> state)
+    {
+        base.RegisterState(state);
+        state.Declare("posteriorCovariance", () => _posteriorCovariance,
+            v => _posteriorCovariance = v ?? new Matrix<T>(0, 0));
+    }
+
     /// <summary>
     /// Initializes a new instance of the <see cref="BayesianRegression{T}"/> class with the specified options and regularization.
     /// </summary>
