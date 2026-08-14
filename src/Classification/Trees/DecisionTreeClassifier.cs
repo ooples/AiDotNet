@@ -69,9 +69,10 @@ public class DecisionTreeClassifier<T> : ProbabilisticClassifierBase<T>, ITreeBa
     /// graph, marks absent children and rebuilds it, so nothing here touches a reader or a writer.
     /// </para>
     /// <para>
-    /// ClassProbabilities is declared even though the hand-written Serialize this replaces did not
-    /// write it. That omission was silent: a restored tree returned hard class predictions that
-    /// matched, and probability estimates that did not.
+    /// The hand-written pair this replaces was four methods and about 180 lines: Serialize,
+    /// SerializeNode, Deserialize and DeserializeNode, half of it recursion and half of it turning
+    /// each field into JSON and back. It was correct. That is the point -- correct and 180 lines,
+    /// against correct and one description, with no second copy to keep in step.
     /// </para>
     /// </remarks>
     protected override void RegisterState(AiDotNet.Models.ModelStateRegistry<T> state)
