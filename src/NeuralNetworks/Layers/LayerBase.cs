@@ -2321,7 +2321,13 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         // Conv/Deconv whose OutputShape carries the full per-sample output dims. Layers
         // with a different shape contract (e.g. a rank-agnostic Dense that maps only the
         // last axis) override this.
-        int[] outShape = OutputShape;
+        // A declared OutputShape may carry -1 on axes the layer cannot fix at construction
+        // time -- MultiHeadAttentionLayer declares [-1, headCount * headDimension] because its
+        // sequence length is only known once a real input arrives. Tensor allocation rejects a
+        // -1 outright, so the declaration must be reconciled against the concrete input before
+        // either branch below builds a tensor from it. Shape inference is exactly the phase where
+        // that input is available, so the substitution is exact rather than a guess.
+        int[] outShape = ResolvePlaceholderAxes(OutputShape, input);
 
         // An input of the SAME rank as OutputShape carries no batch axis, and the real Forward
         // returns OutputShape unchanged for it. Prepending regardless -- and reading
@@ -2343,6 +2349,62 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         full[0] = batch;
         System.Array.Copy(outShape, 0, full, 1, outShape.Length);
         return new Tensor<T>(full);
+    }
+
+    /// <summary>
+    /// Substitutes every <c>-1</c> placeholder axis in <paramref name="declared"/> with the
+    /// corresponding concrete extent from <paramref name="input"/>, aligning the two shapes at
+    /// their TRAILING axis.
+    /// </summary>
+    /// <param name="declared">A layer's declared shape, possibly carrying -1 placeholders.</param>
+    /// <param name="input">The concrete input driving this shape-resolution forward.</param>
+    /// <returns>
+    /// <paramref name="declared"/> itself when it holds no placeholder -- the common case stays
+    /// allocation-free and behaviourally identical -- otherwise a resolved copy.
+    /// </returns>
+    /// <remarks>
+    /// <para>
+    /// Right alignment, not left: a layer names its trailing FEATURE axes and leaves the leading
+    /// batch/sequence axes unfixed, so axis k counted from the end of the declaration is the same
+    /// axis as k from the end of the concrete input. That holds for both callers -- a rank-equal
+    /// declaration aligns 1:1, and a declaration that will have a batch axis prepended sits one
+    /// axis to the right of the input's leading axis, which is precisely the offset below.
+    /// </para>
+    /// <para>
+    /// A placeholder whose source axis falls outside the input is deliberately LEFT as -1 rather
+    /// than guessed. Tensor allocation then rejects it exactly as it did before this method
+    /// existed, so this resolution can only ever turn a throw into a correct shape -- it cannot
+    /// change the result of any call that already succeeded.
+    /// </para>
+    /// </remarks>
+    private static int[] ResolvePlaceholderAxes(int[] declared, Tensor<T> input)
+    {
+        bool hasPlaceholder = false;
+        for (int i = 0; i < declared.Length; i++)
+        {
+            if (declared[i] < 0)
+            {
+                hasPlaceholder = true;
+                break;
+            }
+        }
+
+        if (!hasPlaceholder) return declared;
+
+        var resolved = (int[])declared.Clone();
+        int offset = input.Shape.Length - declared.Length;
+        for (int i = 0; i < resolved.Length; i++)
+        {
+            if (resolved[i] >= 0) continue;
+
+            int sourceAxis = i + offset;
+            if (sourceAxis >= 0 && sourceAxis < input.Shape.Length)
+            {
+                resolved[i] = input.Shape[sourceAxis];
+            }
+        }
+
+        return resolved;
     }
 
     /// <summary>
