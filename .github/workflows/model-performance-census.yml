@@ -8,8 +8,9 @@ name: Model Performance Census
 on:
   pull_request:
     paths:
-      - 'src/NeuralNetworks/**'
-      - 'src/AiDotNet.Generators/**'
+      # Every model family lives under src/, not only src/NeuralNetworks/. Audio, finance,
+      # vision-language and TTS regressions were previously able to bypass the census entirely.
+      - 'src/**'
       - 'tests/AiDotNet.Tests/ModelFamilyTests/**'
       - 'tools/ModelPerfFixtureRunner/**'
       - 'tools/ModelPerfProbe/**'

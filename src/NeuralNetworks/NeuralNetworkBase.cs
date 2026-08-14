@@ -14400,6 +14400,24 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     protected virtual Tensor<T> PrepareInputForTraining(Tensor<T> input) => input;
 
     /// <summary>
+    /// Enters the training contract, prepares a public input, and evaluates the differentiable
+    /// forward path used by the objective.
+    /// </summary>
+    /// <remarks>
+    /// Keeping these three steps in one internal funnel prevents conformance and performance
+    /// diagnostics from probing <see cref="ForwardForTraining"/> with an unprepared public input.
+    /// Audio models are the canonical example: their public waveform is converted to a compact
+    /// spectral representation before the trainable graph runs. This method is internal so the
+    /// generated test assembly can observe the exact objective-output contract without exposing a
+    /// second production API.
+    /// </remarks>
+    internal Tensor<T> ForwardPreparedForTraining(Tensor<T> input)
+    {
+        SetTrainingMode(true);
+        return ForwardForTraining(PrepareInputForTraining(input));
+    }
+
+    /// <summary>
     /// Builds the exact scalar objective differentiated by every tape-based training path.
     /// </summary>
     /// <param name="input">The model input.</param>
@@ -14422,10 +14440,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // training contract here so trainable layers, autodiff, and streaming storage all see a
         // consistent mode. In particular, an inference-first model may have read-only quantized
         // streaming snapshots that must be promoted before its weights participate in backward.
-        SetTrainingMode(true);
-
-        var trainingInput = PrepareInputForTraining(input);
-        var prediction = ForwardForTraining(trainingInput);
+        var prediction = ForwardPreparedForTraining(input);
         target = AlignTargetToOutputShape(prediction, target);
 
         var resolved = lossFunction ?? LossFunction;
@@ -14484,7 +14499,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         bool usesCompositeObjective = this is ICompositeLoss<T> && _compositeTargetsAreReal;
         if (resolved is LossFunctions.MeanSquaredErrorLoss<T> && !usesCompositeObjective)
         {
-            var prediction = ForwardForTraining(PrepareInputForTraining(input));
+            var prediction = ForwardPreparedForTraining(input);
             target = AlignTargetToOutputShape(prediction, target);
             if (prediction.Length == 0) return 0.0;
 

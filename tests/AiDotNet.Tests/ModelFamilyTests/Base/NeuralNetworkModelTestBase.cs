@@ -2313,26 +2313,37 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         if (!TrainingInvariantsNotApplicable(network)
             && network is AiDotNet.NeuralNetworks.NeuralNetworkBase<T> nn)
         {
-            var objectiveTarget = target;
-            if (nn.DefaultLossFunction is AiDotNet.LossFunctions.CrossEntropyWithLogitsLoss<T>)
+            // Predict and ForwardForTraining are two distinct public contracts. Decoders,
+            // enhancement models, GANs and token classifiers commonly return a user-facing
+            // result from Predict while training compares an intermediate tensor (logits,
+            // masks, spectra, discriminator scores, and so on). Building the objective target
+            // from Predict happened to work for ordinary regressors, but made the census report
+            // dozens of false shape failures and prevented it from reaching the expensive phases
+            // that it exists to measure. Always derive this target from the exact tensor consumed
+            // by BuildTrainingObjective; CrossEntropy is not special in this respect.
+            WritePerformanceProgress(outputDirectory!, performanceFileName, "training-target-shape");
+            var targetPreparationTimer = System.Diagnostics.Stopwatch.StartNew();
+            // BuildTrainingObjective switches the network back to training mode before it invokes
+            // ForwardForTraining. Some streamed and stateful models expose a deliberately different
+            // tensor while the persistent inference session is active, so probing the shape in eval
+            // mode and then building the objective in training mode can manufacture an incompatible
+            // target. Make the state transition once, account for it as target preparation, and keep
+            // the target probe and taped objective on the identical training contract.
+            Tensor<T> objectiveTarget;
+            // A number of audio pipelines select their compact differentiable representation only
+            // when a tape is active (for example, complex STFT bins instead of reconstructed public
+            // audio). A NoGrad probe therefore observes the wrong contract. Use a disposable probe
+            // tape so target construction sees exactly the shape BuildTrainingObjective will emit.
+            using (var targetShapeTape = new GradientTape<T>())
             {
-                // Predict and ForwardForTraining are allowed to have different output contracts.
-                // NER is the canonical case: Predict pads decoded labels to the fixture's public
-                // output shape, while the objective consumes per-token logits at the real sequence
-                // length. Build the objective target from the path it is actually compared with.
-                WritePerformanceProgress(outputDirectory!, performanceFileName, "training-target-shape");
-                var targetPreparationTimer = System.Diagnostics.Stopwatch.StartNew();
-                using (var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
-                {
-                    var trainingOutput = nn.ForwardForTraining(input);
-                    objectiveTarget = MakeTargetWellPosedForLoss(
-                        network,
-                        CreateRandomTargetTensor(trainingOutput.Shape.ToArray(), rng),
-                        rng);
-                }
-                targetPreparationTimer.Stop();
-                targetPreparationMs = targetPreparationTimer.Elapsed.TotalMilliseconds;
+                var trainingOutput = nn.ForwardPreparedForTraining(input);
+                objectiveTarget = MakeTargetWellPosedForLoss(
+                    network,
+                    CreateRandomTargetTensor(trainingOutput.Shape.ToArray(), rng),
+                    rng);
             }
+            targetPreparationTimer.Stop();
+            targetPreparationMs = targetPreparationTimer.Elapsed.TotalMilliseconds;
 
             WritePerformanceProgress(outputDirectory!, performanceFileName, "tape-forward");
             using var tape = new GradientTape<T>();
