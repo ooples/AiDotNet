@@ -40,7 +40,7 @@ namespace AiDotNet.TextToSpeech.Vocoders;
     Year = 2023,
     Authors = "Siuzdak"
 )]
-public class Vocos<T> : VocoderBase<T>
+public partial class Vocos<T> : VocoderBase<T>
 {
     private readonly VocosOptions _options;
 

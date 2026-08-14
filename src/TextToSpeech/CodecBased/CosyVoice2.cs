@@ -40,7 +40,7 @@ namespace AiDotNet.TextToSpeech.CodecBased;
     Year = 2024,
     Authors = "Du et al."
 )]
-public class CosyVoice2<T> : TtsModelBase<T>, ICodecTts<T>
+public partial class CosyVoice2<T> : TtsModelBase<T>, ICodecTts<T>
 {
     private readonly CosyVoice2Options _options;
 

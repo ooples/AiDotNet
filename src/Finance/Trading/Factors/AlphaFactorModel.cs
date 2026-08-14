@@ -62,7 +62,7 @@ namespace AiDotNet.Finance.Trading.Factors;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Deep Learning for Alpha Factor Investing", "https://doi.org/10.1016/j.jfineco.2020.06.024")]
-public class AlphaFactorModel<T> : FinancialModelBase<T>, IFactorModel<T>
+public partial class AlphaFactorModel<T> : FinancialModelBase<T>, IFactorModel<T>
 {
     #region Execution Mode
 

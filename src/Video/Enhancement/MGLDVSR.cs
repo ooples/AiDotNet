@@ -55,7 +55,7 @@ namespace AiDotNet.Video.Enhancement;
     "https://arxiv.org/abs/2312.00853",
     Year = 2024,
     Authors = "Yang Zheng, Xiaoming Zhu, Jianlong Wu, Liqiang Nie")]
-public class MGLDVSR<T> : VideoSuperResolutionBase<T>
+public partial class MGLDVSR<T> : VideoSuperResolutionBase<T>
 {
     #region Fields
 

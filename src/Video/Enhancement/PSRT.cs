@@ -56,7 +56,7 @@ namespace AiDotNet.Video.Enhancement;
     "https://arxiv.org/abs/2207.08494",
     Year = 2022,
     Authors = "Shuwei Shi, Jinjin Gu, Liangbin Xie, Xintao Wang, Yujiu Yang, Chao Dong")]
-public class PSRT<T> : VideoSuperResolutionBase<T>
+public partial class PSRT<T> : VideoSuperResolutionBase<T>
 {
     #region Fields
 

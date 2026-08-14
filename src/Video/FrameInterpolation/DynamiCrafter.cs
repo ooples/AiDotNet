@@ -54,7 +54,7 @@ namespace AiDotNet.Video.FrameInterpolation;
     "https://arxiv.org/abs/2310.12190",
     Year = 2024,
     Authors = "Jinbo Xing, Menghan Xia, Yong Zhang, Haoxin Chen, Wangbo Yu, Hanyuan Liu, Gongye Liu, Xintao Wang, Ying Shan, Tien-Tsin Wong")]
-public class DynamiCrafter<T> : FrameInterpolationBase<T>
+public partial class DynamiCrafter<T> : FrameInterpolationBase<T>
 {
     #region Fields
 

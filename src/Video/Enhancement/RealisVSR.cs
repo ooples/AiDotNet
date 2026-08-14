@@ -51,7 +51,7 @@ namespace AiDotNet.Video.Enhancement;
     "https://arxiv.org/abs/2507.19138",
     Year = 2025,
     Authors = "Chao Ma, Shangchen Zhou, Chen Change Loy")]
-public class RealisVSR<T> : VideoSuperResolutionBase<T>
+public partial class RealisVSR<T> : VideoSuperResolutionBase<T>
 {
     #region Fields
 

@@ -67,7 +67,7 @@ namespace AiDotNet.Video.ActionRecognition;
     "https://arxiv.org/abs/2203.12602",
     Year = 2022,
     Authors = "Zhan Tong, Yibing Song, Jue Wang, Limin Wang")]
-public class VideoMAE<T> : NeuralNetworkBase<T>
+public partial class VideoMAE<T> : NeuralNetworkBase<T>
 {
     private readonly VideoMAEOptions _options;
 

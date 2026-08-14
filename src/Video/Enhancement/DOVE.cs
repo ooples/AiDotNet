@@ -54,7 +54,7 @@ namespace AiDotNet.Video.Enhancement;
     "https://arxiv.org/abs/2505.16239",
     Year = 2025,
     Authors = "Zheng Chen, Zichen Zou, Kewei Zhang, Xiongfei Su, Xin Yuan, Yong Guo, Yulun Zhang")]
-public class DOVE<T> : VideoSuperResolutionBase<T>
+public partial class DOVE<T> : VideoSuperResolutionBase<T>
 {
     #region Fields
 

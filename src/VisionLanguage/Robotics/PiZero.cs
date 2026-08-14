@@ -58,7 +58,7 @@ namespace AiDotNet.VisionLanguage.Robotics;
     Year = 2024,
     Authors = "Black et al."
 )]
-public class PiZero<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
+public partial class PiZero<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
 {
     private readonly PiZeroOptions _options;
 

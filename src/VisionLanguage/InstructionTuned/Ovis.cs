@@ -64,7 +64,7 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
     Year = 2024,
     Authors = "Lu et al."
 )]
-public class Ovis<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
+public partial class Ovis<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
 {
     private readonly OvisOptions _options;
 

@@ -65,7 +65,7 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
     Year = 2024,
     Authors = "Chen et al."
 )]
-public class Dragonfly<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
+public partial class Dragonfly<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
 {
     private readonly DragonflyOptions _options;
 

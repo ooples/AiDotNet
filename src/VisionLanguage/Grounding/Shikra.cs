@@ -59,7 +59,7 @@ namespace AiDotNet.VisionLanguage.Grounding;
     Year = 2023,
     Authors = "Chen et al."
 )]
-public class Shikra<T> : VisionLanguageModelBase<T>, IVisualGroundingModel<T>
+public partial class Shikra<T> : VisionLanguageModelBase<T>, IVisualGroundingModel<T>
 {
     private readonly ShikraOptions _options;
 

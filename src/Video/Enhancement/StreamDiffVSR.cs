@@ -54,7 +54,7 @@ namespace AiDotNet.Video.Enhancement;
     "https://arxiv.org/abs/2512.23709",
     Year = 2025,
     Authors = "Hau-Shiang Shiu, Chin-Yang Lin, Zhixiang Wang, Chi-Wei Hsiao, Po-Fan Yu, Yu-Chih Chen, Yu-Lun Liu")]
-public class StreamDiffVSR<T> : VideoSuperResolutionBase<T>
+public partial class StreamDiffVSR<T> : VideoSuperResolutionBase<T>
 {
     #region Fields
 

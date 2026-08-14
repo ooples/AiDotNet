@@ -57,7 +57,7 @@ namespace AiDotNet.Video.Enhancement;
     "https://arxiv.org/abs/2401.06312",
     Year = 2024,
     Authors = "Xingyu Zhou, Leheng Zhang, Xiaorui Zhao, Keze Wang, Leida Li, Shuhang Gu")]
-public class MIAVSR<T> : VideoSuperResolutionBase<T>
+public partial class MIAVSR<T> : VideoSuperResolutionBase<T>
 {
     #region Fields
 

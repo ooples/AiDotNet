@@ -53,7 +53,7 @@ namespace AiDotNet.Video.FrameInterpolation;
     "https://arxiv.org/abs/2003.05534",
     Year = 2020,
     Authors = "Simon Niklaus, Feng Liu")]
-public class SoftSplat<T> : FrameInterpolationBase<T>
+public partial class SoftSplat<T> : FrameInterpolationBase<T>
 {
     #region Fields
 

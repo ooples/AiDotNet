@@ -62,7 +62,7 @@ namespace AiDotNet.Video.FrameInterpolation;
     "https://arxiv.org/abs/2111.13817",
     Year = 2022,
     Authors = "Zhihao Shi, Xiangyu Xu, Xiaohong Liu, Jun Chen, Ming-Hsuan Yang")]
-public class VFIT<T> : FrameInterpolationBase<T>
+public partial class VFIT<T> : FrameInterpolationBase<T>
 {
     private readonly VFITOptions _options;
 

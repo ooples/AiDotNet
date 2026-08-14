@@ -72,7 +72,7 @@ namespace AiDotNet.Classification.TimeSeries;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Vector<>))]
 [ResearchPaper("A Time Series Forest for Classification and Feature Extraction", "https://doi.org/10.1016/j.ins.2013.01.006", Year = 2013, Authors = "Houtao Deng, George Runger, Eugene Tuv, Martyanov Vladimir")]
-public class TimeSeriesForestClassifier<T> : ClassifierBase<T>, ITimeSeriesClassifier<T>
+public partial class TimeSeriesForestClassifier<T> : ClassifierBase<T>, ITimeSeriesClassifier<T>
 {
 
     // Returned the tree count, its own comment calling it "simplified". An honest zero replaces a

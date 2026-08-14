@@ -40,7 +40,7 @@ namespace AiDotNet.TextToSpeech.CodecBased;
     Year = 2024,
     Authors = "Zhang et al."
 )]
-public class Amphion<T> : TtsModelBase<T>, ICodecTts<T>
+public partial class Amphion<T> : TtsModelBase<T>, ICodecTts<T>
 {
     private readonly AmphionOptions _options;
 

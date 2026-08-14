@@ -74,7 +74,7 @@ namespace AiDotNet.Video.ActionRecognition;
     "https://arxiv.org/abs/2102.05095",
     Year = 2021,
     Authors = "Gedas Bertasius, Heng Wang, Lorenzo Torresani")]
-public class TimeSformer<T> : NeuralNetworkBase<T>
+public partial class TimeSformer<T> : NeuralNetworkBase<T>
 {
     private readonly TimeSformerOptions _options;
 

@@ -43,7 +43,7 @@ namespace AiDotNet.TextToSpeech.MultiModal;
     Year = 2022,
     Authors = "Ao et al."
 )]
-public class SpeechT5<T> : TtsModelBase<T>, IEndToEndTts<T>
+public partial class SpeechT5<T> : TtsModelBase<T>, IEndToEndTts<T>
 {
     private readonly SpeechT5Options _options;
 

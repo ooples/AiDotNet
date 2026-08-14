@@ -60,7 +60,7 @@ namespace AiDotNet.VisionLanguage.Unified;
     Year = 2024,
     Authors = "Ge et al."
 )]
-public class SEEDX<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<T>
+public partial class SEEDX<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<T>
 {
     private readonly SEEDXOptions _options;
 

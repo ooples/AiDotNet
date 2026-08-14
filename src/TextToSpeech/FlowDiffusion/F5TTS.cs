@@ -40,7 +40,7 @@ namespace AiDotNet.TextToSpeech.FlowDiffusion;
     Year = 2024,
     Authors = "Chen et al."
 )]
-public class F5TTS<T> : TtsModelBase<T>, ICodecTts<T>
+public partial class F5TTS<T> : TtsModelBase<T>, ICodecTts<T>
 {
     private readonly F5TTSOptions _options;
 

@@ -82,7 +82,7 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Tiny Time Mixers (TTMs): Fast Pre-trained Models for Enhanced Zero/Few-Shot Forecasting of Multivariate Time Series", "https://arxiv.org/abs/2401.03955", Year = 2024, Authors = "Vijay Ekambaram, Arindam Jati, Nam H. Nguyen, Phanwadee Sinthong, Jayant Kalagnanam")]
-public class TinyTimeMixers<T> : TimeSeriesFoundationModelBase<T>
+public partial class TinyTimeMixers<T> : TimeSeriesFoundationModelBase<T>
 {
     #region Execution Mode
 

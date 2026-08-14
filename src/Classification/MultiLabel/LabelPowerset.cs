@@ -85,7 +85,7 @@ namespace AiDotNet.Classification.MultiLabel;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Matrix<>))]
 [ResearchPaper("Learning multi-label scene classification", "https://doi.org/10.1016/j.patcog.2004.01.013", Year = 2004, Authors = "Matthew R. Boutell, Jiebo Luo, Xipeng Shen, Christopher M. Brown")]
-public class LabelPowerset<T> : MultiLabelClassifierBase<T>
+public partial class LabelPowerset<T> : MultiLabelClassifierBase<T>
 {
 
     /// <inheritdoc />

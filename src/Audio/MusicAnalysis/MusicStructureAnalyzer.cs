@@ -41,7 +41,7 @@ namespace AiDotNet.Audio.MusicAnalysis;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     [ResearchPaper("Music Structure Analysis: A Survey", "https://doi.org/10.1007/978-3-319-25226-1_12")]
-public class MusicStructureAnalyzer<T> : AudioNeuralNetworkBase<T>
+public partial class MusicStructureAnalyzer<T> : AudioNeuralNetworkBase<T>
 {
     /// <inheritdoc />
     /// <remarks>

@@ -40,7 +40,7 @@ namespace AiDotNet.TextToSpeech.CodecBased;
     Year = 2024,
     Authors = "Fish Audio"
 )]
-public class FishSpeechV15<T> : TtsModelBase<T>, ICodecTts<T>
+public partial class FishSpeechV15<T> : TtsModelBase<T>, ICodecTts<T>
 {
     private readonly FishSpeechV15Options _options;
 

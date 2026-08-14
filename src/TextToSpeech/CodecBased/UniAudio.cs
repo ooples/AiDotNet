@@ -41,7 +41,7 @@ namespace AiDotNet.TextToSpeech.CodecBased;
     Year = 2024,
     Authors = "Yang et al."
 )]
-public class UniAudio<T> : TtsModelBase<T>, ICodecTts<T>
+public partial class UniAudio<T> : TtsModelBase<T>, ICodecTts<T>
 {
     private readonly UniAudioOptions _options;
 

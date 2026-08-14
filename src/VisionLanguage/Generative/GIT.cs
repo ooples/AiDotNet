@@ -59,7 +59,7 @@ namespace AiDotNet.VisionLanguage.Generative;
     Year = 2022,
     Authors = "Wang et al."
 )]
-public class GIT<T> : VisionLanguageModelBase<T>, IGenerativeVisionLanguageModel<T>
+public partial class GIT<T> : VisionLanguageModelBase<T>, IGenerativeVisionLanguageModel<T>
 {
     private readonly GITOptions _options;
 

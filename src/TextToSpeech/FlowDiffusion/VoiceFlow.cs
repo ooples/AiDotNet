@@ -40,7 +40,7 @@ namespace AiDotNet.TextToSpeech.FlowDiffusion;
     Year = 2024,
     Authors = "Guo et al."
 )]
-public class VoiceFlow<T> : TtsModelBase<T>, IEndToEndTts<T>
+public partial class VoiceFlow<T> : TtsModelBase<T>, IEndToEndTts<T>
 {
     private readonly VoiceFlowOptions _options;
 

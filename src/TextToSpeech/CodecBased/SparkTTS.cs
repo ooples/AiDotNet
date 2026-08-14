@@ -40,7 +40,7 @@ namespace AiDotNet.TextToSpeech.CodecBased;
     Year = 2025,
     Authors = "Wang et al."
 )]
-public class SparkTTS<T> : TtsModelBase<T>, ICodecTts<T>
+public partial class SparkTTS<T> : TtsModelBase<T>, ICodecTts<T>
 {
     private readonly SparkTTSOptions _options;
 

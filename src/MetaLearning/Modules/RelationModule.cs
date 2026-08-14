@@ -40,7 +40,7 @@ namespace AiDotNet.MetaLearning.Modules;
     Authors = "Sung, F., Yang, Y., Zhang, L., Xiang, T., Torr, P. H. S., & Hospedales, T. M.")]
 [ComponentType(ComponentType.MetaLearner)]
 [PipelineStage(PipelineStage.Training)]
-public class RelationModule<T> : ModelBase<T, Tensor<T>, Tensor<T>>
+public partial class RelationModule<T> : ModelBase<T, Tensor<T>, Tensor<T>>
 {
 
     /// <inheritdoc />

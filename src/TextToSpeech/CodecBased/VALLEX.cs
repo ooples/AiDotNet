@@ -50,7 +50,7 @@ namespace AiDotNet.TextToSpeech.CodecBased;
     Year = 2023,
     Authors = "Zhang et al."
 )]
-public class VALLEX<T> : TtsModelBase<T>, ICodecTts<T>
+public partial class VALLEX<T> : TtsModelBase<T>, ICodecTts<T>
 {
     private readonly VALLEXOptions _options;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;

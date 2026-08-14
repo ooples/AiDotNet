@@ -57,7 +57,7 @@ namespace AiDotNet.Video.FrameInterpolation;
     "https://arxiv.org/abs/2205.14620",
     Year = 2022,
     Authors = "Lingtong Kong, Boyuan Jiang, Donghao Luo, Wenqing Chu, Xiaoming Huang, Ying Tai, Chengjie Wang, Jie Yang")]
-public class IFRNet<T> : FrameInterpolationBase<T>
+public partial class IFRNet<T> : FrameInterpolationBase<T>
 {
     #region Fields
 

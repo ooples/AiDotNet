@@ -63,7 +63,7 @@ namespace AiDotNet.Regression;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
     [ResearchPaper("Generalized Linear Models", "https://doi.org/10.1007/978-1-4899-3242-6")]
-public class GammaRegression<T> : RegressionBase<T>
+public partial class GammaRegression<T> : RegressionBase<T>
 {
     private const double MuFloor = 1e-10;
     private const double MuCeiling = 1e10;

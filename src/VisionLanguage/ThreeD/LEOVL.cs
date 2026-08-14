@@ -58,7 +58,7 @@ namespace AiDotNet.VisionLanguage.ThreeD;
     Year = 2024,
     Authors = "Huang et al."
 )]
-public class LEOVL<T> : VisionLanguageModelBase<T>, IThreeDVisionLanguageModel<T>
+public partial class LEOVL<T> : VisionLanguageModelBase<T>, IThreeDVisionLanguageModel<T>
 {
     private readonly LEOVLOptions _options;
 

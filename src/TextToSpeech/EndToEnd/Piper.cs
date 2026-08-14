@@ -38,7 +38,7 @@ namespace AiDotNet.TextToSpeech.EndToEnd;
     "Piper: A Fast Local Neural Text-to-Speech System",
     "https://github.com/rhasspy/piper"
 )]
-public class Piper<T> : TtsModelBase<T>, IEndToEndTts<T>
+public partial class Piper<T> : TtsModelBase<T>, IEndToEndTts<T>
 {
     private readonly PiperOptions _options;
 

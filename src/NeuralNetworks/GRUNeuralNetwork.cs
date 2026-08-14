@@ -52,7 +52,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Learning Phrase Representations using RNN Encoder-Decoder for Statistical Machine Translation", "https://arxiv.org/abs/1406.1078", Year = 2014, Authors = "Kyunghyun Cho, Bart van Merrienboer, Caglar Gulcehre, Dzmitry Bahdanau, Fethi Bougares, Holger Schwenk, Yoshua Bengio")]
-public class GRUNeuralNetwork<T> : NeuralNetworkBase<T>
+public partial class GRUNeuralNetwork<T> : NeuralNetworkBase<T>
 {
     private readonly GRUOptions _options;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;

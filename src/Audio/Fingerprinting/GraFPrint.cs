@@ -45,7 +45,7 @@ namespace AiDotNet.Audio.Fingerprinting;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("GraFPrint: A GNN-Based Approach for Audio Identification", "https://arxiv.org/abs/2410.10994", Year = 2025, Authors = "Aditya Bhattacharjee, Shubhr Singh, Emmanouil Benetos")]
-internal class GraFPrint<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
+internal partial class GraFPrint<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
 {
     #region Fields
 

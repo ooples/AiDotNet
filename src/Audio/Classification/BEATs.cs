@@ -149,7 +149,7 @@ namespace AiDotNet.Audio.Classification;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("BEATs: Audio Pre-Training with Acoustic Tokenizers", "https://arxiv.org/abs/2212.09058", Year = 2023, Authors = "Sanyuan Chen, Yu Wu, Chengyi Wang, Shujie Liu, Daniel Tompkins, Zhuo Chen, Furu Wei")]
-public class BEATs<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
+public partial class BEATs<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
 {
     #region Fields
 

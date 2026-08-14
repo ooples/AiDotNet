@@ -50,7 +50,7 @@ namespace AiDotNet.Video.Stabilization;
     "https://arxiv.org/abs/2102.06205",
     Year = 2021,
     Authors = "Yu-Lun Liu, Wei-Sheng Lai, Ming-Hsuan Yang, Yung-Yu Chuang, Jia-Bin Huang")]
-public class FuSta<T> : VideoStabilizationBase<T>
+public partial class FuSta<T> : VideoStabilizationBase<T>
 {
     private readonly FuStaOptions _options;
 

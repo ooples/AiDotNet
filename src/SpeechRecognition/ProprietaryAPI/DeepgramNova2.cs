@@ -41,7 +41,7 @@ namespace AiDotNet.SpeechRecognition.ProprietaryAPI;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Deepgram Nova-2", "https://deepgram.com/learn/nova-2-speech-to-text-api")]
-public class DeepgramNova2<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
+public partial class DeepgramNova2<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly DeepgramNova2Options _options; public override ModelOptions GetOptions() => _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer; private bool _useNativeMode; private bool _disposed;

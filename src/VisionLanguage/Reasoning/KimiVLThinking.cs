@@ -59,7 +59,7 @@ namespace AiDotNet.VisionLanguage.Reasoning;
     Year = 2025,
     Authors = "Moonshot AI"
 )]
-public class KimiVLThinking<T> : VisionLanguageModelBase<T>, IReasoningVLM<T>
+public partial class KimiVLThinking<T> : VisionLanguageModelBase<T>, IReasoningVLM<T>
 {
     private readonly KimiVLThinkingOptions _options;
 

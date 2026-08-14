@@ -52,7 +52,7 @@ namespace AiDotNet.SurvivalAnalysis;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("Survival Analysis: Techniques for Censored and Truncated Data", "https://doi.org/10.1007/978-1-4757-3294-8")]
-public class WeibullAFT<T> : SurvivalModelBase<T>
+public partial class WeibullAFT<T> : SurvivalModelBase<T>
 {
 
     /// <inheritdoc />

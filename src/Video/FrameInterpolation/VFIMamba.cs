@@ -64,7 +64,7 @@ namespace AiDotNet.Video.FrameInterpolation;
     "https://arxiv.org/abs/2407.02315",
     Year = 2024,
     Authors = "Guozhen Zhang, Chunxu Liu, Yuhan Zhu, Limin Wang")]
-public class VFIMamba<T> : FrameInterpolationBase<T>
+public partial class VFIMamba<T> : FrameInterpolationBase<T>
 {
     private readonly VFIMambaOptions _options;
 

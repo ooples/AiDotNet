@@ -48,7 +48,7 @@ namespace AiDotNet.NeuralNetworks
     [ModelComplexity(ModelComplexity.High)]
     [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     [ResearchPaper("One Embedder, Any Task: Instruction-Finetuned Text Embeddings", "https://arxiv.org/abs/2212.09741", Year = 2023, Authors = "Hongjin Su, Weijia Shi, Jungo Kasai, Yizhong Wang, Yushi Hu, Mari Ostendorf, Wen-tau Yih, Noah A. Smith, Luke Zettlemoyer, Tao Yu")]
-    public class InstructorEmbedding<T> : TransformerEmbeddingNetwork<T>
+    public partial class InstructorEmbedding<T> : TransformerEmbeddingNetwork<T>
     {
         private readonly InstructorEmbeddingOptions _options;
 

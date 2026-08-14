@@ -58,7 +58,7 @@ namespace AiDotNet.VisionLanguage.Document;
     Year = 2023,
     Authors = "Lee et al."
 )]
-public class Pix2Struct<T> : VisionLanguageModelBase<T>, IDocumentUnderstandingModel<T>
+public partial class Pix2Struct<T> : VisionLanguageModelBase<T>, IDocumentUnderstandingModel<T>
 {
     private readonly Pix2StructOptions _options;
 

@@ -41,7 +41,7 @@ namespace AiDotNet.SpeechRecognition.Specialized;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Speaker Diarization: A Review of Recent Research", "https://doi.org/10.1109/TASLP.2012.2209910")]
-public class SpeakerDiarizedASR<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
+public partial class SpeakerDiarizedASR<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly SpeakerDiarizedASROptions _options; public override ModelOptions GetOptions() => _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer; private bool _useNativeMode; private bool _disposed;

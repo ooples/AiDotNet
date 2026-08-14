@@ -51,7 +51,7 @@ namespace AiDotNet.Video.Denoising;
     "https://arxiv.org/abs/2207.06937",
     Year = 2022,
     Authors = "Chenyang Qi, Junming Chen, Xin Yang, Qifeng Chen")]
-public class BSVD<T> : VideoDenoisingBase<T>
+public partial class BSVD<T> : VideoDenoisingBase<T>
 {
     private readonly BSVDOptions _options;
 

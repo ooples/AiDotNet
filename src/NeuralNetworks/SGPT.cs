@@ -51,7 +51,7 @@ namespace AiDotNet.NeuralNetworks
     [ModelComplexity(ModelComplexity.High)]
     [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     [ResearchPaper("SGPT: GPT Sentence Embeddings for Semantic Search", "https://arxiv.org/abs/2202.08904", Year = 2022, Authors = "Niklas Muennighoff")]
-    public class SGPT<T> : TransformerEmbeddingNetwork<T>
+    public partial class SGPT<T> : TransformerEmbeddingNetwork<T>
     {
         private readonly SGPTOptions _options;
 

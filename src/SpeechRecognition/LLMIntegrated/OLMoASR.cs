@@ -42,7 +42,7 @@ namespace AiDotNet.SpeechRecognition.LLMIntegrated;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("OLMo: Accelerating the Science of Language Models", "https://arxiv.org/abs/2402.00838", Year = 2024, Authors = "Groeneveld et al.")]
-public class OLMoASR<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
+public partial class OLMoASR<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly OLMoASROptions _options; public override ModelOptions GetOptions() => _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer; private bool _useNativeMode; private bool _disposed;

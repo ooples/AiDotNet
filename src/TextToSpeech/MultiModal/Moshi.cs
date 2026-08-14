@@ -42,7 +42,7 @@ namespace AiDotNet.TextToSpeech.MultiModal;
     Year = 2024,
     Authors = "Defossez et al."
 )]
-public class Moshi<T> : TtsModelBase<T>, ICodecTts<T>, IStreamingTts<T>
+public partial class Moshi<T> : TtsModelBase<T>, ICodecTts<T>, IStreamingTts<T>
 {
     private readonly MoshiOptions _options;
 

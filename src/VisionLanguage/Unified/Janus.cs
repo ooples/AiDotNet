@@ -61,7 +61,7 @@ namespace AiDotNet.VisionLanguage.Unified;
     Year = 2024,
     Authors = "Wu et al."
 )]
-public class Janus<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<T>
+public partial class Janus<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<T>
 {
     private readonly JanusOptions _options;
 

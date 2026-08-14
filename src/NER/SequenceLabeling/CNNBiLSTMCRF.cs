@@ -114,7 +114,7 @@ namespace AiDotNet.NER.SequenceLabeling;
     "https://arxiv.org/abs/1603.01354",
     Year = 2016,
     Authors = "Xuezhe Ma, Eduard Hovy")]
-public class CNNBiLSTMCRF<T> : SequenceLabelingNERBase<T>, INERModel<T>
+public partial class CNNBiLSTMCRF<T> : SequenceLabelingNERBase<T>, INERModel<T>
 {
     #region Fields
 

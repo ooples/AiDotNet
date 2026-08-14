@@ -63,7 +63,7 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
     Year = 2024,
     Authors = "Liu et al."
 )]
-public class LLaVA15<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
+public partial class LLaVA15<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
 {
     private readonly LLaVA15Options _options;
 

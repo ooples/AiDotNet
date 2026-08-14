@@ -52,7 +52,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Self-Attention Generative Adversarial Networks", "https://arxiv.org/abs/1805.08318", Year = 2019, Authors = "Han Zhang, Ian Goodfellow, Dimitris Metaxas, Augustus Odena")]
-public class SAGAN<T> : GenerativeAdversarialNetwork<T>
+public partial class SAGAN<T> : GenerativeAdversarialNetwork<T>
 {
     private readonly SAGANOptions _options;
     private readonly int _latentSize;

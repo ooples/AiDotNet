@@ -64,7 +64,7 @@ namespace AiDotNet.Regression;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("Beta Regression for Modelling Rates and Proportions", "https://doi.org/10.1080/0266476042000214501", Year = 2004, Authors = "Silvia L. P. Ferrari, Francisco Cribari-Neto")]
-public class BetaRegression<T> : AsyncDecisionTreeRegressionBase<T>
+public partial class BetaRegression<T> : AsyncDecisionTreeRegressionBase<T>
 {
     private const double MuFloor = 1e-10;
     private const double MuCeiling = 1.0 - 1e-10;

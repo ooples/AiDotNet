@@ -58,7 +58,7 @@ namespace AiDotNet.VisionLanguage.VideoLanguage;
     Year = 2024,
     Authors = "Xu et al."
 )]
-public class SlowFastLLaVA<T> : VisionLanguageModelBase<T>, IVideoLanguageModel<T>
+public partial class SlowFastLLaVA<T> : VisionLanguageModelBase<T>, IVideoLanguageModel<T>
 {
     private readonly SlowFastLLaVAOptions _options;
 

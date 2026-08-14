@@ -58,7 +58,7 @@ namespace AiDotNet.Video.FrameInterpolation;
     "https://arxiv.org/abs/2501.03699",
     Year = 2025,
     Authors = "Jianhui Wang, Yongqiang Zhang, Ying Tai")]
-public class MoG<T> : FrameInterpolationBase<T>
+public partial class MoG<T> : FrameInterpolationBase<T>
 {
     #region Fields
 

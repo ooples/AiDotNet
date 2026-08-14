@@ -41,7 +41,7 @@ namespace AiDotNet.SpeechRecognition.Robust;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("SpeechBrain: A General-Purpose Speech Toolkit", "https://arxiv.org/abs/2106.04624", Year = 2021, Authors = "Ravanelli et al.")]
-public class SpeechBrain<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
+public partial class SpeechBrain<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly SpeechBrainOptions _options; public override ModelOptions GetOptions() => _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer; private bool _useNativeMode; private bool _disposed;

@@ -63,7 +63,7 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
     Year = 2025,
     Authors = "Shi et al."
 )]
-public class Eagle25<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
+public partial class Eagle25<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
 {
     private readonly Eagle25Options _options;
 

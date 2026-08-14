@@ -46,7 +46,7 @@ namespace AiDotNet.SpeechRecognition.NeMo;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Efficient Sequence Transduction by Jointly Predicting Tokens and Durations", "https://arxiv.org/abs/2304.06795", Year = 2023, Authors = "Xu et al.")]
-public class ParakeetTDT<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
+public partial class ParakeetTDT<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly ParakeetTDTOptions _options; public override ModelOptions GetOptions() => _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer; private bool _useNativeMode; private bool _disposed;

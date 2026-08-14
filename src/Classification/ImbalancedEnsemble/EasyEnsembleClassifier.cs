@@ -67,7 +67,7 @@ namespace AiDotNet.Classification.ImbalancedEnsemble;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("Exploratory Undersampling for Class-Imbalance Learning", "https://doi.org/10.1109/TSMCB.2008.2007853", Year = 2009, Authors = "Xu-Ying Liu, Jianxin Wu, Zhi-Hua Zhou")]
-public class EasyEnsembleClassifier<T> : ClassifierBase<T>
+public partial class EasyEnsembleClassifier<T> : ClassifierBase<T>
 {
 
     // Returned _subClassifiers.Count. Same as its two siblings.

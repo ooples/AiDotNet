@@ -38,7 +38,7 @@ namespace AiDotNet.TextToSpeech.CodecBased;
     "OrpheusTTS: Audio Native Speech Generation",
     "https://github.com/canopyai/OrpheusTTS"
 )]
-public class OrpheusTTS<T> : TtsModelBase<T>, ICodecTts<T>
+public partial class OrpheusTTS<T> : TtsModelBase<T>, ICodecTts<T>
 {
     private readonly OrpheusTTSOptions _options;
 

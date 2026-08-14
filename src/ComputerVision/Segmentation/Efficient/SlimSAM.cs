@@ -56,7 +56,7 @@ namespace AiDotNet.ComputerVision.Segmentation.Efficient;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("SlimSAM: 0.1% Data Frees Slim Segment Anything Model", "https://arxiv.org/abs/2312.05284", Year = 2023, Authors = "Zigeng Chen, Gongfan Fang, Xinyin Ma, Xinchao Wang")]
-public class SlimSAM<T> : Common.PromptableSegmentationBase<T>
+public partial class SlimSAM<T> : Common.PromptableSegmentationBase<T>
 {
     private readonly SlimSAMOptions _options;
     public override ModelOptions GetOptions() => _options;

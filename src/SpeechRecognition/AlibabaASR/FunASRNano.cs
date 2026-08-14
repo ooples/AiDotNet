@@ -41,7 +41,7 @@ namespace AiDotNet.SpeechRecognition.AlibabaASR;
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("FunASR: A Fundamental End-to-End Speech Recognition Toolkit", "https://arxiv.org/abs/2305.11013", Year = 2024, Authors = "Gao et al.")]
-public class FunASRNano<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
+public partial class FunASRNano<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly FunASRNanoOptions _options; public override ModelOptions GetOptions() => _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer; private bool _useNativeMode; private bool _disposed;

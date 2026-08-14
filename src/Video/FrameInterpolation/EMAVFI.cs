@@ -57,7 +57,7 @@ namespace AiDotNet.Video.FrameInterpolation;
     "https://arxiv.org/abs/2303.00440",
     Year = 2023,
     Authors = "Guozhen Zhang, Yuhan Zhu, Haonan Wang, Youxin Chen, Gangshan Wu, Limin Wang")]
-public class EMAVFI<T> : FrameInterpolationBase<T>
+public partial class EMAVFI<T> : FrameInterpolationBase<T>
 {
     #region Fields
 

@@ -60,7 +60,7 @@ namespace AiDotNet.Clustering.Density;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("A Density-Based Algorithm for Discovering Clusters in Large Spatial Databases with Noise", "https://www.aaai.org/Papers/KDD/1996/KDD96-037.pdf", Year = 1996, Authors = "Martin Ester, Hans-Peter Kriegel, Jorg Sander, Xiaowei Xu")]
-public class DBSCAN<T> : ClusteringBase<T>
+public partial class DBSCAN<T> : ClusteringBase<T>
 {
     private readonly DBSCANOptions<T> _options;
 

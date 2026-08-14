@@ -43,7 +43,7 @@ namespace AiDotNet.SpeechRecognition.Multilingual;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("XLS-R: Self-supervised Cross-lingual Speech Representation Learning at Scale", "https://arxiv.org/abs/2111.09296", Year = 2022, Authors = "Babu et al.")]
-public class XLSR<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
+public partial class XLSR<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly XLSROptions _options; public override ModelOptions GetOptions() => _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer; private bool _useNativeMode; private bool _disposed;

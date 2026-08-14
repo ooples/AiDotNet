@@ -43,7 +43,7 @@ namespace AiDotNet.SpeechRecognition.Multilingual;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Scaling Speech Technology to 1,000+ Languages", "https://arxiv.org/abs/2305.13516", Year = 2023, Authors = "Pratap et al.")]
-public class OmnilangualASR<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
+public partial class OmnilangualASR<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly OmnilangualASROptions _options; public override ModelOptions GetOptions() => _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer; private bool _useNativeMode; private bool _disposed;

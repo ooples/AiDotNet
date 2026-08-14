@@ -60,7 +60,7 @@ namespace AiDotNet.VisionLanguage.Encoders;
     Year = 2024,
     Authors = "Xiao et al."
 )]
-public class Florence2<T> : VisionLanguageModelBase<T>, IVisualEncoder<T>
+public partial class Florence2<T> : VisionLanguageModelBase<T>, IVisualEncoder<T>
 {
     private readonly Florence2Options _options;
 

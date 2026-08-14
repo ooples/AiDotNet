@@ -63,7 +63,7 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 [ModelComplexity(ModelComplexity.High)]
 [ResearchPaper("Kairos: Towards Adaptive and Generalizable Time Series Foundation Models", "https://arxiv.org/abs/2509.25826")]
     [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-public class Kairos<T> : TimeSeriesFoundationModelBase<T>
+public partial class Kairos<T> : TimeSeriesFoundationModelBase<T>
 {
     #region Fields
 

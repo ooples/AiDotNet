@@ -50,7 +50,7 @@ namespace AiDotNet.Video.Stabilization;
     "https://arxiv.org/abs/2501.06868",
     Year = 2025,
     Authors = "Donghao Zhang")]
-public class GaVS<T> : VideoStabilizationBase<T>
+public partial class GaVS<T> : VideoStabilizationBase<T>
 {
     private readonly GaVSOptions _options;
 

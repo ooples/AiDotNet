@@ -40,7 +40,7 @@ namespace AiDotNet.TextToSpeech.CodecBased;
     Year = 2023,
     Authors = "Borsos et al."
 )]
-public class SoundStorm<T> : TtsModelBase<T>, ICodecTts<T>
+public partial class SoundStorm<T> : TtsModelBase<T>, ICodecTts<T>
 {
     private readonly SoundStormOptions _options;
 

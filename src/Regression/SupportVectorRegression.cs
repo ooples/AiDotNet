@@ -59,7 +59,7 @@ namespace AiDotNet.Regression;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("A Tutorial on Support Vector Regression", "https://doi.org/10.1023/B:STCO.0000035301.49549.88", Year = 2004, Authors = "Alex J. Smola, Bernhard Scholkopf")]
-public class SupportVectorRegression<T> : NonLinearRegressionBase<T>
+public partial class SupportVectorRegression<T> : NonLinearRegressionBase<T>
 {
     /// <summary>
     /// Configuration options for the Support Vector Regression model.

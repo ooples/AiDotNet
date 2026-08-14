@@ -59,7 +59,7 @@ namespace AiDotNet.VisionLanguage.Unified;
     Year = 2025,
     Authors = "Chenyuan Wu et al."
 )]
-public class OmniGen2<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<T>
+public partial class OmniGen2<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<T>
 {
     private readonly OmniGen2Options _options;
 

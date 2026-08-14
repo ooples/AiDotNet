@@ -68,7 +68,7 @@ namespace AiDotNet.DistributedTraining;
 [ModelComplexity(ModelComplexity.High)]
 [ResearchPaper("PyTorch Distributed: Accelerating Data Parallel Training", "https://arxiv.org/abs/2006.15704")]
     [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-public class DDPModel<T, TInput, TOutput> : ShardedModelBase<T, TInput, TOutput>
+public partial class DDPModel<T, TInput, TOutput> : ShardedModelBase<T, TInput, TOutput>
 {
     private Vector<T>? _computedGradients;
 

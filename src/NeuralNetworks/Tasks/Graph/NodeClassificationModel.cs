@@ -82,7 +82,7 @@ namespace AiDotNet.NeuralNetworks.Tasks.Graph;
     "https://arxiv.org/abs/1609.02907",
     Year = 2017,
     Authors = "Thomas N. Kipf, Max Welling")]
-public class NodeClassificationModel<T> : NeuralNetworkBase<T>, AiDotNet.Interfaces.IGraphInferenceModel<T>
+public partial class NodeClassificationModel<T> : NeuralNetworkBase<T>, AiDotNet.Interfaces.IGraphInferenceModel<T>
 {
     private readonly ILossFunction<T> _lossFunction;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;

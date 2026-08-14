@@ -40,7 +40,7 @@ namespace AiDotNet.TextToSpeech.Latest;
     Year = 2025,
     Authors = "Siyi Zhou, Yiquan Zhou, Yi He, Xun Zhou, Jinchao Wang, Wei Deng, Jingchen Shu"
 )]
-public class IndexTTS2<T> : TtsModelBase<T>, ICodecTts<T>
+public partial class IndexTTS2<T> : TtsModelBase<T>, ICodecTts<T>
 {
     private readonly IndexTTS2Options _options;
 

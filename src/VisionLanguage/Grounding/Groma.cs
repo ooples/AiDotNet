@@ -59,7 +59,7 @@ namespace AiDotNet.VisionLanguage.Grounding;
     Year = 2024,
     Authors = "Ma et al."
 )]
-public class Groma<T> : VisionLanguageModelBase<T>, IVisualGroundingModel<T>
+public partial class Groma<T> : VisionLanguageModelBase<T>, IVisualGroundingModel<T>
 {
     private readonly GromaOptions _options;
 

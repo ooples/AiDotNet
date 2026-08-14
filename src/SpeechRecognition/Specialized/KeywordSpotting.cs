@@ -41,7 +41,7 @@ namespace AiDotNet.SpeechRecognition.Specialized;
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Small-footprint Keyword Spotting Using Deep Neural Networks", "https://doi.org/10.1109/ICASSP.2014.6854370")]
-public class KeywordSpotting<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
+public partial class KeywordSpotting<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly KeywordSpottingOptions _options; public override ModelOptions GetOptions() => _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer; private bool _useNativeMode; private bool _disposed;

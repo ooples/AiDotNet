@@ -56,7 +56,7 @@ namespace AiDotNet.Video.Enhancement;
     "https://arxiv.org/abs/2206.02146",
     Year = 2022,
     Authors = "Jingyun Liang, Yuchen Fan, Xiaoyu Xiang, Rakesh Ranjan, Eddy Ilg, Simon Green, Jiezhang Cao, Kai Zhang, Radu Timofte, Luc Van Gool")]
-public class RVRT<T> : VideoSuperResolutionBase<T>
+public partial class RVRT<T> : VideoSuperResolutionBase<T>
 {
     #region Fields
 

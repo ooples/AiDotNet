@@ -67,7 +67,7 @@ namespace AiDotNet.Regression;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
     [ResearchPaper("Generalized Linear Models", "https://doi.org/10.1007/978-1-4899-3242-6")]
-public class TweedieRegression<T> : RegressionBase<T>
+public partial class TweedieRegression<T> : RegressionBase<T>
 {
     /// <summary>
     /// Configuration options for the Tweedie regression model.

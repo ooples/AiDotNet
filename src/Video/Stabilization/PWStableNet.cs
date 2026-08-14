@@ -50,7 +50,7 @@ namespace AiDotNet.Video.Stabilization;
     "https://arxiv.org/abs/2009.10721",
     Year = 2021,
     Authors = "Minda Zhao, Qiang Ling")]
-public class PWStableNet<T> : VideoStabilizationBase<T>
+public partial class PWStableNet<T> : VideoStabilizationBase<T>
 {
     private readonly PWStableNetOptions _options;
 

@@ -63,7 +63,7 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 [ModelComplexity(ModelComplexity.High)]
 [ResearchPaper("TOTO: Time-Series Optimized Transformer for Observability", "https://arxiv.org/abs/2407.07874")]
     [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-public class TOTO<T> : TimeSeriesFoundationModelBase<T>
+public partial class TOTO<T> : TimeSeriesFoundationModelBase<T>
 {
     #region Fields
 

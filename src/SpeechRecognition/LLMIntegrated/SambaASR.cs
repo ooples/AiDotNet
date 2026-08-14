@@ -41,7 +41,7 @@ namespace AiDotNet.SpeechRecognition.LLMIntegrated;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("SAMBA-ASR: State-of-the-Art Speech Recognition Leveraging Structured State-Space Models", "https://arxiv.org/abs/2501.02832", Year = 2025, Authors = "Yadav et al.")]
-public class SambaASR<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
+public partial class SambaASR<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly SambaASROptions _options; public override ModelOptions GetOptions() => _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer; private bool _useNativeMode; private bool _disposed;

@@ -57,7 +57,7 @@ namespace AiDotNet.ReinforcementLearning.Agents.EligibilityTraces;
     "https://incompleteideas.net/book/the-book-2nd.html",
     Year = 2018,
     Authors = "Sutton, R. S. & Barto, A. G.")]
-public class SARSALambdaAgent<T> : ReinforcementLearningAgentBase<T>
+public partial class SARSALambdaAgent<T> : ReinforcementLearningAgentBase<T>
 {
     private SARSALambdaOptions<T> _options;
 

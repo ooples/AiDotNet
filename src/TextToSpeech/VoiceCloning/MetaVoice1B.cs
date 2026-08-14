@@ -38,7 +38,7 @@ namespace AiDotNet.TextToSpeech.VoiceCloning;
     "MetaVoice-1B: 1.2B Parameter Voice Cloning Model",
     "https://github.com/metavoiceio/metavoice-src"
 )]
-public class MetaVoice1B<T> : TtsModelBase<T>, IEndToEndTts<T>, IVoiceCloner<T>
+public partial class MetaVoice1B<T> : TtsModelBase<T>, IEndToEndTts<T>, IVoiceCloner<T>
 {
     private readonly MetaVoice1BOptions _options;
 

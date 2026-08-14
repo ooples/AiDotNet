@@ -58,7 +58,7 @@ namespace AiDotNet.VisionLanguage.Proprietary;
     "Constitutional AI: Harmlessness from AI Feedback",
     "https://arxiv.org/abs/2212.08073"
 )]
-public class ClaudeVision<T> : VisionLanguageModelBase<T>, IProprietaryVLM<T>
+public partial class ClaudeVision<T> : VisionLanguageModelBase<T>, IProprietaryVLM<T>
 {
     private readonly ClaudeVisionOptions _options;
 

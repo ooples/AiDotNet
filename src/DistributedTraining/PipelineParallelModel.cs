@@ -73,7 +73,7 @@ namespace AiDotNet.DistributedTraining;
 [ModelComplexity(ModelComplexity.VeryHigh)]
 [ResearchPaper("GPipe: Efficient Training of Giant Neural Networks", "https://arxiv.org/abs/1811.06965")]
     [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-public class PipelineParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TInput, TOutput>
+public partial class PipelineParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TInput, TOutput>
 {
     private readonly int _microBatchCount;
     private readonly IPipelinePartitionStrategy<T>? _partitionStrategy;

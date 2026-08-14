@@ -51,7 +51,7 @@ namespace AiDotNet.SurvivalAnalysis;
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("Theory of Counting Processes", "https://doi.org/10.1007/978-1-4612-4532-4")]
-public class NelsonAalenEstimator<T> : SurvivalModelBase<T>
+public partial class NelsonAalenEstimator<T> : SurvivalModelBase<T>
 {
     /// <summary>
     /// The cumulative hazard values at each event time.

@@ -50,7 +50,7 @@ namespace AiDotNet.Video.Inpainting;
     "https://arxiv.org/abs/2312.03816",
     Year = 2024,
     Authors = "Zhixing Zhang, Bichen Wu, Xiaoyan Wang, Yaqiao Luo, Zijian He, Peter Vajda, Dimitris Metaxas, Licheng Yu")]
-public class AVID<T> : VideoInpaintingBase<T>
+public partial class AVID<T> : VideoInpaintingBase<T>
 {
     private readonly AVIDOptions _options;
 

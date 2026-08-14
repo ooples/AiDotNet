@@ -59,7 +59,7 @@ namespace AiDotNet.VisionLanguage.Grounding;
     Year = 2024,
     Authors = "Ren et al."
 )]
-public class DINOX<T> : VisionLanguageModelBase<T>, IVisualGroundingModel<T>
+public partial class DINOX<T> : VisionLanguageModelBase<T>, IVisualGroundingModel<T>
 {
     private readonly DINOXOptions _options;
 

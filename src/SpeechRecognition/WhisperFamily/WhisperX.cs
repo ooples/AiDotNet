@@ -46,7 +46,7 @@ namespace AiDotNet.SpeechRecognition.WhisperFamily;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("WhisperX: Time-Accurate Speech Transcription of Long-Form Audio", "https://arxiv.org/abs/2303.00747", Year = 2023, Authors = "Bain et al.")]
-public class WhisperX<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
+public partial class WhisperX<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly WhisperXOptions _options; public override ModelOptions GetOptions() => _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer; private bool _useNativeMode; private bool _disposed;

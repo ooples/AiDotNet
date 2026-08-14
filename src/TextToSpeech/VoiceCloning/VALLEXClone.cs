@@ -40,7 +40,7 @@ namespace AiDotNet.TextToSpeech.VoiceCloning;
     Year = 2023,
     Authors = "Zhang et al."
 )]
-public class VALLEXClone<T> : TtsModelBase<T>, ICodecTts<T>, IVoiceCloner<T>
+public partial class VALLEXClone<T> : TtsModelBase<T>, ICodecTts<T>, IVoiceCloner<T>
 {
     private readonly VALLEXCloneOptions _options;
 

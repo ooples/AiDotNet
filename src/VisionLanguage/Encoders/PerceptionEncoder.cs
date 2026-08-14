@@ -59,7 +59,7 @@ namespace AiDotNet.VisionLanguage.Encoders;
     Year = 2025,
     Authors = "Meta"
 )]
-public class PerceptionEncoder<T> : VisionLanguageModelBase<T>, IVisualEncoder<T>
+public partial class PerceptionEncoder<T> : VisionLanguageModelBase<T>, IVisualEncoder<T>
 {
     private readonly PerceptionEncoderOptions _options;
 

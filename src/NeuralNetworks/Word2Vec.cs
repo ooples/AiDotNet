@@ -56,7 +56,7 @@ namespace AiDotNet.NeuralNetworks
     [ModelComplexity(ModelComplexity.Low)]
     [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     [ResearchPaper("Efficient Estimation of Word Representations in Vector Space", "https://arxiv.org/abs/1301.3781", Year = 2013, Authors = "Tomas Mikolov, Kai Chen, Greg Corrado, Jeffrey Dean")]
-    public class Word2Vec<T> : NeuralNetworkBase<T>, IEmbeddingModel<T>
+    public partial class Word2Vec<T> : NeuralNetworkBase<T>, IEmbeddingModel<T>
     {
         private readonly Word2VecOptions _options;
 

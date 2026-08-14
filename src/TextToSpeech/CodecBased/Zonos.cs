@@ -35,7 +35,7 @@ namespace AiDotNet.TextToSpeech.CodecBased;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Zyphra Zonos: Zero-Shot TTS", "https://github.com/Zyphra/Zonos")]
-public class Zonos<T> : TtsModelBase<T>, ICodecTts<T>
+public partial class Zonos<T> : TtsModelBase<T>, ICodecTts<T>
 {
     private readonly ZonosOptions _options;
 

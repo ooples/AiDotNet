@@ -40,7 +40,7 @@ namespace AiDotNet.TextToSpeech.VoiceCloning;
     Year = 2023,
     Authors = "Qin et al."
 )]
-public class OpenVoice<T> : TtsModelBase<T>, IEndToEndTts<T>, IVoiceCloner<T>
+public partial class OpenVoice<T> : TtsModelBase<T>, IEndToEndTts<T>, IVoiceCloner<T>
 {
     private readonly OpenVoiceOptions _options;
 

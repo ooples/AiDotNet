@@ -62,7 +62,7 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
     Year = 2023,
     Authors = "Bavishi et al."
 )]
-public class Fuyu<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
+public partial class Fuyu<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
 {
     private readonly FuyuOptions _options;
 

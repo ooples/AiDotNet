@@ -60,7 +60,7 @@ namespace AiDotNet.VisionLanguage.ThreeD;
     Year = 2024,
     Authors = "Xu et al."
 )]
-public class PointLLM<T> : VisionLanguageModelBase<T>, IThreeDVisionLanguageModel<T>
+public partial class PointLLM<T> : VisionLanguageModelBase<T>, IThreeDVisionLanguageModel<T>
 {
     private readonly PointLLMOptions _options;
 

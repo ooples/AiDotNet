@@ -52,7 +52,7 @@ namespace AiDotNet.Video.FrameInterpolation;
     "https://arxiv.org/abs/2111.15483",
     Year = 2022,
     Authors = "Duolikun Danier, Fan Zhang, David Bull")]
-public class STMFNet<T> : FrameInterpolationBase<T>
+public partial class STMFNet<T> : FrameInterpolationBase<T>
 {
     #region Fields
 

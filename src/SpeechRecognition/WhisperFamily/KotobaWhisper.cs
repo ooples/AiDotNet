@@ -46,7 +46,7 @@ namespace AiDotNet.SpeechRecognition.WhisperFamily;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Distil-Whisper: Robust Knowledge Distillation via Large-Scale Pseudo Labelling", "https://arxiv.org/abs/2311.00430", Year = 2023, Authors = "Gandhi et al.")]
-public class KotobaWhisper<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
+public partial class KotobaWhisper<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly KotobaWhisperOptions _options; public override ModelOptions GetOptions() => _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer; private bool _useNativeMode; private bool _disposed;

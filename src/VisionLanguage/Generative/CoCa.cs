@@ -61,7 +61,7 @@ namespace AiDotNet.VisionLanguage.Generative;
     Year = 2022,
     Authors = "Yu et al."
 )]
-public class CoCa<T> : VisionLanguageModelBase<T>, IGenerativeVisionLanguageModel<T>
+public partial class CoCa<T> : VisionLanguageModelBase<T>, IGenerativeVisionLanguageModel<T>
 {
     private readonly CoCaOptions _options;
 

@@ -42,7 +42,7 @@ namespace AiDotNet.TextToSpeech.MultiModal;
     Year = 2023,
     Authors = "Zhang et al."
 )]
-public class SpeechGPT<T> : TtsModelBase<T>, ICodecTts<T>
+public partial class SpeechGPT<T> : TtsModelBase<T>, ICodecTts<T>
 {
     private readonly SpeechGPTOptions _options;
 

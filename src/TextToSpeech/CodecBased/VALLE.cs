@@ -49,7 +49,7 @@ namespace AiDotNet.TextToSpeech.CodecBased;
     Year = 2023,
     Authors = "Wang et al."
 )]
-public class VALLE<T> : TtsModelBase<T>, ICodecTts<T>
+public partial class VALLE<T> : TtsModelBase<T>, ICodecTts<T>
 {
     private readonly VALLEOptions _options;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;

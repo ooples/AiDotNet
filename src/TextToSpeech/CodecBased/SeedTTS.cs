@@ -40,7 +40,7 @@ namespace AiDotNet.TextToSpeech.CodecBased;
     Year = 2024,
     Authors = "Seed Team, ByteDance"
 )]
-public class SeedTTS<T> : TtsModelBase<T>, ICodecTts<T>
+public partial class SeedTTS<T> : TtsModelBase<T>, ICodecTts<T>
 {
     private readonly SeedTTSOptions _options;
 

@@ -58,7 +58,7 @@ namespace AiDotNet.VisionLanguage.Editing;
     Year = 2024,
     Authors = "Fu et al."
 )]
-public class MGIE<T> : VisionLanguageModelBase<T>, IImageEditingVLM<T>
+public partial class MGIE<T> : VisionLanguageModelBase<T>, IImageEditingVLM<T>
 {
     private readonly MGIEOptions _options;
 

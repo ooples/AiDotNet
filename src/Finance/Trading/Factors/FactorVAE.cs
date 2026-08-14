@@ -87,7 +87,7 @@ namespace AiDotNet.Finance.Trading.Factors;
     "https://doi.org/10.1609/aaai.v36i4.20369",
     Year = 2022,
     Authors = "Yitong Duan, Lei Wang, Qizhong Zhang, Jian Li")]
-public class FactorVAE<T> : FinancialModelBase<T>, IFactorModel<T>
+public partial class FactorVAE<T> : FinancialModelBase<T>, IFactorModel<T>
 {
     #region Execution Mode
 

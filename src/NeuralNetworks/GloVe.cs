@@ -53,7 +53,7 @@ namespace AiDotNet.NeuralNetworks
     [ModelComplexity(ModelComplexity.Low)]
     [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     [ResearchPaper("GloVe: Global Vectors for Word Representation", "https://nlp.stanford.edu/pubs/glove.pdf", Year = 2014, Authors = "Jeffrey Pennington, Richard Socher, Christopher D. Manning")]
-    public class GloVe<T> : NeuralNetworkBase<T>, IEmbeddingModel<T>
+    public partial class GloVe<T> : NeuralNetworkBase<T>, IEmbeddingModel<T>
     {
         private readonly GloVeOptions _options;
 

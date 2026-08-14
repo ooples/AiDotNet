@@ -60,7 +60,7 @@ namespace AiDotNet.ComputerVision.Segmentation.Video;
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Efficient Track Anything", "https://arxiv.org/abs/2411.18933", Year = 2024, Authors = "Yunyang Xiong, Chong Zhou, Xiaoyu Xiang, Lemeng Wu, Chenchen Zhu, Zechun Liu, Saksham Suri, Balakrishnan Varadarajan, Ramya Akula, Forrest Iandola, Raghuraman Krishnamoorthi, Bilge Soran, Vikas Chandra")]
-public class EfficientTAM<T> : Common.VideoSegmentationBase<T>
+public partial class EfficientTAM<T> : Common.VideoSegmentationBase<T>
 {
     /// <inheritdoc />
     /// <remarks>

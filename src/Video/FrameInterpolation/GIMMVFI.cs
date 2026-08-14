@@ -57,7 +57,7 @@ namespace AiDotNet.Video.FrameInterpolation;
     "https://arxiv.org/abs/2407.08680",
     Year = 2024,
     Authors = "Zujin Guo, Wei Li, Chen Change Loy")]
-public class GIMMVFI<T> : FrameInterpolationBase<T>
+public partial class GIMMVFI<T> : FrameInterpolationBase<T>
 {
     #region Fields
 

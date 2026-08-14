@@ -73,7 +73,7 @@ namespace AiDotNet.Classification.MultiLabel;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Matrix<>))]
 [ResearchPaper("Classifier Chains for Multi-Label Classification", "https://doi.org/10.1007/s10994-011-5256-5", Year = 2011, Authors = "Jesse Read, Bernhard Pfahringer, Geoff Holmes, Eibe Frank")]
-public class ClassifierChainClassifier<T> : MultiLabelClassifierBase<T>
+public partial class ClassifierChainClassifier<T> : MultiLabelClassifierBase<T>
 {
 
     /// <inheritdoc />

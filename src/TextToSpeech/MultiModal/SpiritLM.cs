@@ -42,7 +42,7 @@ namespace AiDotNet.TextToSpeech.MultiModal;
     Year = 2024,
     Authors = "Nguyen et al."
 )]
-public class SpiritLM<T> : TtsModelBase<T>, ICodecTts<T>
+public partial class SpiritLM<T> : TtsModelBase<T>, ICodecTts<T>
 {
     private readonly SpiritLMOptions _options;
 

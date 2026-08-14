@@ -40,7 +40,7 @@ namespace AiDotNet.TextToSpeech.EndToEnd;
     Year = 2022,
     Authors = "Casanova et al."
 )]
-public class YourTTS<T> : TtsModelBase<T>, IEndToEndTts<T>
+public partial class YourTTS<T> : TtsModelBase<T>, IEndToEndTts<T>
 {
     private readonly YourTTSOptions _options;
 

@@ -62,7 +62,7 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
     Year = 2025,
     Authors = "Zhu et al."
 )]
-public class InternVL3<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
+public partial class InternVL3<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
 {
     private readonly InternVL3Options _options;
 

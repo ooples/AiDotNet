@@ -47,7 +47,7 @@ namespace AiDotNet.TextToSpeech.CodecBased;
     "CosyVoice: Scalable Streaming Speech Synthesis",
     "https://arxiv.org/abs/2412.10117"
 )]
-public class CosyVoice3<T> : TtsModelBase<T>, ICodecTts<T>
+public partial class CosyVoice3<T> : TtsModelBase<T>, ICodecTts<T>
 {
     private readonly CosyVoice3Options _options;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;

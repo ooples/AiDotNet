@@ -87,7 +87,7 @@ namespace AiDotNet.Classification.Ordinal;
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("Ridge Regression: Biased Estimation for Nonorthogonal Problems", "https://doi.org/10.1080/00401706.1970.10488634")]
-public class OrdinalRidgeRegression<T> : OrdinalClassifierBase<T>,
+public partial class OrdinalRidgeRegression<T> : OrdinalClassifierBase<T>,
     IParameterizable<T, Matrix<T>, Vector<T>>, IGradientComputable<T, Matrix<T>, Vector<T>>
 {
 

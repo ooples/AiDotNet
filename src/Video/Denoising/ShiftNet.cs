@@ -70,7 +70,7 @@ namespace AiDotNet.Video.Denoising;
     "https://arxiv.org/abs/2206.10810",
     Year = 2023,
     Authors = "Dasong Li, Xiaoyu Shi, Yi Zhang, Ka Chun Cheung, Simon See, Xiaogang Wang, Hongwei Qin, Hongsheng Li")]
-public class ShiftNet<T> : VideoDenoisingBase<T>
+public partial class ShiftNet<T> : VideoDenoisingBase<T>
 {
     private readonly ShiftNetOptions _options;
 

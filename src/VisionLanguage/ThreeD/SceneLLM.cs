@@ -60,7 +60,7 @@ namespace AiDotNet.VisionLanguage.ThreeD;
     Year = 2024,
     Authors = "Fu et al."
 )]
-public class SceneLLM<T> : VisionLanguageModelBase<T>, IThreeDVisionLanguageModel<T>
+public partial class SceneLLM<T> : VisionLanguageModelBase<T>, IThreeDVisionLanguageModel<T>
 {
     private readonly SceneLLMOptions _options;
 

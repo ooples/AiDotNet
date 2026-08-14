@@ -60,7 +60,7 @@ namespace AiDotNet.Regression;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("Greedy Function Approximation: A Gradient Boosting Machine", "https://doi.org/10.1214/aos/1013203451", Year = 2001, Authors = "Jerome H. Friedman")]
-public class GradientBoostingRegression<T> : AsyncDecisionTreeRegressionBase<T>
+public partial class GradientBoostingRegression<T> : AsyncDecisionTreeRegressionBase<T>
 {
     /// <summary>
     /// Collection of decision trees that make up the ensemble.

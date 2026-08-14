@@ -60,7 +60,7 @@ namespace AiDotNet.VisionLanguage.Proprietary;
     Year = 2024,
     Authors = "Gemini Team, Google"
 )]
-public class GeminiVision<T> : VisionLanguageModelBase<T>, IProprietaryVLM<T>
+public partial class GeminiVision<T> : VisionLanguageModelBase<T>, IProprietaryVLM<T>
 {
     private readonly GeminiVisionOptions _options;
 

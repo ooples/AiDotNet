@@ -22,7 +22,7 @@ namespace AiDotNet.Optimizers;
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 [ComponentType(ComponentType.Optimizer)]
 [PipelineStage(PipelineStage.Training)]
-public class NormalOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOutput>
+public partial class NormalOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOutput>
 {
     /// <summary>
     /// Options specific to the normal optimizer, including parameters inherited from genetic algorithms.

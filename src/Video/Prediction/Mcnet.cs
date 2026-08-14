@@ -78,7 +78,7 @@ namespace AiDotNet.Video.Prediction;
     "https://arxiv.org/abs/1706.08033",
     Year = 2017,
     Authors = "Ruben Villegas, Jimei Yang, Seunghoon Hong, Xunyu Lin, Honglak Lee")]
-public class Mcnet<T> : VideoNeuralNetworkBase<T>
+public partial class Mcnet<T> : VideoNeuralNetworkBase<T>
 {
     #region Fields
 

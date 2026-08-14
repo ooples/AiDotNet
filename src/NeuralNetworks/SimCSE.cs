@@ -49,7 +49,7 @@ namespace AiDotNet.NeuralNetworks
     [ModelComplexity(ModelComplexity.High)]
     [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     [ResearchPaper("SimCSE: Simple Contrastive Learning of Sentence Embeddings", "https://arxiv.org/abs/2104.08821", Year = 2022, Authors = "Tianyu Gao, Xingcheng Yao, Danqi Chen")]
-    public class SimCSE<T> : TransformerEmbeddingNetwork<T>
+    public partial class SimCSE<T> : TransformerEmbeddingNetwork<T>
     {
         private readonly SimCSEOptions _options;
 

@@ -45,7 +45,7 @@ namespace AiDotNet.Audio.Fingerprinting;
     "https://arxiv.org/abs/1912.10211",
     Year = 2020,
     Authors = "Qiuqiang Kong, Yin Cao, Turab Iqbal, Yuxuan Wang, Wenwu Wang, Mark D. Plumbley")]
-public class PANNsModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
+public partial class PANNsModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
 {
     /// <inheritdoc />
     /// <remarks>

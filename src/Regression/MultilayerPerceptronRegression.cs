@@ -55,7 +55,7 @@ namespace AiDotNet.Regression;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
     [ResearchPaper("Learning Internal Representations by Error Propagation", "https://doi.org/10.21236/ADA164453")]
-public class MultilayerPerceptronRegression<T> : NonLinearRegressionBase<T>
+public partial class MultilayerPerceptronRegression<T> : NonLinearRegressionBase<T>
 {
     /// <summary>
     /// The configuration options for the multilayer perceptron.

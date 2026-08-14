@@ -49,7 +49,7 @@ namespace AiDotNet.TextToSpeech.Classic;
     Year = 2021,
     Authors = "Ren et al."
 )]
-public class PortaSpeech<T> : TtsModelBase<T>, IAcousticModel<T>
+public partial class PortaSpeech<T> : TtsModelBase<T>, IAcousticModel<T>
 {
     private readonly PortaSpeechOptions _options;
 

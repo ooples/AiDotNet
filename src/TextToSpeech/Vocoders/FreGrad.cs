@@ -40,7 +40,7 @@ namespace AiDotNet.TextToSpeech.Vocoders;
     Year = 2022,
     Authors = "Shin et al."
 )]
-public class FreGrad<T> : VocoderBase<T>
+public partial class FreGrad<T> : VocoderBase<T>
 {
     private readonly FreGradOptions _options;
 

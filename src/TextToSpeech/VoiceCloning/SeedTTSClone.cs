@@ -40,7 +40,7 @@ namespace AiDotNet.TextToSpeech.VoiceCloning;
     Year = 2024,
     Authors = "Anastassiou et al."
 )]
-public class SeedTTSClone<T> : TtsModelBase<T>, ICodecTts<T>, IVoiceCloner<T>
+public partial class SeedTTSClone<T> : TtsModelBase<T>, ICodecTts<T>, IVoiceCloner<T>
 {
     private readonly SeedTTSCloneOptions _options;
 

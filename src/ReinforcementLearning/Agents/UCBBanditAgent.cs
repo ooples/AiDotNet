@@ -43,7 +43,7 @@ namespace AiDotNet.ReinforcementLearning.Agents.Bandits;
     "https://doi.org/10.1023/A:1013689704352",
     Year = 2002,
     Authors = "Auer, P., Cesa-Bianchi, N., & Fischer, P.")]
-public class UCBBanditAgent<T> : ReinforcementLearningAgentBase<T>
+public partial class UCBBanditAgent<T> : ReinforcementLearningAgentBase<T>
 {
 
     /// <inheritdoc />

@@ -38,7 +38,7 @@ namespace AiDotNet.TextToSpeech.VoiceCloning;
     "Chatterbox: Open-Source Voice Cloning",
     "https://github.com/resemble-ai/Chatterbox"
 )]
-public class Chatterbox<T> : TtsModelBase<T>, ICodecTts<T>
+public partial class Chatterbox<T> : TtsModelBase<T>, ICodecTts<T>
 {
     private readonly ChatterboxOptions _options;
 

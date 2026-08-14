@@ -64,7 +64,7 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
     Year = 2024,
     Authors = "Li et al."
 )]
-public class Aria<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
+public partial class Aria<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
 {
     private readonly AriaOptions _options;
 

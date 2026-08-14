@@ -58,7 +58,7 @@ namespace AiDotNet.Regression;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
     [ResearchPaper("Spline Models for Observational Data", "https://doi.org/10.1137/1.9781611970128")]
-public class SplineRegression<T> : NonLinearRegressionBase<T>
+public partial class SplineRegression<T> : NonLinearRegressionBase<T>
 {
     /// <summary>
     /// Configuration options for the spline regression model.

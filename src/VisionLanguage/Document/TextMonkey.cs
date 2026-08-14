@@ -59,7 +59,7 @@ namespace AiDotNet.VisionLanguage.Document;
     Year = 2024,
     Authors = "Liu et al."
 )]
-public class TextMonkey<T> : VisionLanguageModelBase<T>, IDocumentUnderstandingModel<T>
+public partial class TextMonkey<T> : VisionLanguageModelBase<T>, IDocumentUnderstandingModel<T>
 {
     private readonly TextMonkeyOptions _options;
 

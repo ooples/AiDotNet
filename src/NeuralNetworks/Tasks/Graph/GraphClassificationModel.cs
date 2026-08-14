@@ -92,7 +92,7 @@ namespace AiDotNet.NeuralNetworks.Tasks.Graph;
     "https://arxiv.org/abs/1609.02907",
     Year = 2017,
     Authors = "Thomas N. Kipf, Max Welling")]
-public class GraphClassificationModel<T> : NeuralNetworkBase<T>
+public partial class GraphClassificationModel<T> : NeuralNetworkBase<T>
 {
     private readonly ILossFunction<T> _lossFunction;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;

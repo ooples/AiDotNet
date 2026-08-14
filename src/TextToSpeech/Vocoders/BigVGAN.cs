@@ -40,7 +40,7 @@ namespace AiDotNet.TextToSpeech.Vocoders;
     Year = 2023,
     Authors = "Lee et al."
 )]
-public class BigVGAN<T> : VocoderBase<T>
+public partial class BigVGAN<T> : VocoderBase<T>
 {
     private readonly BigVGANOptions _options;
 

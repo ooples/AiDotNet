@@ -35,7 +35,7 @@ namespace AiDotNet.TextToSpeech.Latest;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("OuteTTS: Outperforming ElevenLabs", "https://github.com/edwko/OuteTTS")]
-public class OuteTTS<T> : TtsModelBase<T>, ICodecTts<T>
+public partial class OuteTTS<T> : TtsModelBase<T>, ICodecTts<T>
 {
     private readonly OuteTTSOptions _options;
 

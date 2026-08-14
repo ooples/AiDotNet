@@ -59,7 +59,7 @@ namespace AiDotNet.VisionLanguage.Grounding;
     Year = 2024,
     Authors = "Ren et al."
 )]
-public class GroundingDINO15<T> : VisionLanguageModelBase<T>, IVisualGroundingModel<T>
+public partial class GroundingDINO15<T> : VisionLanguageModelBase<T>, IVisualGroundingModel<T>
 {
     private readonly GroundingDINO15Options _options;
 

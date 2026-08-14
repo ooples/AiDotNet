@@ -62,7 +62,7 @@ namespace AiDotNet.Audio.Classification;
 // Title corrected to the published plural form ("Networks"). The arXiv id was already correct — this
 // entry surfaced in the citation audit only because the recorded title did not match arXiv's exactly.
 [ResearchPaper("Convolutional Recurrent Neural Networks for Polyphonic Sound Event Detection", "https://arxiv.org/abs/1702.06286", Year = 2017, Authors = "Emre Cakir, Giambattista Parascandolo, Toni Heittola, Heikki Huttunen, Tuomas Virtanen")]
-public class CRNNEventDetector<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
+public partial class CRNNEventDetector<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
 {
     #region Fields
 

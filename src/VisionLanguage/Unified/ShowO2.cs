@@ -62,7 +62,7 @@ namespace AiDotNet.VisionLanguage.Unified;
     Year = 2025,
     Authors = "Jinheng Xie, Zhenheng Yang, Mike Zheng Shou"
 )]
-public class ShowO2<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<T>
+public partial class ShowO2<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<T>
 {
     private readonly ShowO2Options _options;
 

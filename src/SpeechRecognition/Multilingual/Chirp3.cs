@@ -42,7 +42,7 @@ namespace AiDotNet.SpeechRecognition.Multilingual;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Google USM: Scaling Automatic Speech Recognition Beyond 100 Languages", "https://arxiv.org/abs/2303.01037", Year = 2023, Authors = "Zhang et al.")]
-public class Chirp3<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
+public partial class Chirp3<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly Chirp3Options _options; public override ModelOptions GetOptions() => _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer; private bool _useNativeMode; private bool _disposed;

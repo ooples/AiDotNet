@@ -71,7 +71,7 @@ namespace AiDotNet.Classification.Ensemble;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("Random Forests", "https://doi.org/10.1023/A:1010933404324", Year = 2001, Authors = "Leo Breiman")]
-public class RandomForestClassifier<T> : EnsembleClassifierBase<T>, ITreeBasedClassifier<T>
+public partial class RandomForestClassifier<T> : EnsembleClassifierBase<T>, ITreeBasedClassifier<T>
 {
     /// <summary>
     /// Gets the Random Forest specific options.

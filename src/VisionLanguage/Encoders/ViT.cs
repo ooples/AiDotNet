@@ -57,7 +57,7 @@ namespace AiDotNet.VisionLanguage.Encoders;
     Year = 2021,
     Authors = "Dosovitskiy et al."
 )]
-public class ViT<T> : VisionLanguageModelBase<T>, IVisualEncoder<T>
+public partial class ViT<T> : VisionLanguageModelBase<T>, IVisualEncoder<T>
 {
     private readonly ViTOptions _options;
 

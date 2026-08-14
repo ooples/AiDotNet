@@ -70,7 +70,7 @@ namespace AiDotNet.Audio.Whisper;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Robust Speech Recognition via Large-Scale Weak Supervision", "https://arxiv.org/abs/2212.04356", Year = 2022, Authors = "Alec Radford, Jong Wook Kim, Tao Xu, Greg Brockman, Christine McLeavey, Ilya Sutskever")]
-public class WhisperModel<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
+public partial class WhisperModel<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly WhisperOptions _options;
 

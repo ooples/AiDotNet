@@ -54,7 +54,7 @@ namespace AiDotNet.ReinforcementLearning.Agents.TabularQLearning;
     "https://www.cs.rhul.ac.uk/~chrisw/new_thesis.pdf",
     Year = 1989,
     Authors = "Watkins, C. J. C. H.")]
-public class TabularQLearningAgent<T> : ReinforcementLearningAgentBase<T>, IGradientComputable<T, Vector<T>, Vector<T>>
+public partial class TabularQLearningAgent<T> : ReinforcementLearningAgentBase<T>, IGradientComputable<T, Vector<T>, Vector<T>>
 {
 
     /// <inheritdoc />

@@ -64,7 +64,7 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
     Year = 2025,
     Authors = "HuggingFace"
 )]
-public class SmolVLM<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
+public partial class SmolVLM<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
 {
     private readonly SmolVLMOptions _options;
 

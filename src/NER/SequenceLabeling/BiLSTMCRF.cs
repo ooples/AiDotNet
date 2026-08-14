@@ -131,7 +131,7 @@ namespace AiDotNet.NER.SequenceLabeling;
     "https://arxiv.org/abs/1508.01991",
     Year = 2015,
     Authors = "Zhiheng Huang, Wei Xu, Kai Yu")]
-public class BiLSTMCRF<T> : SequenceLabelingNERBase<T>, INERModel<T>
+public partial class BiLSTMCRF<T> : SequenceLabelingNERBase<T>, INERModel<T>
 {
     #region Fields
 

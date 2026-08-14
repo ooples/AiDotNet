@@ -64,7 +64,7 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
     Year = 2024,
     Authors = "BAAI"
 )]
-public class AquilaVL<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
+public partial class AquilaVL<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
 {
     private readonly AquilaVLOptions _options;
 

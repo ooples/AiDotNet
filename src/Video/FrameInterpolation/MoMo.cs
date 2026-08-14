@@ -55,7 +55,7 @@ namespace AiDotNet.Video.FrameInterpolation;
     "https://arxiv.org/abs/2406.17256",
     Year = 2024,
     Authors = "Jaihyun Lew, Jooyoung Choi, Chaehun Shin, Dahuin Jung, Sungroh Yoon")]
-public class MoMo<T> : FrameInterpolationBase<T>
+public partial class MoMo<T> : FrameInterpolationBase<T>
 {
     #region Fields
 

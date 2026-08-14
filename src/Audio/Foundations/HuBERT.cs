@@ -42,7 +42,7 @@ namespace AiDotNet.Audio.Foundations;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("HuBERT: Self-Supervised Speech Representation Learning by Masked Prediction of Hidden Units", "https://arxiv.org/abs/2106.07447", Year = 2021, Authors = "Wei-Ning Hsu, Benjamin Bolte, Yao-Hung Hubert Tsai, Kushal Lakhotia, Ruslan Salakhutdinov, Abdelrahman Mohamed")]
-public class HuBERT<T> : AudioNeuralNetworkBase<T>, IAudioFoundationModel<T>
+public partial class HuBERT<T> : AudioNeuralNetworkBase<T>, IAudioFoundationModel<T>
 {
     /// <inheritdoc />
     /// <remarks>

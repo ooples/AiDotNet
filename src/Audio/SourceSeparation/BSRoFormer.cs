@@ -40,7 +40,7 @@ namespace AiDotNet.Audio.SourceSeparation;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Music Source Separation with Band-Split RNN", "https://doi.org/10.48550/arXiv.2309.02612", Year = 2023, Authors = "Wei-Tsung Lu, Ju-Chiang Wang, Qiuqiang Kong, Yun-Ning Hung")]
-public class BSRoFormer<T> : AudioNeuralNetworkBase<T>, IMusicSourceSeparator<T>
+public partial class BSRoFormer<T> : AudioNeuralNetworkBase<T>, IMusicSourceSeparator<T>
 {
     /// <inheritdoc />
     /// <remarks>

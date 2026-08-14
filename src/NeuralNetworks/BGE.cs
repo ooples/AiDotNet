@@ -52,7 +52,7 @@ namespace AiDotNet.NeuralNetworks
     [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     [ResearchPaper(// Title corrected to the published form; the arXiv id was already right.
     "C-Pack: Packed Resources For General Chinese Embeddings", "https://arxiv.org/abs/2309.07597", Year = 2023, Authors = "Shitao Xiao, Zheng Liu, Peitian Zhang, Niklas Muennighoff")]
-    public class BGE<T> : TransformerEmbeddingNetwork<T>
+    public partial class BGE<T> : TransformerEmbeddingNetwork<T>
     {
         private readonly BGEOptions _options;
 

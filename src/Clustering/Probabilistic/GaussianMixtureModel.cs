@@ -55,7 +55,7 @@ namespace AiDotNet.Clustering.Probabilistic;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
     [ResearchPaper("Maximum Likelihood from Incomplete Data via the EM Algorithm", "https://doi.org/10.1111/j.2517-6161.1977.tb01600.x")]
-public class GaussianMixtureModel<T> : ClusteringBase<T>
+public partial class GaussianMixtureModel<T> : ClusteringBase<T>
 {
     private readonly GMMOptions<T> _options;
 

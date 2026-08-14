@@ -49,7 +49,7 @@ namespace AiDotNet.TextToSpeech.EndToEnd;
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Kokoro: A Frontier TTS Model", "https://huggingface.co/hexgrad/Kokoro-82M")]
-public class Kokoro<T> : TtsModelBase<T>, IEndToEndTts<T>
+public partial class Kokoro<T> : TtsModelBase<T>, IEndToEndTts<T>
 {
     private readonly KokoroOptions _options;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;

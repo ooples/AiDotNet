@@ -59,7 +59,7 @@ namespace AiDotNet.VisionLanguage.Document;
     Year = 2024,
     Authors = "Feng et al."
 )]
-public class DocPedia<T> : VisionLanguageModelBase<T>, IDocumentUnderstandingModel<T>
+public partial class DocPedia<T> : VisionLanguageModelBase<T>, IDocumentUnderstandingModel<T>
 {
     private readonly DocPediaOptions _options;
 

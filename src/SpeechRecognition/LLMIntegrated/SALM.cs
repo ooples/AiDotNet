@@ -42,7 +42,7 @@ namespace AiDotNet.SpeechRecognition.LLMIntegrated;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("SALM: Speech-augmented Language Model with In-context Learning for Speech Recognition", "https://arxiv.org/abs/2310.09424", Year = 2024, Authors = "Chen et al.")]
-public class SALM<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
+public partial class SALM<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly SALMOptions _options; public override ModelOptions GetOptions() => _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer; private bool _useNativeMode; private bool _disposed;

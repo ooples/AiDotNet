@@ -35,7 +35,7 @@ namespace AiDotNet.TextToSpeech.ProprietaryAPI;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Pheme: AI Voice Synthesis", "https://www.pheme.ai")]
-public class Pheme<T> : TtsModelBase<T>, IEndToEndTts<T>
+public partial class Pheme<T> : TtsModelBase<T>, IEndToEndTts<T>
 {
     private readonly PhemeOptions _options;
 

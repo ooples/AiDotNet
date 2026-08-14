@@ -40,7 +40,7 @@ namespace AiDotNet.TextToSpeech.CodecBased;
     Year = 2024,
     Authors = "Peng et al."
 )]
-public class VoiceCraft<T> : TtsModelBase<T>, ICodecTts<T>
+public partial class VoiceCraft<T> : TtsModelBase<T>, ICodecTts<T>
 {
     private readonly VoiceCraftOptions _options;
 

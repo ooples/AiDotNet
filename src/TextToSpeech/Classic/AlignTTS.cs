@@ -48,7 +48,7 @@ namespace AiDotNet.TextToSpeech.Classic;
     Year = 2020,
     Authors = "Zeng et al."
 )]
-public class AlignTTS<T> : TtsModelBase<T>, IAcousticModel<T>
+public partial class AlignTTS<T> : TtsModelBase<T>, IAcousticModel<T>
 {
     private readonly AlignTTSOptions _options;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;

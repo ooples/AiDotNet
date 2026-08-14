@@ -57,7 +57,7 @@ namespace AiDotNet.VisionLanguage.VideoLanguage;
     Year = 2024,
     Authors = "Xue et al."
 )]
-public class LongVILA<T> : VisionLanguageModelBase<T>, IVideoLanguageModel<T>
+public partial class LongVILA<T> : VisionLanguageModelBase<T>, IVideoLanguageModel<T>
 {
     private readonly LongVILAOptions _options;
 

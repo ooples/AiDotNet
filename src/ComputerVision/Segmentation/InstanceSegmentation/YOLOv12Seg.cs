@@ -57,7 +57,7 @@ namespace AiDotNet.ComputerVision.Segmentation.InstanceSegmentation;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("YOLOv12: Attention-Centric Real-Time Object Detectors", "https://arxiv.org/abs/2502.12524", Year = 2025, Authors = "Yunjie Tian, Qixiang Ye, David Doermann")]
-public class YOLOv12Seg<T> : Common.InstanceSegmentationBase<T>
+public partial class YOLOv12Seg<T> : Common.InstanceSegmentationBase<T>
 {
     private readonly YOLOv12SegOptions _options;
     public override ModelOptions GetOptions() => _options;

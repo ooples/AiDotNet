@@ -59,7 +59,7 @@ namespace AiDotNet.VisionLanguage.RemoteSensing;
     Year = 2023,
     Authors = "Hu et al."
 )]
-public class RSGPT<T> : VisionLanguageModelBase<T>, IRemoteSensingVLM<T>
+public partial class RSGPT<T> : VisionLanguageModelBase<T>, IRemoteSensingVLM<T>
 {
     private readonly RSGPTOptions _options;
 

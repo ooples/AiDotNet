@@ -59,7 +59,7 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 [ModelComplexity(ModelComplexity.High)]
 [ResearchPaper("Output Scaling: YingLong-Delayed Chain of Thought in a Large Pretrained Time Series Forecasting Model", "https://arxiv.org/abs/2506.11029")]
     [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-public class YingLong<T> : TimeSeriesFoundationModelBase<T>
+public partial class YingLong<T> : TimeSeriesFoundationModelBase<T>
 {
     #region Fields
 

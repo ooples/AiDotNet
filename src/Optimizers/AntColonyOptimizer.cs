@@ -24,7 +24,7 @@ namespace AiDotNet.Optimizers;
 /// </remarks>
 [ComponentType(ComponentType.Optimizer)]
 [PipelineStage(PipelineStage.Training)]
-public class AntColonyOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOutput>
+public partial class AntColonyOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOutput>
 {
     /// <summary>
     /// Options specific to the Ant Colony Optimization algorithm.

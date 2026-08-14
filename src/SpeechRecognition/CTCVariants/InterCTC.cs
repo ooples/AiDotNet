@@ -41,7 +41,7 @@ namespace AiDotNet.SpeechRecognition.CTCVariants;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Intermediate Loss Regularization for CTC-based Speech Recognition", "https://arxiv.org/abs/2102.03216", Year = 2021, Authors = "Lee and Watanabe")]
-public class InterCTC<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
+public partial class InterCTC<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly InterCTCOptions _options; public override ModelOptions GetOptions() => _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer; private bool _useNativeMode; private bool _disposed;

@@ -62,7 +62,7 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
     Year = 2024,
     Authors = "Liu et al."
 )]
-public class LLaVANeXT<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
+public partial class LLaVANeXT<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
 {
     private readonly LLaVANeXTOptions _options;
 

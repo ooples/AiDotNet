@@ -44,7 +44,7 @@ namespace AiDotNet.Audio.Foundations;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("MERT: Acoustic Music Understanding Model with Large-Scale Self-supervised Training", "https://doi.org/10.48550/arXiv.2306.00107", Year = 2024, Authors = "Yizhi Li, Ruibin Yuan, Ge Zhang, Yinghao Ma, Xingran Chen, Hanzhi Yin, Chenghua Lin, Anton Ragni, Emmanouil Benetos, Norbert Gyenge, Roger Sherr, Jie Fu")]
-public class MERT<T> : AudioNeuralNetworkBase<T>, IAudioFoundationModel<T>
+public partial class MERT<T> : AudioNeuralNetworkBase<T>, IAudioFoundationModel<T>
 {
     /// <inheritdoc />
     /// <remarks>

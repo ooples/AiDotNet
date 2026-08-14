@@ -56,7 +56,7 @@ namespace AiDotNet.Video.FrameInterpolation;
     "https://arxiv.org/abs/2311.08007",
     Year = 2024,
     Authors = "Zhihang Zhong, Gurunandan Krishnan, Xiao Sun, Yu Qiao, Sizhuo Ma, Jian Wang")]
-public class InterpAnyClearer<T> : FrameInterpolationBase<T>
+public partial class InterpAnyClearer<T> : FrameInterpolationBase<T>
 {
     #region Fields
 

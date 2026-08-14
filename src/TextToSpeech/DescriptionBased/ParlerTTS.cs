@@ -51,7 +51,7 @@ namespace AiDotNet.TextToSpeech.DescriptionBased;
     Year = 2024,
     Authors = "Lyth et al."
 )]
-public class ParlerTTS<T> : TtsModelBase<T>, ICodecTts<T>
+public partial class ParlerTTS<T> : TtsModelBase<T>, ICodecTts<T>
 {
     private readonly ParlerTTSOptions _options;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;

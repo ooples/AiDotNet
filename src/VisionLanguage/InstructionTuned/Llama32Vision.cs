@@ -63,7 +63,7 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
     Year = 2024,
     Authors = "Grattafiori et al."
 )]
-public class Llama32Vision<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
+public partial class Llama32Vision<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
 {
     private readonly Llama32VisionOptions _options;
 

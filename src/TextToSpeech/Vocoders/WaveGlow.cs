@@ -40,7 +40,7 @@ namespace AiDotNet.TextToSpeech.Vocoders;
     Year = 2019,
     Authors = "Prenger et al."
 )]
-public class WaveGlow<T> : VocoderBase<T>
+public partial class WaveGlow<T> : VocoderBase<T>
 {
     private readonly WaveGlowOptions _options;
 

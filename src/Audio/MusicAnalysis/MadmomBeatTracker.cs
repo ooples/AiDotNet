@@ -43,7 +43,7 @@ namespace AiDotNet.Audio.MusicAnalysis;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Joint Beat and Downbeat Tracking with Recurrent Neural Networks", "https://doi.org/10.5281/zenodo.1160264", Year = 2016, Authors = "Sebastian Böck, Florian Krebs, Gerhard Widmer")]
-public class MadmomBeatTracker<T> : AudioNeuralNetworkBase<T>, IBeatTracker<T>
+public partial class MadmomBeatTracker<T> : AudioNeuralNetworkBase<T>, IBeatTracker<T>
 {
     #region Fields
 

@@ -40,7 +40,7 @@ namespace AiDotNet.TextToSpeech.CodecBased;
     Year = 2024,
     Authors = "Chen et al."
 )]
-public class VALLE2<T> : TtsModelBase<T>, ICodecTts<T>
+public partial class VALLE2<T> : TtsModelBase<T>, ICodecTts<T>
 {
     private readonly VALLE2Options _options;
 

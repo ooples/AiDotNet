@@ -38,7 +38,7 @@ namespace AiDotNet.TextToSpeech.StyleEmotion;
     "https://arxiv.org/abs/2211.12171"
 )]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-public class EmotiVoice<T> : TtsModelBase<T>, IEndToEndTts<T>
+public partial class EmotiVoice<T> : TtsModelBase<T>, IEndToEndTts<T>
 {
     private readonly EmotiVoiceOptions _options;
 

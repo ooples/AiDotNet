@@ -58,7 +58,7 @@ namespace AiDotNet.VisionLanguage.Document;
     Year = 2023,
     Authors = "Blecher et al."
 )]
-public class Nougat<T> : VisionLanguageModelBase<T>, IDocumentUnderstandingModel<T>
+public partial class Nougat<T> : VisionLanguageModelBase<T>, IDocumentUnderstandingModel<T>
 {
     private readonly NougatOptions _options;
 

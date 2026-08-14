@@ -61,7 +61,7 @@ namespace AiDotNet.VisionLanguage.Generative;
     Year = 2023,
     Authors = "Chen et al."
 )]
-public class PaLI<T> : VisionLanguageModelBase<T>, IGenerativeVisionLanguageModel<T>
+public partial class PaLI<T> : VisionLanguageModelBase<T>, IGenerativeVisionLanguageModel<T>
 {
     private readonly PaLIOptions _options;
 

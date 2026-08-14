@@ -50,7 +50,7 @@ namespace AiDotNet.Video.Stabilization;
     "https://arxiv.org/abs/2404.12887",
     Year = 2024,
     Authors = "Yuchen Zhang, Xiu Li")]
-public class ThreeDMF<T> : VideoStabilizationBase<T>
+public partial class ThreeDMF<T> : VideoStabilizationBase<T>
 {
     private readonly ThreeDMFOptions _options;
 

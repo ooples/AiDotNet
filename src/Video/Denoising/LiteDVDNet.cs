@@ -63,7 +63,7 @@ namespace AiDotNet.Video.Denoising;
     "https://www.mecs-press.org/ijigsp/ijigsp-v17-n3/v17n3-1.html",
     Year = 2025,
     Authors = "Andrii Ilchenko, Sergii Stirenko")]
-public class LiteDVDNet<T> : VideoDenoisingBase<T>
+public partial class LiteDVDNet<T> : VideoDenoisingBase<T>
 {
     private readonly LiteDVDNetOptions _options;
 

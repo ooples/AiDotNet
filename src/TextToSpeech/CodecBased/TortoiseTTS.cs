@@ -40,7 +40,7 @@ namespace AiDotNet.TextToSpeech.CodecBased;
     Year = 2023,
     Authors = "Betker"
 )]
-public class TortoiseTTS<T> : TtsModelBase<T>, ICodecTts<T>
+public partial class TortoiseTTS<T> : TtsModelBase<T>, ICodecTts<T>
 {
     private readonly TortoiseTTSOptions _options;
 

@@ -51,7 +51,7 @@ namespace AiDotNet.Audio.TextToSpeech;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Matcha-TTS: A fast TTS architecture with conditional flow matching", "https://arxiv.org/abs/2309.03199", Year = 2024, Authors = "Shivam Mehta, Ruibo Tu, Jonas Beskow, Eva Szekely, Gustav Eje Henter")]
-public class MatchaTTS<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
+public partial class MatchaTTS<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
 {
     /// <inheritdoc />
     /// <remarks>

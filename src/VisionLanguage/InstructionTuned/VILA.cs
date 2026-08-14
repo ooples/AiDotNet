@@ -65,7 +65,7 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
     Year = 2024,
     Authors = "Lin et al."
 )]
-public class VILA<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
+public partial class VILA<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
 {
     private readonly VILAOptions _options;
 

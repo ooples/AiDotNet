@@ -60,7 +60,7 @@ namespace AiDotNet.VisionLanguage.Grounding;
     Year = 2024,
     Authors = "Rasheed et al."
 )]
-public class GLaMM<T> : VisionLanguageModelBase<T>, IVisualGroundingModel<T>
+public partial class GLaMM<T> : VisionLanguageModelBase<T>, IVisualGroundingModel<T>
 {
     private readonly GLaMMOptions _options;
 

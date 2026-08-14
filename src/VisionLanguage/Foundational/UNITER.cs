@@ -55,7 +55,7 @@ namespace AiDotNet.VisionLanguage.Foundational;
     Year = 2020,
     Authors = "Chen et al."
 )]
-public class UNITER<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionModel<T>
+public partial class UNITER<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionModel<T>
 {
     private readonly UNITEROptions _options;
 

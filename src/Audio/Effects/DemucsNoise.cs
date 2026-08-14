@@ -46,7 +46,7 @@ namespace AiDotNet.Audio.Effects;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Real Time Speech Enhancement in the Waveform Domain", "https://doi.org/10.48550/arXiv.2006.12847", Year = 2020, Authors = "Alexandre Défossez, Gabriel Synnaeve, Yossi Adi")]
-public class DemucsNoise<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
+public partial class DemucsNoise<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
 {
     /// <inheritdoc />
     /// <remarks>

@@ -60,7 +60,7 @@ namespace AiDotNet.Audio.Classification;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("PANNs: Large-Scale Pretrained Audio Neural Networks for Audio Pattern Recognition", "https://arxiv.org/abs/1912.10211", Year = 2020, Authors = "Qiuqiang Kong, Yin Cao, Turab Iqbal, Yuxuan Wang, Wenwu Wang, Mark D. Plumbley")]
-public class PANNs<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
+public partial class PANNs<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
 {
     #region Fields
 

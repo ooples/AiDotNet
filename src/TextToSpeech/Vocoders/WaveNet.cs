@@ -44,7 +44,7 @@ namespace AiDotNet.TextToSpeech.Vocoders;
     Year = 2016,
     Authors = "van den Oord et al."
 )]
-public class WaveNet<T> : VocoderBase<T>
+public partial class WaveNet<T> : VocoderBase<T>
 {
     private readonly WaveNetOptions _options;
 

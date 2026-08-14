@@ -62,7 +62,7 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
     Year = 2024,
     Authors = "Tong et al."
 )]
-public class Cambrian1<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
+public partial class Cambrian1<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
 {
     private readonly Cambrian1Options _options;
 

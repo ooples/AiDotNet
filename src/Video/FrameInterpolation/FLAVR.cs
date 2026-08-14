@@ -56,7 +56,7 @@ namespace AiDotNet.Video.FrameInterpolation;
     "https://arxiv.org/abs/2012.08512",
     Year = 2021,
     Authors = "Tarun Kalluri, Deepak Pathak, Manmohan Chandraker, Du Tran")]
-public class FLAVR<T> : FrameInterpolationBase<T>
+public partial class FLAVR<T> : FrameInterpolationBase<T>
 {
     #region Fields
 

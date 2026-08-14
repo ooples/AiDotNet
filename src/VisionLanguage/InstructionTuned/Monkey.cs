@@ -65,7 +65,7 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
     Year = 2024,
     Authors = "Li et al."
 )]
-public class Monkey<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
+public partial class Monkey<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
 {
     private readonly MonkeyOptions _options;
 

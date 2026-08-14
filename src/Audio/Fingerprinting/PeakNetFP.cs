@@ -43,7 +43,7 @@ namespace AiDotNet.Audio.Fingerprinting;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("An Industrial-Strength Audio Search Algorithm", "https://www.ee.columbia.edu/~dpwe/papers/Wang03-shazam.pdf", Year = 2003, Authors = "Avery Li-Chun Wang")]
-public class PeakNetFP<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
+public partial class PeakNetFP<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
 {
     /// <inheritdoc />
     /// <remarks>

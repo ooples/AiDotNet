@@ -38,7 +38,7 @@ namespace AiDotNet.TextToSpeech.ProprietaryAPI;
     "Microsoft Azure Neural Text-to-Speech",
     "https://azure.microsoft.com/en-us/products/ai-services/text-to-speech"
 )]
-public class AzureNeuralTTS<T> : TtsModelBase<T>, IEndToEndTts<T>
+public partial class AzureNeuralTTS<T> : TtsModelBase<T>, IEndToEndTts<T>
 {
     private readonly AzureNeuralTTSOptions _options;
 

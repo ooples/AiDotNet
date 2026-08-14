@@ -49,7 +49,7 @@ namespace AiDotNet.TextToSpeech.Classic;
     Year = 2019,
     Authors = "Li et al."
 )]
-public class TransformerTTS<T> : TtsModelBase<T>, IAcousticModel<T>
+public partial class TransformerTTS<T> : TtsModelBase<T>, IAcousticModel<T>
 {
     private readonly TransformerTTSOptions _options;
 

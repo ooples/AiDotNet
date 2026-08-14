@@ -42,7 +42,7 @@ namespace AiDotNet.TextToSpeech.MultiModal;
     Year = 2025,
     Authors = "Chen et al."
 )]
-public class MinMo<T> : TtsModelBase<T>, ICodecTts<T>, IStreamingTts<T>
+public partial class MinMo<T> : TtsModelBase<T>, ICodecTts<T>, IStreamingTts<T>
 {
     private readonly MinMoOptions _options;
 

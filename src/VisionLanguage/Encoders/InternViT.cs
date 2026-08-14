@@ -57,7 +57,7 @@ namespace AiDotNet.VisionLanguage.Encoders;
     Year = 2024,
     Authors = "Chen et al."
 )]
-public class InternViT<T> : VisionLanguageModelBase<T>, IVisualEncoder<T>
+public partial class InternViT<T> : VisionLanguageModelBase<T>, IVisualEncoder<T>
 {
     private readonly InternViTOptions _options;
 

@@ -57,7 +57,7 @@ namespace AiDotNet.Video.Enhancement;
     "https://arxiv.org/abs/2407.13987",
     Year = 2024,
     Authors = "Yuehan Zhang, Angela Yao")]
-public class RealViformer<T> : VideoSuperResolutionBase<T>
+public partial class RealViformer<T> : VideoSuperResolutionBase<T>
 {
     #region Fields
 

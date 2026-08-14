@@ -55,7 +55,7 @@ namespace AiDotNet.VisionLanguage.Encoders;
     Year = 2023,
     Authors = "Zhai et al."
 )]
-public class SigLIPSO<T> : VisionLanguageModelBase<T>, IVisualEncoder<T>
+public partial class SigLIPSO<T> : VisionLanguageModelBase<T>, IVisualEncoder<T>
 {
     private readonly SigLIPSOOptions _options;
 

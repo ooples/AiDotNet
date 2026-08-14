@@ -45,7 +45,7 @@ namespace AiDotNet.Audio.Fingerprinting;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Conformer: Convolution-augmented Transformer for Speech Recognition", "https://arxiv.org/abs/2005.08100", Year = 2020, Authors = "Anmol Gulati, James Qin, Chung-Cheng Chiu, Niki Parmar, Yu Zhang, Jiahui Yu, Wei Han, Shibo Wang, Zhengdong Zhang, Yonghui Wu, Ruoming Pang")]
-public class ConformerFP<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
+public partial class ConformerFP<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
 {
     /// <inheritdoc />
     /// <remarks>

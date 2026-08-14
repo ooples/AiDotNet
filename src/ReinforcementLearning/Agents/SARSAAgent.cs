@@ -57,7 +57,7 @@ namespace AiDotNet.ReinforcementLearning.Agents.SARSA;
     "https://citeseerx.ist.psu.edu/doc/10.1.1.17.2539",
     Year = 1994,
     Authors = "Rummery, G. A. & Niranjan, M.")]
-public class SARSAAgent<T> : ReinforcementLearningAgentBase<T>, IGradientComputable<T, Vector<T>, Vector<T>>
+public partial class SARSAAgent<T> : ReinforcementLearningAgentBase<T>, IGradientComputable<T, Vector<T>, Vector<T>>
 {
 
     /// <inheritdoc />

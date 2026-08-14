@@ -56,7 +56,7 @@ namespace AiDotNet.Video.FrameInterpolation;
     "https://arxiv.org/abs/2304.09790",
     Year = 2023,
     Authors = "Zhen Li, Zuo-Liang Zhu, Ling-Hao Han, Qibin Hou, Chun-Le Guo, Ming-Ming Cheng")]
-public class AMT<T> : FrameInterpolationBase<T>
+public partial class AMT<T> : FrameInterpolationBase<T>
 {
     #region Fields
 

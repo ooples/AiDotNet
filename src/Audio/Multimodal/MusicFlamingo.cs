@@ -45,7 +45,7 @@ namespace AiDotNet.Audio.Multimodal;
 [ModelComplexity(ModelComplexity.VeryHigh)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("MusicFlamingo: Multimodal Music Understanding and Generation with Pretrained Language Models", "https://doi.org/10.48550/arXiv.2410.01250", Year = 2024, Authors = "Zhifeng Kong, Arushi Goel, Rohan Badlani, Wei Ping, Rafael Valle, Bryan Catanzaro")]
-public class MusicFlamingo<T> : AudioNeuralNetworkBase<T>, IAudioLanguageModel<T>
+public partial class MusicFlamingo<T> : AudioNeuralNetworkBase<T>, IAudioLanguageModel<T>
 {
     /// <inheritdoc />
     /// <remarks>

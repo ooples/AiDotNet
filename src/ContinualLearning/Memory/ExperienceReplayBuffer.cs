@@ -82,7 +82,7 @@ public enum ReplaySamplingStrategy
 [ResearchPaper("Experience Replay for Continual Learning", "https://arxiv.org/abs/1811.11682", Year = 2019, Authors = "David Rolnick, Arun Ahuja, Jonathan Schwarz, Timothy Lillicrap, Gregory Wayne")]
 [ComponentType(ComponentType.ContinualLearner)]
 [PipelineStage(PipelineStage.Training)]
-public class ExperienceReplayBuffer<T, TInput, TOutput> : ModelBase<T, TInput, TOutput>
+public partial class ExperienceReplayBuffer<T, TInput, TOutput> : ModelBase<T, TInput, TOutput>
 {
     private readonly int _maxSize;
     private readonly List<DataPoint<T, TInput, TOutput>> _buffer;

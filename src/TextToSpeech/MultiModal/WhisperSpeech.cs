@@ -41,7 +41,7 @@ namespace AiDotNet.TextToSpeech.MultiModal;
     Year = 2023,
     Authors = "Kharitonov et al."
 )]
-public class WhisperSpeech<T> : TtsModelBase<T>, ICodecTts<T>
+public partial class WhisperSpeech<T> : TtsModelBase<T>, ICodecTts<T>
 {
     private readonly WhisperSpeechOptions _options;
 

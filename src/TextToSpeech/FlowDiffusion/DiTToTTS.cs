@@ -35,7 +35,7 @@ namespace AiDotNet.TextToSpeech.FlowDiffusion;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("DiTTo-TTS: Diffusion Transformers for Scalable Text-to-Speech without Domain-Specific Factors", "https://arxiv.org/abs/2406.11427", Year = 2024, Authors = "Lee et al.")]
-public class DiTToTTS<T> : TtsModelBase<T>, IEndToEndTts<T>
+public partial class DiTToTTS<T> : TtsModelBase<T>, IEndToEndTts<T>
 {
     private readonly DiTToTTSOptions _options; public override ModelOptions GetOptions() => _options;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer; private bool _useNativeMode; private bool _disposed;

@@ -62,7 +62,7 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
     Year = 2024,
     Authors = "Abdin et al."
 )]
-public class Phi3Vision<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
+public partial class Phi3Vision<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
 {
     private readonly Phi3VisionOptions _options;
 

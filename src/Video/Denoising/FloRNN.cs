@@ -50,7 +50,7 @@ namespace AiDotNet.Video.Denoising;
     "https://arxiv.org/abs/2204.05532",
     Year = 2022,
     Authors = "Junyi Li, Xiaohe Wu, Zhenxing Niu, Wangmeng Zuo")]
-public class FloRNN<T> : VideoDenoisingBase<T>
+public partial class FloRNN<T> : VideoDenoisingBase<T>
 {
     private readonly FloRNNOptions _options;
 

@@ -88,7 +88,7 @@ namespace AiDotNet.Audio.AudioGen;
 [ModelComplexity(ModelComplexity.VeryHigh)]
 [ModelInput(typeof(string), typeof(Tensor<>))]
 [ResearchPaper("AudioGen: Textually Guided Audio Generation", "https://doi.org/10.48550/arXiv.2209.15352", Year = 2022, Authors = "Felix Kreuk, Gabriel Synnaeve, Adam Polyak, Uriel Singer, Alexandre Défossez, Jade Copet, Devi Parikh, Yaniv Taigman, Yossi Adi")]
-public class AudioGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
+public partial class AudioGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
 {
     /// <inheritdoc />
     /// <remarks>

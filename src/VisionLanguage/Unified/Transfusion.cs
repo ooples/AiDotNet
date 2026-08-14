@@ -62,7 +62,7 @@ namespace AiDotNet.VisionLanguage.Unified;
     Year = 2024,
     Authors = "Zhou et al."
 )]
-public class Transfusion<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<T>
+public partial class Transfusion<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<T>
 {
     private readonly TransfusionOptions _options;
 

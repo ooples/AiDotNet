@@ -35,7 +35,7 @@ namespace AiDotNet.TextToSpeech.CodecBased;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("ChatTTS: A Generative Speech Model", "https://github.com/2noise/ChatTTS")]
-public class ChatTTS<T> : TtsModelBase<T>, ICodecTts<T>
+public partial class ChatTTS<T> : TtsModelBase<T>, ICodecTts<T>
 {
     private readonly ChatTTSOptions _options;
 

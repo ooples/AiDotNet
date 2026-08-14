@@ -47,7 +47,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Large Scale GAN Training for High Fidelity Natural Image Synthesis", "https://arxiv.org/abs/1809.11096", Year = 2019, Authors = "Andrew Brock, Jeff Donahue, Karen Simonyan")]
-public class BigGAN<T> : GenerativeAdversarialNetwork<T>
+public partial class BigGAN<T> : GenerativeAdversarialNetwork<T>
 {
     private readonly BigGANOptions _options;
     private readonly int _latentSize;

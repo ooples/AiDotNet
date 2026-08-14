@@ -57,7 +57,7 @@ namespace AiDotNet.ComputerVision.Segmentation.Interactive;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Segment Everything Everywhere All at Once", "https://arxiv.org/abs/2304.06718", Year = 2023, Authors = "Zou et al.")]
-public class SEEM<T> : Common.PromptableSegmentationBase<T>
+public partial class SEEM<T> : Common.PromptableSegmentationBase<T>
 {
     private readonly SEEMOptions _options;
     public override ModelOptions GetOptions() => _options;

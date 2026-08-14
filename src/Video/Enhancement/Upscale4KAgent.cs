@@ -52,7 +52,7 @@ namespace AiDotNet.Video.Enhancement;
     "https://arxiv.org/abs/2312.06640",
     Year = 2024,
     Authors = "Shangchen Zhou, Peiqing Yang, Jianyi Wang, Yihang Luo, Chen Change Loy")]
-public class Upscale4KAgent<T> : VideoSuperResolutionBase<T>
+public partial class Upscale4KAgent<T> : VideoSuperResolutionBase<T>
 {
     #region Fields
 

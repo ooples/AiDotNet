@@ -40,7 +40,7 @@ namespace AiDotNet.TextToSpeech.Vocoders;
     Year = 2018,
     Authors = "Kalchbrenner et al."
 )]
-public class WaveRNN<T> : VocoderBase<T>
+public partial class WaveRNN<T> : VocoderBase<T>
 {
     private readonly WaveRNNOptions _options;
 

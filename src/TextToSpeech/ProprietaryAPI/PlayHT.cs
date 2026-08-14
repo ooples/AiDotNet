@@ -35,7 +35,7 @@ namespace AiDotNet.TextToSpeech.ProprietaryAPI;
 [ModelComplexity(ModelComplexity.Medium)]
 [ResearchPaper("PlayHT", "https://play.ht")]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-public class PlayHT<T> : TtsModelBase<T>, IEndToEndTts<T>
+public partial class PlayHT<T> : TtsModelBase<T>, IEndToEndTts<T>
 {
     private readonly PlayHTOptions _options;
 

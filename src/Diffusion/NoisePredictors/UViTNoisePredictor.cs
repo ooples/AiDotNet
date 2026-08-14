@@ -55,7 +55,7 @@ namespace AiDotNet.Diffusion.NoisePredictors;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     [ResearchPaper("All are Worth Words: A ViT Backbone for Diffusion Models", "https://arxiv.org/abs/2209.12152")]
-public class UViTNoisePredictor<T> : NoisePredictorBase<T>
+public partial class UViTNoisePredictor<T> : NoisePredictorBase<T>
 {
     private readonly int _inputChannels;
     private readonly int _hiddenSize;

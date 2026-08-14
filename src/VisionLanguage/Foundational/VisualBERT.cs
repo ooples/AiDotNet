@@ -55,7 +55,7 @@ namespace AiDotNet.VisionLanguage.Foundational;
     Year = 2019,
     Authors = "Li et al."
 )]
-public class VisualBERT<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionModel<T>
+public partial class VisualBERT<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionModel<T>
 {
     private readonly VisualBERTOptions _options;
 

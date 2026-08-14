@@ -40,7 +40,7 @@ namespace AiDotNet.TextToSpeech.StyleEmotion;
     Year = 2022,
     Authors = "Li et al."
 )]
-public class StyleTTS<T> : TtsModelBase<T>, IEndToEndTts<T>
+public partial class StyleTTS<T> : TtsModelBase<T>, IEndToEndTts<T>
 {
     private readonly StyleTTSOptions _options;
 

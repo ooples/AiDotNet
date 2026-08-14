@@ -59,7 +59,7 @@ namespace AiDotNet.VisionLanguage.Reasoning;
     Year = 2024,
     Authors = "Xu et al."
 )]
-public class LLaVACoT<T> : VisionLanguageModelBase<T>, IReasoningVLM<T>
+public partial class LLaVACoT<T> : VisionLanguageModelBase<T>, IReasoningVLM<T>
 {
     private readonly LLaVACoTOptions _options;
 

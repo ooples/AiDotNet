@@ -61,7 +61,7 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("One Fits All: Power General Time Series Analysis by Pretrained LM", "https://arxiv.org/abs/2302.11939", Year = 2023, Authors = "Tian Zhou, Peisong Niu, Xue Wang, Liang Sun, Rong Jin")]
-public class GPT4TS<T> : TimeSeriesFoundationModelBase<T>
+public partial class GPT4TS<T> : TimeSeriesFoundationModelBase<T>
 {
     #region Fields
 

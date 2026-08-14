@@ -41,7 +41,7 @@ namespace AiDotNet.SpeechRecognition.Streaming;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Emformer: Efficient Memory Transformer Based Acoustic Model for Low Latency Streaming Speech Recognition", "https://arxiv.org/abs/2010.10759", Year = 2021, Authors = "Shi et al.")]
-public class EmformerRNNT<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
+public partial class EmformerRNNT<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly EmformerRNNTOptions _options; public override ModelOptions GetOptions() => _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer; private bool _useNativeMode; private bool _disposed;

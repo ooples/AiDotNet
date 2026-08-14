@@ -42,7 +42,7 @@ namespace AiDotNet.TextToSpeech.MultiModal;
     Year = 2024,
     Authors = "Fang et al."
 )]
-public class LlamaOmni<T> : TtsModelBase<T>, ICodecTts<T>, IStreamingTts<T>
+public partial class LlamaOmni<T> : TtsModelBase<T>, ICodecTts<T>, IStreamingTts<T>
 {
     private readonly LlamaOmniOptions _options;
 

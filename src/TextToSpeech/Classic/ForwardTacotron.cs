@@ -48,7 +48,7 @@ namespace AiDotNet.TextToSpeech.Classic;
     Year = 2021,
     Authors = "Shen et al."
 )]
-public class ForwardTacotron<T> : TtsModelBase<T>, IAcousticModel<T>
+public partial class ForwardTacotron<T> : TtsModelBase<T>, IAcousticModel<T>
 {
     private readonly ForwardTacotronOptions _options;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;

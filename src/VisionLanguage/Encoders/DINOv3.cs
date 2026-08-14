@@ -58,7 +58,7 @@ namespace AiDotNet.VisionLanguage.Encoders;
     Year = 2025,
     Authors = "Oriane Siméoni et al. (Meta AI Research)"
 )]
-public class DINOv3<T> : VisionLanguageModelBase<T>, IVisualEncoder<T>
+public partial class DINOv3<T> : VisionLanguageModelBase<T>, IVisualEncoder<T>
 {
     private readonly DINOv3Options _options;
 

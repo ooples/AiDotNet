@@ -51,7 +51,7 @@ namespace AiDotNet.Video.Inpainting;
     "https://arxiv.org/abs/2211.11293",
     Year = 2022,
     Authors = "Hao Luo, Peng Zhao, Ling Pei")]
-public class FlowLens<T> : VideoInpaintingBase<T>
+public partial class FlowLens<T> : VideoInpaintingBase<T>
 {
     private readonly FlowLensOptions _options;
 

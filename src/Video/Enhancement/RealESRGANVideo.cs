@@ -56,7 +56,7 @@ namespace AiDotNet.Video.Enhancement;
     "https://arxiv.org/abs/2107.10833",
     Year = 2021,
     Authors = "Xintao Wang, Liangbin Xie, Chao Dong, Ying Shan")]
-public class RealESRGANVideo<T> : VideoSuperResolutionBase<T>
+public partial class RealESRGANVideo<T> : VideoSuperResolutionBase<T>
 {
     #region Fields
 

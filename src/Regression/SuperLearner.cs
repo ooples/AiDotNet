@@ -62,7 +62,7 @@ namespace AiDotNet.Regression;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("Super Learner", "https://doi.org/10.2202/1544-6115.1309", Year = 2007, Authors = "Mark J. van der Laan, Eric C. Polley, Alan E. Hubbard")]
-public class SuperLearner<T> : NonLinearRegressionBase<T>
+public partial class SuperLearner<T> : NonLinearRegressionBase<T>
 {
     /// <summary>
     /// Initializes a new instance with a default base model.

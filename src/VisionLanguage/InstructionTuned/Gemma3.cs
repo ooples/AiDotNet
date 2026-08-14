@@ -63,7 +63,7 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
     Year = 2025,
     Authors = "Gemma Team"
 )]
-public class Gemma3<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
+public partial class Gemma3<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
 {
     private readonly Gemma3Options _options;
 

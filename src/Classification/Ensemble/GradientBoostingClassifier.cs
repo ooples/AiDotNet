@@ -74,7 +74,7 @@ namespace AiDotNet.Classification.Ensemble;
     "https://doi.org/10.1214/aos/1013203451",
     Year = 2001,
     Authors = "Jerome H. Friedman")]
-public class GradientBoostingClassifier<T> : EnsembleClassifierBase<T>, ITreeBasedClassifier<T>
+public partial class GradientBoostingClassifier<T> : EnsembleClassifierBase<T>, ITreeBasedClassifier<T>
 {
     /// <summary>
     /// Gets the Gradient Boosting specific options.

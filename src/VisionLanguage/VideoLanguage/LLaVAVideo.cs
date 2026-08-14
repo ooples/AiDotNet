@@ -57,7 +57,7 @@ namespace AiDotNet.VisionLanguage.VideoLanguage;
     Year = 2024,
     Authors = "Zhang et al."
 )]
-public class LLaVAVideo<T> : VisionLanguageModelBase<T>, IVideoLanguageModel<T>
+public partial class LLaVAVideo<T> : VisionLanguageModelBase<T>, IVideoLanguageModel<T>
 {
     private readonly LLaVAVideoOptions _options;
 

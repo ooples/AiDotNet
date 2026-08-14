@@ -43,7 +43,7 @@ namespace AiDotNet.SpeechRecognition.Foundation;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("w2v-BERT: Combining Contrastive Learning and Masked Language Modeling for Self-Supervised Speech Pre-Training", "https://arxiv.org/abs/2108.06209", Year = 2021, Authors = "Chung et al.")]
-public class W2vBERT<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
+public partial class W2vBERT<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly W2vBERTOptions _options; public override ModelOptions GetOptions() => _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer; private bool _useNativeMode; private bool _disposed;

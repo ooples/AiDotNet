@@ -44,7 +44,7 @@ namespace AiDotNet.SpeechRecognition.ConformerFamily;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Efficient Conformer: Progressive Downsampling and Grouped Attention for Automatic Speech Recognition", "https://arxiv.org/abs/2109.01163", Year = 2021, Authors = "Burchi and Vielzeuf")]
-public class EfficientConformer<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
+public partial class EfficientConformer<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly EfficientConformerOptions _options; public override ModelOptions GetOptions() => _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer; private bool _useNativeMode; private bool _disposed;

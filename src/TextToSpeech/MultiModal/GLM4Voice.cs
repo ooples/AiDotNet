@@ -42,7 +42,7 @@ namespace AiDotNet.TextToSpeech.MultiModal;
     Year = 2024,
     Authors = "Zeng et al."
 )]
-public class GLM4Voice<T> : TtsModelBase<T>, ICodecTts<T>, IStreamingTts<T>
+public partial class GLM4Voice<T> : TtsModelBase<T>, ICodecTts<T>, IStreamingTts<T>
 {
     private readonly GLM4VoiceOptions _options;
 

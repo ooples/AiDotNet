@@ -84,7 +84,7 @@ namespace AiDotNet.Classification.Boosting;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
     [ResearchPaper("LightGBM: A Highly Efficient Gradient Boosting Decision Tree", "https://papers.nips.cc/paper/6907-lightgbm-a-highly-efficient-gradient-boosting-decision-tree")]
-public class HistGradientBoostingClassifier<T> : ClassifierBase<T>
+public partial class HistGradientBoostingClassifier<T> : ClassifierBase<T>
 {
 
     // Its own comment: "For tree-based models, parameters do not fit the typical vector format".

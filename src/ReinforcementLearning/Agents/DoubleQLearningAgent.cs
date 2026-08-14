@@ -50,7 +50,7 @@ namespace AiDotNet.ReinforcementLearning.Agents.DoubleQLearning;
     "https://papers.nips.cc/paper/2010/hash/091d584fced301b442654dd8c23b3fc9-Abstract.html",
     Year = 2010,
     Authors = "van Hasselt, H.")]
-public class DoubleQLearningAgent<T> : ReinforcementLearningAgentBase<T>, IGradientComputable<T, Vector<T>, Vector<T>>
+public partial class DoubleQLearningAgent<T> : ReinforcementLearningAgentBase<T>, IGradientComputable<T, Vector<T>, Vector<T>>
 {
     private DoubleQLearningOptions<T> _options;
 

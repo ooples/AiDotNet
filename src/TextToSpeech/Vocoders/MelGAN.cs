@@ -40,7 +40,7 @@ namespace AiDotNet.TextToSpeech.Vocoders;
     Year = 2019,
     Authors = "Kumar et al."
 )]
-public class MelGAN<T> : VocoderBase<T>
+public partial class MelGAN<T> : VocoderBase<T>
 {
     private readonly MelGANOptions _options;
 

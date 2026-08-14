@@ -57,7 +57,7 @@ namespace AiDotNet.CausalInference;
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("Metalearners for Estimating Heterogeneous Treatment Effects using Machine Learning", "https://doi.org/10.1073/pnas.1804597116", Year = 2019, Authors = "Sören R. Künzel, Jasjeet S. Sekhon, Peter J. Bickel, Bin Yu")]
-public class SLearner<T> : CausalModelBase<T>
+public partial class SLearner<T> : CausalModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>

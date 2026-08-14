@@ -58,7 +58,7 @@ namespace AiDotNet.Clustering.Ensemble;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("Cluster Ensembles - A Knowledge Reuse Framework for Combining Multiple Partitions", "https://doi.org/10.1162/153244303321897735", Year = 2003, Authors = "Alexander Strehl, Joydeep Ghosh")]
-public class ConsensusClustering<T> : ClusteringBase<T>
+public partial class ConsensusClustering<T> : ClusteringBase<T>
 {
     private readonly ConsensusClusteringOptions<T> _options;
 

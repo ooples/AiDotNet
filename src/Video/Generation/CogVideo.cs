@@ -68,7 +68,7 @@ namespace AiDotNet.Video.Generation;
     "https://arxiv.org/abs/2205.15868",
     Year = 2022,
     Authors = "Wenyi Hong, Ming Ding, Wendi Zheng, Xinghan Liu, Jie Tang")]
-public class CogVideo<T> : NeuralNetworkBase<T>
+public partial class CogVideo<T> : NeuralNetworkBase<T>
 {
     private readonly CogVideoOptions _options;
 

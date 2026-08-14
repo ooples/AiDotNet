@@ -60,7 +60,7 @@ namespace AiDotNet.VisionLanguage.ThreeD;
     Year = 2023,
     Authors = "Hong et al."
 )]
-public class ThreeDLLM<T> : VisionLanguageModelBase<T>, IThreeDVisionLanguageModel<T>
+public partial class ThreeDLLM<T> : VisionLanguageModelBase<T>, IThreeDVisionLanguageModel<T>
 {
     private readonly ThreeDLLMOptions _options;
 

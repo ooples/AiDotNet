@@ -48,7 +48,7 @@ namespace AiDotNet.TextToSpeech.CodecBased;
     Year = 2023,
     Authors = "Borsos et al."
 )]
-public class AudioLM<T> : TtsModelBase<T>, ICodecTts<T>
+public partial class AudioLM<T> : TtsModelBase<T>, ICodecTts<T>
 {
     private readonly AudioLMOptions _options;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;

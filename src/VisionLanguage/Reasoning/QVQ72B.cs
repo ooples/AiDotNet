@@ -59,7 +59,7 @@ namespace AiDotNet.VisionLanguage.Reasoning;
     Year = 2024,
     Authors = "Qwen Team"
 )]
-public class QVQ72B<T> : VisionLanguageModelBase<T>, IReasoningVLM<T>
+public partial class QVQ72B<T> : VisionLanguageModelBase<T>, IReasoningVLM<T>
 {
     private readonly QVQ72BOptions _options;
 

@@ -62,7 +62,7 @@ namespace AiDotNet.ComputerVision.Segmentation.Foundation;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Generalized Decoding for Pixel, Image, and Language", "https://arxiv.org/abs/2212.11270", Year = 2023, Authors = "Zou et al.")]
-public class XDecoder<T> : Common.PanopticSegmentationBase<T>
+public partial class XDecoder<T> : Common.PanopticSegmentationBase<T>
 {
     private readonly XDecoderOptions _options;
 

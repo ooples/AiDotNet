@@ -58,7 +58,7 @@ namespace AiDotNet.Video.Denoising;
     "https://arxiv.org/abs/1907.01361",
     Year = 2020,
     Authors = "Matias Tassano, Julie Delon, Thomas Veit")]
-public class FastDVDNet<T> : VideoDenoisingBase<T>
+public partial class FastDVDNet<T> : VideoDenoisingBase<T>
 {
     private readonly FastDVDNetOptions _options;
 

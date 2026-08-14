@@ -49,7 +49,7 @@ namespace AiDotNet.TextToSpeech.Classic;
     Year = 2020,
     Authors = "Vainer and Durnov"
 )]
-public class SpeedySpeech<T> : TtsModelBase<T>, IAcousticModel<T>
+public partial class SpeedySpeech<T> : TtsModelBase<T>, IAcousticModel<T>
 {
     private readonly SpeedySpeechOptions _options;
 

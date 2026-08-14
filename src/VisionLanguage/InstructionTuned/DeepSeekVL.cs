@@ -63,7 +63,7 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
     Year = 2024,
     Authors = "Lu et al."
 )]
-public class DeepSeekVL<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
+public partial class DeepSeekVL<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
 {
     private readonly DeepSeekVLOptions _options;
 

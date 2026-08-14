@@ -34,7 +34,7 @@ namespace AiDotNet.TextToSpeech.Latest;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Kani TTS", "https://github.com/KaniTTS/KaniTTS")]
-public class KaniTTS<T> : TtsModelBase<T>, ICodecTts<T>
+public partial class KaniTTS<T> : TtsModelBase<T>, ICodecTts<T>
 {
     private readonly KaniTTSOptions _options;
 

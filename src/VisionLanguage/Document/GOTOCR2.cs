@@ -57,7 +57,7 @@ namespace AiDotNet.VisionLanguage.Document;
     Year = 2024,
     Authors = "Wei et al."
 )]
-public class GOTOCR2<T> : VisionLanguageModelBase<T>, IDocumentUnderstandingModel<T>
+public partial class GOTOCR2<T> : VisionLanguageModelBase<T>, IDocumentUnderstandingModel<T>
 {
     private readonly GOTOCR2Options _options;
 

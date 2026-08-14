@@ -54,7 +54,7 @@ namespace AiDotNet.Video.Enhancement;
     "https://arxiv.org/abs/2501.01320",
     Year = 2025,
     Authors = "Jianyi Wang, Kelvin C.K. Chan, Shangchen Zhou, Chen Change Loy")]
-public class SeedVR<T> : VideoSuperResolutionBase<T>
+public partial class SeedVR<T> : VideoSuperResolutionBase<T>
 {
     #region Fields
 

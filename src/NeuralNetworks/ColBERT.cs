@@ -50,7 +50,7 @@ namespace AiDotNet.NeuralNetworks
     [ModelComplexity(ModelComplexity.High)]
     [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     [ResearchPaper("ColBERT: Efficient and Effective Passage Search via Contextualized Late Interaction over BERT", "https://arxiv.org/abs/2004.12832", Year = 2020, Authors = "Omar Khattab, Matei Zaharia")]
-    public class ColBERT<T> : TransformerEmbeddingNetwork<T>
+    public partial class ColBERT<T> : TransformerEmbeddingNetwork<T>
     {
         private readonly ColBERTOptions _options;
 

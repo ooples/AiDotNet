@@ -50,7 +50,7 @@ namespace AiDotNet.Video.Stabilization;
     "https://arxiv.org/abs/2011.14574",
     Year = 2022,
     Authors = "Yufei Xu, Jing Zhang, Stephen J. Maybank, Dacheng Tao")]
-public class DUT<T> : VideoStabilizationBase<T>
+public partial class DUT<T> : VideoStabilizationBase<T>
 {
     private readonly DUTOptions _options;
 

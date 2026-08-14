@@ -63,7 +63,7 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
     Year = 2025,
     Authors = "Yao et al."
 )]
-public class MiniCPMo<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
+public partial class MiniCPMo<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
 {
     private readonly MiniCPMoOptions _options;
 

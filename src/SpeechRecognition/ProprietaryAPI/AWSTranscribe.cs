@@ -41,7 +41,7 @@ namespace AiDotNet.SpeechRecognition.ProprietaryAPI;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Amazon Transcribe", "https://aws.amazon.com/transcribe/")]
-public class AWSTranscribe<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
+public partial class AWSTranscribe<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly AWSTranscribeOptions _options; public override ModelOptions GetOptions() => _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer; private bool _useNativeMode; private bool _disposed;

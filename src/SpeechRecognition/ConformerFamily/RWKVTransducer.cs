@@ -55,7 +55,7 @@ namespace AiDotNet.SpeechRecognition.ConformerFamily;
     "https://arxiv.org/abs/2309.14758",
     Year = 2023,
     Authors = "Keyu An, Shiliang Zhang")]
-public class RWKVTransducer<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
+public partial class RWKVTransducer<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly RWKVTransducerOptions _options; public override ModelOptions GetOptions() => _options;
     private RwkvTimeMixing<T>? _timeMixing;

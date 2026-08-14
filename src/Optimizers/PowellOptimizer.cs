@@ -30,7 +30,7 @@ using Newtonsoft.Json;
 /// </remarks>
 [ComponentType(ComponentType.Optimizer)]
 [PipelineStage(PipelineStage.Training)]
-public class PowellOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOutput>
+public partial class PowellOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOutput>
 {
     /// <summary>
     /// Configuration options specific to Powell's optimization method.

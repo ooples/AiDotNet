@@ -60,7 +60,7 @@ namespace AiDotNet.VisionLanguage.VideoLanguage;
     Year = 2023,
     Authors = "Li et al."
 )]
-public class VideoChat2<T> : VisionLanguageModelBase<T>, IVideoLanguageModel<T>
+public partial class VideoChat2<T> : VisionLanguageModelBase<T>, IVideoLanguageModel<T>
 {
     private readonly VideoChat2Options _options;
 

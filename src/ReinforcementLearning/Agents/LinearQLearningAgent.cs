@@ -41,7 +41,7 @@ namespace AiDotNet.ReinforcementLearning.Agents.AdvancedRL;
     "https://incompleteideas.net/book/the-book-2nd.html",
     Year = 2018,
     Authors = "Sutton, R. S. & Barto, A. G.")]
-public class LinearQLearningAgent<T> : ReinforcementLearningAgentBase<T>
+public partial class LinearQLearningAgent<T> : ReinforcementLearningAgentBase<T>
 {
 
     /// <inheritdoc />

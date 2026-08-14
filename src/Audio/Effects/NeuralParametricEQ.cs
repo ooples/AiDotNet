@@ -41,7 +41,7 @@ namespace AiDotNet.Audio.Effects;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Style Transfer of Audio Effects with Differentiable Signal Processing", "https://arxiv.org/abs/2207.08759", Year = 2022, Authors = "Christian J. Steinmetz, Nicholas J. Bryan, Joshua D. Reiss")]
-public class NeuralParametricEQ<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
+public partial class NeuralParametricEQ<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
 {
     /// <inheritdoc />
     /// <remarks>

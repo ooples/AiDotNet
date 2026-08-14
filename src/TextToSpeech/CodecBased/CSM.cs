@@ -35,7 +35,7 @@ namespace AiDotNet.TextToSpeech.CodecBased;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Sesame CSM: Conversational Speech Model", "https://github.com/SesameAI/csm")]
-public class CSM<T> : TtsModelBase<T>, ICodecTts<T>
+public partial class CSM<T> : TtsModelBase<T>, ICodecTts<T>
 {
     private readonly CSMOptions _options;
 

@@ -60,7 +60,7 @@ namespace AiDotNet.Regression;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
     [ResearchPaper("Gaussian Processes for Machine Learning", "https://gaussianprocess.org/gpml/")]
-public class GaussianProcessRegression<T> : NonLinearRegressionBase<T>
+public partial class GaussianProcessRegression<T> : NonLinearRegressionBase<T>
 {
     /// <summary>
     /// The kernel matrix (also known as the covariance matrix) that represents the similarity between all training points.

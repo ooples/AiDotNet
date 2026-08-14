@@ -61,7 +61,7 @@ namespace AiDotNet.VisionLanguage.Grounding;
     Year = 2024,
     Authors = "Ren et al."
 )]
-public class GroundedSAM2<T> : VisionLanguageModelBase<T>, IVisualGroundingModel<T>
+public partial class GroundedSAM2<T> : VisionLanguageModelBase<T>, IVisualGroundingModel<T>
 {
     private readonly GroundedSAM2Options _options;
 

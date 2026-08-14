@@ -61,7 +61,7 @@ namespace AiDotNet.VisionLanguage.Medical;
     Year = 2023,
     Authors = "Li et al."
 )]
-public class LLaVAMed<T> : VisionLanguageModelBase<T>, IMedicalVLM<T>
+public partial class LLaVAMed<T> : VisionLanguageModelBase<T>, IMedicalVLM<T>
 {
     private readonly LLaVAMedOptions _options;
 

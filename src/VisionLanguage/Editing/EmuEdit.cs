@@ -57,7 +57,7 @@ namespace AiDotNet.VisionLanguage.Editing;
     Year = 2024,
     Authors = "Sheynin et al."
 )]
-public class EmuEdit<T> : VisionLanguageModelBase<T>, IImageEditingVLM<T>
+public partial class EmuEdit<T> : VisionLanguageModelBase<T>, IImageEditingVLM<T>
 {
     private readonly EmuEditOptions _options;
 

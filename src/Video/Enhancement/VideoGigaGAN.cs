@@ -62,7 +62,7 @@ namespace AiDotNet.Video.Enhancement;
     "https://arxiv.org/abs/2404.12388",
     Year = 2024,
     Authors = "Yiran Xu, Taesung Park, Richard Zhang, Yang Zhou, Eli Shechtman, Feng Liu, Jia-Bin Huang, Difan Liu")]
-public class VideoGigaGAN<T> : VideoSuperResolutionBase<T>
+public partial class VideoGigaGAN<T> : VideoSuperResolutionBase<T>
 {
     #region Fields
 

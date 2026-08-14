@@ -65,7 +65,7 @@ namespace AiDotNet.Classification.DiscriminantAnalysis;
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("The Use of Multiple Measurements in Taxonomic Problems", "https://doi.org/10.1111/j.1469-1809.1936.tb02137.x")]
-public class QuadraticDiscriminantAnalysis<T> : ProbabilisticClassifierBase<T>,
+public partial class QuadraticDiscriminantAnalysis<T> : ProbabilisticClassifierBase<T>,
     IParameterizable<T, Matrix<T>, Vector<T>>
 {
 

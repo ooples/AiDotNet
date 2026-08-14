@@ -58,7 +58,7 @@ namespace AiDotNet.VisionLanguage.Grounding;
     Year = 2022,
     Authors = "Minderer et al."
 )]
-public class OWLViT<T> : VisionLanguageModelBase<T>, IVisualGroundingModel<T>
+public partial class OWLViT<T> : VisionLanguageModelBase<T>, IVisualGroundingModel<T>
 {
     private readonly OWLViTOptions _options;
 

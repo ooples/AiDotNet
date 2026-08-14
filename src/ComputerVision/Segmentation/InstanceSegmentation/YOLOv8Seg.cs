@@ -60,7 +60,7 @@ namespace AiDotNet.ComputerVision.Segmentation.InstanceSegmentation;
 [ModelComplexity(ModelComplexity.Medium)]
 [ResearchPaper("Ultralytics YOLOv8", "https://docs.ultralytics.com/models/yolov8/")]
     [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-public class YOLOv8Seg<T> : Common.InstanceSegmentationBase<T>
+public partial class YOLOv8Seg<T> : Common.InstanceSegmentationBase<T>
 {
     private readonly YOLOv8SegOptions _options;
     public override ModelOptions GetOptions() => _options;

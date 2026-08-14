@@ -51,7 +51,7 @@ namespace AiDotNet.Clustering.Subspace;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("Automatic Subspace Clustering of High Dimensional Data for Data Mining Applications", "https://doi.org/10.1145/276304.276314", Year = 1998, Authors = "Rakesh Agrawal, Johannes Gehrke, Dimitrios Gunopulos, Prabhakar Raghavan")]
-public class CLIQUE<T> : ClusteringBase<T>
+public partial class CLIQUE<T> : ClusteringBase<T>
 {
     private readonly CLIQUEOptions<T> _options;
 

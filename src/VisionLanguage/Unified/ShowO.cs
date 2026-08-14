@@ -59,7 +59,7 @@ namespace AiDotNet.VisionLanguage.Unified;
     Year = 2024,
     Authors = "Xie et al."
 )]
-public class ShowO<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<T>
+public partial class ShowO<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<T>
 {
     private readonly ShowOOptions _options;
 

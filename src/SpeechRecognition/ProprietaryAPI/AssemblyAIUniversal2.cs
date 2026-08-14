@@ -41,7 +41,7 @@ namespace AiDotNet.SpeechRecognition.ProprietaryAPI;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("AssemblyAI Universal-2", "https://www.assemblyai.com/research/universal-2")]
-public class AssemblyAIUniversal2<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
+public partial class AssemblyAIUniversal2<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly AssemblyAIUniversal2Options _options; public override ModelOptions GetOptions() => _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer; private bool _useNativeMode; private bool _disposed;

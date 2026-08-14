@@ -42,7 +42,7 @@ namespace AiDotNet.SpeechRecognition.LLMIntegrated;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Granite-speech: open-source speech-aware LLMs with strong English ASR capabilities", "https://arxiv.org/abs/2505.08699", Year = 2025, Authors = "IBM Research")]
-public class GraniteSpeech<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
+public partial class GraniteSpeech<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly GraniteSpeechOptions _options; public override ModelOptions GetOptions() => _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer; private bool _useNativeMode; private bool _disposed;

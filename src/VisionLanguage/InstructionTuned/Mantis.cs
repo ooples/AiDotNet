@@ -65,7 +65,7 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
     Year = 2024,
     Authors = "Jiang et al."
 )]
-public class Mantis<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
+public partial class Mantis<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
 {
     private readonly MantisOptions _options;
 

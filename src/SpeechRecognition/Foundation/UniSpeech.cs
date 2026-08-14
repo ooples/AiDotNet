@@ -43,7 +43,7 @@ namespace AiDotNet.SpeechRecognition.Foundation;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("UniSpeech: Unified Speech Representation Learning with Labeled and Unlabeled Data", "https://arxiv.org/abs/2101.07597", Year = 2021, Authors = "Wang et al.")]
-public class UniSpeech<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
+public partial class UniSpeech<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly UniSpeechOptions _options; public override ModelOptions GetOptions() => _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer; private bool _useNativeMode; private bool _disposed;

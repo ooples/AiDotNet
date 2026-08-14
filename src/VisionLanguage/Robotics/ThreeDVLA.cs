@@ -60,7 +60,7 @@ namespace AiDotNet.VisionLanguage.Robotics;
     Year = 2024,
     Authors = "Zhen et al."
 )]
-public class ThreeDVLA<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
+public partial class ThreeDVLA<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
 {
     private readonly ThreeDVLAOptions _options;
 

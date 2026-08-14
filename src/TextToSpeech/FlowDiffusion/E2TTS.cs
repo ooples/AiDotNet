@@ -41,7 +41,7 @@ namespace AiDotNet.TextToSpeech.FlowDiffusion;
     Year = 2024,
     Authors = "Eskimez et al."
 )]
-public class E2TTS<T> : TtsModelBase<T>, ICodecTts<T>
+public partial class E2TTS<T> : TtsModelBase<T>, ICodecTts<T>
 {
     private readonly E2TTSOptions _options;
 

@@ -61,7 +61,7 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("SimMTM: A Simple Pre-Training Framework for Masked Time-Series Modeling", "https://arxiv.org/abs/2302.00861", Year = 2023, Authors = "Jiaxiang Dong, Haixu Wu, Haoran Zhang, Li Zhang, Jianmin Wang, Mingsheng Long")]
-public class SimMTM<T> : TimeSeriesFoundationModelBase<T>
+public partial class SimMTM<T> : TimeSeriesFoundationModelBase<T>
 {
     #region Fields
 

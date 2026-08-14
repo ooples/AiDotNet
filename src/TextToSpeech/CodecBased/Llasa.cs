@@ -40,7 +40,7 @@ namespace AiDotNet.TextToSpeech.CodecBased;
     Year = 2025,
     Authors = "Ye et al."
 )]
-public class Llasa<T> : TtsModelBase<T>, ICodecTts<T>
+public partial class Llasa<T> : TtsModelBase<T>, ICodecTts<T>
 {
     private readonly LlasaOptions _options;
 

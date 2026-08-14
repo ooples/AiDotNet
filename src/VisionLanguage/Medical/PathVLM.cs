@@ -60,7 +60,7 @@ namespace AiDotNet.VisionLanguage.Medical;
     Year = 2024,
     Authors = "Sun et al."
 )]
-public class PathVLM<T> : VisionLanguageModelBase<T>, IMedicalVLM<T>
+public partial class PathVLM<T> : VisionLanguageModelBase<T>, IMedicalVLM<T>
 {
     private readonly PathVLMOptions _options;
 

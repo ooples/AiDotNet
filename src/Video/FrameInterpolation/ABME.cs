@@ -57,7 +57,7 @@ namespace AiDotNet.Video.FrameInterpolation;
     "https://arxiv.org/abs/2108.06815",
     Year = 2021,
     Authors = "Junheum Park, Chul Lee, Chang-Su Kim")]
-public class ABME<T> : FrameInterpolationBase<T>
+public partial class ABME<T> : FrameInterpolationBase<T>
 {
     #region Fields
 

@@ -59,7 +59,7 @@ namespace AiDotNet.Video.Enhancement;
     "https://arxiv.org/abs/2506.04830",
     Year = 2025,
     Authors = "Shuo Cao, Yihao Liu, Xiaohui Li, Yuanting Gao, Yu Zhou, Chao Dong")]
-public class DualXVSR<T> : VideoSuperResolutionBase<T>
+public partial class DualXVSR<T> : VideoSuperResolutionBase<T>
 {
     #region Fields
 

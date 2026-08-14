@@ -51,7 +51,7 @@ namespace AiDotNet.Video.Inpainting;
     "https://arxiv.org/abs/2109.02974",
     Year = 2021,
     Authors = "Rui Liu, Hanming Deng, Yangyi Huang, Xiaoyu Shi, Lewei Lu, Wenxiu Sun, Xiaogang Wang, Jifeng Dai, Hongsheng Li")]
-public class FuseFormer<T> : VideoInpaintingBase<T>
+public partial class FuseFormer<T> : VideoInpaintingBase<T>
 {
     private readonly FuseFormerOptions _options;
 

@@ -40,7 +40,7 @@ namespace AiDotNet.TextToSpeech.Vocoders;
     Year = 2022,
     Authors = "Kaneko et al."
 )]
-public class ISTFTNet<T> : VocoderBase<T>
+public partial class ISTFTNet<T> : VocoderBase<T>
 {
     private readonly ISTFTNetOptions _options;
 

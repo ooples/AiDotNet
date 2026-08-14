@@ -35,7 +35,7 @@ namespace AiDotNet.TextToSpeech.CodecBased;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("GPT-SoVITS: Zero-Shot Text-to-Speech", "https://github.com/RVC-Boss/GPT-SoVITS")]
-public class GPTSoVITS<T> : TtsModelBase<T>, ICodecTts<T>
+public partial class GPTSoVITS<T> : TtsModelBase<T>, ICodecTts<T>
 {
     private readonly GPTSoVITSOptions _options;
 

@@ -40,7 +40,7 @@ namespace AiDotNet.TextToSpeech.Vocoders;
     Year = 2021,
     Authors = "Yang et al."
 )]
-public class MultiBandMelGAN<T> : VocoderBase<T>
+public partial class MultiBandMelGAN<T> : VocoderBase<T>
 {
     private readonly MultiBandMelGANOptions _options;
 

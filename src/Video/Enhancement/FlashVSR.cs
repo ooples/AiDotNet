@@ -54,7 +54,7 @@ namespace AiDotNet.Video.Enhancement;
     "https://arxiv.org/abs/2510.12747",
     Year = 2025,
     Authors = "Junhao Zhuang, Shi Guo, Xin Cai, Xiaohui Li, Yihao Liu, Chun Yuan, Tianfan Xue")]
-public class FlashVSR<T> : VideoSuperResolutionBase<T>
+public partial class FlashVSR<T> : VideoSuperResolutionBase<T>
 {
     #region Fields
 

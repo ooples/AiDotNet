@@ -59,7 +59,7 @@ namespace AiDotNet.ComputerVision.Segmentation.OpenVocabulary;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Grounded SAM: Assembling Open-World Models for Diverse Visual Tasks", "https://arxiv.org/abs/2401.14159", Year = 2024, Authors = "Ren et al.")]
-public class GroundedSAM2<T> : Common.OpenVocabSegmentationBase<T>
+public partial class GroundedSAM2<T> : Common.OpenVocabSegmentationBase<T>
 {
     /// <inheritdoc />
     /// <remarks>

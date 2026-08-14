@@ -40,7 +40,7 @@ namespace AiDotNet.TextToSpeech.FlowDiffusion;
     Year = 2024,
     Authors = "Wang et al."
 )]
-public class MaskGCT<T> : TtsModelBase<T>, ICodecTts<T>
+public partial class MaskGCT<T> : TtsModelBase<T>, ICodecTts<T>
 {
     private readonly MaskGCTOptions _options;
 

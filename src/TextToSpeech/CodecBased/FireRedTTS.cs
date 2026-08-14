@@ -40,7 +40,7 @@ namespace AiDotNet.TextToSpeech.CodecBased;
     Year = 2024,
     Authors = "Guo et al."
 )]
-public class FireRedTTS<T> : TtsModelBase<T>, ICodecTts<T>
+public partial class FireRedTTS<T> : TtsModelBase<T>, ICodecTts<T>
 {
     private readonly FireRedTTSOptions _options;
 

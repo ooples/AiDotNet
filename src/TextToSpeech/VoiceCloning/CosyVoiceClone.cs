@@ -40,7 +40,7 @@ namespace AiDotNet.TextToSpeech.VoiceCloning;
     Year = 2024,
     Authors = "Du et al."
 )]
-public class CosyVoiceClone<T> : TtsModelBase<T>, ICodecTts<T>, IVoiceCloner<T>
+public partial class CosyVoiceClone<T> : TtsModelBase<T>, ICodecTts<T>, IVoiceCloner<T>
 {
     private readonly CosyVoiceCloneOptions _options;
 

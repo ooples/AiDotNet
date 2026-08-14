@@ -41,7 +41,7 @@ namespace AiDotNet.SpeechRecognition.Streaming;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("FastEmit: Low-latency Streaming ASR with Sequence-level Emission Regularization", "https://arxiv.org/abs/2010.11148", Year = 2021, Authors = "Yu et al.")]
-public class FastEmit<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
+public partial class FastEmit<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly FastEmitOptions _options; public override ModelOptions GetOptions() => _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer; private bool _useNativeMode; private bool _disposed;

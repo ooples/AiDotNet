@@ -62,7 +62,7 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 [ModelComplexity(ModelComplexity.High)]
 [ResearchPaper("TEST: Text Prototype Aligned Embedding for Time Series", "https://arxiv.org/abs/2308.08241")]
     [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-public class TEST<T> : TimeSeriesFoundationModelBase<T>
+public partial class TEST<T> : TimeSeriesFoundationModelBase<T>
 {
     #region Fields
 

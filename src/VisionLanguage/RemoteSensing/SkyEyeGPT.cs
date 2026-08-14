@@ -60,7 +60,7 @@ namespace AiDotNet.VisionLanguage.RemoteSensing;
     Year = 2024,
     Authors = "Zhan et al."
 )]
-public class SkyEyeGPT<T> : VisionLanguageModelBase<T>, IRemoteSensingVLM<T>
+public partial class SkyEyeGPT<T> : VisionLanguageModelBase<T>, IRemoteSensingVLM<T>
 {
     private readonly SkyEyeGPTOptions _options;
 

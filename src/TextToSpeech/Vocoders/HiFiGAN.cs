@@ -47,7 +47,7 @@ namespace AiDotNet.TextToSpeech.Vocoders;
     Year = 2020,
     Authors = "Kong et al."
 )]
-public class HiFiGAN<T> : VocoderBase<T>
+public partial class HiFiGAN<T> : VocoderBase<T>
 {
     private readonly HiFiGANOptions _options;
 

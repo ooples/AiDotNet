@@ -41,7 +41,7 @@ namespace AiDotNet.TextToSpeech.MultiModal;
     Year = 2025,
     Authors = "StepFun"
 )]
-public class StepAudio<T> : TtsModelBase<T>, ICodecTts<T>, IStreamingTts<T>
+public partial class StepAudio<T> : TtsModelBase<T>, ICodecTts<T>, IStreamingTts<T>
 {
     private readonly StepAudioOptions _options;
 

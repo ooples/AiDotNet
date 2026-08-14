@@ -51,7 +51,7 @@ namespace AiDotNet.Video.FrameInterpolation;
     "https://arxiv.org/abs/2404.06692",
     Year = 2024,
     Authors = "Guangyang Wu, Xin Tao, Changlin Li, Wenyi Wang, Xiaohong Liu, Qingqing Zheng")]
-public class PerVFI<T> : FrameInterpolationBase<T>
+public partial class PerVFI<T> : FrameInterpolationBase<T>
 {
     #region Fields
 

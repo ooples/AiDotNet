@@ -60,7 +60,7 @@ namespace AiDotNet.NeuralNetworks
     [ModelComplexity(ModelComplexity.Medium)]
     [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     [ResearchPaper("Sentence-BERT: Sentence Embeddings using Siamese BERT-Networks", "https://arxiv.org/abs/1908.10084", Year = 2019, Authors = "Nils Reimers, Iryna Gurevych")]
-    public class SiameseNeuralNetwork<T> : NeuralNetworkBase<T>, IEmbeddingModel<T>
+    public partial class SiameseNeuralNetwork<T> : NeuralNetworkBase<T>, IEmbeddingModel<T>
     {
         private readonly SiameseNeuralNetworkOptions _options;
 

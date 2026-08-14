@@ -49,7 +49,7 @@ namespace AiDotNet.Regression;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
     [ResearchPaper("Generalized Linear Models", "https://doi.org/10.1007/978-1-4899-3242-6")]
-public class PoissonRegression<T> : RegressionBase<T>
+public partial class PoissonRegression<T> : RegressionBase<T>
 {
     /// <summary>
     /// Configuration options for the Poisson regression model.

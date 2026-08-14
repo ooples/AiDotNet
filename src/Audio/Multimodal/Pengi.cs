@@ -46,7 +46,7 @@ namespace AiDotNet.Audio.Multimodal;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Pengi: An Audio Language Model for Audio Tasks", "https://doi.org/10.48550/arXiv.2305.11834", Year = 2023, Authors = "Soham Deshmukh, Benjamin Elizalde, Rita Singh, Huaming Wang")]
-public class Pengi<T> : AudioNeuralNetworkBase<T>, IAudioLanguageModel<T>
+public partial class Pengi<T> : AudioNeuralNetworkBase<T>, IAudioLanguageModel<T>
 {
     /// <inheritdoc />
     /// <remarks>

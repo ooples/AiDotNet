@@ -52,7 +52,7 @@ namespace AiDotNet.Audio.Effects;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("High-Fidelity Audio Compression with Improved RVQGAN", "https://doi.org/10.48550/arXiv.2306.06546", Year = 2024, Authors = "Rithesh Kumar, Prem Seetharaman, Alejandro Luebs, Ishaan Kumar, Kundan Kumar")]
-public class DAC<T> : AudioNeuralNetworkBase<T>, IAudioCodec<T>
+public partial class DAC<T> : AudioNeuralNetworkBase<T>, IAudioCodec<T>
 {
     /// <inheritdoc />
     /// <remarks>

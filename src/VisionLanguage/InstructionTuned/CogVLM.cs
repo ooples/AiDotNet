@@ -64,7 +64,7 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
     Year = 2023,
     Authors = "Wang et al."
 )]
-public class CogVLM<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
+public partial class CogVLM<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
 {
     private readonly CogVLMOptions _options;
 

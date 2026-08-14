@@ -47,7 +47,7 @@ namespace AiDotNet.AnomalyDetection.TreeBased;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("Isolation Forest", "https://doi.org/10.1109/ICDM.2008.17", Year = 2008, Authors = "Fei Tony Liu, Kai Ming Ting, Zhi-Hua Zhou")]
-public class IsolationForest<T> : AnomalyDetectorBase<T>
+public partial class IsolationForest<T> : AnomalyDetectorBase<T>
 {
     private readonly int _numTrees;
     private readonly int _maxSamples;

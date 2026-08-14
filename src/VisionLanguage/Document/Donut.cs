@@ -57,7 +57,7 @@ namespace AiDotNet.VisionLanguage.Document;
     Year = 2022,
     Authors = "Kim et al."
 )]
-public class Donut<T> : VisionLanguageModelBase<T>, IDocumentUnderstandingModel<T>
+public partial class Donut<T> : VisionLanguageModelBase<T>, IDocumentUnderstandingModel<T>
 {
     private readonly DonutOptions _options;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;

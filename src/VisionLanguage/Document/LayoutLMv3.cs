@@ -58,7 +58,7 @@ namespace AiDotNet.VisionLanguage.Document;
     Year = 2022,
     Authors = "Huang et al."
 )]
-public class LayoutLMv3<T> : VisionLanguageModelBase<T>, IDocumentUnderstandingModel<T>
+public partial class LayoutLMv3<T> : VisionLanguageModelBase<T>, IDocumentUnderstandingModel<T>
 {
     private readonly LayoutLMv3Options _options;
 

@@ -40,7 +40,7 @@ namespace AiDotNet.TextToSpeech.Vocoders;
     Year = 2022,
     Authors = "Lee et al."
 )]
-public class PriorGrad<T> : VocoderBase<T>
+public partial class PriorGrad<T> : VocoderBase<T>
 {
     private readonly PriorGradOptions _options;
 

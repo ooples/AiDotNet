@@ -59,7 +59,7 @@ namespace AiDotNet.VisionLanguage.Reasoning;
     Year = 2025,
     Authors = "Skywork Team"
 )]
-public class SkyworkR1V<T> : VisionLanguageModelBase<T>, IReasoningVLM<T>
+public partial class SkyworkR1V<T> : VisionLanguageModelBase<T>, IReasoningVLM<T>
 {
     private readonly SkyworkR1VOptions _options;
 

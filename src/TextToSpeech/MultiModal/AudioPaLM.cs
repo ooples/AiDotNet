@@ -41,7 +41,7 @@ namespace AiDotNet.TextToSpeech.MultiModal;
     Year = 2023,
     Authors = "Rubenstein et al."
 )]
-public class AudioPaLM<T> : TtsModelBase<T>, IEndToEndTts<T>
+public partial class AudioPaLM<T> : TtsModelBase<T>, IEndToEndTts<T>
 {
     private readonly AudioPaLMOptions _options;
 

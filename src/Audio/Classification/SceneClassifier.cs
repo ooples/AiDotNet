@@ -52,7 +52,7 @@ namespace AiDotNet.Audio.Classification;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("A Large-Scale Evaluation of Acoustic and Subjective Music-Similarity Measures", "https://doi.org/10.1016/j.csl.2017.01.007", Year = 2017, Authors = "Annamaria Mesaros, Toni Heittola, Tuomas Virtanen")]
-public class SceneClassifier<T> : AudioClassifierBase<T>, ISceneClassifier<T>
+public partial class SceneClassifier<T> : AudioClassifierBase<T>, ISceneClassifier<T>
 {
     #region Fields
 

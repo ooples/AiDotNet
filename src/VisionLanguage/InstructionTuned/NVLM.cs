@@ -63,7 +63,7 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
     Year = 2024,
     Authors = "Dai et al."
 )]
-public class NVLM<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
+public partial class NVLM<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
 {
     private readonly NVLMOptions _options;
 

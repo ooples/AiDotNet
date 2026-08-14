@@ -41,7 +41,7 @@ namespace AiDotNet.TextToSpeech.Vocoders;
     Year = 2021,
     Authors = "Jang et al."
 )]
-public class UnivNet<T> : VocoderBase<T>
+public partial class UnivNet<T> : VocoderBase<T>
 {
     private readonly UnivNetOptions _options;
 

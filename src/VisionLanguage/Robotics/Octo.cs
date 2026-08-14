@@ -59,7 +59,7 @@ namespace AiDotNet.VisionLanguage.Robotics;
     Year = 2024,
     Authors = "Ghosh et al."
 )]
-public class Octo<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
+public partial class Octo<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
 {
     private readonly OctoOptions _options;
 

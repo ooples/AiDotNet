@@ -59,7 +59,7 @@ namespace AiDotNet.VisionLanguage.Document;
     Year = 2024,
     Authors = "Ye et al."
 )]
-public class UReader<T> : VisionLanguageModelBase<T>, IDocumentUnderstandingModel<T>
+public partial class UReader<T> : VisionLanguageModelBase<T>, IDocumentUnderstandingModel<T>
 {
     private readonly UReaderOptions _options;
 

@@ -62,7 +62,7 @@ namespace AiDotNet.Video.FrameInterpolation;
     "https://openaccess.thecvf.com/content/CVPR2024/papers/Hu_IQ-VFI_Implicit_Quadratic_Motion_Estimation_for_Video_Frame_Interpolation_CVPR_2024_paper.pdf",
     Year = 2024,
     Authors = "Mengshun Hu, Kui Jiang, Zhihang Zhong, Zheng Wang, Yinqiang Zheng")]
-public class IQVFI<T> : FrameInterpolationBase<T>
+public partial class IQVFI<T> : FrameInterpolationBase<T>
 {
     /// <summary>
     /// Gets the implicit quadratic motion model, which modulates linear intermediate flows into

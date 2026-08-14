@@ -57,7 +57,7 @@ namespace AiDotNet.Audio.Classification;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Frequency Dynamic Convolution: Frequency-Adaptive Pattern Recognition for Sound Event Detection", "https://arxiv.org/abs/2203.15296", Year = 2022, Authors = "Hyeonuk Nam, Seong-Hu Kim, Byeong-Yun Ko, Yong-Hwa Park")]
-public class FDYSED<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
+public partial class FDYSED<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
 {
     #region Fields
 

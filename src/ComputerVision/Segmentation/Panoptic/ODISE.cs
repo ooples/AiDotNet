@@ -56,7 +56,7 @@ namespace AiDotNet.ComputerVision.Segmentation.Panoptic;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Open-Vocabulary Panoptic Segmentation with Text-to-Image Diffusion Models", "https://arxiv.org/abs/2303.04803", Year = 2023, Authors = "Xu et al.")]
-public class ODISE<T> : Common.PanopticSegmentationBase<T>
+public partial class ODISE<T> : Common.PanopticSegmentationBase<T>
 {
     /// <inheritdoc />
     /// <remarks>

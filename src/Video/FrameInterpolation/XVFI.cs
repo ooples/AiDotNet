@@ -64,7 +64,7 @@ namespace AiDotNet.Video.FrameInterpolation;
     "https://arxiv.org/abs/2103.16206",
     Year = 2021,
     Authors = "Hyeonjun Sim, Jihyong Oh, Munchurl Kim")]
-public class XVFI<T> : FrameInterpolationBase<T>
+public partial class XVFI<T> : FrameInterpolationBase<T>
 {
     private readonly XVFIOptions _options;
 

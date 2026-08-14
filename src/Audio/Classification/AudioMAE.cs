@@ -49,7 +49,7 @@ namespace AiDotNet.Audio.Classification;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Masked Autoencoders that Listen", "https://arxiv.org/abs/2207.06405", Year = 2022, Authors = "Po-Yao Huang, Hu Xu, Juncheng Li, Alexei Baevski, Michael Auli, Wojciech Galuba, Florian Metze, Christoph Feichtenhofer")]
-public class AudioMAE<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
+public partial class AudioMAE<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
 {
     #region Fields
 

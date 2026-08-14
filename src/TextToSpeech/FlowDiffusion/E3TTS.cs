@@ -40,7 +40,7 @@ namespace AiDotNet.TextToSpeech.FlowDiffusion;
     Year = 2023,
     Authors = "Gao et al."
 )]
-public class E3TTS<T> : TtsModelBase<T>, IEndToEndTts<T>
+public partial class E3TTS<T> : TtsModelBase<T>, IEndToEndTts<T>
 {
     private readonly E3TTSOptions _options;
 

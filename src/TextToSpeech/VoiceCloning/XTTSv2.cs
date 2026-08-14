@@ -35,7 +35,7 @@ namespace AiDotNet.TextToSpeech.VoiceCloning;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("XTTS: Massively Multilingual Text-to-Speech", "https://arxiv.org/abs/2406.04904")]
-public class XTTSv2<T> : TtsModelBase<T>, ICodecTts<T>
+public partial class XTTSv2<T> : TtsModelBase<T>, ICodecTts<T>
 {
     private readonly XTTSv2Options _options;
 

@@ -56,7 +56,7 @@ namespace AiDotNet.VisionLanguage.Foundational;
     Year = 2021,
     Authors = "Zhang et al."
 )]
-public class VinVL<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionModel<T>
+public partial class VinVL<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionModel<T>
 {
     private readonly VinVLOptions _options;
 

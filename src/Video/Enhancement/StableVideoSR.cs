@@ -53,7 +53,7 @@ namespace AiDotNet.Video.Enhancement;
     "https://arxiv.org/abs/2312.06640",
     Year = 2024,
     Authors = "Shangchen Zhou, Peiqing Yang, Jianyi Wang, Yihang Luo, Chen Change Loy")]
-public class StableVideoSR<T> : VideoSuperResolutionBase<T>
+public partial class StableVideoSR<T> : VideoSuperResolutionBase<T>
 {
     #region Fields
 

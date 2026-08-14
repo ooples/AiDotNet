@@ -35,7 +35,7 @@ namespace AiDotNet.TextToSpeech.CodecBased;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("IndexTTS: Zero-Shot Text-to-Speech", "https://github.com/indexteam/IndexTTS")]
-public class IndexTTS<T> : TtsModelBase<T>, ICodecTts<T>
+public partial class IndexTTS<T> : TtsModelBase<T>, ICodecTts<T>
 {
     private readonly IndexTTSOptions _options;
 

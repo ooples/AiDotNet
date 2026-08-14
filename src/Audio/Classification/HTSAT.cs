@@ -62,7 +62,7 @@ namespace AiDotNet.Audio.Classification;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("HTS-AT: A Hierarchical Token-Semantic Audio Transformer for Sound Classification and Detection", "https://arxiv.org/abs/2202.00874", Year = 2022, Authors = "Ke Chen, Xingjian Du, Bilei Zhu, Zejun Ma, Taylor Berg-Kirkpatrick, Shlomo Dubnov")]
-public class HTSAT<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
+public partial class HTSAT<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
 {
     #region Fields
 

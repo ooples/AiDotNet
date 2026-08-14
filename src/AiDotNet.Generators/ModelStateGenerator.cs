@@ -102,12 +102,36 @@ public class ModelStateGenerator : IIncrementalGenerator
             if (member is IFieldSymbol { IsReadOnly: true }) continue;
 
             var classification = ParameterMemberSemanticModel.Classify(member);
-            if (classification.Kind is not (ParameterMemberSemanticModel.Kind.Fitted
-                or ParameterMemberSemanticModel.Kind.Frozen
-                or ParameterMemberSemanticModel.Kind.Buffer))
+
+            // OPT-OUT, NOT OPT-IN, and this is the whole reason 330 hand-written Serialize/Deserialize
+            // pairs exist. Requiring [Fitted], [Frozen] or [Buffer] before a member is persisted means
+            // an author who adds a field and annotates nothing gets a model that serialises
+            // incompletely and no error -- so the only way to be sure was to write the pair by hand,
+            // which is two places to forget the same field instead of one. Storage is now persisted by
+            // DEFAULT and a member has to say why it should not be.
+            //
+            // The four exclusions are the ones that would be wrong to persist, not the ones nobody
+            // annotated:
+            //   Trainable  already in the parameter vector; writing it again would restore it twice
+            //   Scratch    a work buffer whose value between calls means nothing
+            //   Alias      another name for a member already carried
+            //   External   not this model's to save
+            // Conflicting is excluded too, because a member carrying contradictory annotations is a
+            // question for AIDN089 to answer rather than something to guess at here.
+            if (classification.Kind is ParameterMemberSemanticModel.Kind.Trainable
+                or ParameterMemberSemanticModel.Kind.Scratch
+                or ParameterMemberSemanticModel.Kind.Alias
+                or ParameterMemberSemanticModel.Kind.External
+                or ParameterMemberSemanticModel.Kind.Conflicting)
             {
                 continue;
             }
+
+            // Whether somebody ASKED for this member to be state, as opposed to it being swept in by
+            // the default. It decides how loudly an unsupported shape is reported, below.
+            var annotated = classification.Kind is ParameterMemberSemanticModel.Kind.Fitted
+                or ParameterMemberSemanticModel.Kind.Frozen
+                or ParameterMemberSemanticModel.Kind.Buffer;
 
             // Keyed by DECLARING TYPE and member, not by member alone. A name is unique within one
             // class and nothing more: VectorAutoRegressionModel and VARMAModel each keep a private
@@ -115,12 +139,19 @@ public class ModelStateGenerator : IIncrementalGenerator
             // registration met the base's under the same key and threw "State '_residuals' is
             // already declared". Every model with a field that shares a name with one further up its
             // own hierarchy had the same fault waiting in it.
-            var call = DeclareCall(member.Name, $"{type.Name}.{member.Name}", memberType, numeric,
+            var call = DeclareCall(member.Name, $"{type.Name}.{member.Name}", memberType, numeric, annotated,
                 nullableTarget: memberType.NullableAnnotation == NullableAnnotation.Annotated
                     || memberType.IsValueType);
 
             if (call is null)
             {
+                // A member the default swept in whose type the registry cannot carry is passed over in
+                // silence, because that is exactly what happened to it before persistence became the
+                // default -- reporting it would turn "no change" into hundreds of new build errors
+                // about members nobody claimed were state. An ANNOTATED member is the opposite case and
+                // is still reported below.
+                if (!annotated) continue;
+
                 // LOUD, NOT SILENT. This member was CLASSIFIED as state -- somebody annotated it --
                 // and the generator cannot express its type. Skipping quietly would drop annotated
                 // state from the payload and produce a model that restores almost everything, which
@@ -190,8 +221,18 @@ public class ModelStateGenerator : IIncrementalGenerator
     /// model keeps its own declaration until it does.
     /// </remarks>
     private static string? DeclareCall(
-        string name, string id, ITypeSymbol memberType, string numeric, bool nullableTarget)
+        string name, string id, ITypeSymbol memberType, string numeric, bool annotated, bool nullableTarget)
     {
+        // A nullable value type has a state the registry cannot express: "not set" is not a number,
+        // and the getter cannot hand an int? to something expecting an int. MOMENT proved it -- the
+        // display string had its '?' trimmed before matching, so an int? matched the int case and the
+        // generated lambda would not compile. Declining is the honest answer; inventing a zero for it
+        // would silently turn "never configured" into "configured to zero" on every round trip.
+        if (memberType is INamedTypeSymbol { OriginalDefinition.SpecialType: SpecialType.System_Nullable_T })
+        {
+            return null;
+        }
+
         // Namespaces stripped before matching. The display string is fully qualified, so
         // List<AiDotNet.Tensors.LinearAlgebra.Vector<T>> does not end with "List<Vector<T>>" and a
         // naive suffix test silently declined it -- which is how the knots got dropped.
@@ -233,16 +274,24 @@ public class ModelStateGenerator : IIncrementalGenerator
             // to say that it is there. Restored IN PLACE, because the parent builds it and what
             // travels is its state rather than its identity.
             // A parameter source keeps its state in a vector rather than a payload.
-            _ when memberType.AllInterfaces.Any(i => i.Name == "IParameterSource")
+            // THE CHILD PATHS STAY OPT-IN even though storage is now opt-out, and the difference is
+            // real rather than cautious. Storage is state by its nature -- a Matrix<T> a model holds
+            // between calls is something it learned. An object is not: a model also holds its
+            // optimizer, its scheduler, its loss function, and none of those are state to restore.
+            // Sweeping them in on the default is how three networks came to persist a _trainOptimizer
+            // that is never assigned, which the compiler reported as CS0649 and which would have
+            // travelled in every payload as a null. So a nested model is carried when somebody says it
+            // is state, and otherwise left alone.
+            _ when annotated && memberType.AllInterfaces.Any(i => i.Name == "IParameterSource")
                    && !IsSerializableModel(memberType) =>
                 $"state.DeclareParameterSource(\"{id}\", {getter});",
 
-            _ when IsSerializableModel(memberType) =>
+            _ when annotated && IsSerializableModel(memberType) =>
                 $"state.DeclareChild<{memberType.ToDisplayString().TrimEnd('?')}>(\"{id}\", {getter});",
 
             // A list of nested models -- an agent's per-actor target networks, a mixer's per-agent
             // heads. Same rule as a single child: each carries its own state, restored in place.
-            _ when memberType is INamedTypeSymbol { Name: "List", TypeArguments.Length: 1 } list
+            _ when annotated && memberType is INamedTypeSymbol { Name: "List", TypeArguments.Length: 1 } list
                    && IsSerializableModel(list.TypeArguments[0]) =>
                 $"state.DeclareChildList<{list.TypeArguments[0].ToDisplayString().TrimEnd('?')}>(\"{id}\", {getter});",
 

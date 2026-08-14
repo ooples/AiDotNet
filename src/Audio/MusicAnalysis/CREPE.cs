@@ -40,7 +40,7 @@ namespace AiDotNet.Audio.MusicAnalysis;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("CREPE: A Convolutional Representation for Pitch Estimation", "https://arxiv.org/abs/1802.06182", Year = 2018, Authors = "Jong Wook Kim, Justin Salamon, Peter Li, Juan Pablo Bello")]
-public class CREPE<T> : AudioNeuralNetworkBase<T>, IPitchDetector<T>
+public partial class CREPE<T> : AudioNeuralNetworkBase<T>, IPitchDetector<T>
 {
     /// <inheritdoc />
     /// <remarks>

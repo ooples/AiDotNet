@@ -74,7 +74,7 @@ namespace AiDotNet.Diffusion.NoisePredictors;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     [ResearchPaper("Scalable Diffusion Models with Transformers", "https://arxiv.org/abs/2212.09748")]
-public class DiTNoisePredictor<T> : NoisePredictorBase<T>
+public partial class DiTNoisePredictor<T> : NoisePredictorBase<T>
 {
 
     /// <inheritdoc />

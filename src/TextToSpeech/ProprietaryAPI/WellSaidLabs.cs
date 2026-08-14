@@ -35,7 +35,7 @@ namespace AiDotNet.TextToSpeech.ProprietaryAPI;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("WellSaid Labs", "https://wellsaidlabs.com")]
-public class WellSaidLabs<T> : TtsModelBase<T>, IEndToEndTts<T>
+public partial class WellSaidLabs<T> : TtsModelBase<T>, IEndToEndTts<T>
 {
     private readonly WellSaidLabsOptions _options;
 

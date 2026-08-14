@@ -59,7 +59,7 @@ namespace AiDotNet.VisionLanguage.Document;
     Year = 2024,
     Authors = "Paruchuri"
 )]
-public class Surya<T> : VisionLanguageModelBase<T>, IDocumentUnderstandingModel<T>
+public partial class Surya<T> : VisionLanguageModelBase<T>, IDocumentUnderstandingModel<T>
 {
     private readonly SuryaOptions _options;
 

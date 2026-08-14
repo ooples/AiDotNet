@@ -40,7 +40,7 @@ namespace AiDotNet.TextToSpeech.Vocoders;
     Year = 2021,
     Authors = "Kong et al."
 )]
-public class DiffWave<T> : VocoderBase<T>
+public partial class DiffWave<T> : VocoderBase<T>
 {
     private readonly DiffWaveOptions _options;
 

@@ -49,7 +49,7 @@ namespace AiDotNet.TextToSpeech.Classic;
     Year = 2018,
     Authors = "Ping et al."
 )]
-public class DeepVoice3<T> : TtsModelBase<T>, IAcousticModel<T>
+public partial class DeepVoice3<T> : TtsModelBase<T>, IAcousticModel<T>
 {
     private readonly DeepVoice3Options _options;
 

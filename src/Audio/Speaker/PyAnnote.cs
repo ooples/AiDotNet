@@ -43,7 +43,7 @@ namespace AiDotNet.Audio.Speaker;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Powerset Multi-class Cross Entropy Loss for Neural Speaker Diarization", "https://doi.org/10.48550/arXiv.2310.13025", Year = 2023, Authors = "Alexis Plaquet, Hervé Bredin")]
-public class PyAnnote<T> : SpeakerRecognitionBase<T>, ISpeakerDiarizer<T>
+public partial class PyAnnote<T> : SpeakerRecognitionBase<T>, ISpeakerDiarizer<T>
 {
     #region Fields
 

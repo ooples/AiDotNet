@@ -55,7 +55,7 @@ namespace AiDotNet.Video.Enhancement;
     "https://arxiv.org/abs/2507.01012",
     Year = 2025,
     Authors = "Kaichen Chi, Xin Li, Zhi-Song Liu, Wan-Chi Siu")]
-public class DAMVSR<T> : VideoSuperResolutionBase<T>
+public partial class DAMVSR<T> : VideoSuperResolutionBase<T>
 {
     #region Fields
 

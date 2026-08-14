@@ -35,7 +35,7 @@ namespace AiDotNet.TextToSpeech.CodecBased;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Nari Labs Dia", "https://github.com/nari-labs/dia")]
-public class Dia<T> : TtsModelBase<T>, ICodecTts<T>
+public partial class Dia<T> : TtsModelBase<T>, ICodecTts<T>
 {
     private readonly DiaOptions _options;
 

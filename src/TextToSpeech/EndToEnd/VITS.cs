@@ -56,7 +56,7 @@ namespace AiDotNet.TextToSpeech.EndToEnd;
     Year = 2021,
     Authors = "Kim et al."
 )]
-public class VITS<T> : TtsModelBase<T>, IEndToEndTts<T>
+public partial class VITS<T> : TtsModelBase<T>, IEndToEndTts<T>
 {
     private readonly VITSOptions _options;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;

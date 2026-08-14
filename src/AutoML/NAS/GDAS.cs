@@ -41,7 +41,7 @@ namespace AiDotNet.AutoML.NAS
     [ModelComplexity(ModelComplexity.High)]
     [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     [ResearchPaper("Searching for A Robust Neural Architecture in Four GPU Hours", "https://arxiv.org/abs/1910.04465")]
-    public class GDAS<T> : NasAutoMLModelBase<T>
+    public partial class GDAS<T> : NasAutoMLModelBase<T>
     {
         private readonly INumericOperations<T> _ops;
         private readonly SearchSpaceBase<T> _nasSearchSpace;

@@ -63,7 +63,7 @@ namespace AiDotNet.Video.FrameInterpolation;
     "https://arxiv.org/abs/2405.17933",
     Year = 2024,
     Authors = "Jinbo Xing, Hanyuan Liu, Menghan Xia, Yong Zhang, Xintao Wang, Ying Shan, Tien-Tsin Wong")]
-public class ToonCrafter<T> : FrameInterpolationBase<T>
+public partial class ToonCrafter<T> : FrameInterpolationBase<T>
 {
     private readonly ToonCrafterOptions _options;
 

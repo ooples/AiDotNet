@@ -40,7 +40,7 @@ namespace AiDotNet.TextToSpeech.FlowDiffusion;
     Year = 2024,
     Authors = "Mehta et al."
 )]
-public class MatchaTTS<T> : TtsModelBase<T>, IEndToEndTts<T>
+public partial class MatchaTTS<T> : TtsModelBase<T>, IEndToEndTts<T>
 {
     private readonly MatchaTTSOptions _options;
 

@@ -53,7 +53,7 @@ namespace AiDotNet.Video.FrameInterpolation;
     "https://arxiv.org/abs/2507.04984",
     Year = 2025,
     Authors = "Zonglin Lyu, Chen Chen")]
-public class TLBVFI<T> : FrameInterpolationBase<T>
+public partial class TLBVFI<T> : FrameInterpolationBase<T>
 {
     #region Fields
 

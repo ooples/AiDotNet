@@ -335,7 +335,7 @@ public abstract class NeuralProcessBase<T, TInput, TOutput> : MetaLearnerBase<T,
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("Neural Processes", "https://arxiv.org/abs/1807.01622")]
-public class NeuralProcessModel<T, TInput, TOutput> : MetaLearningModelBase<T, TInput, TOutput>, IAdaptedMetaModel<T>
+public partial class NeuralProcessModel<T, TInput, TOutput> : MetaLearningModelBase<T, TInput, TOutput>, IAdaptedMetaModel<T>
 {
 
     /// <inheritdoc />

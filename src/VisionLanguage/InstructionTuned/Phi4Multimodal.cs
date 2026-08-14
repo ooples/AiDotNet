@@ -63,7 +63,7 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
     Year = 2025,
     Authors = "Abdin et al."
 )]
-public class Phi4Multimodal<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
+public partial class Phi4Multimodal<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
 {
     private readonly Phi4MultimodalOptions _options;
 

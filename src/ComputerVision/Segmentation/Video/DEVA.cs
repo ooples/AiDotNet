@@ -58,7 +58,7 @@ namespace AiDotNet.ComputerVision.Segmentation.Video;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Tracking Anything with Decoupled Video Segmentation", "https://arxiv.org/abs/2309.03903", Year = 2023, Authors = "Cheng et al.")]
-public class DEVA<T> : Common.VideoSegmentationBase<T>
+public partial class DEVA<T> : Common.VideoSegmentationBase<T>
 {
     private readonly DEVAOptions _options;
     public override ModelOptions GetOptions() => _options;

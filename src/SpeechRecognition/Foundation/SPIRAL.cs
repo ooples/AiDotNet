@@ -43,7 +43,7 @@ namespace AiDotNet.SpeechRecognition.Foundation;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("SPIRAL: Self-supervised Perturbation-Invariant Representation Learning for Speech Pre-Training", "https://arxiv.org/abs/2201.10207", Year = 2022, Authors = "Huang et al.")]
-public class SPIRAL<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
+public partial class SPIRAL<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly SPIRALOptions _options; public override ModelOptions GetOptions() => _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer; private bool _useNativeMode; private bool _disposed;

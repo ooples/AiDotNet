@@ -49,7 +49,7 @@ namespace AiDotNet.TextToSpeech.Classic;
     Year = 2022,
     Authors = "Huang et al."
 )]
-public class ProDiff<T> : TtsModelBase<T>, IAcousticModel<T>
+public partial class ProDiff<T> : TtsModelBase<T>, IAcousticModel<T>
 {
     private readonly ProDiffOptions _options;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;

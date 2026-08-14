@@ -56,7 +56,7 @@ namespace AiDotNet.VisionLanguage.Encoders;
     Year = 2023,
     Authors = "Kirillov et al."
 )]
-public class SAM<T> : VisionLanguageModelBase<T>, IVisualEncoder<T>
+public partial class SAM<T> : VisionLanguageModelBase<T>, IVisualEncoder<T>
 {
     private readonly SAMOptions _options;
 

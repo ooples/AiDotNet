@@ -47,7 +47,7 @@ namespace AiDotNet.Classification.Trees;
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
     [ResearchPaper("Classification and Regression Trees", "https://doi.org/10.1201/9781315139470")]
-public class DecisionTreeClassifier<T> : ProbabilisticClassifierBase<T>, ITreeBasedClassifier<T>
+public partial class DecisionTreeClassifier<T> : ProbabilisticClassifierBase<T>, ITreeBasedClassifier<T>
 {
 
     // Its own comment: "Decision trees do not have traditional numeric parameters". The base fold

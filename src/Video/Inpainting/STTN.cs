@@ -51,7 +51,7 @@ namespace AiDotNet.Video.Inpainting;
     "https://arxiv.org/abs/2007.10247",
     Year = 2020,
     Authors = "Yanhong Zeng, Jianlong Fu, Hongyang Chao")]
-public class STTN<T> : VideoInpaintingBase<T>
+public partial class STTN<T> : VideoInpaintingBase<T>
 {
     private readonly STTNOptions _options;
 

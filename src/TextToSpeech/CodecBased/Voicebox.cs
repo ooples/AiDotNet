@@ -51,7 +51,7 @@ namespace AiDotNet.TextToSpeech.CodecBased;
     Year = 2023,
     Authors = "Le et al."
 )]
-public class Voicebox<T> : TtsModelBase<T>, ICodecTts<T>
+public partial class Voicebox<T> : TtsModelBase<T>, ICodecTts<T>
 {
     private readonly VoiceboxOptions _options;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;

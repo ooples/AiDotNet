@@ -58,7 +58,7 @@ namespace AiDotNet.Video.Enhancement;
     "https://arxiv.org/abs/2204.04216",
     Year = 2022,
     Authors = "Chengxu Liu, Huan Yang, Jianlong Fu, Xueming Qian")]
-public class TTVSR<T> : VideoSuperResolutionBase<T>
+public partial class TTVSR<T> : VideoSuperResolutionBase<T>
 {
     #region Fields
 

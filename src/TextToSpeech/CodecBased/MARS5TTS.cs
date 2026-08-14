@@ -38,7 +38,7 @@ namespace AiDotNet.TextToSpeech.CodecBased;
     "MARS5: A Large-Scale Multilingual TTS Model",
     "https://github.com/Camb-ai/MARS5-TTS"
 )]
-public class MARS5TTS<T> : TtsModelBase<T>, ICodecTts<T>
+public partial class MARS5TTS<T> : TtsModelBase<T>, ICodecTts<T>
 {
     private readonly MARS5TTSOptions _options;
 

@@ -60,7 +60,7 @@ namespace AiDotNet.VisionLanguage.Medical;
     Year = 2024,
     Authors = "Chen et al."
 )]
-public class DragonflyMed<T> : VisionLanguageModelBase<T>, IMedicalVLM<T>
+public partial class DragonflyMed<T> : VisionLanguageModelBase<T>, IMedicalVLM<T>
 {
     private readonly DragonflyMedOptions _options;
 

@@ -24,7 +24,7 @@ namespace AiDotNet.Optimizers;
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 [ComponentType(ComponentType.Optimizer)]
 [PipelineStage(PipelineStage.Training)]
-public class NelderMeadOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOutput>
+public partial class NelderMeadOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOutput>
 {
     /// <summary>
     /// The options specific to the Nelder-Mead optimizer.

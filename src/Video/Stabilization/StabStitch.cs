@@ -50,7 +50,7 @@ namespace AiDotNet.Video.Stabilization;
     "https://arxiv.org/abs/2403.06378",
     Year = 2024,
     Authors = "Lang Nie, Chunyu Lin, Kang Liao, Shuaicheng Liu, Yao Zhao")]
-public class StabStitch<T> : VideoStabilizationBase<T>
+public partial class StabStitch<T> : VideoStabilizationBase<T>
 {
     private readonly StabStitchOptions _options;
 

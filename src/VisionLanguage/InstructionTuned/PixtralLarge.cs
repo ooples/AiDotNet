@@ -64,7 +64,7 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
     Year = 2024,
     Authors = "Mistral AI"
 )]
-public class PixtralLarge<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
+public partial class PixtralLarge<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
 {
     private readonly PixtralLargeOptions _options;
 

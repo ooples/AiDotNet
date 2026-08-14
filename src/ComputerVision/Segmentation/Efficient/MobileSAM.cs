@@ -52,7 +52,7 @@ namespace AiDotNet.ComputerVision.Segmentation.Efficient;
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Faster Segment Anything: Towards Lightweight SAM for Mobile Applications", "https://arxiv.org/abs/2306.14289", Year = 2023, Authors = "Chaoning Zhang, Dongshen Han, Yu Qiao, Jung Uk Kim, Sung-Ho Bae, Seungkyu Lee, Choong Seon Hong")]
-public class MobileSAM<T> : Common.PromptableSegmentationBase<T>
+public partial class MobileSAM<T> : Common.PromptableSegmentationBase<T>
 {
     private readonly MobileSAMOptions _options;
     public override ModelOptions GetOptions() => _options;

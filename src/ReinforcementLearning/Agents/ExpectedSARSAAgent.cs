@@ -54,7 +54,7 @@ namespace AiDotNet.ReinforcementLearning.Agents.ExpectedSARSA;
     "https://doi.org/10.1109/ADPRL.2009.4927542",
     Year = 2009,
     Authors = "van Seijen, H., van Hasselt, H., Whiteson, S., & Wiering, M.")]
-public class ExpectedSARSAAgent<T> : ReinforcementLearningAgentBase<T>, IGradientComputable<T, Vector<T>, Vector<T>>
+public partial class ExpectedSARSAAgent<T> : ReinforcementLearningAgentBase<T>, IGradientComputable<T, Vector<T>, Vector<T>>
 {
 
     /// <inheritdoc />

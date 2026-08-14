@@ -43,7 +43,7 @@ namespace AiDotNet.Audio.Generation;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("VoiceCraft: Zero-Shot Speech Editing and Text-to-Speech in the Wild", "https://arxiv.org/abs/2403.16973", Year = 2024, Authors = "Puyuan Peng, Po-Yao Huang, Daniel Li, Abdelrahman Mohamed, David Harwath")]
-public class VoiceCraft<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
+public partial class VoiceCraft<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
 {
     /// <inheritdoc />
     /// <remarks>

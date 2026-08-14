@@ -44,7 +44,7 @@ namespace AiDotNet.Audio.MusicAnalysis;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Onsets and Frames: Dual-Objective Piano Transcription", "https://arxiv.org/abs/1710.11153", Year = 2018, Authors = "Curtis Hawthorne, Erich Elsen, Jialin Song, Adam Roberts, Ian Simon, Colin Raffel, Jesse Engel, Sageev Oore, Douglas Eck")]
-public class OnsetsAndFrames<T> : AudioNeuralNetworkBase<T>, IMusicTranscriber<T>
+public partial class OnsetsAndFrames<T> : AudioNeuralNetworkBase<T>, IMusicTranscriber<T>
 {
     /// <inheritdoc />
     /// <remarks>

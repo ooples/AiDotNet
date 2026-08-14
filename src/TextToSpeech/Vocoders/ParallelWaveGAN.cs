@@ -40,7 +40,7 @@ namespace AiDotNet.TextToSpeech.Vocoders;
     Year = 2020,
     Authors = "Yamamoto et al."
 )]
-public class ParallelWaveGAN<T> : VocoderBase<T>
+public partial class ParallelWaveGAN<T> : VocoderBase<T>
 {
     private readonly ParallelWaveGANOptions _options;
 

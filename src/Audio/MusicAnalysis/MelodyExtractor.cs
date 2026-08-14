@@ -40,7 +40,7 @@ namespace AiDotNet.Audio.MusicAnalysis;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     [ResearchPaper("Melody Extraction from Polyphonic Music Signals Using Pitch Contour Characteristics", "https://doi.org/10.1109/TASLP.2012.2188515")]
-public class MelodyExtractor<T> : AudioNeuralNetworkBase<T>, IPitchDetector<T>
+public partial class MelodyExtractor<T> : AudioNeuralNetworkBase<T>, IPitchDetector<T>
 {
     /// <inheritdoc />
     /// <remarks>

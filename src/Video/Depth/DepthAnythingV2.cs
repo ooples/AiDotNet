@@ -65,7 +65,7 @@ namespace AiDotNet.Video.Depth;
     "https://arxiv.org/abs/2406.09414",
     Year = 2024,
     Authors = "Lihe Yang, Bingyi Kang, Zilong Huang, Zhen Zhao, Xiaogang Xu, Jiashi Feng, Hengshuang Zhao")]
-public class DepthAnythingV2<T> : NeuralNetworkBase<T>
+public partial class DepthAnythingV2<T> : NeuralNetworkBase<T>
 {
     private readonly DepthAnythingV2Options _options;
 

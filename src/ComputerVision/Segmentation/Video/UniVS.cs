@@ -57,7 +57,7 @@ namespace AiDotNet.ComputerVision.Segmentation.Video;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("UniVS: Unified and Universal Video Segmentation with Prompts as Queries", "https://arxiv.org/abs/2402.18115", Year = 2024, Authors = "Li et al.")]
-public class UniVS<T> : Common.VideoSegmentationBase<T>
+public partial class UniVS<T> : Common.VideoSegmentationBase<T>
 {
     private readonly UniVSOptions _options;
     public override ModelOptions GetOptions() => _options;

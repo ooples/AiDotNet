@@ -55,7 +55,7 @@ namespace AiDotNet.Video.Denoising;
     "https://arxiv.org/abs/2011.15045",
     Year = 2021,
     Authors = "Dev Yashpal Sheth, Sreyas Mohan, Joshua L. Vincent, Ramon Manzorro, Peter A. Crozier, Mitesh M. Khapra, Eero P. Simoncelli, Carlos Fernandez-Granda")]
-public class UDVD<T> : VideoDenoisingBase<T>
+public partial class UDVD<T> : VideoDenoisingBase<T>
 {
     private readonly UDVDOptions _options;
 

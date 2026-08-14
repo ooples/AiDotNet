@@ -49,7 +49,7 @@ namespace AiDotNet.TextToSpeech.Classic;
     Year = 2020,
     Authors = "Ren et al."
 )]
-public class FastSpeech2<T> : TtsModelBase<T>, IAcousticModel<T>
+public partial class FastSpeech2<T> : TtsModelBase<T>, IAcousticModel<T>
 {
     private readonly FastSpeech2Options _options;
 

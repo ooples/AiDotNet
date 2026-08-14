@@ -60,7 +60,7 @@ namespace AiDotNet.VisionLanguage.Medical;
     Year = 2024,
     Authors = "Wu et al."
 )]
-public class RadFM<T> : VisionLanguageModelBase<T>, IMedicalVLM<T>
+public partial class RadFM<T> : VisionLanguageModelBase<T>, IMedicalVLM<T>
 {
     private readonly RadFMOptions _options;
 

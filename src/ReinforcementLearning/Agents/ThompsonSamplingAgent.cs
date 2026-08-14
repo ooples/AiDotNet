@@ -44,7 +44,7 @@ namespace AiDotNet.ReinforcementLearning.Agents.Bandits;
     "https://doi.org/10.2307/2332286",
     Year = 1933,
     Authors = "Thompson, W. R.")]
-public class ThompsonSamplingAgent<T> : ReinforcementLearningAgentBase<T>
+public partial class ThompsonSamplingAgent<T> : ReinforcementLearningAgentBase<T>
 {
 
     /// <inheritdoc />

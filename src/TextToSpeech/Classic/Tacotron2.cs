@@ -50,7 +50,7 @@ namespace AiDotNet.TextToSpeech.Classic;
     Year = 2018,
     Authors = "Shen et al."
 )]
-public class Tacotron2<T> : TtsModelBase<T>, IAcousticModel<T>
+public partial class Tacotron2<T> : TtsModelBase<T>, IAcousticModel<T>
 {
     private readonly Tacotron2Options _options;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;

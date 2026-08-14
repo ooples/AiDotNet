@@ -44,7 +44,7 @@ namespace AiDotNet.SpeechRecognition.ConformerFamily;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("ContextNet: Improving Convolutional Neural Networks for Automatic Speech Recognition with Global Context", "https://arxiv.org/abs/2005.03191", Year = 2020, Authors = "Han et al.")]
-public class ContextNet<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
+public partial class ContextNet<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly ContextNetOptions _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;

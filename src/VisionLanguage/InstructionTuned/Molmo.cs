@@ -63,7 +63,7 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
     Year = 2024,
     Authors = "Deitke et al."
 )]
-public class Molmo<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
+public partial class Molmo<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
 {
     private readonly MolmoOptions _options;
 

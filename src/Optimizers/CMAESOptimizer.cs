@@ -25,7 +25,7 @@ namespace AiDotNet.Optimizers;
 /// </remarks>
 [ComponentType(ComponentType.Optimizer)]
 [PipelineStage(PipelineStage.Training)]
-public class CMAESOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOutput>
+public partial class CMAESOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOutput>
 {
     /// <summary>
     /// The options specific to the CMA-ES optimization algorithm.

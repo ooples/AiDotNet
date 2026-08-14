@@ -63,7 +63,7 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 [ModelComplexity(ModelComplexity.High)]
 [ResearchPaper("Kronos: A Foundation Model for the Language of Financial Markets", "https://arxiv.org/abs/2508.02739")]
     [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-public class Kronos<T> : TimeSeriesFoundationModelBase<T>
+public partial class Kronos<T> : TimeSeriesFoundationModelBase<T>
 {
     #region Fields
 

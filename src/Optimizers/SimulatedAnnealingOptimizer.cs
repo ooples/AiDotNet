@@ -28,7 +28,7 @@ using Newtonsoft.Json;
 /// </remarks>
 [ComponentType(ComponentType.Optimizer)]
 [PipelineStage(PipelineStage.Training)]
-public class SimulatedAnnealingOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOutput>
+public partial class SimulatedAnnealingOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOutput>
 {
     /// <summary>
     /// Random number generator for stochastic decision-making.

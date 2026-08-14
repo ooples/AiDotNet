@@ -48,7 +48,7 @@ namespace AiDotNet.TextToSpeech.Classic;
     Year = 2020,
     Authors = "Kim et al."
 )]
-public class GlowTTS<T> : TtsModelBase<T>, IAcousticModel<T>
+public partial class GlowTTS<T> : TtsModelBase<T>, IAcousticModel<T>
 {
     private readonly GlowTTSOptions _options;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;

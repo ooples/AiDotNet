@@ -47,7 +47,7 @@ namespace AiDotNet.SpeechRecognition.LLMIntegrated;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("AudioPaLM: A Large Language Model That Can Speak and Listen", "https://arxiv.org/abs/2306.12925", Year = 2023, Authors = "Rubenstein et al.")]
-public class AudioPaLM<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
+public partial class AudioPaLM<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly AudioPaLMOptions _options; public override ModelOptions GetOptions() => _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer; private bool _useNativeMode; private bool _disposed;

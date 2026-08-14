@@ -40,7 +40,7 @@ namespace AiDotNet.TextToSpeech.CodecBased;
     Year = 2024,
     Authors = "Ju et al."
 )]
-public class NaturalSpeech3<T> : TtsModelBase<T>, IEndToEndTts<T>
+public partial class NaturalSpeech3<T> : TtsModelBase<T>, IEndToEndTts<T>
 {
     private readonly NaturalSpeech3Options _options;
 

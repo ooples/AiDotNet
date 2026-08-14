@@ -58,7 +58,7 @@ namespace AiDotNet.VisionLanguage.Editing;
     Year = 2024,
     Authors = "Huang et al."
 )]
-public class SmartEdit<T> : VisionLanguageModelBase<T>, IImageEditingVLM<T>
+public partial class SmartEdit<T> : VisionLanguageModelBase<T>, IImageEditingVLM<T>
 {
     private readonly SmartEditOptions _options;
 

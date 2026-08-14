@@ -58,7 +58,7 @@ namespace AiDotNet.VisionLanguage.Grounding;
     Year = 2024,
     Authors = "Zhang et al."
 )]
-public class FerretV2<T> : VisionLanguageModelBase<T>, IVisualGroundingModel<T>
+public partial class FerretV2<T> : VisionLanguageModelBase<T>, IVisualGroundingModel<T>
 {
     private readonly FerretV2Options _options;
 

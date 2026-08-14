@@ -63,7 +63,7 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
     Year = 2024,
     Authors = "Gupta et al."
 )]
-public class Maya<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
+public partial class Maya<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
 {
     private readonly MayaOptions _options;
 

@@ -97,7 +97,7 @@ namespace AiDotNet.VisionLanguage.Encoders;
     Year = 2025,
     Authors = "Tschannen et al."
 )]
-public class SigLIP2<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageModel<T>
+public partial class SigLIP2<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageModel<T>
 {
     #region Fields
 

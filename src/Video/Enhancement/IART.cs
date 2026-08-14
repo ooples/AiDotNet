@@ -58,7 +58,7 @@ namespace AiDotNet.Video.Enhancement;
     "https://arxiv.org/abs/2305.00163",
     Year = 2024,
     Authors = "Kai Xu, Ziwei Yu, Xin Wang, Michael Bi Mi, Angela Yao")]
-public class IART<T> : VideoSuperResolutionBase<T>
+public partial class IART<T> : VideoSuperResolutionBase<T>
 {
     #region Fields
 

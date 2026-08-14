@@ -40,7 +40,7 @@ namespace AiDotNet.TextToSpeech.EndToEnd;
     Year = 2023,
     Authors = "Kong et al."
 )]
-public class VITS2<T> : TtsModelBase<T>, IEndToEndTts<T>
+public partial class VITS2<T> : TtsModelBase<T>, IEndToEndTts<T>
 {
     private readonly VITS2Options _options;
 

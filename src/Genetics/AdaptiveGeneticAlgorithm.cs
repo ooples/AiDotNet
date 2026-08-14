@@ -1,6 +1,6 @@
 namespace AiDotNet.Genetics;
 
-public class AdaptiveGeneticAlgorithm<T, TInput, TOutput> :
+public partial class AdaptiveGeneticAlgorithm<T, TInput, TOutput> :
     StandardGeneticAlgorithm<T, TInput, TOutput>
 {
     private readonly double _minMutationRate;

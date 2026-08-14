@@ -64,7 +64,7 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
     Year = 2024,
     Authors = "Vikhyat Korrapati"
 )]
-public class Moondream<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
+public partial class Moondream<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
 {
     private readonly MoondreamOptions _options;
 

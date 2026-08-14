@@ -66,7 +66,7 @@ namespace AiDotNet.Audio.Classification;
 // detector implements. The previous entry paired that id with the title and author list of the
 // companion Audio Set dataset paper (Gemmeke et al., ICASSP 2017) — two different papers.
 [ResearchPaper("CNN Architectures for Large-Scale Audio Classification", "https://arxiv.org/abs/1609.09430", Year = 2017, Authors = "Shawn Hershey, Sourish Chaudhuri, Daniel P. W. Ellis, Jort F. Gemmeke, Aren Jansen, R. Channing Moore, Manoj Plakal, Devin Platt, Rif A. Saurous, Bryan Seybold, Malcolm Slaney, Ron J. Weiss, Kevin Wilson")]
-public class AudioEventDetector<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
+public partial class AudioEventDetector<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
 {
     #region Fields
 

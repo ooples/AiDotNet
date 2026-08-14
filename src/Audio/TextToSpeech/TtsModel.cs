@@ -63,7 +63,7 @@ namespace AiDotNet.Audio.TextToSpeech;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("FastSpeech 2: Fast and High-Quality End-to-End Text to Speech", "https://arxiv.org/abs/2006.04558", Year = 2021, Authors = "Yi Ren, Chenxu Hu, Xu Tan, Tao Qin, Sheng Zhao, Zhou Zhao, Tie-Yan Liu")]
-public class TtsModel<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
+public partial class TtsModel<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
 {
     private readonly TtsOptions _options;
 

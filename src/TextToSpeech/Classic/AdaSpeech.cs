@@ -48,7 +48,7 @@ namespace AiDotNet.TextToSpeech.Classic;
     Year = 2021,
     Authors = "Chen et al."
 )]
-public class AdaSpeech<T> : TtsModelBase<T>, IAcousticModel<T>
+public partial class AdaSpeech<T> : TtsModelBase<T>, IAcousticModel<T>
 {
     private readonly AdaSpeechOptions _options;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;

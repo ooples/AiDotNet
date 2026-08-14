@@ -66,7 +66,7 @@ namespace AiDotNet.DistributedTraining;
 [ModelComplexity(ModelComplexity.VeryHigh)]
 [ResearchPaper("PyTorch FSDP: Experiences on Scaling Fully Sharded Data Parallel", "https://arxiv.org/abs/2304.11277")]
     [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-public class FSDPModel<T, TInput, TOutput> : ShardedModelBase<T, TInput, TOutput>
+public partial class FSDPModel<T, TInput, TOutput> : ShardedModelBase<T, TInput, TOutput>
 {
     private Vector<T>? _computedGradients;
 

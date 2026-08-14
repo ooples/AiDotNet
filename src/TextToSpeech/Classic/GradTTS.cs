@@ -49,7 +49,7 @@ namespace AiDotNet.TextToSpeech.Classic;
     Year = 2021,
     Authors = "Popov et al."
 )]
-public class GradTTS<T> : TtsModelBase<T>, IAcousticModel<T>
+public partial class GradTTS<T> : TtsModelBase<T>, IAcousticModel<T>
 {
     private readonly GradTTSOptions _options;
 

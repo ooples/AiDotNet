@@ -65,7 +65,7 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
     Year = 2024,
     Authors = "Wu et al."
 )]
-public class VILAU<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
+public partial class VILAU<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
 {
     private readonly VILAUOptions _options;
 

@@ -52,7 +52,7 @@ namespace AiDotNet.Video.Enhancement;
     "https://arxiv.org/abs/2012.02181",
     Year = 2021,
     Authors = "Kelvin C.K. Chan, Xintao Wang, Ke Yu, Chao Dong, Chen Change Loy")]
-public class IconVSR<T> : VideoSuperResolutionBase<T>
+public partial class IconVSR<T> : VideoSuperResolutionBase<T>
 {
     #region Fields
 

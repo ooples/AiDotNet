@@ -56,7 +56,7 @@ namespace AiDotNet.VisionLanguage.Encoders;
     Year = 2025,
     Authors = "Ranzinger et al."
 )]
-public class RADIOv25<T> : VisionLanguageModelBase<T>, IVisualEncoder<T>
+public partial class RADIOv25<T> : VisionLanguageModelBase<T>, IVisualEncoder<T>
 {
     private readonly RADIOv25Options _options;
 

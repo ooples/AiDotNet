@@ -64,7 +64,7 @@ namespace AiDotNet.Audio.MusicGen;
 [ModelComplexity(ModelComplexity.VeryHigh)]
 [ModelInput(typeof(string), typeof(Tensor<>))]
 [ResearchPaper("Simple and Controllable Music Generation", "https://doi.org/10.48550/arXiv.2306.05284", Year = 2023, Authors = "Jade Copet, Felix Kreuk, Itai Gat, Tal Remez, David Kant, Gabriel Synnaeve, Yossi Adi, Alexandre Défossez")]
-public class MusicGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
+public partial class MusicGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
 {
     /// <inheritdoc />
     /// <remarks>

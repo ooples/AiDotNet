@@ -40,7 +40,7 @@ namespace AiDotNet.ReinforcementLearning.Agents.Planning;
     "https://doi.org/10.1023/A:1022635613229",
     Year = 1993,
     Authors = "Moore, A. W. & Atkeson, C. G.")]
-public class PrioritizedSweepingAgent<T> : ReinforcementLearningAgentBase<T>
+public partial class PrioritizedSweepingAgent<T> : ReinforcementLearningAgentBase<T>
 {
     private PrioritizedSweepingOptions<T> _options;
 

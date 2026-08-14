@@ -23,7 +23,7 @@ namespace AiDotNet.Optimizers;
 /// </remarks>
 [ComponentType(ComponentType.Optimizer)]
 [PipelineStage(PipelineStage.Training)]
-public class BayesianOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOutput>
+public partial class BayesianOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOutput>
 {
     /// <summary>
     /// The options for configuring the Bayesian Optimization algorithm.

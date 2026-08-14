@@ -51,7 +51,7 @@ namespace AiDotNet.Classification.MultiLabel;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Matrix<>))]
 [ResearchPaper("Random k-Labelsets for Multilabel Classification", "https://doi.org/10.1109/TKDE.2010.164", Year = 2011, Authors = "Grigorios Tsoumakas, Ioannis Katakis, Ioannis Vlahavas")]
-public class RAkELClassifier<T> : MultiLabelClassifierBase<T>
+public partial class RAkELClassifier<T> : MultiLabelClassifierBase<T>
 {
     /// <summary>
     /// Gets the size of each labelset (k parameter).

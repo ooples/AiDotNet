@@ -60,7 +60,7 @@ namespace AiDotNet.VisionLanguage.ThreeD;
     Year = 2024,
     Authors = "Qi et al."
 )]
-public class GPT4Point<T> : VisionLanguageModelBase<T>, IThreeDVisionLanguageModel<T>
+public partial class GPT4Point<T> : VisionLanguageModelBase<T>, IThreeDVisionLanguageModel<T>
 {
     private readonly GPT4PointOptions _options;
 

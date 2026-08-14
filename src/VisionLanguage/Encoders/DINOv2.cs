@@ -56,7 +56,7 @@ namespace AiDotNet.VisionLanguage.Encoders;
     Year = 2024,
     Authors = "Oquab et al."
 )]
-public class DINOv2<T> : VisionLanguageModelBase<T>, IVisualEncoder<T>
+public partial class DINOv2<T> : VisionLanguageModelBase<T>, IVisualEncoder<T>
 {
     private readonly DINOv2Options _options;
 

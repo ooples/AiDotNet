@@ -64,7 +64,7 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 [ModelComplexity(ModelComplexity.High)]
 [ResearchPaper("TimeMAE: Self-Supervised Representations of Time Series with Decoupled Masked Autoencoders", "https://arxiv.org/abs/2303.00320")]
     [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-public class TimeMAE<T> : TimeSeriesFoundationModelBase<T>
+public partial class TimeMAE<T> : TimeSeriesFoundationModelBase<T>
 {
     #region Fields
 

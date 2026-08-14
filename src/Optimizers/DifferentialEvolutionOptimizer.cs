@@ -22,7 +22,7 @@ namespace AiDotNet.Optimizers;
 /// </remarks>
 [ComponentType(ComponentType.Optimizer)]
 [PipelineStage(PipelineStage.Training)]
-public class DifferentialEvolutionOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOutput>
+public partial class DifferentialEvolutionOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOutput>
 {
     /// <summary>
     /// Configuration options specific to the Differential Evolution algorithm.

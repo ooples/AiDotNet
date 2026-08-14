@@ -49,7 +49,7 @@ namespace AiDotNet.TextToSpeech.CodecBased;
     Year = 2023,
     Authors = "Kharitonov et al."
 )]
-public class SPEARTTS<T> : TtsModelBase<T>, ICodecTts<T>
+public partial class SPEARTTS<T> : TtsModelBase<T>, ICodecTts<T>
 {
     private readonly SPEARTTSOptions _options;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;

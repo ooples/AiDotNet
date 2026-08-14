@@ -41,7 +41,7 @@ namespace AiDotNet.SpeechRecognition.ProprietaryAPI;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Rev AI", "https://www.rev.com/api")]
-public class RevAI<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
+public partial class RevAI<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly RevAIOptions _options; public override ModelOptions GetOptions() => _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer; private bool _useNativeMode; private bool _disposed;

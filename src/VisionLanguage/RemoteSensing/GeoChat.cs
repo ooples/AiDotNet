@@ -60,7 +60,7 @@ namespace AiDotNet.VisionLanguage.RemoteSensing;
     Year = 2024,
     Authors = "Kuckreja et al."
 )]
-public class GeoChat<T> : VisionLanguageModelBase<T>, IRemoteSensingVLM<T>
+public partial class GeoChat<T> : VisionLanguageModelBase<T>, IRemoteSensingVLM<T>
 {
     private readonly GeoChatOptions _options;
 

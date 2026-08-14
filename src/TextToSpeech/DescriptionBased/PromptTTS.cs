@@ -40,7 +40,7 @@ namespace AiDotNet.TextToSpeech.DescriptionBased;
     Year = 2023,
     Authors = "Guo et al."
 )]
-public class PromptTTS<T> : TtsModelBase<T>, IEndToEndTts<T>
+public partial class PromptTTS<T> : TtsModelBase<T>, IEndToEndTts<T>
 {
     private readonly PromptTTSOptions _options;
 

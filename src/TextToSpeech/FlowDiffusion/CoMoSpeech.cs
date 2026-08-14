@@ -40,7 +40,7 @@ namespace AiDotNet.TextToSpeech.FlowDiffusion;
     Year = 2023,
     Authors = "Ye et al."
 )]
-public class CoMoSpeech<T> : TtsModelBase<T>, IEndToEndTts<T>
+public partial class CoMoSpeech<T> : TtsModelBase<T>, IEndToEndTts<T>
 {
     private readonly CoMoSpeechOptions _options;
 

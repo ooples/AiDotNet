@@ -65,7 +65,7 @@ namespace AiDotNet.Regression;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("Linear Mixed Models for Longitudinal Data", "https://doi.org/10.1007/b98969")]
-public class MixedEffectsModel<T> : NonLinearRegressionBase<T>
+public partial class MixedEffectsModel<T> : NonLinearRegressionBase<T>
 {
     /// <summary>
     /// Fixed effect coefficients.

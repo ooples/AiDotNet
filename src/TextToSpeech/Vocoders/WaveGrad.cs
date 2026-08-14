@@ -41,7 +41,7 @@ namespace AiDotNet.TextToSpeech.Vocoders;
     Year = 2021,
     Authors = "Chen et al."
 )]
-public class WaveGrad<T> : VocoderBase<T>
+public partial class WaveGrad<T> : VocoderBase<T>
 {
     private readonly WaveGradOptions _options;
 

@@ -57,7 +57,7 @@ namespace AiDotNet.Video.FrameInterpolation;
     "https://arxiv.org/abs/2204.03513",
     Year = 2022,
     Authors = "Ping Hu, Simon Niklaus, Stan Sclaroff, Kate Saenko")]
-public class M2M<T> : FrameInterpolationBase<T>
+public partial class M2M<T> : FrameInterpolationBase<T>
 {
     #region Fields
 

@@ -55,7 +55,7 @@ namespace AiDotNet.VisionLanguage.Foundational;
     Year = 2021,
     Authors = "Kim et al."
 )]
-public class ViLT<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionModel<T>
+public partial class ViLT<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionModel<T>
 {
     private readonly ViLTOptions _options;
 

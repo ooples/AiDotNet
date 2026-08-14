@@ -76,7 +76,7 @@ namespace AiDotNet.Audio.Enhancement;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Conv-TasNet: Surpassing Ideal Time-Frequency Magnitude Masking for Speech Separation", "https://arxiv.org/abs/1809.07454", Year = 2019, Authors = "Yi Luo, Nima Mesgarani")]
-public class ConvTasNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
+public partial class ConvTasNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
 {
     private readonly ConvTasNetOptions _options;
 

@@ -52,7 +52,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Conditional Generative Adversarial Nets", "https://arxiv.org/abs/1411.1784", Year = 2014, Authors = "Mehdi Mirza, Simon Osindero")]
-public class ConditionalGAN<T> : GenerativeAdversarialNetwork<T>
+public partial class ConditionalGAN<T> : GenerativeAdversarialNetwork<T>
 {
     private readonly ConditionalGANOptions _options;
 

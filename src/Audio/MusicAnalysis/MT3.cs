@@ -42,7 +42,7 @@ namespace AiDotNet.Audio.MusicAnalysis;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("MT3: Multi-Task Multitrack Music Transcription", "https://arxiv.org/abs/2111.03017", Year = 2022, Authors = "Josh Gardner, Ian Simon, Ethan Manilow, Curtis Hawthorne, Jesse Engel")]
-public class MT3<T> : AudioNeuralNetworkBase<T>, IMusicTranscriber<T>
+public partial class MT3<T> : AudioNeuralNetworkBase<T>, IMusicTranscriber<T>
 {
     /// <inheritdoc />
     /// <remarks>

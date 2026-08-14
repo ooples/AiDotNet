@@ -59,7 +59,7 @@ namespace AiDotNet.VisionLanguage.Document;
     Year = 2024,
     Authors = "Hu et al."
 )]
-public class MPLUGDocOwl2<T> : VisionLanguageModelBase<T>, IDocumentUnderstandingModel<T>
+public partial class MPLUGDocOwl2<T> : VisionLanguageModelBase<T>, IDocumentUnderstandingModel<T>
 {
     private readonly MPLUGDocOwl2Options _options;
 

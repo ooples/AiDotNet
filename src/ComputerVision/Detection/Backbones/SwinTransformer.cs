@@ -32,7 +32,7 @@ namespace AiDotNet.ComputerVision.Detection.Backbones;
     "https://arxiv.org/abs/2103.14030",
     Year = 2021,
     Authors = "Ze Liu, Yutong Lin, Yue Cao, Han Hu, Yixuan Wei, Zheng Zhang, Stephen Lin, Baining Guo")]
-public class SwinTransformer<T> : NeuralNetworkBase<T>, IDetectionBackbone<T>
+public partial class SwinTransformer<T> : NeuralNetworkBase<T>, IDetectionBackbone<T>
 {
 
 

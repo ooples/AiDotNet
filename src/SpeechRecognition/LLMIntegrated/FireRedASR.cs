@@ -47,7 +47,7 @@ namespace AiDotNet.SpeechRecognition.LLMIntegrated;
     "https://arxiv.org/abs/2501.14350",
     Year = 2025,
     Authors = "Kai-Tuo Xu, Feng-Long Xie, Xu Tang, Yao Hu")]
-public class FireRedASR<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
+public partial class FireRedASR<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     /// <inheritdoc />
     /// <remarks>

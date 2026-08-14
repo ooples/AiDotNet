@@ -55,7 +55,7 @@ namespace AiDotNet.Regression;
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
     [ResearchPaper("Isotonic Regression Under Lipschitz Constraint", "https://doi.org/10.1080/01621459.1972.10482387")]
-public class IsotonicRegression<T> : NonLinearRegressionBase<T>
+public partial class IsotonicRegression<T> : NonLinearRegressionBase<T>
 {
     /// <summary>
     /// The sorted input values from the training data.

@@ -59,7 +59,7 @@ namespace AiDotNet.VisionLanguage.Unified;
     Year = 2024,
     Authors = "Meta"
 )]
-public class Chameleon<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<T>
+public partial class Chameleon<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<T>
 {
     private readonly ChameleonOptions _options;
 

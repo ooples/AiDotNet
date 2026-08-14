@@ -42,7 +42,7 @@ namespace AiDotNet.Audio.Generation;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("High Fidelity Neural Audio Compression", "https://arxiv.org/abs/2210.13438", Year = 2022, Authors = "Alexandre Defossez, Jade Copet, Gabriel Synnaeve, Yossi Adi")]
-public class EnCodec<T> : AudioNeuralNetworkBase<T>, IAudioCodec<T>
+public partial class EnCodec<T> : AudioNeuralNetworkBase<T>, IAudioCodec<T>
 {
     /// <inheritdoc />
     /// <remarks>

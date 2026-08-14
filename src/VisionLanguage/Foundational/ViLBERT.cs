@@ -55,7 +55,7 @@ namespace AiDotNet.VisionLanguage.Foundational;
     Year = 2019,
     Authors = "Lu et al."
 )]
-public class ViLBERT<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionModel<T>
+public partial class ViLBERT<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionModel<T>
 {
     private readonly ViLBERTOptions _options;
 

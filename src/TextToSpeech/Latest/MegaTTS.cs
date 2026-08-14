@@ -40,7 +40,7 @@ namespace AiDotNet.TextToSpeech.Latest;
     Year = 2023,
     Authors = "Jiang et al."
 )]
-public class MegaTTS<T> : TtsModelBase<T>, IEndToEndTts<T>
+public partial class MegaTTS<T> : TtsModelBase<T>, IEndToEndTts<T>
 {
     private readonly MegaTTSOptions _options;
 

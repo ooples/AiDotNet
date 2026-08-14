@@ -35,7 +35,7 @@ namespace AiDotNet.TextToSpeech.ProprietaryAPI;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("NVIDIA Riva", "https://developer.nvidia.com/riva")]
-public class NVIDIARivaTTS<T> : TtsModelBase<T>, IEndToEndTts<T>
+public partial class NVIDIARivaTTS<T> : TtsModelBase<T>, IEndToEndTts<T>
 {
     private readonly NVIDIARivaTTSOptions _options;
 
