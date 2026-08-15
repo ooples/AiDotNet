@@ -23,6 +23,30 @@ namespace AiDotNet.Models.Options;
 /// </remarks>
 public class RAdamOptimizerOptions<T, TInput, TOutput> : GradientBasedOptimizerOptions<T, TInput, TOutput>
 {
+    /// <summary>Initializes RAdam options with the paper-compatible defaults.</summary>
+    public RAdamOptimizerOptions()
+    {
+    }
+
+    /// <summary>Creates a complete copy of an existing RAdam options instance.</summary>
+    /// <param name="other">The options instance to copy.</param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="other"/> is null.</exception>
+    public RAdamOptimizerOptions(RAdamOptimizerOptions<T, TInput, TOutput> other)
+    {
+        if (other is null) throw new ArgumentNullException(nameof(other));
+
+        CopyInheritedPropertiesFrom(other);
+        BatchSize = other.BatchSize;
+        InitialLearningRate = other.InitialLearningRate;
+        Beta1 = other.Beta1;
+        Beta2 = other.Beta2;
+        Epsilon = other.Epsilon;
+        LearningRateIncreaseFactor = other.LearningRateIncreaseFactor;
+        LearningRateDecreaseFactor = other.LearningRateDecreaseFactor;
+        MinLearningRate = other.MinLearningRate;
+        MaxLearningRate = other.MaxLearningRate;
+    }
+
     /// <summary>
     /// Gets or sets the batch size for mini-batch gradient descent.
     /// </summary>
@@ -135,7 +159,7 @@ public class RAdamOptimizerOptions<T, TInput, TOutput> : GradientBasedOptimizerO
     /// <para><b>For Beginners:</b> A floor on how slow learning can get, so the model never grinds to a halt
     /// taking infinitesimally small steps.</para>
     /// </remarks>
-    public new double MinLearningRate { get; set; } = 1e-5;
+    public override double MinLearningRate { get; set; } = 1e-5;
 
     /// <summary>
     /// Gets or sets the maximum allowed learning rate during adaptive adjustments.
@@ -145,5 +169,5 @@ public class RAdamOptimizerOptions<T, TInput, TOutput> : GradientBasedOptimizerO
     /// <para><b>For Beginners:</b> A ceiling on how fast learning can get, so the model never takes such a large
     /// step that it overshoots the solution.</para>
     /// </remarks>
-    public new double MaxLearningRate { get; set; } = 0.1;
+    public override double MaxLearningRate { get; set; } = 0.1;
 }

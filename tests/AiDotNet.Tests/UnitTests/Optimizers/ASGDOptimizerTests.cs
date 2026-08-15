@@ -2,6 +2,7 @@ using System;
 using AiDotNet.Models.Options;
 using AiDotNet.Optimizers;
 using AiDotNet.Optimizers.Fused;
+using AiDotNet.Tensors.Engines.Autodiff;
 using Xunit;
 
 namespace AiDotNet.Tests.UnitTests.Optimizers;
@@ -37,6 +38,35 @@ public class ASGDOptimizerTests
         });
 
     private static double Eta(int t) => Gamma0 / Math.Pow(1.0 + Lambda * Gamma0 * t, Alpha);
+
+    [Fact]
+    public void TapeStep_MultipleStepsMaintainTheArithmeticMeanOfIterates()
+    {
+        var optimizer = CreateOptimizer(t0: 0.0);
+        var parameter = new Tensor<double>(new[] { 2 });
+        parameter.AsWritableSpan()[0] = 1.0;
+        parameter.AsWritableSpan()[1] = -2.0;
+        var gradient = new Tensor<double>(new[] { 2 });
+        gradient.AsWritableSpan()[0] = 0.4;
+        gradient.AsWritableSpan()[1] = -0.7;
+        var gradients = new Dictionary<Tensor<double>, Tensor<double>> { [parameter] = gradient };
+
+        double sum0 = 0.0;
+        double sum1 = 0.0;
+        const int steps = 12;
+        for (int step = 0; step < steps; step++)
+        {
+            optimizer.Step(new TapeStepContext<double>(new[] { parameter }, gradients, 0.0));
+            sum0 += parameter.AsSpan()[0];
+            sum1 += parameter.AsSpan()[1];
+        }
+
+        var average = optimizer.GetTapeAveragedParameterForTests(parameter);
+        Assert.NotNull(average);
+        Assert.Equal(sum0 / steps, average!.AsSpan()[0], 12);
+        Assert.Equal(sum1 / steps, average.AsSpan()[1], 12);
+        Assert.NotEqual(parameter.AsSpan()[0], average.AsSpan()[0], 12);
+    }
 
     /// <summary>
     /// One step must be exactly theta*(1 - eta_t*lambda) - eta_t*g, with eta_t from the schedule rather than the

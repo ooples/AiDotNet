@@ -586,13 +586,25 @@ internal static class NeuralBatchHelper
         // managed-heap growth of a forward at probeLarge FIRST — before the
         // allocated probes prime the pool — so the delta reflects the pooled
         // footprint the budget must actually bound.
-        long retainedLarge = MeasureForwardRetainedBytes(nn, sampleInput, probeLarge);
+        bool retainedProbeFailed = false;
+        long retainedLarge;
+        try
+        {
+            retainedLarge = MeasureForwardRetainedBytes(nn, sampleInput, probeLarge);
+        }
+        catch (OutOfMemoryException)
+        {
+            // A failed large probe is itself evidence that the analytic candidate must start at the minimum.
+            // Verification below still measures batch size 1 and rejects the budget if even that cannot fit.
+            retainedLarge = long.MaxValue;
+            retainedProbeFailed = true;
+        }
         long perSampleRetained = retainedLarge / System.Math.Max(1, probeLarge);
 
-        long bytesSmall = MeasureForwardAllocatedBytes(nn, sampleInput, probeSmall);
+        long bytesSmall = retainedProbeFailed ? 0L : MeasureForwardAllocatedBytes(nn, sampleInput, probeSmall);
         long beta;       // per-sample slope (bytes per additional sample)
         long alpha;      // per-call fixed cost (intercept)
-        if (probeLarge > probeSmall)
+        if (!retainedProbeFailed && probeLarge > probeSmall)
         {
             long bytesLarge = MeasureForwardAllocatedBytes(nn, sampleInput, probeLarge);
             long dB = probeLarge - probeSmall;
@@ -661,7 +673,7 @@ internal static class NeuralBatchHelper
         long availableForChunk = budgetWithMargin - outputRetention - alpha;
         // Solve alpha + outputRetention + beta * chunk <= budget for chunk.
         long chunk = availableForChunk / beta;
-        if (chunk < 1) return 1;
+        if (chunk < 1) chunk = 1;
         if (chunk > axis0) chunk = axis0;
 
         // VERIFY, do not trust the extrapolation. The fit above is built from probes at B=8/16, and the
@@ -674,12 +686,32 @@ internal static class NeuralBatchHelper
         // So measure a real forward at the candidate and halve until it fits. The common case costs one
         // extra forward at roughly the size of the first chunk we were going to run anyway.
         int candidate = (int)chunk;
-        for (int i = 0; i < MaxChunkVerifyHalvings && candidate > 1; i++)
+        OutOfMemoryException? lastOutOfMemory = null;
+        for (int halvings = 0; ; halvings++)
         {
-            if (MeasureForwardRetainedBytes(nn, sampleInput, candidate) <= budgetWithMargin) break;
+            bool fits;
+            try
+            {
+                fits = MeasureForwardRetainedBytes(nn, sampleInput, candidate) <= budgetWithMargin;
+                lastOutOfMemory = null;
+            }
+            catch (OutOfMemoryException ex)
+            {
+                fits = false;
+                lastOutOfMemory = ex;
+            }
+
+            if (fits) return candidate;
+            if (candidate == 1 || halvings >= MaxChunkVerifyHalvings)
+            {
+                throw new InvalidOperationException(
+                    $"No verified chunk size fits within the configured memory budget of {memoryBudgetBytes} bytes " +
+                    $"after the {MemoryBudgetSafetyFactor:P0} safety margin.",
+                    lastOutOfMemory);
+            }
+
             candidate = System.Math.Max(1, candidate / 2);
         }
-        return candidate;
     }
 
     /// <summary>

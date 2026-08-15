@@ -146,7 +146,7 @@ public class OptimizationAlgorithmOptions<T, TInput, TOutput> : ModelOptions
     /// <para><b>For Beginners:</b> This prevents the learning rate from becoming too small.
     /// Even if the rate keeps decreasing, it won't go below this value.</para>
     /// </remarks>
-    public double MinLearningRate { get; set; } = 1e-6;
+    public virtual double MinLearningRate { get; set; } = 1e-6;
 
     /// <summary>
     /// Gets or sets the maximum allowed learning rate.
@@ -156,7 +156,7 @@ public class OptimizationAlgorithmOptions<T, TInput, TOutput> : ModelOptions
     /// <para><b>For Beginners:</b> This prevents the learning rate from becoming too large,
     /// which could cause the algorithm to make wild guesses instead of learning properly.</para>
     /// </remarks>
-    public double MaxLearningRate { get; set; } = 1.0;
+    public virtual double MaxLearningRate { get; set; } = 1.0;
 
     /// <summary>
     /// Gets or sets how many times the learning rate is REDUCED on a validation/fitness plateau before early

@@ -83,7 +83,6 @@ public class RAdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
     /// </summary>
     /// <param name="model">The model whose parameters this optimizer updates.</param>
     /// <param name="options">The options for configuring the RAdam optimizer, or null for paper defaults.</param>
-    /// <param name="engine">The compute engine to run tensor operations on, or null for the ambient engine.</param>
     /// <remarks>
     /// <para><b>For Beginners:</b> This sets up the RAdam optimizer. Passing no options gives you the settings
     /// from the paper (learning rate 0.001, beta1 0.9, beta2 0.999), which are a good default for most models.
@@ -91,8 +90,7 @@ public class RAdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
     /// </remarks>
     public RAdamOptimizer(
         IFullModel<T, TInput, TOutput> model,
-        RAdamOptimizerOptions<T, TInput, TOutput>? options = null,
-        IEngine? engine = null)
+        RAdamOptimizerOptions<T, TInput, TOutput>? options = null)
         : base(model, options ?? new())
     {
         _options = options ?? new RAdamOptimizerOptions<T, TInput, TOutput>();

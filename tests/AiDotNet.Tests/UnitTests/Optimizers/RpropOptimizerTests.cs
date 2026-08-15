@@ -3,6 +3,7 @@ using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Models.Options;
 using AiDotNet.Optimizers;
 using AiDotNet.Optimizers.Fused;
+using AiDotNet.Tensors.Engines.Autodiff;
 using Xunit;
 
 namespace AiDotNet.Tests.UnitTests.Optimizers;
@@ -38,6 +39,29 @@ public class RpropOptimizerTests
 
     private static RpropOptimizer<double, Matrix<double>, Vector<double>> CreateOptimizer()
         => new(null, Options());
+
+    [Fact]
+    public void TapeStep_MultipleStepsFollowGrowthReversalAndFreshSignBranches()
+    {
+        var optimizer = CreateOptimizer();
+        var parameter = new Tensor<double>(new[] { 1 });
+        var gradient = new Tensor<double>(new[] { 1 });
+        var gradients = new Dictionary<Tensor<double>, Tensor<double>> { [parameter] = gradient };
+
+        gradient.AsWritableSpan()[0] = 1.0;
+        optimizer.Step(new TapeStepContext<double>(new[] { parameter }, gradients, 0.0));
+        Assert.Equal(-0.1, parameter.AsSpan()[0], 12);
+
+        optimizer.Step(new TapeStepContext<double>(new[] { parameter }, gradients, 0.0));
+        Assert.Equal(-0.22, parameter.AsSpan()[0], 12);
+
+        gradient.AsWritableSpan()[0] = -1.0;
+        optimizer.Step(new TapeStepContext<double>(new[] { parameter }, gradients, 0.0));
+        Assert.Equal(-0.22, parameter.AsSpan()[0], 12);
+
+        optimizer.Step(new TapeStepContext<double>(new[] { parameter }, gradients, 0.0));
+        Assert.Equal(-0.16, parameter.AsSpan()[0], 12);
+    }
 
     /// <summary>
     /// The defining property: the size of the step depends only on Delta, never on the size of the gradient.

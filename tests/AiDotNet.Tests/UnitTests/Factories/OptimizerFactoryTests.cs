@@ -29,9 +29,6 @@ namespace AiDotNet.Tests.UnitTests.Factories;
 /// </remarks>
 public class OptimizerFactoryTests
 {
-    private static readonly Type FactoryType =
-        typeof(OptimizerFactory<double, Matrix<double>, Vector<double>>);
-
     /// <summary>
     /// Enum values that name a concept rather than a shipped optimizer. Each is listed with the reason it has
     /// no implementation to resolve to, so this set stays a deliberate exclusion list and not a dumping ground.
@@ -66,28 +63,19 @@ public class OptimizerFactoryTests
     [MemberData(nameof(ImplementedOptimizerTypes))]
     public void CreateOptimizer_WithDefaults_BuildsEveryImplementedType(OptimizerType type)
     {
-        var create = FactoryType.GetMethod(
-            "CreateOptimizer",
-            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static,
-            binder: null,
-            types: new[] { typeof(OptimizerType) },
-            modifiers: null);
-        Assert.NotNull(create);
-
-        object? optimizer;
+        IOptimizer<double, Matrix<double>, Vector<double>> optimizer;
         try
         {
-            optimizer = create!.Invoke(null, new object[] { type });
+            optimizer = OptimizerFactory<double, Matrix<double>, Vector<double>>.CreateOptimizer(type);
         }
-        catch (System.Reflection.TargetInvocationException ex) when (ex.InnerException is not null)
+        catch (Exception ex)
         {
             throw new Xunit.Sdk.XunitException(
                 $"OptimizerType.{type} is advertised by the enum but the factory could not build it: " +
-                $"{ex.InnerException.GetType().Name}: {ex.InnerException.Message}");
+                $"{ex.GetType().Name}: {ex.Message}");
         }
 
         Assert.NotNull(optimizer);
-        Assert.IsAssignableFrom<IOptimizer<double, Matrix<double>, Vector<double>>>(optimizer);
     }
 
     /// <summary>
@@ -125,21 +113,13 @@ public class OptimizerFactoryTests
     [MemberData(nameof(ImplementedOptimizerTypes))]
     public void GetOptimizerType_RoundTripsToACanonicalNameForTheSameImplementation(OptimizerType type)
     {
-        var create = FactoryType.GetMethod(
-            "CreateOptimizer",
-            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static,
-            binder: null,
-            types: new[] { typeof(OptimizerType) },
-            modifiers: null);
-        var optimizer = (IOptimizer<double, Matrix<double>, Vector<double>>)create!
-            .Invoke(null, new object[] { type })!;
+        var optimizer = OptimizerFactory<double, Matrix<double>, Vector<double>>.CreateOptimizer(type);
 
         var reported = OptimizerFactory<double, Matrix<double>, Vector<double>>.GetOptimizerType(optimizer);
 
         // Building from the reported name must yield the same implementation type — that is what "canonical"
         // has to mean for serialization to survive a round trip, and it holds for aliases too.
-        var rebuilt = (IOptimizer<double, Matrix<double>, Vector<double>>)create
-            .Invoke(null, new object[] { reported })!;
+        var rebuilt = OptimizerFactory<double, Matrix<double>, Vector<double>>.CreateOptimizer(reported);
         Assert.Equal(optimizer.GetType(), rebuilt.GetType());
     }
 
@@ -152,8 +132,33 @@ public class OptimizerFactoryTests
         var optimizer = new AdagradOptimizer<double, Matrix<double>, Vector<double>>(null);
 
         var first = OptimizerFactory<double, Matrix<double>, Vector<double>>.GetOptimizerType(optimizer);
+        Assert.Equal(OptimizerType.Adagrad, first);
         for (int i = 0; i < 20; i++)
-            Assert.Equal(first, OptimizerFactory<double, Matrix<double>, Vector<double>>.GetOptimizerType(optimizer));
+            Assert.Equal(OptimizerType.Adagrad,
+                OptimizerFactory<double, Matrix<double>, Vector<double>>.GetOptimizerType(optimizer));
+    }
+
+    [Fact]
+    public void CreateOptimizer_WithMismatchedOptions_RejectsTheConfiguration()
+    {
+        var options = new RpropOptimizerOptions<double, Matrix<double>, Vector<double>>();
+
+        var ex = Assert.Throws<ArgumentException>(() =>
+            OptimizerFactory<double, Matrix<double>, Vector<double>>
+                .CreateOptimizer(OptimizerType.Adam, options));
+
+        Assert.Contains(OptimizerType.Adam.ToString(), ex.Message);
+        Assert.Contains(nameof(RpropOptimizerOptions<double, Matrix<double>, Vector<double>>), ex.Message);
+    }
+
+    [Fact]
+    public void GetOptimizerType_MapsDerivedOptimizerToItsRegisteredBaseType()
+    {
+        var optimizer = new DerivedAdamOptimizer();
+
+        var type = OptimizerFactory<double, Matrix<double>, Vector<double>>.GetOptimizerType(optimizer);
+
+        Assert.Equal(OptimizerType.Adam, type);
     }
 
     /// <summary>
@@ -165,42 +170,17 @@ public class OptimizerFactoryTests
     [InlineData(OptimizerType.HillClimbing)]
     public void CreateOptimizer_ForAnUnimplementedType_ExplainsWhatIsAvailable(OptimizerType type)
     {
-        var create = FactoryType.GetMethod(
-            "CreateOptimizer",
-            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static,
-            binder: null,
-            types: new[] { typeof(OptimizerType) },
-            modifiers: null);
-
-        var ex = Assert.Throws<TargetInvocationExceptionUnwrapper.Wrapped>(() =>
-            TargetInvocationExceptionUnwrapper.Invoke(() => create!.Invoke(null, new object[] { type })));
+        var ex = Assert.Throws<ArgumentException>(() =>
+            OptimizerFactory<double, Matrix<double>, Vector<double>>.CreateOptimizer(type));
 
         Assert.Contains(type.ToString(), ex.Message);
         // The message must enumerate real alternatives, not just say "unknown".
         Assert.Contains("Adam", ex.Message);
     }
 
-    /// <summary>
-    /// Rethrows a reflection <see cref="System.Reflection.TargetInvocationException"/>'s inner exception in a
-    /// shape xUnit's <c>Assert.Throws</c> can match on, without losing the original message.
-    /// </summary>
-    internal static class TargetInvocationExceptionUnwrapper
+    private sealed class DerivedAdamOptimizer
+        : AdamOptimizer<double, Matrix<double>, Vector<double>>
     {
-        internal sealed class Wrapped : Exception
-        {
-            public Wrapped(string message) : base(message) { }
-        }
-
-        internal static void Invoke(Action action)
-        {
-            try
-            {
-                action();
-            }
-            catch (System.Reflection.TargetInvocationException ex) when (ex.InnerException is not null)
-            {
-                throw new Wrapped(ex.InnerException.Message);
-            }
-        }
+        public DerivedAdamOptimizer() : base(null) { }
     }
 }

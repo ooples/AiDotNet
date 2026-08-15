@@ -84,7 +84,6 @@ public class RpropOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
     /// </summary>
     /// <param name="model">The model whose parameters this optimizer updates.</param>
     /// <param name="options">The options for configuring Rprop, or null for the paper's defaults.</param>
-    /// <param name="engine">The compute engine to run tensor operations on, or null for the ambient engine.</param>
     /// <exception cref="ArgumentOutOfRangeException">
     /// Thrown when a hyperparameter falls outside the range the algorithm is defined for.
     /// </exception>
@@ -94,8 +93,7 @@ public class RpropOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
     /// </remarks>
     public RpropOptimizer(
         IFullModel<T, TInput, TOutput> model,
-        RpropOptimizerOptions<T, TInput, TOutput>? options = null,
-        IEngine? engine = null)
+        RpropOptimizerOptions<T, TInput, TOutput>? options = null)
         : base(model, options ?? new())
     {
         _options = options ?? new RpropOptimizerOptions<T, TInput, TOutput>();
@@ -362,15 +360,17 @@ public class RpropOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
                 _tapeStepSize[param] = stepSize;
             }
 
-            var ones = new Tensor<T>(param._shape);
-            ones.Fill(NumOps.One);
-            var zeros = new Tensor<T>(param._shape);
-
             var signOfProduct = Engine.TensorSign(Engine.TensorMultiply(prevGrad, grad));
 
-            var grew = Engine.TensorMax(signOfProduct, zeros);
-            var shrank = Engine.TensorMax(Engine.TensorMultiplyScalar(signOfProduct, negativeOne), zeros);
-            var held = Engine.TensorSubtract(Engine.TensorSubtract(ones, grew), shrank);
+            // The sign is exactly -1, 0, or +1. Scalar clamps create the one-hot masks without
+            // allocating and filling full-size ones/zeros tensors for every parameter on every step.
+            var grew = Engine.TensorClamp(signOfProduct, NumOps.Zero, NumOps.One);
+            var shrank = Engine.TensorClamp(
+                Engine.TensorMultiplyScalar(signOfProduct, negativeOne),
+                NumOps.Zero,
+                NumOps.One);
+            var held = Engine.TensorNegate(
+                Engine.TensorSubtractScalar(Engine.TensorAbs(signOfProduct), NumOps.One));
 
             var factor = Engine.TensorAdd(
                 Engine.TensorAdd(
@@ -381,7 +381,8 @@ public class RpropOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
                 Engine.TensorClamp(Engine.TensorMultiply(stepSize, factor), minStep, maxStep),
                 stepSize);
 
-            var effectiveGradient = Engine.TensorMultiply(grad, Engine.TensorSubtract(ones, shrank));
+            var notShrank = Engine.TensorNegate(Engine.TensorSubtractScalar(shrank, NumOps.One));
+            var effectiveGradient = Engine.TensorMultiply(grad, notShrank);
 
             Engine.TensorSubtractInPlace(
                 param,

@@ -30,6 +30,72 @@ namespace AiDotNet.Models.Options;
 public class GradientBasedOptimizerOptions<T, TInput, TOutput> : OptimizationAlgorithmOptions<T, TInput, TOutput>
 {
     /// <summary>
+    /// Copies every settable option inherited by a concrete gradient optimizer.
+    /// </summary>
+    /// <param name="other">The options instance to copy.</param>
+    /// <remarks>
+    /// Concrete optimizer option classes call this from their copy constructors before copying their own
+    /// properties. Keeping the inherited list here prevents newly added optimizers from silently losing shared
+    /// configuration such as reproducibility seeds, schedulers, clipping, caching, or early-stopping policy.
+    /// </remarks>
+    protected void CopyInheritedPropertiesFrom(GradientBasedOptimizerOptions<T, TInput, TOutput> other)
+    {
+        if (other is null) throw new ArgumentNullException(nameof(other));
+
+        Seed = other.Seed;
+        MaxIterations = other.MaxIterations;
+        UseEarlyStopping = other.UseEarlyStopping;
+        EarlyStoppingPatience = other.EarlyStoppingPatience;
+        BadFitPatience = other.BadFitPatience;
+        MinimumFeatures = other.MinimumFeatures;
+        MaximumFeatures = other.MaximumFeatures;
+        UseExpressionTrees = other.UseExpressionTrees;
+        InitialLearningRate = other.InitialLearningRate;
+        UseAdaptiveLearningRate = other.UseAdaptiveLearningRate;
+        LearningRateDecay = other.LearningRateDecay;
+        MinLearningRate = other.MinLearningRate;
+        MaxLearningRate = other.MaxLearningRate;
+        MaxLearningRateReductionsOnPlateau = other.MaxLearningRateReductionsOnPlateau;
+        PlateauLearningRateReductionFactor = other.PlateauLearningRateReductionFactor;
+        UseAdaptiveMomentum = other.UseAdaptiveMomentum;
+        InitialMomentum = other.InitialMomentum;
+        MomentumIncreaseFactor = other.MomentumIncreaseFactor;
+        MomentumDecreaseFactor = other.MomentumDecreaseFactor;
+        MinMomentum = other.MinMomentum;
+        MaxMomentum = other.MaxMomentum;
+        ExplorationRate = other.ExplorationRate;
+        MinExplorationRate = other.MinExplorationRate;
+        MaxExplorationRate = other.MaxExplorationRate;
+        Tolerance = other.Tolerance;
+        OptimizationMode = other.OptimizationMode;
+        ParameterAdjustmentScale = other.ParameterAdjustmentScale;
+        SignFlipProbability = other.SignFlipProbability;
+        FeatureSelectionProbability = other.FeatureSelectionProbability;
+        ParameterAdjustmentProbability = other.ParameterAdjustmentProbability;
+        PredictionOptions = other.PredictionOptions;
+        ModelStatsOptions = other.ModelStatsOptions;
+        FitDetector = other.FitDetector;
+        FitnessCalculator = other.FitnessCalculator;
+        ModelCache = other.ModelCache;
+
+        GradientCache = other.GradientCache;
+        _lossFunction = other._lossFunction;
+        LossFunctionExplicitlySet = other.LossFunctionExplicitlySet;
+        Regularization = other.Regularization;
+        DataSampler = other.DataSampler;
+        ShuffleData = other.ShuffleData;
+        DropLastBatch = other.DropLastBatch;
+        RandomSeed = other.RandomSeed;
+        EnableGradientClipping = other.EnableGradientClipping;
+        GradientClippingMethod = other.GradientClippingMethod;
+        MaxGradientNorm = other.MaxGradientNorm;
+        MaxGradientValue = other.MaxGradientValue;
+        LearningRateScheduler = other.LearningRateScheduler;
+        SchedulerStepMode = other.SchedulerStepMode;
+        UseTrainingLossAsFitness = other.UseTrainingLossAsFitness;
+    }
+
+    /// <summary>
     /// Gets or sets the gradient cache to use for storing and retrieving computed gradients.
     /// </summary>
     /// <remarks>

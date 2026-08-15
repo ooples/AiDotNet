@@ -2,6 +2,7 @@ using System;
 using AiDotNet.Models.Options;
 using AiDotNet.Optimizers;
 using AiDotNet.Optimizers.Fused;
+using AiDotNet.Tensors.Engines.Autodiff;
 using Xunit;
 
 namespace AiDotNet.Tests.UnitTests.Optimizers;
@@ -78,6 +79,30 @@ public class RAdamOptimizerTests
             Epsilon = Eps,
             UseAdaptiveLearningRate = adaptiveLr,
         });
+
+    [Theory]
+    [InlineData(1)]
+    [InlineData(4)]
+    [InlineData(5)]
+    [InlineData(12)]
+    public void TapeStep_MatchesAlgorithm2AcrossBothBranches(int steps)
+    {
+        var optimizer = CreateOptimizer();
+        var parameter = new Tensor<double>(new[] { 3 });
+        new[] { 0.5, -0.25, 3.0 }.CopyTo(parameter.AsWritableSpan());
+        var gradient = new Tensor<double>(new[] { 3 });
+        new[] { 0.1, -0.4, 2.0 }.CopyTo(gradient.AsWritableSpan());
+        var gradients = new Dictionary<Tensor<double>, Tensor<double>> { [parameter] = gradient };
+
+        for (int step = 0; step < steps; step++)
+        {
+            optimizer.Step(new TapeStepContext<double>(new[] { parameter }, gradients, 0.0));
+        }
+
+        Assert.Equal(ReferenceRAdam(0.5, 0.1, steps), parameter.AsSpan()[0], 10);
+        Assert.Equal(ReferenceRAdam(-0.25, -0.4, steps), parameter.AsSpan()[1], 10);
+        Assert.Equal(ReferenceRAdam(3.0, 2.0, steps), parameter.AsSpan()[2], 10);
+    }
 
     /// <summary>
     /// At the paper's default beta2 = 0.999 the SMA estimate rho_t crosses the threshold of 4 between t = 4 and

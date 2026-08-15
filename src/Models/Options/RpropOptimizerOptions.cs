@@ -30,6 +30,27 @@ namespace AiDotNet.Models.Options;
 /// </remarks>
 public class RpropOptimizerOptions<T, TInput, TOutput> : GradientBasedOptimizerOptions<T, TInput, TOutput>
 {
+    /// <summary>Initializes Rprop options with the values from the original paper.</summary>
+    public RpropOptimizerOptions()
+    {
+    }
+
+    /// <summary>Creates a complete copy of an existing Rprop options instance.</summary>
+    /// <param name="other">The options instance to copy.</param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="other"/> is null.</exception>
+    public RpropOptimizerOptions(RpropOptimizerOptions<T, TInput, TOutput> other)
+    {
+        if (other is null) throw new ArgumentNullException(nameof(other));
+
+        CopyInheritedPropertiesFrom(other);
+        InitialStepSize = other.InitialStepSize;
+        EtaPlus = other.EtaPlus;
+        EtaMinus = other.EtaMinus;
+        MinStepSize = other.MinStepSize;
+        MaxStepSize = other.MaxStepSize;
+        InitialLearningRate = other.InitialLearningRate;
+    }
+
     /// <summary>
     /// Gets or sets the initial per-weight update value Delta_0.
     /// </summary>
@@ -98,17 +119,20 @@ public class RpropOptimizerOptions<T, TInput, TOutput> : GradientBasedOptimizerO
     public double MaxStepSize { get; set; } = 50.0;
 
     /// <summary>
-    /// Not used by Rprop. Present only because it is inherited.
+    /// Gets or sets the compatibility alias for <see cref="InitialStepSize"/>.
     /// </summary>
-    /// <value>Reported as <see cref="InitialStepSize"/> for coherence; changing it has no effect on the update.</value>
+    /// <value>The current <see cref="InitialStepSize"/>.</value>
     /// <remarks>
     /// <para>
     /// Rprop has no learning rate: the per-weight step size plays that role and is adapted by the algorithm
-    /// itself. This property is surfaced with the same value as <see cref="InitialStepSize"/> so that anything
-    /// which logs or displays a learning rate shows a number of the right order rather than an unrelated default,
-    /// but the update reads <see cref="InitialStepSize"/>, never this.
+    /// itself. This inherited property is therefore a synchronized alias for <see cref="InitialStepSize"/> so
+    /// generic configuration and logging surfaces cannot display or set an unrelated number.
     /// </para>
-    /// <para><b>For Beginners:</b> Ignore this one — set <see cref="InitialStepSize"/> instead.</para>
+    /// <para><b>For Beginners:</b> This and <see cref="InitialStepSize"/> are two names for the same setting.</para>
     /// </remarks>
-    public override double InitialLearningRate { get; set; } = 0.1;
+    public override double InitialLearningRate
+    {
+        get => InitialStepSize;
+        set => InitialStepSize = value;
+    }
 }

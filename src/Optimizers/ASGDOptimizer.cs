@@ -72,7 +72,6 @@ public class ASGDOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
     /// </summary>
     /// <param name="model">The model whose parameters this optimizer updates.</param>
     /// <param name="options">The options for configuring the ASGD optimizer, or null for reference defaults.</param>
-    /// <param name="engine">The compute engine to run tensor operations on, or null for the ambient engine.</param>
     /// <remarks>
     /// <para><b>For Beginners:</b> This sets up the optimizer. With no options you get the standard defaults
     /// (step size 0.01, decay 1e-4, exponent 0.75). Remember that averaging does not start until step
@@ -81,8 +80,7 @@ public class ASGDOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
     /// </remarks>
     public ASGDOptimizer(
         IFullModel<T, TInput, TOutput> model,
-        ASGDOptimizerOptions<T, TInput, TOutput>? options = null,
-        IEngine? engine = null)
+        ASGDOptimizerOptions<T, TInput, TOutput>? options = null)
         : base(model, options ?? new())
     {
         _options = options ?? new ASGDOptimizerOptions<T, TInput, TOutput>();
@@ -385,6 +383,12 @@ public class ASGDOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
                 ax);
         }
     }
+
+    /// <summary>
+    /// Returns the tape-path running average for a parameter so the paper's averaging invariant can be tested.
+    /// </summary>
+    internal Tensor<T>? GetTapeAveragedParameterForTests(Tensor<T> parameter)
+        => _tapeAx.TryGetValue(parameter, out var average) ? average : null;
 
     /// <summary>
     /// Reverses an ASGD gradient update to recover the parameters from before the step.
