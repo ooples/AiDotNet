@@ -68,15 +68,32 @@ public class StochasticGradientDescentOptimizer<T, TInput, TOutput> : GradientBa
     }
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// This optimizer's eager loop calls <c>ApplyMomentum</c>, and <c>InitialMomentum</c> defaults to
+    /// 0.9 — so it is SGD WITH MOMENTUM unless momentum is explicitly zero. It previously reported
+    /// plain <c>OptimizerType.SGD</c> with <c>beta1 = 0</c> regardless, which meant the same optimizer
+    /// trained differently depending on whether the compiled or eager path ran: momentum on the eager
+    /// side, none on the fused side. It now reports the kernel that matches what it actually does.
+    /// </para>
+    /// </remarks>
     bool Fused.IFusedOptimizerSpec.TryGetFusedOptimizerConfig(out Fused.FusedOptimizerConfig config)
     {
         config = default;
         if (_options.UseAdaptiveLearningRate) return false;
         if (!TryGetFusedLrSchedule(out var schedule)) return false;
-        config = new Fused.FusedOptimizerConfig(
-            Tensors.Engines.Compilation.OptimizerType.SGD,
-            (float)GetCurrentLearningRate(),
-            0f, 0f, 0f, 0f, schedule);
+
+        float momentum = (float)GradientOptions.InitialMomentum;
+        config = momentum == 0f
+            ? new Fused.FusedOptimizerConfig(
+                Tensors.Engines.Compilation.OptimizerType.SGD,
+                (float)GetCurrentLearningRate(),
+                0f, 0f, 0f, 0f, schedule)
+            : new Fused.FusedOptimizerConfig(
+                Tensors.Engines.Compilation.OptimizerType.SGDMomentum,
+                (float)GetCurrentLearningRate(),
+                momentum,           // Beta1 carries the momentum coefficient
+                0f, 0f, 0f, schedule);
         return true;
     }
 

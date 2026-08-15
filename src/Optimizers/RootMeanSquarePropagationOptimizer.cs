@@ -50,6 +50,14 @@ public class RootMeanSquarePropagationOptimizer<T, TInput, TOutput> : GradientBa
     {
         config = default;
         if (_options.UseAdaptiveLearningRate) return false;
+
+        // This optimizer's eager loop calls ApplyMomentum, and InitialMomentum defaults to 0.9, but
+        // the fused RMSprop kernel has no momentum term and there is no RMSprop+momentum kernel to
+        // dispatch to. Reporting RMSprop anyway would drop the momentum on the fused path only, so the
+        // same optimizer would train differently depending on which path ran. Decline instead and let
+        // the eager tape handle it — that is what the interface's per-instance fallback is for.
+        if (GradientOptions.InitialMomentum != 0.0) return false;
+
         if (!TryGetFusedLrSchedule(out var schedule)) return false;
         config = new Fused.FusedOptimizerConfig(
             Tensors.Engines.Compilation.OptimizerType.RMSprop,

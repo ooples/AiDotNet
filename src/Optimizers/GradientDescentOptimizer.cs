@@ -29,8 +29,41 @@ namespace AiDotNet.Optimizers;
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 [ComponentType(ComponentType.Optimizer)]
 [PipelineStage(PipelineStage.Training)]
-public class GradientDescentOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TInput, TOutput>
+public class GradientDescentOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TInput, TOutput>, Fused.IFusedOptimizerSpec
 {
+    /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// The optimize loop calls <c>ApplyMomentum</c> before updating, and <c>InitialMomentum</c>
+    /// defaults to 0.9, so this is SGD WITH MOMENTUM unless momentum is explicitly zero. It maps to
+    /// the <c>SGDMomentum</c> kernel accordingly, and to plain <c>SGD</c> only when momentum is 0 —
+    /// reporting plain SGD in both cases would drop the momentum on the fused path.
+    /// </para>
+    /// <para>
+    /// Declines when the learning rate adapts during training, since the fused plan bakes it in when
+    /// the plan is built.
+    /// </para>
+    /// </remarks>
+    bool Fused.IFusedOptimizerSpec.TryGetFusedOptimizerConfig(out Fused.FusedOptimizerConfig config)
+    {
+        config = default;
+        if (GradientOptions.UseAdaptiveLearningRate) return false;
+        if (!TryGetFusedLrSchedule(out var schedule)) return false;
+
+        float momentum = (float)GradientOptions.InitialMomentum;
+        config = momentum == 0f
+            ? new Fused.FusedOptimizerConfig(
+                Tensors.Engines.Compilation.OptimizerType.SGD,
+                (float)GetCurrentLearningRate(),
+                0f, 0f, 0f, 0f, schedule)
+            : new Fused.FusedOptimizerConfig(
+                Tensors.Engines.Compilation.OptimizerType.SGDMomentum,
+                (float)GetCurrentLearningRate(),
+                momentum,           // Beta1 carries the momentum coefficient
+                0f, 0f, 0f, schedule);
+        return true;
+    }
+
     /// <summary>
     /// Options specific to the Gradient Descent optimizer.
     /// </summary>
