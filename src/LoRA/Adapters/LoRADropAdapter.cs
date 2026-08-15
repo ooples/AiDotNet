@@ -167,7 +167,7 @@ public class LoRADropAdapter<T> : LoRAAdapterBase<T>
         _random = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomHelper.CreateSecureRandom();
 
         // Initialize dropout mask (will be regenerated on each forward pass during training)
-        int outputSize = GetOutputShape()[0];
+        int outputSize = GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0];
         _dropoutMask = new bool[outputSize];
     }
 
@@ -256,7 +256,7 @@ public class LoRADropAdapter<T> : LoRAAdapterBase<T>
     /// which is important for stable training and accurate predictions.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // Forward through base layer
         Tensor<T> baseOutput = _baseLayer.Forward(input);
@@ -299,36 +299,6 @@ public class LoRADropAdapter<T> : LoRAAdapterBase<T>
         Tensor<T> result = Engine.TensorAdd(baseOutput, loraOutput);
 
         return result;
-    }
-
-    /// <summary>
-    /// Updates parameter gradients from both layers (called by Backward).
-    /// </summary>
-    /// <remarks>
-    /// This is a helper method that collects gradients from the base and LoRA layers
-    /// into the unified parameter gradient vector. It respects the frozen state of the base layer.
-    /// </remarks>
-    private void UpdateParameterGradientsFromLayers()
-    {
-        ParameterGradients = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
-        int idx = 0;
-
-        // If base layer is not frozen, pack its gradients first
-        if (!_freezeBaseLayer)
-        {
-            Vector<T> baseGrads = _baseLayer.GetParameterGradients();
-            for (int i = 0; i < baseGrads.Length; i++)
-            {
-                ParameterGradients[idx++] = baseGrads[i];
-            }
-        }
-
-        // Pack LoRA gradients
-        Vector<T> loraGrads = _loraLayer.GetParameterGradients();
-        for (int i = 0; i < loraGrads.Length; i++)
-        {
-            ParameterGradients[idx++] = loraGrads[i];
-        }
     }
 
     /// <summary>
@@ -378,7 +348,7 @@ public class LoRADropAdapter<T> : LoRAAdapterBase<T>
 
         // Both DenseLayer and FullyConnectedLayer store parameters as [weights..., biases...]
         int inputSize = GetInputShape()[0];
-        int outputSize = GetOutputShape()[0];
+        int outputSize = GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0];
         int weightCount = inputSize * outputSize;
 
         // Create new parameters with merged weights

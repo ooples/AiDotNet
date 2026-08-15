@@ -47,7 +47,7 @@ namespace AiDotNet.TimeSeries.AnomalyDetection;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("DeepAnT: A Deep Learning Approach for Unsupervised Anomaly Detection in Time Series", "https://doi.org/10.1109/ACCESS.2018.2886457", Year = 2019, Authors = "Mohsin Munir, Shoaib Ahmed Siddiqui, Andreas Dengel, Sheraz Ahmed")]
-public class DeepANT<T> : TimeSeriesModelBase<T>
+public partial class DeepANT<T> : TimeSeriesModelBase<T>
 {
     private readonly DeepANTOptions<T> _options;
 
@@ -60,11 +60,14 @@ public class DeepANT<T> : TimeSeriesModelBase<T>
 
     // Fully connected layer (Tensor-based)
     private Tensor<T> _fcWeights;      // [1, numChannels]
+    [Buffer]
     private Vector<T> _trainingSeries = Vector<T>.Empty();
     private Tensor<T> _fcBias;         // [1]
 
     // Gradient accumulators for batch training
+    [Scratch]
     private Tensor<T> _fcWeightsGrad;
+    [Scratch]
     private Tensor<T> _fcBiasGrad;
 
     // Anomaly detection threshold
@@ -538,17 +541,8 @@ public class DeepANT<T> : TimeSeriesModelBase<T>
         return new DeepANT<T>(new DeepANTOptions<T>(_options), initializeModel: false);
     }
 
-    public override long ParameterCount
-    {
-        get
-        {
-            int count = 0;
-            foreach (var conv in _convLayers)
-                count += (int)conv.ParameterCount;
-            count += _fcWeights.Length + _fcBias.Length;
-            return count;
-        }
-    }
+    // ParameterCount restated a fold the base now derives from generated component registration.
+    // Removed under AIDN082.
 }
 
 /// <summary>
@@ -594,8 +588,48 @@ public class DeepANTOptions<T> : TimeSeriesRegressionOptions<T>
 /// Supports training via analytical Backward pass with stored kernel/bias gradients.
 /// Weights are initialized using Xavier/Glorot initialization.</para>
 /// </remarks>
-internal class ConvLayerTensor<T> : NeuralNetworks.Layers.LayerBase<T>
+// Rank 1 on BOTH sides, and the two axes are not the same axis - which is the whole content of this
+// declaration. The base constructor states it directly, `new[] { kernelSize }` in and
+// `new[] { outputChannels }` out, and ForwardTraced matches: it reads the input as a flat window via
+// `input.Length` / `inputSpan[pos + k]`, and allocates its result as
+// `new Tensor<T>(new[] { _outputChannels })`.
+//
+// The convolution positions never reach the output. `numPositions` is computed, ReLU'd into
+// _lastPreActivations for the backward pass, and then AVERAGED AWAY inside the same loop
+// (`outputSpan[outChannel] = channelSum * 1/numPositions`) - the global average pooling the summary
+// mentions. So there is no window relation to declare here; the window is entirely internal.
+[TensorLayout(TensorAxis.Time, Direction = TensorLayoutDirection.Input,
+    Note = "A flat time-series window; the layer reads it through input.Length.")]
+[TensorLayout(TensorAxis.Channels, Direction = TensorLayoutDirection.Output,
+    Note = "One globally-averaged value per output channel.")]
+[AutoParameters]
+internal partial class ConvLayerTensor<T> : NeuralNetworks.Layers.LayerBase<T>, IShapeContract
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// Hand-written rather than generated because the single axis CHANGES ROLE: Time goes in and
+    /// Channels comes out, so there is no <c>Same</c> to derive. <c>Fixed(_outputChannels)</c> reads
+    /// the field the forward allocates against, so a layer built with a different channel count
+    /// reports that count.
+    /// </para>
+    /// <para>
+    /// The <c>_outputChannels &lt;= 0</c> guard is not defensive padding: the internal
+    /// deserialization constructor deliberately leaves it at 0 until parameters are read back, and
+    /// <c>AxisRelation.Fixed</c> rejects a non-positive size. Declining until the layer is real beats
+    /// declaring a width of zero.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        if (inputRank != 1 || _outputChannels <= 0) return null;
+
+        return new[]
+        {
+            new OutputAxisContract(TensorAxis.Channels, AxisRelation.Fixed(_outputChannels)),
+        };
+    }
+
     private int _outputChannels;
     private int _kernelSize;
     private Tensor<T> _kernels;  // [outputChannels, kernelSize]
@@ -610,7 +644,6 @@ internal class ConvLayerTensor<T> : NeuralNetworks.Layers.LayerBase<T>
     private Tensor<T>? _kernelGradients;
     private Tensor<T>? _biasGradients;
 
-    public override long ParameterCount => _kernels.Length + _biases.Length;
     public override bool SupportsTraining => true;
 
     public ConvLayerTensor(int outputChannels, int kernelSize, int seed = 42)
@@ -643,7 +676,7 @@ internal class ConvLayerTensor<T> : NeuralNetworks.Layers.LayerBase<T>
         _biases = new Tensor<T>(new[] { 1 });
     }
 
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         _lastInput = input;
         var output = new Tensor<T>(new[] { _outputChannels });
@@ -711,14 +744,6 @@ internal class ConvLayerTensor<T> : NeuralNetworks.Layers.LayerBase<T>
         _lastPreActivations = null;
         _kernelGradients = null;
         _biasGradients = null;
-    }
-
-    public override Vector<T> GetParameters()
-    {
-        var p = new List<T>();
-        for (int i = 0; i < _kernels.Length; i++) p.Add(_kernels[i]);
-        for (int i = 0; i < _biases.Length; i++) p.Add(_biases[i]);
-        return new Vector<T>(p.ToArray());
     }
 
     public override void Serialize(BinaryWriter writer)

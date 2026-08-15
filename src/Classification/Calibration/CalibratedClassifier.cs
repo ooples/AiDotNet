@@ -9,6 +9,7 @@ using AiDotNet.Validation;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 
+using AiDotNet.Models.Parameters;
 namespace AiDotNet.Classification.Calibration;
 
 /// <summary>
@@ -53,9 +54,24 @@ namespace AiDotNet.Classification.Calibration;
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("Predicting Good Probabilities with Supervised Learning", "https://doi.org/10.1145/1102351.1102430")]
-public class CalibratedClassifier<T> : ProbabilisticClassifierBase<T>,
+public partial class CalibratedClassifier<T> : ProbabilisticClassifierBase<T>,
     IParameterizable<T, Matrix<T>, Vector<T>>
 {
+
+    /// <inheritdoc />
+    /// <remarks>All four calibration coefficients -- Platt A and B, then beta A and B. Registering the two Platt scalars by hand missed the beta pair and made a restore throw "Expected 2 parameters, got 4"; keeping the original packing cannot miss anything. PackParameters and UnpackParameters ARE the previous
+    /// GetParameters and SetParameters, renamed rather than rewritten, so the layout is
+    /// byte-for-byte unchanged. What changes is that the COUNT now folds this same
+    /// component instead of ClassifierBase's NumFeatures * NumClasses formula, which
+    /// described the classifier's shape rather than what it serializes.</remarks>
+    protected override void RegisterComponents()
+    {
+        RegisterParameterComponent(new VariableLengthParameterSource<T>(
+            () => PackParameters().Length,
+            PackParameters,
+            UnpackParameters));
+    }
+
     /// <summary>
     /// The base classifier being calibrated.
     /// </summary>
@@ -826,7 +842,7 @@ public class CalibratedClassifier<T> : ProbabilisticClassifierBase<T>,
     }
 
     /// <inheritdoc/>
-    public Vector<T> GetParameters()
+    private Vector<T> PackParameters()
     {
         // Return calibration parameters
         return new Vector<T>(new[]
@@ -841,7 +857,7 @@ public class CalibratedClassifier<T> : ProbabilisticClassifierBase<T>,
     }
 
     /// <inheritdoc/>
-    public void SetParameters(Vector<T> parameters)
+    private void UnpackParameters(Vector<T> parameters)
     {
         if (parameters.Length < 6)
         {
@@ -858,7 +874,7 @@ public class CalibratedClassifier<T> : ProbabilisticClassifierBase<T>,
     }
 
     /// <inheritdoc/>
-    public IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
+    public override IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
     {
         var newModel = Clone();
         if (newModel is CalibratedClassifier<T> calibrated)

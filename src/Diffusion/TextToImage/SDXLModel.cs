@@ -108,8 +108,17 @@ namespace AiDotNet.Diffusion.TextToImage;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("SDXL: Improving Latent Diffusion Models for High-Resolution Image Synthesis", "https://arxiv.org/abs/2307.01952", Year = 2023, Authors = "Podell et al.")]
-public class SDXLModel<T> : LatentDiffusionModelBase<T>
+public partial class SDXLModel<T> : LatentDiffusionModelBase<T>
 {
+    /// <inheritdoc />
+    /// <remarks>Registration order is serialization order, and matches the
+    /// concatenation the previous hand-written GetParameters performed.</remarks>
+    protected override void RegisterComponents()
+    {
+        RegisterParameterComponent(_unet);
+        RegisterParameterComponent(_vae);
+    }
+
     #region Constants
 
     /// <summary>
@@ -1077,58 +1086,11 @@ public class SDXLModel<T> : LatentDiffusionModelBase<T>
 
     #region IParameterizable Implementation
 
-    /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        // Combine parameters from U-Net and VAE
-        var unetParams = _unet.GetParameters();
-        var vaeParams = _vae.GetParameters();
 
-        var totalLength = unetParams.Length + vaeParams.Length;
-        var combined = new Vector<T>(totalLength);
 
-        for (int i = 0; i < unetParams.Length; i++)
-        {
-            combined[i] = unetParams[i];
-        }
 
-        for (int i = 0; i < vaeParams.Length; i++)
-        {
-            combined[unetParams.Length + i] = vaeParams[i];
-        }
-
-        return combined;
-    }
 
     /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        var unetCount = checked((int)_unet.ParameterCount);
-        var vaeCount = checked((int)_vae.ParameterCount);
-
-        if (parameters.Length != unetCount + vaeCount)
-            throw new ArgumentException($"Expected {unetCount + vaeCount} parameters, got {parameters.Length}.");
-
-        var unetParams = new Vector<T>(unetCount);
-        var vaeParams = new Vector<T>(vaeCount);
-
-        for (int i = 0; i < unetCount; i++)
-        {
-            unetParams[i] = parameters[i];
-        }
-
-        for (int i = 0; i < vaeCount; i++)
-        {
-            vaeParams[i] = parameters[unetCount + i];
-        }
-
-        _unet.SetParameters(unetParams);
-        _vae.SetParameters(vaeParams);
-    }
-
-    /// <inheritdoc />
-    public override long ParameterCount => _unet.ParameterCount + _vae.ParameterCount;
-
     #endregion
 
     #region ICloneable Implementation

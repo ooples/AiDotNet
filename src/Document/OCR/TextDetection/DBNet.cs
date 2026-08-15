@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Document.Interfaces;
 using AiDotNet.Document.Options;
 using AiDotNet.Enums;
@@ -53,7 +53,7 @@ namespace AiDotNet.Document.OCR.TextDetection;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Real-time Scene Text Detection with Differentiable Binarization", "https://doi.org/10.48550/arXiv.1911.08947", Year = 2020, Authors = "Minghui Liao, Zhaoyi Wan, Cong Yao, Kai Chen, Xiang Bai")]
-public class DBNet<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
+public partial class DBNet<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
 {
     private readonly DBNetOptions _options;
 
@@ -64,7 +64,7 @@ public class DBNet<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
 
     private readonly bool _useNativeMode;
     private readonly InferenceSession? _onnxSession;
-    private readonly IOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private readonly int _backboneChannels;
     private readonly int _innerChannels;
     private readonly double _expandRatio;
@@ -78,8 +78,11 @@ public class DBNet<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
     private readonly List<ILayer<T>> _thresholdHead = [];
 
     // Cached outputs for inspection
+    [Scratch]
     private Tensor<T>? _lastProbabilityMap;
+    [Scratch]
     private Tensor<T>? _lastThresholdMap;
+    [Scratch]
     private Tensor<T>? _lastBinaryMap;
 
     #endregion
@@ -132,7 +135,7 @@ public class DBNet<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
         double expandRatio = 1.5,
         double thresholdK = 50,
         int minTextArea = 16,
-        IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         DBNetOptions? options = null)
         : base(architecture, lossFunction ?? new BinaryCrossEntropyLoss<T>(), 1.0)
@@ -190,7 +193,7 @@ public class DBNet<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
         double expandRatio = 1.5,
         double thresholdK = 50,
         int minTextArea = 16,
-        IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         DBNetOptions? options = null)
         : base(architecture, lossFunction ?? new BinaryCrossEntropyLoss<T>(), 1.0)
@@ -663,42 +666,22 @@ public class DBNet<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
             throw new NotSupportedException("Training is not supported in ONNX inference mode.");
         }
 
-        SetTrainingMode(true);
-
-        TrainWithTape(input, expectedOutput);
-        var paramGradients = CollectParameterGradients();
-        UpdateParameters(paramGradients);
-        SetTrainingMode(false);}
-
-    /// <inheritdoc/>
-    public override void UpdateParameters(Vector<T> gradients)
-    {
-        if (!_useNativeMode)
-        {
-            throw new NotSupportedException("Parameter updates are not supported in ONNX inference mode.");
-        }
-
-        var currentParams = GetParameters();
-        T learningRate = NumOps.FromDouble(0.001);
-
-        currentParams = Engine.Subtract(currentParams, Engine.Multiply(gradients, learningRate));
-
-        SetParameters(currentParams);
+        // Delegate to the shared tape-training path (TrainWithTape via TrainCore): LSUV init,
+        // global gradient-norm clipping, and a single optimizer (Adam) step. The previous
+        // override called TrainWithTape — which already applies the optimizer update — and
+        // then applied a SECOND, hardcoded-LR (0.001) raw-SGD step using the STALE, unclipped
+        // per-layer gradients left on the layers. That double update (with the second step's
+        // gradients no longer matching the post-step weights, and no clipping) made the loss
+        // diverge instead of decrease (#1854). DBNet's paper (Liao et al. 2020) trains the
+        // probability/threshold detection maps with ordinary SGD/Adam backprop, so the shared
+        // trainer is the paper-faithful path.
+        base.Train(input, expectedOutput);
     }
 
-    private Vector<T> CollectParameterGradients()
-    {
-        var gradients = new List<T>();
-
-        foreach (var layer in Layers)
-        {
-            var layerGradients = layer.GetParameterGradients();
-            gradients.AddRange(layerGradients);
-        }
-
-        return new Vector<T>([.. gradients]);
-    }
-
+    /// <inheritdoc />
+    /// <remarks>The weights belong to the loaded graph in this mode. The base refuses
+    /// the write on every parameter surface, so the guard is stated once, here.</remarks>
+    protected override bool SupportsParameterMutation => _useNativeMode;
     #endregion
 
     #region Disposal

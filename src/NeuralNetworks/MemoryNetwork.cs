@@ -50,8 +50,9 @@ namespace AiDotNet.NeuralNetworks;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelInputShapeConstraint(ExactRank = 1)]
 [ResearchPaper("Memory Networks", "https://arxiv.org/abs/1410.3916", Year = 2015, Authors = "Jason Weston, Sumit Chopra, Antoine Bordes")]
-public class MemoryNetwork<T> : NeuralNetworkBase<T>
+public partial class MemoryNetwork<T> : SequenceModelLayoutBase<T>
 {
     private readonly MemoryNetworkOptions _options;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
@@ -139,6 +140,7 @@ public class MemoryNetwork<T> : NeuralNetworkBase<T>
     /// as they can store and retrieve information as needed throughout a sequence of operations.
     /// </para>
     /// </remarks>
+    [Buffer]
     private Matrix<T> _memory;
 
     /// <summary>
@@ -255,49 +257,8 @@ public class MemoryNetwork<T> : NeuralNetworkBase<T>
         }
     }
 
-    /// <summary>
-    /// Updates the parameters of all layers in the network using the provided parameter vector.
-    /// </summary>
-    /// <param name="parameters">A vector containing updated parameters for all layers.</param>
-    /// <remarks>
-    /// <para>
-    /// This method distributes the provided parameter values to each layer in the network. It extracts
-    /// the appropriate segment of the parameter vector for each layer based on the layer's parameter count.
-    /// This allows for updating the learned weights and biases in the network's layers after training.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method updates all the learnable values in the network's layers.
-    /// 
-    /// During training, a Memory Network learns many values (called parameters) that determine
-    /// how it processes information. These include:
-    /// - How to encode inputs
-    /// - How to determine which memory slots to access
-    /// - How to update memory with new information
-    /// - How to produce outputs based on memory and input
-    /// 
-    /// This method:
-    /// 1. Takes a long list of all these parameters
-    /// 2. Figures out which parameters belong to which layers
-    /// 3. Updates each layer with its corresponding parameters
-    /// 
-    /// Note that this updates the network's processing mechanisms but not the content of the memory itself.
-    /// The memory content is updated during normal operation through the memory write layers.
-    /// </para>
-    /// </remarks>
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        int startIndex = 0;
-        foreach (var layer in Layers)
-        {
-            int layerParameterCount = checked((int)layer.ParameterCount);
-            if (layerParameterCount > 0)
-            {
-                Vector<T> layerParameters = parameters.SubVector(startIndex, layerParameterCount);
-                layer.UpdateParameters(layerParameters);
-                startIndex += layerParameterCount;
-            }
-        }
-    }
-
+    // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
+    // exactly the same enumeration, so this said nothing the base does not already say.
     /// <summary>
     /// Processes input through the memory network to generate predictions.
     /// </summary>
@@ -350,10 +311,6 @@ public class MemoryNetwork<T> : NeuralNetworkBase<T>
 
     private Tensor<T> RunLayers(Tensor<T> input)
     {
-        // Ensure 2D input for memory operations (TensorMatMul requires rank >= 2)
-        if (input.Rank == 1)
-            input = input.Reshape([1, input.Shape[0]]);
-
         // Convert memory matrix to tensor for memory-augmented layers
         var memoryTensor = Tensor<T>.FromMatrix(_memory);
 
@@ -364,11 +321,21 @@ public class MemoryNetwork<T> : NeuralNetworkBase<T>
         {
             if (layer is MemoryReadLayer<T> memoryReadLayer)
             {
+                // A custom architecture may start directly with a memory operation. The default
+                // architecture starts with an embedding, where preserving rank-1 token IDs is
+                // essential: EmbeddingLayer promotes them to the rank-2 matrix these operations
+                // need. Reshaping before the embedding creates rank 3 downstream.
+                if (current.Rank == 1)
+                    current = current.Reshape([1, current.Shape[0]]);
+
                 // MemoryReadLayer computes attention and reads from memory internally
                 current = memoryReadLayer.Forward(current, memoryTensor);
             }
             else if (layer is MemoryWriteLayer<T> memoryWriteLayer)
             {
+                if (current.Rank == 1)
+                    current = current.Reshape([1, current.Shape[0]]);
+
                 // MemoryWriteLayer updates memory based on input
                 current = memoryWriteLayer.Forward(current, memoryTensor);
             }

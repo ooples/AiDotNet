@@ -56,7 +56,7 @@ namespace AiDotNet.NeuralNetworks
     [ModelComplexity(ModelComplexity.Low)]
     [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     [ResearchPaper("Efficient Estimation of Word Representations in Vector Space", "https://arxiv.org/abs/1301.3781", Year = 2013, Authors = "Tomas Mikolov, Kai Chen, Greg Corrado, Jeffrey Dean")]
-    public class Word2Vec<T> : NeuralNetworkBase<T>, IEmbeddingModel<T>
+    public class Word2Vec<T> : TextEmbeddingModelLayoutBase<T>, IEmbeddingModel<T>
     {
         private readonly Word2VecOptions _options;
 
@@ -312,30 +312,8 @@ namespace AiDotNet.NeuralNetworks
             return output;
         }
 
-        /// <summary>
-        /// Updates the parameters of all layers in the network based on a provided update vector.
-        /// </summary>
-        /// <param name="parameters">A vector containing updated weights and biases.</param>
-        /// <remarks>
-        /// <b>For Beginners:</b> After we figure out how to improve (the backward pass), this method 
-        /// actually changes the model's settings. It's like turning the knobs on a machine to fine-tune its 
-        /// performance.
-        /// </remarks>
-        public override void UpdateParameters(Vector<T> parameters)
-        {
-            int index = 0;
-            foreach (var layer in Layers)
-            {
-                int layerParameterCount = checked((int)layer.ParameterCount);
-                if (layerParameterCount > 0)
-                {
-                    var layerParameters = parameters.Slice(index, layerParameterCount);
-                    layer.UpdateParameters(layerParameters);
-                    index += layerParameterCount;
-                }
-            }
-        }
-
+    // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
+    // exactly the same enumeration, so this said nothing the base does not already say.
         /// <inheritdoc/>
         /// <remarks>
         /// <b>For Beginners:</b> This is identical to the Forward pass—it takes word IDs and 

@@ -74,7 +74,7 @@ namespace AiDotNet.Classification.Meta;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("Stacked Generalization", "https://doi.org/10.1016/S0893-6080(05)80023-1", Year = 1992, Authors = "David H. Wolpert")]
-public class StackingClassifier<T> : MetaClassifierBase<T>
+public partial class StackingClassifier<T> : MetaClassifierBase<T>
 {
     /// <summary>
     /// Initializes a new instance with default settings using Gaussian Naive Bayes estimators.

@@ -21,6 +21,8 @@ public class ConvolutionalLayersIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task ConvolutionalLayer_Forward_ProducesValidOutput()
     {
+        await Task.Yield();
+
         // Arrange: 3 channels, 8x8 image, 16 filters, 3x3 kernel
         var layer = new ConvolutionalLayer<double>(
             outputDepth: 16, kernelSize: 3, stride: 1, padding: 1);
@@ -38,6 +40,35 @@ public class ConvolutionalLayersIntegrationTests
         Assert.Equal(8, output.Shape[1]);  // height
         Assert.Equal(8, output.Shape[2]);  // width
         AssertNoNaNOrInf(output);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task ConvolutionalLayer_ReusedInstancePreservesEarlierOutput()
+    {
+        await Task.Yield();
+
+        var layer = new ConvolutionalLayer<double>(
+            outputDepth: 2, kernelSize: 3, stride: 1, padding: 1);
+        var firstInput = new Tensor<double>([1, 4, 4]);
+        var secondInput = new Tensor<double>([1, 4, 4]);
+        for (int i = 0; i < firstInput.Length; i++)
+        {
+            firstInput[i] = 1d;
+            secondInput[i] = -1d;
+        }
+
+        var firstOutput = layer.Forward(firstInput);
+        var firstSnapshot = firstOutput.Clone();
+        var secondOutput = layer.Forward(secondInput);
+
+        bool outputsDiffer = false;
+        for (int i = 0; i < firstOutput.Length; i++)
+        {
+            Assert.Equal(firstSnapshot[i], firstOutput[i], Tolerance);
+            outputsDiffer |= Math.Abs(firstSnapshot[i] - secondOutput[i]) > Tolerance;
+        }
+
+        Assert.True(outputsDiffer, "The second input must exercise a distinct convolution result.");
     }
 
     [Fact(Timeout = 120000)]

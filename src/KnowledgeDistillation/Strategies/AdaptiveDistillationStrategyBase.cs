@@ -191,7 +191,10 @@ public abstract class AdaptiveDistillationStrategyBase<T>
             // Both ∂L/∂T and ∂T/∂z_k are computed numerically so this works
             // correctly for ALL subclass temperature mappings (accuracy, entropy,
             // confidence) without assuming any specific formula.
-            double eps = 1e-5;
+            // A 1e-5 step is below the useful resolution of the float-valued loss and
+            // produces a noisy temperature-chain derivative. Keep the tighter step for
+            // double while using a representable central difference for float.
+            double eps = typeof(T) == typeof(float) ? 1e-3 : 1e-5;
 
             // ∂L/∂T: perturb temperature
             var studentSoftPlus = DistillationHelper<T>.Softmax(studentOutput, adaptiveTemp + eps);

@@ -59,7 +59,7 @@ namespace AiDotNet.Finance.Forecasting.Transformers;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("A Time Series is Worth 64 Words: Long-term Forecasting with Transformers", "https://arxiv.org/abs/2211.14730", Year = 2023, Authors = "Yuqi Nie, Nam H. Nguyen, Phanwadee Sinthong, Jayant Kalagnanam")]
-public class PatchTST<T> : ForecastingModelBase<T>
+public partial class PatchTST<T> : ForecastingModelBase<T>
 {
     #region Native Mode Fields
 
@@ -86,16 +86,19 @@ public class PatchTST<T> : ForecastingModelBase<T>
     /// <summary>
     /// Positional encoding for patches.
     /// </summary>
+    [Buffer]
     private Tensor<T>? _positionalEncoding;
 
     /// <summary>
     /// Instance normalization mean (for RevIN).
     /// </summary>
+    [Scratch]
     private Tensor<T>? _instanceMean;
 
     /// <summary>
     /// Instance normalization standard deviation (for RevIN).
     /// </summary>
+    [Scratch]
     private Tensor<T>? _instanceStd;
 
     #endregion
@@ -401,6 +404,28 @@ public class PatchTST<T> : ForecastingModelBase<T>
             // Initialize positional encoding
             int numPatches = CalculateNumPatches();
             _positionalEncoding = CreatePositionalEncoding(numPatches, _modelDimension);
+
+            // PatchTST knows every native layer shape at construction time. Resolve the
+            // otherwise-lazy Dense/Transformer chain now so the first user forecast runs
+            // through exactly the same materialized graph as every later forecast. Leaving
+            // resolution inside the first Forward produced a repeatable one-ULP first-call
+            // drift in float (the second and third calls were bit-identical), violating the
+            // deterministic inference contract even though weights never changed.
+            ResolveNativeLayerShapes(numPatches);
+        }
+    }
+
+    private void ResolveNativeLayerShapes(int numPatches)
+    {
+        int[] currentShape = [numPatches, _patchSize];
+        foreach (var layer in Layers)
+        {
+            if (layer is LayerBase<T> layerBase && !layerBase.IsShapeResolved)
+            {
+                layerBase.ResolveFromShape(currentShape);
+            }
+
+            currentShape = layer.GetOutputShape();
         }
     }
 
@@ -542,40 +567,8 @@ public class PatchTST<T> : ForecastingModelBase<T>
         SetTrainingMode(false);
     }
 
-    /// <summary>
-    /// Updates the model's parameters from a flat parameter vector.
-    /// </summary>
-    /// <param name="parameters">A vector containing all parameters for all layers.</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Neural networks have many parameters (weights and biases)
-    /// that determine how they process data. This method allows you to set all these
-    /// parameters at once from a single flattened vector.
-    /// </para>
-    /// <para>
-    /// This is useful for:
-    /// <list type="bullet">
-    /// <item>Loading saved model parameters</item>
-    /// <item>Applying parameters from external optimization algorithms</item>
-    /// <item>Ensemble methods that combine parameters from multiple models</item>
-    /// </list>
-    /// </para>
-    /// </remarks>
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        if (parameters is null)
-            throw new ArgumentNullException(nameof(parameters));
-
-        int offset = 0;
-        foreach (var layer in Layers)
-        {
-            var layerParams = layer.GetParameters();
-            var newParams = parameters.Slice(offset, layerParams.Length);
-            layer.SetParameters(newParams);
-            offset += layerParams.Length;
-        }
-    }
-
+    // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
+    // exactly the same enumeration, so this said nothing the base does not already say.
     /// <summary>
     /// Gets metadata about the model for serialization and inspection.
     /// </summary>

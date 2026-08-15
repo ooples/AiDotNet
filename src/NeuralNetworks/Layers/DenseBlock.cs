@@ -52,8 +52,70 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Convolution)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 3, Cost = ComputeCost.High, TestInputShape = "4, 8, 8", TestConstructorArgs = "4, 3")]
-public class DenseBlock<T> : LayerBase<T>, ILayerSerializationExtras<T>
+// Both ranks come from OnFirstForward naming them itself - "requires rank-3 [C,H,W] or rank-4
+// [B,C,H,W] input" - and rejecting everything else. The concatenation helper picks its channel axis the
+// same way ("a.Shape.Length == 4 ? 1 : 0"), so the output keeps the rank it was given.
+[TensorLayout(TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Output)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Output)]
+[AutoParameters]
+public partial class DenseBlock<T> : LayerBase<T>, ILayerSerializationExtras<T>, IShapeContract
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// From this layer's own <c>ResolveShapes(new[] { channels, height, width },
+    /// new[] { channels + _numLayers * _growthRate, height, width })</c> in
+    /// <see cref="OnFirstForward"/>. The spatial extent survives because every inner
+    /// <see cref="DenseBlockLayer{T}"/> is same-padded, and the channel count GROWS BY A CONSTANT: the
+    /// block concatenates the input with one growth-rate slab per layer, so the increase depends on
+    /// the block's configuration and not at all on how many channels arrived.
+    /// </para>
+    /// <para>
+    /// FIXED WOULD BE WRONG HERE, and that is the point worth recording. The output channel count is
+    /// <c>in + numLayers*growthRate</c>, not a constant - a DenseNet block is defined by what it ADDS.
+    /// Freezing the sum observed at one input width would make the contract right for exactly one
+    /// upstream layer and silently wrong for every other.
+    /// </para>
+    /// <para>
+    /// An additive offset looks like it needs a form the vocabulary does not have. It does not:
+    /// with stride 1 and dilation 1 the window formula reduces to <c>in + 2*padding - (kernel-1)</c>,
+    /// which reaches any non-negative offset. An even offset uses <c>kernel: 1</c> and half the offset
+    /// as padding; an odd one uses <c>kernel: 2</c>, whose extra <c>-1</c> absorbs the parity. That is
+    /// the same identity <c>CroppingLayer</c> uses to express a constant trim, run in the other
+    /// direction.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        if (_numLayers <= 0 || _growthRate <= 0) return null;
+
+        int added = _numLayers * _growthRate;
+        // Encode "in + added" as a window: even offsets need no parity correction, odd ones borrow
+        // the -(kernel-1) term to supply it.
+        var grow = (added % 2 == 0)
+            ? AxisRelation.Window(TensorAxis.Channels, kernel: 1, stride: 1, padding: added / 2)
+            : AxisRelation.Window(TensorAxis.Channels, kernel: 2, stride: 1, padding: (added + 1) / 2);
+
+        var channels = new OutputAxisContract(TensorAxis.Channels, grow);
+        OutputAxisContract Pass(TensorAxis a) => new(a, AxisRelation.Same(a));
+
+        return inputRank switch
+        {
+            3 => new[] { channels, Pass(TensorAxis.Height), Pass(TensorAxis.Width) },
+            4 => new[]
+            {
+                Pass(TensorAxis.Batch), channels, Pass(TensorAxis.Height), Pass(TensorAxis.Width),
+            },
+            _ => null,
+        };
+    }
+
     private readonly List<DenseBlockLayer<T>> _layers;
     private readonly int _numLayers;
     private readonly int _growthRate;
@@ -65,10 +127,6 @@ public class DenseBlock<T> : LayerBase<T>, ILayerSerializationExtras<T>
     // GPU cached tensors for backward pass
     private List<Tensor<T>>? _gpuFeatureMaps;
 
-    /// <summary>
-    /// Gets a value indicating whether this layer supports training.
-    /// </summary>
-    public override long ParameterCount => (int)_layers.Sum(l => l.ParameterCount);
     public override bool SupportsTraining => true;
 
     public override Vector<T> GetParameterGradients()
@@ -207,7 +265,7 @@ public class DenseBlock<T> : LayerBase<T>, ILayerSerializationExtras<T>
     /// </summary>
     /// <param name="input">The input tensor [B, C, H, W].</param>
     /// <returns>The output tensor with all layer outputs concatenated.</returns>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // Lazy gate — drives inner-layer shape resolution so any
         // Deserialize-buffered parameters get a chance to be replayed
@@ -282,33 +340,6 @@ public class DenseBlock<T> : LayerBase<T>, ILayerSerializationExtras<T>
         {
             layer.UpdateParameters(learningRate);
         }
-    }
-
-    /// <summary>
-    /// Gets all trainable parameters from the block.
-    /// </summary>
-    public override Vector<T> GetParameters()
-    {
-        return new Vector<T>(_layers.SelectMany(l => l.GetParameters().ToArray()).ToArray());
-    }
-
-    /// <summary>
-    /// Sets all trainable parameters from the given parameter vector.
-    /// </summary>
-    /// <param name="parameters">The parameter vector containing all layer parameters.</param>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        // Pre-Forward: inner layers' shapes haven't been resolved, so
-        // their slice lengths are wrong. Buffer the full vector and
-        // replay from OnFirstForward, after each inner DenseBlockLayer
-        // has a chance to lock in its own input channel count.
-        if (!IsShapeResolved)
-        {
-            _pendingParameters = parameters;
-            return;
-        }
-
-        ApplyParameters(parameters);
     }
 
     private Vector<T>? _pendingParameters;

@@ -48,7 +48,7 @@ namespace AiDotNet.Video.Motion;
     "https://arxiv.org/abs/2303.08340",
     Year = 2023,
     Authors = "Xiaoyu Shi, Zhaoyang Huang, Weikang Bian, Dasong Li, Manyuan Zhang, Ka Chun Cheung, Simon See, Hongwei Qin, Jifeng Dai, Hongsheng Li")]
-public class VideoFlow<T> : OpticalFlowBase<T>
+public partial class VideoFlow<T> : OpticalFlowBase<T>
 {
     private readonly VideoFlowOptions _options;
 
@@ -168,15 +168,21 @@ public class VideoFlow<T> : OpticalFlowBase<T>
         var rawFlow = _outputConv.Forward(feat);
 
         // Extract 2-channel flow field
-        var flow = new Tensor<T>([2, height, width]);
-        if (rawFlow.Length < flow.Length)
-            throw new InvalidOperationException($"Raw flow output ({rawFlow.Length} elements) is smaller than expected flow field ({flow.Length} elements).");
-        for (int i = 0; i < flow.Length; i++)
+        // The output convolution already emits exactly 2 channels at the input resolution
+        // (ConvolutionalLayer(2, kernel 3, stride 1, padding 1)), so rawFlow IS the flow field. The
+        // element-by-element Data.Span copy this replaced was a numeric no-op that severed the
+        // autodiff tape at the end of the forward pass, discarding the gradient path for the whole
+        // network behind it. Returning the tensor directly is bit-identical; the guard is kept so a
+        // layer misconfiguration still fails loudly instead of silently yielding a wrong-shaped field.
+        int expectedLength = 2 * height * width;
+        if (rawFlow.Length < expectedLength)
         {
-            flow.Data.Span[i] = rawFlow.Data.Span[i];
+            throw new InvalidOperationException(
+                $"Raw flow output ({rawFlow.Length} elements) is smaller than the expected flow field " +
+                $"({expectedLength} elements for 2x{height}x{width}).");
         }
 
-        return flow;
+        return rawFlow;
     }
 
     /// <inheritdoc/>
@@ -193,41 +199,7 @@ public class VideoFlow<T> : OpticalFlowBase<T>
         }
     }
 
-    /// <inheritdoc/>
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        int required = 0;
-        if (_featureExtract is not null) required += _featureExtract.GetParameters().Length;
-        foreach (var block in _processingBlocks) required += block.GetParameters().Length;
-        if (_outputConv is not null) required += _outputConv.GetParameters().Length;
-        if (parameters.Length < required)
-            throw new ArgumentException($"Parameter vector length {parameters.Length} is less than required {required}.", nameof(parameters));
-        int offset = 0;
-        if (_featureExtract is not null)
-        {
-            var p = _featureExtract.GetParameters();
-            var sub = new Vector<T>(p.Length);
-            for (int i = 0; i < p.Length; i++) sub[i] = parameters[offset + i];
-            _featureExtract.SetParameters(sub);
-            offset += p.Length;
-        }
-        foreach (var block in _processingBlocks)
-        {
-            var p = block.GetParameters();
-            var sub = new Vector<T>(p.Length);
-            for (int i = 0; i < p.Length; i++) sub[i] = parameters[offset + i];
-            block.SetParameters(sub);
-            offset += p.Length;
-        }
-        if (_outputConv is not null)
-        {
-            var p = _outputConv.GetParameters();
-            var sub = new Vector<T>(p.Length);
-            for (int i = 0; i < p.Length; i++) sub[i] = parameters[offset + i];
-            _outputConv.SetParameters(sub);
-        }
-    }
-
+    // UpdateParameters restated the base verbatim; ModelBase routes it to SetParameters.
     /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()
     {

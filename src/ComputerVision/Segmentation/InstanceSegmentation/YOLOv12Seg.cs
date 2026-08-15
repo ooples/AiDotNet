@@ -57,40 +57,51 @@ namespace AiDotNet.ComputerVision.Segmentation.InstanceSegmentation;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("YOLOv12: Attention-Centric Real-Time Object Detectors", "https://arxiv.org/abs/2502.12524", Year = 2025, Authors = "Yunjie Tian, Qixiang Ye, David Doermann")]
-public class YOLOv12Seg<T> : NeuralNetworkBase<T>, IInstanceSegmentation<T>
+public class YOLOv12Seg<T> : Common.InstanceSegmentationBase<T>
 {
     private readonly YOLOv12SegOptions _options;
     public override ModelOptions GetOptions() => _options;
 
     #region Fields
-    private int _height, _width, _channels, _numClasses;
+    // Only YOLOv12Seg's OWN configuration lives here. _height, _width, _channels, _numClasses,
+    // _useNativeMode, _onnxModelPath, _onnxSession, _optimizer, _disposed and _encoderLayerEnd all
+    // come from InstanceSegmentationBase -> SegmentationModelBase, as do MaxInstances,
+    // ConfidenceThreshold and NmsThreshold.
     private YOLOv12SegModelSize _modelSize;
     private int[] _channelDims;
     private int _decoderDim;
     private int[] _depths;
     private double _dropRate;
-    private bool _useNativeMode;
-    private string? _onnxModelPath;
-    private InferenceSession? _onnxSession;
-    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
-    private bool _disposed;
-    private int _encoderLayerEnd;
     #endregion
 
     #region Properties
+    // SupportsTraining, NumClasses, InputHeight, InputWidth and IsOnnxMode are inherited from
+    // SegmentationModelBase and say exactly the same thing, so re-declaring them here would only
+    // create two sources of one fact.
+    internal bool UseNativeMode => _useNativeMode;
+    internal YOLOv12SegModelSize ModelSize => _modelSize;
+    #endregion
+
     /// <summary>
-    /// Gets whether this YOLOv12Seg instance supports training.
+    /// Creates the paper-faithful default optimizer: AdamW with lr=1e-4.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// <b>For Beginners:</b> Returns <c>true</c> in native mode, <c>false</c> in ONNX mode.
+    /// The Ultralytics YOLOv8/YOLOv12 reference uses lr0=0.01 with cosine decay to lrf=0.01
+    /// (i.e., minimum lr = 1e-4 by end of training); for short-horizon memorization-style
+    /// training on a single fixed batch the constant 1e-4 baseline is what the schedule
+    /// eventually reaches, and avoids the optimizer-bouncing divergence seen at the framework
+    /// default (lr=1e-3) where 200-iter loss exceeds 50-iter loss. Overriding the base's
+    /// CreateDefaultOptimizer is how that default survives re-parenting.
     /// </para>
     /// </remarks>
-    public override bool SupportsTraining => _useNativeMode;
-    internal bool UseNativeMode => _useNativeMode;
-    internal YOLOv12SegModelSize ModelSize => _modelSize;
-    internal int NumClasses => _numClasses;
-    #endregion
+    protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreateDefaultOptimizer()
+        => new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new AiDotNet.Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = 1e-4
+            });
 
     #region Constructors
     /// <summary>
@@ -127,29 +138,35 @@ public class YOLOv12Seg<T> : NeuralNetworkBase<T>, IInstanceSegmentation<T>
         // MoreData_ShouldNotDegrade invariant catches. Callers training on
         // real ground-truth masks pass their own multi-component loss via
         // the lossFunction parameter.
-        : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>())
+        // The base resolves height/width/channels/numClasses/native-mode from the architecture,
+        // which is exactly what the deleted lines below used to do by hand. `optimizer` is passed
+        // straight through - INCLUDING null; the base defaults it lazily via CreateDefaultOptimizer(),
+        // overridden above to keep this model's lr=1e-4 AdamW. The MSE default loss is preserved
+        // explicitly because the base would otherwise default to CrossEntropyWithLogitsLoss.
+        : base(architecture, optimizer, lossFunction ?? new MeanSquaredErrorLoss<T>(), numClasses)
     {
         _options = options ?? new YOLOv12SegOptions(); Options = _options;
-        _height = architecture.InputHeight > 0 ? architecture.InputHeight : 640;
-        _width = architecture.InputWidth > 0 ? architecture.InputWidth : 640;
-        _channels = architecture.InputDepth > 0 ? architecture.InputDepth : 3;
-        _numClasses = numClasses; _modelSize = modelSize; _dropRate = dropRate;
-        _useNativeMode = true; _onnxModelPath = null;
-        // Paper-faithful default optimizer: AdamW with lr=1e-4. The Ultralytics
-        // YOLOv8/YOLOv12 reference uses lr0=0.01 with cosine decay to lrf=0.01
-        // (i.e., minimum lr = 1e-4 by end of training); for short-horizon
-        // memorization-style training on a single fixed batch the constant
-        // 1e-4 baseline is what the schedule eventually reaches, and avoids
-        // the optimizer-bouncing divergence seen at the framework default
-        // (lr=1e-3) where 200-iter loss exceeds 50-iter loss.
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
-            this,
-            new AiDotNet.Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
-            {
-                InitialLearningRate = 1e-4
-            });
+        ApplyYoloInputFallback(architecture);
+        _modelSize = modelSize; _dropRate = dropRate;
         (_channelDims, _depths, _decoderDim) = GetModelConfig(modelSize);
         InitializeLayers();
+    }
+
+    /// <summary>
+    /// Re-applies YOLOv12-Seg's 640x640 fallback for architectures that carry no input geometry.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// SegmentationModelBase falls back to 512x512 when the architecture supplies no input height
+    /// or width. Every YOLO variant is trained and exported at 640x640, so that fallback is
+    /// restored here for the unset case only - when the architecture does specify dimensions, the
+    /// base's value already matches and nothing changes.
+    /// </para>
+    /// </remarks>
+    private void ApplyYoloInputFallback(NeuralNetworkArchitecture<T> architecture)
+    {
+        if (architecture.InputHeight <= 0) _height = 640;
+        if (architecture.InputWidth <= 0) _width = 640;
     }
 
     /// <summary>
@@ -171,39 +188,21 @@ public class YOLOv12Seg<T> : NeuralNetworkBase<T>, IInstanceSegmentation<T>
     public YOLOv12Seg(NeuralNetworkArchitecture<T> architecture, string onnxModelPath,
         int numClasses = 80, YOLOv12SegModelSize modelSize = YOLOv12SegModelSize.N,
         YOLOv12SegOptions? options = null)
-        // ONNX path — loss is unused (no native training) but kept consistent
-        // with the native ctor for any round-trip / serialization checks.
-        : base(architecture, new MeanSquaredErrorLoss<T>())
+        // The base's ONNX constructor already validates the path, sets ONNX mode, resolves the input
+        // geometry and opens the InferenceSession - the same lines this used to repeat.
+        : base(architecture, onnxModelPath, numClasses)
     {
         _options = options ?? new YOLOv12SegOptions(); Options = _options;
-        if (string.IsNullOrWhiteSpace(onnxModelPath))
-            throw new ArgumentException("ONNX model path cannot be null or empty.", nameof(onnxModelPath));
-        if (!File.Exists(onnxModelPath))
-            throw new FileNotFoundException($"YOLOv12Seg ONNX model not found: {onnxModelPath}");
-        _height = architecture.InputHeight > 0 ? architecture.InputHeight : 640;
-        _width = architecture.InputWidth > 0 ? architecture.InputWidth : 640;
-        _channels = architecture.InputDepth > 0 ? architecture.InputDepth : 3;
-        _numClasses = numClasses; _modelSize = modelSize; _dropRate = 0;
-        _useNativeMode = false; _onnxModelPath = onnxModelPath; _optimizer = null;
+        ApplyYoloInputFallback(architecture);
+        _modelSize = modelSize; _dropRate = 0;
         (_channelDims, _depths, _decoderDim) = GetModelConfig(modelSize);
-        try { _onnxSession = new InferenceSession(onnxModelPath); }
-        catch (Exception ex) { throw new InvalidOperationException($"Failed to load YOLOv12Seg ONNX model: {ex.Message}", ex); }
         InitializeLayers();
     }
     #endregion
 
     #region Public Methods
-    /// <summary>
-    /// Runs a forward pass to produce segmentation logits.
-    /// </summary>
-    /// <param name="input">The input tensor [C, H, W] or [B, C, H, W].</param>
-    /// <returns>Segmentation logits tensor.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Pass an image to get a per-pixel class prediction map.
-    /// </para>
-    /// </remarks>
-    protected override Tensor<T> PredictCore(Tensor<T> input) => _useNativeMode ? Forward(input) : PredictOnnx(input);
+    // PredictCore is inherited from SegmentationModelBase and dispatches to Forward / PredictOnnx
+    // exactly as the deleted override did.
 
     /// <summary>
     /// Performs one training step.
@@ -222,7 +221,9 @@ public class YOLOv12Seg<T> : NeuralNetworkBase<T>, IInstanceSegmentation<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expectedOutput);
+            // Passes this model's optimizer explicitly - the base Train() would let
+            // NeuralNetworkBase pick its own, losing the lr=1e-4 AdamW default.
+            TrainWithTape(input, expectedOutput, Optimizer);
         }
         finally
         {
@@ -242,7 +243,7 @@ public class YOLOv12Seg<T> : NeuralNetworkBase<T>, IInstanceSegmentation<T>
         _ => ([16, 32, 64, 128], [1, 2, 2, 1], 64)
     };
 
-    private Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> Forward(Tensor<T> input)
     {
         bool hasBatch = input.Rank == 4; if (!hasBatch) input = AddBatchDimension(input);
         var features = input;
@@ -251,7 +252,7 @@ public class YOLOv12Seg<T> : NeuralNetworkBase<T>, IInstanceSegmentation<T>
         if (!hasBatch) features = RemoveBatchDimension(features); return features;
     }
 
-    private Tensor<T> PredictOnnx(Tensor<T> input)
+    protected override Tensor<T> PredictOnnx(Tensor<T> input)
     {
         if (_onnxSession is null) throw new InvalidOperationException("ONNX session is not initialized.");
         bool hasBatch = input.Rank == 4; if (!hasBatch) input = AddBatchDimension(input);
@@ -268,19 +269,7 @@ public class YOLOv12Seg<T> : NeuralNetworkBase<T>, IInstanceSegmentation<T>
         if (!hasBatch) result = RemoveBatchDimension(result); return result;
     }
 
-    private Tensor<T> AddBatchDimension(Tensor<T> tensor)
-    { var result = new Tensor<T>([1, tensor.Shape[0], tensor.Shape[1], tensor.Shape[2]]); tensor.Data.Span.CopyTo(result.Data.Span); return result; }
-
-    private Tensor<T> RemoveBatchDimension(Tensor<T> tensor)
-    {
-        int[] s = new int[tensor.Shape.Length - 1];
-        for (int i = 0; i < s.Length; i++)
-            s[i] = tensor.Shape[i + 1];
-
-        var r = new Tensor<T>(s);
-        tensor.Data.Span.CopyTo(r.Data.Span);
-        return r;
-    }
+    // AddBatchDimension and RemoveBatchDimension are inherited from SegmentationModelBase.
     #endregion
 
     #region Abstract Implementation
@@ -308,34 +297,8 @@ public class YOLOv12Seg<T> : NeuralNetworkBase<T>, IInstanceSegmentation<T>
         }
     }
 
-    /// <summary>
-    /// Updates all trainable parameters from a flat parameter vector.
-    /// </summary>
-    /// <param name="parameters">Flat vector of all model parameters.</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Replaces all model weights with new values.
-    /// </para>
-    /// </remarks>
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        int offset = 0;
-        foreach (var layer in Layers)
-        {
-            var p = layer.GetParameters();
-            int count = p.Length;
-            if (offset + count <= parameters.Length)
-            {
-                var slice = new Vector<T>(count);
-                for (int i = 0; i < count; i++)
-                    slice[i] = parameters[offset + i];
-
-                layer.UpdateParameters(slice);
-                offset += count;
-            }
-        }
-    }
-
+    // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
+    // exactly the same enumeration, so this said nothing the base does not already say.
     /// <summary>
     /// Collects metadata describing this model's configuration.
     /// </summary>
@@ -402,47 +365,21 @@ public class YOLOv12Seg<T> : NeuralNetworkBase<T>, IInstanceSegmentation<T>
     /// </para>
     /// </remarks>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() => _useNativeMode
-        ? new YOLOv12Seg<T>(Architecture, _optimizer, LossFunction, _numClasses, _modelSize, _dropRate, _options)
+        ? new YOLOv12Seg<T>(Architecture, Optimizer, LossFunction, _numClasses, _modelSize, _dropRate, _options)
         : new YOLOv12Seg<T>(Architecture, _onnxModelPath ?? throw new InvalidOperationException("ONNX model path not initialized."), _numClasses, _modelSize, _options);
 
-    /// <summary>
-    /// Releases managed resources including the ONNX inference session.
-    /// </summary>
-    /// <param name="disposing">True when called from Dispose().</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Frees memory used by the ONNX runtime.
-    /// </para>
-    /// </remarks>
-    protected override void Dispose(bool disposing)
-    { if (!_disposed) { if (disposing) { _onnxSession?.Dispose(); _onnxSession = null; } _disposed = true; } base.Dispose(disposing); }
+    // Dispose is inherited from SegmentationModelBase, which already disposes the ONNX session.
+    // YOLOv12Seg owns no further unmanaged resources.
     #endregion
 
     #region IInstanceSegmentation Implementation
 
-    private double _confidenceThreshold = 0.5;
-    private double _nmsThreshold = 0.5;
+    // NumClasses, InputHeight, InputWidth, IsOnnxMode and Segment come from SegmentationModelBase;
+    // MaxInstances (default 100), ConfidenceThreshold (0.5) and NmsThreshold (0.5) come from
+    // InstanceSegmentationBase with the same defaults these explicit implementations hard-coded.
 
-    int ISegmentationModel<T>.NumClasses => _numClasses;
-    int ISegmentationModel<T>.InputHeight => _height;
-    int ISegmentationModel<T>.InputWidth => _width;
-    bool ISegmentationModel<T>.IsOnnxMode => !_useNativeMode;
-    Tensor<T> ISegmentationModel<T>.Segment(Tensor<T> image) => Predict(image);
-    int IInstanceSegmentation<T>.MaxInstances => 100;
-
-    double IInstanceSegmentation<T>.ConfidenceThreshold
-    {
-        get => _confidenceThreshold;
-        set => _confidenceThreshold = value;
-    }
-
-    double IInstanceSegmentation<T>.NmsThreshold
-    {
-        get => _nmsThreshold;
-        set => _nmsThreshold = value;
-    }
-
-    InstanceSegmentationResult<T> IInstanceSegmentation<T>.DetectInstances(Tensor<T> image)
+    /// <inheritdoc/>
+    public override InstanceSegmentationResult<T> DetectInstances(Tensor<T> image)
     {
         var sw = System.Diagnostics.Stopwatch.StartNew();
         var logits = Predict(image);
@@ -472,7 +409,7 @@ public class YOLOv12Seg<T> : NeuralNetworkBase<T>, IInstanceSegmentation<T>
                         }
                 if (area < 4) continue;
                 double confidence = sumConf / area;
-                if (confidence < _confidenceThreshold) continue;
+                if (confidence < ConfidenceThreshold) continue;
                 var box = new BoundingBox<T>(NumOps.FromDouble(minX), NumOps.FromDouble(minY),
                     NumOps.FromDouble(maxX + 1), NumOps.FromDouble(maxY + 1), BoundingBoxFormat.XYXY, cls);
                 instances.Add(new InstanceMask<T>(box, mask, cls, NumOps.FromDouble(confidence)));
@@ -484,7 +421,7 @@ public class YOLOv12Seg<T> : NeuralNetworkBase<T>, IInstanceSegmentation<T>
         while (instances.Count > 0)
         {
             var best = instances[0]; kept.Add(best); instances.RemoveAt(0);
-            instances = instances.Where(inst => best.ComputeMaskIoU(inst, NumOps) < _nmsThreshold).ToList();
+            instances = instances.Where(inst => best.ComputeMaskIoU(inst, NumOps) < NmsThreshold).ToList();
         }
 
         sw.Stop();

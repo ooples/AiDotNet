@@ -82,7 +82,7 @@ public class TemplateNER<T> : TransformerNERBase<T>
         NeuralNetworkArchitecture<T> architecture,
         string modelPath,
         TransformerNEROptions? options = null)
-        : base(architecture, modelPath, options ?? new TransformerNEROptions(),
+        : base(architecture, modelPath, options ?? CreateDefaultOptions(),
             "Template-NER", "Cui et al., ACL 2021")
     {
     }
@@ -94,7 +94,7 @@ public class TemplateNER<T> : TransformerNERBase<T>
         NeuralNetworkArchitecture<T> architecture,
         TransformerNEROptions? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
-        : base(architecture, options ?? new TransformerNEROptions(),
+        : base(architecture, options ?? CreateDefaultOptions(),
             "Template-NER", "Cui et al., ACL 2021", optimizer)
     {
     }
@@ -107,4 +107,24 @@ public class TemplateNER<T> : TransformerNERBase<T>
             return new TemplateNER<T>(Architecture, p, optionsCopy);
         return new TemplateNER<T>(Architecture, optionsCopy);
     }
+
+    /// <summary>
+    /// Creates the training defaults used by the Template-NER reference implementation.
+    /// </summary>
+    /// <remarks>
+    /// Cui et al.'s released BART training code uses AdamW with a per-update linear
+    /// warmup/decay scheduler and global gradient clipping. AdamW already enables global
+    /// norm clipping in AiDotNet; these defaults supply the missing scheduler while callers
+    /// can still provide an exact dataset-dependent step count through
+    /// <see cref="TransformerNEROptions"/>.
+    /// </remarks>
+    private static TransformerNEROptions CreateDefaultOptions() => new()
+    {
+        WarmupSteps = 2,
+        // Keep the first update effectively at zero while avoiding a zero-LR fused-backend
+        // sentinel that would discard the otherwise valid first loss observation.
+        WarmupInitialLearningRate = 1e-8,
+        TotalTrainingSteps = 1000,
+        EndLearningRate = 0.0
+    };
 }

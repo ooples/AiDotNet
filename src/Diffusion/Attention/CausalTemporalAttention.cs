@@ -1,5 +1,6 @@
-#pragma warning disable CS0649, CS0414, CS0169
+﻿#pragma warning disable CS0649, CS0414, CS0169
 using AiDotNet.ActivationFunctions;
+using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks.Attention;
 using AiDotNet.NeuralNetworks.Layers;
@@ -31,7 +32,11 @@ namespace AiDotNet.Diffusion.Attention;
 /// - Combined with spatial attention for full spatio-temporal modeling
 /// </para>
 /// </remarks>
-public class CausalTemporalAttention<T> : LayerBase<T>
+// Shape-preserving at rank 3 [Batch, Time, Features]; only that rank was probed, so only it is declared.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
+[AutoParameters]
+public partial class CausalTemporalAttention<T> : LayerBase<T>, IShapeContract
 {
     private readonly int _channels;
     private readonly int _numHeads;
@@ -112,7 +117,7 @@ public class CausalTemporalAttention<T> : LayerBase<T>
     /// <summary>
     /// Performs causal temporal attention where each frame attends only to past frames.
     /// </summary>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         _hasForwardRun = true;
         return _causalAttention.Forward(input);
@@ -122,18 +127,6 @@ public class CausalTemporalAttention<T> : LayerBase<T>
     public override void UpdateParameters(T learningRate)
     {
         _causalAttention.UpdateParameters(learningRate);
-    }
-
-    /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        return _causalAttention.GetParameters();
-    }
-
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        _causalAttention.SetParameters(parameters);
     }
 
     /// <inheritdoc />

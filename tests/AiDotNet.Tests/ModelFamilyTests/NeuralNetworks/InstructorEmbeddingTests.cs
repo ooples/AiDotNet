@@ -10,7 +10,15 @@ namespace AiDotNet.Tests.ModelFamilyTests.NeuralNetworks;
 // suite's single-threaded determinism BLAS even uncontended (confirmed: times out in a fully
 // serialized run) — not a regression and not shrinkable. Tag HeavyTimeout so it runs full-fidelity
 // nightly (deferred, not skipped). Matches the SimCSE/SPLADE/SGPT embedding-model precedent.
+//
+// The nightly lane still runs at full xUnit width, and OptimizerStep_ParamL2_DoesNotExplode was timing
+// out THERE through starvation rather than slowness: measured alone on the CI-matched Release build it
+// takes 5 s against its 120 s gate (24x headroom). That invariant is a SINGLE Train call plus two
+// whole-parameter L2 sweeps, so the float rung (already applied — this fixture is <float>) and the
+// iteration-cap rung cannot reach it; there is no iteration count to trim. Serialize instead, exactly
+// as FoundationScaleSerialCollection documents, and leave the 768-dim BERT-scale fixture alone.
 [Trait("Category", "HeavyTimeout")]
+[Collection("FoundationScaleSerial")] // dedicated cores (#1622 L4)
 public class InstructorEmbeddingTests : EmbeddingModelTestBase<float>
 {
     // InstructorEmbedding's default ctor wires a 768-dim transformer

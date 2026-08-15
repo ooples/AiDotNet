@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Document.Interfaces;
 using AiDotNet.Document.Options;
 using AiDotNet.Enums;
@@ -56,7 +56,7 @@ namespace AiDotNet.Document.PixelToSequence;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("MatCha: Enhancing Visual Language Pretraining with Math Reasoning and Chart Derendering", "https://doi.org/10.48550/arXiv.2212.09662", Year = 2023, Authors = "Fangyu Liu, Francesco Piccinno, Syrine Krichene, Chenxi Pang, Kenton Lee, Mandar Joshi, Yasemin Altun, Nigel Collier, Julian Martin Eisenschlos")]
-public class MATCHA<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>, ITableExtractor<T>
+public partial class MATCHA<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>, ITableExtractor<T>
 {
     private readonly MATCHAOptions _options;
 
@@ -67,7 +67,7 @@ public class MATCHA<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>, ITableExt
 
     private readonly bool _useNativeMode;
     private readonly InferenceSession? _onnxSession;
-    private readonly IOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private readonly int _encoderDim;
     private readonly int _decoderDim;
     private readonly int _encoderLayers;
@@ -82,8 +82,6 @@ public class MATCHA<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>, ITableExt
     private bool _nativeLayersInitialized;
 
     // Learnable embeddings
-    private Tensor<T>? _patchEmbeddings;
-    private Tensor<T>? _decoderPositionEmbeddings;
 
     #endregion
 
@@ -140,7 +138,7 @@ public class MATCHA<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>, ITableExt
         int numHeads = 24,
         int vocabSize = 50265,
         int maxPatchesPerImage = 4096,
-        IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         MATCHAOptions? options = null)
         : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
@@ -195,7 +193,7 @@ public class MATCHA<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>, ITableExt
         int numHeads = 24,
         int vocabSize = 50265,
         int maxPatchesPerImage = 4096,
-        IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         MATCHAOptions? options = null)
         : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
@@ -262,11 +260,7 @@ public class MATCHA<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>, ITableExt
     {
         var random = RandomHelper.CreateSeededRandom(42);
 
-        _patchEmbeddings = Tensor<T>.CreateDefault([_maxPatchesPerImage, _encoderDim], NumOps.Zero);
-        _decoderPositionEmbeddings = Tensor<T>.CreateDefault([MaxSequenceLength, _decoderDim], NumOps.Zero);
 
-        InitializeWithSmallRandomValues(_patchEmbeddings, random, 0.02);
-        InitializeWithSmallRandomValues(_decoderPositionEmbeddings, random, 0.02);
     }
 
     private void EnsureNativeInitialized()
@@ -747,6 +741,24 @@ public class MATCHA<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>, ITableExt
 
     #region NeuralNetworkBase Implementation
 
+    /// <inheritdoc />
+    /// <remarks>
+    /// MATCHA builds its encoder and decoder lists inside EnsureNativeInitialized, so in native mode there is nothing for the base to walk until that has run.
+    /// <para>
+    /// This replaces separate ParameterCount, GetParameters and SetParameters overrides that
+    /// each ran the initializer and then called base. The base calls this hook from all of
+    /// them, so the count, the vector, the restore and the chunks cannot observe different
+    /// stages of construction.
+    /// </para>
+    /// </remarks>
+    protected override void EnsureParametersReady()
+    {
+        if (_useNativeMode)
+        {
+            EnsureNativeInitialized();
+        }
+    }
+
     /// <inheritdoc/>
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
@@ -763,6 +775,25 @@ public class MATCHA<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>, ITableExt
     }
 
     /// <inheritdoc/>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input)
+    {
+        EnsureNativeInitialized();
+        return base.ForwardForTraining(PreprocessDocument(input));
+    }
+
+    /// <inheritdoc/>
+    public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input)
+    {
+        if (_useNativeMode)
+        {
+            EnsureNativeInitialized();
+            input = PreprocessDocument(input);
+        }
+
+        return base.GetNamedLayerActivations(input);
+    }
+
+    /// <inheritdoc/>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
         if (!_useNativeMode)
@@ -770,35 +801,15 @@ public class MATCHA<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>, ITableExt
 
         EnsureNativeInitialized();
         SetTrainingMode(true);
-        TrainWithTape(input, expectedOutput);
-
-        UpdateParameters(CollectGradients());
+        TrainWithTape(input, expectedOutput, _optimizer);
         SetTrainingMode(false);
     }
 
-    /// <inheritdoc/>
-    public override void UpdateParameters(Vector<T> gradients)
-    {
-        if (!_useNativeMode)
-            throw new NotSupportedException("Parameter updates not supported in ONNX mode.");
-
-        EnsureNativeInitialized();
-        var currentParams = GetParameters();
-        T lr = NumOps.FromDouble(0.00005);
-        
-        currentParams = Engine.Subtract(currentParams, Engine.Multiply(gradients, lr));
-        SetParameters(currentParams);
-    }
-
-    private Vector<T> CollectGradients()
-    {
-        var grads = new List<T>();
-        EnsureNativeInitialized();
-        foreach (var layer in Layers)
-            grads.AddRange(layer.GetParameterGradients());
-        return new Vector<T>([.. grads]);
-    }
-
+    // UpdateParameters is NOT overridden. It used to throw NotSupportedException; the base
+    // implementation is virtual now and distributes a flat vector over the same enumeration
+    // GetParameters folds, which this model already exposes correctly. The throw existed
+    // because the member was ABSTRACT and demanded an answer -- 572 models answered it the
+    // same way.
     #endregion
 
     #region Disposal

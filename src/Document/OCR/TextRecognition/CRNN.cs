@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Document.Interfaces;
 using AiDotNet.Document.Options;
 using AiDotNet.Enums;
@@ -55,7 +55,7 @@ namespace AiDotNet.Document.OCR.TextRecognition;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("An End-to-End Trainable Neural Network for Image-based Sequence Recognition and Its Application to Scene Text Recognition", "https://doi.org/10.48550/arXiv.1507.05717", Year = 2017, Authors = "Baoguang Shi, Xiang Bai, Cong Yao")]
-public class CRNN<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
+public partial class CRNN<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
 {
     private readonly CRNNOptions _options;
 
@@ -67,12 +67,13 @@ public class CRNN<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
     private bool _useNativeMode;
     private readonly InferenceSession? _onnxSession;
     private string? _onnxModelPath;
-    private IOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private int _cnnChannels;
     private int _rnnHiddenSize;
     private int _rnnLayers;
     private string _charset;
 
+    [Scratch]
     private Tensor<T>? _lastCharacterProbs;
 
     // Native mode layers
@@ -95,6 +96,13 @@ public class CRNN<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
 
     /// <inheritdoc/>
     public string SupportedCharacters => _charset;
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Traced: the CTC head builds <c>[MaxSequenceLength, _charset.Length + 1]</c>, the +1 being the
+    /// CTC blank.
+    /// </remarks>
+    protected override int OutputClassCount => _charset.Length + 1;
 
     /// <inheritdoc/>
     public new int MaxSequenceLength => base.MaxSequenceLength;
@@ -123,7 +131,7 @@ public class CRNN<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
         int rnnHiddenSize = 256,
         int rnnLayers = 2,
         string? charset = null,
-        IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         CRNNOptions? options = null)
         : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
@@ -172,7 +180,7 @@ public class CRNN<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
         int rnnHiddenSize = 256,
         int rnnLayers = 2,
         string? charset = null,
-        IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         CRNNOptions? options = null)
         : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
@@ -238,7 +246,9 @@ public class CRNN<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
         var startTime = DateTime.UtcNow;
 
         var preprocessed = PreprocessTextImage(croppedImage);
-        var output = _useNativeMode ? Forward(preprocessed) : RunOnnxInference(preprocessed);
+        var output = _useNativeMode
+            ? CanonicalizeCtcLogits(Forward(preprocessed))
+            : CanonicalizeCtcLogits(RunOnnxInference(preprocessed));
 
         _lastCharacterProbs = output;
 
@@ -334,17 +344,38 @@ public class CRNN<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
     {
         var processed = EnsureBatchDimension(image);
 
-        // Normalize to [-1, 1] range
+        // CRNN has a fixed-height image contract: every crop is resized to
+        // [ImageHeight, ImageSize] before the CNN (Shi et al., 2017). The old
+        // implementation only normalized, allowing the source instance's lazy
+        // convolution geometry to adapt to an arbitrary caller size while a
+        // fresh clone rebuilt from the configured dimensions. That changed the
+        // spatial token count across Clone (e.g. 18,816 vs 1,536 outputs).
+        // Nearest-neighbor sampling is deterministic and sufficient here; a
+        // caller that wants higher-quality interpolation can install the public
+        // preprocessing transformer.
         int batchSize = processed.Shape[0];
         int channels = processed.Shape[1];
-        int height = processed.Shape[2];
-        int width = processed.Shape[3];
+        int sourceHeight = processed.Shape[2];
+        int sourceWidth = processed.Shape[3];
+        int targetHeight = ImageHeight;
+        int targetWidth = ImageSize;
 
-        var normalized = new Tensor<T>(processed._shape);
-        for (int i = 0; i < processed.Data.Length; i++)
+        var normalized = new Tensor<T>([batchSize, channels, targetHeight, targetWidth]);
+        for (int b = 0; b < batchSize; b++)
         {
-            double val = NumOps.ToDouble(processed.Data.Span[i]);
-            normalized.Data.Span[i] = NumOps.FromDouble((val / 255.0 - 0.5) * 2.0);
+            for (int c = 0; c < channels; c++)
+            {
+                for (int y = 0; y < targetHeight; y++)
+                {
+                    int sourceY = Math.Min(sourceHeight - 1, y * sourceHeight / targetHeight);
+                    for (int x = 0; x < targetWidth; x++)
+                    {
+                        int sourceX = Math.Min(sourceWidth - 1, x * sourceWidth / targetWidth);
+                        double val = NumOps.ToDouble(processed[b, c, sourceY, sourceX]);
+                        normalized[b, c, y, x] = NumOps.FromDouble((val / 255.0 - 0.5) * 2.0);
+                    }
+                }
+            }
         }
 
         return normalized;
@@ -358,7 +389,8 @@ public class CRNN<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
     public Tensor<T> EncodeDocument(Tensor<T> documentImage)
     {
         var preprocessed = PreprocessTextImage(documentImage);
-        return _useNativeMode ? Forward(preprocessed) : RunOnnxInference(preprocessed);
+        var logits = _useNativeMode ? Forward(preprocessed) : RunOnnxInference(preprocessed);
+        return CanonicalizeCtcLogits(logits);
     }
 
     /// <inheritdoc/>
@@ -597,8 +629,8 @@ public class CRNN<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
                 _rnnHiddenSize,
                 _rnnLayers,
                 _charset,
-                _optimizer,
-                LossFunction);
+                optimizer: null,
+                lossFunction: LossFunction);
         }
 
         return new CRNN<T>(
@@ -609,8 +641,45 @@ public class CRNN<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
             _rnnHiddenSize,
             _rnnLayers,
             _charset,
-            _optimizer,
-            LossFunction);
+            optimizer: null,
+            lossFunction: LossFunction);
+    }
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// CRNN's convolutional and dense layers resolve their parameter shapes on
+    /// the first image forward. Recreate that resolved state before copying so
+    /// a clone cannot silently retain freshly initialized lazy weights.
+    /// </remarks>
+    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
+    {
+        var copy = (CRNN<T>)CreateNewInstance();
+        if (copy.Layers.Count != Layers.Count)
+            throw new InvalidOperationException("CRNN clone layer topology does not match the source model.");
+
+        for (int i = 0; i < Layers.Count; i++)
+        {
+            var source = Layers[i];
+            var destination = copy.Layers[i];
+            int[] inputShape = source.GetInputShape();
+            if (destination is LayerBase<T> destinationBase &&
+                !destinationBase.IsShapeResolved &&
+                inputShape.Length > 0 &&
+                Array.TrueForAll(inputShape, dimension => dimension > 0))
+            {
+                destinationBase.ResolveFromShape(inputShape);
+            }
+
+            destination.SetParameters(source.GetParameters());
+            if (source is ILayerSerializationExtras<T> sourceExtras &&
+                destination is ILayerSerializationExtras<T> destinationExtras)
+            {
+                destinationExtras.SetExtraParameters(sourceExtras.GetExtraParameters());
+            }
+        }
+
+        copy.SetTrainingMode(false);
+        return copy;
     }
 
     #endregion
@@ -621,7 +690,51 @@ public class CRNN<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         var preprocessed = PreprocessTextImage(input);
-        return _useNativeMode ? Forward(preprocessed) : RunOnnxInference(preprocessed);
+        var logits = _useNativeMode ? Forward(preprocessed) : RunOnnxInference(preprocessed);
+        return CanonicalizeCtcLogits(logits);
+    }
+
+    /// <inheritdoc/>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input) =>
+        CanonicalizeCtcLogits(Forward(input));
+
+    /// <summary>
+    /// Converts the CNN/recurrent head's spatial logits to the public CTC contract
+    /// [batch, time, classes], pooling deterministically to MaxSequenceLength.
+    /// </summary>
+    private Tensor<T> CanonicalizeCtcLogits(Tensor<T> logits)
+    {
+        int classes = _charset.Length + 1;
+        if (logits.Rank == 3 && logits.Shape[^1] == classes &&
+            logits.Shape[1] == MaxSequenceLength)
+            return logits;
+
+        if (logits.Shape[^1] != classes)
+            throw new InvalidOperationException(
+                $"CRNN output must have {classes} classes in its final dimension, but got shape [{string.Join(", ", logits.Shape)}].");
+
+        int batch = logits.Rank >= 3 ? logits.Shape[0] : 1;
+        int positions = logits.Length / checked(batch * classes);
+        var flattened = Engine.Reshape(logits, [batch, positions, classes]);
+        int timeSteps = MaxSequenceLength;
+        if (positions == timeSteps)
+            return flattened;
+
+        if (positions < timeSteps)
+        {
+            int repeats = (timeSteps + positions - 1) / positions;
+            var expanded = Engine.TensorRepeatElements(flattened, repeats, axis: 1);
+            return expanded.Shape[1] == timeSteps
+                ? expanded
+                : Engine.TensorSlice(expanded, [0, 0, 0], [batch, timeSteps, classes]);
+        }
+
+        if (positions % timeSteps != 0)
+            return Engine.TensorSlice(flattened, [0, 0, 0], [batch, timeSteps, classes]);
+
+        int positionsPerStep = positions / timeSteps;
+        var grouped = Engine.Reshape(flattened, [batch, timeSteps, positionsPerStep, classes]);
+        return Engine.ReduceMean(grouped, [2], keepDims: false);
     }
 
     /// <inheritdoc/>
@@ -631,33 +744,32 @@ public class CRNN<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
             throw new NotSupportedException("Training not supported in ONNX mode.");
 
         SetTrainingMode(true);
-        TrainWithTape(input, expectedOutput);
-
-        UpdateParameters(CollectGradients());
-        SetTrainingMode(false);
+        try
+        {
+            var preprocessedInput = PreprocessTextImage(input);
+            if (_optimizer is IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> gradientOptimizer)
+                TrainWithTape(preprocessedInput, expectedOutput, gradientOptimizer);
+            else
+                TrainWithTape(preprocessedInput, expectedOutput, _optimizer);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
     }
 
-    /// <inheritdoc/>
-    public override void UpdateParameters(Vector<T> gradients)
-    {
-        if (!_useNativeMode)
-            throw new NotSupportedException("Parameter updates not supported in ONNX mode.");
+    // UpdateParameters applied a GRADIENT STEP, but its one-argument form is the value setter and every caller passes values -- the override corrupted the model. Removed under AIDN082.
 
-        var currentParams = GetParameters();
-        T lr = NumOps.FromDouble(0.0001);
-        
-        currentParams = Engine.Subtract(currentParams, Engine.Multiply(gradients, lr));
-        SetParameters(currentParams);
-    }
-
-    private Vector<T> CollectGradients()
-    {
-        var grads = new List<T>();
-        foreach (var layer in Layers)
-            grads.AddRange(layer.GetParameterGradients());
-        return new Vector<T>([.. grads]);
-    }
-
+    /// <summary>
+    /// Parameters cannot be written while the model is backed by a loaded ONNX graph: the weights
+    /// belong to that graph, not to this instance.
+    /// </summary>
+    /// <remarks>
+    /// Replaces a hand-written throw that used to sit inside UpdateParameters. The base checks this
+    /// on every mutating entry point rather than the one member the throw happened to guard, and
+    /// reading -- ParameterCount and GetParameters -- stays available either way.
+    /// </remarks>
+    protected override bool SupportsParameterMutation => _useNativeMode;
     #endregion
 
     #region Disposal

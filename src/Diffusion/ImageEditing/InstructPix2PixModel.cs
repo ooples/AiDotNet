@@ -95,8 +95,17 @@ namespace AiDotNet.Diffusion.ImageEditing;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("InstructPix2Pix: Learning to Follow Image Editing Instructions", "https://arxiv.org/abs/2211.09800", Year = 2023, Authors = "Brooks et al.")]
-public class InstructPix2PixModel<T> : LatentDiffusionModelBase<T>
+public partial class InstructPix2PixModel<T> : LatentDiffusionModelBase<T>
 {
+    /// <inheritdoc />
+    /// <remarks>Registration order is serialization order, and matches the
+    /// concatenation the previous hand-written GetParameters performed.</remarks>
+    protected override void RegisterComponents()
+    {
+        RegisterParameterComponent(_unet);
+        RegisterParameterComponent(_vae);
+    }
+
     #region Constants
 
     public const int DefaultWidth = 512;
@@ -129,7 +138,6 @@ public class InstructPix2PixModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override int LatentChannels => LATENT_CHANNELS;
     /// <inheritdoc />
-    public override long ParameterCount => _unet.ParameterCount + _vae.ParameterCount;
 
     /// <summary>Gets the default image guidance scale for balancing image fidelity.</summary>
     public double DefaultImageGuidance => DEFAULT_IMAGE_GUIDANCE;
@@ -192,31 +200,7 @@ public class InstructPix2PixModel<T> : LatentDiffusionModelBase<T>
 
     #region IParameterizable Implementation
 
-    /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        var unetParams = _unet.GetParameters();
-        var vaeParams = _vae.GetParameters();
-        var combined = new Vector<T>(unetParams.Length + vaeParams.Length);
-        for (int i = 0; i < unetParams.Length; i++) combined[i] = unetParams[i];
-        for (int i = 0; i < vaeParams.Length; i++) combined[unetParams.Length + i] = vaeParams[i];
-        return combined;
-    }
 
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        var unetCount = checked((int)_unet.ParameterCount);
-        var vaeCount = checked((int)_vae.ParameterCount);
-        if (parameters.Length != unetCount + vaeCount)
-            throw new ArgumentException($"Expected {unetCount + vaeCount} parameters, got {parameters.Length}.", nameof(parameters));
-        var unetParams = new Vector<T>(unetCount);
-        var vaeParams = new Vector<T>(vaeCount);
-        for (int i = 0; i < unetCount; i++) unetParams[i] = parameters[i];
-        for (int i = 0; i < vaeCount; i++) vaeParams[i] = parameters[unetCount + i];
-        _unet.SetParameters(unetParams);
-        _vae.SetParameters(vaeParams);
-    }
 
     #endregion
 

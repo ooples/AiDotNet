@@ -62,7 +62,14 @@ namespace AiDotNet.NeuralNetworks.Layers.SSM;
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerTask(LayerTask.TemporalProcessing)]
 [LayerProperty(IsTrainable = true, IsStateful = true, Cost = ComputeCost.High, TestInputShape = "4, 256", TestConstructorArgs = "4")]
-public partial class HGRNLayer<T> : LayerBase<T>
+// Shape-preserving. Relations discovered by probing; roles read from the forward - this folder's
+// convention is seqLen = Shape[rank-2], modelDim = Shape[rank-1], so rank 2 is [Time, Features].
+[TensorLayout(TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
+[AutoParameters]
+public partial class HGRNLayer<T> : LayerBase<T>, IShapeContract
 {
     private readonly int _modelDimension;
     private readonly double _forgetBias;
@@ -138,15 +145,6 @@ public partial class HGRNLayer<T> : LayerBase<T>
     /// and upper layers should use lower forget bias for short-range patterns.</para>
     /// </remarks>
     public double ForgetBias => _forgetBias;
-
-    /// <summary>
-    /// Gets the total number of trainable parameters.
-    /// </summary>
-    public override long ParameterCount =>
-        _inputProjectionWeights.Length + _inputProjectionBias.Length +
-        _forgetGateWeights.Length + _forgetGateBias.Length +
-        _inputGateWeights.Length + _inputGateBias.Length +
-        _outputProjectionWeights.Length + _outputProjectionBias.Length;
 
     /// <summary>
     /// Creates a new HGRN (Hierarchically Gated Recurrent Neural Network) layer.
@@ -231,7 +229,7 @@ public partial class HGRNLayer<T> : LayerBase<T>
     }
 
     /// <inheritdoc />
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         _originalInputShape = input._shape;
 
@@ -259,29 +257,16 @@ public partial class HGRNLayer<T> : LayerBase<T>
         _lastProjectedInput = projected3D;
 
         // Step 2: Compute forget and input gates from projected input
-        var forgetGate3D = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
-        var inputGate3D = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
-
         var fBias = Engine.Reshape(_forgetGateBias, new[] { 1, _modelDimension });
         var iBias = Engine.Reshape(_inputGateBias, new[] { 1, _modelDimension });
-
-        for (int t = 0; t < seqLen; t++)
-        {
-            var p_t = projected3D.GetSliceAlongDimension(t, 1);
-
-            // f_t = sigmoid(W_f * p_t + b_f)
-            var fRaw = Engine.TensorBroadcastAdd(
-                Engine.TensorMatMul(p_t, _forgetGateWeights), fBias);
-            var f_t = Engine.Sigmoid(fRaw);
-
-            // i_t = sigmoid(W_i * p_t + b_i)
-            var iRaw = Engine.TensorBroadcastAdd(
-                Engine.TensorMatMul(p_t, _inputGateWeights), iBias);
-            var i_t = Engine.Sigmoid(iRaw);
-
-            forgetGate3D.SetSlice(1, t, f_t);
-            inputGate3D.SetSlice(1, t, i_t);
-        }
+        var forgetGate3D = Engine.Reshape(
+            Engine.Sigmoid(Engine.TensorBroadcastAdd(
+                Engine.TensorMatMul(projected, _forgetGateWeights), fBias)),
+            new[] { batchSize, seqLen, _modelDimension });
+        var inputGate3D = Engine.Reshape(
+            Engine.Sigmoid(Engine.TensorBroadcastAdd(
+                Engine.TensorMatMul(projected, _inputGateWeights), iBias)),
+            new[] { batchSize, seqLen, _modelDimension });
 
         _lastForgetGate = forgetGate3D;
         _lastInputGate = inputGate3D;
@@ -332,41 +317,28 @@ public partial class HGRNLayer<T> : LayerBase<T>
         Tensor<T> x, Tensor<T> forgetGate, Tensor<T> inputGate,
         int batchSize, int seqLen)
     {
-        var output = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
-        var h = TensorAllocator.Rent<T>(new[] { batchSize, _modelDimension });
-
-        // Store all hidden states for backward pass: [batch, seqLen+1, modelDim]
-        // Index 0 is the initial zero state, indices 1..seqLen are states after each step
-        var allHidden = new Tensor<T>(new[] { batchSize, seqLen + 1, _modelDimension });
+        var h = Tensor<T>.CreateDefault([batchSize, _modelDimension], NumOps.Zero);
+        var hiddenSteps = new List<Tensor<T>>(seqLen);
 
         for (int t = 0; t < seqLen; t++)
         {
-            for (int bi = 0; bi < batchSize; bi++)
-            {
-                for (int d = 0; d < _modelDimension; d++)
-                {
-                    T fVal = forgetGate[new[] { bi, t, d }];
-                    T iVal = inputGate[new[] { bi, t, d }];
-                    T xVal = x[new[] { bi, t, d }];
-                    T hPrev = h[new[] { bi, d }];
+            var f_t = Engine.TensorSqueeze(Engine.TensorNarrow(forgetGate, 1, t, 1), axis: 1);
+            var i_t = Engine.TensorSqueeze(Engine.TensorNarrow(inputGate, 1, t, 1), axis: 1);
+            var x_t = Engine.TensorSqueeze(Engine.TensorNarrow(x, 1, t, 1), axis: 1);
 
-                    // h_t = f_t * h_{t-1} + i_t * x_t
-                    T hNew = NumOps.Add(
-                        NumOps.Multiply(fVal, hPrev),
-                        NumOps.Multiply(iVal, xVal));
-
-                    h[new[] { bi, d }] = hNew;
-                    output[new[] { bi, t, d }] = hNew;
-                }
-            }
-
-            // Save hidden state snapshot for backward pass
-            for (int bi = 0; bi < batchSize; bi++)
-                for (int d = 0; d < _modelDimension; d++)
-                    allHidden[new[] { bi, t + 1, d }] = h[new[] { bi, d }];
+            h = Engine.TensorAdd(
+                Engine.TensorMultiply(f_t, h),
+                Engine.TensorMultiply(i_t, x_t));
+            hiddenSteps.Add(Engine.TensorExpandDims(h, axis: 1));
         }
 
-        _lastHiddenStates = allHidden;
+        var output = hiddenSteps.Count == 1
+            ? hiddenSteps[0]
+            : Engine.TensorConcatenate(hiddenSteps.ToArray(), axis: 1);
+        var initialState = Tensor<T>.CreateDefault([batchSize, 1, _modelDimension], NumOps.Zero);
+        _lastHiddenStates = Engine.TensorConcatenate(
+            [initialState, output],
+            axis: 1);
         return output;
     }
 
@@ -413,28 +385,6 @@ public partial class HGRNLayer<T> : LayerBase<T>
         RegisterTrainableParameter(_outputProjectionWeights, PersistentTensorRole.Weights);
         RegisterTrainableParameter(_outputProjectionBias, PersistentTensorRole.Biases);
 
-    }
-
-    /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        var parameters = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
-        int index = 0;
-        foreach (var tensor in GetAllTensors())
-            for (int i = 0; i < tensor.Length; i++)
-                parameters[index++] = tensor[i];
-        return parameters;
-    }
-
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (parameters.Length != ParameterCount)
-            throw new ArgumentException($"Expected {ParameterCount} parameters, got {parameters.Length}");
-        int index = 0;
-        foreach (var tensor in GetAllTensors())
-            for (int i = 0; i < tensor.Length; i++)
-                tensor[i] = parameters[index++];
     }
 
     private Tensor<T>[] GetAllTensors() =>

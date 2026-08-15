@@ -28,7 +28,7 @@ namespace AiDotNet.SelfSupervisedLearning;
 /// <para><b>Not used by:</b> SimCLR, SimSiam (uses stop-gradient instead), Barlow Twins</para>
 /// </remarks>
 [AiDotNet.Configuration.YamlConfigurable("MomentumEncoder")]
-public interface IMomentumEncoder<T>
+public interface IMomentumEncoder<T> : IParameterSource<T>
 {
     /// <summary>
     /// Gets the momentum coefficient for EMA updates.
@@ -92,15 +92,4 @@ public interface IMomentumEncoder<T>
     /// </remarks>
     void CopyFromMainEncoder(INeuralNetwork<T> mainEncoder);
 
-    /// <summary>
-    /// Gets all parameters of the momentum encoder.
-    /// </summary>
-    /// <returns>A vector containing all parameters.</returns>
-    Vector<T> GetParameters();
-
-    /// <summary>
-    /// Sets the parameters of the momentum encoder directly.
-    /// </summary>
-    /// <param name="parameters">The parameters to set.</param>
-    void SetParameters(Vector<T> parameters);
 }

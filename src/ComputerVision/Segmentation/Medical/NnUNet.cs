@@ -56,39 +56,28 @@ namespace AiDotNet.ComputerVision.Segmentation.Medical;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("nnU-Net: a self-configuring method for deep learning-based biomedical image segmentation", "https://doi.org/10.1038/s41592-020-01008-z", Year = 2021, Authors = "Fabian Isensee, Paul F. Jaeger, Simon A. A. Kohl, Jens Petersen, Klaus H. Maier-Hein")]
-public class NnUNet<T> : NeuralNetworkBase<T>, IMedicalSegmentation<T>
+public class NnUNet<T> : Common.MedicalSegmentationBase<T>
 {
     private readonly NnUNetOptions _options;
     public override ModelOptions GetOptions() => _options;
 
     #region Fields
-    private readonly int _height, _width, _channels, _numClasses;
+    // Only NnUNet's OWN configuration lives here. _height, _width, _channels, _numClasses,
+    // _useNativeMode, _onnxModelPath, _onnxSession, _optimizer, _disposed and _encoderLayerEnd all
+    // come from MedicalSegmentationBase -> SegmentationModelBase.
+    private static readonly string[] ModalitiesSupported = ["CT", "MRI_T1", "MRI_T2", "Xray", "Ultrasound"];
     private readonly NnUNetModelSize _modelSize;
     private readonly int[] _channelDims;
     private readonly int _decoderDim;
     private readonly int[] _depths;
     private readonly double _dropRate;
-    private readonly bool _useNativeMode;
-    private readonly string? _onnxModelPath;
-    private InferenceSession? _onnxSession;
-    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
-    private bool _disposed;
-    private int _encoderLayerEnd;
     #endregion
 
     #region Properties
-    /// <summary>
-    /// Gets whether this NnUNet instance supports training.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Returns <c>true</c> in native mode, <c>false</c> in ONNX mode.
-    /// </para>
-    /// </remarks>
-    public override bool SupportsTraining => _useNativeMode;
+    // SupportsTraining, NumClasses, InputHeight, InputWidth, IsOnnxMode, Segment, SupportedModalities,
+    // Supports3D, Supports2D and SupportsFewShot are all supplied identically by the base.
     internal bool UseNativeMode => _useNativeMode;
     internal NnUNetModelSize ModelSize => _modelSize;
-    internal int NumClasses => _numClasses;
     #endregion
 
     #region Constructors
@@ -112,15 +101,15 @@ public class NnUNet<T> : NeuralNetworkBase<T>, IMedicalSegmentation<T>
         ILossFunction<T>? lossFunction = null, int numClasses = 14,
         NnUNetModelSize modelSize = NnUNetModelSize.UNet2D, double dropRate = 0,
         NnUNetOptions? options = null)
-        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>())
+        // `optimizer` is passed straight through - INCLUDING null. The base resolves the default
+        // AdamW lazily via CreateDefaultOptimizer(), which a base-constructor argument cannot do.
+        : base(architecture, optimizer, lossFunction, numClasses, ModalitiesSupported)
     {
         _options = options ?? new NnUNetOptions(); Options = _options;
+        // nnU-Net defaults to 256x256, not the base's 512x512, so the geometry fallback stays here.
         _height = architecture.InputHeight > 0 ? architecture.InputHeight : 256;
         _width = architecture.InputWidth > 0 ? architecture.InputWidth : 256;
-        _channels = architecture.InputDepth > 0 ? architecture.InputDepth : 3;
-        _numClasses = numClasses; _modelSize = modelSize; _dropRate = dropRate;
-        _useNativeMode = true; _onnxModelPath = null;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _modelSize = modelSize; _dropRate = dropRate;
         (_channelDims, _depths, _decoderDim) = GetModelConfig(modelSize);
         InitializeLayers();
     }
@@ -144,21 +133,15 @@ public class NnUNet<T> : NeuralNetworkBase<T>, IMedicalSegmentation<T>
     public NnUNet(NeuralNetworkArchitecture<T> architecture, string onnxModelPath,
         int numClasses = 14, NnUNetModelSize modelSize = NnUNetModelSize.UNet2D,
         NnUNetOptions? options = null)
-        : base(architecture, new CrossEntropyWithLogitsLoss<T>())
+        // The base validates the path, sets ONNX mode, resolves the input geometry and opens the
+        // InferenceSession - the same twenty lines this used to repeat.
+        : base(architecture, onnxModelPath, numClasses, ModalitiesSupported)
     {
         _options = options ?? new NnUNetOptions(); Options = _options;
-        if (string.IsNullOrWhiteSpace(onnxModelPath))
-            throw new ArgumentException("ONNX model path cannot be null or empty.", nameof(onnxModelPath));
-        if (!File.Exists(onnxModelPath))
-            throw new FileNotFoundException($"NnUNet ONNX model not found: {onnxModelPath}");
         _height = architecture.InputHeight > 0 ? architecture.InputHeight : 256;
         _width = architecture.InputWidth > 0 ? architecture.InputWidth : 256;
-        _channels = architecture.InputDepth > 0 ? architecture.InputDepth : 3;
-        _numClasses = numClasses; _modelSize = modelSize; _dropRate = 0;
-        _useNativeMode = false; _onnxModelPath = onnxModelPath; _optimizer = null;
+        _modelSize = modelSize; _dropRate = 0;
         (_channelDims, _depths, _decoderDim) = GetModelConfig(modelSize);
-        try { _onnxSession = new InferenceSession(onnxModelPath); }
-        catch (Exception ex) { throw new InvalidOperationException($"Failed to load NnUNet ONNX model: {ex.Message}", ex); }
         InitializeLayers();
     }
     #endregion
@@ -200,7 +183,7 @@ public class NnUNet<T> : NeuralNetworkBase<T>, IMedicalSegmentation<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expectedOutput);
+            TrainWithTape(input, expectedOutput, Optimizer);
         }
         finally
         {
@@ -218,7 +201,7 @@ public class NnUNet<T> : NeuralNetworkBase<T>, IMedicalSegmentation<T>
         _ => ([32, 64, 128, 256], [2, 2, 2, 2], 256)
     };
 
-    private Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> Forward(Tensor<T> input)
     {
         bool hasBatch = input.Rank == 4; if (!hasBatch) input = AddBatchDimension(input);
         var features = input;
@@ -227,7 +210,7 @@ public class NnUNet<T> : NeuralNetworkBase<T>, IMedicalSegmentation<T>
         if (!hasBatch) features = RemoveBatchDimension(features); return features;
     }
 
-    private Tensor<T> PredictOnnx(Tensor<T> input)
+    protected override Tensor<T> PredictOnnx(Tensor<T> input)
     {
         if (_onnxSession is null) throw new InvalidOperationException("ONNX session is not initialized.");
         bool hasBatch = input.Rank == 4; if (!hasBatch) input = AddBatchDimension(input);
@@ -244,11 +227,8 @@ public class NnUNet<T> : NeuralNetworkBase<T>, IMedicalSegmentation<T>
         if (!hasBatch) result = RemoveBatchDimension(result); return result;
     }
 
-    private Tensor<T> AddBatchDimension(Tensor<T> tensor)
-    { var result = new Tensor<T>([1, tensor.Shape[0], tensor.Shape[1], tensor.Shape[2]]); tensor.Data.Span.CopyTo(result.Data.Span); return result; }
-
-    private Tensor<T> RemoveBatchDimension(Tensor<T> tensor)
-    { int[] s = new int[tensor.Shape.Length - 1]; for (int i = 0; i < s.Length; i++) s[i] = tensor.Shape[i + 1]; var r = new Tensor<T>(s); tensor.Data.Span.CopyTo(r.Data.Span); return r; }
+    // AddBatchDimension / RemoveBatchDimension are inherited from SegmentationModelBase; the copies
+    // that used to live here were line-for-line identical apart from the base's extra rank guards.
     #endregion
 
     #region Abstract Implementation
@@ -276,18 +256,8 @@ public class NnUNet<T> : NeuralNetworkBase<T>, IMedicalSegmentation<T>
         }
     }
 
-    /// <summary>
-    /// Updates all trainable parameters from a flat parameter vector.
-    /// </summary>
-    /// <param name="parameters">Flat vector of all model parameters.</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Replaces all model weights with new values.
-    /// </para>
-    /// </remarks>
-    public override void UpdateParameters(Vector<T> parameters)
-    { int o = 0; foreach (var l in Layers) { var p = l.GetParameters(); int c = p.Length; if (o + c <= parameters.Length) { var n = new Vector<T>(c); for (int i = 0; i < c; i++) n[i] = parameters[o + i]; l.UpdateParameters(n); o += c; } } }
-
+    // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
+    // exactly the same enumeration, so this said nothing the base does not already say.
     /// <summary>
     /// Collects metadata describing this model's configuration.
     /// </summary>
@@ -340,30 +310,15 @@ public class NnUNet<T> : NeuralNetworkBase<T>, IMedicalSegmentation<T>
         ? new NnUNet<T>(Architecture, _optimizer, LossFunction, _numClasses, _modelSize, _dropRate, _options)
         : new NnUNet<T>(Architecture, _onnxModelPath ?? throw new InvalidOperationException("ONNX model path not initialized."), _numClasses, _modelSize, _options);
 
-    /// <summary>
-    /// Releases managed resources including the ONNX inference session.
-    /// </summary>
-    /// <param name="disposing">True when called from Dispose().</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Frees memory used by the ONNX runtime.
-    /// </para>
-    /// </remarks>
-    protected override void Dispose(bool disposing)
-    { if (!_disposed) { if (disposing) { _onnxSession?.Dispose(); _onnxSession = null; } _disposed = true; } base.Dispose(disposing); }
+    // Dispose is inherited: SegmentationModelBase already disposes _onnxSession and flips _disposed,
+    // and NnUNet owns no other unmanaged resource.
     #endregion
 
     #region IMedicalSegmentation Implementation
-    int ISegmentationModel<T>.NumClasses => _numClasses;
-    int ISegmentationModel<T>.InputHeight => _height;
-    int ISegmentationModel<T>.InputWidth => _width;
-    bool ISegmentationModel<T>.IsOnnxMode => !_useNativeMode;
-    Tensor<T> ISegmentationModel<T>.Segment(Tensor<T> image) => Predict(image);
-    IReadOnlyList<string> IMedicalSegmentation<T>.SupportedModalities => ["CT", "MRI_T1", "MRI_T2", "Xray", "Ultrasound"];
-    bool IMedicalSegmentation<T>.Supports3D => true;
-    bool IMedicalSegmentation<T>.Supports2D => true;
-    bool IMedicalSegmentation<T>.SupportsFewShot => false;
-    MedicalSegmentationResult<T> IMedicalSegmentation<T>.SegmentSlice(Tensor<T> slice)
+    /// <summary>
+    /// Segments a single 2D medical slice.
+    /// </summary>
+    public override MedicalSegmentationResult<T> SegmentSlice(Tensor<T> slice)
     {
         var output = Predict(slice);
         var labels = Common.SegmentationTensorOps.ArgmaxAlongClassDim(output);
@@ -382,10 +337,13 @@ public class NnUNet<T> : NeuralNetworkBase<T>, IMedicalSegmentation<T>
         }
         return new MedicalSegmentationResult<T> { Labels = labels, Probabilities = probs, Structures = structures };
     }
-    MedicalSegmentationResult<T> IMedicalSegmentation<T>.SegmentVolume(Tensor<T> volume)
+    /// <summary>
+    /// Segments a 3D volume slice-by-slice and aggregates the per-structure statistics.
+    /// </summary>
+    public override MedicalSegmentationResult<T> SegmentVolume(Tensor<T> volume)
     {
         if (volume.Rank <= 3)
-            return ((IMedicalSegmentation<T>)this).SegmentSlice(volume);
+            return SegmentSlice(volume);
         int numC = volume.Shape[0], depth = volume.Shape[1], h = volume.Shape[2], w = volume.Shape[3];
         var volLabels = new Tensor<T>([depth, h, w]);
         var volProbs = new Tensor<T>([numC, depth, h, w]);
@@ -397,7 +355,7 @@ public class NnUNet<T> : NeuralNetworkBase<T>, IMedicalSegmentation<T>
                 for (int y = 0; y < h; y++)
                     for (int x = 0; x < w; x++)
                         slice[c, y, x] = volume[c, d, y, x];
-            var result = ((IMedicalSegmentation<T>)this).SegmentSlice(slice);
+            var result = SegmentSlice(slice);
             for (int y = 0; y < h; y++)
                 for (int x = 0; x < w; x++)
                     volLabels[d, y, x] = result.Labels[y, x];
@@ -418,7 +376,9 @@ public class NnUNet<T> : NeuralNetworkBase<T>, IMedicalSegmentation<T>
             structures.Add(new SegmentedStructure { ClassId = kvp.Key, Name = $"Class_{kvp.Key}", VolumeOrArea = kvp.Value.area, MeanConfidence = kvp.Value.confSum / kvp.Value.area });
         return new MedicalSegmentationResult<T> { Labels = volLabels, Probabilities = volProbs, Structures = structures };
     }
-    MedicalSegmentationResult<T> IMedicalSegmentation<T>.SegmentFewShot(Tensor<T> queryImage, Tensor<T> supportImages, Tensor<T> supportMasks)
-        => ((IMedicalSegmentation<T>)this).SegmentSlice(queryImage);
+    /// <inheritdoc/>
+    public override MedicalSegmentationResult<T> SegmentFewShot(
+        Tensor<T> queryImage, Tensor<T> supportImages, Tensor<T> supportMasks)
+        => SegmentSlice(queryImage);
     #endregion
 }

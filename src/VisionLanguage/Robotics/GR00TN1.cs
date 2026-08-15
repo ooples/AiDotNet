@@ -84,7 +84,7 @@ namespace AiDotNet.VisionLanguage.Robotics;
     Year = 2025,
     Authors = "NVIDIA"
 )]
-public class GR00TN1<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
+public partial class GR00TN1<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
 {
     private readonly GR00TN1Options _options;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
@@ -404,105 +404,12 @@ public class GR00TN1<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
         if (IsOnnxMode)
             throw new NotSupportedException("Training is not supported in ONNX mode.");
         SetTrainingMode(true);
-        TrainWithTape(input, expected);
+        TrainWithTape(input, expected, _optimizer);
         SetTrainingMode(false);
     }
 
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        if (!_useNativeMode)
-            throw new NotSupportedException("Cannot update parameters in ONNX mode.");
-        int idx = 0;
-        foreach (var layer in Layers)
-        {
-            int count = (int)layer.ParameterCount;
-            layer.UpdateParameters(parameters.Slice(idx, count));
-            idx += count;
-        }
-        // _tokenEmbedding lives OUTSIDE Layers: it embeds token IDs on the dedicated
-        // instruction path (EmbedInstructionTokens), so it cannot join the sequential
-        // Layers walk that Predict runs image tensors through. Its parameters ride at
-        // the TAIL of the flat vector — same layout as GetParameters/SetParameters —
-        // so training updates reach the embedding table (same off-Layers contract as
-        // PaLME._patchEmbed).
-        int embedCount = (int)_tokenEmbedding.ParameterCount;
-        if (embedCount > 0 && idx + embedCount <= parameters.Length)
-            _tokenEmbedding.UpdateParameters(parameters.Slice(idx, embedCount));
-    }
-
-    /// <inheritdoc />
-    /// <remarks>
-    /// Includes the off-<see cref="NeuralNetworkBase{T}.Layers"/> instruction-token
-    /// embedding table so the flat parameter APIs (<see cref="GetParameters"/> /
-    /// <see cref="SetParameters"/> / <see cref="UpdateParameters"/>) agree on length.
-    /// </remarks>
-    public override long ParameterCount
-    {
-        get
-        {
-            long total = 0;
-            foreach (var layer in Layers)
-                total += layer.ParameterCount;
-            return total + _tokenEmbedding.ParameterCount;
-        }
-    }
-
-    /// <inheritdoc />
-    /// <remarks>Layout: [layer params in Layers order ...] [token-embedding params].</remarks>
-    public override Vector<T> GetParameters()
-    {
-        var baseParams = base.GetParameters();
-        var embedParams = _tokenEmbedding.GetParameters();
-        if (embedParams.Length == 0)
-            return baseParams;
-        var combined = new Vector<T>(baseParams.Length + embedParams.Length);
-        for (int i = 0; i < baseParams.Length; i++)
-            combined[i] = baseParams[i];
-        for (int i = 0; i < embedParams.Length; i++)
-            combined[baseParams.Length + i] = embedParams[i];
-        return combined;
-    }
-
-    /// <inheritdoc />
-    /// <remarks>
-    /// Accepts both the full layout produced by <see cref="GetParameters"/> (layers +
-    /// embedding tail) and a layers-only vector (the embedding is left untouched), so
-    /// older callers that sized their vector from the Layers sum keep working.
-    /// </remarks>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int embedCount = (int)_tokenEmbedding.ParameterCount;
-
-        // Derive the layer-side size from the actual Layers walk, NOT from
-        // parameters.Length − embedCount. With the subtraction form a legacy
-        // layers-only vector silently sized baseCount to layerCount − embedCount,
-        // dropping the tail of the regular layer weights before
-        // base.SetParameters ran. Compute the true layer total once and pick
-        // the matching layout explicitly.
-        int layerCount = 0;
-        foreach (var layer in Layers)
-            layerCount += (int)layer.ParameterCount;
-
-        if (parameters.Length != layerCount && parameters.Length != layerCount + embedCount)
-            throw new ArgumentException(
-                $"Expected {layerCount} (layers-only) or {layerCount + embedCount} (layers + embedding) parameters, got {parameters.Length}.",
-                nameof(parameters)
-            );
-
-        var baseSlice = new Vector<T>(layerCount);
-        for (int i = 0; i < layerCount; i++)
-            baseSlice[i] = parameters[i];
-        base.SetParameters(baseSlice);
-
-        if (embedCount > 0 && parameters.Length == layerCount + embedCount)
-        {
-            var embedSlice = new Vector<T>(embedCount);
-            for (int i = 0; i < embedCount; i++)
-                embedSlice[i] = parameters[layerCount + i];
-            _tokenEmbedding.SetParameters(embedSlice);
-        }
-    }
-
+    // UpdateParameters restated a fold the base now derives from generated component registration.
+    // Removed under AIDN082.
     protected override Tensor<T> PreprocessImage(Tensor<T> image) =>
         NormalizeImage(image, _options.ImageMean, _options.ImageStd);
 

@@ -22,8 +22,10 @@ namespace AiDotNet.NeuralNetworks;
 /// </remarks>
 /// <example>
 /// <code>
-/// var options = new ZambaOptions { VocabSize = 32000, ModelDim = 3712, NumLayers = 76 };
-/// var model = new ZambaLanguageModel&lt;float&gt;(options);
+/// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
+///     InputType.OneDimensional, NeuralNetworkTaskType.TextGeneration,
+///     inputSize: 4096, outputSize: 32000);
+/// var model = new ZambaLanguageModel&lt;float&gt;(architecture);
 /// var tokens = Tensor&lt;float&gt;.Random(new[] { 1, 128 });
 /// var logits = model.Predict(tokens);
 /// </code>
@@ -37,7 +39,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Zamba: A Compact 7B SSM Hybrid Model", "https://arxiv.org/abs/2405.16712", Year = 2024, Authors = "Paolo Glorioso, Quentin Anthony, Yury Tokpanov, James Whittington, Jonathan Pilault, Adam Ibrahim, Beren Millidge")]
-public class ZambaLanguageModel<T> : NeuralNetworkBase<T>
+public class ZambaLanguageModel<T> : TokenLanguageModelLayoutBase<T>
 {
     private readonly ZambaOptions _options;
     private readonly int _vocabSize;
@@ -67,15 +69,22 @@ public class ZambaLanguageModel<T> : NeuralNetworkBase<T>
     public ZambaLanguageModel(
         NeuralNetworkArchitecture<T> architecture,
         int vocabSize = 32000,
-        int modelDimension = 256,
-        int numLayers = 12,
+        int modelDimension = 3712,
+        int numLayers = 76,
         int stateDimension = 16,
         int attentionInterval = 6,
-        int maxSeqLength = 512,
+        int maxSeqLength = 4096,
         ILossFunction<T>? lossFunction = null,
         ZambaOptions? options = null)
         : base(architecture,
-            lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(NeuralNetworkTaskType.TextGeneration))
+            // Zamba's LM head emits RAW LOGITS (DenseLayer with no activation, see
+            // LayerHelper.CreateZambaLayers), so the loss must be cross-entropy-with-logits (fused
+            // log-softmax + NLL, == PyTorch nn.CrossEntropyLoss) — the same pairing
+            // RWKV4LanguageModel already uses. The TextGeneration DEFAULT is CategoricalCrossEntropy,
+            // which expects softmax PROBABILITIES and takes log(predicted): feeding it un-normalized
+            // logits makes the objective degenerate, because every non-positive logit is clamped to the
+            // 1e-7 floor where TensorClamp has ZERO gradient, so those classes never train.
+            lossFunction ?? new AiDotNet.LossFunctions.CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new ZambaOptions();
         Options = _options;
@@ -111,33 +120,15 @@ public class ZambaLanguageModel<T> : NeuralNetworkBase<T>
 
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
-        SetTrainingMode(false);
-        return Accelerate(input, () =>
-        {
-            var output = input;
-            for (int i = 0; i < Layers.Count; i++)
-            {
-                output = Layers[i].Forward(output);
-            }
-            return output;
-        });
+        // Keep inference on the base funnel so unbatched token sequences are
+        // promoted consistently with Train, then squeezed back for the caller.
+        // Walking Layers directly made the output shape depend on whether the
+        // recurrent blocks had first been materialized by a batched training
+        // forward, which also broke trained-model clone parity.
+        return base.PredictCore(input);
     }
 
-    public override void UpdateParameters(Vector<T> gradients)
-    {
-        if (gradients.Length != ParameterCount)
-        {
-            throw new ArgumentException(
-                $"Expected {ParameterCount} gradients, but got {gradients.Length}",
-                nameof(gradients));
-        }
-
-        var currentParams = GetParameters();
-        T learningRate = NumOps.FromDouble(0.001);
-        currentParams = Engine.Subtract(currentParams, Engine.Multiply(gradients, learningRate));
-        SetParameters(currentParams);
-    }
-
+    // UpdateParameters applied a GRADIENT STEP, but its one-argument form is the value setter and every caller passes values -- the override corrupted the model. Removed under AIDN082.
     public override ModelMetadata<T> GetModelMetadata()
     {
         return new ModelMetadata<T>

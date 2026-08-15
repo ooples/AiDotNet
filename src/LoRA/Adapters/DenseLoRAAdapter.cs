@@ -65,14 +65,10 @@ public class DenseLoRAAdapter<T> : LoRAAdapterBase<T>
         {
             throw new ArgumentException("DenseLoRAAdapter only supports layers with 1D input/output shapes (Dense/FullyConnected layers)", nameof(baseLayer));
         }
-
-        // Force-resolve a lazy base layer using the LoRA decomposition's
-        // already-resolved input size (settled in the base ctor via the
-        // outSize×2 heuristic when the base was lazy). Without this, callers
-        // querying ParameterCount or GetParameters before any forward pass
-        // see only the LoRA contribution — the base reports 0 parameters
-        // because its weight tensors are still [0, ...] placeholders.
-        EnsureBaseLayerShapeResolved();
+        // Lazy base-layer resolution is intentionally left to the shared lifecycle. The adapter's
+        // synthetic input fallback is sufficient to size its low-rank tensors but is not evidence
+        // that can safely pin the wrapped layer. A real forward, an explicit-input constructor, or
+        // restore supplies authoritative shape information through the base implementation.
     }
 
     /// <summary>
@@ -151,12 +147,9 @@ public class DenseLoRAAdapter<T> : LoRAAdapterBase<T>
         // Get the LoRA weight contribution
         Matrix<T> loraWeights = _loraLayer.MergeWeights();
 
-        // Force-resolve the base layer if it's still in lazy state — without
-        // this, GetParameters() returns an empty Vector and the merge loop
-        // below indexes past the end. The LoRA decomposition's inner layer
-        // already settled on inputSize via the outSize×2 heuristic (see
-        // LoRAAdapterBase.CreateLoRALayer), so we propagate that to the base.
-        EnsureBaseLayerShapeResolved();
+        // A merge is an explicit value-reading operation, so bring up the base weights now.
+        // Construction and count queries remain allocation-free.
+        MaterializeBaseLayerParameters();
 
         // Get base layer parameters (works for both DenseLayer and FullyConnectedLayer)
         Vector<T> baseParams = _baseLayer.GetParameters();
@@ -164,7 +157,7 @@ public class DenseLoRAAdapter<T> : LoRAAdapterBase<T>
         // Both DenseLayer and FullyConnectedLayer store parameters as [weights..., biases...]
         // We need to add the LoRA weights to the base weights
         int inputSize = GetInputShape()[0];
-        int outputSize = GetOutputShape()[0];
+        int outputSize = GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0];
         int weightCount = inputSize * outputSize;
 
         // Create new parameters with merged weights

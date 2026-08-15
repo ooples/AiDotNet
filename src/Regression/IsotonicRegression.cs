@@ -107,9 +107,15 @@ public class IsotonicRegression<T> : NonLinearRegressionBase<T>
 
     /// <summary>
     /// Isotonic regression learns a monotonic step function — no optimizer parameter injection.
-    /// Returning 0 makes SupportsParameterInitialization return false.
     /// </summary>
-    public override long ParameterCount => 0;
+        /// <remarks>
+    /// Expressed as a capability, not as a count. A zero ParameterCount also suppresses
+    /// injection -- that is why this was written that way -- but it overloads a COUNT to carry
+    /// a CAPABILITY: the model does have parameters (the base getter returns its coefficients
+    /// and intercept), so the count contradicted the vector and anything pairing the two by
+    /// length saw parameters the model claimed not to have.
+    /// </remarks>
+    public override bool SupportsParameterInitialization => false;
 
     /// <summary>
     /// Trains the Isotonic Regression model using the provided input features and target values.

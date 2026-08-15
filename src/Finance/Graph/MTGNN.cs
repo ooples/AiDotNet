@@ -89,7 +89,7 @@ namespace AiDotNet.Finance.Graph;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Connecting the Dots: Multivariate Time Series Forecasting with Graph Neural Networks", "https://arxiv.org/abs/2005.11650", Year = 2020, Authors = "Zonghan Wu, Shirui Pan, Guodong Long, Jing Jiang, Xiaojun Chang, Chengqi Zhang")]
-public class MTGNN<T> : ForecastingModelBase<T>
+public partial class MTGNN<T> : ForecastingModelBase<T>
 {
     #region Execution Mode
     private readonly bool _useNativeMode;
@@ -707,20 +707,8 @@ public class MTGNN<T> : ForecastingModelBase<T>
         }
     }
 
-    /// <summary>
-    /// Updates parameters using the provided gradients.
-    /// </summary>
-    /// <param name="gradients">Gradient vector.</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the MTGNN model, UpdateParameters updates internal parameters or state. This keeps the MTGNN architecture aligned with the latest values.
-    /// </para>
-    /// </remarks>
-    public override void UpdateParameters(Vector<T> gradients)
-    {
-        // Parameters are updated through the optimizer in Train()
-    }
-
+    // UpdateParameters was an empty override, silently dropping every restore. The base
+    // distributes the vector over the declared enumeration.
     /// <summary>
     /// Gets metadata about the MTGNN model.
     /// </summary>

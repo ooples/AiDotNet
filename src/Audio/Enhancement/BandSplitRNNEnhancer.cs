@@ -46,13 +46,23 @@ namespace AiDotNet.Audio.Enhancement;
 [ResearchPaper("Music Source Separation with Band-Split RNN", "https://arxiv.org/abs/2209.15174", Year = 2023, Authors = "Yi Luo, Jianwei Yu")]
 public class BandSplitRNNEnhancer<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// DERIVED, not stored: measured [1,8] -> [1,257], which is FFTSize (512) / 2 + 1 - the number of
+    /// one-sided spectrum bins. This is the case that rules out reading a width reflectively by
+    /// property name: 257 appears nowhere in the options.
+    /// </remarks>
+    protected override int OutputFeatureWidth => _options.FFTSize / 2 + 1;
+
     #region Fields
 
     private readonly BandSplitRNNEnhancerOptions _options;
     public override ModelOptions GetOptions() => _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private readonly ShortTimeFourierTransform<T> _stft;
+    [Scratch]
     private Tensor<T>? _lastPhase;
+    [Buffer]
     private Tensor<T>? _noiseProfile;
     private bool _useNativeMode;
     private bool _disposed;
@@ -199,10 +209,10 @@ public class BandSplitRNNEnhancer<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer
     {
         ThrowIfDisposed();
         if (IsOnnxMode && OnnxEncoder is not null) return OnnxEncoder.Run(input);
-        var current = input;
-        foreach (var layer in Layers)
-            current = layer.Forward(current);
-        return current;
+        // The native enhancer is the sequential Layers graph. Use the
+        // canonical executor for deterministic evaluation, streaming weight
+        // lifetimes, and per-layer inference scratch recycling.
+        return base.PredictCore(input);
     }
 
     public override void Train(Tensor<T> input, Tensor<T> expected)
@@ -211,7 +221,10 @@ public class BandSplitRNNEnhancer<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expected);
+            // Use the AdamW optimizer selected by the constructor. The
+            // optimizer-less overload falls back to the base Adam8Bit path,
+            // whose full-vector state clone caused the generated-test OOM.
+            TrainWithTape(input, expected, _optimizer);
         }
         finally
         {
@@ -219,12 +232,11 @@ public class BandSplitRNNEnhancer<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer
         }
     }
 
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        if (!_useNativeMode) throw new NotSupportedException("ONNX mode.");
-        int idx = 0; foreach (var l in Layers) { int c = (int)l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; }
-    }
-
+    /// <inheritdoc />
+    /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
+    /// write on every parameter surface, so the guard is stated once here instead of being
+    /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
+    protected override bool SupportsParameterMutation => _useNativeMode;
     protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio)
     {
         _stft.MagnitudeAndPhase(rawAudio, out var magnitude, out var phase);
@@ -285,9 +297,10 @@ public class BandSplitRNNEnhancer<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer
 
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
+        var cloneOptions = new BandSplitRNNEnhancerOptions(_options);
         if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new BandSplitRNNEnhancer<T>(Architecture, mp, _options);
-        return new BandSplitRNNEnhancer<T>(Architecture, _options);
+            return new BandSplitRNNEnhancer<T>(Architecture, mp, cloneOptions);
+        return new BandSplitRNNEnhancer<T>(Architecture, cloneOptions);
     }
 
     #endregion

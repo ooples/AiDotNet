@@ -46,6 +46,16 @@ namespace AiDotNet.Audio.Generation;
 [ResearchPaper("SoundStream: An End-to-End Neural Audio Codec", "https://arxiv.org/abs/2107.03312", Year = 2021, Authors = "Neil Zeghidour, Alejandro Luebs, Ahmed Omran, Jan Skoglund, Marco Tagliasacchi")]
 public class SoundStream<T> : AudioNeuralNetworkBase<T>, IAudioCodec<T>
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// Traced from output construction: PredictCore folds over Layers, and CreateDefaultSoundStreamLayers
+    /// is a full encoder-decoder autoencoder whose final layer is <c>DenseLayer&lt;T&gt;(1, Tanh)</c> -
+    /// it reconstructs a mono waveform sample per step. A constant 1, not an options field: neither
+    /// CodebookSize (1024) nor EncoderDim is the width of what Predict returns; those describe the
+    /// bottleneck reached via Encode/EncodeEmbeddings, which are separate entry points.
+    /// </remarks>
+    protected override int OutputFeatureWidth => 1;
+
     #region Fields
 
     private readonly SoundStreamOptions _options;
@@ -235,7 +245,7 @@ public class SoundStream<T> : AudioNeuralNetworkBase<T>, IAudioCodec<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expected);
+            TrainWithTape(input, expected, _optimizer);
         }
         finally
         {
@@ -243,12 +253,11 @@ public class SoundStream<T> : AudioNeuralNetworkBase<T>, IAudioCodec<T>
         }
     }
 
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        if (!_useNativeMode) throw new NotSupportedException("ONNX mode.");
-        int idx = 0; foreach (var l in Layers) { int c = (int)l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; }
-    }
-
+    /// <inheritdoc />
+    /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
+    /// write on every parameter surface, so the guard is stated once here instead of being
+    /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
+    protected override bool SupportsParameterMutation => _useNativeMode;
     protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio) => rawAudio;
     protected override Tensor<T> PostprocessOutput(Tensor<T> o) => o;
 

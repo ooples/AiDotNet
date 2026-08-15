@@ -100,8 +100,17 @@ namespace AiDotNet.Diffusion.Audio;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("VoiceCraft: Zero-Shot Speech Editing and Text-to-Speech in the Wild", "https://arxiv.org/abs/2403.16973", Year = 2024, Authors = "Peng et al.")]
-public class VoiceCraftModel<T> : AudioDiffusionModelBase<T>
+public partial class VoiceCraftModel<T> : AudioDiffusionModelBase<T>
 {
+    /// <inheritdoc />
+    /// <remarks>Registration order is serialization order, and matches the
+    /// concatenation the previous hand-written GetParameters performed.</remarks>
+    protected override void RegisterComponents()
+    {
+        RegisterParameterComponent(_transformer);
+        RegisterParameterComponent(_audioVAE);
+    }
+
     #region Constants
 
     private const int LATENT_CHANNELS = 8;
@@ -142,7 +151,6 @@ public class VoiceCraftModel<T> : AudioDiffusionModelBase<T>
     /// <inheritdoc />
     public override bool SupportsAudioToAudio => true;
     /// <inheritdoc />
-    public override long ParameterCount => _transformer.ParameterCount + _audioVAE.ParameterCount;
 
     #endregion
 
@@ -191,31 +199,7 @@ public class VoiceCraftModel<T> : AudioDiffusionModelBase<T>
 
     #region IParameterizable Implementation
 
-    /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        var tParams = _transformer.GetParameters();
-        var vaeParams = _audioVAE.GetParameters();
-        var combined = new Vector<T>(tParams.Length + vaeParams.Length);
-        for (int i = 0; i < tParams.Length; i++) combined[i] = tParams[i];
-        for (int i = 0; i < vaeParams.Length; i++) combined[tParams.Length + i] = vaeParams[i];
-        return combined;
-    }
 
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int tCount = checked((int)_transformer.ParameterCount);
-        int vaeCount = checked((int)_audioVAE.ParameterCount);
-        if (parameters.Length != tCount + vaeCount)
-            throw new ArgumentException($"Expected {tCount + vaeCount} parameters, got {parameters.Length}.", nameof(parameters));
-        var tParams = new Vector<T>(tCount);
-        var vaeParams = new Vector<T>(vaeCount);
-        for (int i = 0; i < tCount; i++) tParams[i] = parameters[i];
-        for (int i = 0; i < vaeCount; i++) vaeParams[i] = parameters[tCount + i];
-        _transformer.SetParameters(tParams);
-        _audioVAE.SetParameters(vaeParams);
-    }
 
     #endregion
 

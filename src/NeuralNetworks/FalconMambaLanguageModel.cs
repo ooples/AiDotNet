@@ -39,7 +39,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Falcon Mamba: The First Competitive Attention-free 7B Language Model", "https://arxiv.org/abs/2410.05355", Year = 2024, Authors = "Jingwei Zuo, Younes Belkada, Paul Music, Rouven Bauer, Komal Kumar Bein, Yago Gimenez")]
-public class FalconMambaLanguageModel<T> : NeuralNetworkBase<T>
+public class FalconMambaLanguageModel<T> : TokenLanguageModelLayoutBase<T>
 {
     private readonly FalconMambaOptions _options;
     private readonly int _vocabSize;
@@ -133,21 +133,7 @@ public class FalconMambaLanguageModel<T> : NeuralNetworkBase<T>
         });
     }
 
-    public override void UpdateParameters(Vector<T> gradients)
-    {
-        if (gradients.Length != ParameterCount)
-        {
-            throw new ArgumentException(
-                $"Expected {ParameterCount} gradients, but got {gradients.Length}",
-                nameof(gradients));
-        }
-
-        var currentParams = GetParameters();
-        T learningRate = NumOps.FromDouble(0.001);
-        currentParams = Engine.Subtract(currentParams, Engine.Multiply(gradients, learningRate));
-        SetParameters(currentParams);
-    }
-
+    // UpdateParameters applied a GRADIENT STEP, but its one-argument form is the value setter and every caller passes values -- the override corrupted the model. Removed under AIDN082.
     public override ModelMetadata<T> GetModelMetadata()
     {
         return new ModelMetadata<T>

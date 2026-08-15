@@ -60,45 +60,29 @@ namespace AiDotNet.ComputerVision.Segmentation.Semantic;
 [ModelTask(ModelTask.Segmentation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("DiffCut: Catalyzing Zero-Shot Semantic Segmentation with Diffusion Features and Recursive Normalized Cut", "https://arxiv.org/abs/2407.11230", Year = 2024, Authors = "Couairon et al.")]
-public class DiffCut<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
+[ResearchPaper("DiffCut: Catalyzing Zero-Shot Semantic Segmentation with Diffusion Features and Recursive Normalized Cut", "https://arxiv.org/abs/2406.02842", Year = 2024, Authors = "Couairon et al.")]
+public class DiffCut<T> : Common.SemanticSegmentationBase<T>
 {
     private readonly DiffCutOptions _options;
     public override ModelOptions GetOptions() => _options;
 
     #region Fields
 
-    private readonly int _height;
-    private readonly int _width;
-    private readonly int _channels;
-    private readonly int _numClasses;
+    // Only DiffCut's OWN configuration lives here. _height, _width, _channels, _numClasses,
+    // _useNativeMode, _onnxModelPath, _onnxSession, _optimizer, _disposed and _encoderLayerEnd all
+    // come from SemanticSegmentationBase -> SegmentationModelBase.
     private readonly int[] _channelDims;
     private readonly int _decoderDim;
     private readonly int[] _depths;
     private readonly double _dropRate;
-    private readonly bool _useNativeMode;
-    private readonly string? _onnxModelPath;
-    private InferenceSession? _onnxSession;
-    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
-    private bool _disposed;
-    private int _encoderLayerEnd;
 
     #endregion
 
     #region Properties
 
-    /// <summary>
-    /// Gets whether this DiffCut instance supports training.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> DiffCut is primarily a zero-shot model that doesn't need training.
-    /// In native mode, training is supported for optional fine-tuning. ONNX mode is inference-only.
-    /// </para>
-    /// </remarks>
-    public override bool SupportsTraining => _useNativeMode;
+    // SupportsTraining and NumClasses are inherited from SegmentationModelBase and say exactly the
+    // same thing, so re-declaring them here would only create two sources of one fact.
     internal bool UseNativeMode => _useNativeMode;
-    internal int NumClasses => _numClasses;
 
     #endregion
 
@@ -128,18 +112,11 @@ public class DiffCut<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
         int numClasses = 150,
         double dropRate = 0.1,
         DiffCutOptions? options = null)
-        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>())
+        : base(architecture, optimizer, lossFunction, numClasses)
     {
         _options = options ?? new DiffCutOptions();
         Options = _options;
-        _height = architecture.InputHeight > 0 ? architecture.InputHeight : 512;
-        _width = architecture.InputWidth > 0 ? architecture.InputWidth : 512;
-        _channels = architecture.InputDepth > 0 ? architecture.InputDepth : 3;
-        _numClasses = numClasses;
         _dropRate = dropRate;
-        _useNativeMode = true;
-        _onnxModelPath = null;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
         _channelDims = [64, 128, 256, 512];
         _depths = [2, 2, 4, 2];
@@ -168,31 +145,15 @@ public class DiffCut<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
         string onnxModelPath,
         int numClasses = 150,
         DiffCutOptions? options = null)
-        : base(architecture, new CrossEntropyWithLogitsLoss<T>())
+        : base(architecture, onnxModelPath, numClasses)
     {
         _options = options ?? new DiffCutOptions();
         Options = _options;
-
-        if (string.IsNullOrWhiteSpace(onnxModelPath))
-            throw new ArgumentException("ONNX model path cannot be null or empty.", nameof(onnxModelPath));
-        if (!File.Exists(onnxModelPath))
-            throw new FileNotFoundException($"DiffCut ONNX model not found: {onnxModelPath}");
-
-        _height = architecture.InputHeight > 0 ? architecture.InputHeight : 512;
-        _width = architecture.InputWidth > 0 ? architecture.InputWidth : 512;
-        _channels = architecture.InputDepth > 0 ? architecture.InputDepth : 3;
-        _numClasses = numClasses;
         _dropRate = 0.0;
-        _useNativeMode = false;
-        _onnxModelPath = onnxModelPath;
-        _optimizer = null;
 
         _channelDims = [64, 128, 256, 512];
         _depths = [2, 2, 4, 2];
         _decoderDim = 256;
-
-        try { _onnxSession = new InferenceSession(onnxModelPath); }
-        catch (Exception ex) { throw new InvalidOperationException($"Failed to load DiffCut ONNX model: {ex.Message}", ex); }
 
         InitializeLayers();
     }
@@ -237,7 +198,7 @@ public class DiffCut<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expectedOutput);
+            TrainWithTape(input, expectedOutput, Optimizer);
         }
         finally
         {
@@ -249,7 +210,7 @@ public class DiffCut<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
 
     #region Private Methods
 
-    private Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> Forward(Tensor<T> input)
     {
         bool hasBatch = input.Rank == 4;
         if (!hasBatch) input = AddBatchDimension(input);
@@ -260,7 +221,7 @@ public class DiffCut<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
         return features;
     }
 
-    private Tensor<T> PredictOnnx(Tensor<T> input)
+    protected override Tensor<T> PredictOnnx(Tensor<T> input)
     {
         if (_onnxSession is null) throw new InvalidOperationException("ONNX session is not initialized.");
         bool hasBatch = input.Rank == 4;
@@ -275,22 +236,6 @@ public class DiffCut<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
         for (int i = 0; i < outputTensor.Length; i++) outputData[i] = NumOps.FromDouble(outputTensor.GetValue(i));
         var result = new Tensor<T>(outputTensor.Dimensions.ToArray(), new Vector<T>(outputData));
         if (!hasBatch) result = RemoveBatchDimension(result);
-        return result;
-    }
-
-    private Tensor<T> AddBatchDimension(Tensor<T> tensor)
-    {
-        var result = new Tensor<T>([1, tensor.Shape[0], tensor.Shape[1], tensor.Shape[2]]);
-        tensor.Data.Span.CopyTo(result.Data.Span);
-        return result;
-    }
-
-    private Tensor<T> RemoveBatchDimension(Tensor<T> tensor)
-    {
-        int[] newShape = new int[tensor.Shape.Length - 1];
-        for (int i = 0; i < newShape.Length; i++) newShape[i] = tensor.Shape[i + 1];
-        var result = new Tensor<T>(newShape);
-        tensor.Data.Span.CopyTo(result.Data.Span);
         return result;
     }
 
@@ -336,31 +281,8 @@ public class DiffCut<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
         }
     }
 
-    /// <summary>
-    /// Updates all trainable parameters from a flat vector.
-    /// </summary>
-    /// <param name="parameters">Flat parameter vector.</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Replaces model weights, used during optimization and loading.
-    /// </para>
-    /// </remarks>
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        int offset = 0;
-        foreach (var layer in Layers)
-        {
-            var lp = layer.GetParameters();
-            if (offset + lp.Length <= parameters.Length)
-            {
-                var np = new Vector<T>(lp.Length);
-                for (int i = 0; i < lp.Length; i++) np[i] = parameters[offset + i];
-                layer.UpdateParameters(np);
-                offset += lp.Length;
-            }
-        }
-    }
-
+    // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
+    // exactly the same enumeration, so this said nothing the base does not already say.
     /// <summary>
     /// Collects model metadata.
     /// </summary>
@@ -412,28 +334,6 @@ public class DiffCut<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
             ? new DiffCut<T>(Architecture, _optimizer, LossFunction, _numClasses, _dropRate, _options)
             : new DiffCut<T>(Architecture, _onnxModelPath ?? throw new InvalidOperationException("ONNX model path not initialized."), _numClasses, _options);
     }
-
-    protected override void Dispose(bool disposing)
-    {
-        if (!_disposed) { if (disposing) { _onnxSession?.Dispose(); _onnxSession = null; } _disposed = true; }
-        base.Dispose(disposing);
-    }
-
-    #endregion
-
-    #region ISemanticSegmentation Implementation
-
-    int ISegmentationModel<T>.NumClasses => _numClasses;
-    int ISegmentationModel<T>.InputHeight => _height;
-    int ISegmentationModel<T>.InputWidth => _width;
-    bool ISegmentationModel<T>.IsOnnxMode => !_useNativeMode;
-    Tensor<T> ISegmentationModel<T>.Segment(Tensor<T> image) => Predict(image);
-
-    Tensor<T> ISemanticSegmentation<T>.GetClassMap(Tensor<T> image)
-        => Common.SegmentationTensorOps.ArgmaxAlongClassDim(Predict(image));
-
-    Tensor<T> ISemanticSegmentation<T>.GetProbabilityMap(Tensor<T> image)
-        => Common.SegmentationTensorOps.SoftmaxAlongClassDim(Predict(image));
 
     #endregion
 }

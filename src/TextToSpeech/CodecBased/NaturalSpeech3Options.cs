@@ -12,6 +12,7 @@ public class NaturalSpeech3Options : EndToEndTtsOptions
     /// <param name="other">The options instance to copy from.</param>
     /// <exception cref="ArgumentNullException">Thrown when other is null.</exception>
     public NaturalSpeech3Options(NaturalSpeech3Options other)
+        : base(other)
     {
         if (other == null)
             throw new ArgumentNullException(nameof(other));

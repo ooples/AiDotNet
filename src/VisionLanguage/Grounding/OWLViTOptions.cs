@@ -12,32 +12,11 @@ public class OWLViTOptions : GroundingVLMOptions
     /// <param name="other">The options instance to copy from.</param>
     /// <exception cref="ArgumentNullException">Thrown when other is null.</exception>
     public OWLViTOptions(OWLViTOptions other)
+        : base(other)
     {
-        if (other == null)
-            throw new ArgumentNullException(nameof(other));
-
-        Seed = other.Seed;
-        ImageSize = other.ImageSize;
-        VisionDim = other.VisionDim;
-        DecoderDim = other.DecoderDim;
-        NumVisionLayers = other.NumVisionLayers;
-        NumDecoderLayers = other.NumDecoderLayers;
-        NumHeads = other.NumHeads;
-        VocabSize = other.VocabSize;
-        MaxSequenceLength = other.MaxSequenceLength;
-        MaxGenerationLength = other.MaxGenerationLength;
-        DropoutRate = other.DropoutRate;
-        ArchitectureType = other.ArchitectureType;
-        ImageMean = other.ImageMean;
-        ImageStd = other.ImageStd;
-        ModelPath = other.ModelPath;
-        OnnxOptions = other.OnnxOptions;
-        LearningRate = other.LearningRate;
-        WeightDecay = other.WeightDecay;
-        MaxDetections = other.MaxDetections;
-        ConfidenceThreshold = other.ConfidenceThreshold;
-        NmsThreshold = other.NmsThreshold;
-        BoxDimension = other.BoxDimension;
+        TextEmbeddingDim = other.TextEmbeddingDim;
+        DetectionDim = other.DetectionDim;
+        NumFusionLayers = other.NumFusionLayers;
         NumClassEmbeddings = other.NumClassEmbeddings;
     }
 
@@ -54,4 +33,13 @@ public class OWLViTOptions : GroundingVLMOptions
 
     /// <summary>Gets or sets the class embedding dimension.</summary>
     public int NumClassEmbeddings { get; set; } = 512;
+
+    /// <summary>Gets or sets the text-encoder feature width.</summary>
+    public int TextEmbeddingDim { get; set; } = 768;
+
+    /// <summary>Gets or sets the detection-decoder feature width.</summary>
+    public int DetectionDim { get; set; } = 256;
+
+    /// <summary>Gets or sets the number of cross-modal fusion layers.</summary>
+    public int NumFusionLayers { get; set; } = 6;
 }

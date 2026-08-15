@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Document.Interfaces;
 using AiDotNet.Document.Options;
 using AiDotNet.Enums;
@@ -51,7 +51,7 @@ namespace AiDotNet.Document.OCR.TextRecognition;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("TrOCR: Transformer-based Optical Character Recognition with Pre-trained Models", "https://doi.org/10.48550/arXiv.2109.10282", Year = 2022, Authors = "Minghao Li, Tengchao Lv, Jingye Chen, Lei Cui, Yijuan Lu, Dinei Florencio, Cha Zhang, Zhoujun Li, Furu Wei")]
-public class TrOCR<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
+public partial class TrOCR<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
 {
     private readonly TrOCROptions _options;
 
@@ -64,7 +64,7 @@ public class TrOCR<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
     private readonly InferenceSession? _onnxEncoderSession;
     private readonly InferenceSession? _onnxDecoderSession;
     private readonly ITokenizer _tokenizer;
-    private readonly IOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private readonly int _encoderHiddenDim;
     private readonly int _decoderHiddenDim;
     private readonly int _numEncoderLayers;
@@ -84,8 +84,10 @@ public class TrOCR<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
     private Tensor<T>? _decoderWordEmbeddings;
 
     // Cached outputs
+    [Scratch]
     private Tensor<T>? _lastCharacterProbabilities;
 #pragma warning disable CS0649 // Field is never assigned - attention weights are computed but not yet stored
+    [Scratch]
     private Tensor<T>? _lastAttentionWeights;
 #pragma warning restore CS0649
 
@@ -153,7 +155,7 @@ public class TrOCR<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
         int numDecoderHeads = 12,
         int patchSize = 16,
         int vocabSize = 50265,
-        IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         TrOCROptions? options = null)
         : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
@@ -182,7 +184,11 @@ public class TrOCR<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
         _patchSize = patchSize;
         _vocabSize = vocabSize;
         _maxSequenceLength = maxSequenceLength;
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
+            new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate
+            });
 
         ImageSize = Math.Max(imageHeight, imageWidth);
         MaxSequenceLength = maxSequenceLength;
@@ -235,7 +241,7 @@ public class TrOCR<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
         int numDecoderHeads = 12,
         int patchSize = 16,
         int vocabSize = 50265,
-        IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         TrOCROptions? options = null)
         : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
@@ -253,7 +259,11 @@ public class TrOCR<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
         _patchSize = patchSize;
         _vocabSize = vocabSize;
         _maxSequenceLength = maxSequenceLength;
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
+            new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate
+            });
 
         ImageSize = Math.Max(imageHeight, imageWidth);
         MaxSequenceLength = maxSequenceLength;
@@ -809,27 +819,23 @@ public class TrOCR<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
 
         SetTrainingMode(true);
 
-        TrainWithTape(input, expectedOutput);
+        TrainWithTape(input, expectedOutput, _optimizer);
         var paramGradients = CollectParameterGradients();
         UpdateParameters(paramGradients);
         SetTrainingMode(false);}
 
-    /// <inheritdoc/>
-    public override void UpdateParameters(Vector<T> gradients)
-    {
-        if (!_useNativeMode)
-        {
-            throw new NotSupportedException("Parameter updates are not supported in ONNX inference mode.");
-        }
+    // UpdateParameters applied a GRADIENT STEP, but its one-argument form is the value setter and every caller passes values -- the override corrupted the model. Removed under AIDN082.
 
-        var currentParams = GetParameters();
-        T learningRate = NumOps.FromDouble(_options.LearningRate);
-
-        currentParams = Engine.Subtract(currentParams, Engine.Multiply(gradients, learningRate));
-
-        SetParameters(currentParams);
-    }
-
+    /// <summary>
+    /// Parameters cannot be written while the model is backed by a loaded ONNX graph: the weights
+    /// belong to that graph, not to this instance.
+    /// </summary>
+    /// <remarks>
+    /// Replaces a hand-written throw that used to sit inside UpdateParameters. The base checks this
+    /// on every mutating entry point rather than the one member the throw happened to guard, and
+    /// reading -- ParameterCount and GetParameters -- stays available either way.
+    /// </remarks>
+    protected override bool SupportsParameterMutation => _useNativeMode;
     private Vector<T> CollectParameterGradients()
     {
         var gradients = new List<T>();

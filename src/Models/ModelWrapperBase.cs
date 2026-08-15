@@ -27,7 +27,8 @@ namespace AiDotNet.Models;
 /// </para>
 /// </remarks>
 public abstract class ModelWrapperBase<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>,
-    IParameterizable<T, TInput, TOutput>, IFeatureAware, IGradientComputable<T, TInput, TOutput>
+    IParameterizable<T, TInput, TOutput>, IFeatureAware, IGradientComputable<T, TInput, TOutput>,
+    AiDotNet.Models.Parameters.IParameterManifestProvider
 {
     /// <summary>
     /// Numeric operations for type T.
@@ -70,17 +71,135 @@ public abstract class ModelWrapperBase<T, TInput, TOutput> : IFullModel<T, TInpu
 
     // --- IParameterizable ---
 
+    /// <summary>
+    /// The components this wrapper's parameters live in, in registration order, which is also the
+    /// serialization order. Empty for a plain wrapper, which forwards to the model it wraps.
+    /// </summary>
+    private readonly AiDotNet.Models.Parameters.ParameterComponentRegistry<T> _parameterRegistry = new();
+    private bool _componentsRegistered;
+
+    /// <summary>
+    /// Declares a component whose parameters belong to this wrapper's own surface, for a wrapper
+    /// that holds parameters INSTEAD of the model it wraps.
+    /// </summary>
+    /// <remarks>
+    /// A meta-learning adapted model is the case this exists for: it wraps a base model but carries
+    /// its own adapted vector, and forwarding to the wrapped model would read the wrong weights.
+    /// Registration order is serialization order, so keep it stable. Null is tolerated and
+    /// registration is idempotent by reference.
+    /// </remarks>
+    protected void RegisterParameterComponent(
+        IParameterSource<T>? component,
+        [System.Runtime.CompilerServices.CallerArgumentExpression(nameof(component))] string? componentExpression = null,
+        [System.Runtime.CompilerServices.CallerMemberName] string? memberName = null)
+        => _parameterRegistry.RegisterLegacy(GetType().FullName ?? GetType().Name,
+            memberName, componentExpression, component);
+
+    protected void RegisterParameterComponent(string stableId, IParameterSource<T>? component,
+        AiDotNet.Models.Parameters.ParameterSlotRole role = AiDotNet.Models.Parameters.ParameterSlotRole.Trainable)
+        => _parameterRegistry.Register(stableId, component, role);
+
+    /// <summary>
+    /// Declare this wrapper's own trainable components here with
+    /// <see cref="RegisterParameterComponent"/>. Leave it alone to forward to the wrapped model.
+    /// </summary>
+    protected virtual void RegisterComponents()
+    {
+    }
+
+    protected virtual void RegisterGeneratedParameterComponents(
+        AiDotNet.Models.Parameters.ParameterComponentRegistry<T> registry)
+    {
+    }
+
+    /// <summary>
+    /// Runs after <see cref="SetParameters"/> has distributed values into the components.
+    /// </summary>
+    protected virtual void OnParametersRestored()
+    {
+    }
+
+    private IReadOnlyList<IParameterSource<T>> Components
+    {
+        get
+        {
+            if (!_componentsRegistered)
+            {
+                RegisterGeneratedParameterComponents(_parameterRegistry);
+                RegisterComponents();
+                _componentsRegistered = true;
+            }
+            return _parameterRegistry.Components;
+        }
+    }
+
+    public AiDotNet.Models.Parameters.ParameterLayoutSnapshot ParameterLayout
+    {
+        get
+        {
+            var components = Components;
+            if (components.Count > 0) return _parameterRegistry.ParameterLayout;
+            if (BaseModel is AiDotNet.Models.Parameters.IParameterManifestProvider manifest)
+                return manifest.ParameterLayout;
+            var parameterizable = InterfaceGuard.TryParameterizable(BaseModel);
+            long count = parameterizable?.ParameterCount ?? 0;
+            return new AiDotNet.Models.Parameters.ParameterLayoutSnapshot(new[]
+            {
+                new AiDotNet.Models.Parameters.ParameterSlotDescriptor(
+                    $"{BaseModel.GetType().FullName}::wrapped-model",
+                    AiDotNet.Models.Parameters.ParameterSlotRole.Trainable,
+                    count == 0 ? AiDotNet.Models.Parameters.ParameterReadiness.ParameterFree
+                               : AiDotNet.Models.Parameters.ParameterReadiness.Materialized,
+                    count)
+            });
+        }
+    }
+
     /// <inheritdoc/>
+    /// <remarks>
+    /// Registered components first; a wrapper that registers none forwards to the model it wraps,
+    /// which is what a wrapper should do and what this always did.
+    /// </remarks>
     public virtual Vector<T> GetParameters()
-        => InterfaceGuard.TryParameterizable(BaseModel)?.GetParameters() ?? new Vector<T>(0);
+    {
+        var components = Components;
+        if (components.Count == 0)
+            return InterfaceGuard.TryParameterizable(BaseModel)?.GetParameters() ?? new Vector<T>(0);
+
+        return _parameterRegistry.GetParameters();
+    }
 
     /// <inheritdoc/>
+    /// <remarks>The inverse of <see cref="GetParameters"/>, down whichever of the two paths that
+    /// took.</remarks>
     public virtual void SetParameters(Vector<T> parameters)
-        => InterfaceGuard.TryParameterizable(BaseModel)?.SetParameters(parameters);
+    {
+        if (parameters is null) throw new ArgumentNullException(nameof(parameters));
+
+        var components = Components;
+        if (components.Count == 0)
+        {
+            InterfaceGuard.TryParameterizable(BaseModel)?.SetParameters(parameters);
+            return;
+        }
+
+        _parameterRegistry.SetParameters(parameters);
+        OnParametersRestored();
+    }
 
     /// <inheritdoc/>
-    public virtual long ParameterCount =>
-        InterfaceGuard.TryParameterizable(BaseModel)?.ParameterCount ?? 0;
+    /// <remarks>Folds the same enumeration the vector does, so the two cannot disagree.</remarks>
+    public virtual long ParameterCount
+    {
+        get
+        {
+            var components = Components;
+            if (components.Count == 0)
+                return InterfaceGuard.TryParameterizable(BaseModel)?.ParameterCount ?? 0;
+
+            return _parameterRegistry.ParameterCount;
+        }
+    }
 
     /// <inheritdoc/>
     public virtual bool SupportsParameterInitialization =>

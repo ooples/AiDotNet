@@ -44,7 +44,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Deep Octonion Networks", "https://arxiv.org/abs/1903.08478", Year = 2019, Authors = "Jiasong Wu et al.")]
-public class OctonionNeuralNetwork<T> : NeuralNetworkBase<T>
+public class OctonionNeuralNetwork<T> : VectorModelLayoutBase<T>
 {
     private readonly OctonionNeuralNetworkOptions _options;
 
@@ -215,25 +215,8 @@ public class OctonionNeuralNetwork<T> : NeuralNetworkBase<T>
         return output;
     }
 
-    /// <summary>
-    /// Updates the parameters of all layers in the network.
-    /// </summary>
-    /// <param name="parameters">A vector containing all parameters for the network.</param>
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        int index = 0;
-        foreach (var layer in Layers)
-        {
-            int layerParameterCount = checked((int)layer.ParameterCount);
-            if (layerParameterCount > 0)
-            {
-                var layerParameters = parameters.Slice(index, layerParameterCount);
-                layer.UpdateParameters(layerParameters);
-                index += layerParameterCount;
-            }
-        }
-    }
-
+    // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
+    // exactly the same enumeration, so this said nothing the base does not already say.
     /// <summary>
     /// Trains the octonion neural network using the provided input and expected output.
     /// </summary>

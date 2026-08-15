@@ -52,7 +52,7 @@ namespace AiDotNet.Regression;
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
     [ResearchPaper("Applied Logistic Regression", "https://doi.org/10.1002/0471722146")]
-public class MultinomialLogisticRegression<T> : RegressionBase<T>
+public partial class MultinomialLogisticRegression<T> : RegressionBase<T>
 {
     /// <summary>
     /// The configuration options for the multinomial logistic regression model.
@@ -126,7 +126,14 @@ public class MultinomialLogisticRegression<T> : RegressionBase<T>
     /// <summary>
     /// Multinomial logistic is a classification model — no optimizer parameter injection.
     /// </summary>
-    public override long ParameterCount => 0;
+        /// <remarks>
+    /// Expressed as a capability, not as a count. A zero ParameterCount also suppresses
+    /// injection -- that is why this was written that way -- but it overloads a COUNT to carry
+    /// a CAPABILITY: the model does have parameters (the base getter returns its coefficients
+    /// and intercept), so the count contradicted the vector and anything pairing the two by
+    /// length saw parameters the model claimed not to have.
+    /// </remarks>
+    public override bool SupportsParameterInitialization => false;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="MultinomialLogisticRegression{T}"/> class with optional custom options and regularization.

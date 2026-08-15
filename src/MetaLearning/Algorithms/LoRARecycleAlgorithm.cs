@@ -59,7 +59,7 @@ namespace AiDotNet.MetaLearning.Algorithms;
     Authors = "Yixiao Hu, Minghao Chen, et al.")]
 [ComponentType(ComponentType.MetaLearner)]
 [PipelineStage(PipelineStage.Training)]
-public class LoRARecycleAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
+public partial class LoRARecycleAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
     private IParameterizable<T, TInput, TOutput>? _cachedParamModel;
     private IParameterizable<T, TInput, TOutput> ParamModel => _cachedParamModel ??= InterfaceGuard.Parameterizable(MetaModel);
@@ -69,11 +69,13 @@ public class LoRARecycleAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
     /// <summary>
     /// Bank of LoRA adapters. Each adapter is a flat vector of parameter deltas (length = paramDim).
     /// </summary>
+    [Buffer]
     private readonly List<Vector<T>> _adapterBank;
 
     /// <summary>
     /// Prototype embedding for each adapter in the bank (length = prototypeDim per adapter).
     /// </summary>
+    [Buffer]
     private readonly List<Vector<T>> _adapterPrototypes;
 
     /// <summary>

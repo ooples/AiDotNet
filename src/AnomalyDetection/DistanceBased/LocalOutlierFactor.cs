@@ -48,9 +48,12 @@ namespace AiDotNet.AnomalyDetection.DistanceBased;
 public class LocalOutlierFactor<T> : AnomalyDetectorBase<T>
 {
     private readonly int _numNeighbors;
+    [Buffer]
     private Matrix<T>? _trainingData;
+    [Buffer]
     private Vector<T>[]? _kDistances;
     private int[][]? _neighborIndices;
+    [Buffer]
     private Vector<T>? _lrd;
 
     /// <summary>

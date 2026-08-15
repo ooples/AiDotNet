@@ -56,7 +56,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("SpiralNet++: A Fast and Highly Efficient Mesh Convolution Operator", "https://arxiv.org/abs/1911.05856", Year = 2019, Authors = "Shunwang Gong, Lei Chen, Michael Bronstein, Stefanos Zafeiriou")]
-public class SpiralNet<T> : NeuralNetworkBase<T>
+public class SpiralNet<T> : GraphModelLayoutBase<T>
 {
     /// <summary>
     /// The loss function used to compute training loss.
@@ -370,7 +370,6 @@ public class SpiralNet<T> : NeuralNetworkBase<T>
         if (TryForwardGpuOptimized(input, out var gpuResult))
             return gpuResult;
 
-
         if (_spiralIndicesPerLevel.Count == 0)
         {
             // Auto-generate default spiral indices: each vertex references itself
@@ -389,11 +388,8 @@ public class SpiralNet<T> : NeuralNetworkBase<T>
         PropagateSpiralIndicesToLayers();
 
         Tensor<T> output = input;
-
         foreach (var layer in Layers)
-        {
             output = layer.Forward(output);
-        }
 
         return output;
     }
@@ -485,7 +481,10 @@ public class SpiralNet<T> : NeuralNetworkBase<T>
     public int PredictClass(Tensor<T> meshFeatures, int[,] meshSpiralIndices)
     {
         SetSpiralIndices(meshSpiralIndices);
-        var output = Forward(meshFeatures);
+        // Route through Predict so BatchNorm/Dropout run in evaluation mode.
+        // Forward() would leave them in training mode, producing input-independent
+        // outputs at inference time (same bug the Predict override already fixes).
+        var output = Predict(meshFeatures);
 
         var outputArray = output.ToArray();
         int predictedClass = 0;
@@ -516,7 +515,51 @@ public class SpiralNet<T> : NeuralNetworkBase<T>
             throw new InvalidOperationException(
                 "Spiral indices must be set via SetSpiralIndices before calling Predict.");
         }
-        return Accelerate(input, () => Forward(input));
+
+        // The VERTEX COUNT is fixed by the mesh the spiral indices were computed from, and this is the
+        // one place that can say so. Each level's index table is [numVertices, spiralLength] and the
+        // convolution gathers neighbours through it, so a mesh with more vertices than the table has
+        // rows walks straight off the end - the failure was IndexOutOfRangeException raised from inside
+        // the gather, naming no constraint and reading as an engine defect rather than as a model
+        // stating what it needs.
+        //
+        // Unlike a convolution's spatial extent this genuinely CANNOT be relaxed: spiral ordering is a
+        // property of one specific mesh topology, so a different vertex count is a different mesh and
+        // needs its own indices. Saying so is the fix; accepting it would be wrong.
+        int expectedVertices = _spiralIndicesPerLevel[0].GetLength(0);
+        int vertexAxis = input.Rank >= 3 ? input.Rank - 2 : 0;
+        if (input.Rank >= 2 && input.Shape[vertexAxis] != expectedVertices)
+        {
+            throw new ArgumentException(
+                $"SpiralNet was given a mesh with {input.Shape[vertexAxis]} vertices, but its spiral "
+                + $"indices describe a mesh of {expectedVertices}. Spiral ordering is a property of one "
+                + "specific mesh topology, so a different vertex count is a different mesh: recompute "
+                + $"the indices for it and pass them to {nameof(SetSpiralIndices)}.",
+                nameof(input));
+        }
+
+        // Inference MUST run BatchNorm in eval mode (running stats), NOT training
+        // mode (per-forward batch stats). The default IsTrainingMode is true on
+        // construction, and this override bypasses the base PredictCore's
+        // SetTrainingMode(false) toggle — so without this, Predict computes batch
+        // statistics over the vertex axis. For a spatially-uniform mesh (every
+        // vertex identical, the ModelFamily invariant inputs), the per-channel
+        // batch variance is ~0, so (x - batchMean)/sqrt(var+eps) collapses every
+        // feature to 0 and the network emits a constant output independent of the
+        // input — breaking DifferentInputs_ShouldProduceDifferentOutputs and
+        // driving the BatchNorm backward's 1/var^1.5 term toward NaN. Eval mode
+        // divides by the running variance (initialized to 1), which passes the
+        // signal through.
+        bool wasTraining = IsTrainingMode;
+        if (wasTraining) SetTrainingMode(false);
+        try
+        {
+            return Accelerate(input, () => Forward(input));
+        }
+        finally
+        {
+            if (wasTraining) SetTrainingMode(true);
+        }
     }
 
     /// <summary>
@@ -538,23 +581,8 @@ public class SpiralNet<T> : NeuralNetworkBase<T>
         }
     }
 
-    /// <summary>
-    /// Updates network parameters using a flat parameter vector.
-    /// </summary>
-    /// <param name="parameters">Vector containing all parameters.</param>
-    /// <inheritdoc />
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        int index = 0;
-        foreach (var layer in Layers)
-        {
-            int layerParams = checked((int)layer.ParameterCount);
-            var layerParameters = parameters.Slice(index, layerParams);
-            layer.UpdateParameters(layerParameters);
-            index += layerParams;
-        }
-    }
-
+    // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
+    // exactly the same enumeration, so this said nothing the base does not already say.
     /// <summary>
     /// Gets metadata about this model.
     /// </summary>
@@ -691,7 +719,8 @@ public class SpiralNet<T> : NeuralNetworkBase<T>
     public Vector<T> PredictProbabilities(Tensor<T> meshFeatures, int[,] meshSpiralIndices)
     {
         SetSpiralIndices(meshSpiralIndices);
-        var output = Forward(meshFeatures);
+        // Route through Predict so BatchNorm/Dropout run in evaluation mode.
+        var output = Predict(meshFeatures);
 
         var softmax = new SoftmaxActivation<T>();
         return softmax.Activate(output.ToVector());

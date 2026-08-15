@@ -42,7 +42,12 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.AttentionComputation)]
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerProperty(IsTrainable = true, Cost = ComputeCost.High, TestInputShape = "4, 8", TestConstructorArgs = "4, 8, 2, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
-public partial class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
+// Self-attention over a sequence: shape-preserving at rank 2 [Time, Features] - the unbatched form the
+// discovery sweep probed. Attention needs a real sequence axis, so this is not declared rank-agnostic.
+[TensorLayout(TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
+[AutoParameters]
+public partial class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IShapeContract
 {
     /// <summary>
     /// Gets or sets whether auxiliary loss (attention sparsity regularization) should be used during training.
@@ -101,7 +106,10 @@ public partial class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T
     /// Queries represent what each position in the sequence is looking for in other positions.
     /// Shape: [embeddingDimension, embeddingDimension]
     /// </remarks>
-    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+    [TrainableParameter(
+        Role = PersistentTensorRole.Weights,
+        Shape = "_embeddingDimension, _embeddingDimension",
+        LowPrecisionBacking = nameof(_queryWeightsHalf))]
 
     private Tensor<T> _queryWeights;
 
@@ -113,7 +121,10 @@ public partial class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T
     /// Keys represent what each position in the sequence has to offer to other positions.
     /// Shape: [embeddingDimension, embeddingDimension]
     /// </remarks>
-    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+    [TrainableParameter(
+        Role = PersistentTensorRole.Weights,
+        Shape = "_embeddingDimension, _embeddingDimension",
+        LowPrecisionBacking = nameof(_keyWeightsHalf))]
     private Tensor<T> _keyWeights;
 
     /// <summary>
@@ -125,7 +136,10 @@ public partial class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T
     /// is being extracted from each position.
     /// Shape: [embeddingDimension, embeddingDimension]
     /// </remarks>
-    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+    [TrainableParameter(
+        Role = PersistentTensorRole.Weights,
+        Shape = "_embeddingDimension, _embeddingDimension",
+        LowPrecisionBacking = nameof(_valueWeightsHalf))]
     private Tensor<T> _valueWeights;
 
     /// <summary>
@@ -137,7 +151,7 @@ public partial class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T
     /// baseline activation level of the attention output.
     /// Shape: [embeddingDimension]
     /// </remarks>
-    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+    [TrainableParameter(Role = PersistentTensorRole.Biases, Shape = "_embeddingDimension")]
 
     private Tensor<T> _outputBias;
 
@@ -386,17 +400,6 @@ public partial class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T
     protected override bool SupportsGpuExecution => true;
 
     /// <summary>
-    /// Gets the total number of trainable parameters in this layer.
-    /// </summary>
-    /// <value>
-    /// The total number of parameters: 3 weight matrices (Q, K, V) each of size [embeddingDimension × embeddingDimension],
-    /// plus an output bias of size [embeddingDimension].
-    /// Total = 3 × E² + E = E × (3E + 1) where E is the embedding dimension.
-    /// </value>
-    public override long ParameterCount =>
-        3 * (_embeddingDimension * _embeddingDimension) + _embeddingDimension;
-
-    /// <summary>
     /// Initializes a new instance of the <see cref="SelfAttentionLayer{T}"/> class with a scalar activation function.
     /// </summary>
     /// <param name="sequenceLength">The length of the input sequence.</param>
@@ -429,9 +432,9 @@ public partial class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T
     /// </para>
     /// </remarks>
     public SelfAttentionLayer(
-        int sequenceLength,
-        int embeddingDimension,
-        int headCount = 8,
+        [LayerState] int sequenceLength,
+        [LayerState] int embeddingDimension,
+        [LayerState] int headCount = 8,
         IActivationFunction<T>? activationFunction = null,
         IInitializationStrategy<T>? initializationStrategy = null)
         : base(
@@ -619,11 +622,11 @@ public partial class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T
     /// or types of questions.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // Materialize lazy-init weights before any Q/K/V projection runs — same
         // contract DenseLayer gives for lazy layers.
-        EnsureInitialized();
+        EnsureInitializedFromInput(input);
 
         // Store original shape for any-rank tensor support
         _originalInputShape = input._shape;
@@ -835,13 +838,12 @@ public partial class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T
         if (inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
 
-        // Materialize lazy Q/K/V/bias tensors before GPU path.
-        EnsureInitialized();
-
         if (Engine is not DirectGpuTensorEngine gpuEngine)
             throw new InvalidOperationException("ForwardGpu requires DirectGpuTensorEngine.");
 
         var input = inputs[0];
+        // Materialize or adopt lazy Q/K/V/bias tensors through the common lifecycle before GPU use.
+        EnsureInitializedFromInput(input);
 
         // Get dimensions from input shape
         int[] inputShape = input._shape;
@@ -1069,175 +1071,6 @@ public partial class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T
             Engine.InvalidatePersistentTensor(_valueWeights);
             Engine.InvalidatePersistentTensor(_outputBias);
         }
-    }
-
-    /// <summary>
-    /// Gets all trainable parameters of the self-attention layer as a single vector.
-    /// </summary>
-    /// <returns>A vector containing all trainable parameters (query weights, key weights, value weights, and output biases).</returns>
-    /// <remarks>
-    /// <para>
-    /// This method retrieves all trainable parameters of the self-attention layer as a single vector. The query weights
-    /// are stored first, followed by the key weights, value weights, and finally the output biases. This is useful for
-    /// optimization algorithms that operate on all parameters at once, or for saving and loading model weights.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method collects all the learnable values from the self-attention layer.
-    /// 
-    /// The parameters:
-    /// - Are the weights and biases that the self-attention layer learns during training
-    /// - Control how the layer processes sequence information
-    /// - Are returned as a single list (vector)
-    /// 
-    /// This is useful for:
-    /// - Saving the model to disk
-    /// - Loading parameters from a previously trained model
-    /// - Advanced optimization techniques that need access to all parameters
-    /// 
-    /// The query weights are stored first in the vector, followed by the key weights, value weights,
-    /// and finally the output biases.
-    /// </para>
-    /// </remarks>
-    public override Vector<T> GetParameters()
-    {
-        // Force lazy tensors to materialize before copying their data.
-        EnsureInitialized();
-
-        // fp16-resident (#1764): on the separate-projection resident path the fp32 _queryWeights/_keyWeights/
-        // _valueWeights are freed to [0,0] and the fp16 half masters are authoritative. Reading _queryWeights
-        // directly would return a zero-length (or stale) vector, so clone/serialize silently drops the
-        // attention weights. Read the effective full-precision weights (half master upcast when resident,
-        // fp32 tensor otherwise — the latter also covers the fused-QKV path, where the projections stay fp32).
-        Tensor<T> qEff = _queryWeightsHalf is not null ? _queryWeightsHalf.Cast<T>() : _queryWeights;
-        Tensor<T> kEff = _keyWeightsHalf is not null ? _keyWeightsHalf.Cast<T>() : _keyWeights;
-        Tensor<T> vEff = _valueWeightsHalf is not null ? _valueWeightsHalf.Cast<T>() : _valueWeights;
-
-        int qRows = qEff.Shape[0], qCols = qEff.Shape[1];
-        int kRows = kEff.Shape[0], kCols = kEff.Shape[1];
-        int vRows = vEff.Shape[0], vCols = vEff.Shape[1];
-        int biasLen = _outputBias.Shape[0];
-
-        int totalParams = qRows * qCols + kRows * kCols + vRows * vCols + biasLen;
-
-        var parameters = new Vector<T>(totalParams);
-        int index = 0;
-
-        // Copy query weights
-        for (int i = 0; i < qRows; i++)
-        {
-            for (int j = 0; j < qCols; j++)
-            {
-                parameters[index++] = qEff[i, j];
-            }
-        }
-
-        // Copy key weights
-        for (int i = 0; i < kRows; i++)
-        {
-            for (int j = 0; j < kCols; j++)
-            {
-                parameters[index++] = kEff[i, j];
-            }
-        }
-
-        // Copy value weights
-        for (int i = 0; i < vRows; i++)
-        {
-            for (int j = 0; j < vCols; j++)
-            {
-                parameters[index++] = vEff[i, j];
-            }
-        }
-
-        // Copy output bias
-        for (int i = 0; i < biasLen; i++)
-        {
-            parameters[index++] = _outputBias[i];
-        }
-
-        return parameters;
-    }
-
-    /// <summary>
-    /// Sets the trainable parameters of the self-attention layer.
-    /// </summary>
-    /// <param name="parameters">A vector containing all parameters (query weights, key weights, value weights, and output biases) to set.</param>
-    /// <exception cref="ArgumentException">Thrown when the parameters vector has incorrect length.</exception>
-    /// <remarks>
-    /// <para>
-    /// This method sets the trainable parameters of the self-attention layer from a single vector. The vector should
-    /// contain the query weight values first, followed by the key weight values, value weight values, and finally
-    /// the output bias values. This is useful for loading saved model weights or for implementing optimization
-    /// algorithms that operate on all parameters at once.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method updates all the weights and biases in the self-attention layer.
-    /// 
-    /// When setting parameters:
-    /// - The input must be a vector with the correct total length
-    /// - The first part of the vector is used for the query weights
-    /// - The second part of the vector is used for the key weights
-    /// - The third part of the vector is used for the value weights
-    /// - The last part of the vector is used for the output biases
-    /// 
-    /// This is useful for:
-    /// - Loading a previously saved model
-    /// - Transferring parameters from another model
-    /// - Testing different parameter values
-    /// 
-    /// An error is thrown if the input vector doesn't have the expected number of parameters.
-    /// </para>
-    /// </remarks>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        // Force lazy tensors to materialize so the shape reads below report the
-        // real dimensions rather than 0.
-        EnsureInitialized();
-
-        // fp16-resident (#1764): on the separate-projection resident path the fp32 _queryWeights/_keyWeights/
-        // _valueWeights are freed to [0,0] and the fp16 half masters are authoritative — writing into the
-        // fp32 tensors would be silently discarded on the next forward (which re-upcasts the STALE half),
-        // so a clone/deserialize keeps the resident master's old (e.g. random probe-init) values. Downcast
-        // straight into the half master when resident; write the fp32 tensor otherwise (which also covers
-        // the fused-QKV path, where the projections stay fp32). Dimensions come from whichever is live.
-        bool qResident = _queryWeightsHalf is not null;
-        bool kResident = _keyWeightsHalf is not null;
-        bool vResident = _valueWeightsHalf is not null;
-
-        int qRows, qCols, kRows, kCols, vRows, vCols;
-        (qRows, qCols) = qResident ? (_queryWeightsHalf!.Shape[0], _queryWeightsHalf!.Shape[1]) : (_queryWeights.Shape[0], _queryWeights.Shape[1]);
-        (kRows, kCols) = kResident ? (_keyWeightsHalf!.Shape[0], _keyWeightsHalf!.Shape[1]) : (_keyWeights.Shape[0], _keyWeights.Shape[1]);
-        (vRows, vCols) = vResident ? (_valueWeightsHalf!.Shape[0], _valueWeightsHalf!.Shape[1]) : (_valueWeights.Shape[0], _valueWeights.Shape[1]);
-        int biasLen = _outputBias.Shape[0];
-
-        int qLen = qRows * qCols, kLen = kRows * kCols, vLen = vRows * vCols;
-        int totalParams = qLen + kLen + vLen + biasLen;
-
-        if (parameters.Length != totalParams)
-        {
-            throw new ArgumentException($"Expected {totalParams} parameters, but got {parameters.Length}");
-        }
-
-        var span = parameters.AsSpan();
-        if (qResident) NumOps.ToHalfSpan(span.Slice(0, qLen), _queryWeightsHalf!.AsWritableSpan());
-        else span.Slice(0, qLen).CopyTo(_queryWeights.Data.Span);
-
-        if (kResident) NumOps.ToHalfSpan(span.Slice(qLen, kLen), _keyWeightsHalf!.AsWritableSpan());
-        else span.Slice(qLen, kLen).CopyTo(_keyWeights.Data.Span);
-
-        if (vResident) NumOps.ToHalfSpan(span.Slice(qLen + kLen, vLen), _valueWeightsHalf!.AsWritableSpan());
-        else span.Slice(qLen + kLen, vLen).CopyTo(_valueWeights.Data.Span);
-
-        span.Slice(qLen + kLen + vLen, biasLen).CopyTo(_outputBias.Data.Span);
-
-        // The cached fused-QKV weight was built from the OLD projection weights; force a rebuild so the
-        // fused path (when enabled) reflects the new values instead of a stale concatenation.
-        _fusedQkvBuilt = false;
-        _fusedQkvWeightsHalf = null;
-
-        // Notify GPU that tensor data has changed
-        Engine.InvalidatePersistentTensor(_queryWeights);
-        Engine.InvalidatePersistentTensor(_keyWeights);
-        Engine.InvalidatePersistentTensor(_valueWeights);
-        Engine.InvalidatePersistentTensor(_outputBias);
     }
 
     /// <summary>

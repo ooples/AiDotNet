@@ -54,6 +54,16 @@ namespace AiDotNet.Audio.Effects;
 [ResearchPaper("High-Fidelity Audio Compression with Improved RVQGAN", "https://doi.org/10.48550/arXiv.2306.06546", Year = 2024, Authors = "Rithesh Kumar, Prem Seetharaman, Alejandro Luebs, Ishaan Kumar, Kundan Kumar")]
 public class DAC<T> : AudioNeuralNetworkBase<T>, IAudioCodec<T>
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// Measured: <c>PredictCore</c> folds <c>Layers</c> in order and <c>PostprocessOutput</c> is the
+    /// identity, so the width is the last layer's output size. <c>CreateDefaultDACLayers</c> runs the
+    /// full encode/decode round trip and ends at "output projection to mono waveform",
+    /// <c>FullyConnectedLayer&lt;T&gt;(1)</c>. The codebook width (<c>_options.CodebookDim</c>) is an
+    /// INTERIOR bottleneck, not the output - the decoder half runs after it.
+    /// </remarks>
+    protected override int OutputFeatureWidth => 1;
+
     #region Fields
 
     private readonly DACOptions _options;
@@ -246,7 +256,7 @@ public class DAC<T> : AudioNeuralNetworkBase<T>, IAudioCodec<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expected);
+            TrainWithTape(input, expected, _optimizer);
         }
         finally
         {
@@ -254,12 +264,11 @@ public class DAC<T> : AudioNeuralNetworkBase<T>, IAudioCodec<T>
         }
     }
 
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        if (!_useNativeMode) throw new NotSupportedException("ONNX mode.");
-        int idx = 0; foreach (var l in Layers) { int c = (int)l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; }
-    }
-
+    /// <inheritdoc />
+    /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
+    /// write on every parameter surface, so the guard is stated once here instead of being
+    /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
+    protected override bool SupportsParameterMutation => _useNativeMode;
     protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio) => rawAudio;
     protected override Tensor<T> PostprocessOutput(Tensor<T> o) => o;
 

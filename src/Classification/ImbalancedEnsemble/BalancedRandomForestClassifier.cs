@@ -90,6 +90,8 @@ namespace AiDotNet.Classification.ImbalancedEnsemble;
     Authors = "Chao Chen, Andy Liaw, Leo Breiman")]
 public class BalancedRandomForestClassifier<T> : ClassifierBase<T>
 {
+
+    // Returned _trees.Count. Same as BalancedBaggingClassifier: a count is not a weight.
     /// <summary>
     /// The ensemble of decision trees.
     /// </summary>
@@ -594,31 +596,6 @@ public class BalancedRandomForestClassifier<T> : ClassifierBase<T>
     }
 
     /// <summary>
-    /// Gets the model parameters.
-    /// </summary>
-    /// <returns>Vector with tree count (simplified representation).</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Tree ensembles don't fit neatly into a parameter vector.
-    /// Use serialization for full model persistence.</para>
-    /// </remarks>
-    public Vector<T> GetParameters()
-    {
-        return new Vector<T>(1) { [0] = NumOps.FromDouble(_trees.Count) };
-    }
-
-    /// <summary>
-    /// Sets the model parameters.
-    /// </summary>
-    /// <param name="parameters">Parameter vector (limited support).</param>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Tree models are better loaded via serialization.</para>
-    /// </remarks>
-    public void SetParameters(Vector<T> parameters)
-    {
-        // Limited support for tree models
-    }
-
-    /// <summary>
     /// Creates a new instance with the specified parameters.
     /// </summary>
     /// <param name="parameters">Parameters (limited support).</param>
@@ -626,7 +603,7 @@ public class BalancedRandomForestClassifier<T> : ClassifierBase<T>
     /// <remarks>
     /// <para><b>For Beginners:</b> Creates a new untrained model with same hyperparameters.</para>
     /// </remarks>
-    public IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
+    public override IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
     {
         return new BalancedRandomForestClassifier<T>(_nEstimators, _maxDepth, _maxFeatures,
             _minSamplesSplit, _minSamplesLeaf, _samplingStrategy, _bootstrap);

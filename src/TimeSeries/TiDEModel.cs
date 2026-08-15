@@ -1,6 +1,7 @@
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
-using AiDotNet.Models.Options;
+using AiDotNet.Models.Options;
+using AiDotNet.Models.Parameters;
 
 namespace AiDotNet.TimeSeries;
 
@@ -19,7 +20,7 @@ namespace AiDotNet.TimeSeries;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("Long-term Forecasting with TiDE: Time-series Dense Encoder", "https://arxiv.org/abs/2304.08424", Year = 2023, Authors = "Abhimanyu Das, Weihao Kong, Andrew Leach, Shaan Mathur, Rajat Sen, Rose Yu")]
-public class TiDEModel<T> : TimeSeriesModelBase<T>
+public partial class TiDEModel<T> : TimeSeriesModelBase<T>
 {
     private readonly TiDEOptions<T> _options;
     private readonly Random _random;
@@ -27,12 +28,31 @@ public class TiDEModel<T> : TimeSeriesModelBase<T>
     private readonly int _h;
 
     // Encoder: hidden = ReLU(W1·x + b1). Decoder: out = W2·hidden + b2. Linear skip: + Wr·x + br.
+    [TrainableParameter]
     private readonly double[][] _w1; // [H][L]
+    [TrainableParameter]
     private readonly double[] _b1;   // [H]
+    [TrainableParameter]
     private readonly double[] _w2;   // [H]
+    [TrainableParameter]
     private double _b2;
+    [TrainableParameter]
     private readonly double[] _wr;   // [L]
+    [TrainableParameter]
     private double _br;
+
+    // TiDE's reference implementation optionally normalizes each series before
+    // the dense encoder and restores its scale after decoding. This supervised
+    // Matrix/Vector adaptation keeps equivalent training-set statistics so raw
+    // time indices and large target offsets do not destabilize the MLP.
+    [Buffer]
+    private readonly double[] _inputMeans;
+    [Buffer]
+    private readonly double[] _inputStds;
+    [Buffer]
+    private double _targetMean;
+    [Buffer]
+    private double _targetStd = 1.0;
 
     public TiDEModel(TiDEOptions<T>? options = null)
         : base(options ?? new TiDEOptions<T>())
@@ -47,6 +67,8 @@ public class TiDEModel<T> : TimeSeriesModelBase<T>
         _b1 = new double[_h];
         _w2 = new double[_h];
         _wr = new double[_l];
+        _inputMeans = new double[_l];
+        _inputStds = Enumerable.Repeat(1.0, _l).ToArray();
         double s1 = Math.Sqrt(2.0 / _l); // He init for ReLU
         double s2 = Math.Sqrt(1.0 / _h);
         for (int i = 0; i < _h; i++)
@@ -60,6 +82,19 @@ public class TiDEModel<T> : TimeSeriesModelBase<T>
     }
 
     private static bool IsFiniteValue(double v) => !double.IsNaN(v) && !double.IsInfinity(v);
+
+    /// <summary>
+    /// Converts a forecast to <typeparamref name="T"/> and verifies finiteness AFTER the conversion.
+    /// Checking only the double is not enough: every double from about 3.4e38 up is finite yet
+    /// overflows to Infinity once narrowed to float, so a pre-conversion guard passes the value
+    /// through and the float caller still receives Infinity.
+    /// </summary>
+    private T ToFiniteT(double value)
+    {
+        if (!IsFiniteValue(value)) { return NumOps.Zero; }
+        T converted = NumOps.FromDouble(value);
+        return IsFiniteValue(NumOps.ToDouble(converted)) ? converted : NumOps.Zero;
+    }
 
     private static double[] Window(int l, Func<int, double> get, int count)
     {
@@ -92,11 +127,89 @@ public class TiDEModel<T> : TimeSeriesModelBase<T>
         return (hidden, pred);
     }
 
+    private double[] NormalizeWindow(double[] x)
+    {
+        var normalized = new double[_l];
+        for (int j = 0; j < _l; j++)
+            normalized[j] = (x[j] - _inputMeans[j]) / _inputStds[j];
+        return normalized;
+    }
+
+    private void FitNormalization(Matrix<T> x, Vector<T> y)
+    {
+        int n = x.Rows;
+        int cols = x.Columns;
+
+        Array.Clear(_inputMeans, 0, _inputMeans.Length);
+        for (int j = 0; j < _inputStds.Length; j++)
+            _inputStds[j] = 1.0;
+
+        for (int row = 0; row < n; row++)
+        {
+            var window = Window(_l, c => Convert.ToDouble(x[row, c]), cols);
+            for (int j = 0; j < _l; j++)
+                _inputMeans[j] += window[j];
+        }
+        if (n > 0)
+        {
+            for (int j = 0; j < _l; j++)
+                _inputMeans[j] /= n;
+        }
+
+        var variances = new double[_l];
+        _targetMean = 0.0;
+        int finiteTargets = 0;
+        for (int row = 0; row < n; row++)
+        {
+            var window = Window(_l, c => Convert.ToDouble(x[row, c]), cols);
+            for (int j = 0; j < _l; j++)
+            {
+                double centered = window[j] - _inputMeans[j];
+                variances[j] += centered * centered;
+            }
+            // Non-finite targets are EXCLUDED from the statistics, matching NLinearModel.FitScalers.
+            // Window already clamps non-finite inputs, so _inputMeans and _inputStds were protected;
+            // the target path was not. A single NaN label made _targetMean NaN, and while _targetStd
+            // rescues _targetStd back to 1.0, nothing rescued the mean -- every normalized target,
+            // every error and every gradient then went NaN, training completed without an exception,
+            // and every later prediction collapsed to 0 through the output guard. Silent and total.
+            double target = Convert.ToDouble(y[row]);
+            if (!IsFiniteValue(target)) continue;
+
+            _targetMean += target;
+            finiteTargets++;
+        }
+
+        if (n > 0)
+        {
+            _targetMean = finiteTargets > 0 ? _targetMean / finiteTargets : 0.0;
+            for (int j = 0; j < _l; j++)
+            {
+                double std = Math.Sqrt(variances[j] / n);
+                _inputStds[j] = std > 1e-8 && IsFiniteValue(std) ? std : 1.0;
+            }
+        }
+
+        double targetVariance = 0.0;
+        for (int row = 0; row < n; row++)
+        {
+            double target = Convert.ToDouble(y[row]);
+            if (!IsFiniteValue(target)) continue;
+
+            double centered = target - _targetMean;
+            targetVariance += centered * centered;
+        }
+        double targetStd = finiteTargets > 0 ? Math.Sqrt(targetVariance / finiteTargets) : 1.0;
+        _targetStd = targetStd > 1e-8 && IsFiniteValue(targetStd) ? targetStd : 1.0;
+    }
+
     protected override void TrainCore(Matrix<T> x, Vector<T> y)
     {
         int n = x.Rows;
         int cols = x.Columns;
         double lr = _options.LearningRate;
+
+        FitNormalization(x, y);
 
         for (int epoch = 0; epoch < _options.Epochs; epoch++)
         {
@@ -120,9 +233,16 @@ public class TiDEModel<T> : TimeSeriesModelBase<T>
                 for (int bi = batchStart; bi < batchEnd; bi++)
                 {
                     int idx = order[bi];
-                    var xv = Window(_l, c => Convert.ToDouble(x[idx, c]), cols);
+                    var xv = NormalizeWindow(Window(_l, c => Convert.ToDouble(x[idx, c]), cols));
                     var (hidden, pred) = Forward(xv);
-                    double err = pred - Convert.ToDouble(y[idx]); // dMSE/dpred
+                    // Filtering the statistics alone does not keep a NaN label out of the gradient:
+                    // this row's error would still be NaN and would poison every weight it touches.
+                    // Skip the row instead.
+                    double rawTarget = Convert.ToDouble(y[idx]);
+                    if (!IsFiniteValue(rawTarget)) continue;
+
+                    double normalizedTarget = (rawTarget - _targetMean) / _targetStd;
+                    double err = pred - normalizedTarget; // dMSE/dpred
 
                     gB2 += err;
                     gBr += err;
@@ -152,37 +272,20 @@ public class TiDEModel<T> : TimeSeriesModelBase<T>
             }
         }
 
-        ModelParameters = FlattenParameters();
-    }
-
-    /// <summary>
-    /// Flattens every learned weight (<c>_w1</c>, <c>_b1</c>, <c>_w2</c>, <c>_b2</c>, <c>_wr</c>,
-    /// <c>_br</c>) into a single contiguous vector, in the same layout <see cref="ParameterCount"/>
-    /// describes. This is the real parameter set the base-class contract expects for model inspection,
-    /// checkpointing, and parameter transfer — not a one-element placeholder.
-    /// </summary>
-    private Vector<T> FlattenParameters()
-    {
-        var flat = new T[ParameterCount];
-        int k = 0;
-        for (int i = 0; i < _h; i++)
-            for (int j = 0; j < _l; j++) { flat[k++] = NumOps.FromDouble(_w1[i][j]); }
-        for (int i = 0; i < _h; i++) { flat[k++] = NumOps.FromDouble(_b1[i]); }
-        for (int i = 0; i < _h; i++) { flat[k++] = NumOps.FromDouble(_w2[i]); }
-        flat[k++] = NumOps.FromDouble(_b2);
-        for (int j = 0; j < _l; j++) { flat[k++] = NumOps.FromDouble(_wr[j]); }
-        flat[k] = NumOps.FromDouble(_br);
-        return new Vector<T>(flat);
     }
 
     public override T PredictSingle(Vector<T> input)
     {
-        var xv = Window(_l, j => Convert.ToDouble(input[j]), input.Length);
-        var (_, pred) = Forward(xv);
-        return NumOps.FromDouble(IsFiniteValue(pred) ? pred : 0.0);
+        var xv = NormalizeWindow(Window(_l, j => Convert.ToDouble(input[j]), input.Length));
+        var (_, normalizedPrediction) = Forward(xv);
+        double pred = normalizedPrediction * _targetStd + _targetMean;
+        // ToFiniteT, not NumOps.FromDouble(IsFiniteValue(pred) ? pred : 0.0): the pre-conversion
+        // check is the insufficient one its own helper documents. Every double from about 3.4e38 up
+        // is finite yet overflows to Infinity once narrowed to float, so the pre-conversion form
+        // passed such a value straight through to a float model. GuardPrediction then still runs, as
+        // a second line of defence for the recursive-forecast path.
+        return GuardPrediction(ToFiniteT(pred));
     }
-
-    public override long ParameterCount => (long)_h * _l + _h + _h + 1 + _l + 1;
 
     protected override void SerializeCore(BinaryWriter writer)
     {
@@ -198,6 +301,13 @@ public class TiDEModel<T> : TimeSeriesModelBase<T>
         writer.Write(_b2);
         for (int j = 0; j < _l; j++) { writer.Write(_wr[j]); }
         writer.Write(_br);
+        writer.Write(_targetMean);
+        writer.Write(_targetStd);
+        for (int j = 0; j < _l; j++)
+        {
+            writer.Write(_inputMeans[j]);
+            writer.Write(_inputStds[j]);
+        }
     }
 
     protected override void DeserializeCore(BinaryReader reader)
@@ -214,6 +324,19 @@ public class TiDEModel<T> : TimeSeriesModelBase<T>
         _b2 = reader.ReadDouble();
         for (int j = 0; j < _l; j++) { _wr[j] = reader.ReadDouble(); }
         _br = reader.ReadDouble();
+
+        // Normalization state was added after the original TiDE serialization
+        // layout. Older payloads end after _br and retain identity statistics.
+        if (reader.BaseStream.Position < reader.BaseStream.Length)
+        {
+            _targetMean = reader.ReadDouble();
+            _targetStd = reader.ReadDouble();
+            for (int j = 0; j < _l; j++)
+            {
+                _inputMeans[j] = reader.ReadDouble();
+                _inputStds[j] = reader.ReadDouble();
+            }
+        }
     }
 
     public override ModelMetadata<T> GetModelMetadata()

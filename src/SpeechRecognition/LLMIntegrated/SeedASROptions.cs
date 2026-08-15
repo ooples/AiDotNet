@@ -5,7 +5,10 @@ namespace AiDotNet.SpeechRecognition.LLMIntegrated;
 
 /// <summary>Options for Seed-ASR: ByteDance's large-scale multilingual ASR.</summary>
 /// <remarks>
-/// <para><b>For Beginners:</b> These options configure the SeedASR model. Default values follow the original paper's recommended settings for optimal speech recognition accuracy.</para>
+/// <para><b>For Beginners:</b> These options configure the native Seed-ASR approximation. The paper
+/// reports a nearly 2B-parameter LUISE encoder and a greater-than-10B-parameter MoE LLM, but does not
+/// publish a complete layer-level configuration or exact optimizer hyperparameters. The defaults here
+/// are therefore practical library defaults, and every exposed architecture/training value is customizable.</para>
 /// </remarks>
 public class SeedASROptions : ModelOptions
 {
@@ -32,6 +35,8 @@ public class SeedASROptions : ModelOptions
         OnnxOptions = new OnnxModelOptions(other.OnnxOptions);
         DropoutRate = other.DropoutRate;
         Language = other.Language;
+        LearningRate = other.LearningRate;
+        WeightDecay = other.WeightDecay;
     }
 
     public int SampleRate { get; set; } = 16000;
@@ -46,4 +51,6 @@ public class SeedASROptions : ModelOptions
     public OnnxModelOptions OnnxOptions { get; set; } = new();
     public double DropoutRate { get; set; } = 0.1;
     public string Language { get; set; } = "en";
+    public double LearningRate { get; set; } = 1e-4;
+    public double WeightDecay { get; set; } = 0.01;
 }

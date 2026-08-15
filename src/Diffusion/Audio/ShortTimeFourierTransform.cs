@@ -116,7 +116,7 @@ public class ShortTimeFourierTransform<T>
     /// <summary>
     /// Initializes a new STFT processor.
     /// </summary>
-    /// <param name="nFft">FFT size (default: 2048). Should be a power of 2.</param>
+    /// <param name="nFft">FFT size (default: 2048). Arbitrary positive lengths are supported.</param>
     /// <param name="hopLength">Hop length between frames (default: nFft/4).</param>
     /// <param name="windowLength">Window length (default: nFft).</param>
     /// <param name="windowFunction">Window function to use (default: HanningWindow - industry standard for audio).</param>
@@ -147,39 +147,12 @@ public class ShortTimeFourierTransform<T>
         if (nFft <= 0)
             throw new ArgumentOutOfRangeException(nameof(nFft), "FFT size must be positive.");
 
-        // Librosa / Whisper / standard audio configs commonly pass non-pow2
-        // window lengths (Whisper = 400, BEATs = 1024, Mel-Band RoFormer
-        // sometimes 1023). Round nFft up to the next pow2 — the windowed
-        // signal is zero-padded out to that size before the FFT, equivalent
-        // to librosa's default behaviour. Preserve windowLength = original
-        // nFft when not explicitly passed so the window function still
-        // uses the requested length.
-        int requestedNFft = nFft;
-        int requestedWindowLength = windowLength ?? nFft;
-        if ((nFft & (nFft - 1)) != 0)
-        {
-            // Largest representable pow2 in int32 is 1<<30 (2^30 = ~1.07B samples).
-            // Anything above that would overflow when we shift left, so cap and
-            // throw instead of looping into negative territory.
-            const int maxPow2 = 1 << 30;
-            if (nFft > maxPow2)
-                throw new ArgumentOutOfRangeException(
-                    nameof(nFft),
-                    $"nFft={nFft} exceeds the largest representable power-of-two FFT size ({maxPow2}).");
-            int pow2 = 1;
-            while (pow2 < nFft) pow2 <<= 1;
-            nFft = pow2;
-        }
-
         _nFft = nFft;
-        // Default hop must be derived from the caller-requested nFft (librosa's
-        // contract). Whisper requests nFft=400 ⇒ hop=100; if we compute hop from
-        // the rounded-up 512 we get 128, breaking the 400-sample frame cadence.
-        // Floor at 1 so requestedNFft ∈ {1, 2, 3} (which integer-divide to 0)
+        // Floor at 1 so nFft in {1, 2, 3} (which integer-divide to 0)
         // doesn't trip the "Hop length must be positive" guard below for
         // otherwise valid small inputs.
-        _hopLength = hopLength ?? Math.Max(1, requestedNFft / 4);
-        _windowLength = requestedWindowLength;
+        _hopLength = hopLength ?? Math.Max(1, nFft / 4);
+        _windowLength = windowLength ?? nFft;
         _center = center;
         _padMode = padMode;
         _fft = new FastFourierTransform<T>();
@@ -496,7 +469,18 @@ public class ShortTimeFourierTransform<T>
             try
             {
                 Engine.STFT(signal, _nFft, _hopLength, _windowTensor, _center, out var magnitude, out _);
-                return magnitude;
+
+                // Only take the accelerated result if it agrees with this transform's declared bin
+                // count. That path may round the transform size up to a power of two — for Whisper's
+                // 25ms window at 16kHz, nFft 400 becomes 512 and the magnitude comes back with 257
+                // bins instead of 201. NumFrequencyBins (nFft/2+1) is the contract every caller sizes
+                // against, the mel filterbank above all, so a mismatch fails with "Power spectrogram
+                // has 257 frequency bins but filterbank expects 201". Fall through to the exact CPU
+                // transform when they disagree rather than returning a differently-binned spectrum.
+                if (magnitude.Shape.Length > 0 && magnitude.Shape[^1] == NumFrequencyBins)
+                {
+                    return magnitude;
+                }
             }
             catch
             {

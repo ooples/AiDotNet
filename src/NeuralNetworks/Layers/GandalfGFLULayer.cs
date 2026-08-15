@@ -5,6 +5,8 @@ using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Helpers;
 
+using AiDotNet.Attributes;
+
 namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
@@ -31,7 +33,14 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-public class GandalfGFLULayer<T> : LayerBase<T>
+// The gated residual update h <- g*glu + (1-g)*h keeps the running representation at the input
+// width for every stage, so the feature count is preserved end to end. Declared at rank 2 only:
+// ForwardTraced reshapes to [batch, features], so a rank-3 input comes back out as rank 2 rather
+// than identity, and claiming a higher rank here would be claiming something untrue.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
+[AutoParameters]
+public partial class GandalfGFLULayer<T> : LayerBase<T>, IShapeContract
 {
     private readonly int _numStages;
     private int _numFeatures = -1;
@@ -46,7 +55,9 @@ public class GandalfGFLULayer<T> : LayerBase<T>
     /// <summary>Initializes a GFLU stack.</summary>
     /// <param name="numFeatures">Number of input features.</param>
     /// <param name="numStages">Number of GFLU stages (GANDALF default 6).</param>
-    public GandalfGFLULayer(int numFeatures, int numStages = 6)
+    public GandalfGFLULayer(
+        [LayerState] int numFeatures,
+        [LayerState] int numStages = 6)
         : base(new[] { numFeatures }, new[] { numFeatures })
     {
         if (numFeatures <= 0) throw new ArgumentOutOfRangeException(nameof(numFeatures));
@@ -114,7 +125,7 @@ public class GandalfGFLULayer<T> : LayerBase<T>
     }
 
     /// <inheritdoc/>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         int features = input.Shape[input.Rank - 1];
         if (!_built || _numFeatures != features)
@@ -148,45 +159,6 @@ public class GandalfGFLULayer<T> : LayerBase<T>
         }
 
         return h;
-    }
-
-    /// <inheritdoc/>
-    public override Vector<T> GetParameters()
-    {
-        var all = new List<T>();
-        for (int s = 0; s < _numStages; s++)
-        {
-            var m = _maskLogits![s];
-            for (int i = 0; i < m.Length; i++) all.Add(m[i]);
-        }
-        foreach (var sub in GetSubLayers())
-        {
-            var p = sub.GetParameters();
-            for (int i = 0; i < p.Length; i++) all.Add(p[i]);
-        }
-        var result = new Vector<T>(all.Count);
-        for (int i = 0; i < all.Count; i++) result[i] = all[i];
-        return result;
-    }
-
-    /// <inheritdoc/>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int offset = 0;
-        for (int s = 0; s < _numStages; s++)
-        {
-            var m = _maskLogits![s];
-            for (int i = 0; i < m.Length; i++) m[i] = parameters[offset++];
-        }
-        foreach (var sub in GetSubLayers())
-        {
-            int count = AiDotNet.Helpers.ParameterCountHelper.ToFlatVectorSize(sub.ParameterCount);
-            if (count == 0) continue;
-            var p = new Vector<T>(count);
-            for (int i = 0; i < count; i++) p[i] = parameters[offset + i];
-            sub.SetParameters(p);
-            offset += count;
-        }
     }
 
     /// <inheritdoc/>

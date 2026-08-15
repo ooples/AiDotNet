@@ -288,23 +288,36 @@ public class NesterovAcceleratedGradientOptimizer<T, TInput, TOutput> : Gradient
     /// </remarks>
     public override Vector<T> UpdateParameters(Vector<T> parameters, Vector<T> gradient)
     {
+        if (parameters.Length != gradient.Length)
+        {
+            throw new ArgumentException(
+                $"Parameter vector length ({parameters.Length}) must match gradient vector length ({gradient.Length}).",
+                nameof(gradient));
+        }
+
         if (_velocity == null || _velocity.Length != parameters.Length)
         {
             _velocity = new Vector<T>(parameters.Length);
         }
 
-        // === Vectorized NAG Update using IEngine (Phase B: US-GPU-015) ===
-        // Note: In NAG, the gradient is evaluated at the lookahead position
+        // The gradient is evaluated at the lookahead position by the caller. Fuse the
+        // velocity and parameter updates so the only per-step vector is the result.
+        var updatedParameters = new Vector<T>(parameters.Length, skipZeroInit: true);
+        var parameterSpan = parameters.AsSpan();
+        var gradientSpan = gradient.AsSpan();
+        var velocitySpan = _velocity.AsWritableSpan();
+        var updatedSpan = updatedParameters.AsWritableSpan();
 
-        // Update velocity: velocity = momentum * velocity + lr * gradient
-        var momentumVelocity = (Vector<T>)Engine.Multiply(_velocity, CurrentMomentum);
-        var scaledGradient = (Vector<T>)Engine.Multiply(gradient, CurrentLearningRate);
-        _velocity = (Vector<T>)Engine.Add(momentumVelocity, scaledGradient);
+        for (int i = 0; i < updatedSpan.Length; i++)
+        {
+            T velocity = NumOps.Add(
+                NumOps.Multiply(CurrentMomentum, velocitySpan[i]),
+                NumOps.Multiply(CurrentLearningRate, gradientSpan[i]));
+            velocitySpan[i] = velocity;
+            updatedSpan[i] = NumOps.Subtract(parameterSpan[i], velocity);
+        }
 
-        // Update parameters: params = params - velocity
-        var updatedParams = (Vector<T>)Engine.Subtract(parameters, _velocity);
-
-        return updatedParams;
+        return updatedParameters;
     }
 
     // Per-parameter velocity for tape-based NAG training

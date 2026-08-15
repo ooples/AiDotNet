@@ -280,6 +280,13 @@ public class RootMeanSquarePropagationOptimizer<T, TInput, TOutput> : GradientBa
     /// </remarks>
     public override Vector<T> UpdateParameters(Vector<T> parameters, Vector<T> gradient)
     {
+        if (parameters.Length != gradient.Length)
+        {
+            throw new ArgumentException(
+                $"Parameter vector length ({parameters.Length}) must match gradient vector length ({gradient.Length}).",
+                nameof(gradient));
+        }
+
         // Lazy initialization of squared gradient state
         if (_squaredGradient.Length != parameters.Length)
         {
@@ -293,21 +300,27 @@ public class RootMeanSquarePropagationOptimizer<T, TInput, TOutput> : GradientBa
         T oneMinusDecay = NumOps.FromDouble(1 - _options.Decay);
         T epsilon = NumOps.FromDouble(_options.Epsilon);
 
-        // Update squared gradient: sqGrad = decay * sqGrad + (1 - decay) * grad^2
-        var gradSquared = (Vector<T>)Engine.Multiply(gradient, gradient);
-        var sqGradScaled = (Vector<T>)Engine.Multiply(_squaredGradient, decay);
-        var gradSquaredScaled = (Vector<T>)Engine.Multiply(gradSquared, oneMinusDecay);
-        _squaredGradient = (Vector<T>)Engine.Add(sqGradScaled, gradSquaredScaled);
+        // Mutate the running average in place and write directly into the one vector the caller
+        // owns. The previous Engine chain materialized ten parameter-sized temporaries per step.
+        var updatedParams = new Vector<T>(parameters.Length, skipZeroInit: true);
+        var pSpan = parameters.AsSpan();
+        var gSpan = gradient.AsSpan();
+        var sqGradSpan = _squaredGradient.AsWritableSpan();
+        var outSpan = updatedParams.AsWritableSpan();
+        T learningRate = CurrentLearningRate;
 
-        // Compute update: update = learningRate * gradient / (sqrt(sqGrad) + epsilon)
-        var sqGradSqrt = (Vector<T>)Engine.Sqrt(_squaredGradient);
-        var epsilonVec = new Vector<T>(Enumerable.Repeat(epsilon, sqGradSqrt.Length));
-        var denominator = (Vector<T>)Engine.Add(sqGradSqrt, epsilonVec);
-        var gradScaled = (Vector<T>)Engine.Multiply(gradient, CurrentLearningRate);
-        var update = (Vector<T>)Engine.Divide(gradScaled, denominator);
+        for (int i = 0; i < pSpan.Length; i++)
+        {
+            T g = gSpan[i];
+            T squaredGradient = NumOps.Add(
+                NumOps.Multiply(sqGradSpan[i], decay),
+                NumOps.Multiply(NumOps.Multiply(g, g), oneMinusDecay));
+            sqGradSpan[i] = squaredGradient;
 
-        // Apply update: params = params - update
-        var updatedParams = (Vector<T>)Engine.Subtract(parameters, update);
+            T denominator = NumOps.Add(NumOps.Sqrt(squaredGradient), epsilon);
+            T update = NumOps.Divide(NumOps.Multiply(g, learningRate), denominator);
+            outSpan[i] = NumOps.Subtract(pSpan[i], update);
+        }
 
         return updatedParams;
     }

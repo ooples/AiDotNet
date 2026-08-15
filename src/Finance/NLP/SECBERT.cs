@@ -53,20 +53,12 @@ namespace AiDotNet.Finance.NLP;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("SEC-BERT: A Pre-trained Language Model for the Securities Domain", "https://doi.org/10.1145/3533271.3561753", Year = 2022, Authors = "Lefteris Loukas, Manos Fergadiotis, Ion Androutsopoulos, Prodromos Malakasiotis")]
-public class SECBERT<T> : FinancialNLPModelBase<T>
+// DOI corrected: 10.1145/3533271.3561753 is "Learning to simulate realistic limit order book
+// markets from data as a World Agent" (ICAIF'22) — an unrelated paper. SEC-BERT is introduced in
+// Loukas et al., "FiNER: Financial Numeric Entity Recognition for XBRL Tagging" (ACL 2022).
+[ResearchPaper("FiNER: Financial Numeric Entity Recognition for XBRL Tagging (introduces SEC-BERT)", "https://doi.org/10.18653/v1/2022.acl-long.303", Year = 2022, Authors = "Lefteris Loukas, Manos Fergadiotis, Ion Androutsopoulos, Prodromos Malakasiotis")]
+public partial class SECBERT<T> : FinancialNLPModelBase<T>
 {
-    #region Native Mode Fields
-
-    private ILayer<T>? _wordEmbedding;
-    private ILayer<T>? _positionEmbedding;
-    private ILayer<T>? _typeEmbedding;
-    private readonly List<ILayer<T>> _transformerLayers = [];
-    private ILayer<T>? _pooler;
-    private ILayer<T>? _taskHead;
-
-    #endregion
-
     #region Shared Fields
 
     private readonly ModelOptions.SECBERTOptions<T> _options;
@@ -171,36 +163,7 @@ public class SECBERT<T> : FinancialNLPModelBase<T>
                 Architecture, MaxSequenceLength, VocabularySize, HiddenDimension,
                 12, 12, _dropout)); // Default heads/layers
 
-            ExtractLayerReferences();
         }
-    }
-
-    /// <summary>
-    /// Executes ExtractLayerReferences for the SECBERT.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the SECBERT model, ExtractLayerReferences performs a supporting step in the workflow. It keeps the SECBERT architecture pipeline consistent.
-    /// </para>
-    /// </remarks>
-    private void ExtractLayerReferences()
-    {
-        int idx = 0;
-        if (Layers.Count > idx) _wordEmbedding = Layers[idx++];
-        if (Layers.Count > idx) _positionEmbedding = Layers[idx++];
-        if (Layers.Count > idx) _typeEmbedding = Layers[idx++];
-        idx += 2; // skip norm/dropout
-
-        _transformerLayers.Clear();
-        // One composite TransformerEncoderBlock per layer now (residual attention + residual FFN
-        // internally) — a single Layers entry per block, not six flat sublayers.
-        for (int i = 0; i < 12; i++)
-        {
-            if (idx < Layers.Count) _transformerLayers.Add(Layers[idx++]);
-        }
-
-        if (idx < Layers.Count) _pooler = Layers[idx++];
-        if (idx < Layers.Count) _taskHead = Layers[idx];
     }
 
     #endregion
@@ -222,25 +185,8 @@ public class SECBERT<T> : FinancialNLPModelBase<T>
         SetTrainingMode(false);
     }
 
-    /// <summary>
-    /// Executes UpdateParameters for the SECBERT.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the SECBERT model, UpdateParameters updates internal parameters or state. This keeps the SECBERT architecture aligned with the latest values.
-    /// </para>
-    /// </remarks>
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        int offset = 0;
-        foreach (var layer in Layers)
-        {
-            var layerParams = layer.GetParameters();
-            layer.SetParameters(parameters.Slice(offset, layerParams.Length));
-            offset += layerParams.Length;
-        }
-    }
-
+    // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
+    // exactly the same enumeration, so this said nothing the base does not already say.
     /// <summary>
     /// Executes CreateNewInstance for the SECBERT.
     /// </summary>
@@ -251,13 +197,8 @@ public class SECBERT<T> : FinancialNLPModelBase<T>
     /// </remarks>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
-        var options = new ModelOptions.SECBERTOptions<T>
-        {
-            MaxSequenceLength = MaxSequenceLength,
-            VocabularySize = VocabularySize,
-            HiddenDimension = HiddenDimension
-        };
-        return new SECBERT<T>(Architecture, options, _optimizer, LossFunction);
+        return new SECBERT<T>(
+            Architecture, new ModelOptions.SECBERTOptions<T>(_options), _optimizer, LossFunction);
     }
 
     /// <summary>

@@ -303,12 +303,13 @@ public class PLLaVA<T> : VisionLanguageModelBase<T>, IVideoLanguageModel<T>
         else
         {
             Layers.AddRange(
-                LayerHelper<T>.CreateDefaultVideoTemporalVLMLayers(
-                    _options.VisionDim,
+                // PLLaVA (Xu et al. 2024, arXiv:2404.16994) = parameter-free adaptive spatial POOLING of
+                // per-frame residual-ViT features -> shared projection -> residual LLM. Residual blocks
+                // fix the old shared builder's post-training collapse.
+                LayerHelper<T>.CreateDefaultVideoPoolingVLMLayers(
                     _options.VisionDim,
                     _options.DecoderDim,
                     _options.NumVisionLayers,
-                    2,
                     _options.NumDecoderLayers,
                     _options.NumHeads,
                     _options.DropoutRate,
@@ -324,8 +325,11 @@ public class PLLaVA<T> : VisionLanguageModelBase<T>, IVideoLanguageModel<T>
 
     private void ComputeEncoderDecoderBoundary()
     {
-        int lpb = _options.DropoutRate > 0 ? 6 : 5;
-        _encoderLayerEnd = 2 + _options.NumVisionLayers * lpb + 2 * lpb + 2;
+        // CreateDefaultVideoPoolingVLMLayers: patch(1)+LN(1) + numVisionLayers·(block+optional dropout)
+        // + 5 pooling layers (transpose, reshape, adaptive-pool, reshape, transpose) before the
+        // projection + LLM. The visual segment ends after the pooling module.
+        int perBlock = _options.DropoutRate > 0 ? 2 : 1;
+        _encoderLayerEnd = 2 + _options.NumVisionLayers * perBlock + 5;
     }
 
     private Tensor<T> TokenizeText(string text)
@@ -356,23 +360,15 @@ public class PLLaVA<T> : VisionLanguageModelBase<T>, IVideoLanguageModel<T>
         if (IsOnnxMode)
             throw new NotSupportedException("Training is not supported in ONNX mode.");
         SetTrainingMode(true);
-        TrainWithTape(input, expected);
+        TrainWithTape(input, expected, _optimizer);
         SetTrainingMode(false);
     }
 
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        if (!_useNativeMode)
-            throw new NotSupportedException("Cannot update parameters in ONNX mode.");
-        int idx = 0;
-        foreach (var l in Layers)
-        {
-            int c = (int)l.ParameterCount;
-            l.UpdateParameters(parameters.Slice(idx, c));
-            idx += c;
-        }
-    }
-
+    /// <inheritdoc />
+    /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
+    /// write on every parameter surface, so the guard is stated once here instead of being
+    /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
+    protected override bool SupportsParameterMutation => _useNativeMode;
     protected override Tensor<T> PreprocessImage(Tensor<T> image) =>
         NormalizeImage(image, _options.ImageMean, _options.ImageStd);
 

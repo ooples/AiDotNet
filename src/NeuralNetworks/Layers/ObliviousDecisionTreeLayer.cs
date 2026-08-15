@@ -25,8 +25,46 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-public partial class ObliviousDecisionTreeLayer<T> : LayerBase<T>
+// Rank 2 EXACTLY, and this layer says so twice in its own words. OnFirstForward throws for any other
+// rank - "requires rank-2 input [batch, features]" - and ForwardTraced re-checks the same thing on every
+// call rather than only on the first, because "ODT Forward indexes the tensor as a flat [batch,
+// _inputDim] matrix [...] rank-1 input would alias batch onto the feature axis and silently produce
+// garbage". So BatchOptional is not merely unnecessary here, it would declare the precise form the layer
+// was hardened to reject.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features, Direction = TensorLayoutDirection.Input,
+    Note = "Unbatched or higher-rank data must be reshaped to [batch, features] upstream.")]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
+[AutoParameters]
+public partial class ObliviousDecisionTreeLayer<T> : LayerBase<T>, IShapeContract
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// Hand-written because the feature axis keeps its role but changes size, which a generated
+    /// <c>Same(Features)</c> would misstate. The base constructors declare it directly -
+    /// <c>base([inputDim], [outputDim])</c> and <c>base([-1], [outputDim])</c> - and
+    /// <c>OnFirstForward</c> preserves it when it resolves the lazy form:
+    /// <c>ResolveShapes(new[] { inputDim }, OutputShape)</c> re-uses the ALREADY-declared
+    /// <c>OutputShape</c>, so resolving the input width never moves the output width.
+    /// </para>
+    /// <para>
+    /// <c>Fixed(_outputDim)</c> rather than anything derived from the input, because an oblivious tree
+    /// routes each sample to one of <c>2^depth</c> leaves and emits that leaf's value vector: the leaf
+    /// table is <c>_leafValues</c>, allocated <c>[numLeaves, _outputDim]</c>. The number of input
+    /// features decides which leaf is chosen, not how wide the answer is.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        if (inputRank != 2 || _outputDim <= 0) return null;
+
+        return new[]
+        {
+            new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+            new OutputAxisContract(TensorAxis.Features, AxisRelation.Fixed(_outputDim)),
+        };
+    }
+
     // Non-readonly: lazy ctor leaves _inputDim = -1 until OnFirstForward
     // resolves it from input.Shape[^1]. Eager ctor sets it at construction.
     private int _inputDim;
@@ -67,13 +105,7 @@ public partial class ObliviousDecisionTreeLayer<T> : LayerBase<T>
     /// <inheritdoc/>
     public override bool SupportsTraining => true;
 
-    /// <inheritdoc/>
-    public override long ParameterCount =>
-        _inputDim > 0
-            ? (long)_depth * _inputDim +      // feature selection weights
-              _depth +                          // thresholds
-              (long)_numLeaves * _outputDim      // leaf values
-            : 0L;                                // lazy: no params allocated yet
+                                // lazy: no params allocated yet
 
     /// <summary>
     /// Initializes an oblivious decision tree.
@@ -82,6 +114,13 @@ public partial class ObliviousDecisionTreeLayer<T> : LayerBase<T>
     /// <param name="depth">Tree depth (number of split levels).</param>
     /// <param name="outputDim">Output dimension per leaf.</param>
     /// <param name="initScale">Initialization scale.</param>
+    /// <remarks>
+    /// Not marked <c>[LayerState]</c>; the lazy overload below carries the annotation. The generator
+    /// takes one constructor per type, first by source order, and this one takes <c>inputDim</c>,
+    /// whose backing field is <c>-1</c> on a lazily-built layer that has not yet forwarded. The lazy
+    /// overload re-resolves <c>inputDim</c> from the first input and so restores layers built
+    /// either way.
+    /// </remarks>
     public ObliviousDecisionTreeLayer(int inputDim, int depth = 6, int outputDim = 1, double initScale = 0.01)
         : base([inputDim], [outputDim])
     {
@@ -121,7 +160,7 @@ public partial class ObliviousDecisionTreeLayer<T> : LayerBase<T>
     /// <param name="depth">Tree depth (number of split levels).</param>
     /// <param name="outputDim">Output dimension per leaf.</param>
     /// <param name="initScale">Initialization scale.</param>
-    public ObliviousDecisionTreeLayer(int depth = 6, int outputDim = 1, double initScale = 0.01)
+    public ObliviousDecisionTreeLayer([LayerState] int depth = 6, [LayerState] int outputDim = 1, [LayerState] double initScale = 0.01)
         : base([-1], [outputDim])
     {
         if (depth <= 0 || depth > 30)
@@ -194,16 +233,37 @@ public partial class ObliviousDecisionTreeLayer<T> : LayerBase<T>
             throw new InvalidOperationException(
                 "ObliviousDecisionTreeLayer cannot initialize until OnFirstForward has resolved the input dimension from input shape.");
 
-        _featureSelectionWeights = AllocateLazyWeight([_depth, _inputDim]);
-        _thresholds = AllocateLazyWeight([_depth]);
-        _leafValues = AllocateLazyWeight([_numLeaves, _outputDim]);
+        // Idempotent allocation: correctly-shaped parameters are already present when a deserialize
+        // installed them or a copy-on-write clone shared them, and re-initializing would replace
+        // trained weights with fresh noise (#1221 Clone_AfterTraining). See ConvolutionalLayer. A
+        // freshly-constructed lazy layer holds the constructor's [0, 0] placeholders, which cannot
+        // match a positive _depth, so it still initializes.
+        bool weightsAlreadyValid =
+            _featureSelectionWeights is { Rank: 2 } fs && fs.Shape[0] == _depth && fs.Shape[1] == _inputDim
+            && _thresholds is { Rank: 1 } th && th.Shape[0] == _depth
+            && _leafValues is { Rank: 2 } lv && lv.Shape[0] == _numLeaves && lv.Shape[1] == _outputDim;
+
+        if (!weightsAlreadyValid)
+        {
+            _featureSelectionWeights = AllocateLazyWeight([_depth, _inputDim]);
+            _thresholds = AllocateLazyWeight([_depth]);
+            _leafValues = AllocateLazyWeight([_numLeaves, _outputDim]);
+        }
+
         // Gradient buffers don't go through the streaming pool — they
         // mirror the weight shapes but are owned by the autograd tape,
-        // not registered with the pool. Plain new Tensor here.
+        // not registered with the pool. Plain new Tensor here. Allocated
+        // unconditionally, since a restore installs weights but never
+        // gradients.
         _featureSelectionGrad = new Tensor<T>([_depth, _inputDim]);
         _thresholdsGrad = new Tensor<T>([_depth]);
         _leafValuesGrad = new Tensor<T>([_numLeaves, _outputDim]);
-        InitializeParameters(_initScale);
+
+        if (!weightsAlreadyValid)
+        {
+            InitializeParameters(_initScale);
+        }
+
         _isInitialized = true;
     }
 
@@ -233,7 +293,7 @@ public partial class ObliviousDecisionTreeLayer<T> : LayerBase<T>
     /// </summary>
     /// <param name="input">Input features [batchSize, inputDim].</param>
     /// <returns>Tree output [batchSize, outputDim].</returns>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // Lazy-ctor instances start with _inputDim = -1; resolve from
         // input.Shape on first call, then materialize parameter tensors.
@@ -279,120 +339,50 @@ public partial class ObliviousDecisionTreeLayer<T> : LayerBase<T>
 
     private Tensor<T> ComputeFeatureSelections()
     {
-        var selections = new Tensor<T>([_depth, _inputDim]);
-
-        for (int level = 0; level < _depth; level++)
-        {
-            // Softmax over features for this level
-            var maxVal = _featureSelectionWeights[level * _inputDim];
-            for (int f = 1; f < _inputDim; f++)
-            {
-                var val = _featureSelectionWeights[level * _inputDim + f];
-                if (NumOps.Compare(val, maxVal) > 0)
-                    maxVal = val;
-            }
-
-            var sumExp = NumOps.Zero;
-            for (int f = 0; f < _inputDim; f++)
-            {
-                var exp = NumOps.Exp(NumOps.Subtract(
-                    _featureSelectionWeights[level * _inputDim + f], maxVal));
-                selections[level * _inputDim + f] = exp;
-                sumExp = NumOps.Add(sumExp, exp);
-            }
-
-            for (int f = 0; f < _inputDim; f++)
-            {
-                selections[level * _inputDim + f] = NumOps.Divide(
-                    selections[level * _inputDim + f], sumExp);
-            }
-        }
-
-        return selections;
+        return Engine.TensorSoftmax(_featureSelectionWeights, axis: 1);
     }
 
     private Tensor<T> ComputeSplitDecisions(Tensor<T> input, Tensor<T> featureSelections, int batchSize)
     {
-        // [batchSize, depth] - probability of going right at each level
-        var decisions = TensorAllocator.Rent<T>([batchSize, _depth]);
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int level = 0; level < _depth; level++)
-            {
-                // Compute weighted feature value
-                var weightedFeature = NumOps.Zero;
-                for (int f = 0; f < _inputDim; f++)
-                {
-                    weightedFeature = NumOps.Add(weightedFeature,
-                        NumOps.Multiply(
-                            featureSelections[level * _inputDim + f],
-                            input[b * _inputDim + f]));
-                }
-
-                // Soft split decision using sigmoid
-                var logit = NumOps.Subtract(weightedFeature, _thresholds[level]);
-                var rightProb = Sigmoid(logit);
-                decisions[b * _depth + level] = rightProb;
-            }
-        }
-
-        return decisions;
+        // [batch, input] @ [input, depth] => [batch, depth]. Keep both the
+        // feature-selection weights and thresholds on the active tape.
+        var weightedFeatures = Engine.TensorMatMul(
+            input,
+            Engine.TensorTranspose(featureSelections));
+        var negativeThresholds = Engine.Reshape(
+            Engine.TensorNegate(_thresholds),
+            [1, _depth]);
+        return Engine.Sigmoid(Engine.TensorBroadcastAdd(weightedFeatures, negativeThresholds));
     }
 
     private Tensor<T> ComputeLeafProbabilities(Tensor<T> splitDecisions, int batchSize)
     {
-        var leafProbs = TensorAllocator.Rent<T>([batchSize, _numLeaves]);
-
-        for (int b = 0; b < batchSize; b++)
+        var paths = new List<Tensor<T>>
         {
-            for (int leaf = 0; leaf < _numLeaves; leaf++)
-            {
-                // Compute probability of reaching this leaf
-                var prob = NumOps.One;
-                for (int level = 0; level < _depth; level++)
-                {
-                    var rightProb = splitDecisions[b * _depth + level];
-                    var leftProb = NumOps.Subtract(NumOps.One, rightProb);
+            Tensor<T>.CreateDefault([batchSize, 1], NumOps.One)
+        };
 
-                    // Check if this leaf goes right or left at this level
-                    bool goRight = ((leaf >> (_depth - 1 - level)) & 1) == 1;
-                    prob = NumOps.Multiply(prob, goRight ? rightProb : leftProb);
-                }
-                leafProbs[b * _numLeaves + leaf] = prob;
+        for (int level = 0; level < _depth; level++)
+        {
+            var right = Engine.TensorNarrow(splitDecisions, dim: 1, start: level, length: 1);
+            var left = Engine.TensorNegate(Engine.TensorSubtractScalar(right, NumOps.One));
+            var next = new List<Tensor<T>>(paths.Count * 2);
+            foreach (var parent in paths)
+            {
+                next.Add(Engine.TensorMultiply(parent, left));
+                next.Add(Engine.TensorMultiply(parent, right));
             }
+            paths = next;
         }
 
-        return leafProbs;
+        return paths.Count == 1
+            ? paths[0]
+            : Engine.TensorConcatenate(paths.ToArray(), axis: 1);
     }
 
     private Tensor<T> ComputeOutput(Tensor<T> leafProbs, int batchSize)
     {
-        var output = TensorAllocator.Rent<T>([batchSize, _outputDim]);
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int o = 0; o < _outputDim; o++)
-            {
-                var sum = NumOps.Zero;
-                for (int leaf = 0; leaf < _numLeaves; leaf++)
-                {
-                    sum = NumOps.Add(sum, NumOps.Multiply(
-                        leafProbs[b * _numLeaves + leaf],
-                        _leafValues[leaf * _outputDim + o]));
-                }
-                output[b * _outputDim + o] = sum;
-            }
-        }
-
-        return output;
-    }
-
-    private T Sigmoid(T x)
-    {
-        var negX = NumOps.Negate(x);
-        var expNegX = NumOps.Exp(negX);
-        return NumOps.Divide(NumOps.One, NumOps.Add(NumOps.One, expNegX));
+        return Engine.TensorMatMul(leafProbs, _leafValues);
     }
 
     /// <summary>
@@ -476,37 +466,4 @@ public partial class ObliviousDecisionTreeLayer<T> : LayerBase<T>
         Engine.TensorFill(_leafValuesGrad, NumOps.Zero);
     }
 
-    /// <inheritdoc/>
-    public override Vector<T> GetParameters()
-    {
-        int total = _featureSelectionWeights.Length + _thresholds.Length + _leafValues.Length;
-        var result = new Vector<T>(total);
-        int offset = 0;
-        for (int i = 0; i < _featureSelectionWeights.Length; i++)
-            result[offset++] = _featureSelectionWeights[i];
-        for (int i = 0; i < _thresholds.Length; i++)
-            result[offset++] = _thresholds[i];
-        for (int i = 0; i < _leafValues.Length; i++)
-            result[offset++] = _leafValues[i];
-        return result;
-    }
-
-    /// <inheritdoc/>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        // Mirror GetParameters' layout: feature-selection weights, then thresholds, then leaf
-        // values. Writing the elements in place updates the same registered tensors the tape
-        // trains, so the Clone serialize -> deserialize round-trip restores learned weights.
-        int expected = _featureSelectionWeights.Length + _thresholds.Length + _leafValues.Length;
-        if (parameters.Length != expected)
-        {
-            throw new ArgumentException(
-                $"Expected {expected} parameters, got {parameters.Length}.", nameof(parameters));
-        }
-
-        int offset = 0;
-        for (int i = 0; i < _featureSelectionWeights.Length; i++) _featureSelectionWeights[i] = parameters[offset++];
-        for (int i = 0; i < _thresholds.Length; i++) _thresholds[i] = parameters[offset++];
-        for (int i = 0; i < _leafValues.Length; i++) _leafValues[i] = parameters[offset++];
-    }
 }

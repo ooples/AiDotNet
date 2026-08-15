@@ -61,7 +61,7 @@ namespace AiDotNet.Video.FrameInterpolation;
     "https://arxiv.org/abs/2202.04901",
     Year = 2022,
     Authors = "Fitsum Reda, Janne Kontkanen, Eric Tabellion, Deqing Sun, Caroline Pantofaru, Brian Curless")]
-public class FILM<T> : FrameInterpolationBase<T>
+public partial class FILM<T> : FrameInterpolationBase<T>
 {
     private readonly FILMOptions _options;
 
@@ -471,9 +471,9 @@ public class FILM<T> : FrameInterpolationBase<T>
         }
         var grid = Engine.TensorAdd(baseGrid, Engine.TensorMultiply(flowNHWC, scale));
 
-        var featNHWC = Engine.TensorPermute(features, [0, 2, 3, 1]);
-        var warpedNHWC = Engine.GridSample(featNHWC, grid);
-        return Engine.TensorPermute(warpedNHWC, [0, 3, 1, 2]);
+        // Engine.GridSample is NCHW (PyTorch convention): features are already [B, C, H, W],
+        // pass them directly. The grid is [B, H, W, 2] regardless of image layout.
+        return Engine.GridSample(features, grid);
     }
 
     private Tensor<T> FuseFeatures(
@@ -592,23 +592,8 @@ public class FILM<T> : FrameInterpolationBase<T>
         _synthesisHead = (ConvolutionalLayer<T>)Layers[idx++];
     }
 
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        // Use layer.ParameterCount + layer.UpdateParameters and ALWAYS advance the offset (the proven
-        // AMT pattern). The previous version keyed off GetParameters().Length and called SetParameters,
-        // then SKIPPED a layer whose count read as 0 (an unresolved/lazy layer post-deserialize) WITHOUT
-        // advancing the offset — so every subsequent layer read its weights from the wrong slice and a
-        // clone/round-trip predicted with mismatched weights (Clone_AfterTraining, issue #1221 class).
-        int idx = 0;
-        foreach (var layer in Layers)
-        {
-            int count = checked((int)layer.ParameterCount);
-            if (count == 0) continue;
-            layer.UpdateParameters(parameters.Slice(idx, count));
-            idx += count;
-        }
-    }
-
+    // UpdateParameters was an empty override, silently dropping every restore. The base
+    // distributes the vector over the declared enumeration.
     public override ModelMetadata<T> GetModelMetadata()
     {
         return new ModelMetadata<T>

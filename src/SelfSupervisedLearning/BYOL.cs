@@ -48,10 +48,15 @@ namespace AiDotNet.SelfSupervisedLearning;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Bootstrap Your Own Latent - A New Approach to Self-Supervised Learning", "https://arxiv.org/abs/2006.07733", Year = 2020, Authors = "Jean-Bastien Grill, Florian Strub, Florent Altché, Corentin Tallec, Pierre Richemond, Elena Buchatskaya, Carl Doersch, Bernardo Avila Pires, Zhaohan Guo, Mohammad Gheshlaghi Azar, Bilal Piot, Koray Kavukcuoglu, Rémi Munos, Michal Valko")]
-public class BYOL<T> : SelfSupervisedLearningMethodBase<T>
+public partial class BYOL<T> : SelfSupervisedLearningMethodBase<T>
 {
+    [FrozenParameter]
     private readonly IMomentumEncoder<T> _targetEncoder;
+
+    [ParameterAlias(nameof(_projector))]
     private readonly SymmetricProjector<T> _onlineProjector;
+
+    [FrozenParameter]
     private readonly SymmetricProjector<T> _targetProjector;
     private readonly BYOLLoss<T> _loss;
     private readonly SelfSupervisedLearningAugmentationPolicies<T> _augmentation;

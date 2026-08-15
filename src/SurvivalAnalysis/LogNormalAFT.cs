@@ -4,6 +4,7 @@ using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using Newtonsoft.Json;
 
+using AiDotNet.Models.Parameters;
 namespace AiDotNet.SurvivalAnalysis;
 
 /// <summary>
@@ -53,6 +54,29 @@ namespace AiDotNet.SurvivalAnalysis;
 [ResearchPaper("Survival Analysis: Techniques for Censored and Truncated Data", "https://doi.org/10.1007/978-1-4757-3294-8")]
 public class LogNormalAFT<T> : SurvivalModelBase<T>
 {
+
+    /// <inheritdoc />
+    /// <remarks>Intercept, scale, then the covariate coefficients, the same layout as WeibullAFT -- the two differ in their error distribution, not in what they fit.</remarks>
+    protected override void RegisterComponents()
+    {
+        RegisterParameterComponent(
+            "parameters/00000000-intercept",
+            new ScalarParameterSource<T>(() => Intercept, v => Intercept = v),
+            ParameterSlotRole.LearnedState,
+            ParameterAvailability.Fit);
+        RegisterParameterComponent(
+            "parameters/00000001-scale",
+            new ScalarParameterSource<T>(() => Scale, v => Scale = v),
+            ParameterSlotRole.LearnedState,
+            ParameterAvailability.Fit);
+        RegisterParameterComponent(
+            "parameters/00000002-coefficients",
+            new VectorFieldParameterSource<T>(
+                () => Coefficients,
+                value => Coefficients = value),
+            ParameterSlotRole.LearnedState,
+            ParameterAvailability.Fit);
+    }
     /// <summary>
     /// Gets the regression coefficients (β).
     /// </summary>
@@ -250,6 +274,19 @@ public class LogNormalAFT<T> : SurvivalModelBase<T>
     }
 
     /// <summary>
+    /// Converts an exponent to the model's numeric type without turning a finite
+    /// double result into infinity when <typeparamref name="T"/> has a smaller range.
+    /// </summary>
+    private T ExpAsFiniteNumeric(double exponent)
+    {
+        double maxValue = NumOps.ToDouble(NumOps.MaxValue);
+        if (exponent >= Math.Log(maxValue))
+            return NumOps.MaxValue;
+
+        return NumOps.FromDouble(Math.Exp(exponent));
+    }
+
+    /// <summary>
     /// Predicts survival probabilities at specified times.
     /// </summary>
     public override Matrix<T> PredictSurvivalProbability(Matrix<T> x, Vector<T> times)
@@ -298,7 +335,7 @@ public class LogNormalAFT<T> : SurvivalModelBase<T>
                 eta += NumOps.ToDouble(coefficients[j]) * NumOps.ToDouble(x[i, j]);
 
             // For log-normal, the acceleration factor is exp(-η)
-            result[i] = NumOps.FromDouble(Math.Exp(-eta));
+            result[i] = ExpAsFiniteNumeric(-eta);
         }
 
         return result;
@@ -344,42 +381,10 @@ public class LogNormalAFT<T> : SurvivalModelBase<T>
                 mu += NumOps.ToDouble(coefficients[j]) * NumOps.ToDouble(input[i, j]);
 
             // Median survival time for log-normal: exp(μ)
-            double median = Math.Exp(mu);
-            result[i] = NumOps.FromDouble(median);
+            result[i] = ExpAsFiniteNumeric(mu);
         }
 
         return result;
-    }
-
-    /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        if (Coefficients is null)
-            return new Vector<T>(2);
-
-        var parameters = new Vector<T>(Coefficients.Length + 2);
-        parameters[0] = Intercept;
-        parameters[1] = Scale;
-        for (int i = 0; i < Coefficients.Length; i++)
-            parameters[i + 2] = Coefficients[i];
-
-        return parameters;
-    }
-
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (parameters.Length < 2) return;
-
-        Intercept = parameters[0];
-        Scale = parameters[1];
-
-        if (parameters.Length > 2)
-        {
-            Coefficients = new Vector<T>(parameters.Length - 2);
-            for (int i = 0; i < Coefficients.Length; i++)
-                Coefficients[i] = parameters[i + 2];
-        }
     }
 
     /// <inheritdoc />

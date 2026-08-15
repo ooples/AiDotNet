@@ -62,12 +62,6 @@ public abstract class SafetyModuleBase<T> : ModelBase<T, Vector<T>, Vector<T>>, 
     public override ILossFunction<T> DefaultLossFunction => new MeanSquaredErrorLoss<T>();
 
     /// <inheritdoc />
-    public override Vector<T> GetParameters() => new Vector<T>(0);
-
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters) { }
-
-    /// <inheritdoc />
     public override IFullModel<T, Vector<T>, Vector<T>> WithParameters(Vector<T> parameters)
     {
         var copy = DeepCopy();

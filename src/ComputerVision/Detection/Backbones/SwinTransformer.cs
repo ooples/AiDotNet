@@ -11,6 +11,8 @@ using AiDotNet.Tensors;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 
+using System.Linq;
+
 namespace AiDotNet.ComputerVision.Detection.Backbones;
 
 /// <summary>
@@ -30,8 +32,35 @@ namespace AiDotNet.ComputerVision.Detection.Backbones;
     "https://arxiv.org/abs/2103.14030",
     Year = 2021,
     Authors = "Ze Liu, Yutong Lin, Yue Cao, Han Hu, Yixuan Wei, Zheng Zhang, Stephen Lin, Baining Guo")]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Input, BatchOptional = true)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Output, BatchOptional = true)]
 public class SwinTransformer<T> : NeuralNetworkBase<T>, IDetectionBackbone<T>
 {
+
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// The patch embedding and every layer inside every Swin stage. The layer norms are excluded because SwinLayerNorm is not a LayerBase and holds no trainable tensors of its own -- widening it is a separate change, not one to make silently here.
+    /// <para>
+    /// These live outside <c>Layers</c>, held in plain block objects, which is why this backbone
+    /// used to THROW from GetParameters rather than expose a flat vector -- the base walk would
+    /// have found nothing. Refusing was never right: PyTorch has no module that declines to
+    /// enumerate its parameters, and the refusal cost this model checkpointing, flat-vector
+    /// optimizers and every count-based diagnostic. Declaring the layers here gets all of it back,
+    /// and count, vector, restore and chunks fold this one declaration.
+    /// </para>
+    /// </remarks>
+    protected override IEnumerable<LayerBase<T>?> GetExtraTrainableLayers()
+    {
+        foreach (var layer in _patchEmbed.EnumerateLayers()) yield return layer;
+        foreach (var stage in _stages)
+        {
+            foreach (var layer in stage.EnumerateLayers()) yield return layer;
+        }
+    }
+
     private readonly PatchEmbeddingBlock<T> _patchEmbed;
     private readonly List<SwinStage<T>> _stages;
     private readonly SwinVariant _variant;
@@ -194,20 +223,11 @@ public class SwinTransformer<T> : NeuralNetworkBase<T>, IDetectionBackbone<T>
         return (0, 0);
     }
 
-    /// <summary>
-    /// Sum across patch embedding + every Swin stage. Inherited
-    /// <c>NeuralNetworkBase&lt;T&gt;.GetParameterCount()</c> delegates to this
-    /// virtual property, satisfying the <see cref="IDetectionBackbone{T}"/> contract.
-    /// </summary>
-    public override long ParameterCount
-    {
-        get
-        {
-            long count = _patchEmbed.GetParameterCount();
-            for (int i = 0; i < _stages.Count; i++) count += _stages[i].GetParameterCount();
-            return count;
-        }
-    }
+    // ParameterCount is NOT overridden. It folds the same enumeration GetParameters
+    // does -- Layers, then GetExtraTrainableLayers() -- so the two cannot disagree. The
+    // override that was here summed the stem and blocks through GetParameterCount(),
+    // a SEPARATE source, and once the vector started folding the base enumeration the
+    // two drifted apart immediately.
 
     public void WriteParameters(BinaryWriter writer)
     {
@@ -303,17 +323,8 @@ public class SwinTransformer<T> : NeuralNetworkBase<T>, IDetectionBackbone<T>
         throw new NotSupportedException(
             $"{GetType().Name}: detection backbones train as part of a parent detector.");
 
-    public override Vector<T> GetParameters() =>
-        throw new NotSupportedException(
-            $"{GetType().Name}: backbones do not expose a flat parameter vector. Use WriteParameters/ReadParameters.");
 
-    public override void SetParameters(Vector<T> parameters) =>
-        throw new NotSupportedException(
-            $"{GetType().Name}: backbones do not accept a flat parameter vector. Use ReadParameters.");
 
-    public override void UpdateParameters(Vector<T> parameters) =>
-        throw new NotSupportedException(
-            $"{GetType().Name}: backbones do not accept a flat parameter update vector.");
 
     public override IFullModel<T, Tensor<T>, Tensor<T>> WithParameters(Vector<T> parameters) =>
         throw new NotSupportedException(
@@ -363,6 +374,14 @@ public enum SwinVariant
 /// </summary>
 internal class PatchEmbeddingBlock<T>
 {
+
+
+    /// <summary>The trainable layers this type owns, in forward order.</summary>
+    internal IEnumerable<LayerBase<T>> EnumerateLayers()
+    {
+        yield return _proj;
+    }
+
     private readonly ConvolutionalLayer<T> _proj;
     private readonly int _patchSize;
 
@@ -407,6 +426,21 @@ internal class PatchEmbeddingBlock<T>
 /// </summary>
 internal class SwinStage<T>
 {
+
+
+    /// <summary>The trainable layers this type owns, in forward order.</summary>
+    internal IEnumerable<LayerBase<T>> EnumerateLayers()
+    {
+        foreach (var b in _blocks)
+        {
+            foreach (var l in b.EnumerateLayers()) yield return l;
+        }
+        if (_patchMerge is not null)
+        {
+            foreach (var l in _patchMerge.EnumerateLayers()) yield return l;
+        }
+    }
+
     private readonly List<SwinTransformerBlock<T>> _blocks;
     private readonly PatchMergingBlock<T>? _patchMerge;
     private readonly int _dim;
@@ -499,6 +533,17 @@ internal class SwinStage<T>
 /// </summary>
 internal class SwinTransformerBlock<T>
 {
+
+
+    /// <summary>The trainable layers this type owns, in forward order.</summary>
+    internal IEnumerable<LayerBase<T>> EnumerateLayers()
+    {
+        yield return _qkvProj;
+        yield return _outProj;
+        yield return _mlpFc1;
+        yield return _mlpFc2;
+    }
+
     private readonly INumericOperations<T> _numOps;
     private readonly int _dim;
     private readonly int _numHeads;
@@ -1012,6 +1057,14 @@ internal class SwinLayerNorm<T>
 /// </summary>
 internal class PatchMergingBlock<T>
 {
+
+
+    /// <summary>The trainable layers this type owns, in forward order.</summary>
+    internal IEnumerable<LayerBase<T>> EnumerateLayers()
+    {
+        yield return _reduction;
+    }
+
     private readonly DenseLayer<T> _reduction;
     private readonly int _dim;
 

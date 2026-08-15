@@ -56,22 +56,52 @@ namespace AiDotNet.ComputerVision.Segmentation.Medical;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("SegMamba: Long-range Sequential Modeling Mamba For 3D Medical Image Segmentation", "https://arxiv.org/abs/2401.13560", Year = 2024, Authors = "Xing et al.")]
-public class SegMamba<T> : NeuralNetworkBase<T>, IMedicalSegmentation<T>
+public partial class SegMamba<T> : Common.MedicalSegmentationBase<T>
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// SegMamba is VOLUMETRIC, so a rank-4 input means something different here than it does for the
+    /// rest of the family. <see cref="Forward"/> reshapes it to a rank-5 <c>[1, C, D, H, W]</c> volume,
+    /// runs a 3-D network, and drops the leading axis again - so the four axes coming out are
+    /// <c>[Classes, Depth, Height, Width]</c>, NOT the family's <c>[Batch, Classes, H/32, W/32]</c>.
+    /// </para>
+    /// <para>
+    /// Measured: <c>[1,3,64,64] -&gt; [7,3,64,64]</c> at 7 classes. Nothing is downsampled and the class
+    /// count lands on axis 0, which is why the inherited law disagreed. That disagreement was the
+    /// conformance sweep working, not a bug in the model - this is a genuinely different I/O
+    /// convention, and it is stated rather than forced into the family shape.
+    /// </para>
+    /// <para>
+    /// The relations are written against the INHERITED input axis names, so no second [TensorLayout] is
+    /// declared and ADNSHAPE001 cannot fire: what the base calls Channels is this model's depth axis.
+    /// </para>
+    /// </remarks>
+    public override IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        if (inputRank != 4 || _numClasses <= 0) return null;
+
+        return new[]
+        {
+            new OutputAxisContract(TensorAxis.Classes, AxisRelation.Fixed(_numClasses)),
+            new OutputAxisContract(TensorAxis.Depth, AxisRelation.Same(TensorAxis.Channels)),
+            new OutputAxisContract(TensorAxis.Height, AxisRelation.Same(TensorAxis.Height)),
+            new OutputAxisContract(TensorAxis.Width, AxisRelation.Same(TensorAxis.Width)),
+        };
+    }
+
     private readonly SegMambaOptions _options;
     public override ModelOptions GetOptions() => _options;
 
     #region Fields
-    private readonly int _inChannels, _numClasses;
+    // Only SegMamba's OWN configuration lives here. _height, _width, _channels, _numClasses,
+    // _useNativeMode, _onnxModelPath, _onnxSession, _optimizer, _disposed and _encoderLayerEnd all
+    // come from MedicalSegmentationBase -> SegmentationModelBase.
+    private readonly int _inChannels;
     private readonly int[] _channelDims;
     private readonly int[] _depths;
     private readonly int _stateDim;
     private readonly double _dropRate;
-    private readonly bool _useNativeMode;
-    private readonly string? _onnxModelPath;
-    private InferenceSession? _onnxSession;
-    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
-    private bool _disposed;
 
     // --- Typed layer references for the custom (skip-connected) forward pass.
     // All of these are ALSO held in the base Layers list (parameter management);
@@ -86,6 +116,7 @@ public class SegMamba<T> : NeuralNetworkBase<T>, IMedicalSegmentation<T>
     private readonly List<Conv3DLayer<T>> _decConvs = new();
     private readonly List<InstanceNormalizationLayer<T>> _decNorms = new();
     private Conv3DLayer<T>? _outConv;
+    private bool _nativeShapesResolved;
     #endregion
 
     private sealed class GscModule
@@ -120,9 +151,12 @@ public class SegMamba<T> : NeuralNetworkBase<T>, IMedicalSegmentation<T>
     }
 
     #region Properties
-    public override bool SupportsTraining => _useNativeMode;
+    // SupportsTraining, NumClasses, InputHeight, InputWidth, IsOnnxMode, Segment, SupportedModalities
+    // (default ["CT", "MRI"]), Supports3D and SupportsFewShot are all supplied identically by the base.
     internal bool UseNativeMode => _useNativeMode;
-    internal int NumClasses => _numClasses;
+
+    /// <summary>SegMamba is a purely volumetric (3D) model; single 2D slices are not supported.</summary>
+    public override bool Supports2D => false;
     #endregion
 
     #region Constructors
@@ -132,47 +166,62 @@ public class SegMamba<T> : NeuralNetworkBase<T>, IMedicalSegmentation<T>
         ILossFunction<T>? lossFunction = null, int numClasses = 14,
         double dropRate = 0,
         SegMambaOptions? options = null)
-        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>())
+        // `optimizer` is passed straight through - INCLUDING null. The base resolves the default
+        // lazily via CreateDefaultOptimizer(), overridden below to keep SegMamba's 1e-4 AdamW.
+        : base(architecture, optimizer, lossFunction, numClasses)
     {
         _options = options ?? new SegMambaOptions(); Options = _options;
+        // InputHeight/InputWidth stay verbatim from the architecture (SegMamba reported them that
+        // way); the base's 512 fallback would otherwise invent a size this 3D model never uses.
+        _height = architecture.InputHeight;
+        _width = architecture.InputWidth;
         _inChannels = architecture.InputDepth > 0 ? architecture.InputDepth : 1;
-        _numClasses = numClasses; _dropRate = dropRate;
-        _useNativeMode = true; _onnxModelPath = null;
-        // Paper-faithful encoder widths/depths (Xing et al. 2024, §4): feature dims
-        // [48, 96, 192, 384] with two TSMamba blocks per stage.
-        _channelDims = [48, 96, 192, 384];
-        _depths = [2, 2, 2, 2];
-        _stateDim = 16;
-        // SegMamba trains with AdamW at a small LR (paper §4.2 uses 1e-4 with
-        // warmup/poly decay); the framework default 1e-3 is too aggressive for the
-        // hybrid conv-Mamba encoder.
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
-            this, new Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>> { InitialLearningRate = 1e-4 });
+        _dropRate = dropRate;
+        (_channelDims, _depths, _stateDim) = ValidateAndCopyArchitectureOptions(_options);
         InitializeLayers();
     }
+
+    /// <summary>
+    /// SegMamba trains with AdamW at a small LR (paper §4.2 uses 1e-4 with warmup/poly decay);
+    /// the framework default 1e-3 is too aggressive for the hybrid conv-Mamba encoder.
+    /// </summary>
+    protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreateDefaultOptimizer()
+        => new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+            this, new Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>> { InitialLearningRate = 1e-4 });
 
     /// <summary>Initializes SegMamba in ONNX (inference-only) mode.</summary>
     public SegMamba(NeuralNetworkArchitecture<T> architecture, string onnxModelPath,
         int numClasses = 14,
         SegMambaOptions? options = null)
-        : base(architecture, new CrossEntropyWithLogitsLoss<T>())
+        // The base validates the path, sets ONNX mode and opens the InferenceSession.
+        : base(architecture, onnxModelPath, numClasses)
     {
         _options = options ?? new SegMambaOptions(); Options = _options;
-        if (string.IsNullOrWhiteSpace(onnxModelPath))
-            throw new ArgumentException("ONNX model path cannot be null or empty.", nameof(onnxModelPath));
-        if (!File.Exists(onnxModelPath))
-            throw new FileNotFoundException($"SegMamba ONNX model not found: {onnxModelPath}");
+        _height = architecture.InputHeight;
+        _width = architecture.InputWidth;
         _inChannels = architecture.InputDepth > 0 ? architecture.InputDepth : 1;
-        _numClasses = numClasses; _dropRate = 0;
-        _useNativeMode = false; _onnxModelPath = onnxModelPath; _optimizer = null;
-        _channelDims = [48, 96, 192, 384];
-        _depths = [2, 2, 2, 2];
-        _stateDim = 16;
-        try { _onnxSession = new InferenceSession(onnxModelPath); }
-        catch (Exception ex) { throw new InvalidOperationException($"Failed to load SegMamba ONNX model: {ex.Message}", ex); }
+        _dropRate = 0;
+        (_channelDims, _depths, _stateDim) = ValidateAndCopyArchitectureOptions(_options);
         InitializeLayers();
     }
     #endregion
+
+    private static (int[] ChannelDimensions, int[] StageDepths, int StateDimension)
+        ValidateAndCopyArchitectureOptions(SegMambaOptions options)
+    {
+        if (options.ChannelDimensions is null || options.ChannelDimensions.Length == 0)
+            throw new ArgumentException("At least one channel dimension is required.", nameof(options));
+        if (options.StageDepths is null || options.StageDepths.Length != options.ChannelDimensions.Length)
+            throw new ArgumentException("StageDepths must contain one entry per channel dimension.", nameof(options));
+        if (options.ChannelDimensions.Any(dimension => dimension <= 0))
+            throw new ArgumentOutOfRangeException(nameof(options), "Channel dimensions must be positive.");
+        if (options.StageDepths.Any(depth => depth <= 0))
+            throw new ArgumentOutOfRangeException(nameof(options), "Stage depths must be positive.");
+        if (options.StateDimension <= 0)
+            throw new ArgumentOutOfRangeException(nameof(options), "StateDimension must be positive.");
+
+        return (options.ChannelDimensions.ToArray(), options.StageDepths.ToArray(), options.StateDimension);
+    }
 
     #region Public Methods
     /// <summary>Runs a forward pass to produce segmentation logits.</summary>
@@ -190,7 +239,7 @@ public class SegMamba<T> : NeuralNetworkBase<T>, IMedicalSegmentation<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expectedOutput, _optimizer);
+            TrainWithTape(input, expectedOutput, Optimizer);
         }
         finally
         {
@@ -200,7 +249,7 @@ public class SegMamba<T> : NeuralNetworkBase<T>, IMedicalSegmentation<T>
     #endregion
 
     #region Forward
-    private Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> Forward(Tensor<T> input)
     {
         bool hasBatch = input.Rank == 5;
         if (!hasBatch)
@@ -394,10 +443,10 @@ public class SegMamba<T> : NeuralNetworkBase<T>, IMedicalSegmentation<T>
         return new Tensor<int>(idx, [len]);
     }
 
-    private Tensor<T> PredictOnnx(Tensor<T> input)
+    protected override Tensor<T> PredictOnnx(Tensor<T> input)
     {
         if (_onnxSession is null) throw new InvalidOperationException("ONNX session is not initialized.");
-        bool hasBatch = input.Rank == 5; if (!hasBatch) input = AddBatchDimension(input);
+        bool hasBatch = input.Rank == 5; if (!hasBatch) input = AddVolumeBatchDimension(input);
         var inputData = new float[input.Length];
         for (int i = 0; i < input.Length; i++) inputData[i] = Convert.ToSingle(input.Data.Span[i]);
         var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input._shape);
@@ -411,11 +460,11 @@ public class SegMamba<T> : NeuralNetworkBase<T>, IMedicalSegmentation<T>
         if (!hasBatch) result = RemoveBatchDimension(result); return result;
     }
 
-    private Tensor<T> AddBatchDimension(Tensor<T> tensor)
+    // RemoveBatchDimension comes from SegmentationModelBase (identical, plus a Shape[0] == 1 guard).
+    // AddBatchDimension does NOT: the base's promotes rank-3 [C,H,W] only, while SegMamba needs to
+    // promote a rank-4 volume [C,D,H,W], so the rank-agnostic version is kept under its own name.
+    private static Tensor<T> AddVolumeBatchDimension(Tensor<T> tensor)
     { var s = new int[tensor.Shape.Length + 1]; s[0] = 1; for (int i = 0; i < tensor.Shape.Length; i++) s[i + 1] = tensor.Shape[i]; var result = new Tensor<T>(s); tensor.Data.Span.CopyTo(result.Data.Span); return result; }
-
-    private Tensor<T> RemoveBatchDimension(Tensor<T> tensor)
-    { int[] s = new int[tensor.Shape.Length - 1]; for (int i = 0; i < s.Length; i++) s[i] = tensor.Shape[i + 1]; var r = new Tensor<T>(s); tensor.Data.Span.CopyTo(r.Data.Span); return r; }
     #endregion
 
     #region Layer construction
@@ -489,6 +538,76 @@ public class SegMamba<T> : NeuralNetworkBase<T>, IMedicalSegmentation<T>
     }
 
     /// <summary>
+    /// Resolves lazy convolution weights through SegMamba's real U-shaped topology.
+    /// </summary>
+    /// <remarks>
+    /// The base resolver treats <see cref="NeuralNetworkBase{T}.Layers"/> as a flat chain. That is
+    /// incorrect for SegMamba: each decoder stage concatenates the upsampled feature with an encoder
+    /// skip (Xing et al. 2024, section 2), so its convolution consumes the sum of both channel counts.
+    /// Resolving the decoder as a flat chain pins, for example, the finest fusion kernel to 64 input
+    /// channels although the real graph supplies 64 + 32 = 96. Resolve the convolution shapes here in
+    /// the same encoder/skip/decoder order as <see cref="Forward(Tensor{T})"/>.
+    /// </remarks>
+    protected override void ResolveLazyLayerShapes()
+    {
+        if (_nativeShapesResolved || !_useNativeMode || Layers.Count == 0 || _stem is null || _outConv is null)
+            return;
+
+        int depth = Architecture.InputHeight;
+        int height = Architecture.InputHeight;
+        int width = Architecture.InputWidth;
+        if (depth <= 0 || height <= 0 || width <= 0)
+            return; // Dynamic volumes resolve from their first real forward.
+
+        static int ConvOutput(int size, int kernel, int stride, int padding)
+            => (size + 2 * padding - kernel) / stride + 1;
+
+        _stem.ResolveFromShape([_inChannels, depth, height, width]);
+        depth = ConvOutput(depth, _stem.KernelSize, _stem.Stride, _stem.Padding);
+        height = ConvOutput(height, _stem.KernelSize, _stem.Stride, _stem.Padding);
+        width = ConvOutput(width, _stem.KernelSize, _stem.Stride, _stem.Padding);
+
+        var skipSpatial = new (int Depth, int Height, int Width)[_channelDims.Length];
+        for (int stage = 0; stage < _channelDims.Length; stage++)
+        {
+            if (stage > 0)
+            {
+                var down = _downConvs[stage - 1];
+                down.ResolveFromShape([_channelDims[stage - 1], depth, height, width]);
+                depth = ConvOutput(depth, down.KernelSize, down.Stride, down.Padding);
+                height = ConvOutput(height, down.KernelSize, down.Stride, down.Padding);
+                width = ConvOutput(width, down.KernelSize, down.Stride, down.Padding);
+            }
+
+            int channels = _channelDims[stage];
+            var gsc = _gsc[stage];
+            gsc.Proj.ResolveFromShape([channels, depth, height, width]);
+            gsc.Proj2.ResolveFromShape([channels, depth, height, width]);
+            gsc.Proj3.ResolveFromShape([channels, depth, height, width]);
+            skipSpatial[stage] = (depth, height, width);
+        }
+
+        int currentChannels = _channelDims[^1];
+        int convIdx = 0;
+        for (int stage = _channelDims.Length - 2; stage >= 0; stage--)
+        {
+            (depth, height, width) = skipSpatial[stage];
+            int concatChannels = currentChannels + _channelDims[stage];
+            _decConvs[convIdx].ResolveFromShape([concatChannels, depth, height, width]);
+            currentChannels = _channelDims[stage];
+            convIdx++;
+        }
+
+        // The final upsample returns to the input volume without another skip concat.
+        depth = Architecture.InputHeight;
+        height = Architecture.InputHeight;
+        width = Architecture.InputWidth;
+        _decConvs[convIdx].ResolveFromShape([currentChannels, depth, height, width]);
+        _outConv.ResolveFromShape([_channelDims[0], depth, height, width]);
+        _nativeShapesResolved = true;
+    }
+
+    /// <summary>
     /// Re-derives the typed sub-layer references from the canonical <see cref="NeuralNetworkBase{T}.Layers"/>
     /// list after deserialization rebuilds it. Without this a cloned/loaded model would run the
     /// constructor's randomly-initialized layers in Forward while the loaded weights sit unused.
@@ -546,9 +665,8 @@ public class SegMamba<T> : NeuralNetworkBase<T>, IMedicalSegmentation<T>
     #endregion
 
     #region Abstract Implementation
-    public override void UpdateParameters(Vector<T> parameters)
-    { int o = 0; foreach (var l in Layers) { var p = l.GetParameters(); int c = p.Length; if (c == 0) continue; if (o + c <= parameters.Length) { var n = new Vector<T>(c); for (int i = 0; i < c; i++) n[i] = parameters[o + i]; l.UpdateParameters(n); o += c; } } }
-
+    // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
+    // exactly the same enumeration, so this said nothing the base does not already say.
     public override ModelMetadata<T> GetModelMetadata() => new()
     {
         AdditionalInfo = new Dictionary<string, object> { { "ModelName", "SegMamba" }, { "InChannels", _inChannels }, { "NumClasses", _numClasses }, { "UseNativeMode", _useNativeMode }, { "NumLayers", Layers.Count } },
@@ -580,25 +698,17 @@ public class SegMamba<T> : NeuralNetworkBase<T>, IMedicalSegmentation<T>
         ? new SegMamba<T>(Architecture, _optimizer, LossFunction, _numClasses, _dropRate, _options)
         : new SegMamba<T>(Architecture, _onnxModelPath ?? throw new InvalidOperationException("ONNX model path not initialized."), _numClasses, _options);
 
-    protected override void Dispose(bool disposing)
-    { if (!_disposed) { if (disposing) { _onnxSession?.Dispose(); _onnxSession = null; } _disposed = true; } base.Dispose(disposing); }
+    // Dispose is inherited: SegmentationModelBase already disposes _onnxSession and flips _disposed,
+    // and SegMamba owns no other unmanaged resource.
     #endregion
 
     #region IMedicalSegmentation Implementation
-    int ISegmentationModel<T>.NumClasses => _numClasses;
-    int ISegmentationModel<T>.InputHeight => Architecture.InputHeight;
-    int ISegmentationModel<T>.InputWidth => Architecture.InputWidth;
-    bool ISegmentationModel<T>.IsOnnxMode => !_useNativeMode;
-    Tensor<T> ISegmentationModel<T>.Segment(Tensor<T> image) => Predict(image);
-    IReadOnlyList<string> IMedicalSegmentation<T>.SupportedModalities => ["CT", "MRI"];
-    bool IMedicalSegmentation<T>.Supports3D => true;
-    bool IMedicalSegmentation<T>.Supports2D => false;
-    bool IMedicalSegmentation<T>.SupportsFewShot => false;
-
-    MedicalSegmentationResult<T> IMedicalSegmentation<T>.SegmentSlice(Tensor<T> slice)
+    /// <inheritdoc/>
+    public override MedicalSegmentationResult<T> SegmentSlice(Tensor<T> slice)
         => throw new NotSupportedException("SegMamba is a 3D model. Use SegmentVolume with a [C, D, H, W] volume.");
 
-    MedicalSegmentationResult<T> IMedicalSegmentation<T>.SegmentVolume(Tensor<T> volume)
+    /// <inheritdoc/>
+    public override MedicalSegmentationResult<T> SegmentVolume(Tensor<T> volume)
     {
         var output = Predict(volume); // [numClasses, D, H, W] (batch stripped) or [B, numClasses, D, H, W]
         // SegmentVolume is single-volume: the IMedicalSegmentation contract returns
@@ -644,7 +754,9 @@ public class SegMamba<T> : NeuralNetworkBase<T>, IMedicalSegmentation<T>
         return new MedicalSegmentationResult<T> { Labels = labels, Probabilities = probs, Structures = structures };
     }
 
-    MedicalSegmentationResult<T> IMedicalSegmentation<T>.SegmentFewShot(Tensor<T> queryImage, Tensor<T> supportImages, Tensor<T> supportMasks)
+    /// <inheritdoc/>
+    public override MedicalSegmentationResult<T> SegmentFewShot(
+        Tensor<T> queryImage, Tensor<T> supportImages, Tensor<T> supportMasks)
         => throw new NotSupportedException("SegMamba does not support few-shot segmentation. Use SegmentVolume for 3D volumes.");
     #endregion
 }

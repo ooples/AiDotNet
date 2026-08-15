@@ -68,8 +68,18 @@ namespace AiDotNet.Diffusion.VAE;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     [ResearchPaper("Auto-Encoding Variational Bayes", "https://arxiv.org/abs/1312.6114")]
-public class AudioVAE<T> : VAEModelBase<T>
+public partial class AudioVAE<T> : VAEModelBase<T>
 {
+    /// <inheritdoc />
+    /// <remarks>Registration order is serialization order, and matches the
+    /// concatenation the previous hand-written GetParameters performed.</remarks>
+    protected override void RegisterComponents()
+    {
+        RegisterParameterComponent(_muProjection);
+        RegisterParameterComponent(_logVarProjection);
+        RegisterParameterComponent(_latentToDecoder);
+    }
+
     /// <summary>
     /// Number of mel spectrogram channels (frequency bins).
     /// </summary>
@@ -128,6 +138,7 @@ public class AudioVAE<T> : VAEModelBase<T>
     /// <summary>
     /// Cached input for backward pass.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastInput;
 
     /// <summary>
@@ -220,10 +231,15 @@ public class AudioVAE<T> : VAEModelBase<T>
         _muProjection = (DenseLayer<T>)encoderLayers[0];
         _logVarProjection = (DenseLayer<T>)encoderLayers[1];
 
+        int hiddenDim = _baseChannels * _channelMultipliers[^1];
+        _muProjection.ResolveShapesOnly(new[] { hiddenDim });
+        _logVarProjection.ResolveShapesOnly(new[] { hiddenDim });
+
         // Decoder projection from LayerHelper
         var decoderLayers = LayerHelper<T>.CreateAudioVAEDecoderLayers(
             _melChannels, _latentChannels, _baseChannels, _channelMultipliers).ToList();
         _latentToDecoder = (DenseLayer<T>)decoderLayers[0];
+        _latentToDecoder.ResolveShapesOnly(new[] { _latentChannels });
     }
 
     /// <inheritdoc />
@@ -653,95 +669,9 @@ public class AudioVAE<T> : VAEModelBase<T>
 
     #region IParameterizable Implementation
 
-    /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        var allParams = new List<T>();
 
-        // Collect from projection layers
-        if (_muProjection != null)
-        {
-            var p = _muProjection.GetParameters();
-            for (int i = 0; i < p.Length; i++)
-            {
-                allParams.Add(p[i]);
-            }
-        }
 
-        if (_logVarProjection != null)
-        {
-            var p = _logVarProjection.GetParameters();
-            for (int i = 0; i < p.Length; i++)
-            {
-                allParams.Add(p[i]);
-            }
-        }
 
-        if (_latentToDecoder != null)
-        {
-            var p = _latentToDecoder.GetParameters();
-            for (int i = 0; i < p.Length; i++)
-            {
-                allParams.Add(p[i]);
-            }
-        }
-
-        return new Vector<T>(allParams.ToArray());
-    }
-
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int offset = 0;
-
-        if (_muProjection != null)
-        {
-            int count = checked((int)_muProjection.ParameterCount);
-            var p = new T[count];
-            for (int i = 0; i < count; i++)
-            {
-                p[i] = parameters[offset + i];
-            }
-            _muProjection.SetParameters(new Vector<T>(p));
-            offset += count;
-        }
-
-        if (_logVarProjection != null)
-        {
-            int count = checked((int)_logVarProjection.ParameterCount);
-            var p = new T[count];
-            for (int i = 0; i < count; i++)
-            {
-                p[i] = parameters[offset + i];
-            }
-            _logVarProjection.SetParameters(new Vector<T>(p));
-            offset += count;
-        }
-
-        if (_latentToDecoder != null)
-        {
-            int count = checked((int)_latentToDecoder.ParameterCount);
-            var p = new T[count];
-            for (int i = 0; i < count; i++)
-            {
-                p[i] = parameters[offset + i];
-            }
-            _latentToDecoder.SetParameters(new Vector<T>(p));
-        }
-    }
-
-    /// <inheritdoc />
-    public override long ParameterCount
-    {
-        get
-        {
-            int count = 0;
-            if (_muProjection != null) count += (int)_muProjection.ParameterCount;
-            if (_logVarProjection != null) count += (int)_logVarProjection.ParameterCount;
-            if (_latentToDecoder != null) count += (int)_latentToDecoder.ParameterCount;
-            return count;
-        }
-    }
 
     #endregion
 

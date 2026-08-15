@@ -20,10 +20,26 @@ namespace AiDotNet.NeuralNetworks;
 /// giving strict O(n) complexity and O(1) memory per token during generation.</para>
 /// <para><b>Reference:</b> De et al., "Griffin: Mixing Gated Linear Recurrences with Local Attention", 2024.</para>
 /// </remarks>
+/// <remarks>
+/// <para>
+/// <b>Do not override <c>Train</c> to call <c>TrainWithTape</c> directly.</b> Besides the
+/// tape/optimizer step, the base entry point performs canonical batch promotion, first-step
+/// LSUV, optimizer persistence, OOM recovery, and fused-compiled training where eligible.
+/// Bypassing it skipped those contracts and made the unbatched recurrence numerically unstable
+/// on its second FP32 update. This model previously carried a <c>Train</c> override whose whole
+/// body was <c>base.Train(...)</c> to hold that note; the override added no behavior and is
+/// gone, but the reason it existed is recorded here. <see cref="GriffinLanguageModel{T}"/> has
+/// the same recurrence structure and no override, which is the shape both models want.
+/// </para>
+/// </remarks>
 /// <example>
 /// <code>
-/// var options = new HawkOptions { VocabSize = 256000, ModelDim = 2560, NumLayers = 26 };
-/// var model = new HawkLanguageModel&lt;float&gt;(options);
+/// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.TextGeneration,
+///     inputSize: 2048,
+///     outputSize: 256000);
+/// var model = new HawkLanguageModel&lt;float&gt;(architecture);
 /// var tokens = Tensor&lt;float&gt;.Random(new[] { 1, 128 });
 /// var logits = model.Predict(tokens);
 /// </code>
@@ -36,13 +52,15 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Griffin: Mixing Gated Linear Recurrences with Local Attention for Efficient Language Models", "https://arxiv.org/abs/2402.19427", Year = 2024, Authors = "Soham De, Samuel L. Smith, Anushan Fernando, Aleksandar Botev, George Cristian-Muraru, Albert Gu, Ruba Haroun, Leonard Berrada, Yutian Chen, Srivatsan Srinivasan, Guillaume Desjardins, Arnaud Doucet, David Budden, Yee Whye Teh, Razvan Pascanu, Nando De Freitas, Caglar Gulcehre")]
-public class HawkLanguageModel<T> : NeuralNetworkBase<T>
+public class HawkLanguageModel<T> : TokenLanguageModelLayoutBase<T>
 {
     private readonly HawkOptions _options;
     private readonly int _vocabSize;
     private readonly int _modelDimension;
+    private readonly int _recurrenceDimension;
     private readonly int _numLayers;
     private readonly int _maxSeqLength;
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
 
     /// <inheritdoc />
     public override bool SupportsTraining => true;
@@ -64,25 +82,28 @@ public class HawkLanguageModel<T> : NeuralNetworkBase<T>
     public HawkLanguageModel(
         NeuralNetworkArchitecture<T> architecture,
         int vocabSize = 256000,
-        int modelDimension = 256,
-        int numLayers = 4,
-        int maxSeqLength = 512,
+        int modelDimension = 2048,
+        int numLayers = 24,
+        int maxSeqLength = 2048,
         ILossFunction<T>? lossFunction = null,
-        HawkOptions? options = null)
+        HawkOptions? options = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
         : base(architecture,
-            // Hawk is a language model: its training objective is next-token cross-entropy.
-            // Deriving the loss from architecture.TaskType picked up whatever the caller set
-            // (e.g. Regression -> MSE), and MSE against a softmax probability vector barely
-            // moves (the [0,1/V] outputs can't reach a continuous target), so training never
-            // reduced the loss. Pin TextGeneration cross-entropy like every other LM here.
-            lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(NeuralNetworkTaskType.TextGeneration))
+            // Hawk trains on next-token logits. Keep softmax fused with cross-entropy so
+            // very unlikely tokens never create the -target/probability gradient blow-up
+            // produced by a separate Softmax + CategoricalCrossEntropy pair.
+            lossFunction ?? new AiDotNet.LossFunctions.CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new HawkOptions();
         Options = _options;
         _vocabSize = vocabSize;
         _modelDimension = modelDimension;
+        _recurrenceDimension = _options.RecurrenceDimension;
         _numLayers = numLayers;
         _maxSeqLength = maxSeqLength;
+        if (_recurrenceDimension <= 0)
+            throw new ArgumentOutOfRangeException(nameof(options), "RecurrenceDimension must be positive.");
+        _optimizer = optimizer ?? CreateDefaultOptimizer();
         InitializeLayers();
     }
 
@@ -99,13 +120,43 @@ public class HawkLanguageModel<T> : NeuralNetworkBase<T>
         else
         {
             Layers.AddRange(LayerHelper<T>.CreateHawkLayers(
-                _vocabSize, _modelDimension, _numLayers, _maxSeqLength));
+                _vocabSize, _modelDimension, _numLayers, _maxSeqLength,
+                _recurrenceDimension));
         }
     }
 
     #endregion
 
     #region NeuralNetworkBase Overrides
+
+    /// <summary>
+    /// Hawk's RG-LRU carries a data-dependent hidden state through a timestep
+    /// recurrence. That stateful loop cannot be captured once and safely replayed
+    /// by the static fused-training plan; use the eager tape so every step records
+    /// the current recurrence and AdamW receives the true finite gradients.
+    /// </summary>
+    protected override bool SupportsFusedCompiledTraining => false;
+
+    /// <summary>
+    /// Uses the constructor-selected optimizer. Hawk's paper trains with
+    /// AdamW; callers can supply any gradient optimizer through the constructor.
+    /// </summary>
+    protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> GetOrCreateBaseOptimizer()
+        => _optimizer;
+
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreateDefaultOptimizer()
+        => new AiDotNet.Optimizers.AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new AiDotNet.Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate,
+                WeightDecay = _options.WeightDecay,
+                Beta1 = _options.Beta1,
+                Beta2 = _options.Beta2,
+                Epsilon = _options.Epsilon,
+                EnableGradientClipping = _options.EnableGradientClipping,
+                MaxGradientNorm = _options.MaxGradientNorm
+            });
 
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
@@ -121,40 +172,11 @@ public class HawkLanguageModel<T> : NeuralNetworkBase<T>
         });
     }
 
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
-    {
-        // Tape-based forward + backward + parameter update path that all
-        // other NeuralNetworkBase consumers use. Without this delegation,
-        // Train() was a no-op and downstream tests that expect parameters
-        // to change after Train (LossStrictlyDecreasesOnMemorizationTask,
-        // Training_ShouldChangeParameters, OptimizerStep_ParamL2_DoesNotExplode,
-        // TrainingError_ShouldNotExceedTestError) all fail with "loss
-        // didn't decrease" / "parameters unchanged" diagnostics.
-        SetTrainingMode(true);
-        try
-        {
-            TrainWithTape(input, expectedOutput);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
-    }
-
-    public override void UpdateParameters(Vector<T> gradients)
-    {
-        if (gradients.Length != ParameterCount)
-        {
-            throw new ArgumentException(
-                $"Expected {ParameterCount} gradients, but got {gradients.Length}",
-                nameof(gradients));
-        }
-
-        var currentParams = GetParameters();
-        T learningRate = NumOps.FromDouble(0.001);
-        currentParams = Engine.Subtract(currentParams, Engine.Multiply(gradients, learningRate));
-        SetParameters(currentParams);
-    }
+    // UpdateParameters validated the length and distributed the vector across Layers. The base does
+    // both. Its trailing "did the loop consume the whole vector" guard is not lost either -- it
+    // protected against sum(layer.ParameterCount) drifting from ParameterCount, and the base derives
+    // the count and the distribution from ONE enumeration, so they cannot drift apart. Removed under
+    // AIDN082.
 
     public override ModelMetadata<T> GetModelMetadata()
     {
@@ -165,6 +187,7 @@ public class HawkLanguageModel<T> : NeuralNetworkBase<T>
                 { "Architecture", "Hawk" },
                 { "VocabSize", _vocabSize },
                 { "ModelDimension", _modelDimension },
+                { "RecurrenceDimension", _recurrenceDimension },
                 { "NumLayers", _numLayers },
                 { "MaxSeqLength", _maxSeqLength },
                 { "LayerCount", Layers.Count }
@@ -179,6 +202,10 @@ public class HawkLanguageModel<T> : NeuralNetworkBase<T>
         writer.Write(_modelDimension);
         writer.Write(_numLayers);
         writer.Write(_maxSeqLength);
+        // RecurrenceDimension is configurable and sizes the whole RG-LRU stack, but it was not
+        // in the payload -- so a checkpoint saved with a non-default width reloaded at the
+        // default and mismatched its own weights.
+        writer.Write(_recurrenceDimension);
     }
 
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
@@ -187,13 +214,27 @@ public class HawkLanguageModel<T> : NeuralNetworkBase<T>
         _ = reader.ReadInt32();
         _ = reader.ReadInt32();
         _ = reader.ReadInt32();
+
+        // VALIDATED, NOT APPLIED. The layer stack was already built from the options this
+        // instance was constructed with, so a differing saved width cannot be adopted here --
+        // the weights about to be loaded would not fit. Reporting the mismatch names the cause;
+        // staying silent would load a checkpoint into a wrong-width model, which fails later as
+        // an opaque parameter-count error or, worse, does not fail at all.
+        int savedRecurrenceDimension = reader.ReadInt32();
+        if (savedRecurrenceDimension != _recurrenceDimension)
+        {
+            throw new InvalidOperationException(
+                $"Checkpoint was saved with RecurrenceDimension {savedRecurrenceDimension} but this "
+                + $"instance was built with {_recurrenceDimension}. Set RecurrenceDimension on the "
+                + "options before loading this checkpoint.");
+        }
     }
 
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
         return new HawkLanguageModel<T>(
             Architecture, _vocabSize, _modelDimension, _numLayers, _maxSeqLength,
-            LossFunction, _options);
+            LossFunction, new HawkOptions(_options), optimizer: null);
     }
 
     #endregion

@@ -47,7 +47,9 @@ namespace AiDotNet.AnomalyDetection.DistanceBased;
 public class SOSDetector<T> : AnomalyDetectorBase<T>
 {
     private readonly double _perplexity;
+    [Buffer]
     private Matrix<T>? _trainingData;
+    [Buffer]
     private Vector<T>? _trainingBindingProbs;
 
     /// <summary>

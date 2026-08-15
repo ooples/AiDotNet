@@ -38,13 +38,51 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.GraphProcessing)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(ApiShape = LayerApiShape.GraphWithSetup, IsTrainable = true, ChangesShape = true, TestInputShape = "4, 8", TestConstructorArgs = "8, 4", TestSetupCode = "var adj = new AiDotNet.Tensors.LinearAlgebra.Tensor<double>(new[] { 4, 4 }); for (int i = 0; i < 4; i++) { adj[i, i] = 1.0; if (i > 0) adj[i, i-1] = 1.0; if (i < 3) adj[i, i+1] = 1.0; } var m = layer.GetType().GetMethod(\"SetAdjacencyMatrix\"); if (m != null) m.Invoke(layer, new object[] { adj });")]
-public partial class GraphSAGELayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
+// Rank 2 - [numNodes, inputFeatures] - is what the forward's own restore branch names ("Was 2D, return
+// [nodes, outputFeatures]") and the only form [LayerProperty(TestInputShape = "4, 8")] exercises. Other
+// ranks ARE handled, but their node count must agree with the separately-installed adjacency matrix, so
+// a declaration there would be a claim about a tensor this layer never sees on its own.
+//
+// The node axis is TensorAxis.Other: graph nodes are neither a sequence nor a spatial extent, and naming
+// them Time or Length would licence a downstream causal or convolutional layer to read an ordering into
+// them that does not exist.
+[TensorLayout(TensorAxis.Other, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Input,
+    Note = "Node features: the leading axis is the graph's nodes, sized by the installed adjacency matrix.")]
+[TensorLayout(TensorAxis.Other, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
+[AutoParameters]
+public partial class GraphSAGELayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>, IShapeContract
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// HAND-WRITTEN because the emitted width is configuration - and, worth stating explicitly, it is NOT
+    /// the sum of the two branches. The self and neighbour projections are both
+    /// <c>[_inputFeatures, _outputFeatures]</c> and step 5 COMBINES them with
+    /// <c>Engine.TensorAdd(selfTransformed, neighborTransformed)</c>, not a concatenation, so the width is
+    /// <c>_outputFeatures</c> once. That factor-of-two question is exactly what a shape contract should
+    /// settle rather than leave to the reader.
+    /// </para>
+    /// <para>
+    /// The node axis is Same: aggregating a neighbourhood into each node changes what a node holds, never
+    /// how many nodes there are. The optional L2 normalization is per-vector and does not resize anything.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        if (inputRank != 2 || _outputFeatures <= 0) return null;
+
+        return new[]
+        {
+            new OutputAxisContract(TensorAxis.Other, AxisRelation.Same(TensorAxis.Other)),
+            new OutputAxisContract(TensorAxis.Features, AxisRelation.Fixed(_outputFeatures)),
+        };
+    }
+
     private readonly int _inputFeatures;
     private readonly int _outputFeatures;
     private readonly SAGEAggregatorType _aggregatorType;
     private readonly bool _normalize;
-    private readonly Random _random;
 
     /// <summary>
     /// Weight tensor for self features. Shape: [inputFeatures, outputFeatures].
@@ -143,9 +181,6 @@ public partial class GraphSAGELayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
     protected override bool SupportsGpuExecution => true;
 
     /// <inheritdoc/>
-    public override long ParameterCount => _selfWeights.Length + _neighborWeights.Length + _bias.Length;
-
-    /// <inheritdoc/>
     public int InputFeatures => _inputFeatures;
 
     /// <inheritdoc/>
@@ -155,10 +190,10 @@ public partial class GraphSAGELayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
     /// Initializes a new instance of the <see cref="GraphSAGELayer{T}"/> class.
     /// </summary>
     public GraphSAGELayer(
-        int inputFeatures,
-        int outputFeatures,
+        [LayerState] int inputFeatures,
+        [LayerState] int outputFeatures,
         SAGEAggregatorType aggregatorType = SAGEAggregatorType.Mean,
-        bool normalize = true,
+        [LayerState] bool normalize = true,
         IActivationFunction<T>? activationFunction = null,
         IInitializationStrategy<T>? initializationStrategy = null)
         : base([inputFeatures], [outputFeatures], activationFunction ?? new IdentityActivation<T>())
@@ -169,7 +204,6 @@ public partial class GraphSAGELayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         _outputFeatures = outputFeatures;
         _aggregatorType = aggregatorType;
         _normalize = normalize;
-        _random = RandomHelper.CreateSecureRandom();
 
         // Initialize weights as Tensors for GPU acceleration
         _selfWeights = new Tensor<T>([_inputFeatures, _outputFeatures]);
@@ -214,7 +248,7 @@ public partial class GraphSAGELayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
     }
 
     /// <inheritdoc/>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         if (_adjacencyMatrix == null)
         {
@@ -626,50 +660,6 @@ public partial class GraphSAGELayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         metadata["AggregatorType"] = ((int)_aggregatorType).ToString();
         metadata["Normalize"] = _normalize.ToString();
         return metadata;
-    }
-
-    /// <inheritdoc/>
-    public override Vector<T> GetParameters()
-    {
-        return Vector<T>.Concatenate(
-            new Vector<T>(_selfWeights.ToArray()),
-            new Vector<T>(_neighborWeights.ToArray()),
-            new Vector<T>(_bias.ToArray())
-        );
-    }
-
-    /// <inheritdoc/>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int selfCount = _selfWeights.Length;
-        int neighborCount = _neighborWeights.Length;
-        int biasCount = _bias.Length;
-        int totalParams = selfCount + neighborCount + biasCount;
-
-        if (parameters.Length != totalParams)
-        {
-            throw new ArgumentException(
-                $"Expected {totalParams} parameters, but got {parameters.Length}", nameof(parameters));
-        }
-
-        int index = 0;
-
-        // Write in-place to preserve registered parameter tensor references
-        parameters.SubVector(index, selfCount).AsSpan().CopyTo(_selfWeights.Data.Span);
-        index += selfCount;
-
-        parameters.SubVector(index, neighborCount).AsSpan().CopyTo(_neighborWeights.Data.Span);
-        index += neighborCount;
-
-        parameters.SubVector(index, biasCount).AsSpan().CopyTo(_bias.Data.Span);
-
-        // Invalidate the GPU-resident copies of these persistent trainable tensors so
-        // ForwardGpu reuploads the freshly-written CPU values on its next call. Without
-        // this the GPU path would silently use the pre-update weights, mirroring the
-        // pattern in DenseLayer/Conv layers.
-        Engine.InvalidatePersistentTensor(_selfWeights);
-        Engine.InvalidatePersistentTensor(_neighborWeights);
-        Engine.InvalidatePersistentTensor(_bias);
     }
 
     public override void ClearGradients()

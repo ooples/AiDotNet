@@ -78,6 +78,7 @@ public class WeightedRegression<T> : RegressionBase<T>
     /// for those who might be less reliable.
     /// </para>
     /// </remarks>
+    [Buffer]
     private readonly Vector<T> _weights;
 
     /// <summary>

@@ -72,11 +72,11 @@ public class XTTSv2Clone<T> : TtsModelBase<T>, ICodecTts<T>, IVoiceCloner<T>
         XTTSv2CloneOptions? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null
     )
-        : base(architecture)
+        : base(architecture, new AiDotNet.LossFunctions.CrossEntropyWithLogitsLoss<T>(classAxis: -1))
     {
         _options = options ?? new XTTSv2CloneOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? CreateDefaultOptimizer();
         base.SampleRate = _options.SampleRate;
         base.MelChannels = _options.MelChannels;
         base.HopSize = _options.HopSize;
@@ -216,10 +216,17 @@ public class XTTSv2Clone<T> : TtsModelBase<T>, ICodecTts<T>, IVoiceCloner<T>
 
     protected override Tensor<T> PreprocessText(string text)
     {
-        int len = Math.Min(text.Length, _options.MaxTextLength);
+        if (text is null)
+            throw new ArgumentNullException(nameof(text));
+
+        // XTTS is a token language model. The native stack starts with an
+        // index-mode embedding, so fractional character values would all
+        // truncate to token zero and erase the multilingual text signal.
+        byte[] utf8 = System.Text.Encoding.UTF8.GetBytes(text);
+        int len = Math.Min(utf8.Length, _options.MaxTextLength);
         var t = new Tensor<T>([len]);
         for (int i = 0; i < len; i++)
-            t[i] = NumOps.FromDouble(text[i] / 128.0);
+            t[i] = NumOps.FromDouble(utf8[i]);
         return t;
     }
 
@@ -240,7 +247,8 @@ public class XTTSv2Clone<T> : TtsModelBase<T>, ICodecTts<T>, IVoiceCloner<T>
                     _options.NumEncoderLayers,
                     _options.NumLLMLayers,
                     _options.NumHeads,
-                    _options.DropoutRate
+                    _options.DropoutRate,
+                    _options.VocabSize
                 )
             );
     }
@@ -264,7 +272,10 @@ public class XTTSv2Clone<T> : TtsModelBase<T>, ICodecTts<T>, IVoiceCloner<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expected);
+            // The Coqui XTTS trainer uses a dedicated low-rate AdamW setup.
+            // Pass the configured/custom optimizer explicitly; otherwise the
+            // base trainer silently creates its unrelated generic optimizer.
+            TrainWithTape(input, expected, _optimizer);
         }
         finally
         {
@@ -272,19 +283,11 @@ public class XTTSv2Clone<T> : TtsModelBase<T>, ICodecTts<T>, IVoiceCloner<T>
         }
     }
 
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        if (!_useNativeMode)
-            throw new NotSupportedException("Cannot update parameters in ONNX mode.");
-        int idx = 0;
-        foreach (var l in Layers)
-        {
-            int c = (int)l.ParameterCount;
-            l.UpdateParameters(parameters.Slice(idx, c));
-            idx += c;
-        }
-    }
-
+    /// <inheritdoc />
+    /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
+    /// write on every parameter surface, so the guard is stated once here instead of being
+    /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
+    protected override bool SupportsParameterMutation => _useNativeMode;
     public override ModelMetadata<T> GetModelMetadata()
     {
         var m = new ModelMetadata<T>
@@ -345,9 +348,23 @@ public class XTTSv2Clone<T> : TtsModelBase<T>, ICodecTts<T>, IVoiceCloner<T>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
         if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new XTTSv2Clone<T>(Architecture, mp, _options);
-        return new XTTSv2Clone<T>(Architecture, _options);
+            return new XTTSv2Clone<T>(Architecture, mp, new XTTSv2CloneOptions(_options));
+        return new XTTSv2Clone<T>(Architecture, new XTTSv2CloneOptions(_options));
     }
+
+    private AdamWOptimizer<T, Tensor<T>, Tensor<T>> CreateDefaultOptimizer() =>
+        new(
+            this,
+            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate,
+                WeightDecay = _options.WeightDecay,
+                Beta1 = _options.AdamBeta1,
+                Beta2 = _options.AdamBeta2,
+                Epsilon = _options.AdamEpsilon,
+                UseAdaptiveLearningRate = false,
+            }
+        );
 
     private void ThrowIfDisposed()
     {

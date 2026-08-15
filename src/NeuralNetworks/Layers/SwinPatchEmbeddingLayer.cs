@@ -25,9 +25,68 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Transformer)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerTask(LayerTask.SpatialProcessing)]
-[LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 3, TestInputShape = "1, 3, 8, 8", TestConstructorArgs = "4, 16")]
-public class SwinPatchEmbeddingLayer<T> : LayerBase<T>
+// ExpectedInputRank corrected from 3 to 4: OnFirstForward accepts s.Length == 4 and throws for
+// anything else ("requires rank-4 [B,C,H,W] input; got rank {n}. Add a batch dimension"), and
+// TestInputShape "1, 3, 8, 8" is itself rank 4. The 3 was copied from PatchEmbeddingLayer, which
+// genuinely does take [C,H,W]; this layer does not, so declaring a rank-3 layout to match it would
+// have been a false claim (and ADNSHAPE005 would have flagged the disagreement either way).
+[LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 4, TestInputShape = "1, 3, 8, 8", TestConstructorArgs = "4, 16")]
+// Rank 4 ONLY, and batch is NOT optional - see the guard above.
+//
+// The output is a token sequence: ForwardTraced permutes NCHW -> NHWC and reshapes to
+// [batch, numPatches, _embedDim], so the flattened patch grid is Time and the embedding is Features -
+// the same reading SwinPatchMergingLayer, the layer that consumes this one, declares for its input.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Output)]
+[AutoParameters]
+public partial class SwinPatchEmbeddingLayer<T> : LayerBase<T>, IShapeContract
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// The patch grid comes from the inner projection, constructed as
+    /// <c>new ConvolutionalLayer&lt;T&gt;(embedDim, kernelSize: patchSize, stride: patchSize,
+    /// padding: 0)</c>, and <c>ForwardTraced</c> reads its result back as
+    /// <c>patchH = projected.Shape[2]</c>, <c>patchW = projected.Shape[3]</c>,
+    /// <c>numPatches = patchH * patchW</c>. So each spatial axis is that convolution's window and the
+    /// token axis is their product - which is exactly <see cref="AxisRelation.ProductOf"/> over two
+    /// <see cref="AxisRelation.Window"/>s. <see cref="AxisRelation.Product"/> alone multiplies RAW
+    /// input axes and cannot express the per-side division first.
+    /// </para>
+    /// <para>
+    /// NOT <c>Fixed(NumPatches)</c>. That property is <c>(_inputHeight / _patchSize) *
+    /// (_inputWidth / _patchSize)</c> over fields resolved from the FIRST input seen, so freezing it
+    /// would state one resolution as if it were configuration. The window form derives the same
+    /// number from whatever input actually arrives.
+    /// </para>
+    /// <para>
+    /// <c>OnFirstForward</c> additionally requires <c>inH % _patchSize == 0</c> and
+    /// <c>inW % _patchSize == 0</c>, so the window's floor is exact here rather than a crop - but the
+    /// window is still the right form, because it is what the convolution computes.
+    /// </para>
+    /// <para>
+    /// The trailing <c>_norm</c> is a <see cref="LayerNormalizationLayer{T}"/> resolved at
+    /// <c>[_embedDim]</c> and preserves shape, so it does not enter the contract.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        if (inputRank != 4 || _patchSize <= 0 || _embedDim <= 0) return null;
+
+        return new[]
+        {
+            new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+            new OutputAxisContract(
+                TensorAxis.Time,
+                AxisRelation.ProductOf(
+                    AxisRelation.Window(TensorAxis.Height, kernel: _patchSize, stride: _patchSize, padding: 0),
+                    AxisRelation.Window(TensorAxis.Width, kernel: _patchSize, stride: _patchSize, padding: 0))),
+            new OutputAxisContract(TensorAxis.Features, AxisRelation.Fixed(_embedDim)),
+        };
+    }
+
     private readonly int _patchSize;
     private readonly int _embedDim;
     // Non-readonly: lazy ctor leaves these = -1 until OnFirstForward.
@@ -48,9 +107,6 @@ public class SwinPatchEmbeddingLayer<T> : LayerBase<T>
 
     /// <inheritdoc/>
     public override bool SupportsTraining => true;
-
-    /// <inheritdoc/>
-    public override long ParameterCount => _projection.ParameterCount + _norm.ParameterCount;
 
     /// <summary>
     /// Gets the number of patches produced by this layer.
@@ -138,6 +194,13 @@ public class SwinPatchEmbeddingLayer<T> : LayerBase<T>
 
         _projection.ResolveFromShape(new[] { inChannels, inH, inW });
         _projection.SetTrainingMode(IsTrainingMode);
+        // Resolve the inner normalization before replaying a serialized flat
+        // parameter vector. Otherwise its ParameterCount is still zero, so
+        // SetParameters consumes only the projection weights and silently
+        // drops the trained gamma/beta values; the first Forward then creates
+        // fresh normalization parameters and a clone immediately diverges.
+        _norm.ResolveFromShape(new[] { _embedDim });
+        _norm.SetTrainingMode(IsTrainingMode);
 
         ResolveShapes(
             new[] { inChannels, inH, inW },
@@ -157,7 +220,7 @@ public class SwinPatchEmbeddingLayer<T> : LayerBase<T>
     /// </summary>
     /// <param name="input">Input tensor of shape [batch, channels, height, width].</param>
     /// <returns>Output tensor of shape [batch, numPatches, embedDim].</returns>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         if (!IsShapeResolved) OnFirstForward(input);
 
@@ -171,23 +234,11 @@ public class SwinPatchEmbeddingLayer<T> : LayerBase<T>
         int patchW = projected.Shape[3];
         int numPatches = patchH * patchW;
 
-        // Reshape to sequence: [batch, numPatches, embedDim]
-        var sequence = new Tensor<T>([batch, numPatches, _embedDim]);
-
-        for (int b = 0; b < batch; b++)
-        {
-            for (int h = 0; h < patchH; h++)
-            {
-                for (int w = 0; w < patchW; w++)
-                {
-                    int seqIdx = h * patchW + w;
-                    for (int c = 0; c < _embedDim; c++)
-                    {
-                        sequence[b, seqIdx, c] = projected[b, c, h, w];
-                    }
-                }
-            }
-        }
+        // NCHW -> NHWC -> [batch, numPatches, embedDim]. Keep this conversion
+        // on Engine operations so the compiled training graph retains the edge
+        // from the normalized sequence back to the convolutional projection.
+        var channelsLast = Engine.TensorPermute(projected, [0, 2, 3, 1]);
+        var sequence = Engine.Reshape(channelsLast, [batch, numPatches, _embedDim]);
 
         // Apply layer normalization
         var normalized = _norm.Forward(sequence);
@@ -208,43 +259,6 @@ public class SwinPatchEmbeddingLayer<T> : LayerBase<T>
         metadata["PatchSize"] = _patchSize.ToString(System.Globalization.CultureInfo.InvariantCulture);
         metadata["EmbedDim"] = _embedDim.ToString(System.Globalization.CultureInfo.InvariantCulture);
         return metadata;
-    }
-
-    /// <inheritdoc/>
-    public override Vector<T> GetParameters()
-    {
-        var projParams = _projection.GetParameters();
-        var normParams = _norm.GetParameters();
-
-        var result = new T[projParams.Length + normParams.Length];
-        projParams.AsSpan().CopyTo(result.AsSpan(0, projParams.Length));
-        normParams.AsSpan().CopyTo(result.AsSpan(projParams.Length, normParams.Length));
-
-        return new Vector<T>(result);
-    }
-
-    /// <inheritdoc/>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        // Pre-Forward: _projection's input channel count is unresolved.
-        // Buffer and replay from OnFirstForward.
-        if (!IsShapeResolved)
-        {
-            _pendingParameters = parameters;
-            return;
-        }
-
-        int projCount = checked((int)_projection.ParameterCount);
-        int normCount = checked((int)_norm.ParameterCount);
-
-        var projParams = new T[projCount];
-        var normParams = new T[normCount];
-
-        parameters.AsSpan().Slice(0, projCount).CopyTo(projParams);
-        parameters.AsSpan().Slice(projCount, normCount).CopyTo(normParams);
-
-        _projection.SetParameters(new Vector<T>(projParams));
-        _norm.SetParameters(new Vector<T>(normParams));
     }
 
     private Vector<T>? _pendingParameters;

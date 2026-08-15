@@ -25,6 +25,8 @@ public class ChirpOptions : ModelOptions
         EncoderDim = other.EncoderDim;
         NumEncoderLayers = other.NumEncoderLayers;
         NumAttentionHeads = other.NumAttentionHeads;
+        FeedForwardExpansionFactor = other.FeedForwardExpansionFactor;
+        ConvKernelSize = other.ConvKernelSize;
         NumMels = other.NumMels;
         VocabSize = other.VocabSize;
         MaxTextLength = other.MaxTextLength;
@@ -39,6 +41,30 @@ public class ChirpOptions : ModelOptions
     public int EncoderDim { get; set; } = 1024;
     public int NumEncoderLayers { get; set; } = 12;
     public int NumAttentionHeads { get; set; } = 16;
+
+    /// <summary>
+    /// Expansion factor of each Conformer block's macaron feed-forward modules: the FFN inner width is
+    /// <c>EncoderDim × FeedForwardExpansionFactor</c>. Default 4, the Conformer paper's setting
+    /// (Gulati et al. 2020, §2.1), which USM's Conformer encoder inherits.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Each encoder block briefly widens the representation before
+    /// projecting it back, giving the block extra capacity to transform features. 4× is the published
+    /// setting; larger adds capacity and cost, smaller shrinks the model.</para>
+    /// </remarks>
+    public int FeedForwardExpansionFactor { get; set; } = 4;
+
+    /// <summary>
+    /// Kernel size of the depthwise convolution inside each Conformer block's convolution module.
+    /// Default 5 — USM reports a 5-frame convolution kernel for its Conformer encoders
+    /// (Zhang et al. 2023, arXiv:2303.01037 §2.1).
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This is how many neighbouring audio frames the block's convolution
+    /// looks at when capturing local sound patterns. Wider kernels see more context per block at
+    /// higher cost.</para>
+    /// </remarks>
+    public int ConvKernelSize { get; set; } = 5;
     public int NumMels { get; set; } = 128;
     public int VocabSize { get; set; } = 32000;
     public int MaxTextLength { get; set; } = 512;

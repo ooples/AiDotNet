@@ -25,9 +25,37 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Structural)]
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerProperty(IsTrainable = false, ChangesShape = true, TestInputShape = "4, 4", TestConstructorArgs = "4")]
-public class SequenceLastLayer<T> : LayerBase<T>
+// Rank 2 [Time, Features] per [LayerProperty(TestInputShape = "4, 4")]; the output is rank 1 because
+// the Time axis is consumed - only the last timestep survives.
+[TensorLayout(TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
+[AutoParameters]
+public partial class SequenceLastLayer<T> : LayerBase<T>, IShapeContract
 {
     private readonly int _featureSize;
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// Takes the final timestep of a sequence, so the Time axis is dropped entirely and the feature
+    /// vector passes through at whatever width it arrived with.
+    /// </para>
+    /// <para>
+    /// This was <c>Fixed(_featureSize)</c>, justified as "this layer is constructed with the feature
+    /// width and will not accept another". <c>ForwardTraced</c> does not check: it reads
+    /// <c>features</c> from the input shape and slices that many values. Fed [6,7], a layer built with
+    /// <c>featureSize = 4</c> returns [7], not [4] - so the contract asserted a width the layer never
+    /// enforces. <c>Same(Features)</c> is correct whether or not that check is ever added, which
+    /// <c>Fixed</c> is not.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        // Rank 2 [Time, Features] per [LayerProperty(TestInputShape = "4, 4")].
+        if (inputRank != 2) return null;
+
+        return new[] { new OutputAxisContract(TensorAxis.Features, AxisRelation.Same(TensorAxis.Features)) };
+    }
     private int _lastSequenceLength;
     private int[]? _originalShape;
 
@@ -51,21 +79,19 @@ public class SequenceLastLayer<T> : LayerBase<T>
     /// Initializes a new SequenceLastLayer.
     /// </summary>
     /// <param name="featureSize">The size of the feature dimension (last dimension of input).</param>
-    public SequenceLastLayer(int featureSize)
+    public SequenceLastLayer(
+        [LayerState] int featureSize)
         : base([featureSize], [featureSize], new IdentityActivation<T>() as IActivationFunction<T>)
     {
         _featureSize = featureSize;
     }
-
-    /// <inheritdoc/>
-    public override long ParameterCount => 0;
 
     /// <summary>
     /// Extracts the last timestep from the input sequence.
     /// </summary>
     /// <param name="input">Input tensor of shape [seqLen, features] or [seqLen, batch, features].</param>
     /// <returns>Output tensor of shape [features] or [batch, features].</returns>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         _originalShape = input._shape;
         int rank = input.Shape.Length;
@@ -80,57 +106,25 @@ public class SequenceLastLayer<T> : LayerBase<T>
         {
             // Shape: [seqLen, features] -> [features]
             int seqLen = input.Shape[0];
-            int features = input.Shape[1];
             _lastSequenceLength = seqLen;
-
-            // Extract last row
-            var result = new Tensor<T>([features]);
-            int offset = (seqLen - 1) * features;
-            for (int i = 0; i < features; i++)
-            {
-                result.Data.Span[i] = input.Data.Span[offset + i];
-            }
-            return result;
+            return Engine.TensorSliceAxis(input, axis: 0, index: seqLen - 1);
         }
         else if (rank == 3)
         {
             // Shape: [seqLen, batch, features] -> [batch, features]
             int seqLen = input.Shape[0];
-            int batch = input.Shape[1];
-            int features = input.Shape[2];
             _lastSequenceLength = seqLen;
-
-            var result = new Tensor<T>([batch, features]);
-            int stride = batch * features;
-            int lastOffset = (seqLen - 1) * stride;
-            for (int i = 0; i < batch * features; i++)
-            {
-                result.Data.Span[i] = input.Data.Span[lastOffset + i];
-            }
-            return result;
+            return Engine.TensorSliceAxis(input, axis: 0, index: seqLen - 1);
         }
         else
         {
-            // Higher rank (>= 4): treat dim[0] as seqLen, extract last slice with remaining dims
+            // Treat dimension 0 as the sequence axis and preserve every remaining
+            // dimension. Going through the engine is essential here: copying Data
+            // into a new Tensor detaches the result from an active gradient tape and
+            // silently turns every upstream recurrent gradient into zero.
             int seqLen = input.Shape[0];
             _lastSequenceLength = seqLen;
-
-            // Output shape is input shape minus the first dimension
-            var outputShape = new int[rank - 1];
-            int sliceSize = 1;
-            for (int d = 1; d < rank; d++)
-            {
-                outputShape[d - 1] = input.Shape[d];
-                sliceSize *= input.Shape[d];
-            }
-
-            var result = new Tensor<T>(outputShape);
-            int lastOffset = (seqLen - 1) * sliceSize;
-            for (int i = 0; i < sliceSize; i++)
-            {
-                result.Data.Span[i] = input.Data.Span[lastOffset + i];
-            }
-            return result;
+            return Engine.TensorSliceAxis(input, axis: 0, index: seqLen - 1);
         }
     }
 
@@ -185,22 +179,6 @@ public class SequenceLastLayer<T> : LayerBase<T>
         {
             throw new ArgumentException($"SequenceLastLayer expects at least 1D input, got {rank}D.");
         }
-    }
-
-    /// <summary>
-    /// Returns an empty vector since this layer has no trainable parameters.
-    /// </summary>
-    public override Vector<T> GetParameters()
-    {
-        return Vector<T>.Empty();
-    }
-
-    /// <summary>
-    /// Update parameters is a no-op since this layer has no trainable parameters.
-    /// </summary>
-    public override void UpdateParameters(T learningRate)
-    {
-        // No parameters to update
     }
 
     /// <summary>

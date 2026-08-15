@@ -48,6 +48,17 @@ namespace AiDotNet.Audio.Foundations;
 [ResearchPaper("wav2vec 2.0: A Framework for Self-Supervised Learning of Speech Representations", "https://arxiv.org/abs/2006.11477", Year = 2020, Authors = "Alexei Baevski, Yuhao Zhou, Abdelrahman Mohamed, Michael Auli")]
 public class Wav2Vec2<T> : AudioNeuralNetworkBase<T>, IAudioFoundationModel<T>
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// Measured: <c>PredictCore</c> folds <c>Layers</c> and <c>PostprocessOutput</c> is the identity.
+    /// <c>CreateDefaultFoundationModelLayers</c> ends with the last
+    /// <c>TransformerEncoderBlock&lt;T&gt;(hiddenDim, ...)</c> and adds no head, so Predict returns
+    /// contextual representations at <c>_options.HiddenDim</c>. <c>FeatureEncoderDim</c> is the CNN
+    /// front-end width, projected up to <c>HiddenDim</c> before the encoder; there is no CTC
+    /// vocabulary projection in this stack.
+    /// </remarks>
+    protected override int OutputFeatureWidth => _options.HiddenDim;
+
     #region Fields
 
     private readonly Wav2Vec2Options _options;
@@ -137,7 +148,7 @@ public class Wav2Vec2<T> : AudioNeuralNetworkBase<T>, IAudioFoundationModel<T>
         foreach (var l in Layers)
         {
             c = l.Forward(c);
-            if (l is MultiHeadAttentionLayer<T>)
+            if (l is TransformerEncoderBlock<T>)
             {
                 if (currentLayer == targetLayer) return c;
                 currentLayer++;
@@ -156,7 +167,7 @@ public class Wav2Vec2<T> : AudioNeuralNetworkBase<T>, IAudioFoundationModel<T>
         foreach (var l in Layers)
         {
             c = l.Forward(c);
-            if (l is MultiHeadAttentionLayer<T>)
+            if (l is TransformerEncoderBlock<T>)
                 layerOutputs.Add(c);
         }
         if (layerOutputs.Count == 0) return c;
@@ -209,7 +220,7 @@ public class Wav2Vec2<T> : AudioNeuralNetworkBase<T>, IAudioFoundationModel<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expected);
+            TrainWithTape(input, expected, _optimizer);
         }
         finally
         {
@@ -217,12 +228,11 @@ public class Wav2Vec2<T> : AudioNeuralNetworkBase<T>, IAudioFoundationModel<T>
         }
     }
 
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        if (!_useNativeMode) throw new NotSupportedException("ONNX mode.");
-        int idx = 0; foreach (var l in Layers) { int c = (int)l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; }
-    }
-
+    /// <inheritdoc />
+    /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
+    /// write on every parameter surface, so the guard is stated once here instead of being
+    /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
+    protected override bool SupportsParameterMutation => _useNativeMode;
     protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio) => rawAudio;
     protected override Tensor<T> PostprocessOutput(Tensor<T> o) => o;
 

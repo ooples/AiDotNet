@@ -1,8 +1,14 @@
 using AiDotNet.Diffusion.Audio;
+// File-level, deliberately: two Tensors namespaces in the project's global usings also define a
+// TensorLayout, so [TensorLayout(...)] only binds to ours when this import shadows them from a nearer
+// scope. Without it the attribute resolves to the wrong type and ADNSHAPE003 reports this contract as
+// having no input layout.
+using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
+using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Onnx;
 
 namespace AiDotNet.Audio;
@@ -30,8 +36,59 @@ namespace AiDotNet.Audio;
 /// 2. Build and train a new model from scratch
 /// </para>
 /// </remarks>
-public abstract class AudioNeuralNetworkBase<T> : NeuralNetworkBase<T>
+// MEASURED across the family, not assumed: every audio model probed returns RANK 2, [Batch, Features].
+// Batch tracks the input; the feature width is model-specific and comes from OutputFeatureWidth below.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
+public abstract class AudioNeuralNetworkBase<T> : NeuralNetworkBase<T>, IShapeContract
 {
+    /// <summary>
+    /// The width of this model's output feature axis, or 0 when it has not been stated.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// VIRTUAL returning 0, not abstract, and that is deliberate on two counts. Adding an abstract
+    /// member to a public base is a breaking change for anything outside this repository that derives
+    /// from it; and 0 lets the 206 models in this family be migrated INCREMENTALLY, with the remaining
+    /// count readable from the conformance sweep at any point - the same ladder ADNSHAPE006 climbed
+    /// from 85 of ~270 layers to zero.
+    /// </para>
+    /// <para>
+    /// WHY THIS CANNOT LIVE ON THE BASE, unlike segmentation's _numClasses. Measured across the family,
+    /// the width is a different quantity per task and is stored under a different name in every options
+    /// class - AudioLM's SemanticVocabSize (1024), BasicPitch's NumHarmonicBins (264) - and is
+    /// sometimes DERIVED rather than stored: BandSplitRNNEnhancer returns 257, which is its
+    /// FFTSize (512) / 2 + 1. No single field and no name-matching rule can produce all three, which is
+    /// why each model states its own one-line expression instead.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> the last number in an audio model's output says how many values it
+    /// predicts per step - a vocabulary size for speech recognition, a bin count for pitch detection, a
+    /// frequency count for enhancement. Each model knows its own, so each one reports it here.
+    /// </para>
+    /// </remarks>
+    protected virtual int OutputFeatureWidth => 0;
+
+    /// <summary>
+    /// The output axes for an audio model: [Batch, Features].
+    /// </summary>
+    /// <remarks>
+    /// Declines - returns null - until the model states its <see cref="OutputFeatureWidth"/>. Declining
+    /// is the honest answer where nothing has been measured, and it is what keeps this contract from
+    /// claiming a width it cannot know.
+    /// </remarks>
+    public virtual IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        int width = OutputFeatureWidth;
+        if (inputRank != 2 || width <= 0) return null;
+
+        return new[]
+        {
+            new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+            new OutputAxisContract(TensorAxis.Features, AxisRelation.Fixed(width)),
+        };
+    }
+
     /// <summary>
     /// Gets the sample rate expected by this model.
     /// </summary>
@@ -116,6 +173,28 @@ public abstract class AudioNeuralNetworkBase<T> : NeuralNetworkBase<T>
     /// </para>
     /// </remarks>
     protected readonly List<ILayer<T>> TextEncoderLayers = new List<ILayer<T>>();
+
+    /// <summary>
+    /// Surfaces <see cref="TextEncoderLayers"/> to the parameter walk for every audio model that
+    /// owns a text tower.
+    /// </summary>
+    /// <remarks>
+    /// TextEncoderLayers live outside <see cref="NeuralNetworkBase{T}.Layers"/>, so without this the
+    /// base folds only the audio stream and the text tower reaches no ParameterCount and no
+    /// checkpoint. Ten models compensated by hand-writing an UpdateParameters that walked both
+    /// lists -- which fixed the write path and left the count and the vector still describing the
+    /// audio stream alone. Yielding here fixes all three at once, in one place.
+    /// </remarks>
+    protected override IEnumerable<LayerBase<T>?> GetExtraTrainableLayers()
+    {
+        foreach (var l in base.GetExtraTrainableLayers())
+            yield return l;
+        foreach (var layer in TextEncoderLayers)
+        {
+            if (layer is LayerBase<T> lb)
+                yield return lb;
+        }
+    }
 
     /// <summary>
     /// Gets the mel spectrogram extractor for preprocessing.
@@ -268,5 +347,79 @@ public abstract class AudioNeuralNetworkBase<T> : NeuralNetworkBase<T>
             nMels: nMels,
             nFft: nFft,
             hopLength: hopLength);
+    }
+
+    /// <summary>
+    /// Trains one step with CIF's alignment supervision applied for the duration of the step.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Any model whose stack contains a <see cref="CifAlignmentLayer{T}"/> must call this rather
+    /// than <c>TrainWithTape</c> directly. Dong &amp; Xu 2020 (arXiv:1905.11235) supervise CIF's
+    /// weight predictor through two mechanisms, both keyed to the label length S~: the scaling
+    /// strategy (S3.3), which multiplies every firing weight by S~ / sum(alpha) so the integrated
+    /// token count is teacher-forced to the target, and the quantity loss (S3.4),
+    /// |sum(alpha) - S~|.
+    /// </para>
+    /// <para>
+    /// The layer implements both and enables them by default, but gates them on
+    /// <c>TargetTokenCount</c>, which only the training caller can know. Before this existed no
+    /// model in the library set it, so on every CIF model both mechanisms were inert and the
+    /// weight predictor trained with nothing supervising how many tokens it should emit. With
+    /// sum(alpha) unconstrained the firing pattern changes discontinuously between steps, and
+    /// CIFEncoder went non-finite within a step or two of training.
+    /// </para>
+    /// <para>
+    /// The target is cleared again afterwards so inference runs on the raw alphas and decides its
+    /// own output length, exactly as the paper specifies. The scan is a no-op for models that
+    /// build no CIF stage -- the Paraformer family gates its CIF layer on
+    /// <c>UseCifAlignment</c> -- so this is safe to call unconditionally.
+    /// </para>
+    /// </remarks>
+    /// <param name="input">The training input.</param>
+    /// <param name="expected">The target tensor; its token axis supplies S~.</param>
+    /// <param name="optimizer">The model's configured optimizer.</param>
+    protected void TrainWithCifSupervision(
+        Tensor<T> input,
+        Tensor<T> expected,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer)
+    {
+        SetCifTargetTokenCount(expected);
+        try
+        {
+            TrainWithTape(input, expected, optimizer);
+        }
+        finally
+        {
+            SetCifTargetTokenCount(null);
+        }
+    }
+
+    /// <summary>
+    /// Points every CIF stage in this model at the current batch's target token count, or clears
+    /// it when <paramref name="expected"/> is null.
+    /// </summary>
+    /// <remarks>
+    /// Labels are [batch, tokens, vocab] or [tokens, vocab] unbatched, so the token axis is the
+    /// one before the vocabulary axis.
+    /// </remarks>
+    private void SetCifTargetTokenCount(Tensor<T>? expected)
+    {
+        int? tokenCount = null;
+        if (expected is not null)
+        {
+            int count = expected.Rank >= 2
+                ? expected.Shape[expected.Rank - 2]
+                : expected.Shape[0];
+            if (count > 0) tokenCount = count;
+        }
+
+        foreach (var layer in Layers)
+        {
+            if (layer is CifAlignmentLayer<T> cif)
+            {
+                cif.TargetTokenCount = tokenCount;
+            }
+        }
     }
 }

@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Document.Interfaces;
 using AiDotNet.Document.Options;
 using AiDotNet.Enums;
@@ -55,8 +55,9 @@ namespace AiDotNet.Document.LayoutAware;
 [ModelTask(ModelTask.Detection)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[RankRoutedInputDomain(2, 12)]
 [ResearchPaper("LayoutLMv2: Multi-modal Pre-training for Visually-Rich Document Understanding", "https://doi.org/10.48550/arXiv.2012.14740", Year = 2021, Authors = "Yang Xu, Yiheng Xu, Tengchao Lv, Lei Cui, Furu Wei, Guoxin Wang, Yijuan Lu, Dinei Florencio, Cha Zhang, Wanxiang Che, Min Zhang, Lidong Zhou")]
-public class LayoutLMv2<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, IDocumentQA<T>
+public partial class LayoutLMv2<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, IDocumentQA<T>
 {
     private readonly LayoutLMv2Options _options;
 
@@ -68,7 +69,7 @@ public class LayoutLMv2<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, I
     private readonly bool _useNativeMode;
     private readonly InferenceSession? _onnxSession;
     private readonly ITokenizer _tokenizer;
-    private readonly IOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private readonly int _hiddenDim;
     private readonly int _numLayers;
     private readonly int _numHeads;
@@ -83,9 +84,6 @@ public class LayoutLMv2<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, I
     private readonly List<ILayer<T>> _outputLayers = [];
 
     // Learnable embeddings
-    private Tensor<T>? _positionEmbeddings;
-    private Tensor<T>? _spatialPositionEmbeddings;
-    private Tensor<T>? _visualPositionEmbeddings;
 
     #endregion
 
@@ -146,7 +144,7 @@ public class LayoutLMv2<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, I
         int numHeads = 12,
         int vocabSize = 30522,
         int visualBackboneChannels = 256,
-        IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         LayoutLMv2Options? options = null)
         : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
@@ -168,7 +166,7 @@ public class LayoutLMv2<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, I
         _numHeads = numHeads;
         _vocabSize = vocabSize;
         _visualBackboneChannels = visualBackboneChannels;
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? CreatePaperDefaultOptimizer();
 
         ImageSize = imageSize;
         MaxSequenceLength = maxSequenceLength;
@@ -214,7 +212,7 @@ public class LayoutLMv2<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, I
         int numHeads = 12,
         int vocabSize = 30522,
         int visualBackboneChannels = 256,
-        IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         LayoutLMv2Options? options = null)
         : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
@@ -229,7 +227,7 @@ public class LayoutLMv2<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, I
         _numHeads = numHeads;
         _vocabSize = vocabSize;
         _visualBackboneChannels = visualBackboneChannels;
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? CreatePaperDefaultOptimizer();
 
         ImageSize = imageSize;
         MaxSequenceLength = maxSequenceLength;
@@ -241,6 +239,25 @@ public class LayoutLMv2<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, I
     }
 
     #endregion
+
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreatePaperDefaultOptimizer()
+    {
+        // LayoutLMv2 Appendix B: Adam with lr=2e-5, weight decay=1e-2,
+        // and (beta1,beta2)=(0.9,0.999). AdamW expresses the cited decoupled
+        // weight-decay formulation while keeping every value user-overridable
+        // through the constructor's optimizer parameter.
+        var options = new AiDotNet.Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+        {
+            InitialLearningRate = _options.LearningRate,
+            WeightDecay = _options.WeightDecay,
+            Beta1 = 0.9,
+            Beta2 = 0.999,
+            Epsilon = 1e-8,
+            UseAMSGrad = false,
+            UseAdaptiveLearningRate = false
+        };
+        return new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this, options);
+    }
 
     #region Initialization
 
@@ -277,7 +294,11 @@ public class LayoutLMv2<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, I
     //   [.. + TextEmbeddingLayerCount)                          = word-embedding / position / layernorm / dropout,
     //   [rest]                                                  = multimodal transformer encoder + classification head.
     private const int VisualBackboneLayerCount = 12;
-    private const int TextEmbeddingLayerCount = 4;
+
+    // Three, not four: the token EmbeddingLayer and the sinusoidal PositionalEncodingLayer that
+    // used to open this section are now a single LayoutEmbeddingLayer, which also carries the 2D
+    // layout terms. The LayerNorm and Dropout after them are unchanged.
+    private const int TextEmbeddingLayerCount = 3;
 
     // Re-links the per-role forward-path sublists to the CURRENT Layers. The two-stream forward reads
     // these lists, not Layers directly, so they must be rebuilt whenever Layers is replaced — including
@@ -492,13 +513,7 @@ public class LayoutLMv2<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, I
     {
         var random = RandomHelper.CreateSeededRandom(42);
 
-        _positionEmbeddings = Tensor<T>.CreateDefault([MaxSequenceLength, _hiddenDim], NumOps.Zero);
-        _spatialPositionEmbeddings = Tensor<T>.CreateDefault([1024, _hiddenDim], NumOps.Zero);
-        _visualPositionEmbeddings = Tensor<T>.CreateDefault([(ImageSize / 16) * (ImageSize / 16), _hiddenDim], NumOps.Zero);
 
-        InitializeWithSmallRandomValues(_positionEmbeddings, random, 0.02);
-        InitializeWithSmallRandomValues(_spatialPositionEmbeddings, random, 0.02);
-        InitializeWithSmallRandomValues(_visualPositionEmbeddings, random, 0.02);
     }
 
     private void InitializeWithSmallRandomValues(Tensor<T> tensor, Random random, double stdDev)
@@ -885,7 +900,11 @@ public class LayoutLMv2<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, I
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expectedOutput);
+            var gradientOptimizer = _optimizer
+                ?? throw new InvalidOperationException(
+                    "LayoutLMv2 training requires an optimizer implementing " +
+                    "IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>.");
+            TrainWithTape(input, expectedOutput, gradientOptimizer);
         }
         finally
         {
@@ -893,19 +912,18 @@ public class LayoutLMv2<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, I
         }
     }
 
-    /// <inheritdoc/>
-    public override void UpdateParameters(Vector<T> gradients)
-    {
-        if (!_useNativeMode)
-            throw new NotSupportedException("Parameter updates not supported in ONNX mode.");
+    // UpdateParameters applied a GRADIENT STEP, but its one-argument form is the value setter and every caller passes values -- the override corrupted the model. Removed under AIDN082.
 
-        var currentParams = GetParameters();
-        T lr = NumOps.FromDouble(0.00005);
-        
-        currentParams = Engine.Subtract(currentParams, Engine.Multiply(gradients, lr));
-        SetParameters(currentParams);
-    }
-
+    /// <summary>
+    /// Parameters cannot be written while the model is backed by a loaded ONNX graph: the weights
+    /// belong to that graph, not to this instance.
+    /// </summary>
+    /// <remarks>
+    /// Replaces a hand-written throw that used to sit inside UpdateParameters. The base checks this
+    /// on every mutating entry point rather than the one member the throw happened to guard, and
+    /// reading -- ParameterCount and GetParameters -- stays available either way.
+    /// </remarks>
+    protected override bool SupportsParameterMutation => _useNativeMode;
     #endregion
 
     #region Disposal

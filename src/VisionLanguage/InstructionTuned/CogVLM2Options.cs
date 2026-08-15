@@ -49,7 +49,13 @@ public class CogVLM2Options : InstructionTunedVLMOptions
         NumVisionLayers = 63;
         NumDecoderLayers = 40;
         NumHeads = 32;
-        ImageSize = 490;
+
+        // CogVLM2 supports input resolution "up to 1344 x 1344 pixels" (Hong et al.,
+        // arXiv:2408.16500) — that high-resolution support is one of its headline changes over
+        // CogVLM. This previously read 490, which is CogVLM v1's resolution, so the model was
+        // configured as its own predecessor. Bounded generated fixtures override this for CI;
+        // production now matches the paper.
+        ImageSize = 1344;
         LanguageModelName = "GLM-4";
     }
 

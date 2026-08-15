@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 
@@ -31,6 +31,35 @@ namespace AiDotNet.LossFunctions;
 [LossProperty(IsNonNegative = true, ZeroForIdentical = false, RequiresProbabilityInputs = false, TestInputFormat = LossTestInputFormat.RawLogits, ExpectedOutput = OutputType.Logits)]
 public class CrossEntropyWithLogitsLoss<T> : LossFunctionBase<T>
 {
+    private readonly int? _classAxis;
+
+    /// <summary>
+    /// Initializes cross-entropy with automatic class-axis inference.
+    /// </summary>
+    public CrossEntropyWithLogitsLoss()
+    {
+    }
+
+    /// <summary>
+    /// Initializes cross-entropy with an explicit class axis.
+    /// </summary>
+    /// <param name="classAxis">
+    /// The class dimension. Negative values are resolved from the end of the prediction shape,
+    /// matching the usual tensor-axis convention.
+    /// </param>
+    /// <remarks>
+    /// Use this overload when the model has a defined layout such as NCHW segmentation. Automatic
+    /// inference remains the parameterless default for sequence and classification callers whose
+    /// logits conventionally place classes on the final axis.
+    /// </remarks>
+    public CrossEntropyWithLogitsLoss(int classAxis)
+    {
+        _classAxis = classAxis;
+    }
+
+    /// <summary>Gets the explicitly configured class axis, or null when inference is enabled.</summary>
+    public int? ClassAxis => _classAxis;
+
     /// <summary>
     /// Calculates the Cross-Entropy loss from raw logits using log-sum-exp for stability.
     /// </summary>
@@ -69,6 +98,7 @@ public class CrossEntropyWithLogitsLoss<T> : LossFunctionBase<T>
 
         return NumOps.Negate(loss);
     }
+
 
     /// <inheritdoc />
     public override Tensor<T> ComputeTapeLoss(Tensor<T> predicted, Tensor<T> target)
@@ -120,8 +150,45 @@ public class CrossEntropyWithLogitsLoss<T> : LossFunctionBase<T>
             return Engine.TensorNegate(perSample);
 
         var batchAxes = Enumerable.Range(0, perSample.Shape.Length).ToArray();
-        var mean = Engine.ReduceMean(perSample, batchAxes, keepDims: false);
-        return Engine.TensorNegate(mean);
+
+        // Average over SUPERVISED slots, not over every slot. An ignored target (an index outside
+        // [0, numClasses), the -1 sentinel) one-hot encodes to an all-zero row, so it contributes
+        // nothing to the numerator -- but counting it in the denominator silently shrinks the
+        // gradient by the ignored fraction. PyTorch's reduction='mean' divides by the number of
+        // non-ignored targets, which is the parity this class documents.
+        //
+        // COUNT THE ROWS, DO NOT SUM THEIR MASS. Summing mass counts correctly only while every
+        // supervised row carries mass exactly 1 -- one-hot, or a normalized distribution. A weighted
+        // or unnormalized soft target breaks that: scale a batch's targets by w and the numerator
+        // scales by w too, but so does this denominator, so the tape loss comes out divided by w
+        // while CalculateLoss (which does not divide at all) does not. Same inputs, two different
+        // objectives, and nothing in the type says the targets have to be normalized.
+        //
+        // Sign of the absolute mass is the indicator instead: any row with target mass counts once,
+        // whatever that mass is, and an ignored row -- an index outside [0, numClasses), the -1
+        // sentinel, which one-hot encodes to an all-zero row -- counts zero. Absolute value first so
+        // a row of signed weights cannot cancel to zero mass and be read as ignored. The target
+        // carries no gradient, so sign's kink at zero costs nothing here.
+        //
+        // For one-hot targets this is exactly the previous value, so existing callers are unaffected.
+        var targetMass = Engine.ReduceSum(Engine.TensorAbs(target), new[] { classAxis }, keepDims: false);
+        var supervisedRows = Engine.TensorSign(targetMass);
+        var supervised = Engine.ReduceSum(supervisedRows, batchAxes, keepDims: false);
+
+        var total = Engine.ReduceSum(perSample, batchAxes, keepDims: false);
+
+        // Divide by the supervised count as a TENSOR operation. Reading it back to the host and
+        // baking a constant divisor works eagerly but not under the compiled fused training path,
+        // which traces this expression once: a host-side read is not re-evaluated per step, and
+        // that graph produced NaN while the identical eager computation was numerically clean
+        // (loss 2.1966, 105 gradient tensors, none non-finite, max |grad| 0.60). Keeping the whole
+        // reduction in tensor ops makes the loss valid under both execution models.
+        //
+        // Clamped at one so an all-ignored batch yields zero instead of dividing by zero; the
+        // numerator is zero in that case regardless.
+        var safeCount = Engine.TensorClampMin(supervised, NumOps.One);
+
+        return Engine.TensorNegate(Engine.TensorDivide(total, safeCount));
     }
 
     private Tensor<T> ComputeLogSoftmax(Tensor<T> logits, int classAxis)
@@ -162,6 +229,22 @@ public class CrossEntropyWithLogitsLoss<T> : LossFunctionBase<T>
     private int ResolveClassAxis(Tensor<T> predicted, Tensor<T> target)
     {
         int rank = predicted.Shape.Length;
+        if (rank == 0)
+            throw new ArgumentException("Cross-entropy logits must have at least one dimension.", nameof(predicted));
+
+        if (_classAxis.HasValue)
+        {
+            int explicitAxis = _classAxis.Value < 0 ? rank + _classAxis.Value : _classAxis.Value;
+            if (explicitAxis < 0 || explicitAxis >= rank)
+            {
+                throw new ArgumentOutOfRangeException(
+                    "classAxis",
+                    _classAxis.Value,
+                    $"Class axis {_classAxis.Value} is outside logits rank {rank}.");
+            }
+            return explicitAxis;
+        }
+
         int defaultAxis = rank - 1;
 
         if (target.Shape.Length == rank - 1)
@@ -241,7 +324,9 @@ public class CrossEntropyWithLogitsLoss<T> : LossFunctionBase<T>
 
     private double ProbabilityAxisScore(Tensor<T> target, int axis)
     {
-        int[] shape = target.Shape.ToArray();
+        // _shape, not Shape.ToArray(): every read below is read-only, so the defensive copy was
+        // pure allocation on a per-call scoring path (ADNPERF001).
+        int[] shape = target._shape;
         int axisSize = shape[axis];
         int inner = 1;
         for (int i = axis + 1; i < shape.Length; i++)
@@ -272,8 +357,15 @@ public class CrossEntropyWithLogitsLoss<T> : LossFunctionBase<T>
     private Tensor<T> ClassIndicesToOneHot(Tensor<T> indices, int numClasses, int classAxis, int[] oneHotShape)
     {
         var indicesShape = indices.Shape.ToArray();
+        if (!ShapeMatchesWithAxisRemoved(oneHotShape, indicesShape, classAxis))
+        {
+            throw new ArgumentException(
+                $"Class-index target shape [{string.Join(", ", indicesShape)}] must equal logits " +
+                $"shape [{string.Join(", ", oneHotShape)}] with class axis {classAxis} removed.",
+                nameof(indices));
+        }
+
         var oneHot = new Tensor<T>(oneHotShape.ToArray());
-        var indicesStrides = ComputeStrides(indicesShape);
         var oneHotStrides = ComputeStrides(oneHotShape);
         var indicesSpan = indices.Data.Span;
         var oneHotSpan = oneHot.Data.Span;
@@ -284,23 +376,21 @@ public class CrossEntropyWithLogitsLoss<T> : LossFunctionBase<T>
             int classIdx = (int)Math.Round(NumOps.ToDouble(indicesSpan[i]));
             if (classIdx >= 0 && classIdx < numClasses)
             {
+                // The flattened target ordinal enumerates all non-class coordinates in row-major
+                // order. Decode it directly against those logits axes, inserting the class
+                // coordinate afterward. This avoids indexing an independently computed target
+                // stride array and works for both last-axis sequence labels and channel-first NCHW.
                 int remaining = i;
-                int indexAxis = 0;
                 int oneHotOffset = 0;
 
-                for (int axis = 0; axis < oneHotShape.Length; axis++)
+                for (int axis = oneHotShape.Length - 1; axis >= 0; axis--)
                 {
                     if (axis == classAxis)
                         continue;
 
-                    int coord = indicesShape.Length == 0
-                        ? 0
-                        : remaining / indicesStrides[indexAxis];
-                    if (indicesShape.Length > 0)
-                        remaining %= indicesStrides[indexAxis];
-
+                    int coord = remaining % oneHotShape[axis];
+                    remaining /= oneHotShape[axis];
                     oneHotOffset += coord * oneHotStrides[axis];
-                    indexAxis++;
                 }
 
                 oneHotSpan[oneHotOffset + classIdx * oneHotStrides[classAxis]] = NumOps.One;

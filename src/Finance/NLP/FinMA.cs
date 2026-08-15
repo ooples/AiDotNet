@@ -49,18 +49,8 @@ namespace AiDotNet.Finance.NLP;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("PIXIU: A Large Language Model, Instruction Data and Evaluation Benchmark for Finance", "https://arxiv.org/abs/2306.05443", Year = 2023, Authors = "Qianqian Xie, Weiguang Han, Xiao Zhang, Yanzhao Lai, Min Peng, Alejandro Lopez-Lira, Jimin Huang")]
-public class FinMA<T> : FinancialNLPModelBase<T>
+public partial class FinMA<T> : FinancialNLPModelBase<T>
 {
-    #region Native Mode Fields
-
-    private ILayer<T>? _tokenEmbedding;
-    private ILayer<T>? _positionEmbedding;
-    private readonly List<ILayer<T>> _decoderLayers = [];
-    private ILayer<T>? _finalNorm;
-    private ILayer<T>? _outputHead;
-
-    #endregion
-
     #region Shared Fields
 
     private readonly ModelOptions.FinMAOptions<T> _options;
@@ -165,41 +155,17 @@ public class FinMA<T> : FinancialNLPModelBase<T>
         else if (UseNativeMode)
         {
             Layers.AddRange(LayerHelper<T>.CreateDefaultFinMALayers(
-                Architecture, MaxSequenceLength, VocabularySize, _numAgents,
-                HiddenDimension, 12, 12, _dropout));
+                Architecture,
+                vocabularySize: VocabularySize,
+                maxSequenceLength: MaxSequenceLength,
+                hiddenDimension: HiddenDimension,
+                numAttentionHeads: _options.NumAttentionHeads,
+                intermediateDimension: _options.IntermediateDimension,
+                numLayers: _options.NumLayers,
+                numClasses: _options.NumClasses,
+                dropoutRate: _dropout));
 
-            ExtractLayerReferences();
         }
-    }
-
-    /// <summary>
-    /// Executes ExtractLayerReferences for the FinMA.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the FinMA model, ExtractLayerReferences performs a supporting step in the workflow. It keeps the FinMA architecture pipeline consistent.
-    /// </para>
-    /// </remarks>
-    private void ExtractLayerReferences()
-    {
-        int idx = 0;
-        if (Layers.Count > idx) _tokenEmbedding = Layers[idx++];
-        if (Layers.Count > idx) _positionEmbedding = Layers[idx++];
-        idx++; // skip dropout
-
-        _decoderLayers.Clear();
-        for (int i = 0; i < 12; i++)
-        {
-            if (idx < Layers.Count) _decoderLayers.Add(Layers[idx++]);
-            if (idx < Layers.Count) _decoderLayers.Add(Layers[idx++]);
-            if (idx < Layers.Count) _decoderLayers.Add(Layers[idx++]);
-            if (idx < Layers.Count) _decoderLayers.Add(Layers[idx++]);
-            if (idx < Layers.Count) _decoderLayers.Add(Layers[idx++]);
-            if (idx < Layers.Count) _decoderLayers.Add(Layers[idx++]);
-        }
-
-        if (idx < Layers.Count) _finalNorm = Layers[idx++];
-        if (idx < Layers.Count) _outputHead = Layers[idx];
     }
 
     #endregion
@@ -221,25 +187,8 @@ public class FinMA<T> : FinancialNLPModelBase<T>
         SetTrainingMode(false);
     }
 
-    /// <summary>
-    /// Executes UpdateParameters for the FinMA.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the FinMA model, UpdateParameters updates internal parameters or state. This keeps the FinMA architecture aligned with the latest values.
-    /// </para>
-    /// </remarks>
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        int offset = 0;
-        foreach (var layer in Layers)
-        {
-            var layerParams = layer.GetParameters();
-            layer.SetParameters(parameters.Slice(offset, layerParams.Length));
-            offset += layerParams.Length;
-        }
-    }
-
+    // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
+    // exactly the same enumeration, so this said nothing the base does not already say.
     /// <summary>
     /// Executes CreateNewInstance for the FinMA.
     /// </summary>

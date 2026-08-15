@@ -150,9 +150,9 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
 
             // Assert
             Assert.NotNull(weights);
-            Assert.Equal(hiddenSize, weights.Rows);
+            Assert.Equal(hiddenSize, weights.Shape[0]);
             // Columns = total elastic choices (3 depths + 2 widths + 2 kernels = 7)
-            Assert.Equal(7, weights.Columns);
+            Assert.Equal(7, weights.Shape[1]);
         }
 
         [Fact(Timeout = 60000)]

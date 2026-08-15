@@ -70,13 +70,14 @@ public class NoCurlAlgorithm<T> : ContinuousOptimizationBase<T>
 
         if (n < 2 || d < 2) return new Matrix<T>(d, d);
 
+        // NoCurl's variance ordering must be derived before z-scoring. After standardization every
+        // diagonal variance is nominally one, so ordering those near-ties makes the graph depend on
+        // floating-point roundoff and can change it under a uniform rescaling of the same data.
+        var ordering = InitializeOrdering(data, d, n);
         var X = StandardizeData(data);
 
         // Compute sample covariance: S = (1/n) * X^T * X
         var S = ComputeCovarianceMatrix(X);
-
-        // Initialize ordering based on marginal variance (ascending)
-        var ordering = InitializeOrdering(S, d);
 
         // Iteratively improve ordering via adjacent swaps
         for (int iter = 0; iter < MaxIterations; iter++)
@@ -142,13 +143,32 @@ public class NoCurlAlgorithm<T> : ContinuousOptimizationBase<T>
     }
 
     /// <summary>
-    /// Initializes ordering based on diagonal of S (marginal variance, ascending).
+    /// Initializes ordering from the raw-data marginal variance (ascending).
     /// </summary>
-    private int[] InitializeOrdering(Matrix<T> S, int d)
+    private int[] InitializeOrdering(Matrix<T> data, int d, int n)
     {
+        var variances = new double[d];
+        for (int column = 0; column < d; column++)
+        {
+            double mean = 0;
+            for (int row = 0; row < n; row++) mean += NumOps.ToDouble(data[row, column]);
+            mean /= n;
+
+            double variance = 0;
+            for (int row = 0; row < n; row++)
+            {
+                double centered = NumOps.ToDouble(data[row, column]) - mean;
+                variance += centered * centered;
+            }
+            variances[column] = variance / n;
+        }
+
         var ordering = Enumerable.Range(0, d).ToArray();
         Array.Sort(ordering, (a, b) =>
-            NumOps.ToDouble(S[a, a]).CompareTo(NumOps.ToDouble(S[b, b])));
+        {
+            int byVariance = variances[a].CompareTo(variances[b]);
+            return byVariance != 0 ? byVariance : a.CompareTo(b);
+        });
         return ordering;
     }
 

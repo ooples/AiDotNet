@@ -54,8 +54,8 @@ namespace AiDotNet.Video.FrameInterpolation;
 [ModelTask(ModelTask.FrameInterpolation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("MoG: Motion-Aware Generative Frame Interpolation",
-    "https://arxiv.org/abs/2501.03782",
+[ResearchPaper("Motion-Aware Generative Frame Interpolation",
+    "https://arxiv.org/abs/2501.03699",
     Year = 2025,
     Authors = "Jianhui Wang, Yongqiang Zhang, Ying Tai")]
 public class MoG<T> : FrameInterpolationBase<T>
@@ -93,10 +93,24 @@ public class MoG<T> : FrameInterpolationBase<T>
     {
         _options = options ?? new MoGOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        // Honor the model's configured LearningRate (1e-4) and clip gradients. The bare AdamWOptimizer(this)
+        // dropped both and ran at Adam's own 1e-3 default, which is 10x the rate this model declares and left
+        // MoreData_ShouldNotDegrade oscillating. Fully user-overridable via the optimizer parameter and
+        // MoGOptions.LearningRate. (#1789)
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
+            new AiDotNet.Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            { InitialLearningRate = _options.LearningRate, EnableGradientClipping = true, MaxGradientNorm = 1.0 });
         SupportsArbitraryTimestep = true;
         InitializeLayers();
     }
+
+    /// <summary>
+    /// Routes tape training through the configured optimizer. Without this override the base trainer only
+    /// consults <see cref="NeuralNetworkBase{T}.GetOrCreateBaseOptimizer"/>, so the <c>_optimizer</c> field above
+    /// was stored but never used and training silently ran at the base Adam 1e-3 default. (#1789)
+    /// </summary>
+    protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> GetOrCreateBaseOptimizer()
+        => _optimizer ?? base.GetOrCreateBaseOptimizer();
 
     #endregion
 
@@ -165,7 +179,7 @@ public class MoG<T> : FrameInterpolationBase<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expected);
+            TrainWithTape(input, expected, _optimizer);
         }
         finally
         {
@@ -173,18 +187,11 @@ public class MoG<T> : FrameInterpolationBase<T>
         }
     }
 
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        if (!_useNativeMode) throw new NotSupportedException("Parameter updates are not supported in ONNX mode.");
-        int idx = 0;
-        foreach (var layer in Layers)
-        {
-            int count = checked((int)layer.ParameterCount);
-            layer.UpdateParameters(parameters.Slice(idx, count));
-            idx += count;
-        }
-    }
-
+    /// <inheritdoc />
+    /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
+    /// write on every parameter surface, so the guard is stated once here instead of being
+    /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
+    protected override bool SupportsParameterMutation => _useNativeMode;
     // Identity: tape training runs the raw layer stack (no NormalizeFrames) and the sigmoid head
     // emits [0,1] frames, so /255+*255 only on inference was a train/eval mismatch (MoreData).
     protected override Tensor<T> PreprocessFrames(Tensor<T> rawFrames) => rawFrames;

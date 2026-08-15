@@ -83,22 +83,41 @@ public class PNLAlgorithm<T> : FunctionalBase<T>
                 double depJI = PNLResidualDependence(xj, xi);
 
                 double asymmetry = depJI - depIJ;
+                // UNRESOLVED DIRECTION IS RECORDED AS UNORIENTED, both ways, not as a confident edge
+                // in index order. Writing W[i, j] alone made the two very different outcomes below
+                // indistinguishable to a caller: PNL resolved the direction from the residual
+                // asymmetry, versus PNL could not resolve it and fell back to column layout. The
+                // second reading is worse than uninformative -- because the loop runs over i < j, the
+                // asserted cause and effect then depended on the column ORDER of the input, so
+                // reordering the caller's columns silently reversed the reported causality.
+                //
+                // A symmetric pair is the convention CAMUVAlgorithm already uses for a pair it cannot
+                // orient, and RCDAlgorithm refuses to write an edge at all in the same situation.
+                // This aligns PNL with CAMUV: the adjacency is kept, the direction claim is not made.
+                T weightT = NumOps.FromDouble(weight);
 
-                // When both dependencies are near zero (deterministic relationship),
-                // the PNL model can't determine direction from residuals alone.
-                // Fall back to placing edge i → j since we know a strong relationship exists.
+                // Both residual dependencies near zero: a deterministic relationship, where the PNL
+                // model has no residual asymmetry to read a direction from at all.
                 bool nearZeroDeps = depIJ < 1e-6 && depJI < 1e-6;
 
                 if (nearZeroDeps)
                 {
-                    W[i, j] = NumOps.FromDouble(weight);
+                    W[i, j] = weightT;
+                    W[j, i] = weightT;
                 }
                 else if (Math.Abs(asymmetry) > _threshold * 0.1)
                 {
                     if (asymmetry > 0)
-                        W[i, j] = NumOps.FromDouble(weight);
+                        W[i, j] = weightT;
                     else
-                        W[j, i] = NumOps.FromDouble(weight);
+                        W[j, i] = weightT;
+                }
+                else
+                {
+                    // Strongly related, but the finite-sample PNL independence scores cannot resolve
+                    // the direction. Keep the adjacency, decline the orientation.
+                    W[i, j] = weightT;
+                    W[j, i] = weightT;
                 }
             }
         }

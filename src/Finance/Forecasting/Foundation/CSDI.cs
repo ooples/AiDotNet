@@ -62,7 +62,7 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("CSDI: Conditional Score-based Diffusion Models for Probabilistic Time Series Imputation", "https://arxiv.org/abs/2107.03502", Year = 2021, Authors = "Yusuke Tashiro, Jiaming Song, Yang Song, Stefano Ermon")]
-public class CSDI<T> : TimeSeriesFoundationModelBase<T>
+public partial class CSDI<T> : TimeSeriesFoundationModelBase<T>
 {
     #region Fields
 
@@ -90,10 +90,15 @@ public class CSDI<T> : TimeSeriesFoundationModelBase<T>
     private double _betaEnd;
 
     // DDPM noise schedule (precomputed as generic vectors)
+    [Buffer]
     private Vector<T> _betas = Vector<T>.Empty();
+    [Buffer]
     private Vector<T> _alphas = Vector<T>.Empty();
+    [Buffer]
     private Vector<T> _alphasCumprod = Vector<T>.Empty();
+    [Buffer]
     private Vector<T> _sqrtAlphasCumprod = Vector<T>.Empty();
+    [Buffer]
     private Vector<T> _sqrtOneMinusAlphasCumprod = Vector<T>.Empty();
 
     #endregion
@@ -593,11 +598,8 @@ public class CSDI<T> : TimeSeriesFoundationModelBase<T>
         return (eps, epsilonTrue);
     }
 
-    public override void UpdateParameters(Vector<T> gradients)
-    {
-        // Parameters are updated through the optimizer in Train()
-    }
-
+    // UpdateParameters was an empty override, silently dropping every restore. The base
+    // distributes the vector over the declared enumeration.
     public override ModelMetadata<T> GetModelMetadata() => new()
     {
         AdditionalInfo = new Dictionary<string, object>
@@ -684,11 +686,18 @@ public class CSDI<T> : TimeSeriesFoundationModelBase<T>
     /// </remarks>
     public override Tensor<T> ApplyInstanceNormalization(Tensor<T> input)
     {
+        if (input.Length == 0) return input;
         int batchSize = input.Rank > 1 ? input.Shape[0] : 1;
-        int seqLen = input.Rank > 1 ? input.Shape[1] : input.Length;
+        if (batchSize <= 0) batchSize = 1;
+        // Per-sample size is ALL non-batch elements, not just Shape[1]. The previous code used
+        // input.Shape[1], which for a rank-3+ input (e.g. [1, 8, 8]) dropped every axis beyond 1 and
+        // reshaped 64 elements into [1, 8] (8), throwing "Cannot reshape tensor with 64 elements to
+        // shape [1, 8]". Flattening to [batch, perSample] keeps every element and normalizes per
+        // sample over the whole sequence, regardless of rank.
+        int seqLen = input.Length / batchSize;
         if (seqLen <= 0) return input;
 
-        bool reshaped = input.Rank != 2;
+        bool reshaped = !(input.Rank == 2 && input.Shape[1] == seqLen);
         var flat = reshaped ? Engine.Reshape(input, new[] { batchSize, seqLen }) : input;
         var mean = Engine.ReduceMean(flat, new[] { 1 }, keepDims: true);
         var variance = Engine.ReduceVariance(flat, new[] { 1 }, keepDims: true);

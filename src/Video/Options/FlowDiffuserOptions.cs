@@ -11,4 +11,11 @@ namespace AiDotNet.Video.Options;
 /// </remarks>
 public class FlowDiffuserOptions : NeuralNetworkOptions
 {
+    /// <summary>
+    /// Gets or sets an optional Adam learning rate for native training.
+    /// </summary>
+    /// <remarks>
+    /// When <see langword="null"/>, FlowDiffuser retains the framework's default optimizer behavior.
+    /// </remarks>
+    public double? LearningRate { get; set; }
 }

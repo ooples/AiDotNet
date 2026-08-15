@@ -49,7 +49,7 @@ namespace AiDotNet.Finance.NLP;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("BloombergGPT: A Large Language Model for Finance", "https://arxiv.org/abs/2303.17564", Year = 2023, Authors = "Shijie Wu, Ozan Irsoy, Steven Lu, Vadim Dabravolski, Mark Dredze, Sebastian Gehrmann, Prabhanjan Kambadur, David Rosenberg, Gideon Mann")]
-public class BloombergGPT<T> : FinancialNLPModelBase<T>
+public partial class BloombergGPT<T> : FinancialNLPModelBase<T>
 {
     #region Native Mode Fields
 
@@ -95,8 +95,8 @@ public class BloombergGPT<T> : FinancialNLPModelBase<T>
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
         : base(architecture, onnxModelPath, 
                options?.MaxSequenceLength ?? 2048, 
-               options?.VocabularySize ?? 131072,
-               options?.HiddenDimension ?? 768)
+               options?.VocabularySize ?? 50257,
+               options?.HiddenDimension ?? 1024)
     {
         options ??= new ModelOptions.BloombergGPTOptions<T>();
         _options = options;
@@ -124,8 +124,8 @@ public class BloombergGPT<T> : FinancialNLPModelBase<T>
         ILossFunction<T>? lossFunction = null)
         : base(architecture,
                options?.MaxSequenceLength ?? 2048,
-               options?.VocabularySize ?? 131072,
-               options?.HiddenDimension ?? 768,
+               options?.VocabularySize ?? 50257,
+               options?.HiddenDimension ?? 1024,
                3,
                lossFunction)
     {
@@ -163,7 +163,7 @@ public class BloombergGPT<T> : FinancialNLPModelBase<T>
         {
             Layers.AddRange(LayerHelper<T>.CreateDefaultBloombergGPTLayers(
                 Architecture, MaxSequenceLength, VocabularySize, 
-                HiddenDimension, 12, 12, _dropout));
+                HiddenDimension, _options.NumAttentionHeads, _options.NumLayers, _dropout));
 
             ExtractLayerReferences();
         }
@@ -185,7 +185,7 @@ public class BloombergGPT<T> : FinancialNLPModelBase<T>
         idx++; // skip dropout
 
         _decoderLayers.Clear();
-        for (int i = 0; i < 12; i++)
+        for (int i = 0; i < _options.NumLayers; i++)
         {
             if (idx < Layers.Count) _decoderLayers.Add(Layers[idx++]);
             if (idx < Layers.Count) _decoderLayers.Add(Layers[idx++]);
@@ -218,25 +218,8 @@ public class BloombergGPT<T> : FinancialNLPModelBase<T>
         SetTrainingMode(false);
     }
 
-    /// <summary>
-    /// Executes UpdateParameters for the BloombergGPT.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the BloombergGPT model, UpdateParameters updates internal parameters or state. This keeps the BloombergGPT architecture aligned with the latest values.
-    /// </para>
-    /// </remarks>
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        int offset = 0;
-        foreach (var layer in Layers)
-        {
-            var layerParams = layer.GetParameters();
-            layer.SetParameters(parameters.Slice(offset, layerParams.Length));
-            offset += layerParams.Length;
-        }
-    }
-
+    // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
+    // exactly the same enumeration, so this said nothing the base does not already say.
     /// <summary>
     /// Executes CreateNewInstance for the BloombergGPT.
     /// </summary>
@@ -251,7 +234,12 @@ public class BloombergGPT<T> : FinancialNLPModelBase<T>
         {
             MaxSequenceLength = MaxSequenceLength,
             VocabularySize = VocabularySize,
-            HiddenDimension = HiddenDimension
+            HiddenDimension = HiddenDimension,
+            NumLayers = _options.NumLayers,
+            NumAttentionHeads = _options.NumAttentionHeads,
+            IntermediateDimension = _options.IntermediateDimension,
+            DropoutRate = _options.DropoutRate,
+            TaskType = _options.TaskType
         };
         return new BloombergGPT<T>(Architecture, options, _optimizer, LossFunction);
     }
@@ -293,9 +281,13 @@ public class BloombergGPT<T> : FinancialNLPModelBase<T>
     protected override Tensor<T> ForecastNative(Tensor<T> input, double[]? quantiles)
     {
         SetTrainingMode(false);
-        var current = input;
-        foreach (var layer in Layers) current = layer.Forward(current);
-        return current;
+        // FinancialModelBase dispatches prediction through ForecastNative rather than
+        // NeuralNetworkBase.PredictCore, so BloombergGPT must enter the canonical eager
+        // executor explicitly. Besides preserving the ordinary sequential loop, this
+        // activates per-layer materialize/release and post-forward registration when
+        // weight streaming was explicitly configured or auto-detected.
+        TryAutoEnableWeightStreaming(isTrainingOverride: false);
+        return PredictEager(input);
     }
 
     /// <summary>

@@ -10,13 +10,14 @@ public class PiperOptions : EndToEndTtsOptions
     /// <param name="other">The options instance to copy from.</param>
     /// <exception cref="ArgumentNullException">Thrown when other is null.</exception>
     public PiperOptions(PiperOptions other)
+        : base(other)
     {
-        if (other == null)
-            throw new ArgumentNullException(nameof(other));
-
         LengthScale = other.LengthScale;
         NoiseScale = other.NoiseScale;
         NoiseScaleW = other.NoiseScaleW;
+        OptimizerBeta1 = other.OptimizerBeta1;
+        OptimizerBeta2 = other.OptimizerBeta2;
+        OptimizerEpsilon = other.OptimizerEpsilon;
     }
 
     public PiperOptions()
@@ -27,9 +28,20 @@ public class PiperOptions : EndToEndTtsOptions
         HiddenDim = 192;
         NumFlowSteps = 4;
         NumEncoderLayers = 4;
+        LearningRate = 2e-4;
+        WeightDecay = 0.01;
     }
 
     public double LengthScale { get; set; } = 1.0;
     public double NoiseScale { get; set; } = 0.667;
     public double NoiseScaleW { get; set; } = 0.8;
+
+    /// <summary>Gets or sets AdamW's first-moment decay from the VITS training recipe.</summary>
+    public double OptimizerBeta1 { get; set; } = 0.8;
+
+    /// <summary>Gets or sets AdamW's second-moment decay from the VITS training recipe.</summary>
+    public double OptimizerBeta2 { get; set; } = 0.99;
+
+    /// <summary>Gets or sets AdamW's numerical-stability epsilon.</summary>
+    public double OptimizerEpsilon { get; set; } = 1e-9;
 }

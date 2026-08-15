@@ -1,4 +1,9 @@
 using AiDotNet.ActivationFunctions;
+using System;
+using System.Collections.Generic;
+using AiDotNet.Models.Parameters;
+using AiDotNet.LinearAlgebra;
+using AiDotNet.Interfaces;
 using AiDotNet.Engines;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
@@ -32,7 +37,7 @@ namespace AiDotNet.NeuralNetworks.Tabular;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-public abstract class TabDPTBase<T>
+public abstract class TabDPTBase<T> : IParameterSource<T>
 {
     /// <summary>
     /// Provides access to the hardware-accelerated tensor engine.
@@ -72,32 +77,82 @@ public abstract class TabDPTBase<T>
     /// </summary>
     protected int MLPOutputDimension => Options.OutputHeadDimensions[^1];
 
+    /// <summary>Built once on first parameter access, then reused.</summary>
+    private ParameterComponentRegistry<T>? _parameterRegistry;
+
     /// <summary>
-    /// Gets the total number of trainable parameters.
+    /// Extra trainable layers a subclass contributes, folded after the shared backbone.
     /// </summary>
-    public virtual long ParameterCount
+    /// <remarks>
+    /// The regression and classification variants share this whole backbone and differ only by a
+    /// final projection. Each used to override <see cref="ParameterCount"/> purely to append that
+    /// one layer -- and because this base had no GetParameters or SetParameters at all, the head was
+    /// COUNTED and never read, never restored and never checkpointed. The count grew; the model that
+    /// could be saved did not. Declaring the head here means the subclass states WHAT it adds and
+    /// the registry decides where it goes, so count, vector and restore cannot disagree about it.
+    /// </remarks>
+    protected virtual IEnumerable<IParameterSource<T>> GetExtraTrainableLayers()
+        => System.Linq.Enumerable.Empty<IParameterSource<T>>();
+
+    /// <summary>
+    /// The single ordered traversal of this model's parameter-bearing components.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Count, read and restore all derive from THIS, rather than each restating the component list.
+    /// Three parallel walks are how a count and a vector come to describe different models: they
+    /// agree until someone adds a component to two of them, and nothing reports the disagreement
+    /// because the lengths still look plausible. One enumeration makes that unrepresentable.
+    /// </para>
+    /// <para>
+    /// The stable IDs carry a numeric prefix because the registry orders by identity rather than by
+    /// the order Register happened to be called -- so the prefix, not the call order, is what pins
+    /// serialization order, and it survives a component being added in the middle later.
+    /// </para>
+    /// </remarks>
+    private ParameterComponentRegistry<T> ParameterRegistry
     {
         get
         {
-            int count = checked((int)_featureProjection.ParameterCount);
+            if (_parameterRegistry is not null) return _parameterRegistry;
 
-            foreach (var emb in _categoricalEmbeddings)
-                count += (int)emb.ParameterCount;
+            var registry = new ParameterComponentRegistry<T>();
+            registry.Register("00000000/projection", _featureProjection);
 
-            foreach (var block in _transformerBlocks)
-                count += (int)block.ParameterCount;
+            for (int i = 0; i < _categoricalEmbeddings.Length; i++)
+                registry.Register($"00000001/{i:D8}", _categoricalEmbeddings[i]);
 
-            if (_featureAttention != null)
-                count += (int)_featureAttention.ParameterCount;
+            for (int i = 0; i < _transformerBlocks.Length; i++)
+                registry.Register($"00000002/{i:D8}", _transformerBlocks[i]);
 
-            foreach (var layer in _mlpLayers)
-                count += (int)layer.ParameterCount;
+            registry.Register("00000003/featureAttention", _featureAttention);
 
-            count += (int)_finalNorm.ParameterCount;
+            for (int i = 0; i < _mlpLayers.Length; i++)
+                registry.Register($"00000004/{i:D8}", _mlpLayers[i]);
 
-            return count;
+            registry.Register("00000005/finalNorm", _finalNorm);
+            int extraIndex = 0;
+            foreach (var extra in GetExtraTrainableLayers())
+            {
+                if (extra is not null) registry.Register($"00009000/{extraIndex++:D8}", extra);
+            }
+
+            _parameterRegistry = registry;
+            return registry;
         }
     }
+
+    /// <inheritdoc cref="GetParameters"/>
+    public virtual long ParameterCount => ParameterRegistry.ParameterCount;
+
+    /// <summary>
+    /// Reads every parameter in traversal order. <see cref="SetParameters"/> reads it back in the
+    /// same order, and <see cref="ParameterCount"/> is the length of what this returns.
+    /// </summary>
+    public virtual Vector<T> GetParameters() => ParameterRegistry.GetParameters();
+
+    /// <summary>Restores every parameter, in the order <see cref="GetParameters"/> emitted them.</summary>
+    public virtual void SetParameters(Vector<T> parameters) => ParameterRegistry.SetParameters(parameters);
 
     /// <summary>
     /// Initializes a new instance of the TabDPTBase class.
@@ -116,9 +171,14 @@ public abstract class TabDPTBase<T>
         int embDim = Options.EmbeddingDimension;
 
         // Feature projection for numerical features
-        _featureProjection = new FullyConnectedLayer<T>(
-            embDim,
-            Options.InputActivation ?? new ReLUActivation<T>());
+        _featureProjection = numNumericalFeatures > 0
+            ? new FullyConnectedLayer<T>(
+                numNumericalFeatures,
+                embDim,
+                Options.InputActivation ?? new ReLUActivation<T>())
+            : new FullyConnectedLayer<T>(
+                embDim,
+                Options.InputActivation ?? new ReLUActivation<T>());
 
         // Categorical embeddings
         var cardinalities = Options.CategoricalCardinalities ?? [];
@@ -127,6 +187,7 @@ public abstract class TabDPTBase<T>
         for (int i = 0; i < cardinalities.Length; i++)
         {
             _categoricalEmbeddings[i] = new FullyConnectedLayer<T>(
+                cardinalities[i],
                 embDim,
                 (IActivationFunction<T>?)null);
         }
@@ -164,12 +225,13 @@ public abstract class TabDPTBase<T>
         {
             bool isLast = i == mlpDims.Length - 1;
             _mlpLayers[i] = new FullyConnectedLayer<T>(
+                inputDim,
                 mlpDims[i],
                 isLast ? null : Options.HiddenActivation ?? new GELUActivation<T>());
             inputDim = mlpDims[i];
         }
 
-        _finalNorm = new LayerNormalizationLayer<T>();
+        _finalNorm = new LayerNormalizationLayer<T>(inputDim);
     }
 
     /// <summary>
@@ -312,7 +374,7 @@ public abstract class TabDPTBase<T>
     /// <summary>
     /// Transformer block with multi-head attention and feed-forward network.
     /// </summary>
-    private sealed class TransformerBlock<TBlock>
+    private sealed class TransformerBlock<TBlock> : IParameterSource<TBlock>
     {
         private static readonly INumericOperations<TBlock> NumOps = MathHelper.GetNumericOperations<TBlock>();
 
@@ -351,13 +413,90 @@ public abstract class TabDPTBase<T>
         private Tensor<TBlock>? _valueCache;
         private Tensor<TBlock>? _attentionScoresCache;
 
+        /// <summary>The block attention projections, in serialization order.</summary>
+        private IEnumerable<Tensor<TBlock>> AttentionTensors()
+        {
+            yield return _queryWeights;
+            yield return _keyWeights;
+            yield return _valueWeights;
+            yield return _outputWeights;
+        }
+
+        /// <summary>The block sub-layers, after the attention projections.</summary>
+        private IEnumerable<ILayer<TBlock>> SubLayers()
+        {
+            yield return _ff1;
+            yield return _ff2;
+            yield return _norm1;
+            yield return _norm2;
+        }
+
+        /// <summary>
+        /// Summed from the SAME traversal the vector uses, so the two cannot disagree.
+        /// </summary>
+        /// <remarks>
+        /// This was the formula <c>_embeddingDim * _embeddingDim * 4</c> plus the sub-layers. A
+        /// formula restates what the tensors already know and drifts from them silently -- and with
+        /// no read path there was no vector to contradict it, so any error was unobservable rather
+        /// than absent. The identical formula in TabPFN block proved to be wrong by 7,873.
+        /// </remarks>
         public long ParameterCount
         {
             get
             {
-                int attentionParams = _embeddingDim * _embeddingDim * 4; // Q, K, V, O
-                return attentionParams + _ff1.ParameterCount + _ff2.ParameterCount +
-                       _norm1.ParameterCount + _norm2.ParameterCount;
+                long count = 0;
+                foreach (var tensor in AttentionTensors()) count += tensor.Length;
+                foreach (var layer in SubLayers()) count += layer.ParameterCount;
+                return count;
+            }
+        }
+
+        /// <inheritdoc />
+        public Vector<TBlock> GetParameters()
+        {
+            var result = new Vector<TBlock>(checked((int)ParameterCount));
+            int offset = 0;
+
+            foreach (var tensor in AttentionTensors())
+            {
+                for (int i = 0; i < tensor.Length; i++) result[offset++] = tensor[i];
+            }
+
+            foreach (var layer in SubLayers())
+            {
+                var part = layer.GetParameters();
+                for (int i = 0; i < part.Length; i++) result[offset++] = part[i];
+            }
+
+            return result;
+        }
+
+        /// <summary>Writes THROUGH the attention tensors, then down into each sub-layer.</summary>
+        public void SetParameters(Vector<TBlock> parameters)
+        {
+            if (parameters is null) throw new ArgumentNullException(nameof(parameters));
+
+            long expected = ParameterCount;
+            if (parameters.Length != expected)
+            {
+                throw new ArgumentException(
+                    $"Expected {expected} parameters, got {parameters.Length}.", nameof(parameters));
+            }
+
+            int offset = 0;
+            foreach (var tensor in AttentionTensors())
+            {
+                for (int i = 0; i < tensor.Length; i++) tensor[i] = parameters[offset++];
+            }
+
+            foreach (var layer in SubLayers())
+            {
+                int count = checked((int)layer.ParameterCount);
+                if (count == 0) continue;
+
+                var slice = new Vector<TBlock>(count);
+                for (int i = 0; i < count; i++) slice[i] = parameters[offset++];
+                layer.SetParameters(slice);
             }
         }
 
@@ -390,16 +529,18 @@ public abstract class TabDPTBase<T>
 
             // Feed-forward network
             _ff1 = new FullyConnectedLayer<TBlock>(
+                embeddingDim,
                 ffDim,
                 new GELUActivation<TBlock>() as IActivationFunction<TBlock>);
 
             _ff2 = new FullyConnectedLayer<TBlock>(
+                ffDim,
                 embeddingDim,
                 (IActivationFunction<TBlock>?)null);
 
             // Layer normalizations
-            _norm1 = new LayerNormalizationLayer<TBlock>();
-            _norm2 = new LayerNormalizationLayer<TBlock>();
+            _norm1 = new LayerNormalizationLayer<TBlock>(embeddingDim);
+            _norm2 = new LayerNormalizationLayer<TBlock>(embeddingDim);
         }
 
         private static Tensor<TBlock> InitializeWeights(int[] shape, double scale, Random random)
@@ -592,7 +733,7 @@ public abstract class TabDPTBase<T>
     /// <summary>
     /// Feature-wise attention block for column interactions.
     /// </summary>
-    private sealed class FeatureAttentionBlock<TBlock>
+    private sealed class FeatureAttentionBlock<TBlock> : IParameterSource<TBlock>
     {
         private static readonly INumericOperations<TBlock> NumOps = MathHelper.GetNumericOperations<TBlock>();
 
@@ -607,7 +748,58 @@ public abstract class TabDPTBase<T>
 
         private Tensor<TBlock>? _inputCache;
 
-        public long ParameterCount => _embeddingDim * _embeddingDim * 4;
+        /// <summary>The four projections, in serialization order.</summary>
+        private IEnumerable<Tensor<TBlock>> Tensors()
+        {
+            yield return _featureQuery;
+            yield return _featureKey;
+            yield return _featureValue;
+            yield return _featureOutput;
+        }
+
+        /// <inheritdoc />
+        public long ParameterCount
+        {
+            get
+            {
+                long count = 0;
+                foreach (var tensor in Tensors()) count += tensor.Length;
+                return count;
+            }
+        }
+
+        /// <inheritdoc />
+        public Vector<TBlock> GetParameters()
+        {
+            var result = new Vector<TBlock>(checked((int)ParameterCount));
+            int offset = 0;
+
+            foreach (var tensor in Tensors())
+            {
+                for (int i = 0; i < tensor.Length; i++) result[offset++] = tensor[i];
+            }
+
+            return result;
+        }
+
+        /// <inheritdoc />
+        public void SetParameters(Vector<TBlock> parameters)
+        {
+            if (parameters is null) throw new ArgumentNullException(nameof(parameters));
+
+            long expected = ParameterCount;
+            if (parameters.Length != expected)
+            {
+                throw new ArgumentException(
+                    $"Expected {expected} parameters, got {parameters.Length}.", nameof(parameters));
+            }
+
+            int offset = 0;
+            foreach (var tensor in Tensors())
+            {
+                for (int i = 0; i < tensor.Length; i++) tensor[i] = parameters[offset++];
+            }
+        }
 
         public FeatureAttentionBlock(int embeddingDim, int numHeads, double dropoutRate, Random random)
         {

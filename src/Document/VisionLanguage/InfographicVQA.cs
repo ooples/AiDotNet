@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Document.Interfaces;
 using AiDotNet.Document.Options;
 using AiDotNet.Enums;
@@ -56,7 +56,7 @@ namespace AiDotNet.Document.VisionLanguage;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("InfographicVQA", "https://arxiv.org/abs/2104.12756", Year = 2022, Authors = "Minesh Mathew, Viraj Bagal, Rubèn Tito, Dimosthenis Karatzas, Ernest Valveny, C.V. Jawahar")]
-public class InfographicVQA<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
+public partial class InfographicVQA<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
 {
     private readonly InfographicVQAOptions _options;
 
@@ -67,7 +67,7 @@ public class InfographicVQA<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
 
     private readonly bool _useNativeMode;
     private readonly InferenceSession? _onnxSession;
-    private readonly IOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private readonly int _visionDim;
     private readonly int _textDim;
     private readonly int _fusionDim;
@@ -83,8 +83,6 @@ public class InfographicVQA<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
     private readonly List<ILayer<T>> _answerDecoderLayers = [];
 
     // Learnable embeddings
-    private Tensor<T>? _visionPositionEmbeddings;
-    private Tensor<T>? _textEmbeddings;
 
     #endregion
 
@@ -138,7 +136,7 @@ public class InfographicVQA<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
         int fusionLayers = 6,
         int numHeads = 12,
         int vocabSize = 30522,
-        IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         InfographicVQAOptions? options = null)
         : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
@@ -174,12 +172,12 @@ public class InfographicVQA<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
     /// </summary>
     /// <remarks>
     /// <para>
-    /// <b>Default Configuration (InfographicVQA from WACV 2022):</b>
-    /// - Vision encoder: ViT or ResNet backbone
-    /// - Text encoder: BERT-base
-    /// - Multi-modal fusion transformer
-    /// - Answer decoder for generation
-    /// - Multi-scale visual processing
+    /// The WACV paper introduces the InfographicVQA dataset and evaluates multiple
+    /// baselines; it does not prescribe one reconstructible layer configuration.
+    /// This native implementation is therefore a configurable ViT-style visual
+    /// encoder and fusion approximation. The constructor exposes its image size,
+    /// widths, depths, attention heads, context length, and vocabulary size rather
+    /// than presenting any one of those choices as an undisclosed paper default.
     /// </para>
     /// </remarks>
     public InfographicVQA(
@@ -193,7 +191,7 @@ public class InfographicVQA<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
         int fusionLayers = 6,
         int numHeads = 12,
         int vocabSize = 30522,
-        IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         InfographicVQAOptions? options = null)
         : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
@@ -253,11 +251,7 @@ public class InfographicVQA<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
         var random = RandomHelper.CreateSeededRandom(42);
         int numPatches = (ImageSize / 16) * (ImageSize / 16);
 
-        _visionPositionEmbeddings = Tensor<T>.CreateDefault([numPatches + 1, _visionDim], NumOps.Zero);
-        _textEmbeddings = Tensor<T>.CreateDefault([_vocabSize, _textDim], NumOps.Zero);
 
-        InitializeWithSmallRandomValues(_visionPositionEmbeddings, random, 0.02);
-        InitializeWithSmallRandomValues(_textEmbeddings, random, 0.02);
     }
 
     private void InitializeWithSmallRandomValues(Tensor<T> tensor, Random random, double stdDev)
@@ -539,7 +533,8 @@ public class InfographicVQA<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
         return new InfographicVQA<T>(Architecture, ImageSize, MaxSequenceLength, _visionDim, _textDim,
-            _fusionDim, _visionLayers, _fusionLayers, _numHeads, _vocabSize);
+            _fusionDim, _visionLayers, _fusionLayers, _numHeads, _vocabSize,
+            options: new InfographicVQAOptions(_options));
     }
 
     #endregion
@@ -559,34 +554,24 @@ public class InfographicVQA<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
         if (!_useNativeMode)
             throw new NotSupportedException("Training not supported in ONNX mode.");
 
+        if (_optimizer is not IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> gradientOptimizer)
+        {
+            throw new InvalidOperationException(
+                "InfographicVQA native training requires a gradient-based optimizer.");
+        }
+
         SetTrainingMode(true);
-        TrainWithTape(input, expectedOutput);
-
-        UpdateParameters(CollectGradients());
-        SetTrainingMode(false);
+        try
+        {
+            TrainWithTape(input, expectedOutput, gradientOptimizer);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
     }
 
-    /// <inheritdoc/>
-    public override void UpdateParameters(Vector<T> gradients)
-    {
-        if (!_useNativeMode)
-            throw new NotSupportedException("Parameter updates not supported in ONNX mode.");
-
-        var currentParams = GetParameters();
-        T lr = NumOps.FromDouble(0.00005);
-        
-        currentParams = Engine.Subtract(currentParams, Engine.Multiply(gradients, lr));
-        SetParameters(currentParams);
-    }
-
-    private Vector<T> CollectGradients()
-    {
-        var grads = new List<T>();
-        foreach (var layer in Layers)
-            grads.AddRange(layer.GetParameterGradients());
-        return new Vector<T>([.. grads]);
-    }
-
+    // UpdateParameters folded one enumeration the base already folds. Removed under AIDN082.
     #endregion
 
     #region Disposal
@@ -597,6 +582,122 @@ public class InfographicVQA<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
         if (disposing)
             _onnxSession?.Dispose();
         base.Dispose(disposing);
+    }
+
+    #endregion
+
+    #region Multimodal forward
+
+    /// <summary>Index of the appended token-embedding layer: always the last one.</summary>
+    private int TokenEmbeddingIndex => Layers.Count - 1;
+
+    /// <summary>
+    /// One past the projector, i.e. the first fusion block. Stack order from
+    /// CreateDefaultInfographicVQALayers: [0] patch embed, [1] LayerNorm, [2] learned positions,
+    /// [3 .. 3+visionLayers) vision blocks, [3+visionLayers] the Dense(fusionDim) projector, then the
+    /// fusion blocks and head, and finally the appended token embedding.
+    /// </summary>
+    private int FusionStart => 3 + _visionLayers + 1;
+
+    /// <inheritdoc/>
+    protected override Tensor<T> Forward(Tensor<T> input) => RunMultimodal(input);
+
+    /// <inheritdoc/>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input) => RunMultimodal(input);
+
+    /// <summary>
+    /// Runs the vision tower, then the fusion blocks over the visual tokens and -- when the caller
+    /// supplied question tokens as the auxiliary input -- the embedded text concatenated after them.
+    /// </summary>
+    /// <remarks>
+    /// Both forwards route here, so the question is visible to the gradient tape. That is the
+    /// difference from the EncodeMultimodal-style entry points elsewhere in this family, which open
+    /// a NoGradScope and can never train the second modality. With no auxiliary input the model
+    /// behaves exactly as before.
+    /// </remarks>
+    private Tensor<T> RunMultimodal(Tensor<T> input)
+    {
+        if (!_useNativeMode || Layers.Count <= FusionStart)
+        {
+            return base.Forward(input);
+        }
+
+        var hidden = input;
+        for (int i = 0; i <= 3 + _visionLayers && i < Layers.Count; i++)
+        {
+            hidden = Layers[i].Forward(hidden);
+        }
+
+        var tokens = AuxiliaryInput;
+        if (tokens is not null && tokens.Length > 0)
+        {
+            hidden = ConcatenateSequences(hidden, Layers[TokenEmbeddingIndex].Forward(tokens));
+        }
+
+        for (int i = FusionStart; i < TokenEmbeddingIndex; i++)
+        {
+            hidden = Layers[i].Forward(hidden);
+        }
+
+        return hidden;
+    }
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// The base walks Layers as a chain, which would hand the appended token table a fusion hidden
+    /// state instead of token ids. Reuse the real walk so what is reported is what the model runs.
+    /// </remarks>
+    public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input)
+    {
+        if (!_useNativeMode || Layers.Count <= FusionStart)
+        {
+            return base.GetNamedLayerActivations(input);
+        }
+
+        using var _ = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+
+        var activations = new Dictionary<string, Tensor<T>>();
+        var hidden = input;
+        for (int i = 0; i <= 3 + _visionLayers && i < Layers.Count; i++)
+        {
+            hidden = Layers[i].Forward(hidden);
+            activations[$"vision_{i}_{Layers[i].GetType().Name}"] = hidden;
+        }
+
+        var tokens = AuxiliaryInput;
+        if (tokens is not null && tokens.Length > 0)
+        {
+            var embedded = Layers[TokenEmbeddingIndex].Forward(tokens);
+            activations["token_embedding"] = embedded;
+            hidden = ConcatenateSequences(hidden, embedded);
+        }
+
+        for (int i = FusionStart; i < TokenEmbeddingIndex; i++)
+        {
+            hidden = Layers[i].Forward(hidden);
+            activations[$"fusion_{i}_{Layers[i].GetType().Name}"] = hidden;
+        }
+
+        return activations;
+    }
+
+    /// <summary>Joins visual and text tokens along the sequence axis, matching ranks first.</summary>
+    private Tensor<T> ConcatenateSequences(Tensor<T> visual, Tensor<T> text)
+    {
+        if (visual.Rank == text.Rank)
+        {
+            return Engine.TensorConcatenate([visual, text], axis: visual.Rank - 2);
+        }
+
+        if (visual.Rank == 3 && text.Rank == 2)
+        {
+            var batched = Engine.Reshape(text, new[] { 1, text.Shape[0], text.Shape[1] });
+            return Engine.TensorConcatenate([visual, batched], axis: 1);
+        }
+
+        throw new ArgumentException(
+            $"Cannot fuse a rank-{visual.Rank} visual stream with rank-{text.Rank} text tokens; " +
+            "expected matching ranks or [B, patches, dim] with [tokens, dim].", nameof(text));
     }
 
     #endregion

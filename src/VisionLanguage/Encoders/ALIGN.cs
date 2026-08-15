@@ -70,8 +70,18 @@ namespace AiDotNet.VisionLanguage.Encoders;
     Year = 2021,
     Authors = "Jia et al."
 )]
-public class ALIGN<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageModel<T>
+public partial class ALIGN<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageModel<T>
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// MEASURED: one pooled embedding per sample, and only the batch axis tracks the input -
+    /// <c>[1,3,8,8] -&gt; [1,640]</c>, <c>[3,3,8,8] -&gt; [3,640]</c>, and moving either spatial axis
+    /// (<c>[1,3,12,8]</c>, <c>[1,3,8,12]</c>) leaves the 640 unchanged. 640 is this model's
+    /// EmbeddingDim, so the width is parameterised rather than a literal.
+    /// </remarks>
+    public override IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+        => PooledEmbeddingContract(inputRank);
+
     private readonly ALIGNOptions _options;
 
     public override ModelOptions GetOptions() => _options;
@@ -219,7 +229,7 @@ public class ALIGN<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageMo
         // (or 5 with dropout): Dense + LN + Dense + LN + [Dropout]. Vision
         // encoder lives in Layers, text encoder in TextEncoderLayers.
         int visionBlockSize = _options.DropoutRate > 0 ? 5 : 4;
-        int visionLayerCount = 2 + _options.NumVisionLayers * visionBlockSize;
+        int visionLayerCount = 4 + _options.NumVisionLayers * visionBlockSize;
         SplitDualStreamLayers(
             LayerHelper<T>.CreateDefaultALIGNLayers(
                 visionEmbeddingDim: _options.VisionEmbeddingDim,
@@ -241,9 +251,12 @@ public class ALIGN<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageMo
             return OnnxImageEncoder.Run(input);
         SetTrainingMode(false);
         var current = PreprocessImage(input);
-        foreach (var layer in Layers)
-            current = layer.Forward(current);
-        return current;
+        // ALIGN's native prediction is the vision-side sequential graph.
+        // Enter the canonical eager executor explicitly so a configured or
+        // auto-detected foundation model gets per-layer materialize/release
+        // and inference scratch recycling.
+        TryAutoEnableWeightStreaming(isTrainingOverride: false);
+        return PredictEager(current);
     }
 
     public override void Train(Tensor<T> input, Tensor<T> expected)
@@ -253,7 +266,8 @@ public class ALIGN<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageMo
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(PreprocessImage(input), expected);
+            // Honor the AdamW optimizer selected by the public constructor.
+            TrainWithTape(PreprocessImage(input), expected, _optimizer);
         }
         finally
         {
@@ -261,23 +275,14 @@ public class ALIGN<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageMo
         }
     }
 
+    // This forwarded to a helper the base now calls from its own
+    // GetExtraTrainableLayers, so the override restated it. Removed under AIDN082.
+
     /// <inheritdoc />
-    protected override IEnumerable<LayerBase<T>?> GetExtraTrainableLayers() =>
-        EnumerateTextEncoderTrainableLayers();
-
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        if (!_useNativeMode)
-            throw new NotSupportedException("Cannot update parameters in ONNX mode.");
-        int idx = 0;
-        foreach (var layer in Layers)
-        {
-            int count = checked((int)layer.ParameterCount);
-            layer.UpdateParameters(parameters.Slice(idx, count));
-            idx += count;
-        }
-    }
-
+    /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
+    /// write on every parameter surface, so the guard is stated once here instead of being
+    /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
+    protected override bool SupportsParameterMutation => _useNativeMode;
     protected override Tensor<T> PreprocessImage(Tensor<T> image) =>
         NormalizeImage(image, _options.ImageMean, _options.ImageStd);
 
@@ -339,8 +344,8 @@ public class ALIGN<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageMo
             && _options.ImageEncoderModelPath is { } mp
             && !string.IsNullOrEmpty(mp)
         )
-            return new ALIGN<T>(Architecture, mp, _options);
-        return new ALIGN<T>(Architecture, _options);
+            return new ALIGN<T>(Architecture, mp, new ALIGNOptions(_options));
+        return new ALIGN<T>(Architecture, new ALIGNOptions(_options));
     }
 
     private Tensor<T> TokenizeText(string text)

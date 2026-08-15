@@ -47,7 +47,7 @@ namespace AiDotNet.Video.Inpainting;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("FlowLens: Seeing Beyond the FoV via Flow-Guided Clip-Recurrent Transformer",
+[ResearchPaper("Beyond the Field-of-View: Enhancing Scene Visibility and Perception with Clip-Recurrent Transformer",
     "https://arxiv.org/abs/2211.11293",
     Year = 2022,
     Authors = "Hao Luo, Peng Zhao, Ling Pei")]
@@ -92,7 +92,11 @@ public class FlowLens<T> : VideoInpaintingBase<T>
     {
         _options = options ?? new FlowLensOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
+            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate
+            });
         SupportsTemporalPropagation = true;
         InitializeLayers();
     }
@@ -165,7 +169,7 @@ public class FlowLens<T> : VideoInpaintingBase<T>
         SetTrainingMode(true);
         try
         {
-        TrainWithTape(input, expected);
+        TrainWithTape(input, expected, _optimizer);
         }
         finally
         {
@@ -173,25 +177,18 @@ public class FlowLens<T> : VideoInpaintingBase<T>
         }
     }
 
-    /// <inheritdoc/>
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        if (!_useNativeMode) throw new NotSupportedException("Parameter updates are not supported in ONNX mode.");
-        int required = 0;
-        foreach (var layer in Layers) required += layer.GetParameters().Length;
-        if (parameters.Length < required)
-            throw new ArgumentException($"Parameter vector length {parameters.Length} is less than required {required}.", nameof(parameters));
-        int offset = 0;
-        foreach (var layer in Layers)
-        {
-            var p = layer.GetParameters();
-            var sub = new Vector<T>(p.Length);
-            for (int i = 0; i < p.Length; i++) sub[i] = parameters[offset + i];
-            layer.SetParameters(sub);
-            offset += p.Length;
-        }
-    }
+    // UpdateParameters restated the base verbatim; ModelBase routes it to SetParameters.
 
+    /// <summary>
+    /// Parameters cannot be written while the model is backed by a loaded ONNX graph: the weights
+    /// belong to that graph, not to this instance.
+    /// </summary>
+    /// <remarks>
+    /// Replaces a hand-written throw that used to sit inside UpdateParameters. The base checks this
+    /// on every mutating entry point rather than the one member the throw happened to guard, and
+    /// reading -- ParameterCount and GetParameters -- stays available either way.
+    /// </remarks>
+    protected override bool SupportsParameterMutation => _useNativeMode;
     /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()
     {

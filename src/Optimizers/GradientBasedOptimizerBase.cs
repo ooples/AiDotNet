@@ -1,4 +1,4 @@
-using AiDotNet.Helpers;
+﻿using AiDotNet.Helpers;
 using AiDotNet.Caching;
 using AiDotNet.Deployment.Configuration;
 using AiDotNet.Data.Sampling;
@@ -419,6 +419,17 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         GradientBasedOptimizerOptions<T, TInput, TOutput> options) :
         base(model, options)
     {
+        // Publish this optimizer to the network it was built for, so a model that configures an optimizer in its
+        // constructor actually trains with it. Without this the field stays private to the derived model and the
+        // tape trainer silently uses the base Adam default instead — see
+        // NeuralNetworkBase.AdoptConfiguredOptimizer for the scale of that defect. Adoption never overwrites an
+        // optimizer the model already chose. (#1789)
+        if (model is NeuralNetworkBase<T> configuredNetwork
+            && this is IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> tapeOptimizer)
+        {
+            configuredNetwork.AdoptConfiguredOptimizer(tapeOptimizer);
+        }
+
         GradientOptions = options;
         _currentMomentum = GradientOptions.InitialMomentum;
         _previousGradient = Vector<T>.Empty();
@@ -491,6 +502,17 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         IFullModel<T, TInput, TOutput> newModel)
     {
         base.OnModelChanged(oldModel, newModel);
+
+        // ADOPTION RUNS HERE TOO, not only in the constructors. SetModel is the documented "set
+        // later" path and routes through this method, so an optimizer configured at construction and
+        // attached to its network afterwards used to be silently replaced by the model's own default
+        // -- the configured object still existed, it just never ran. Adoption never overwrites an
+        // optimizer the model already chose, so running it twice is harmless.
+        if (newModel is NeuralNetworkBase<T> configuredNetwork
+            && this is IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> tapeOptimizer)
+        {
+            configuredNetwork.AdoptConfiguredOptimizer(tapeOptimizer);
+        }
 
         if (GradientOptions.LossFunctionExplicitlySet)
         {
@@ -624,6 +646,24 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     /// </remarks>
     protected void NotifyEpochStart(int currentEpoch)
     {
+        // Crossing into epoch N means epoch N-1 just ended. Raising the epoch-end event here is
+        // what gives EVERY optimizer an epoch cadence, rather than the one that happened to call
+        // OnEpochEnd itself.
+        //
+        // All 28 gradient optimizers call NotifyEpochStart at the top of their epoch loop, but
+        // only AdamOptimizer called OnEpochEnd at the bottom of its own. So for the other 27, a
+        // user-configured StepPerEpoch or WarmupThenEpoch schedule never advanced: the learning
+        // rate stayed at its initial value for the entire run no matter what schedule was
+        // attached. That is a configured-but-inert mechanism, and silent -- the schedule is
+        // accepted, stored, and simply never consulted.
+        //
+        // Ticking on entry rather than on exit means the final epoch raises no end event. Nothing
+        // observes it: a schedule only affects steps that come after it, and there are none.
+        if (currentEpoch > 0)
+        {
+            OnEpochEnd();
+        }
+
         GradientOptions.DataSampler?.OnEpochStart(currentEpoch);
     }
 
@@ -1686,12 +1726,26 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         // subclass (caller takes the legacy path).
         if (nn is not AiDotNet.NeuralNetworks.NeuralNetworkBase<T> nnBase) return null;
         var chunks = new List<Tensor<T>>();
-        foreach (var c in nnBase.GetParameterChunks())
+        var gradients = new Dictionary<Tensor<T>, Tensor<T>>();
+        int offset = 0;
+        foreach (var stateChunk in nnBase.GetParameterStateChunks())
         {
+            var c = stateChunk.Tensor;
             if (c is null || c.Length == 0) continue;
-            chunks.Add(c);
+            int len = c.Length;
+            if (offset + len > flatGradient.Length) return null;
+
+            if (stateChunk.Role == AiDotNet.Models.Parameters.ParameterSlotRole.Trainable)
+            {
+                chunks.Add(c);
+                var gradTensor = new Tensor<T>(c.Shape.ToArray());
+                var gradSpan = gradTensor.AsWritableSpan();
+                for (int i = 0; i < len; i++) gradSpan[i] = flatGradient[offset + i];
+                gradients[c] = gradTensor;
+            }
+            offset += len;
         }
-        if (chunks.Count == 0) return null;
+        if (chunks.Count == 0 || offset != flatGradient.Length) return null;
 
         // Slice the flat gradient into per-chunk gradient tensors. Fail
         // fast (return null) if the flat gradient is short of what the
@@ -1705,18 +1759,6 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         // any leftover bytes in flatGradient mean the chunk list is
         // out of sync with what produced the gradient, so we'd be
         // operating on a different model than the gradient describes.
-        var gradients = new Dictionary<Tensor<T>, Tensor<T>>();
-        int offset = 0;
-        foreach (var p in chunks)
-        {
-            int len = p.Length;
-            if (offset + len > flatGradient.Length) return null;
-            var gradTensor = new Tensor<T>(p.Shape.ToArray());
-            var gradSpan = gradTensor.AsWritableSpan();
-            for (int i = 0; i < len; i++) gradSpan[i] = flatGradient[offset + i];
-            gradients[p] = gradTensor;
-            offset += len;
-        }
         if (gradients.Count == 0 || offset != flatGradient.Length) return null;
         return new TapeStepContext<T>(chunks, gradients, NumOps.Zero);
     }
@@ -2867,8 +2909,27 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     /// <returns>The updated parameters.</returns>
     public virtual Vector<T> UpdateParameters(Vector<T> parameters, Vector<T> gradient)
     {
+        if (parameters.Length != gradient.Length)
+        {
+            throw new ArgumentException(
+                $"Parameter vector length ({parameters.Length}) must match gradient vector length ({gradient.Length}).",
+                nameof(gradient));
+        }
+
         var learningRate = NumOps.FromDouble(_currentLearningRate);
-        return parameters.Subtract(gradient.Multiply(learningRate));
+        var updatedParameters = new Vector<T>(parameters.Length, skipZeroInit: true);
+        var parameterSpan = parameters.AsSpan();
+        var gradientSpan = gradient.AsSpan();
+        var updatedSpan = updatedParameters.AsWritableSpan();
+
+        for (int i = 0; i < updatedSpan.Length; i++)
+        {
+            updatedSpan[i] = NumOps.Subtract(
+                parameterSpan[i],
+                NumOps.Multiply(gradientSpan[i], learningRate));
+        }
+
+        return updatedParameters;
     }
 
     /// <summary>

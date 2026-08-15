@@ -69,6 +69,8 @@ namespace AiDotNet.Classification.ImbalancedEnsemble;
 [ResearchPaper("Exploratory Undersampling for Class-Imbalance Learning", "https://doi.org/10.1109/TSMCB.2008.2007853", Year = 2009, Authors = "Xu-Ying Liu, Jianxin Wu, Zhi-Hua Zhou")]
 public class EasyEnsembleClassifier<T> : ClassifierBase<T>
 {
+
+    // Returned _subClassifiers.Count. Same as its two siblings.
     /// <summary>
     /// The ensemble of AdaBoost classifiers.
     /// </summary>
@@ -654,31 +656,6 @@ public class EasyEnsembleClassifier<T> : ClassifierBase<T>
     }
 
     /// <summary>
-    /// Gets the model parameters.
-    /// </summary>
-    /// <returns>Vector with subclassifier count.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Complex ensemble models don't fit into a simple parameter vector.
-    /// Use serialization for full model persistence.</para>
-    /// </remarks>
-    public Vector<T> GetParameters()
-    {
-        return new Vector<T>(1) { [0] = NumOps.FromDouble(_subClassifiers.Count) };
-    }
-
-    /// <summary>
-    /// Sets the model parameters.
-    /// </summary>
-    /// <param name="parameters">Parameter vector (limited support).</param>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Use serialization to save/load ensemble models.</para>
-    /// </remarks>
-    public void SetParameters(Vector<T> parameters)
-    {
-        // Limited support for ensemble models
-    }
-
-    /// <summary>
     /// Creates a new instance with the specified parameters.
     /// </summary>
     /// <param name="parameters">Parameters (limited support).</param>
@@ -686,7 +663,7 @@ public class EasyEnsembleClassifier<T> : ClassifierBase<T>
     /// <remarks>
     /// <para><b>For Beginners:</b> Creates a new untrained model with same hyperparameters.</para>
     /// </remarks>
-    public IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
+    public override IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
     {
         return new EasyEnsembleClassifier<T>(_nSubsets, _nEstimatorsPerSubset, _maxDepth,
             _learningRate, _samplingStrategy, _softVoting);

@@ -66,7 +66,7 @@ namespace AiDotNet.Finance.Forecasting.Transformers;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("TSMixer: An All-MLP Architecture for Time Series Forecasting", "https://arxiv.org/abs/2303.06053", Year = 2023, Authors = "Si-An Chen, Chun-Liang Li, Nate Yoder, Sercan O. Arik, Tomas Pfister")]
-public class TSMixer<T> : ForecastingModelBase<T>
+public partial class TSMixer<T> : ForecastingModelBase<T>
 {
     #region Execution Mode
 
@@ -129,11 +129,13 @@ public class TSMixer<T> : ForecastingModelBase<T>
     /// <summary>
     /// Instance mean for RevIN normalization.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _instanceMean;
 
     /// <summary>
     /// Instance standard deviation for RevIN normalization.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _instanceStd;
 
     #endregion
@@ -556,21 +558,8 @@ public class TSMixer<T> : ForecastingModelBase<T>
         return Forward(input);
     }
 
-    /// <summary>
-    /// Updates network parameters based on gradients.
-    /// </summary>
-    /// <param name="gradients">Gradient vector for parameter updates.</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Parameter updates are handled by the optimizer in the Train method.
-    /// This method exists for interface compatibility.
-    /// </para>
-    /// </remarks>
-    public override void UpdateParameters(Vector<T> gradients)
-    {
-        // Parameters are updated via the optimizer in Train()
-    }
-
+    // UpdateParameters was an empty override, silently dropping every restore. The base
+    // distributes the vector over the declared enumeration.
     /// <summary>
     /// Gets metadata about the model.
     /// </summary>

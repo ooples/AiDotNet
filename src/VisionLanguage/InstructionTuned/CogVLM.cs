@@ -248,10 +248,12 @@ public class CogVLM<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
         ThrowIfDisposed();
         if (IsOnnxMode && OnnxModel is not null)
             return OnnxModel.Run(input);
-        var c = input;
-        foreach (var l in Layers)
-            c = l.Forward(c);
-        return c;
+
+        // The native CogVLM graph is the ordinary sequential Layers pipeline.
+        // Use the canonical base executor so Predict enters evaluation mode and,
+        // for foundation-scale configurations, applies weight-streaming
+        // materialize/release and per-layer inference scratch recycling.
+        return base.PredictCore(input);
     }
 
     public override void Train(Tensor<T> input, Tensor<T> expected)
@@ -259,23 +261,15 @@ public class CogVLM<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
         if (IsOnnxMode)
             throw new NotSupportedException("Training is not supported in ONNX mode.");
         SetTrainingMode(true);
-        TrainWithTape(input, expected);
+        TrainWithTape(input, expected, _optimizer);
         SetTrainingMode(false);
     }
 
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        if (!_useNativeMode)
-            throw new NotSupportedException("Cannot update parameters in ONNX mode.");
-        int idx = 0;
-        foreach (var l in Layers)
-        {
-            int c = (int)l.ParameterCount;
-            l.UpdateParameters(parameters.Slice(idx, c));
-            idx += c;
-        }
-    }
-
+    /// <inheritdoc />
+    /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
+    /// write on every parameter surface, so the guard is stated once here instead of being
+    /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
+    protected override bool SupportsParameterMutation => _useNativeMode;
     protected override Tensor<T> PreprocessImage(Tensor<T> image) =>
         NormalizeImage(image, _options.ImageMean, _options.ImageStd);
 
@@ -332,9 +326,10 @@ public class CogVLM<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
 
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
+        var cloneOptions = new CogVLMOptions(_options);
         if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new CogVLM<T>(Architecture, mp, _options);
-        return new CogVLM<T>(Architecture, _options);
+            return new CogVLM<T>(Architecture, mp, cloneOptions);
+        return new CogVLM<T>(Architecture, cloneOptions);
     }
 
     private void ThrowIfDisposed()

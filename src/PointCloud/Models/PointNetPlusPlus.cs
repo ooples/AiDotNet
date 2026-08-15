@@ -1,4 +1,4 @@
-using AiDotNet.Helpers;
+﻿using AiDotNet.Helpers;
 using System.Collections.Generic;
 using System.Linq;
 using AiDotNet.ActivationFunctions;
@@ -84,7 +84,12 @@ namespace AiDotNet.PointCloud.Models;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Vector<>))]
 [ResearchPaper("PointNet++: Deep Hierarchical Feature Learning on Point Sets in a Metric Space", "https://doi.org/10.48550/arXiv.1706.02413", Year = 2017, Authors = "Charles R. Qi, Li Yi, Hao Su, Leonidas J. Guibas")]
-public class PointNetPlusPlus<T> : NeuralNetworkBase<T>, IPointCloudModel<T>, IPointCloudClassification<T>, IPointCloudSegmentation<T>
+[TensorLayout(TensorAxis.Batch, TensorAxis.Length, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Input, BatchOptional = true)]
+[TensorLayout(TensorAxis.Classes, Direction = TensorLayoutDirection.Output)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Other, TensorAxis.Classes,
+    Direction = TensorLayoutDirection.Output, BatchOptional = true)]
+public partial class PointNetPlusPlus<T> : NeuralNetworkBase<T>, IPointCloudModel<T>, IPointCloudClassification<T>, IPointCloudSegmentation<T>
 {
     private readonly PointNetPlusPlusModelOptions _options;
 
@@ -108,6 +113,7 @@ public class PointNetPlusPlus<T> : NeuralNetworkBase<T>, IPointCloudModel<T>, IP
 
     private readonly List<SetAbstractionLayer<T>> _setAbstractionLayers;
     private readonly List<ILayer<T>> _classificationHeadLayers;
+    [Scratch]
     private Vector<T>? _globalFeatures;
 
     /// <summary>
@@ -123,7 +129,13 @@ public class PointNetPlusPlus<T> : NeuralNetworkBase<T>, IPointCloudModel<T>, IP
     /// </summary>
     /// <param name="options">Configuration options for the PointNet++ model.</param>
     /// <param name="lossFunction">Optional loss function for training.</param>
-    public PointNetPlusPlus(PointNetPlusPlusOptions options, ILossFunction<T>? lossFunction = null, PointNetPlusPlusModelOptions? modelOptions = null)
+    /// <param name="modelOptions">Optional common model options.</param>
+    /// <param name="optimizer">Optional user-supplied optimizer. Defaults to the paper's Adam configuration.</param>
+    public PointNetPlusPlus(
+        PointNetPlusPlusOptions options,
+        ILossFunction<T>? lossFunction = null,
+        PointNetPlusPlusModelOptions? modelOptions = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
         : base(CreateArchitecture(options.NumClasses, options.InputFeatureDim), lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(NeuralNetworkTaskType.MultiClassClassification))
     {
         _options = modelOptions ?? new PointNetPlusPlusModelOptions();
@@ -159,6 +171,17 @@ public class PointNetPlusPlus<T> : NeuralNetworkBase<T>, IPointCloudModel<T>, IP
         _useDropout = options.UseDropout;
         _dropoutRate = options.DropoutRate;
         _learningRate = NumOps.FromDouble(options.LearningRate);
+
+        // Qi et al. train PointNet++ with Adam at an initial learning rate of 1e-3. Route that
+        // option (or the caller's fully custom optimizer) into the optimizer actually used by
+        // TrainWithTape; previously LearningRate was metadata-only and the user setting was ignored.
+        SetBaseTrainOptimizer(optimizer ?? new AiDotNet.Optimizers.AdamOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new AiDotNet.Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = options.LearningRate,
+                UseAMSGrad = false,
+            }));
 
         _multiScaleRadii = options.MultiScaleRadii;
         _multiScaleMlpDimensions = options.MultiScaleMlpDimensions;
@@ -316,7 +339,7 @@ public class PointNetPlusPlus<T> : NeuralNetworkBase<T>, IPointCloudModel<T>, IP
         {
             var outputLayer = new DenseLayer<T>(
                 _numClasses,
-                activationFunction: new IdentityActivation<T>());
+                activationFunction: new SoftmaxActivation<T>());
             AddLayerToCollection(outputLayer);
             _classificationHeadLayers.Add(outputLayer);
             return;
@@ -341,7 +364,7 @@ public class PointNetPlusPlus<T> : NeuralNetworkBase<T>, IPointCloudModel<T>, IP
 
         var output = new DenseLayer<T>(
             _numClasses,
-            activationFunction: new IdentityActivation<T>());
+            activationFunction: new SoftmaxActivation<T>());
         AddLayerToCollection(output);
         _classificationHeadLayers.Add(output);
     }
@@ -536,21 +559,8 @@ public class PointNetPlusPlus<T> : NeuralNetworkBase<T>, IPointCloudModel<T>, IP
 
     public override bool SupportsTraining => true;
 
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        int startIndex = 0;
-        foreach (var layer in Layers)
-        {
-            int layerParameterCount = checked((int)layer.ParameterCount);
-            if (layerParameterCount > 0)
-            {
-                Vector<T> layerParameters = parameters.SubVector(startIndex, layerParameterCount);
-                layer.UpdateParameters(layerParameters);
-                startIndex += layerParameterCount;
-            }
-        }
-    }
-
+    // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
+    // exactly the same enumeration, so this said nothing the base does not already say.
     public override ModelMetadata<T> GetModelMetadata()
     {
         return new ModelMetadata<T>
@@ -1034,8 +1044,52 @@ public class PointNetPlusPlus<T> : NeuralNetworkBase<T>, IPointCloudModel<T>, IP
 /// - Input: Many points, basic features (XYZ)
 /// - Output: Fewer points, rich features (learned patterns)
 /// </remarks>
-internal class SetAbstractionLayer<T> : LayerBase<T>
+// Rank 2 ONLY, quoted from this layer's own guard: ForwardTraced opens with
+// `if (input.Shape.Length != 2 || input.Shape[1] != _inputChannels) throw`, naming the shape
+// [N, _inputChannels]. The leading axis is Other because it counts POINTS of an unordered set - the
+// same call PointConvolutionLayer and MeshPoolLayer make for their point and edge axes.
+[TensorLayout(TensorAxis.Other, TensorAxis.Channels, Direction = TensorLayoutDirection.Input,
+    Note = "Leading axis is the point count; a point cloud is unordered, so it takes no sequence role.")]
+[TensorLayout(TensorAxis.Other, TensorAxis.Channels, Direction = TensorLayoutDirection.Output)]
+[AutoParameters]
+public partial class SetAbstractionLayer<T> : LayerBase<T>, IShapeContract
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// The channel axis is a real claim; the point axis deliberately is not.
+    /// </para>
+    /// <para>
+    /// Channels: <c>Fixed(_outputChannels)</c>. Every branch's mini-PointNet ends at its own
+    /// <c>MlpDimensions[^1]</c> and the multi-scale path concatenates them, which is exactly what
+    /// <c>_outputChannels</c> is computed as (<c>_branches.Sum(b =&gt; b.OutputChannels)</c>). The
+    /// forward then shapes its result with that same field - <c>[numCentroids, _outputChannels]</c> -
+    /// so this reads the layer's own arithmetic rather than a width observed once.
+    /// </para>
+    /// <para>
+    /// Points: <c>Unknown</c>, and that is the accurate answer rather than a cautious one. The count is
+    /// <c>Math.Min(_numPoints, numPoints)</c> - it SATURATES, because farthest-point sampling cannot
+    /// produce more centroids than there are points. <c>Fixed(_numPoints)</c> would be wrong for any
+    /// cloud smaller than the target, and nothing in the vocabulary saturates: <c>Window</c>,
+    /// <c>Scaled</c> and <c>Product</c> are all monotonically unbounded in the input. This is the same
+    /// boundary MeshPoolLayer names for its <c>min(TargetEdges, numEdges)</c> pooling.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        if (inputRank != 2 || _outputChannels <= 0) return null;
+
+        return new[]
+        {
+            new OutputAxisContract(
+                TensorAxis.Other,
+                AxisRelation.Unknown(
+                    $"Centroid count is min({_numPoints}, numPoints) - farthest-point sampling saturates "
+                    + "at the point count, and no relation in the vocabulary saturates.")),
+            new OutputAxisContract(TensorAxis.Channels, AxisRelation.Fixed(_outputChannels)),
+        };
+    }
+
     private sealed class ScaleBranch
     {
         private readonly int[] _mlpDimensions;
@@ -1067,6 +1121,13 @@ internal class SetAbstractionLayer<T> : LayerBase<T>
         public double Radius { get; }
         public int NeighborSamples { get; }
         public List<ILayer<T>> MlpLayers { get; }
+
+        // Exposed so the layer's serialization metadata can record the exact MLP
+        // widths that built this branch's PointConvolution stack, which is what a
+        // clone/deserialize needs to rebuild the branch with the same parameter
+        // count instead of a default-shaped shell.
+        public int[] MlpDimensions => _mlpDimensions;
+
         public int OutputChannels => _mlpDimensions[^1];
         public int[]? NeighborCounts { get; set; }
         public int[,]? NeighborIndices { get; set; }
@@ -1151,7 +1212,33 @@ internal class SetAbstractionLayer<T> : LayerBase<T>
         Parameters = GetParameters();
     }
 
-    public override Tensor<T> Forward(Tensor<T> input)
+    /// <summary>
+    /// Records the structural configuration a clone/deserialize needs to rebuild
+    /// this layer with the same parameter count. The generic layer serialization
+    /// only carries a type name, input/output shapes and a flat parameter vector;
+    /// none of those encode the per-branch MLP widths, radii, neighbour counts or
+    /// centroid count that determine how many parameters a set-abstraction layer
+    /// has. Without this, DeserializationHelper rebuilt a default-shaped shell and
+    /// SetParameters rejected the saved vector ("Expected 4 parameters, but got
+    /// 248") on every Clone/DeepCopy. Every scale is stored uniformly as one
+    /// branch, so a single-scale layer round-trips as a one-branch multi-scale
+    /// layer, which produces the identical branch set.
+    /// </summary>
+    internal override Dictionary<string, string> GetMetadata()
+    {
+        var metadata = base.GetMetadata();
+        var ci = System.Globalization.CultureInfo.InvariantCulture;
+        metadata["SA_NumPoints"] = _numPoints.ToString(ci);
+        metadata["SA_InputChannels"] = _inputChannels.ToString(ci);
+        metadata["SA_Radii"] = string.Join("|", _branches.Select(b => b.Radius.ToString(ci)));
+        metadata["SA_NeighborSamples"] = string.Join("|", _branches.Select(b => b.NeighborSamples.ToString(ci)));
+        // Branches separated by ';', the widths within a branch by ','.
+        metadata["SA_Mlp"] = string.Join(";",
+            _branches.Select(b => string.Join(",", b.MlpDimensions.Select(d => d.ToString(ci)))));
+        return metadata;
+    }
+
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         if (input.Shape.Length != 2 || input.Shape[1] != _inputChannels)
         {
@@ -1224,50 +1311,8 @@ internal class SetAbstractionLayer<T> : LayerBase<T>
         }
     }
 
-    public override Vector<T> GetParameters()
-    {
-        int totalParams = ParameterCountHelper.ToFlatVectorSize(ParameterCount);
-        var parameters = new Vector<T>(totalParams);
-        int offset = 0;
-
-        foreach (var branch in _branches)
-        {
-            foreach (var layer in branch.MlpLayers)
-            {
-                var layerParameters = layer.GetParameters();
-                for (int i = 0; i < layerParameters.Length; i++)
-                {
-                    parameters[offset + i] = layerParameters[i];
-                }
-
-                offset += layerParameters.Length;
-            }
-        }
-
-        Parameters = parameters;
-        return parameters;
-    }
-
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        int offset = 0;
-        foreach (var branch in _branches)
-        {
-            foreach (var layer in branch.MlpLayers)
-            {
-                int layerParameterCount = checked((int)layer.ParameterCount);
-                if (layerParameterCount > 0)
-                {
-                    var layerParameters = parameters.SubVector(offset, layerParameterCount);
-                    layer.UpdateParameters(layerParameters);
-                    offset += layerParameterCount;
-                }
-            }
-        }
-
-        Parameters = parameters;
-    }
-
+    // UpdateParameters walked Layers by hand, distributing the flat vector slice by
+    // slice. That is the base implementation, restated.
     public override void ResetState()
     {
         _lastInput = null;
@@ -1283,26 +1328,6 @@ internal class SetAbstractionLayer<T> : LayerBase<T>
             branch.NeighborCounts = null;
             branch.NeighborIndices = null;
             branch.MaxIndices = null;
-        }
-    }
-
-    public override long ParameterCount
-    {
-        get
-        {
-            // Accumulate in long; SetAbstraction branches over high-resolution
-            // point clouds can have MLP layers whose individual ParameterCount
-            // approaches int.MaxValue. (int) cast on each addend used to
-            // wrap before the sum widened to long for the property's return.
-            long total = 0;
-            foreach (var branch in _branches)
-            {
-                foreach (var layer in branch.MlpLayers)
-                {
-                    total += layer.ParameterCount;
-                }
-            }
-            return total;
         }
     }
 

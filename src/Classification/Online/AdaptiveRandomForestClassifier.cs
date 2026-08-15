@@ -79,6 +79,10 @@ namespace AiDotNet.Classification.Online;
 [ResearchPaper("Adaptive Random Forests for Evolving Data Stream Classification", "https://doi.org/10.1007/s10994-017-5642-8", Year = 2017, Authors = "Heitor Murilo Gomes, Albert Bifet, Jesse Read, Jean Paul Barddal, Fabricio Enembreck, Bernhard Pfharinger, Geoff Holmes, Talel Abdessalem")]
 public class AdaptiveRandomForestClassifier<T> : ClassifierBase<T>, IOnlineClassifier<T>
 {
+
+    // Returned a single value described in its own comment as "minimal parameters" for a
+    // structural ensemble. The empty vector the base produces says the same thing without
+    // inventing a number.
     private readonly AdaptiveRandomForestOptions<T> _options;
 
     /// <inheritdoc/>
@@ -527,20 +531,7 @@ public class AdaptiveRandomForestClassifier<T> : ClassifierBase<T>, IOnlineClass
         : 0;
 
     /// <inheritdoc />
-    public Vector<T> GetParameters()
-    {
-        // Ensemble is structural, return minimal parameters
-        return new Vector<T>(1) { [0] = NumOps.FromDouble(_ensemble.Count) };
-    }
-
-    /// <inheritdoc />
-    public void SetParameters(Vector<T> parameters)
-    {
-        // Ensemble structure cannot be set from flat parameters
-    }
-
-    /// <inheritdoc />
-    public IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
+    public override IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
     {
         // Return a cold instance to avoid inconsistent state.
         // Structural parameters only - ensemble cannot be set from flat parameters.

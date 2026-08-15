@@ -37,7 +37,11 @@ namespace AiDotNet.LossFunctions;
 [LossCategory(LossCategory.Generation)]
 [LossTask(LossTask.ImageGeneration)]
 [LossTask(LossTask.TextGeneration)]
-[LossProperty(IsNonNegative = true, ZeroForIdentical = true, RequiresProbabilityInputs = true, ExpectedOutput = OutputType.Probabilities)]
+// KL is only non-negative / monotonic in error when both P and Q are normalized probability
+// distributions, so the generated tests must feed ProbabilityDistribution vectors (the Continuous
+// default is unnormalized and makes sum(P·log(P/Q)) negative). And the unconstrained derivative
+// -P/Q is -1 at the identity (not zero), so ZeroDerivativeForIdentical is false.
+[LossProperty(IsNonNegative = true, ZeroForIdentical = true, ZeroDerivativeForIdentical = false, RequiresProbabilityInputs = true, TestInputFormat = LossTestInputFormat.ProbabilityDistribution, ExpectedOutput = OutputType.Probabilities)]
 public class KullbackLeiblerDivergence<T> : LossFunctionBase<T>
 {
     /// <summary>

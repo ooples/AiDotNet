@@ -63,8 +63,15 @@ namespace AiDotNet.VisionLanguage.Encoders;
     Year = 2023,
     Authors = "Li et al."
 )]
-public class CLIPA<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageModel<T>
+public partial class CLIPA<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageModel<T>
 {
+    // NO SHAPE CONTRACT, for the same measured reason as BiomedCLIP.
+    //
+    // Probing gave [1,3,8,8] -> [1,64,1024] and [1,3,12,8] -> [1,96,1024], which Product(Height,Width)
+    // fits. The sweep at extent 64 refuted it: contract [1,4096,1280] against a real [1,256,1024]. The
+    // token axis is a patch grid whose size does not track H*W, and 1280 vs 1024 shows the width is
+    // not EmbeddingDim.
+
     private readonly CLIPAOptions _options;
 
     public override ModelOptions GetOptions() => _options;
@@ -264,34 +271,8 @@ public class CLIPA<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageMo
         }
     }
 
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        if (!_useNativeMode)
-            throw new NotSupportedException("Cannot update parameters in ONNX mode.");
-        int idx = 0;
-        foreach (var l in Layers)
-        {
-            int c = (int)l.ParameterCount;
-            l.UpdateParameters(parameters.Slice(idx, c));
-            idx += c;
-        }
-        // Sync the text-encoder stream too. After the dual-stream split
-        // (vision in Layers, text in TextEncoderLayers via
-        // VisionLanguageModelBase + GetExtraTrainableLayers below), the
-        // flat parameter vector includes both streams, but writing back
-        // only into Layers leaves the text encoder on stale weights —
-        // the model state then de-syncs across encoders.
-        foreach (var l in TextEncoderLayers)
-        {
-            int c = (int)l.ParameterCount;
-            l.UpdateParameters(parameters.Slice(idx, c));
-            idx += c;
-        }
-    }
-
-    /// <inheritdoc />
-    protected override IEnumerable<LayerBase<T>?> GetExtraTrainableLayers() =>
-        EnumerateTextEncoderTrainableLayers();
+    // This forwarded to a helper the base now calls from its own
+    // GetExtraTrainableLayers, so the override restated it. Removed under AIDN082.
 
     protected override Tensor<T> PreprocessImage(Tensor<T> image) =>
         NormalizeImage(image, _options.ImageMean, _options.ImageStd);

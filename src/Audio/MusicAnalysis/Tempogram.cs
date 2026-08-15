@@ -41,6 +41,15 @@ namespace AiDotNet.Audio.MusicAnalysis;
     [ResearchPaper("Tempogram Toolbox: MATLAB Implementations for Tempo and Pulse Analysis", "https://doi.org/10.5281/zenodo.1416010")]
 public class Tempogram<T> : AudioNeuralNetworkBase<T>, IBeatTracker<T>
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// Traced from output construction: PredictCore folds over Layers, and the last layer
+    /// CreateDefaultTempogramLayers emits is the tempo-bin classifier
+    /// <c>FullyConnectedLayer&lt;T&gt;(numTempoBins)</c>, wired from <c>_options.NumTempoBins</c>
+    /// (300). Not TempoWindowFrames (384) and not OnsetHiddenDim * 2, which is the layer before it.
+    /// </remarks>
+    protected override int OutputFeatureWidth => _options.NumTempoBins;
+
     #region Fields
 
     private readonly TempogramOptions _options;
@@ -236,7 +245,7 @@ public class Tempogram<T> : AudioNeuralNetworkBase<T>, IBeatTracker<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expected);
+            TrainWithTape(input, expected, _optimizer);
         }
         finally
         {
@@ -244,12 +253,11 @@ public class Tempogram<T> : AudioNeuralNetworkBase<T>, IBeatTracker<T>
         }
     }
 
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        if (!_useNativeMode) throw new NotSupportedException("ONNX mode.");
-        int idx = 0; foreach (var l in Layers) { int c = (int)l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; }
-    }
-
+    /// <inheritdoc />
+    /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
+    /// write on every parameter surface, so the guard is stated once here instead of being
+    /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
+    protected override bool SupportsParameterMutation => _useNativeMode;
     protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio) => rawAudio;
     protected override Tensor<T> PostprocessOutput(Tensor<T> o) => o;
 

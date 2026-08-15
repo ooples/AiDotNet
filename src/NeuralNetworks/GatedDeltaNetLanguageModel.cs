@@ -4,6 +4,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
 using AiDotNet.NeuralNetworks.Options;
+using AiDotNet.Optimizers;
 
 namespace AiDotNet.NeuralNetworks;
 
@@ -36,7 +37,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Gated Delta Networks: Improving Mamba2 with Delta Rule", "https://arxiv.org/abs/2412.06464", Year = 2024, Authors = "Songlin Yang, Jan Kautz, Ali Hatamizadeh")]
-public class GatedDeltaNetLanguageModel<T> : NeuralNetworkBase<T>
+public class GatedDeltaNetLanguageModel<T> : TokenLanguageModelLayoutBase<T>
 {
     private readonly GatedDeltaNetOptions _options;
     private readonly int _vocabSize;
@@ -44,6 +45,7 @@ public class GatedDeltaNetLanguageModel<T> : NeuralNetworkBase<T>
     private readonly int _numLayers;
     private readonly int _numHeads;
     private readonly int _maxSeqLength;
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
 
     /// <inheritdoc />
     public override bool SupportsTraining => true;
@@ -70,9 +72,10 @@ public class GatedDeltaNetLanguageModel<T> : NeuralNetworkBase<T>
         int numHeads = 8,
         int maxSeqLength = 512,
         ILossFunction<T>? lossFunction = null,
-        GatedDeltaNetOptions? options = null)
+        GatedDeltaNetOptions? options = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
         : base(architecture,
-            lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(NeuralNetworkTaskType.TextGeneration))
+            lossFunction ?? new AiDotNet.LossFunctions.CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new GatedDeltaNetOptions();
         Options = _options;
@@ -81,6 +84,15 @@ public class GatedDeltaNetLanguageModel<T> : NeuralNetworkBase<T>
         _numLayers = numLayers;
         _numHeads = numHeads;
         _maxSeqLength = maxSeqLength;
+        // THE PAPER'S RATE, NOT THE LIBRARY DEFAULT. Constructing AdamWOptimizer with no options
+        // silently trained at InitialLearningRate = 1e-3, which is neither the published rate nor
+        // something the caller could change short of building the whole optimizer themselves.
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate,
+            });
         InitializeLayers();
     }
 
@@ -105,6 +117,22 @@ public class GatedDeltaNetLanguageModel<T> : NeuralNetworkBase<T>
 
     #region NeuralNetworkBase Overrides
 
+    /// <summary>
+    /// Gated DeltaNet carries a per-head fast-weight matrix through a timestep recurrence: each
+    /// step applies the delta rule to the state, writing only the difference between the target
+    /// value and what the state currently retrieves for that key. That data-dependent loop is not
+    /// a static op graph, so it cannot be captured once and safely replayed by the fused
+    /// compiled-training plan; the eager tape re-runs the true recurrence every step, so AdamW
+    /// receives the real gradients. Same reason as the sibling recurrent models
+    /// (<see cref="GriffinLanguageModel{T}"/>, <see cref="HawkLanguageModel{T}"/>) and the same
+    /// root cause documented on <c>NeuralNetworkBase.SupportsFusedCompiledTraining</c> (#1643).
+    /// This is a structural property of the architecture, not a temporary restriction.
+    /// </summary>
+    protected override bool SupportsFusedCompiledTraining => false;
+
+    protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> GetOrCreateBaseOptimizer()
+        => _optimizer;
+
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         SetTrainingMode(false);
@@ -119,20 +147,11 @@ public class GatedDeltaNetLanguageModel<T> : NeuralNetworkBase<T>
         });
     }
 
-    public override void UpdateParameters(Vector<T> gradients)
-    {
-        if (gradients.Length != ParameterCount)
-        {
-            throw new ArgumentException(
-                $"Expected {ParameterCount} gradients, but got {gradients.Length}",
-                nameof(gradients));
-        }
-
-        var currentParams = GetParameters();
-        T learningRate = NumOps.FromDouble(0.001);
-        currentParams = Engine.Subtract(currentParams, Engine.Multiply(gradients, learningRate));
-        SetParameters(currentParams);
-    }
+    // UpdateParameters validated the length and distributed the vector across Layers. The base does
+    // both. Its trailing "did the loop consume the whole vector" guard is not lost either -- it
+    // protected against sum(layer.ParameterCount) drifting from ParameterCount, and the base derives
+    // the count and the distribution from ONE enumeration, so they cannot drift apart. Removed under
+    // AIDN082.
 
     public override ModelMetadata<T> GetModelMetadata()
     {
@@ -172,9 +191,14 @@ public class GatedDeltaNetLanguageModel<T> : NeuralNetworkBase<T>
 
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
+        var cloneOptimizer = _optimizer.GetOptions() is AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>> optimizerOptions
+            ? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+                null,
+                new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>(optimizerOptions))
+            : null;
         return new GatedDeltaNetLanguageModel<T>(
             Architecture, _vocabSize, _modelDimension, _numLayers, _numHeads,
-            _maxSeqLength, LossFunction, _options);
+            _maxSeqLength, LossFunction, new GatedDeltaNetOptions(_options), cloneOptimizer);
     }
 
     #endregion

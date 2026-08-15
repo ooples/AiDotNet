@@ -39,7 +39,11 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.AttentionComputation)]
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerProperty(IsTrainable = true, Cost = ComputeCost.High, TestInputShape = "4, 16", TestConstructorArgs = "4, 16, 4, 2")]
-internal partial class GroupedQueryAttentionLayer<T> : LayerBase<T>
+// Grouped-query attention: shape-preserving at rank 2 [Time, Features], the rank the sweep probed.
+[TensorLayout(TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
+[AutoParameters]
+public partial class GroupedQueryAttentionLayer<T> : LayerBase<T>, IShapeContract
 {
     private readonly int _numHeads;
     private readonly int _numKVHeads;
@@ -186,25 +190,6 @@ internal partial class GroupedQueryAttentionLayer<T> : LayerBase<T>
     public double RoPETheta => _ropeLayer?.Theta ?? 10000.0;
 
     /// <summary>
-    /// Gets the total number of trainable parameters.
-    /// </summary>
-    public override long ParameterCount =>
-        _weightsDeferred
-            // Weights not yet materialized: derive the exact count from the dimensions so
-            // callers iterating ParameterCount before the first forward (e.g. a parent
-            // predictor's CalculateParameterCount) get the real value without forcing allocation.
-            ? (long)_embeddingDimension * (_numHeads * _headDimension)        // Q
-              + 2L * _embeddingDimension * (_numKVHeads * _headDimension)     // K + V
-              + (long)(_numHeads * _headDimension) * _embeddingDimension      // output
-              + _embeddingDimension                                          // output bias
-              + (_useProjectionBias                                          // optional q/k/v biases
-                  ? (long)_numHeads * _headDimension + 2L * _numKVHeads * _headDimension
-                  : 0L)
-            : _queryWeights.Length + _keyWeights.Length + _valueWeights.Length +
-              _outputWeights.Length + _queryBias.Length + _keyBias.Length + _valueBias.Length +
-              _outputBias.Length;
-
-    /// <summary>
     /// Creates a new Grouped-Query Attention layer.
     /// </summary>
     /// <param name="sequenceLength">Maximum sequence length.</param>
@@ -314,6 +299,34 @@ internal partial class GroupedQueryAttentionLayer<T> : LayerBase<T>
         {
             // Double-check under the lock: another thread may have materialized while we waited.
             if (!_weightsDeferred) return;
+
+            // ParameterBuffer/deserialization/copy-on-write may rebind the zero-sized
+            // placeholders to fully materialized trained tensors before this fresh
+            // layer's first Forward. Those tensors are authoritative. Synchronize the
+            // deferred-state latch instead of allocating over them, matching PyTorch's
+            // lazy-module materialization contract. The old behavior silently replaced
+            // every shared GQA projection on a COW clone's first prediction
+            // (VideoLLaMA2 Clone_AfterTraining).
+            bool reboundWeightsAreMaterialized =
+                WeightsAlreadyAllocated(
+                    _queryWeights, _embeddingDimension, _numHeads * _headDimension)
+                && WeightsAlreadyAllocated(
+                    _keyWeights, _embeddingDimension, _numKVHeads * _headDimension)
+                && WeightsAlreadyAllocated(
+                    _valueWeights, _embeddingDimension, _numKVHeads * _headDimension)
+                && WeightsAlreadyAllocated(
+                    _outputWeights, _numHeads * _headDimension, _embeddingDimension)
+                && WeightsAlreadyAllocated(_outputBias, _embeddingDimension)
+                && (!_useProjectionBias
+                    || (WeightsAlreadyAllocated(_queryBias, _numHeads * _headDimension)
+                        && WeightsAlreadyAllocated(_keyBias, _numKVHeads * _headDimension)
+                        && WeightsAlreadyAllocated(_valueBias, _numKVHeads * _headDimension)));
+            if (reboundWeightsAreMaterialized)
+            {
+                _weightsDeferred = false;
+                return;
+            }
+
             _queryWeights = new Tensor<T>([_embeddingDimension, _numHeads * _headDimension]);
             _keyWeights = new Tensor<T>([_embeddingDimension, _numKVHeads * _headDimension]);
             _valueWeights = new Tensor<T>([_embeddingDimension, _numKVHeads * _headDimension]);
@@ -342,7 +355,17 @@ internal partial class GroupedQueryAttentionLayer<T> : LayerBase<T>
     /// <remarks>Forces the deferred projection weights to materialize — the hook
     /// <see cref="LayerBase{T}.MaterializeParameters"/> invokes, so the foundation-scale chunk-streaming
     /// path (#1624) reads real weights rather than zero-length placeholders.</remarks>
-    protected override void EnsureParametersMaterialized() => EnsureWeightsMaterialized();
+    protected override void EnsureParametersMaterialized()
+    {
+        EnsureWeightsMaterialized();
+
+        // Then the base, for the registered sub-layers (_ropeLayer / _alibiLayer). Overriding
+        // without chaining used to be harmless because the base only touched THIS layer; it now
+        // also recurses into GetSubLayers(), and skipping that would leave this layer's children
+        // unmaterialized on a save while a restored copy brings them up -- the same asymmetry that
+        // made a VideoCLIP clone reject its own checkpoint.
+        base.EnsureParametersMaterialized();
+    }
 
     /// <summary>
     /// Configures positional encoding for this GQA layer.
@@ -391,7 +414,7 @@ internal partial class GroupedQueryAttentionLayer<T> : LayerBase<T>
     }
 
     /// <inheritdoc />
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         EnsureWeightsMaterialized();
         _originalInputShape = input._shape;
@@ -442,7 +465,9 @@ internal partial class GroupedQueryAttentionLayer<T> : LayerBase<T>
             new[] { 0, 2, 1, 3 });
 
         Tensor<T> context;
-        if (!cacheBwd && _alibiLayer == null)
+        if (!cacheBwd
+            && _alibiLayer == null
+            && AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>.Current is null)
         {
             // ── Inference fast path ──────────────────────────────────────────────
             // Fused interleaved RoPE + GQA-aware scaled-dot-product attention, both
@@ -485,8 +510,8 @@ internal partial class GroupedQueryAttentionLayer<T> : LayerBase<T>
             _lastProjectedValues = cacheBwd ? values : null;
 
             // Expand K/V heads to match Q heads via repeat
-            var expandedKeys = ExpandKVHeads(keys, batchSize, seqLen);
-            var expandedValues = ExpandKVHeads(values, batchSize, seqLen);
+            var expandedKeys = ExpandKVHeads(keys);
+            var expandedValues = ExpandKVHeads(values);
 
             _lastExpandedKeys = cacheBwd ? expandedKeys : null;
             _lastExpandedValues = cacheBwd ? expandedValues : null;
@@ -549,32 +574,15 @@ internal partial class GroupedQueryAttentionLayer<T> : LayerBase<T>
     /// Expands K/V from [batch, numKVHeads, seq, headDim] to [batch, numHeads, seq, headDim]
     /// by repeating each KV head headsPerGroup times.
     /// </summary>
-    private Tensor<T> ExpandKVHeads(Tensor<T> kv, int batchSize, int seqLen)
+    private Tensor<T> ExpandKVHeads(Tensor<T> kv)
     {
         if (_numKVHeads == _numHeads)
             return kv; // No expansion needed (standard MHA)
 
-        var expanded = TensorAllocator.Rent<T>(new[] { batchSize, _numHeads, seqLen, _headDimension });
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int kvh = 0; kvh < _numKVHeads; kvh++)
-            {
-                for (int g = 0; g < _headsPerGroup; g++)
-                {
-                    int qh = kvh * _headsPerGroup + g;
-                    for (int s = 0; s < seqLen; s++)
-                    {
-                        for (int d = 0; d < _headDimension; d++)
-                        {
-                            expanded[new[] { b, qh, s, d }] = kv[new[] { b, kvh, s, d }];
-                        }
-                    }
-                }
-            }
-        }
-
-        return expanded;
+        // Repeat through the engine so the operation is represented on the tape. The former
+        // scalar-copy loop produced the correct forward values but created a detached tensor,
+        // dropping every K/V contribution to the input and projection weights.
+        return Engine.TensorRepeatInterleave(kv, _headsPerGroup, dim: 1);
     }
 
     private (Tensor<T> Context, Tensor<T> AttentionWeights) ComputeALiBiAttention(
@@ -598,7 +606,9 @@ internal partial class GroupedQueryAttentionLayer<T> : LayerBase<T>
         // Causal decoder without a soft-cap: use FlashAttention's causal mask (softcap-free path), the same
         // mechanism the stateless paged fallback uses. Soft-capped causal attention (Gemma-2) falls through
         // to the Engine SDPA path below, which applies an additive causal mask so the cap and mask compose.
-        if (_useCausalMask && _attnLogitSoftcap <= 0.0)
+        if (_useCausalMask
+            && _attnLogitSoftcap <= 0.0
+            && AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>.Current is null)
         {
             var flashConfig = new FlashAttentionConfig { ReturnAttentionWeights = true, UseCausalMask = true };
             var (flashOutput, flashWeights) = FlashAttention<T>.Forward(
@@ -724,27 +734,6 @@ internal partial class GroupedQueryAttentionLayer<T> : LayerBase<T>
         _outputBias = Engine.TensorAdd(_outputBias, Engine.TensorMultiplyScalar(_outputBiasGradient, negLR));
     }
 
-    /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        EnsureWeightsMaterialized();
-        int totalParams = _queryWeights.Length + _keyWeights.Length + _valueWeights.Length +
-                          _outputWeights.Length + _queryBias.Length + _keyBias.Length + _valueBias.Length +
-                          _outputBias.Length;
-        var parameters = new Vector<T>(totalParams);
-        int index = 0;
-
-        // Order: Q/K/V/O weights, optional q/k/v biases (zero-length when unused → layout unchanged),
-        // then the output bias LAST (the tensor-parallel partitioner reads it tail-wise).
-        foreach (var tensor in new[] { _queryWeights, _keyWeights, _valueWeights, _outputWeights, _queryBias, _keyBias, _valueBias, _outputBias })
-        {
-            for (int i = 0; i < tensor.Length; i++)
-                parameters[index++] = tensor[i];
-        }
-
-        return parameters;
-    }
-
     public override Vector<T> GetParameterGradients()
     {
         EnsureWeightsMaterialized();
@@ -778,24 +767,6 @@ internal partial class GroupedQueryAttentionLayer<T> : LayerBase<T>
         _valueWeightsGradient = null;
         _outputWeightsGradient = null;
         _outputBiasGradient = null;
-    }
-
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        EnsureWeightsMaterialized();
-        int expectedParams = _queryWeights.Length + _keyWeights.Length + _valueWeights.Length +
-                             _outputWeights.Length + _queryBias.Length + _keyBias.Length + _valueBias.Length +
-                             _outputBias.Length;
-        if (parameters.Length != expectedParams)
-            throw new ArgumentException($"Expected {expectedParams} parameters, got {parameters.Length}");
-
-        int index = 0;
-        foreach (var tensor in new[] { _queryWeights, _keyWeights, _valueWeights, _outputWeights, _queryBias, _keyBias, _valueBias, _outputBias })
-        {
-            for (int i = 0; i < tensor.Length; i++)
-                tensor[i] = parameters[index++];
-        }
     }
 
     /// <inheritdoc />

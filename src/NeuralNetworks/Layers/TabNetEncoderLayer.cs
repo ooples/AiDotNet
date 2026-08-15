@@ -3,6 +3,8 @@ using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks.Tabular;
 using AiDotNet.Tensors.Engines;
 
+using AiDotNet.Attributes;
+
 namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
@@ -35,7 +37,18 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-public class TabNetEncoderLayer<T> : LayerBase<T>
+// Tabular encoder: a flat [Batch, Features] table in, one decision vector per sample out. Roles taken
+// from ForwardTraced, which reads the feature width off the LAST axis and reshapes to
+// [batch, _numFeatures].
+//
+// Rank 2 only, and batch is NOT optional even though a rank-1 input runs. The rank-1 path sets
+// batch = 1 and still returns a rank-2 [1, decisionDim] - a rank-CHANGING case rather than the
+// batch-elided form BatchOptional describes, so folding it in would have the contract promise a
+// rank-1 output this layer never produces.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
+[AutoParameters]
+public partial class TabNetEncoderLayer<T> : LayerBase<T>, IShapeContract
 {
     private readonly int _decisionDim;
     private readonly int _attentionDim;
@@ -78,16 +91,16 @@ public class TabNetEncoderLayer<T> : LayerBase<T>
     /// <param name="momentum">Batch-norm momentum.</param>
     /// <param name="epsilon">Batch-norm epsilon.</param>
     public TabNetEncoderLayer(
-        int numFeatures,
-        int decisionDim,
-        int attentionDim,
-        int numSteps,
-        int numSharedLayers = 2,
-        int numStepSpecificLayers = 2,
-        double relaxationFactor = 1.5,
-        int virtualBatchSize = 128,
-        double momentum = 0.02,
-        double epsilon = 1e-5)
+        [LayerState] int numFeatures,
+        [LayerState] int decisionDim,
+        [LayerState] int attentionDim,
+        [LayerState] int numSteps,
+        [LayerState] int numSharedLayers = 2,
+        [LayerState] int numStepSpecificLayers = 2,
+        [LayerState] double relaxationFactor = 1.5,
+        [LayerState] int virtualBatchSize = 128,
+        [LayerState] double momentum = 0.02,
+        [LayerState] double epsilon = 1e-5)
         : base(new[] { numFeatures }, new[] { decisionDim })
     {
         if (numFeatures <= 0) throw new ArgumentOutOfRangeException(nameof(numFeatures));
@@ -110,6 +123,34 @@ public class TabNetEncoderLayer<T> : LayerBase<T>
 
     /// <inheritdoc/>
     public override bool SupportsTraining => true;
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// Hand-written because the feature width is replaced rather than carried. From
+    /// <c>BuildComponents</c>: <c>ResolveShapes(new[] { numFeatures }, new[] { _decisionDim })</c>.
+    /// <c>ForwardTraced</c> confirms it - every step contributes
+    /// <c>ReLU(ft @ _decisionSelector)</c>, shaped <c>[batch, n_d]</c> by that selector's
+    /// <c>[ftOut, _decisionDim]</c> shape, and the steps are SUMMED into <c>aggregated</c> rather than
+    /// concatenated, so the step count does not enter the output shape at all.
+    /// </para>
+    /// <para>
+    /// <c>Fixed(_decisionDim)</c> is read off the constructor argument, and it survives the rebuild
+    /// path: <c>BuildComponents</c> re-derives the internal widths whenever the fed input width
+    /// changes, but <c>_decisionDim</c> is readonly and is re-used unchanged. The input width is the
+    /// only thing that adapts.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        if (inputRank != 2 || _decisionDim <= 0) return null;
+
+        return new[]
+        {
+            new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+            new OutputAxisContract(TensorAxis.Features, AxisRelation.Fixed(_decisionDim)),
+        };
+    }
 
     private void BuildComponents(int numFeatures)
     {
@@ -188,7 +229,7 @@ public class TabNetEncoderLayer<T> : LayerBase<T>
     }
 
     /// <inheritdoc/>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         int features = input.Shape[input.Rank - 1];
         if (!_built || _numFeatures != features)
@@ -219,35 +260,6 @@ public class TabNetEncoderLayer<T> : LayerBase<T>
         }
 
         return aggregated ?? Engine.TensorMatMul(ft0, _decisionSelector!);
-    }
-
-    /// <inheritdoc/>
-    public override Vector<T> GetParameters()
-    {
-        var all = new System.Collections.Generic.List<T>();
-        foreach (var sub in GetSubLayers())
-        {
-            var p = sub.GetParameters();
-            for (int i = 0; i < p.Length; i++) all.Add(p[i]);
-        }
-        var result = new Vector<T>(all.Count);
-        for (int i = 0; i < all.Count; i++) result[i] = all[i];
-        return result;
-    }
-
-    /// <inheritdoc/>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int offset = 0;
-        foreach (var sub in GetSubLayers())
-        {
-            int count = AiDotNet.Helpers.ParameterCountHelper.ToFlatVectorSize(sub.ParameterCount);
-            if (count == 0) continue;
-            var p = new Vector<T>(count);
-            for (int i = 0; i < count; i++) p[i] = parameters[offset + i];
-            sub.SetParameters(p);
-            offset += count;
-        }
     }
 
     /// <inheritdoc/>

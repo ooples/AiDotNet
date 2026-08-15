@@ -66,7 +66,9 @@ public class NBEATSDetector<T> : AnomalyDetectorBase<T>
     private int _inputDim;
 
     // Normalization parameters
+    [Buffer]
     private Vector<T>? _dataMeans;
+    [Buffer]
     private Vector<T>? _dataStds;
 
     /// <summary>

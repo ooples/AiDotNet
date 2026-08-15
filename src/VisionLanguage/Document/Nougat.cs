@@ -243,23 +243,15 @@ public class Nougat<T> : VisionLanguageModelBase<T>, IDocumentUnderstandingModel
         if (IsOnnxMode)
             throw new NotSupportedException("Training is not supported in ONNX mode.");
         SetTrainingMode(true);
-        TrainWithTape(input, expected);
+        TrainWithTape(input, expected, _optimizer);
         SetTrainingMode(false);
     }
 
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        if (!_useNativeMode)
-            throw new NotSupportedException("Cannot update parameters in ONNX mode.");
-        int idx = 0;
-        foreach (var l in Layers)
-        {
-            int c = (int)l.ParameterCount;
-            l.UpdateParameters(parameters.Slice(idx, c));
-            idx += c;
-        }
-    }
-
+    // UpdateParameters is NOT overridden. It used to throw NotSupportedException; the base
+    // implementation is virtual now and distributes a flat vector over the same enumeration
+    // GetParameters folds, which this model already exposes correctly. The throw existed
+    // because the member was ABSTRACT and demanded an answer -- 572 models answered it the
+    // same way.
     protected override Tensor<T> PreprocessImage(Tensor<T> image) =>
         NormalizeImage(image, _options.ImageMean, _options.ImageStd);
 

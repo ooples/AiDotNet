@@ -22,36 +22,8 @@ public class RegionCLIPOptions : ContrastiveEncoderOptions
     /// <param name="other">The options instance to copy from.</param>
     /// <exception cref="ArgumentNullException">Thrown when other is null.</exception>
     public RegionCLIPOptions(RegionCLIPOptions other)
+        : base(other)
     {
-        if (other == null)
-            throw new ArgumentNullException(nameof(other));
-
-        Seed = other.Seed;
-        ImageSize = other.ImageSize;
-        VisionEmbeddingDim = other.VisionEmbeddingDim;
-        VisionEncoderVariant = other.VisionEncoderVariant;
-        PatchSize = other.PatchSize;
-        NumVisionLayers = other.NumVisionLayers;
-        NumVisionHeads = other.NumVisionHeads;
-        VisionFfnMultiplier = other.VisionFfnMultiplier;
-        TextEmbeddingDim = other.TextEmbeddingDim;
-        TextEncoderVariant = other.TextEncoderVariant;
-        MaxSequenceLength = other.MaxSequenceLength;
-        VocabSize = other.VocabSize;
-        NumTextLayers = other.NumTextLayers;
-        NumTextHeads = other.NumTextHeads;
-        ProjectionDim = other.ProjectionDim;
-        Temperature = other.Temperature;
-        DropoutRate = other.DropoutRate;
-        ImageMean = other.ImageMean;
-        ImageStd = other.ImageStd;
-        ImageEncoderModelPath = other.ImageEncoderModelPath;
-        TextEncoderModelPath = other.TextEncoderModelPath;
-        OnnxOptions = other.OnnxOptions;
-        LearningRate = other.LearningRate;
-        WeightDecay = other.WeightDecay;
-        WarmUpSteps = other.WarmUpSteps;
-        LabelSmoothing = other.LabelSmoothing;
         LossType = other.LossType;
         Domain = other.Domain;
         MaxRegionsPerImage = other.MaxRegionsPerImage;
@@ -59,6 +31,9 @@ public class RegionCLIPOptions : ContrastiveEncoderOptions
         RoIPoolSize = other.RoIPoolSize;
         RegionTextIoUThreshold = other.RegionTextIoUThreshold;
         UsePseudoLabels = other.UsePseudoLabels;
+        UseResNet50Backbone = other.UseResNet50Backbone;
+        ResNetStageWidths = other.ResNetStageWidths.ToArray();
+        ResNetStageDepths = other.ResNetStageDepths.ToArray();
     }
 
     /// <summary>
@@ -97,15 +72,35 @@ public class RegionCLIPOptions : ContrastiveEncoderOptions
     public bool UsePseudoLabels { get; set; } = true;
 
     /// <summary>
+    /// Gets or sets whether the native visual encoder uses the paper-default ResNet-50
+    /// backbone. Set to <see langword="false"/> to use the configurable ViT path.
+    /// </summary>
+    public bool UseResNet50Backbone { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets the output widths of the four ResNet bottleneck stages.
+    /// </summary>
+    public int[] ResNetStageWidths { get; set; } = [256, 512, 1024, 2048];
+
+    /// <summary>
+    /// Gets or sets the block counts of the four ResNet bottleneck stages.
+    /// </summary>
+    public int[] ResNetStageDepths { get; set; } = [3, 4, 6, 3];
+
+    /// <summary>
     /// Initializes default RegionCLIP options.
     /// </summary>
     public RegionCLIPOptions()
     {
+        // The paper's default pretraining recipe uses CLIP ResNet-50 encoders,
+        // 100 regions per image, SGD at 0.002, and temperature 0.01.
         VisionEncoderVariant = ViTVariant.ViTB32;
         ImageSize = 224;
         VisionEmbeddingDim = 768;
         TextEmbeddingDim = 512;
         ProjectionDim = 512;
-        Temperature = 0.07;
+        Temperature = 0.01;
+        LearningRate = 0.002;
+        WeightDecay = 0.0;
     }
 }

@@ -8,6 +8,12 @@ namespace AiDotNet.TextToSpeech.DescriptionBased;
 /// </remarks>
 public class ParlerTTSOptions : CodecTtsOptions
 {
+    /// <summary>Initializes a copy that preserves every inherited customization.</summary>
+    public ParlerTTSOptions(ParlerTTSOptions other)
+        : base(other)
+    {
+    }
+
     public ParlerTTSOptions()
     {
         SampleRate = 44100;

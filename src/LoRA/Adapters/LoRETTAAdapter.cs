@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Extensions;
 using AiDotNet.Interfaces;
@@ -64,12 +65,14 @@ namespace AiDotNet.LoRA.Adapters;
 /// SIAM J. Scientific Computing, 2011.
 /// </para>
 /// </remarks>
-public class LoRETTAAdapter<T> : LoRAAdapterBase<T>
+[AutoParameters]
+public partial class LoRETTAAdapter<T> : LoRAAdapterBase<T>
 {
     /// <summary>
     /// Tensor-train cores representing the weight decomposition.
     /// Core k has shape (ttRanks[k-1], coreShape[k], ttRanks[k]).
     /// </summary>
+    [TrainableParameter]
     private readonly List<Tensor<T>> _ttCores;
 
     /// <summary>
@@ -91,11 +94,13 @@ public class LoRETTAAdapter<T> : LoRAAdapterBase<T>
     /// <summary>
     /// Gradients for each TT core computed during backpropagation.
     /// </summary>
+    [Scratch]
     private List<Tensor<T>>? _ttCoreGradients;
 
     /// <summary>
     /// Cached intermediate tensors from forward pass, needed for gradient computation.
     /// </summary>
+    [Scratch]
     private List<Tensor<T>>? _forwardIntermediates;
 
     /// <summary>
@@ -111,42 +116,6 @@ public class LoRETTAAdapter<T> : LoRAAdapterBase<T>
     /// Gets the number of cores in the tensor-train.
     /// </summary>
     public int NumCores => _numCores;
-
-    /// <summary>
-    /// Gets the total number of trainable parameters in the tensor-train cores.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// The total parameters is the sum of all core sizes:
-    /// sum_k (ttRanks[k-1] × coreShapes[k] × ttRanks[k])
-    /// </para>
-    /// <para>
-    /// This is typically much smaller than standard LoRA for the same expressiveness.
-    /// </para>
-    /// </remarks>
-    public override long ParameterCount
-    {
-        get
-        {
-            // Promote to long BEFORE the per-core multiplication so a
-            // sufficiently-large rank × shape doesn't wrap. The TT-core
-            // product can be arbitrarily large for big factorizations.
-            // Closes #1271.7Bnd.
-            long ttParams = 0L;
-            for (int k = 0; k < _numCores; k++)
-            {
-                ttParams += (long)_ttRanks[k] * _coreShapes[k] * _ttRanks[k + 1];
-            }
-
-            // Add base layer parameters if not frozen
-            if (!_freezeBaseLayer)
-            {
-                return _baseLayer.ParameterCount + ttParams;
-            }
-
-            return ttParams;
-        }
-    }
 
     /// <summary>
     /// Initializes a new LoRETTA adapter wrapping an existing layer.
@@ -201,7 +170,7 @@ public class LoRETTAAdapter<T> : LoRAAdapterBase<T>
         _numCores = numCores;
 
         int inputSize = GetInputShape()[0];
-        int outputSize = GetOutputShape()[0];
+        int outputSize = GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0];
 
         // Initialize TT-ranks: [1, ttRank, ttRank, ..., ttRank, 1]
         _ttRanks = new int[numCores + 1];
@@ -219,9 +188,9 @@ public class LoRETTAAdapter<T> : LoRAAdapterBase<T>
         _ttCores = new List<Tensor<T>>(numCores);
         InitializeTTCores();
 
-        // Update parameter vector
-        Parameters = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
-        UpdateParametersFromCores();
+        // Tensor-train cores replace the standard LoRA factors and are emitted as one ordered
+        // trainable collection by the generator.
+        FreezeSubLayerParameters(_loraLayer);
     }
 
     /// <summary>
@@ -325,7 +294,7 @@ public class LoRETTAAdapter<T> : LoRAAdapterBase<T>
     /// even though it looks complex mathematically.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // Store intermediates for backward pass
         _forwardIntermediates = new List<Tensor<T>>();
@@ -386,7 +355,7 @@ public class LoRETTAAdapter<T> : LoRAAdapterBase<T>
         }
 
         // Extract output
-        int outputSize = GetOutputShape()[0];
+        int outputSize = GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0];
         Vector<T> outputData = new Vector<T>(batchSize * outputSize);
 
         int idx = 0;
@@ -537,7 +506,7 @@ public class LoRETTAAdapter<T> : LoRAAdapterBase<T>
 
         int batchSize = outputGradient.Shape[0];
         int inputSize = GetInputShape()[0];
-        int outputSize = GetOutputShape()[0];
+        int outputSize = GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0];
 
         // Apply inverse scaling to output gradient
         T scaling = NumOps.Divide(
@@ -681,121 +650,6 @@ public class LoRETTAAdapter<T> : LoRAAdapterBase<T>
             _baseLayer.UpdateParameters(learningRate);
         }
 
-        // Update parameter vector
-        UpdateParametersFromCores();
-    }
-
-    /// <summary>
-    /// Updates the parameter vector from the current TT core values.
-    /// </summary>
-    private void UpdateParametersFromCores()
-    {
-        int idx = 0;
-
-        // If base layer is not frozen, pack its parameters first
-        if (!_freezeBaseLayer)
-        {
-            Vector<T> baseParams = _baseLayer.GetParameters();
-            for (int i = 0; i < baseParams.Length; i++)
-            {
-                Parameters[idx++] = baseParams[i];
-            }
-        }
-
-        // Pack all TT cores
-        foreach (Tensor<T> core in _ttCores)
-        {
-            for (int i = 0; i < core.Length; i++)
-            {
-                Parameters[idx++] = core[i];
-            }
-        }
-    }
-
-    /// <summary>
-    /// Updates the TT cores from the parameter vector.
-    /// </summary>
-    private void UpdateCoresFromParameters()
-    {
-        int idx = 0;
-
-        // If base layer is not frozen, unpack its parameters first
-        if (!_freezeBaseLayer)
-        {
-            int baseParamCount = checked((int)_baseLayer.ParameterCount);
-            Vector<T> baseParams = new Vector<T>(baseParamCount);
-            for (int i = 0; i < baseParamCount; i++)
-            {
-                baseParams[i] = Parameters[idx++];
-            }
-            _baseLayer.SetParameters(baseParams);
-        }
-
-        // Unpack all TT cores
-        for (int k = 0; k < _numCores; k++)
-        {
-            for (int i = 0; i < _ttCores[k].Length; i++)
-            {
-                _ttCores[k][i] = Parameters[idx++];
-            }
-        }
-    }
-
-    /// <summary>
-    /// Updates the parameter gradients vector from the TT core gradients.
-    /// </summary>
-    private void UpdateParameterGradientsFromCores()
-    {
-        ParameterGradients = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
-        int idx = 0;
-
-        // If base layer is not frozen, pack its gradients first
-        if (!_freezeBaseLayer)
-        {
-            Vector<T> baseGrads = _baseLayer.GetParameterGradients();
-            for (int i = 0; i < baseGrads.Length; i++)
-            {
-                ParameterGradients[idx++] = baseGrads[i];
-            }
-        }
-
-        // Pack TT core gradients
-        if (_ttCoreGradients != null)
-        {
-            foreach (Tensor<T> coreGrad in _ttCoreGradients)
-            {
-                for (int i = 0; i < coreGrad.Length; i++)
-                {
-                    ParameterGradients[idx++] = coreGrad[i];
-                }
-            }
-        }
-    }
-
-    /// <summary>
-    /// Gets the current parameters as a vector.
-    /// </summary>
-    /// <returns>Vector containing parameters.</returns>
-    public override Vector<T> GetParameters()
-    {
-        return Parameters.Clone();
-    }
-
-    /// <summary>
-    /// Sets the layer parameters from a vector.
-    /// </summary>
-    /// <param name="parameters">Vector containing parameters.</param>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (parameters.Length != ParameterCount)
-        {
-            throw new ArgumentException(
-                $"Expected {ParameterCount} parameters, got {parameters.Length}",
-                nameof(parameters));
-        }
-
-        Parameters = parameters.Clone();
-        UpdateCoresFromParameters();
     }
 
     /// <summary>
@@ -839,7 +693,7 @@ public class LoRETTAAdapter<T> : LoRAAdapterBase<T>
         Vector<T> baseParams = _baseLayer.GetParameters();
 
         int inputSize = GetInputShape()[0];
-        int outputSize = GetOutputShape()[0];
+        int outputSize = GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0];
         int weightCount = inputSize * outputSize;
 
         // Create new parameters with merged weights
@@ -886,7 +740,7 @@ public class LoRETTAAdapter<T> : LoRAAdapterBase<T>
     private Matrix<T> ContractTensorTrainToMatrix()
     {
         int inputSize = GetInputShape()[0];
-        int outputSize = GetOutputShape()[0];
+        int outputSize = GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0];
 
         // Perform sequential contraction of all TT cores
         // Start with first core: [r0=1, n1, r1] → effectively [n1, r1]
@@ -1019,7 +873,7 @@ public class LoRETTAAdapter<T> : LoRAAdapterBase<T>
     public string GetParameterEfficiencyMetrics()
     {
         int inputSize = GetInputShape()[0];
-        int outputSize = GetOutputShape()[0];
+        int outputSize = GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0];
 
         int fullParams = inputSize * outputSize;
         int ttParams = (int)(ParameterCount - (_freezeBaseLayer ? 0 : _baseLayer.ParameterCount));

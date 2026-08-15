@@ -1,3 +1,4 @@
+using System;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Enums;
 using AiDotNet.Initialization;
@@ -125,5 +126,78 @@ public class InitializationDeterminismTests
         Assert.Equal(a.Length, b.Length);
         for (int i = 0; i < a.Length; i++)
             Assert.Equal(a[i], b[i], 12);
+    }
+
+    /// <summary>
+    /// Builds a CrossAttentionLayer the way a MODEL builds one - through the ambient seed scope.
+    /// </summary>
+    /// <remarks>
+    /// The object-initializer trick the tests above use (<c>RandomSeed = seed</c>) cannot work here:
+    /// CrossAttentionLayer initializes its projections INSIDE its constructor, so a property assigned
+    /// afterwards arrives too late. NeuralNetworkBase's constructor opens this same scope before the
+    /// derived constructor builds any layer, and LayerBase pulls its seed from it, so driving the scope
+    /// directly is what a real seeded model does.
+    /// </remarks>
+    private static double[] BuildAndInitCrossAttention(int seed, int queryDim, int contextDim)
+    {
+        LayerInitializationSeedScope.ResetForModelConstruction(seed);
+        var layer = new CrossAttentionLayer<double>(
+            queryDim: queryDim,
+            contextDim: contextDim,
+            headCount: 4,
+            sequenceLength: 8);
+
+        var p = layer.GetParameters();
+        var arr = new double[p.Length];
+        for (int i = 0; i < p.Length; i++) arr[i] = p[i];
+        return arr;
+    }
+
+    [Fact]
+    public void CrossAttentionLayer_WithSeedScope_InitIsDeterministic_DespiteSharedRngDrain()
+    {
+        // BEFORE THE FIX THIS COULD NOT PASS AT ALL. CrossAttentionLayer hand-rolled its Xavier fill
+        // with RandomHelper.CreateSecureRandom(), which is entropy-seeded on every call - so its weights
+        // were freshly random per construction and ignored the seed scope entirely. Two constructions
+        // under the same seed disagreed even with no RNG drain in between.
+        double[] first = BuildAndInitCrossAttention(seed: 4242, queryDim: 16, contextDim: 16);
+
+        for (int i = 0; i < 5000; i++) RandomHelper.ThreadSafeRandom.Next();
+
+        double[] second = BuildAndInitCrossAttention(seed: 4242, queryDim: 16, contextDim: 16);
+
+        Assert.Equal(first.Length, second.Length);
+        for (int i = 0; i < first.Length; i++)
+            Assert.Equal(first[i], second[i], 12);
+    }
+
+    [Fact]
+    public void CrossAttentionLayer_InitScale_MatchesXavier_NotAThirdOfIt()
+    {
+        // THE DISTRIBUTION, NOT JUST ITS REPEATABILITY. The replaced loop drew uniformly from
+        // [-s/2, +s/2] with s = sqrt(2/(fanIn+fanOut)) while calling itself Xavier. That has standard
+        // deviation s/sqrt(12), i.e. 3.46x too small. A determinism test cannot see that - the weights
+        // were reproducibly wrong - so the scale is asserted separately.
+        //
+        // Xavier's whole purpose is holding activation variance steady layer to layer; too small a scale
+        // shrinks the signal at every hop, and these layers are stacked ~28 deep in a perceiver
+        // resampler. The band is generous (0.5x-2x) because the base initializer draws a TRUNCATED
+        // normal, which lowers the realised deviation slightly, and because a finite sample scatters.
+        // It is still far tighter than the 3.46x error it exists to catch.
+        const int dim = 128;
+        double[] p = BuildAndInitCrossAttention(seed: 99, queryDim: dim, contextDim: dim);
+
+        double mean = 0;
+        for (int i = 0; i < p.Length; i++) mean += p[i];
+        mean /= p.Length;
+
+        double sumSq = 0;
+        for (int i = 0; i < p.Length; i++) sumSq += (p[i] - mean) * (p[i] - mean);
+        double stdDev = Math.Sqrt(sumSq / p.Length);
+
+        // fanIn == fanOut == dim for every projection this layer builds.
+        double expected = Math.Sqrt(2.0 / (dim + dim));
+
+        Assert.InRange(stdDev, expected * 0.5, expected * 2.0);
     }
 }

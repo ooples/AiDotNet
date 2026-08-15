@@ -16,7 +16,7 @@ namespace AiDotNet.Inference;
 /// of tokens after the whole forward completes.
 /// </para>
 /// </remarks>
-internal sealed class InferenceForwardContext
+public sealed class InferenceForwardContext
 {
     /// <summary>
     /// The KV-cache sequence id this forward belongs to (isolates concurrent sequences).

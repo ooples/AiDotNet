@@ -4,7 +4,6 @@ using AiDotNet.Autodiff;
 using AiDotNet.Engines;
 using AiDotNet.Interfaces;
 using AiDotNet.Helpers;
-using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
 
@@ -53,8 +52,52 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Convolution)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = true, ExpectedInputRank = 3, Cost = ComputeCost.High, TestInputShape = "4, 8, 8", TestConstructorArgs = "4, 4")]
-public class ResidualDenseBlock<T> : LayerBase<T>
+// SHAPE-PRESERVING, and it is the residual connection that makes it so rather than any of the five
+// convolutions: ForwardTraced ends at "AddResidual(x5, x0, _residualScale)", which can only add x5 to
+// the untouched input if the two agree exactly. OnFirstForward says the same thing directly -
+// "ResolveShapes(new[] { _numFeatures, inH, inW }, new[] { _numFeatures, inH, inW })" - input and output
+// are the SAME array contents. The interior channel growth (_growthChannels per conv, concatenated) is
+// entirely internal and never reaches the boundary.
+//
+// Roles and ranks come from this layer's own guard, which rejects everything else:
+// "requires rank-3 [C,H,W] or rank-4 [B,C,H,W] input". BatchOptional covers both from one declaration,
+// including the rank 3 its [LayerProperty(ExpectedInputRank = 3)] is tested at.
+//
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    BatchOptional = true, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    BatchOptional = true, Direction = TensorLayoutDirection.Output)]
+[AutoParameters]
+public partial class ResidualDenseBlock<T> : LayerBase<T>, IShapeContract
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// Every axis is <c>Same</c>, so this looks like the case the generator handles - but the generator
+    /// keys its arms on the DECLARED layout length and does not expand <c>BatchOptional</c>, so it would
+    /// emit rank 4 only and return null for the rank 3 this layer's
+    /// <c>[LayerProperty(ExpectedInputRank = 3, TestInputShape = "4, 8, 8")]</c> exercises. Writing both
+    /// ranks by hand is what makes the unbatched form resolvable rather than silently declined.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        // Ranks 3 and 4 only - the two forms OnFirstForward accepts; it throws for anything else.
+        if (inputRank is not (3 or 4)) return null;
+
+        var channels = new OutputAxisContract(TensorAxis.Channels, AxisRelation.Same(TensorAxis.Channels));
+        var height = new OutputAxisContract(TensorAxis.Height, AxisRelation.Same(TensorAxis.Height));
+        var width = new OutputAxisContract(TensorAxis.Width, AxisRelation.Same(TensorAxis.Width));
+
+        return inputRank == 3
+            ? new[] { channels, height, width }
+            : new[]
+            {
+                new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+                channels, height, width,
+            };
+    }
+
     #region Fields
 
     /// <summary>
@@ -150,8 +193,6 @@ public class ResidualDenseBlock<T> : LayerBase<T>
     /// </summary>
     public int NumFeatures => _numFeatures;
 
-    /// <inheritdoc />
-    public override long ParameterCount => GetParameters().Length;
     public override bool SupportsTraining => true;
 
     /// <summary>
@@ -319,7 +360,7 @@ public class ResidualDenseBlock<T> : LayerBase<T>
     #region Forward Pass
 
     /// <inheritdoc />
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         if (!IsShapeResolved) OnFirstForward(input);
 
@@ -748,21 +789,6 @@ public class ResidualDenseBlock<T> : LayerBase<T>
         }
     }
 
-    /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        var allParams = new List<T>();
-        foreach (var conv in _convLayers)
-        {
-            var convParams = conv.GetParameters();
-            for (int i = 0; i < convParams.Length; i++)
-            {
-                allParams.Add(convParams[i]);
-            }
-        }
-        return new Vector<T>([.. allParams]);
-    }
-
     public override Vector<T> GetParameterGradients()
     {
         var gradVectors = _convLayers
@@ -775,26 +801,6 @@ public class ResidualDenseBlock<T> : LayerBase<T>
     {
         foreach (var conv in _convLayers)
             conv.ClearGradients();
-    }
-
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        // Pre-Forward: each conv's input shape is unresolved, so its
-        // GetParameters().Length is wrong. Buffer; OnFirstForward replays.
-        if (!IsShapeResolved)
-        {
-            _pendingParameters = parameters;
-            return;
-        }
-
-        int offset = 0;
-        foreach (var conv in _convLayers)
-        {
-            int count = conv.GetParameters().Length;
-            conv.SetParameters(parameters.SubVector(offset, count));
-            offset += count;
-        }
     }
 
     private Vector<T>? _pendingParameters;

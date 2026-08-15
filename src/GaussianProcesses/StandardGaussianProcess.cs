@@ -43,16 +43,19 @@ public class StandardGaussianProcess<T> : GaussianProcessBase<T>
     /// <summary>
     /// The matrix of input features from the training data.
     /// </summary>
+    [Buffer]
     private Matrix<T> _X;
 
     /// <summary>
     /// The vector of target values from the training data.
     /// </summary>
+    [Buffer]
     private Vector<T> _y;
 
     /// <summary>
     /// The kernel matrix calculated from the training data.
     /// </summary>
+    [Buffer]
     private Matrix<T> _K;
 
     /// <summary>

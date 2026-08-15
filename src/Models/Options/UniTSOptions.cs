@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 
 namespace AiDotNet.Models.Options;
 
@@ -64,12 +64,26 @@ public class UniTSOptions<T> : TimeSeriesRegressionOptions<T>
         if (other == null)
             throw new ArgumentNullException(nameof(other));
 
+        // Seed is declared on ModelOptions rather than in this file, so a copy constructor
+        // written from the local declarations alone misses it. Losing it on a clone silently
+        // changes deterministic initialization.
+        Seed = other.Seed;
         ContextLength = other.ContextLength;
         ForecastHorizon = other.ForecastHorizon;
         HiddenDimension = other.HiddenDimension;
         NumLayers = other.NumLayers;
         NumHeads = other.NumHeads;
-        ConvKernelSizes = other.ConvKernelSizes;
+        // Cloned, not shared: a bare assignment leaves the clone and the original writing
+        // through the SAME buffer, so mutating one silently reconfigures the other.
+        // A null here would be stored as a non-nullable property holding null, so the failure
+        // surfaces much later as a null reference in model code with nothing pointing back at the
+        // clone that produced it. Reject it at the boundary instead.
+        if (other.ConvKernelSizes is null)
+        {
+            throw new ArgumentException(
+                $"{nameof(other.ConvKernelSizes)} must not be null.", nameof(other));
+        }
+        ConvKernelSizes = (int[])other.ConvKernelSizes.Clone();
         DropoutRate = other.DropoutRate;
         TaskType = other.TaskType;
         NumClasses = other.NumClasses;

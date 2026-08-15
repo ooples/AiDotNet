@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 
 namespace AiDotNet.Models.Options;
 
@@ -9,39 +9,36 @@ namespace AiDotNet.Models.Options;
 /// <remarks>
 /// <para>
 /// TimeMachine is a state space model specifically designed for time series forecasting
-/// that combines the efficiency of SSMs with specialized temporal modeling components.
+/// with two outer and two inner Mamba branches.
 /// </para>
 /// <para><b>For Beginners:</b> TimeMachine is a modern architecture that combines ideas from
-/// state space models (like Mamba and S4) with time series-specific enhancements:
-///
-/// <b>The Key Insight:</b>
-/// While Mamba and S4 are general-purpose sequence models, TimeMachine is specifically
-/// designed for time series data with features like:
-/// 1. Multi-scale temporal decomposition
-/// 2. Trend-seasonality modeling
-/// 3. Efficient long-range dependency capture
-///
-/// <b>How It Works:</b>
-/// 1. <b>Temporal Decomposition:</b> Separates trend, seasonal, and residual components
-/// 2. <b>Multi-Scale SSM:</b> Processes different temporal scales with dedicated SSM blocks
-/// 3. <b>Adaptive Gating:</b> Learns which scales are most important for each prediction
-/// 4. <b>Reconstruction:</b> Combines multi-scale outputs for final forecast
-///
-/// <b>Architecture:</b>
-/// - Input embedding with reversible instance normalization
-/// - Multi-scale SSM blocks (fine, medium, coarse granularity)
-/// - Scale-wise attention for importance weighting
-/// - Output projection with de-normalization
+/// state space models (like Mamba and S4) with a time-series-specific branch structure.
+/// RevIN first normalizes each series. E1 embeds the history length, two outer Mambas
+/// scan complementary orientations, E2 forms a smaller embedding for two inner Mambas,
+/// and P1/P2 combine residual and concatenated paths into the forecast.
 ///
 /// <b>Advantages:</b>
 /// - Linear complexity O(n) from SSM backbone
-/// - Explicit temporal decomposition improves interpretability
-/// - Multi-scale processing captures patterns at different frequencies
+/// - Complementary scans model both channel and embedding-axis dependencies
+/// - Residual paths preserve the original embedded signal
 /// - State-of-the-art results on time series benchmarks
 /// </para>
 /// <para>
 /// <b>Reference:</b> Ahamed et al., "TimeMachine: A Time Series is Worth 4 Mambas for Long-term Forecasting", 2024.
 /// https://arxiv.org/abs/2403.09898
+/// </para>
+/// <para>
+/// <b>MIGRATION — four properties were removed:</b> <c>NumScales</c>, <c>NumLayers</c>,
+/// <c>UseMultiScaleAttention</c> and <c>TemporalDecompositionMethod</c>. Each was public, settable
+/// and read by nothing. The published graph is fixed — exactly four Mambas in the two-outer /
+/// two-inner arrangement, combined by addition and concatenation rather than attention — so setting
+/// any of them produced the identical model with no error and no signal. Delete the assignments;
+/// there is no replacement, because there was never a behavior to replace. A build error naming the
+/// property is the point: it tells you the setting was doing nothing, which the old code did not.
+/// The dimensions that DO change the model — <see cref="ModelDimension"/>,
+/// <see cref="StateDimension"/>, <see cref="ExpandFactor"/>, <see cref="ConvKernelSize"/>,
+/// <see cref="ContextLength"/>, <see cref="ForecastHorizon"/> and <see cref="DropoutRate"/> —
+/// are unchanged.
 /// </para>
 /// </remarks>
 public class TimeMachineOptions<T> : TimeSeriesRegressionOptions<T>
@@ -51,7 +48,7 @@ public class TimeMachineOptions<T> : TimeSeriesRegressionOptions<T>
     /// </summary>
     /// <remarks>
     /// <para><b>For Beginners:</b> Creates a default TimeMachine configuration optimized for
-    /// multi-scale time series forecasting with efficient state space processing.
+    /// the paper's four-Mamba time series forecasting graph.
     /// </para>
     /// </remarks>
     public TimeMachineOptions()
@@ -68,18 +65,18 @@ public class TimeMachineOptions<T> : TimeSeriesRegressionOptions<T>
         if (other == null)
             throw new ArgumentNullException(nameof(other));
 
+        // Seed is declared on ModelOptions rather than in this file, so a copy constructor
+        // written from the local declarations alone misses it. Losing it on a clone silently
+        // changes deterministic initialization.
+        Seed = other.Seed;
         ContextLength = other.ContextLength;
         ForecastHorizon = other.ForecastHorizon;
         ModelDimension = other.ModelDimension;
         StateDimension = other.StateDimension;
-        NumScales = other.NumScales;
-        NumLayers = other.NumLayers;
         ExpandFactor = other.ExpandFactor;
         ConvKernelSize = other.ConvKernelSize;
         DropoutRate = other.DropoutRate;
-        UseMultiScaleAttention = other.UseMultiScaleAttention;
         UseReversibleNormalization = other.UseReversibleNormalization;
-        TemporalDecompositionMethod = other.TemporalDecompositionMethod;
     }
 
     /// <summary>
@@ -117,84 +114,45 @@ public class TimeMachineOptions<T> : TimeSeriesRegressionOptions<T>
     /// <summary>
     /// Gets or sets the state dimension for each SSM block.
     /// </summary>
-    /// <value>The state dimension, defaulting to 16.</value>
+    /// <value>The state dimension, defaulting to 256 as in the TimeMachine reference implementation.</value>
     /// <remarks>
     /// <para><b>For Beginners:</b> The dimension of the hidden state in each SSM.
     /// Larger values capture more complex dynamics but use more memory.
     /// </para>
     /// </remarks>
-    public int StateDimension { get; set; } = 16;
-
-    /// <summary>
-    /// Gets or sets the number of temporal scales to model.
-    /// </summary>
-    /// <value>The number of scales, defaulting to 4 (as per "4 Mambas" in the paper).</value>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> TimeMachine uses multiple SSM blocks at different
-    /// temporal granularities. The default of 4 corresponds to:
-    /// - Scale 1: Fine-grained (captures high-frequency patterns)
-    /// - Scale 2: Medium-fine (captures daily patterns)
-    /// - Scale 3: Medium-coarse (captures weekly patterns)
-    /// - Scale 4: Coarse (captures long-term trends)
-    /// More scales increase capacity but also computation.
-    /// </para>
-    /// </remarks>
-    public int NumScales { get; set; } = 4;
-
-    /// <summary>
-    /// Gets or sets the number of SSM layers per scale.
-    /// </summary>
-    /// <value>The number of layers per scale, defaulting to 2.</value>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> How many SSM blocks are stacked at each scale.
-    /// More layers = deeper model per scale = more capacity.
-    /// </para>
-    /// </remarks>
-    public int NumLayers { get; set; } = 2;
+    public int StateDimension { get; set; } = 256;
 
     /// <summary>
     /// Gets or sets the expansion factor for SSM inner dimension.
     /// </summary>
-    /// <value>The expansion factor, defaulting to 2.</value>
+    /// <value>The expansion factor, defaulting to 1 as in the TimeMachine experiments.</value>
     /// <remarks>
     /// <para><b>For Beginners:</b> Each SSM operates in an expanded dimension
     /// (model_dim * expand_factor) for more expressiveness.
     /// </para>
     /// </remarks>
-    public int ExpandFactor { get; set; } = 2;
+    public int ExpandFactor { get; set; } = 1;
 
     /// <summary>
     /// Gets or sets the convolution kernel size for local context.
     /// </summary>
-    /// <value>The kernel size, defaulting to 4.</value>
+    /// <value>The kernel size, defaulting to 2 as in the TimeMachine experiments.</value>
     /// <remarks>
     /// <para><b>For Beginners:</b> A small 1D convolution captures local patterns
     /// before SSM processing. Typically 3-7.
     /// </para>
     /// </remarks>
-    public int ConvKernelSize { get; set; } = 4;
+    public int ConvKernelSize { get; set; } = 2;
 
     /// <summary>
     /// Gets or sets the dropout rate for regularization.
     /// </summary>
-    /// <value>The dropout rate, defaulting to 0.1.</value>
+    /// <value>The dropout rate, defaulting to 0.05 as in the reference implementation.</value>
     /// <remarks>
     /// <para><b>For Beginners:</b> Dropout helps prevent overfitting.
     /// </para>
     /// </remarks>
-    public double DropoutRate { get; set; } = 0.1;
-
-    /// <summary>
-    /// Gets or sets whether to use multi-scale attention for combining scales.
-    /// </summary>
-    /// <value>True to use attention for scale combination; false for simple concatenation. Default: true.</value>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> When true, the model learns to weight different scales
-    /// dynamically based on the input. When false, scales are simply concatenated.
-    /// Attention provides more flexibility but adds computation.
-    /// </para>
-    /// </remarks>
-    public bool UseMultiScaleAttention { get; set; } = true;
+    public double DropoutRate { get; set; } = 0.05;
 
     /// <summary>
     /// Gets or sets whether to use reversible instance normalization.
@@ -208,16 +166,4 @@ public class TimeMachineOptions<T> : TimeSeriesRegressionOptions<T>
     /// </remarks>
     public bool UseReversibleNormalization { get; set; } = true;
 
-    /// <summary>
-    /// Gets or sets the temporal decomposition method for multi-scale processing.
-    /// </summary>
-    /// <value>The temporal decomposition method, defaulting to "moving_avg".</value>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> How to decompose the time series into components:
-    /// - "moving_avg": Uses moving average to extract trend (fast, simple)
-    /// - "fft": Uses FFT for frequency-based decomposition (better for periodic data)
-    /// - "learnable": Learns the decomposition (most flexible but more parameters)
-    /// </para>
-    /// </remarks>
-    public string TemporalDecompositionMethod { get; set; } = "moving_avg";
 }

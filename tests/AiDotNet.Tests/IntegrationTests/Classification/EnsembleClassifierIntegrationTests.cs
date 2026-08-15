@@ -126,7 +126,7 @@ public class EnsembleClassifierIntegrationTests
         var options = new RandomForestClassifierOptions<double>
         {
             NEstimators = 10,
-            MaxFeatures = "sqrt",  // Only consider sqrt(10) ~ 3 features at each split
+            MaxFeatures = AiDotNet.Enums.MaxFeatureSelection.Sqrt,  // Only consider sqrt(10) ~ 3 features at each split
             MaxDepth = 5,
             Seed = 42
         };

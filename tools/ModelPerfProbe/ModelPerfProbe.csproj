@@ -13,11 +13,5 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="Program.cs" />
-    <Compile Include="ModelRegistry.cs" />
-    <Compile Include="ProbeRunner.cs" />
-    <Compile Include="ProbeResult.cs" />
-  </ItemGroup>
-  <ItemGroup>
-    <ProjectReference Include="..\..\src\AiDotNet.csproj" />
   </ItemGroup>
 </Project>

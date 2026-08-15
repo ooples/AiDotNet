@@ -82,16 +82,19 @@ public class JaccardLoss<T> : LossFunctionBase<T>
     /// <inheritdoc />
     public override Tensor<T> ComputeTapeLoss(Tensor<T> predicted, Tensor<T> target)
     {
-        // Jaccard = 1 - (intersection + smooth) / (union + smooth)
+        // Match CalculateLoss exactly: soft IoU without additive smoothing. The former +1 in both
+        // numerator and denominator defined a different objective, so ComputeGradient returned the
+        // derivative of smoothed IoU while finite differences measured the unsmoothed value path.
         var intersection = Engine.TensorMultiply(predicted, target);
         var allAxes = Enumerable.Range(0, intersection.Shape.Length).ToArray();
         var interSum = Engine.ReduceSum(intersection, allAxes, keepDims: false);
         var predSum = Engine.ReduceSum(predicted, allAxes, keepDims: false);
         var targSum = Engine.ReduceSum(target, allAxes, keepDims: false);
         var union = Engine.TensorSubtract(Engine.TensorAdd(predSum, targSum), interSum);
-        var numerator = Engine.TensorAddScalar(interSum, NumOps.One);
-        var denominator = Engine.TensorAddScalar(union, NumOps.One);
-        var iou = Engine.TensorDivide(numerator, denominator);
+        var safeUnion = Engine.TensorClampMin(
+            union,
+            NumOps.FromDouble(NumericalStabilityHelper.SmallEpsilon));
+        var iou = Engine.TensorDivide(interSum, safeUnion);
         return Engine.ScalarMinusTensor(NumOps.One, iou);
     }
 }
