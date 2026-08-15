@@ -445,4 +445,66 @@ public class ADMMOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
         var updated = UpdateParameters(context.GetFlatParameters(), context.GetFlatGradients());
         context.SetFlatParameters(updated);
     }
+
+    /// <summary>
+    /// Applies one linearized-ADMM iteration to a flat parameter vector.
+    /// </summary>
+    /// <param name="parameters">The current parameters (the x block).</param>
+    /// <param name="gradient">The gradient of the loss at those parameters.</param>
+    /// <returns>The updated parameters.</returns>
+    /// <remarks>
+    /// <para>
+    /// Without this override, <see cref="Step"/> resolved to
+    /// <see cref="GradientBasedOptimizerBase{T, TInput, TOutput}"/>'s default <c>theta -= lr * g</c>. The
+    /// splitting was never performed at all on the tape path: no z block, no dual variable, and the
+    /// regularizer that is the whole reason to run ADMM was simply not applied. Training a neural network
+    /// with ADMMOptimizer silently produced plain gradient descent.
+    /// </para>
+    /// <para>
+    /// The three ADMM blocks, with the augmented-Lagrangian coupling that makes it ADMM rather than a
+    /// gradient step next to an unrelated projection:
+    /// </para>
+    /// <code>
+    /// x &lt;- x - lr * ( grad L(x) + rho * (x - z + u) )   // linearized x-update
+    /// z &lt;- regularize( (x + u) / rho )                   // prox of the regularizer
+    /// u &lt;- u + (x - z)                                   // scaled dual ascent
+    /// </code>
+    /// <para>
+    /// <b>Deviation, stated explicitly.</b> <see cref="Optimize"/> solves the x-block in closed form,
+    /// <c>(X^T X + rho I) x = X^T y + rho(z - u)</c>, which needs the design matrix X. The tape has no design
+    /// matrix — it produces one gradient per step — so the x-block is instead LINEARIZED: a gradient step on
+    /// the augmented Lagrangian. That is the standard variant for problems where the exact prox of the smooth
+    /// term is unavailable (linearized / proximal-gradient ADMM, as in Parikh and Boyd's proximal-algorithms
+    /// treatment), not an invention for this file. It converges to the same solution under the usual step-size
+    /// condition, just not in one x-solve per iteration.
+    /// </para>
+    /// <para>
+    /// The z and u blocks are exactly the ones <see cref="Optimize"/> uses — the same
+    /// <c>UpdateZ</c>/<c>UpdateU</c> methods, not reimplementations — so the regularizer and dual update
+    /// cannot drift between the two paths.
+    /// </para>
+    /// </remarks>
+    public override Vector<T> UpdateParameters(Vector<T> parameters, Vector<T> gradient)
+    {
+        int n = parameters.Length;
+        if (_z is null || _z.Length != n) _z = Vector<T>.CreateDefault(n, NumOps.Zero);
+        if (_u is null || _u.Length != n) _u = Vector<T>.CreateDefault(n, NumOps.Zero);
+
+        var rho = NumOps.FromDouble(_options.Rho);
+
+        // Linearized x-update on the augmented Lagrangian:
+        //   x <- x - lr * ( grad L(x) + rho * (x - z + u) )
+        // The rho term is what couples x to the split variable; drop it and this degenerates into the
+        // gradient step this override exists to replace.
+        var coupling = (Vector<T>)Engine.Add(Engine.Subtract(parameters, _z), _u);
+        var totalGradient = (Vector<T>)Engine.Add(gradient, Engine.Multiply(coupling, rho));
+        var x = (Vector<T>)Engine.Subtract(parameters, Engine.Multiply(totalGradient, CurrentLearningRate));
+
+        // Reuse Optimize()'s own z and u blocks so the two paths cannot disagree about them.
+        UpdateZ(x);
+        UpdateU(x);
+
+        _iteration++;
+        return x;
+    }
 }

@@ -423,4 +423,60 @@ public class CoordinateDescentOptimizer<T, TInput, TOutput> : GradientBasedOptim
         var updated = UpdateParameters(context.GetFlatParameters(), context.GetFlatGradients());
         context.SetFlatParameters(updated);
     }
+
+    /// <summary>
+    /// Applies one full coordinate sweep to a flat parameter vector, using per-coordinate learning rates and
+    /// per-coordinate momentum.
+    /// </summary>
+    /// <param name="parameters">The current parameters.</param>
+    /// <param name="gradient">The gradient at those parameters.</param>
+    /// <returns>The updated parameters.</returns>
+    /// <remarks>
+    /// <para>
+    /// Without this override, <see cref="Step"/> resolved to
+    /// <see cref="GradientBasedOptimizerBase{T, TInput, TOutput}"/>'s default of plain
+    /// <c>theta -= lr * g</c>, so training a neural network with this optimizer silently produced gradient
+    /// descent with a single global learning rate — discarding the per-coordinate rates and momentum that are
+    /// the entire reason to choose it.
+    /// </para>
+    /// <para>
+    /// This reproduces exactly what <see cref="Optimize"/>'s sweep does, coordinate by coordinate:
+    /// </para>
+    /// <code>
+    /// update_i = -(lr_i * g_i + momentum_i * previousUpdate_i)
+    /// theta_i += update_i
+    /// </code>
+    /// <para>
+    /// One difference, and it is an improvement rather than a deviation: <see cref="Optimize"/> obtains each
+    /// partial derivative from <c>CalculatePartialDerivative</c>, a one-sided finite difference with a fixed
+    /// 1e-6 epsilon costing one model evaluation per coordinate. The tape hands us every partial exactly, in
+    /// one backward pass. Same update rule, exact derivatives, and O(1) rather than O(n) evaluations.
+    /// </para>
+    /// <para>
+    /// The per-coordinate state is sized lazily here because the tape path never calls the private
+    /// <c>InitializeAdaptiveParameters(IFullModel)</c> overload — that one needs a model to read the
+    /// parameter count from, and <see cref="Step"/> has only the flat vector.
+    /// </para>
+    /// </remarks>
+    public override Vector<T> UpdateParameters(Vector<T> parameters, Vector<T> gradient)
+    {
+        int n = parameters.Length;
+
+        // Size (or resize) the per-coordinate state against the vector we were actually handed.
+        if (_learningRates is null || _learningRates.Length != n)
+        {
+            _learningRates = Vector<T>.CreateDefault(n, NumOps.FromDouble(_options.InitialLearningRate));
+            _momentums = Vector<T>.CreateDefault(n, NumOps.FromDouble(_options.InitialMomentum));
+            _previousUpdate = Vector<T>.CreateDefault(n, NumOps.Zero);
+        }
+
+        var updated = parameters.Clone();
+        for (int i = 0; i < n; i++)
+        {
+            var update = CalculateUpdate(gradient[i], i);
+            updated[i] = NumOps.Add(updated[i], update);
+        }
+
+        return updated;
+    }
 }

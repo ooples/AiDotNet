@@ -495,9 +495,20 @@ public class NewtonMethodOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
         }
         else
         {
-            // Fall back to approximate Newton via flat parameter vector
-            var updated = UpdateParameters(context.GetFlatParameters(), context.GetFlatGradients());
-            context.SetFlatParameters(updated);
+            // No re-evaluation means no Hessian-vector products, and without those there is no Newton step
+            // to take. This used to fall through to UpdateParameters, which — with no override on this class
+            // — resolved to GradientBasedOptimizerBase's plain `theta -= lr * g`. So a caller who selected
+            // Newton's method on a context that cannot re-evaluate silently received gradient descent: a
+            // first-order method wearing a second-order name, converging plausibly and never saying so.
+            //
+            // Refuse instead. Newton needs curvature; if the context cannot supply it, that is a fact the
+            // caller has to know, not one to paper over with a different algorithm.
+            throw new NotSupportedException(
+                "NewtonMethodOptimizer requires a training context that supports loss re-evaluation, so it " +
+                "can form Hessian-vector products for the Newton-CG step. This context does not " +
+                "(TapeStepContext.SupportsReevaluation is false), and there is no Newton step available " +
+                "without curvature. Use Optimize() with an explicit dataset, or choose a first-order " +
+                "optimizer (Adam, SGD) or a quasi-Newton one (LBFGS) for this path.");
         }
     }
 
