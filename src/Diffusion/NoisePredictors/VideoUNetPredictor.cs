@@ -7,6 +7,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.Autodiff;
 
 namespace AiDotNet.Diffusion.NoisePredictors;
 
@@ -1041,6 +1042,32 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
         Tensor<T>? conditioning,
         bool isVideo)
     {
+        // Upscale-A-Video freezes the Stable Diffusion spatial backbone and optimizes only the
+        // inserted temporal modules. Retaining every internal spatial activation until backward
+        // made the paper-scale 733M model require over 45 GiB for one step. Checkpoint each block:
+        // retain its boundary, recompute its interior during backward, and explicitly request only
+        // the temporal parameter gradients. The input VJP still crosses every frozen spatial op,
+        // so this is mathematically the same temporal-only fine-tuning objective, not a smaller model.
+        if (_architectureProfile == VideoUNetArchitectureProfile.UpscaleAVideo
+            && GradientTape<T>.Current is not null)
+        {
+            return GradientCheckpointing<T>.Checkpoint(
+                [input => ApplyVideoBlockCore(block, input, timeEmbed, conditioning, isVideo)],
+                x,
+                parameterSourceFactory: () => GetBlockTemporalTrainingParameters(block),
+                segmentSize: 1);
+        }
+
+        return ApplyVideoBlockCore(block, x, timeEmbed, conditioning, isVideo);
+    }
+
+    private Tensor<T> ApplyVideoBlockCore(
+        VideoBlock block,
+        Tensor<T> x,
+        Tensor<T> timeEmbed,
+        Tensor<T>? conditioning,
+        bool isVideo)
+    {
         // Spatial ResBlock
         if (block.SpatialResBlock is DiffusionResBlock<T> diffusionResBlock)
         {
@@ -1142,6 +1169,34 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
         }
 
         return x;
+    }
+
+    private IReadOnlyList<Tensor<T>> GetBlockTemporalTrainingParameters(VideoBlock block)
+    {
+        var parameters = new List<Tensor<T>>();
+        var seen = new HashSet<Tensor<T>>(TensorReferenceComparer<Tensor<T>>.Instance);
+
+        Add(block.TemporalResBlock);
+        Add(block.TemporalAttention);
+        if (block.SpatialAttention is VideoTransformer3DLayer<T> transformer)
+        {
+            foreach (var layer in transformer.TemporalTrainingLayers) Add(layer);
+        }
+
+        return parameters;
+
+        void Add(ILayer<T>? layer)
+        {
+            if (layer is ITrainableLayer<T> trainable)
+            {
+                // The no-grad checkpoint forward runs before this factory, so lazy child weights
+                // are materialized. TemporalTrainingLayers contains the explicit leaf/composite
+                // adapters from the paper objective; read their tensor list directly without ever
+                // flattening the foundation-scale predictor parameter vector.
+                foreach (var parameter in trainable.GetTrainableParameters())
+                    if (parameter.Length > 0 && seen.Add(parameter)) parameters.Add(parameter);
+            }
+        }
     }
 
     // Reshape NCHW [B, C, H, W] → [B, H*W, C] for self-attention, then back.

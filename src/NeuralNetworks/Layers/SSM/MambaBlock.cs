@@ -514,49 +514,25 @@ internal partial class MambaBlock<T> : LayerBase<T>
     /// Depthwise causal Conv1D using Engine tensor operations.
     /// </summary>
     /// <remarks>
-    /// Time loop over sequence positions with a tiny inner kernel loop (typically 4).
-    /// All per-position operations use Engine-accelerated vectors of size [batch, innerDim].
+    /// Uses the engine's depthwise Conv1D primitive so the entire causal convolution is one
+    /// differentiable operation instead of expanding <c>sequenceLength * kernelSize</c> narrow,
+    /// multiply, and add nodes onto the tape. The public Mamba parameter layout stores coefficients
+    /// as <c>[channel, lag]</c>, where lag zero is the current token. The NCL convolution primitive
+    /// performs cross-correlation, so reverse the lag axis and use <c>kernelSize - 1</c> symmetric
+    /// padding, then retain the first <c>sequenceLength</c> positions. This is exactly equivalent to
+    /// <c>sum_k weight[channel,k] * input[t-k,channel]</c> and preserves the paper's causal contract.
     /// </remarks>
     private Tensor<T> DepthwiseConv1DForward(Tensor<T> input, int batchSize, int seqLen)
     {
-        var output = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _innerDimension });
-        var bias2D = Engine.Reshape(_convBias, new[] { 1, _innerDimension });
-
-        // Pre-compute weight slices for each kernel position: [innerDim] -> [1, innerDim]
-        var weightSlices = new Tensor<T>[_convKernelSize];
-        for (int k = 0; k < _convKernelSize; k++)
-        {
-            weightSlices[k] = Engine.Reshape(
-                _convWeights.GetSliceAlongDimension(k, 1),
-                new[] { 1, _innerDimension });
-        }
-
-        for (int t = 0; t < seqLen; t++)
-        {
-            // Accumulate weighted past inputs, then add bias last.
-            Tensor<T>? result_t = null;
-            for (int k = 0; k < _convKernelSize; k++)
-            {
-                int srcT = t - k;  // causal: only current and past positions
-                if (srcT >= 0)
-                {
-                    var x_src = input.GetSliceAlongDimension(srcT, 1);
-                    var weighted = Engine.TensorBroadcastMultiply(x_src, weightSlices[k]);
-                    result_t = result_t is null
-                        ? weighted
-                        : Engine.TensorAdd(result_t, weighted);
-                }
-            }
-
-            // Add bias: broadcast [1, innerDim] to [batch, innerDim]
-            var final_t = result_t is null
-                ? Engine.TensorBroadcastAdd(new Tensor<T>(new[] { batchSize, _innerDimension }), bias2D)
-                : Engine.TensorBroadcastAdd(result_t, bias2D);
-
-            output.SetSlice(1, t, final_t);
-        }
-
-        return output;
+        var inputNcl = Engine.TensorPermute(input, new[] { 0, 2, 1 }).Contiguous();
+        var reversedWeights = Engine.TensorFlip(_convWeights, new[] { 1 });
+        var kernel = Engine.Reshape(reversedWeights, new[] { _innerDimension, 1, _convKernelSize });
+        var padded = Engine.DepthwiseConv1D(
+            inputNcl, kernel, stride: 1, padding: _convKernelSize - 1);
+        var causalNcl = Engine.TensorNarrow(padded, dim: 2, start: 0, length: seqLen);
+        var causal = Engine.TensorPermute(causalNcl, new[] { 0, 2, 1 }).Contiguous();
+        var bias = Engine.Reshape(_convBias, new[] { 1, 1, _innerDimension });
+        return Engine.TensorBroadcastAdd(causal, bias);
     }
 
     /// <summary>
