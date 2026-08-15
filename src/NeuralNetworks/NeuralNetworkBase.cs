@@ -3014,8 +3014,33 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
 
         if (Architecture.OutputSize > 0 && !AreShapesCompatible([Architecture.OutputSize], outputShape))
         {
-            error = $"The last layer's output shape [{string.Join(", ", outputShape)}] must match the architecture output size ({Architecture.OutputSize}).";
-            return false;
+            // A RESOLVED multi-dimensional output describes the same tensor as the architecture's flat
+            // OutputSize whenever its dimensions multiply out to that count: a generator emitting
+            // [3, 32, 32] and an OutputSize of 3072 are the same 3072 values, differing only in whether
+            // the shape is carried structured or flattened. AreShapesCompatible compares dimension-wise
+            // and cannot see that.
+            //
+            // The deferral above only covers the UNRESOLVED case ([3, -1, -1] before first Forward), so
+            // the same network passed validation when freshly built and failed once its shapes had been
+            // resolved by a forward pass. That is exactly the path a clone takes -- rebuilding a trained
+            // network from its own architecture -- which is why every GAN used to need a hand-written
+            // CreateNewInstance whose only job was to route around this check (see DCGAN, deleted in
+            // 7f61e07c4). Comparing the element count instead lets the base reproduce those clones.
+            //
+            // Narrow by construction: a genuine mismatch has a different element count and is still
+            // rejected with the same message, and a shape carrying a batch dimension multiplies it in,
+            // so [B, 3, 32, 32] does not match 3072 either.
+            long resolvedElements = 1;
+            foreach (int dimension in outputShape)
+            {
+                resolvedElements *= dimension;
+            }
+
+            if (resolvedElements != Architecture.OutputSize)
+            {
+                error = $"The last layer's output shape [{string.Join(", ", outputShape)}] must match the architecture output size ({Architecture.OutputSize}).";
+                return false;
+            }
         }
 
         error = string.Empty;
