@@ -1,3 +1,4 @@
+using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.NeuralNetworks;
@@ -75,6 +76,16 @@ internal static class NeuralBatchHelper
     /// capture.
     /// </summary>
     public const double MemoryBudgetSafetyFactor = 0.7;
+
+    /// <summary>
+    /// Maximum times <see cref="EstimateChunkSize{T}"/> halves a candidate chunk that measured over budget.
+    /// </summary>
+    /// <remarks>
+    /// Six halvings shrink the candidate by 64x, which is far more than the ~1.3x the extrapolation was
+    /// observed to miss by, so the loop converges long before the cap in practice. The cap exists so a
+    /// pathological model cannot turn estimation into an unbounded sequence of full-size forwards.
+    /// </remarks>
+    public const int MaxChunkVerifyHalvings = 6;
 
     private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<object, AdaptiveState> _adaptiveStates
         = new();
@@ -484,14 +495,30 @@ internal static class NeuralBatchHelper
             && xTensor.Rank >= 1
             && xTensor.Shape[0] > 1)
         {
-            int chunk = EstimateChunkSize(nn, xTensor, memoryBudgetBytes);
-            if (chunk >= xTensor.Shape[0])
+            try
             {
-                var direct = nn.Predict(xTensor);
-                return direct is TOutput dt ? dt : model.Predict(X);
+                int chunk = EstimateChunkSize(nn, xTensor, memoryBudgetBytes);
+                if (chunk >= xTensor.Shape[0])
+                {
+                    var direct = nn.Predict(xTensor);
+                    return direct is TOutput dt ? dt : model.Predict(X);
+                }
+                var chunked = nn.PredictInBatches(xTensor, chunk);
+                return chunked is TOutput typed ? typed : model.Predict(X);
             }
-            var chunked = nn.PredictInBatches(xTensor, chunk);
-            return chunked is TOutput typed ? typed : model.Predict(X);
+            finally
+            {
+                // Hand the pooled chunk buffers back. This method's entire contract is a memory ceiling, and
+                // the pool keeps a separate set of buffers per distinct batch size and never releases them --
+                // so without this a caller who said "I have 1 GB" is left holding it after we return. Measured
+                // on a 50k-sample Transformer: 1504 MB retained at the end of this call, of which clearing the
+                // pool released 1236 MB; the returned prediction is 12 MB. Dropping the model released nothing,
+                // which is what identified the pool rather than layer caches as the owner.
+                //
+                // In a finally so an OOM or a model-thrown exception does not leave the buffers stranded --
+                // that is precisely the moment the memory is most needed back.
+                TensorArena.ClearPersistentPool();
+            }
         }
         return model.Predict(X);
     }
@@ -572,8 +599,24 @@ internal static class NeuralBatchHelper
         // Solve alpha + beta * chunk <= budget for chunk.
         long chunk = (budgetWithMargin - alpha) / beta;
         if (chunk < 1) return 1;
-        if (chunk > axis0) return axis0;
-        return (int)chunk;
+        if (chunk > axis0) chunk = axis0;
+
+        // VERIFY, do not trust the extrapolation. The fit above is built from probes at B=8/16, and the
+        // allocator does not behave the same way at both ends of the range it is being extrapolated across:
+        // small buffers come from the pool, large ones do not, so a straight line through two small points
+        // systematically under-predicts. Measured on a 50k-sample Transformer, the extrapolation chose a
+        // chunk whose forward actually retained 944 MB against a 717 MB target -- a 1.3x miss, in the
+        // unsafe direction.
+        //
+        // So measure a real forward at the candidate and halve until it fits. The common case costs one
+        // extra forward at roughly the size of the first chunk we were going to run anyway.
+        int candidate = (int)chunk;
+        for (int i = 0; i < MaxChunkVerifyHalvings && candidate > 1; i++)
+        {
+            if (MeasureForwardRetainedBytes(nn, sampleInput, candidate) <= budgetWithMargin) break;
+            candidate = System.Math.Max(1, candidate / 2);
+        }
+        return candidate;
     }
 
     /// <summary>
@@ -606,6 +649,15 @@ internal static class NeuralBatchHelper
             var warm = sampleInput.Slice(axis: 0, start: 0, end: 1).Contiguous();
             _ = nn.Predict(warm);
         }
+
+        // Probe from a KNOWN pool state. Without this the measurement is a function of how warm the
+        // persistent pool happens to be, and the estimator that consumes it inverts: a warmer pool returns a
+        // smaller retained delta, which lowers the per-sample estimate, which selects a LARGER chunk, which
+        // grows the pool further. Measured on a 50k-sample Transformer, that feedback made the same call
+        // retain 1755 MB / 2032 MB / 2771 MB depending only on what had run before it in the process.
+        // Clearing first costs the probe its buffer reuse but makes the number mean what it claims: the cost
+        // of taking a forward at this batch size from cold.
+        TensorArena.ClearPersistentPool();
 
         long before = System.GC.GetTotalMemory(forceFullCollection: true);
         var probeOutput = nn.Predict(probeInput);
