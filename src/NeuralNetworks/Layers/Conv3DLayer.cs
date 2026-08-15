@@ -363,22 +363,7 @@ public partial class Conv3DLayer<T> : LayerBase<T>, IShapeContract
     {
         if (InputChannels <= 0)
             return;
-
-        int[] kernelShape =
-            [OutputChannels, InputChannels, KernelSize, KernelSize, KernelSize];
-        if (WeightsAlreadyAllocated(_kernels, kernelShape)
-            && WeightsAlreadyAllocated(_biases, OutputChannels))
-        {
-            RegisterTrainableParameter(_kernels, PersistentTensorRole.Weights);
-            RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);
-            return;
-        }
-
-        _kernels = AllocateLazyWeight(kernelShape);
-        _biases = AllocateLazyWeight([OutputChannels]);
-        InitializeWeights();
-        RegisterTrainableParameter(_kernels, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);
+        AllocateAndRegisterWeights(InputChannels);
     }
 
     /// <summary>
@@ -408,20 +393,25 @@ public partial class Conv3DLayer<T> : LayerBase<T>, IShapeContract
         // exist (installed by SetParameters/SetTrainableParameters on deserialize, or shared by a
         // copy-on-write clone) so a cloned model's first forward does not overwrite restored/shared
         // TRAINED weights with fresh random ones (#1221 Clone_AfterTraining). See Conv1DLayer.
-        bool weightsAlreadyValid =
-            WeightsAlreadyAllocated(_kernels, OutputChannels, c, KernelSize, KernelSize, KernelSize)
-            && WeightsAlreadyAllocated(_biases, OutputChannels);
-
-        if (!weightsAlreadyValid)
-        {
-            _kernels = AllocateLazyWeight([OutputChannels, c, KernelSize, KernelSize, KernelSize]);
-            _biases = AllocateLazyWeight([OutputChannels]);
-            InitializeWeights();
-            RegisterTrainableParameter(_kernels, PersistentTensorRole.Weights);
-            RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);
-        }
+        AllocateAndRegisterWeights(c);
 
         ResolveShapes(new[] { c, d, h, w }, new[] { OutputChannels, outD, outH, outW });
+    }
+
+    private void AllocateAndRegisterWeights(int inputChannels)
+    {
+        int[] kernelShape =
+            [OutputChannels, inputChannels, KernelSize, KernelSize, KernelSize];
+        if (!WeightsAlreadyAllocated(_kernels, kernelShape)
+            || !WeightsAlreadyAllocated(_biases, OutputChannels))
+        {
+            _kernels = AllocateLazyWeight(kernelShape);
+            _biases = AllocateLazyWeight([OutputChannels]);
+            InitializeWeights();
+        }
+
+        RegisterTrainableParameter(_kernels, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);
     }
 
     /// <summary>

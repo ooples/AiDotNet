@@ -466,6 +466,8 @@ public partial class UpscaleAVideoModel<T> : VideoDiffusionModelBase<T>
             }
             finally
             {
+                _trainingVideoCondition?.Dispose();
+                _trainingTextConditioning?.Dispose();
                 _trainingVideoCondition = null;
                 _trainingTextConditioning = null;
                 _trainingNoiseLevel = 0;
@@ -575,6 +577,13 @@ public partial class UpscaleAVideoModel<T> : VideoDiffusionModelBase<T>
     /// <param name="numInferenceSteps">DDIM denoising steps.</param>
     /// <param name="guidanceScale">Classifier-free guidance scale.</param>
     /// <param name="seed">Optional deterministic inference seed.</param>
+    /// <param name="noiseLevel">Stable Diffusion x4 degradation/noise class in [0, 350].</param>
+    /// <param name="temporalWindowSize">Number of frames processed per temporal window.</param>
+    /// <param name="temporalWindowOverlap">Number of frames shared by adjacent windows.</param>
+    /// <param name="forwardFlows">Optional forward optical flows; must be supplied with <paramref name="backwardFlows"/>.</param>
+    /// <param name="backwardFlows">Optional backward optical flows; must be supplied with <paramref name="forwardFlows"/>.</param>
+    /// <param name="propagationSteps">Denoising-step indexes at which bidirectional flow propagation is applied.</param>
+    /// <param name="negativePrompt">Negative text used by classifier-free guidance.</param>
     /// <returns>Four-times-upscaled video in [B,F,C,4H,4W] layout.</returns>
     public Tensor<T> Upscale(
         Tensor<T> lowResolutionVideo,
@@ -626,27 +635,26 @@ public partial class UpscaleAVideoModel<T> : VideoDiffusionModelBase<T>
         // The official SD-x4 contract does not VAE-encode the low-resolution input.
         // It adds scheduler noise at the selected degradation level to RGB directly,
         // then concatenates those 3 channels with the 4-channel target latent.
-        var cleanCondition = Engine.TensorPermute(lowResolutionVideo, [0, 2, 1, 3, 4]);
+        // TensorPermute returns a strided view and the scheduler consumes raw vectors, so
+        // materialize the NCFHW component boundary just as TrainConditioned does.
+        var cleanCondition = Engine.TensorPermute(
+            lowResolutionVideo, [0, 2, 1, 3, 4]).Contiguous();
 
-        Tensor<T>? textConditioning = null;
-        Tensor<T>? unconditional = null;
         if (_conditioner is null)
             throw new InvalidOperationException(
                 "Upscale-A-Video requires the Stable Diffusion x4 Upscaler CLIP text " +
                 "encoder (1024-dimensional, 23-layer) for its Transformer3D cross-attention. " +
                 "Pass that released conditioner; reducing guidance does not remove the model's " +
                 "text-conditioning layers.");
-        if (_conditioner is not null && _conditioner.EmbeddingDimension != CROSS_ATTENTION_DIM)
+        if (_conditioner.EmbeddingDimension != CROSS_ATTENTION_DIM)
             throw new InvalidOperationException(
                 $"Upscale-A-Video requires {CROSS_ATTENTION_DIM}-dimensional text conditioning, " +
                 $"but the supplied conditioner produces {_conditioner.EmbeddingDimension} dimensions.");
-        bool useGuidance = guidanceScale > 1.0 && _conditioner is not null && _videoUNet.SupportsCFG;
-        if (_conditioner is not null)
-        {
-            textConditioning = GetCachedTextConditioning(prompt, negativeSlot: false);
-            if (useGuidance)
-                unconditional = GetCachedTextConditioning(negativePrompt, negativeSlot: true);
-        }
+        bool useGuidance = guidanceScale > 1.0 && _videoUNet.SupportsCFG;
+        using var textConditioning = GetCachedTextConditioning(prompt, negativeSlot: false);
+        using Tensor<T>? unconditional = useGuidance
+            ? GetCachedTextConditioning(negativePrompt, negativeSlot: true)
+            : null;
 
         Scheduler.SetTimesteps(numInferenceSteps);
         var rng = CreateInferenceRng(seed);
@@ -690,7 +698,8 @@ public partial class UpscaleAVideoModel<T> : VideoDiffusionModelBase<T>
         }
 
         var decodedNCFHW = _temporalVAE.DecodeVideoFromDiffusion(latents);
-        var decoded = Engine.TensorPermute(decodedNCFHW, [0, 2, 1, 3, 4]);
+        var decoded = Engine.TensorPermute(
+            decodedNCFHW, [0, 2, 1, 3, 4]).Contiguous();
         return originalRank switch
         {
             3 => Engine.Reshape(decoded, [decoded.Shape[2], decoded.Shape[3], decoded.Shape[4]]),
@@ -712,28 +721,33 @@ public partial class UpscaleAVideoModel<T> : VideoDiffusionModelBase<T>
                 ? _cachedNegativeConditioning
                 : _cachedPromptConditioning;
             if (cachedValue is not null && string.Equals(cachedKey, prompt, StringComparison.Ordinal))
-                return cachedValue;
+                return DetachConditioning(cachedValue);
 
-            var encoded = _conditioner.EncodeText(_conditioner.Tokenize(prompt));
-            var persistent = TensorAllocator.RentPinned<T>(encoded.Shape.ToArray());
-            encoded.AsSpan().CopyTo(persistent.AsWritableSpan());
+            using var tokens = _conditioner.Tokenize(prompt);
+            using var encoded = _conditioner.EncodeText(tokens);
+            // Cache ordinary owned storage. Replacing it cannot return memory to a pool while an
+            // in-flight request is reading its detached result, and the old entry becomes safely
+            // collectible after the lock releases.
+            var persistent = new Tensor<T>(
+                encoded.AsSpan().ToArray(), encoded.Shape.ToArray());
 
             if (negativeSlot)
             {
-                _cachedNegativeConditioning?.Dispose();
                 _cachedNegativePrompt = prompt;
                 _cachedNegativeConditioning = persistent;
             }
             else
             {
-                _cachedPromptConditioning?.Dispose();
                 _cachedPrompt = prompt;
                 _cachedPromptConditioning = persistent;
             }
 
-            return persistent;
+            return DetachConditioning(persistent);
         }
     }
+
+    private static Tensor<T> DetachConditioning(Tensor<T> source)
+        => new(source.AsSpan().ToArray(), source.Shape.ToArray());
 
     /// <summary>
     /// Runs the temporal U-Net in the reference eight-frame windows and blends every
@@ -921,7 +935,7 @@ public partial class UpscaleAVideoModel<T> : VideoDiffusionModelBase<T>
         return Engine.Reshape(sliced, [flows.Shape[0], 2, flows.Shape[3], flows.Shape[4]]);
     }
 
-    private Tensor<T> WarpNearest(Tensor<T> input, Tensor<T> flow)
+    internal Tensor<T> WarpNearest(Tensor<T> input, Tensor<T> flow)
     {
         int batch = input.Shape[0];
         int height = input.Shape[2];
@@ -1043,7 +1057,8 @@ public partial class UpscaleAVideoModel<T> : VideoDiffusionModelBase<T>
         metadata.SetProperty("architecture", "temporal-sr-diffusion");
         metadata.SetProperty("backbone", "Video-UNet-256 [1,2,2,4]");
         metadata.SetProperty("upscale_factor", UPSCALE_FACTOR);
-        metadata.SetProperty("input_channels", INPUT_CHANNELS);
+        metadata.SetProperty("input_channels", INPUT_CHANNELS + CONDITION_CHANNELS);
+        metadata.SetProperty("latent_input_channels", INPUT_CHANNELS);
         metadata.SetProperty("latent_channels", LATENT_CHANNELS);
         metadata.SetProperty("cross_attention_dim", CROSS_ATTENTION_DIM);
         metadata.SetProperty("temporal_modules", _videoUNet.TemporalModuleCount);
@@ -1056,6 +1071,25 @@ public partial class UpscaleAVideoModel<T> : VideoDiffusionModelBase<T>
         metadata.SetProperty("default_frames", DEFAULT_NUM_FRAMES);
 
         return metadata;
+    }
+
+    /// <inheritdoc />
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing)
+        {
+            lock (_conditioningCacheLock)
+            {
+                _cachedPromptConditioning?.Dispose();
+                _cachedPromptConditioning = null;
+                _cachedPrompt = null;
+                _cachedNegativeConditioning?.Dispose();
+                _cachedNegativeConditioning = null;
+                _cachedNegativePrompt = null;
+            }
+        }
+
+        base.Dispose(disposing);
     }
 
     #endregion

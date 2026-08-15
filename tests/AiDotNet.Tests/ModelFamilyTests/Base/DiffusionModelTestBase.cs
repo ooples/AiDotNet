@@ -265,6 +265,14 @@ public abstract class DiffusionModelTestBase<TNum> : IAsyncLifetime
         Tensor<TNum> expectedOutput)
         => model.Train(input, expectedOutput);
 
+    /// <summary>
+    /// Gets the model-specific metadata name that must remain stable across a training step.
+    /// Concrete fixtures can override this with a paper-defined literal when it differs from the
+    /// model's construction-time contract.
+    /// </summary>
+    protected virtual string ExpectedModelMetadataName(IDiffusionModel<TNum> model) =>
+        model.GetModelMetadata().Name;
+
     protected Tensor<TNum> CreateRandomTensor(int[] shape, Random rng)
     {
         var tensor = new Tensor<TNum>(shape);
@@ -682,8 +690,12 @@ public abstract class DiffusionModelTestBase<TNum> : IAsyncLifetime
         using var model = CreateModel();
         var input = CreateRandomTensor(InputShape, rng);
         var target = CreateRandomTensor(OutputShape, rng);
+        string expectedName = ExpectedModelMetadataName(model);
         TrainModel(model, input, target);
-        Assert.NotNull(model.GetModelMetadata());
+        var metadata = model.GetModelMetadata();
+        Assert.NotNull(metadata);
+        Assert.False(string.IsNullOrWhiteSpace(metadata.Name));
+        Assert.Equal(expectedName, metadata.Name);
     }
 
     [Fact(Timeout = 120000)]

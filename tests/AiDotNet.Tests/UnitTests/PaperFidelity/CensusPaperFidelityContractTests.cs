@@ -1,4 +1,3 @@
-using System.Reflection;
 using AiDotNet.Diffusion.NoisePredictors;
 using AiDotNet.Diffusion.SuperResolution;
 using AiDotNet.Diffusion.VAE;
@@ -125,20 +124,28 @@ public sealed class CensusPaperFidelityContractTests
     [InlineData(3)]
     public void UprNet_ReleasedSkippedLevelScheduleStillRunsCoarsestAndFinestLevels(int skippedLevels)
     {
+        using var reference = new UPRNet<double>(VideoArchitecture(16, 16), new UPRNetOptions
+        {
+            NumPyramidLevels = 3,
+            NumLevelsSkipped = 0
+        });
         using var model = new UPRNet<double>(VideoArchitecture(16, 16), new UPRNetOptions
         {
             NumPyramidLevels = 3,
             NumLevelsSkipped = skippedLevels
         });
+        model.SetParameters(reference.GetParameters());
 
-        var output = model.Interpolate(
-            Filled([3, 16, 16], 0.1, 0.0003),
-            Filled([3, 16, 16], 0.7, -0.0002),
-            0.5);
+        var frame0 = Filled([3, 16, 16], 0.1, 0.0003);
+        var frame1 = Filled([3, 16, 16], 0.7, -0.0002);
+
+        var referenceOutput = reference.Interpolate(frame0, frame1, 0.5);
+        var output = model.Interpolate(frame0, frame1, 0.5);
 
         Assert.Equal([3, 16, 16], output.Shape.ToArray());
         Assert.All(output.AsSpan().ToArray(), value =>
             Assert.True(!double.IsNaN(value) && !double.IsInfinity(value)));
+        Assert.NotEqual(referenceOutput.AsSpan().ToArray(), output.AsSpan().ToArray());
     }
 
     [Fact]
@@ -210,8 +217,13 @@ public sealed class CensusPaperFidelityContractTests
             images, texts, unboundedScores);
         var boundedLoss = model.ComputeSemanticMatchingLoss(
             images, texts, boundedScores);
+        var interiorLoss = model.ComputeSemanticMatchingLoss(
+            images,
+            texts,
+            new Tensor<double>([0.5, -0.25, -0.25, 0.5], [2, 2]));
 
         Assert.Equal(boundedLoss, unboundedLoss, 10);
+        Assert.NotEqual(boundedLoss, interiorLoss, 10);
     }
 
     [Fact]
@@ -421,10 +433,7 @@ public sealed class CensusPaperFidelityContractTests
         using var model = SmallUpscaleAVideo(new DiffusionModelOptions<double>());
         var input = new Tensor<double>([1.0, 2.0, 3.0, 4.0, 5.0, 6.0], [1, 1, 2, 3]);
         var flow = new Tensor<double>(new double[12], [1, 2, 2, 3]);
-        var method = typeof(UpscaleAVideoModel<double>).GetMethod(
-            "WarpNearest", BindingFlags.Instance | BindingFlags.NonPublic);
-
-        var output = Assert.IsType<Tensor<double>>(method!.Invoke(model, [input, flow]));
+        var output = model.WarpNearest(input, flow);
 
         Assert.Equal(input.AsSpan().ToArray(), output.AsSpan().ToArray());
     }

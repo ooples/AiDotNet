@@ -37971,6 +37971,85 @@ public static class LayerHelper<T>
         CreateDefaultQwen2TextLayers(vocabSize, maxSeqLen, hiddenSize, numLayers, numHeads,
             numKvHeads, ropeTheta);
 
+    /// <summary>
+    /// Creates the 47-layer native UPR-Net graph from the authors' released base model.
+    /// </summary>
+    /// <remarks>
+    /// The returned order is the serialized topology contract consumed by UPR-Net: three
+    /// four-convolution feature stages, the six-layer recurrent motion estimator, the synthesis
+    /// encoder/decoder, and its final five-channel prediction head.
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultUPRNetLayers()
+    {
+        var layers = new List<ILayer<T>>(47);
+
+        void AddLeakyConv(int outputChannels, int kernelSize = 3, int stride = 1, int padding = 1)
+        {
+            layers.Add(new ConvolutionalLayer<T>(
+                outputDepth: outputChannels,
+                kernelSize: kernelSize,
+                stride: stride,
+                padding: padding,
+                activationFunction: (IActivationFunction<T>)new LeakyReLUActivation<T>(0.1)));
+        }
+
+        void AddConv(int outputChannels)
+        {
+            layers.Add(new ConvolutionalLayer<T>(
+                outputDepth: outputChannels, kernelSize: 3, stride: 1, padding: 1,
+                activationFunction: (IActivationFunction<T>)new IdentityActivation<T>()));
+        }
+
+        void AddPReLUConv(int outputChannels, int stride = 1)
+        {
+            layers.Add(new ConvolutionalLayer<T>(
+                outputDepth: outputChannels, kernelSize: 3, stride: stride, padding: 1,
+                activationFunction: (IActivationFunction<T>)new IdentityActivation<T>()));
+            layers.Add(new PReLULayer<T>(outputChannels, channelAxis: 1, initialAlpha: 0.25));
+        }
+
+        void AddPReLUDeconv(int outputChannels)
+        {
+            layers.Add(new DeconvolutionalLayer<T>(
+                outputChannels, kernelSize: 4, stride: 2, padding: 1,
+                activationFunction: new IdentityActivation<T>()));
+            layers.Add(new PReLULayer<T>(outputChannels, channelAxis: 1, initialAlpha: 0.25));
+        }
+
+        for (int i = 0; i < 4; i++) AddLeakyConv(16);
+        AddLeakyConv(32, stride: 2);
+        for (int i = 0; i < 3; i++) AddLeakyConv(32);
+        AddLeakyConv(64, stride: 2);
+        for (int i = 0; i < 3; i++) AddLeakyConv(64);
+
+        AddLeakyConv(160, kernelSize: 1, padding: 0);
+        AddLeakyConv(128);
+        AddLeakyConv(112);
+        AddLeakyConv(96);
+        AddLeakyConv(64);
+        AddConv(4);
+
+        AddPReLUConv(32);
+        AddPReLUConv(32);
+        AddPReLUConv(64, stride: 2);
+        AddPReLUConv(64);
+        AddPReLUConv(64);
+        AddPReLUConv(128, stride: 2);
+        AddPReLUConv(128);
+        AddPReLUConv(128);
+        AddPReLUDeconv(64);
+        AddPReLUConv(64);
+        AddPReLUDeconv(32);
+        AddPReLUConv(32);
+        AddPReLUConv(32);
+        AddPReLUConv(32);
+        layers.Add(new ConvolutionalLayer<T>(
+            outputDepth: 5, kernelSize: 3, stride: 1, padding: 1,
+            activationFunction: new IdentityActivation<T>()));
+
+        return layers;
+    }
+
     #endregion
 
     // RESTORED. This slice deleted both methods while QueryMeldNet still called them; the branch

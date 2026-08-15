@@ -64,6 +64,7 @@ public partial class DiffusionResBlock<T> : LayerBase<T>, IShapeContract
     }
     private readonly int _spatialSize;
     private readonly int _timeEmbedDim;
+    private readonly int _numGroups;
     private readonly double _epsilon;
 
     // First conv block: GroupNorm → SiLU → Conv3x3
@@ -71,7 +72,7 @@ public partial class DiffusionResBlock<T> : LayerBase<T>, IShapeContract
     private readonly ConvolutionalLayer<T> _conv1;
 
     // Time embedding projection: Linear(timeEmbedDim → outChannels)
-    private readonly DenseLayer<T> _timeMlp;
+    private readonly DenseLayer<T>? _timeMlp;
 
     // Second conv block: GroupNorm → SiLU → Conv3x3
     private readonly GroupNormalizationLayer<T> _norm2;
@@ -138,6 +139,7 @@ public partial class DiffusionResBlock<T> : LayerBase<T>, IShapeContract
         _outChannels = outChannels;
         _spatialSize = spatialSize;
         _timeEmbedDim = timeEmbedDim;
+        _numGroups = numGroups;
         _epsilon = epsilon;
 
         // Compute actual group count: SD uses 32, but fall back to largest divisor if needed
@@ -161,10 +163,13 @@ public partial class DiffusionResBlock<T> : LayerBase<T>, IShapeContract
         // timestep projection: Linear(SiLU(temb)). Keeping the Dense activation
         // itself as identity preserves that order (Dense(SiLU(temb)) would apply
         // the non-linearity after the projection instead).
-        _timeMlp = new DenseLayer<T>(
-            outChannels,
-            (IActivationFunction<T>)new IdentityActivation<T>(),
-            InitializationStrategies<T>.Lazy);
+        if (timeEmbedDim > 0)
+        {
+            _timeMlp = new DenseLayer<T>(
+                outChannels,
+                (IActivationFunction<T>)new IdentityActivation<T>(),
+                InitializationStrategies<T>.Lazy);
+        }
 
         // Second block: GroupNorm(out) → SiLU → Conv3x3(out→out)
         _norm2 = new GroupNormalizationLayer<T>(groups2, outChannels, epsilon);
@@ -192,39 +197,21 @@ public partial class DiffusionResBlock<T> : LayerBase<T>, IShapeContract
         // its storage. This gives ParameterCount / SetParameters an exact manifest
         // before the first forward while retaining foundation-scale lazy memory use.
         _conv1.ResolveShapesOnly([inChannels, spatialSize, spatialSize]);
-        if (timeEmbedDim > 0) _timeMlp.ResolveShapesOnly([timeEmbedDim]);
+        _timeMlp?.ResolveShapesOnly([timeEmbedDim]);
         _conv2.ResolveShapesOnly([outChannels, spatialSize, spatialSize]);
         _skipConv?.ResolveShapesOnly([inChannels, spatialSize, spatialSize]);
 
         RegisterSubLayer(_norm1);
         RegisterSubLayer(_conv1);
-        RegisterSubLayer(_timeMlp);
+        if (_timeMlp is not null) RegisterSubLayer(_timeMlp);
         RegisterSubLayer(_norm2);
         RegisterSubLayer(_conv2);
         if (_skipConv is not null) RegisterSubLayer(_skipConv);
 
-        // Eagerly materialize all sublayer lazy weights so they participate
-        // in GetParameters / SetParameters. With pure-lazy init, two freshly-
-        // constructed blocks have all sublayer `_weights` as [0,0] placeholders;
-        // GetParameters on block1 returns a vector that excludes those zero-shape
-        // weights, SetParameters on block2 leaves them at [0,0], then both
-        // blocks lazy-init at first Forward with INDEPENDENT random weights
-        // and produce divergent outputs — breaking the
-        // `block2.SetParameters(block1.GetParameters()) ⇒ block2(x) == block1(x)`
-        // determinism contract relied on by tests and checkpoint reload.
-        //
-        // Sublayers are left FULLY LAZY here — no shape resolution and no weight
-        // allocation in the ctor. At paper scale eager allocation was the dominant
-        // construction cost (a single SD U-Net is ~860M params, ~7 GB at double) and
-        // OOM'd the 16 GB CI runner on construction alone (Unit-03b). The owning
-        // UNetNoisePredictor resolves every sublayer's TRUE shape via its shape-only
-        // forward (ResolveShapesViaForward) before any ParameterCount / GetParameters
-        // read — the single source of truth that matches the real forward exactly —
-        // and weights materialise on demand at that GetParameters or the first real
-        // Forward. The SetParameters(GetParameters()) determinism contract is
-        // unaffected: GetParameters resolves shapes then materialises, and
-        // SetParameters overwrites the values.
-        _ = inChannels; _ = outChannels; _ = spatialSize; _ = timeEmbedDim;
+        // Shape-only resolution records the exact parameter manifest without allocating
+        // foundation-scale weights. Registering those resolved children makes ParameterCount,
+        // GetParameters, and SetParameters share one stable order; actual storage remains lazy
+        // until a parameter value is requested or the first forward executes.
     }
 
     /// <summary>
@@ -244,7 +231,7 @@ public partial class DiffusionResBlock<T> : LayerBase<T>, IShapeContract
         base.SetTrainingMode(isTraining);
         _norm1.SetTrainingMode(isTraining);
         _conv1.SetTrainingMode(isTraining);
-        _timeMlp.SetTrainingMode(isTraining);
+        _timeMlp?.SetTrainingMode(isTraining);
         _norm2.SetTrainingMode(isTraining);
         _conv2.SetTrainingMode(isTraining);
         _skipConv?.SetTrainingMode(isTraining);
@@ -440,7 +427,9 @@ public partial class DiffusionResBlock<T> : LayerBase<T>, IShapeContract
                     $"Got rank {timeEmbed.Shape.Length}, last dim {timeEmbed.Shape[timeEmbed.Shape.Length - 1]}.",
                     nameof(timeEmbed));
             }
-            var timeProj = _timeMlp.Forward(Engine.TensorSiLU(timeEmbed));
+            var timeProjectionLayer = _timeMlp ?? throw new InvalidOperationException(
+                "Time-conditioning parameters were not initialized.");
+            var timeProj = timeProjectionLayer.Forward(Engine.TensorSiLU(timeEmbed));
             // Reshape from [B, outChannels] to [B, outChannels, 1, 1] for broadcasting
             if (timeProj.Shape.Length == 1)
             {
@@ -569,6 +558,7 @@ public partial class DiffusionResBlock<T> : LayerBase<T>, IShapeContract
         metadata["OutChannels"] = _outChannels.ToString(System.Globalization.CultureInfo.InvariantCulture);
         metadata["SpatialSize"] = _spatialSize.ToString(System.Globalization.CultureInfo.InvariantCulture);
         metadata["TimeEmbedDim"] = _timeEmbedDim.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        metadata["NumGroups"] = _numGroups.ToString(System.Globalization.CultureInfo.InvariantCulture);
         metadata["Epsilon"] = _epsilon.ToString("R", System.Globalization.CultureInfo.InvariantCulture);
         return metadata;
     }
@@ -593,7 +583,7 @@ public partial class DiffusionResBlock<T> : LayerBase<T>, IShapeContract
     {
         _norm1.UpdateParameters(learningRate);
         _conv1.UpdateParameters(learningRate);
-        _timeMlp.UpdateParameters(learningRate);
+        _timeMlp?.UpdateParameters(learningRate);
         _norm2.UpdateParameters(learningRate);
         _conv2.UpdateParameters(learningRate);
         _skipConv?.UpdateParameters(learningRate);
@@ -606,7 +596,7 @@ public partial class DiffusionResBlock<T> : LayerBase<T>, IShapeContract
         _originalInputShape = null;
         _norm1.ResetState();
         _conv1.ResetState();
-        _timeMlp.ResetState();
+        _timeMlp?.ResetState();
         _norm2.ResetState();
         _conv2.ResetState();
         _skipConv?.ResetState();

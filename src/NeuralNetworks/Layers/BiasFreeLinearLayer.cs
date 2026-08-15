@@ -5,6 +5,10 @@ using AiDotNet.Tensors.Engines;
 namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>Trainable linear projection <c>y = xW</c> with no bias term.</summary>
+/// <typeparam name="T">The numeric type used for inputs, weights, and outputs.</typeparam>
+/// <remarks><para><b>For Beginners:</b> This layer changes the feature width using only a weight
+/// matrix. Omitting the bias is useful when the surrounding architecture already supplies an
+/// offset or when the paper explicitly requires a pure projection.</para></remarks>
 [LayerCategory(LayerCategory.Dense)]
 [LayerTask(LayerTask.Projection)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, TestInputShape = "1, 4", TestConstructorArgs = "4, 8")]

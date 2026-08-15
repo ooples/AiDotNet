@@ -1987,6 +1987,7 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
         {
             var current = stack.Pop();
             if (!visited.Add(current)) continue;
+            bool isTraversalRoot = ReferenceEquals(current, root);
 
             if (current is Interfaces.ITrainableLayer<T> trainable)
             {
@@ -2024,7 +2025,10 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
             }
 
             var type = current.GetType();
-            if (!CanContainTrainableLayers(type)) continue;
+            // Consumer-defined diffusion subclasses commonly live outside the AiDotNet
+            // namespace. The explicitly supplied root is always a trusted traversal boundary;
+            // descendants still use the bounded type filter below.
+            if (!isTraversalRoot && !CanContainTrainableLayers(type)) continue;
 
             // An explicit stack avoids overflowing on foundation-model object graphs.
             for (var t = type; t != null && t != typeof(object); t = t.BaseType)
@@ -2064,11 +2068,20 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
     private static bool CanContainTrainableLayers(Type type)
     {
         if (type.IsValueType || type == typeof(string)) return false;
-        var ns = type.Namespace ?? string.Empty;
-        if (ns.StartsWith("System", StringComparison.Ordinal) ||
-            ns.StartsWith("AiDotNet.Tensors", StringComparison.Ordinal))
-            return false;
-        return ns.StartsWith("AiDotNet", StringComparison.Ordinal);
+        for (Type? candidate = type;
+             candidate is not null && candidate != typeof(object);
+             candidate = candidate.BaseType)
+        {
+            var ns = candidate.Namespace ?? string.Empty;
+            if (ns.StartsWith("AiDotNet.Tensors", StringComparison.Ordinal))
+                return false;
+            if (ns.StartsWith("System", StringComparison.Ordinal))
+                continue;
+            if (ns.StartsWith("AiDotNet", StringComparison.Ordinal))
+                return true;
+        }
+
+        return false;
     }
 
     /// <summary>

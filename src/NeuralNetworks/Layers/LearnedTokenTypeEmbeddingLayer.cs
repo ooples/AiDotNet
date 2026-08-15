@@ -34,14 +34,14 @@ public sealed partial class LearnedTokenTypeEmbeddingLayer<T> : LayerBase<T>
 
     /// <summary>Creates a BERT-compatible token-type embedding table.</summary>
     public LearnedTokenTypeEmbeddingLayer(int tokenTypeCount, int embeddingSize)
-        : base([1, embeddingSize], [1, embeddingSize])
+        : base([-1, embeddingSize], [-1, embeddingSize])
     {
         if (tokenTypeCount <= 0) throw new ArgumentOutOfRangeException(nameof(tokenTypeCount));
         if (embeddingSize <= 0) throw new ArgumentOutOfRangeException(nameof(embeddingSize));
         _tokenTypeCount = tokenTypeCount;
         _embeddingSize = embeddingSize;
         _embeddings = new Tensor<T>([tokenTypeCount, embeddingSize]);
-        InitializeLayerWeights(_embeddings, embeddingSize, embeddingSize);
+        InitializeLayerWeights(_embeddings, tokenTypeCount, embeddingSize);
         RegisterTrainableParameter(_embeddings, PersistentTensorRole.Embeddings);
     }
 

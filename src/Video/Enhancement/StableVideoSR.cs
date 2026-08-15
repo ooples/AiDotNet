@@ -130,8 +130,40 @@ public partial class StableVideoSR<T> : VideoSuperResolutionBase<T>
         ThrowIfDisposed();
         if (IsOnnxMode)
             throw new NotSupportedException("Flow-guided native propagation is unavailable in ONNX mode.");
+        if (!_options.EnableFlowGuidedPropagation)
+            throw new InvalidOperationException(
+                "Flow-guided propagation is disabled in StableVideoSROptions.");
+        if (lowResFrames is null) throw new ArgumentNullException(nameof(lowResFrames));
+        ValidateFlowTensor(lowResFrames, forwardFlows, nameof(forwardFlows));
+        ValidateFlowTensor(lowResFrames, backwardFlows, nameof(backwardFlows));
         return PostprocessOutput(UpscaleNative(
             PreprocessFrames(lowResFrames), forwardFlows, backwardFlows));
+    }
+
+    private static void ValidateFlowTensor(
+        Tensor<T> frames,
+        Tensor<T>? flows,
+        string parameterName)
+    {
+        if (flows is null) throw new ArgumentNullException(parameterName);
+        if (frames.Rank != 5)
+            throw new ArgumentException(
+                "Flow-guided upscaling requires frames in [B,F,C,H,W] layout.", nameof(frames));
+        if (flows.Rank != 5 || flows.Shape[1] != 2)
+            throw new ArgumentException(
+                "Flows require [B,2,F-1,H,W] layout.", parameterName);
+        if (frames.Shape[1] < 2)
+            throw new ArgumentException(
+                "Flow-guided upscaling requires at least two frames.", nameof(frames));
+        if (flows.Shape[0] != frames.Shape[0]
+            || flows.Shape[2] != frames.Shape[1] - 1
+            || flows.Shape[3] != frames.Shape[3]
+            || flows.Shape[4] != frames.Shape[4])
+        {
+            throw new ArgumentException(
+                "Flows must match the frame batch, F-1 interval count, height, and width.",
+                parameterName);
+        }
     }
 
     private Tensor<T> UpscaleNative(
@@ -200,10 +232,13 @@ public partial class StableVideoSR<T> : VideoSuperResolutionBase<T>
         SetTrainingMode(true);
         try
         {
+            var normalizedInput = PreprocessFrames(input);
+            var normalizedExpected = PreprocessFrames(expected);
             if (_diffusionCore is not null)
-                _diffusionCore.TrainConditioned(input, expected, _options.Prompt, _options.NoiseLevel);
+                _diffusionCore.TrainConditioned(
+                    normalizedInput, normalizedExpected, _options.Prompt, _options.NoiseLevel);
             else
-                TrainWithTape(input, expected, _optimizer);
+                TrainWithTape(normalizedInput, normalizedExpected, _optimizer);
         }
         finally
         {

@@ -10,33 +10,39 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// SVTR's trainable STN_ON rectifier: a six-block localization CNN predicts control
 /// points and a thin-plate-spline grid resamples the source image to 32x100.
 /// </summary>
+/// <typeparam name="T">The numeric type used for image values and trainable control points.</typeparam>
+/// <remarks>
+/// <para><b>For Beginners:</b> The localization network predicts how curved or tilted text should
+/// be straightened, then a smooth thin-plate-spline warp resamples it into the fixed canvas that
+/// the recognizer expects.</para>
+/// <para><b>Reference:</b> Du et al., "SVTR: Scene Text Recognition with a Single Visual Model",
+/// IJCAI 2022 (STN_ON), and Jaderberg et al., "Spatial Transformer Networks", NeurIPS 2015.</para>
+/// </remarks>
 [LayerCategory(LayerCategory.Other)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, Cost = ComputeCost.High,
     TestInputShape = "1, 3, 32, 100", TestConstructorArgs = "3, 32, 64, 32, 100, 20")]
 [TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
-    BatchOptional = true, Direction = TensorLayoutDirection.Input)]
+    Direction = TensorLayoutDirection.Input)]
 [TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
-    BatchOptional = true, Direction = TensorLayoutDirection.Output)]
+    Direction = TensorLayoutDirection.Output)]
 public sealed class SVTRThinPlateSplineLayer<T> : LayerBase<T>, IShapeContract
 {
     /// <inheritdoc />
     public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
     {
-        if (inputRank is not (3 or 4)) return null;
+        if (inputRank != 4) return null;
         var channels = new OutputAxisContract(
             TensorAxis.Channels, AxisRelation.Same(TensorAxis.Channels));
         var height = new OutputAxisContract(
             TensorAxis.Height, AxisRelation.Fixed(_outputHeight));
         var width = new OutputAxisContract(
             TensorAxis.Width, AxisRelation.Fixed(_outputWidth));
-        return inputRank == 3
-            ? [channels, height, width]
-            :
-            [
-                new(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
-                channels, height, width
-            ];
+        return
+        [
+            new(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+            channels, height, width
+        ];
     }
 
     private readonly int _inputChannels;
@@ -47,6 +53,11 @@ public sealed class SVTRThinPlateSplineLayer<T> : LayerBase<T>, IShapeContract
     private readonly int _controlPointCount;
     private readonly double _marginX;
     private readonly double _marginY;
+    private readonly int _localizationFeatureSize;
+
+    // The released localization head damps features before predicting control-point offsets,
+    // keeping the early warp close to its identity initialization.
+    private const double LocalizationScale = 0.1;
 
     private readonly List<ILayer<T>> _localizationLayers = [];
     private readonly DenseLayer<T> _featureProjection;
@@ -105,12 +116,21 @@ public sealed class SVTRThinPlateSplineLayer<T> : LayerBase<T>, IShapeContract
         AddConvBlock(256, pool: true);
         AddConvBlock(256, pool: true);
         AddConvBlock(256, pool: false);
+        int pooledHeight = localizationHeight / 32;
+        int pooledWidth = localizationWidth / 32;
+        if (pooledHeight < 1 || pooledWidth < 1)
+            throw new ArgumentOutOfRangeException(
+                nameof(localizationHeight),
+                "The localization input must be at least 32x32 so five pooling stages leave a non-empty grid.");
+        _localizationFeatureSize = checked(256 * pooledHeight * pooledWidth);
         _featureProjection = new DenseLayer<T>(512, new ReLUActivation<T>() as IActivationFunction<T>);
         RegisterSubLayer(_featureProjection);
 
         _controlWeights = new Tensor<T>([512, controlPointCount * 2]);
         _controlBias = new Tensor<T>([controlPointCount * 2]);
-        InitializeIdentityControlBias(_controlBias, controlPointCount);
+        // Zero weights are intentional: the bias alone reproduces the target control points, so
+        // the initial spatial transform is the identity before localization training begins.
+        InitializeIdentityControlBias(_controlBias, controlPointCount, marginX, marginY);
         RegisterTrainableParameter(_controlWeights, PersistentTensorRole.Weights);
         AppendTrainableParameter(_controlBias, PersistentTensorRole.Biases);
 
@@ -151,9 +171,9 @@ public sealed class SVTRThinPlateSplineLayer<T> : LayerBase<T>, IShapeContract
             input, [_localizationHeight, _localizationWidth],
             InterpolateMode.Bilinear, alignCorners: true);
         foreach (var layer in _localizationLayers) localization = layer.Forward(localization);
-        localization = Engine.Reshape(localization, [batch, 512]);
+        localization = Engine.Reshape(localization, [batch, _localizationFeatureSize]);
         var features = _featureProjection.Forward(localization);
-        features = Engine.TensorMultiplyScalar(features, NumOps.FromDouble(0.1));
+        features = Engine.TensorMultiplyScalar(features, NumOps.FromDouble(LocalizationScale));
         var flatControl = Engine.TensorBroadcastAdd(
             Engine.TensorMatMul(features, _controlWeights), _controlBias);
         var sourceControl = Engine.Reshape(flatControl, [batch, _controlPointCount, 2]);
@@ -169,7 +189,8 @@ public sealed class SVTRThinPlateSplineLayer<T> : LayerBase<T>, IShapeContract
             [batch, _outputHeight * _outputWidth, _controlPointCount + 3]);
         var mapping = Engine.TensorBatchMatMul(inverse, rightHandSide);
         var coordinates = Engine.TensorBatchMatMul(target, mapping);
-        coordinates = Engine.TensorClamp(coordinates, NumOps.Zero, NumOps.One);
+        // Do not clamp the normalized source coordinates: GridSamplePadding.Zeros is the
+        // deliberate out-of-bounds policy and preserves useful coordinate gradients at edges.
         coordinates = Engine.TensorSubtract(
             Engine.TensorMultiplyScalar(coordinates, NumOps.FromDouble(2.0)),
             Tensor<T>.CreateDefault(coordinates.Shape.ToArray(), NumOps.One));
@@ -191,14 +212,20 @@ public sealed class SVTRThinPlateSplineLayer<T> : LayerBase<T>, IShapeContract
     {
         foreach (var layer in ParameterLayers) layer.UpdateParameters(learningRate);
         var own = base.GetParameterGradients();
-        if (own.Length == _controlWeights.Length + _controlBias.Length)
-        {
-            for (int i = 0; i < _controlWeights.Length; i++)
-                _controlWeights[i] = NumOps.Subtract(_controlWeights[i], NumOps.Multiply(learningRate, own[i]));
-            for (int i = 0; i < _controlBias.Length; i++)
-                _controlBias[i] = NumOps.Subtract(_controlBias[i],
-                    NumOps.Multiply(learningRate, own[_controlWeights.Length + i]));
-        }
+        int expected = _controlWeights.Length + _controlBias.Length;
+        if (own.Length != expected)
+            throw new InvalidOperationException(
+                $"SVTRThinPlateSplineLayer expected {expected} own gradients, got {own.Length}. " +
+                "Run backward before updating parameters.");
+        for (int i = 0; i < _controlWeights.Length; i++)
+            _controlWeights[i] = NumOps.Subtract(
+                _controlWeights[i], NumOps.Multiply(learningRate, own[i]));
+        for (int i = 0; i < _controlBias.Length; i++)
+            _controlBias[i] = NumOps.Subtract(
+                _controlBias[i], NumOps.Multiply(
+                    learningRate, own[_controlWeights.Length + i]));
+        Engine.InvalidatePersistentTensor(_controlWeights);
+        Engine.InvalidatePersistentTensor(_controlBias);
     }
 
     public override void ResetState()
@@ -220,9 +247,10 @@ public sealed class SVTRThinPlateSplineLayer<T> : LayerBase<T>, IShapeContract
         return metadata;
     }
 
-    private void InitializeIdentityControlBias(Tensor<T> bias, int count)
+    private void InitializeIdentityControlBias(
+        Tensor<T> bias, int count, double marginX, double marginY)
     {
-        var points = BuildControlPoints(count, 0.01, 0.01);
+        var points = BuildControlPoints(count, marginX, marginY);
         for (int i = 0; i < count; i++)
         {
             bias[i * 2] = NumOps.FromDouble(points[i, 0]);

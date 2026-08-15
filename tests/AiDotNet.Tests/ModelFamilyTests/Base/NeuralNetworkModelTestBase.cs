@@ -219,6 +219,31 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         s_declaredInputShapeCache = new();
     private static readonly System.Collections.Concurrent.ConcurrentDictionary<Type, int[]>
         s_effectiveInputShapeCache = new();
+    private static readonly int[] s_missingDeclaredInputShape = [];
+
+    private (int[] Shape, ModelInputShapeConstraint? Constraint) TryGetArchitectureInputShape()
+    {
+        try
+        {
+            using var arena = TensorArena.Create();
+            using var network = CreateNetwork();
+            int[]? shape = network.GetArchitecture()?.GetInputShape();
+            if (shape is null || shape.Length == 0 || shape.Any(axis => axis <= 0))
+                return (s_missingDeclaredInputShape, null);
+
+            ModelInputShapeConstraint? constraint = network is NeuralNetworkBase<T> concrete
+                ? concrete.GetInputShapeConstraint()
+                : null;
+            return ((int[])shape.Clone(), constraint);
+        }
+        catch (Exception ex) when (
+            ex is ArgumentException or InvalidOperationException
+            or NotSupportedException or NotImplementedException
+            or AiDotNet.Exceptions.TensorShapeMismatchException)
+        {
+            return (s_missingDeclaredInputShape, null);
+        }
+    }
 
     /// <summary>
     /// The fixture declaration after applying the model's generated input-geometry contract. This
@@ -257,41 +282,22 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
     /// </remarks>
     private int[] DeclaredInputShape => s_declaredInputShapeCache.GetOrAdd(GetType(), _ =>
     {
-        try
+        var architecture = TryGetArchitectureInputShape();
+        if (ReferenceEquals(architecture.Shape, s_missingDeclaredInputShape))
         {
-            using var arena = TensorArena.Create();
-            using var network = CreateNetwork();
-
-            var perSample = network.GetArchitecture()?.GetInputShape();
-            if (perSample is null || perSample.Length == 0) return s_fallbackInputShape;
-
-            var declared = new int[perSample.Length + 1];
-            declared[0] = 1;
-            for (int i = 0; i < perSample.Length; i++)
-            {
-                // An unresolved or degenerate axis is not a contract; keep the old probe rather
-                // than build a tensor the model certainly cannot consume.
-                if (perSample[i] <= 0) return s_fallbackInputShape;
-                declared[i + 1] = perSample[i];
-            }
-
-            ClampFreeAxes(declared, perSample.Length);
-
-            if (network is NeuralNetworkBase<T> concrete)
-                declared = ApplyInputShapeConstraint(declared, concrete.GetInputShapeConstraint());
-
-            return declared;
-        }
-        catch (Exception ex) when (
-            ex is ArgumentException or InvalidOperationException
-            or NotSupportedException or NotImplementedException
-            or AiDotNet.Exceptions.TensorShapeMismatchException)
-        {
-            // Same narrow catch as the output-shape warm-up: a model that cannot be constructed or
-            // cannot describe itself keeps the historical probe, and the failure is reported by
-            // whichever invariant depends on it rather than from inside a property getter.
             return s_fallbackInputShape;
         }
+
+        var perSample = architecture.Shape;
+        var declared = new int[perSample.Length + 1];
+        declared[0] = 1;
+        Array.Copy(perSample, 0, declared, 1, perSample.Length);
+        ClampFreeAxes(declared, perSample.Length);
+
+        if (architecture.Constraint is { } constraint)
+            declared = ApplyInputShapeConstraint(declared, constraint);
+
+        return declared;
     });
 
     private static int[] ApplyInputShapeConstraint(
@@ -299,7 +305,6 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         ModelInputShapeConstraint constraint)
         => InputContractShapeResolver.Conform(declared, constraint);
 
-    private static readonly int[] s_missingDeclaredInputShape = [];
     private static readonly System.Collections.Concurrent.ConcurrentDictionary<Type, int[]>
         s_generatedDeclaredInputShapeCache = new();
 
@@ -317,30 +322,17 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
     {
         int[] declared = s_generatedDeclaredInputShapeCache.GetOrAdd(GetType(), _ =>
         {
-            try
-            {
-                using var arena = TensorArena.Create();
-                using var network = CreateNetwork();
-                int[]? shape = network.GetArchitecture()?.GetInputShape();
-                if (shape is null || shape.Length == 0 || shape.Any(axis => axis <= 0))
-                    return s_missingDeclaredInputShape;
-
-                return (int[])shape.Clone();
-            }
-            catch (Exception ex) when (
-                ex is ArgumentException or InvalidOperationException
-                or NotSupportedException or NotImplementedException
-                or AiDotNet.Exceptions.TensorShapeMismatchException)
-            {
-                return s_missingDeclaredInputShape;
-            }
+            return TryGetArchitectureInputShape().Shape;
         });
 
-        return ReferenceEquals(declared, s_missingDeclaredInputShape)
-            ? (int[])fallback.Clone()
-            : AiDotNet.Generators.GeneratedVisionFixtureContract.ConformToDeclaredShape(
-                fallback,
-                declared);
+        if (ReferenceEquals(declared, s_missingDeclaredInputShape))
+            return (int[])fallback.Clone();
+
+        int[] conformed = AiDotNet.Generators.GeneratedVisionFixtureContract.ConformToDeclaredShape(
+            fallback,
+            declared);
+        ClampFreeAxes(conformed, declared.Length);
+        return conformed;
     }
 
     /// <summary>

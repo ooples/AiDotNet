@@ -97,6 +97,8 @@ public sealed partial class DiffusionAttentionLayer<T> : LayerBase<T>, IShapeCon
     /// <summary>Runs attention with query [B,S,Q] and context [B,N,C].</summary>
     public Tensor<T> Forward(Tensor<T> query, Tensor<T> context)
     {
+        if (query is null) throw new ArgumentNullException(nameof(query));
+        if (context is null) throw new ArgumentNullException(nameof(context));
         if (query.Rank != 3 || context.Rank != 3)
             throw new ArgumentException("Attention requires query/context tensors of rank 3.");
         if (query.Shape[0] != context.Shape[0])

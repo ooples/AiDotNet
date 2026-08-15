@@ -426,7 +426,7 @@ public partial class MambaBlock<T> : LayerBase<T>, IShapeContract
         _lastZBranch = zBranch;
 
         // Step 2: Conv1D on x branch (depthwise, causal) - Engine-accelerated
-        var convOutput = DepthwiseConv1DForward(xBranch, batchSize, seqLen);
+        var convOutput = DepthwiseConv1DForward(xBranch, seqLen);
         _lastConvOutput = convOutput;
 
         // Step 3: SiLU activation via Engine
@@ -540,7 +540,7 @@ public partial class MambaBlock<T> : LayerBase<T>, IShapeContract
     /// padding, then retain the first <c>sequenceLength</c> positions. This is exactly equivalent to
     /// <c>sum_k weight[channel,k] * input[t-k,channel]</c> and preserves the paper's causal contract.
     /// </remarks>
-    private Tensor<T> DepthwiseConv1DForward(Tensor<T> input, int batchSize, int seqLen)
+    private Tensor<T> DepthwiseConv1DForward(Tensor<T> input, int seqLen)
     {
         var inputNcl = Engine.TensorPermute(input, new[] { 0, 2, 1 }).Contiguous();
         var reversedWeights = Engine.TensorFlip(_convWeights, new[] { 1 });

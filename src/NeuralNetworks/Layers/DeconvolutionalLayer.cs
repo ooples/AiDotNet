@@ -413,21 +413,7 @@ public partial class DeconvolutionalLayer<T> : LayerBase<T>, IShapeContract
     {
         if (InputDepth <= 0)
             return;
-
-        int[] kernelShape = [InputDepth, OutputDepth, KernelSize, KernelSize];
-        if (WeightsAlreadyAllocated(_kernels, kernelShape)
-            && WeightsAlreadyAllocated(_biases, OutputDepth))
-        {
-            RegisterTrainableParameter(_kernels, PersistentTensorRole.Weights);
-            RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);
-            return;
-        }
-
-        _kernels = AllocateLazyWeight(kernelShape);
-        _biases = AllocateLazyWeight([OutputDepth]);
-        InitializeParameters();
-        RegisterTrainableParameter(_kernels, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);
+        AllocateAndRegisterWeights(InputDepth);
     }
 
     /// <summary>
@@ -449,16 +435,24 @@ public partial class DeconvolutionalLayer<T> : LayerBase<T>, IShapeContract
         int outW = (w - 1) * Stride - 2 * Padding + KernelSize;
 
         // Idempotent: don't re-init weights a clone/deserialize already installed (#1221). See Conv1DLayer.
-        if (!WeightsAlreadyAllocated(_kernels, c, OutputDepth, KernelSize, KernelSize))
-        {
-            _kernels = AllocateLazyWeight([c, OutputDepth, KernelSize, KernelSize]);
-            _biases = AllocateLazyWeight([OutputDepth]);
-            InitializeParameters();
-            RegisterTrainableParameter(_kernels, PersistentTensorRole.Weights);
-            RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);
-        }
+        AllocateAndRegisterWeights(c);
 
         ResolveShapes(new[] { c, h, w }, new[] { OutputDepth, outH, outW });
+    }
+
+    private void AllocateAndRegisterWeights(int inputDepth)
+    {
+        int[] kernelShape = [inputDepth, OutputDepth, KernelSize, KernelSize];
+        if (!WeightsAlreadyAllocated(_kernels, kernelShape)
+            || !WeightsAlreadyAllocated(_biases, OutputDepth))
+        {
+            _kernels = AllocateLazyWeight(kernelShape);
+            _biases = AllocateLazyWeight([OutputDepth]);
+            InitializeParameters();
+        }
+
+        RegisterTrainableParameter(_kernels, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);
     }
 
     /// <inheritdoc />

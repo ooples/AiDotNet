@@ -3365,17 +3365,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         string constructorExpression,
         out int height,
         out int width)
-    {
-        if (GeneratedVisionFixtureContract.TryGetArchitectureSpatialSize(
-                constructorExpression,
-                out height,
-                out width))
-        {
-            return true;
-        }
-
-        return false;
-    }
+        => GeneratedVisionFixtureContract.TryGetArchitectureSpatialSize(
+            constructorExpression, out height, out width);
 
     /// <summary>
     /// Checks if a type IS exactly <c>NeuralNetworkArchitecture&lt;T&gt;</c> (not a derived type).
@@ -12318,7 +12309,10 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             else
             {
                 int spatial = GetVisionSpatialSize(model.ClassName);
-                sb.AppendLine($"    protected override int[] InputShape => ResolveModelDeclaredInputShape(new[] {{ 1, 3, {spatial}, {spatial} }});");
+                if (baseClassName.IndexOf("Diffusion", System.StringComparison.Ordinal) >= 0)
+                    sb.AppendLine($"    protected override int[] InputShape => new[] {{ 1, 3, {spatial}, {spatial} }};");
+                else
+                    sb.AppendLine($"    protected override int[] InputShape => ResolveModelDeclaredInputShape(new[] {{ 1, 3, {spatial}, {spatial} }});");
             }
             sb.AppendLine("    protected override int[] OutputShape => new[] { 4 };");
         }
@@ -12360,7 +12354,10 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             else
             {
                 int spatial = GetVisionSpatialSize(model.ClassName);
-                sb.AppendLine($"    protected override int[] InputShape => ResolveModelDeclaredInputShape(new[] {{ 3, {spatial}, {spatial} }});");
+                if (baseClassName.IndexOf("Diffusion", System.StringComparison.Ordinal) >= 0)
+                    sb.AppendLine($"    protected override int[] InputShape => new[] {{ 3, {spatial}, {spatial} }};");
+                else
+                    sb.AppendLine($"    protected override int[] InputShape => ResolveModelDeclaredInputShape(new[] {{ 3, {spatial}, {spatial} }});");
             }
             sb.AppendLine("    protected override int[] OutputShape => new[] { 4 };");
 
@@ -14682,7 +14679,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // comparison used [C, H] instead of [H, W] and reported nonsense such as "AVID
             // fixture [.., 3, 32]". Anchoring to the close brace/bracket restricts this to
             // genuine 3-element [C, H, W] fixtures, which is the only form the check is valid for.
-            @"InputShape\s*=>\s*(?:new\s*\[\]\s*\{|\[)\s*\d+\s*,\s*(\d+)\s*,\s*(\d+)\s*(?:\}|\])");
+            @"InputShape\s*=>\s*(?:ResolveModelDeclaredInputShape\s*\(\s*)?(?:new\s*\[\]\s*\{|\[)\s*\d+\s*,\s*(\d+)\s*,\s*(\d+)\s*(?:\}|\])\s*\)?");
         if (archMatch.Success && shapeMatch.Success)
         {
             int archH = int.Parse(archMatch.Groups[1].Value);

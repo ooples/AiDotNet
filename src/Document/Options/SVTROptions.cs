@@ -15,6 +15,7 @@ public class SVTROptions : DocumentNeuralNetworkOptions
     {
         if (other is null)
             throw new ArgumentNullException(nameof(other));
+        Seed = other.Seed;
         InputHeight = other.InputHeight;
         InputWidth = other.InputWidth;
         EmbedDimensions = (int[])other.EmbedDimensions.Clone();
@@ -74,10 +75,15 @@ public class SVTROptions : DocumentNeuralNetworkOptions
     /// <summary>Whether the training recipe uses its optional TPS rectifier before SVTRNet.</summary>
     public bool UseTpsRectification { get; set; } = true;
 
+    /// <summary>Height of the TPS localization-network input.</summary>
     public int TpsInputHeight { get; set; } = 32;
+    /// <summary>Width of the TPS localization-network input.</summary>
     public int TpsInputWidth { get; set; } = 64;
+    /// <summary>Even number of boundary control points predicted by the TPS head.</summary>
     public int TpsControlPointCount { get; set; } = 20;
+    /// <summary>Horizontal inset of the target control-point rectangle.</summary>
     public double TpsMarginX { get; set; } = 0.05;
+    /// <summary>Vertical inset of the target control-point rectangle.</summary>
     public double TpsMarginY { get; set; } = 0.05;
 
     /// <summary>Validates that the three-stage SVTR-Tiny topology is internally consistent.</summary>
@@ -85,23 +91,50 @@ public class SVTROptions : DocumentNeuralNetworkOptions
     {
         if (EmbedDimensions.Length != 3 || StageDepths.Length != 3 || StageHeads.Length != 3)
             throw new ArgumentException("SVTR requires exactly three stages.");
-        if (!EmbedDimensions.SequenceEqual([64, 128, 256]) ||
-            !StageDepths.SequenceEqual([3, 6, 3]) ||
-            !StageHeads.SequenceEqual([2, 4, 8]))
-            throw new ArgumentException("SVTR-Tiny requires stage depths [3,6,3] (12 blocks total).");
         for (int i = 0; i < 3; i++)
         {
-            if (EmbedDimensions[i] <= 0 || StageHeads[i] <= 0 || EmbedDimensions[i] % StageHeads[i] != 0)
+            if (EmbedDimensions[i] <= 0)
+                throw new ArgumentOutOfRangeException(
+                    nameof(EmbedDimensions), $"Stage {i} embedding dimension must be positive.");
+            if (StageDepths[i] <= 0)
+                throw new ArgumentOutOfRangeException(
+                    nameof(StageDepths), $"Stage {i} depth must be positive.");
+            if (StageHeads[i] <= 0 || EmbedDimensions[i] % StageHeads[i] != 0)
                 throw new ArgumentException($"Stage {i} embedding dimension must be divisible by its head count.");
         }
-        if (InputHeight != 32 || InputWidth != 100 || OutputCharacterPositions != 25)
-            throw new ArgumentException("SVTR-Tiny reference geometry is 32x100 with 25 output positions.");
-        if (LocalMixingBlocks != 6 || LocalWindowHeight != 7 || LocalWindowWidth != 11)
-            throw new ArgumentException("SVTR-Tiny requires six 7x11 local-mixing blocks followed by six global blocks.");
+        if (InputHeight <= 0 || InputHeight % 16 != 0)
+            throw new ArgumentOutOfRangeException(
+                nameof(InputHeight), "Input height must be positive and divisible by 16.");
+        if (InputWidth <= 0 || InputWidth % 4 != 0)
+            throw new ArgumentOutOfRangeException(
+                nameof(InputWidth), "Input width must be positive and divisible by 4.");
+        if (OutputCharacterPositions != InputWidth / 4)
+            throw new ArgumentException(
+                "OutputCharacterPositions must equal InputWidth / 4.",
+                nameof(OutputCharacterPositions));
+        int totalBlocks = StageDepths.Sum();
+        if (LocalMixingBlocks < 0 || LocalMixingBlocks > totalBlocks)
+            throw new ArgumentOutOfRangeException(nameof(LocalMixingBlocks));
+        if (LocalWindowHeight <= 0 || LocalWindowWidth <= 0)
+            throw new ArgumentOutOfRangeException(
+                nameof(LocalWindowHeight), "Local mixing windows must be positive.");
         if (DropPathRate < 0 || DropPathRate >= 1)
             throw new ArgumentOutOfRangeException(nameof(DropPathRate));
-        if (UseTpsRectification &&
-            (TpsInputHeight != 32 || TpsInputWidth != 64 || TpsControlPointCount != 20))
-            throw new ArgumentException("SVTR STN_ON requires a 32x64 localization input and 20 TPS control points.");
+        if (LastStageDropout < 0 || LastStageDropout >= 1)
+            throw new ArgumentOutOfRangeException(nameof(LastStageDropout));
+        if (OutputChannels <= 0)
+            throw new ArgumentOutOfRangeException(nameof(OutputChannels));
+        if (UseTpsRectification)
+        {
+            if (TpsInputHeight <= 0 || TpsInputWidth <= 0)
+                throw new ArgumentOutOfRangeException(
+                    nameof(TpsInputHeight), "TPS localization dimensions must be positive.");
+            if (TpsControlPointCount < 4 || TpsControlPointCount % 2 != 0)
+                throw new ArgumentOutOfRangeException(
+                    nameof(TpsControlPointCount), "TPS requires an even control-point count of at least four.");
+            if (TpsMarginX < 0 || TpsMarginX >= 0.5 || TpsMarginY < 0 || TpsMarginY >= 0.5)
+                throw new ArgumentOutOfRangeException(
+                    nameof(TpsMarginX), "TPS margins must be in [0, 0.5).");
+        }
     }
 }

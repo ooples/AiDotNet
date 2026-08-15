@@ -6,6 +6,14 @@ using AiDotNet.Interfaces;
 namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>SVTR local/global component-mixing block with the released model's pre-normalization and MLP.</summary>
+/// <typeparam name="T">The numeric type used for tensor values and trainable parameters.</typeparam>
+/// <remarks>
+/// <para><b>For Beginners:</b> Local mixing lets each visual token attend to nearby text strokes,
+/// while global mixing lets later blocks connect the full word. The residual MLP then refines each
+/// token without changing the image-token grid.</para>
+/// <para><b>Reference:</b> Du et al., "SVTR: Scene Text Recognition with a Single Visual Model",
+/// IJCAI 2022.</para>
+/// </remarks>
 [LayerCategory(LayerCategory.Transformer)]
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerProperty(IsTrainable = true, Cost = ComputeCost.High, TestInputShape = "1, 8, 8", TestConstructorArgs = "8, 2, 2, 4, 4, 2")]
@@ -29,7 +37,8 @@ public class SVTRMixingBlockLayer<T> : LayerBase<T>
     private readonly LayerNormalizationLayer<T> _norm2;
     private readonly DenseLayer<T> _mlpUp;
     private readonly DenseLayer<T> _mlpDown;
-    private Tensor<bool>? _localMask;
+    private Tensor<bool>? _localMaskPlane;
+    private readonly object _localMaskLock = new();
 
     private ILayer<T>[] ParameterLayers =>
         [_norm1, _query, _key, _value, _output, _norm2, _mlpUp, _mlpDown];
@@ -99,7 +108,7 @@ public class SVTRMixingBlockLayer<T> : LayerBase<T>
         Tensor<bool>? mask = _local ? GetLocalMask(batch) : null;
         var attended = Engine.ScaledDotProductAttention(
             q, k, v, mask, 1.0 / Math.Sqrt(headDim), out _);
-        attended = Engine.TensorPermute(attended, [0, 2, 1, 3]);
+        attended = Engine.TensorPermute(attended, [0, 2, 1, 3]).Contiguous();
         attended = Engine.Reshape(attended, [batch * sequence, _hiddenSize]);
         attended = _output.Forward(attended);
         attended = Engine.Reshape(attended, [batch, sequence, _hiddenSize]);
@@ -121,26 +130,46 @@ public class SVTRMixingBlockLayer<T> : LayerBase<T>
 
     private Tensor<bool> GetLocalMask(int batch)
     {
-        if (_localMask is not null && _localMask.Shape[0] == batch) return _localMask;
         int sequence = _height * _width;
-        var mask = new Tensor<bool>([batch, _numHeads, sequence, sequence]);
-        int radiusY = _windowHeight / 2;
-        int radiusX = _windowWidth / 2;
-        for (int query = 0; query < sequence; query++)
+        var plane = System.Threading.Volatile.Read(ref _localMaskPlane);
+        if (plane is null)
         {
-            int qy = query / _width;
-            int qx = query % _width;
-            for (int key = 0; key < sequence; key++)
+            lock (_localMaskLock)
             {
-                int ky = key / _width;
-                int kx = key % _width;
-                bool allowed = Math.Abs(qy - ky) <= radiusY && Math.Abs(qx - kx) <= radiusX;
+                plane = _localMaskPlane;
+                if (plane is null)
+                {
+                    plane = new Tensor<bool>([sequence, sequence]);
+                    int radiusY = _windowHeight / 2;
+                    int radiusX = _windowWidth / 2;
+                    for (int query = 0; query < sequence; query++)
+                    {
+                        int qy = query / _width;
+                        int qx = query % _width;
+                        for (int key = 0; key < sequence; key++)
+                        {
+                            int ky = key / _width;
+                            int kx = key % _width;
+                            plane[query, key] = Math.Abs(qy - ky) <= radiusY &&
+                                Math.Abs(qx - kx) <= radiusX;
+                        }
+                    }
+                    System.Threading.Volatile.Write(ref _localMaskPlane, plane);
+                }
+            }
+        }
+
+        // The engine currently requires concrete batch/head mask axes. Replicate the cached
+        // geometry plane without recomputing the spatial-neighborhood predicate.
+        var mask = new Tensor<bool>([batch, _numHeads, sequence, sequence]);
+        for (int query = 0; query < sequence; query++)
+        for (int key = 0; key < sequence; key++)
+        {
+            bool allowed = plane[query, key];
                 for (int b = 0; b < batch; b++)
                 for (int head = 0; head < _numHeads; head++)
                     mask[b, head, query, key] = allowed;
-            }
         }
-        _localMask = mask;
         return mask;
     }
 

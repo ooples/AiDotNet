@@ -80,15 +80,14 @@ public sealed class TemporalModule3DLayer<T> : LayerBase<T>
 
     /// <inheritdoc />
     protected override Tensor<T> ForwardTraced(Tensor<T> input)
-    {
-        if (input.Rank != 5)
-            throw new ArgumentException("TemporalModule3DLayer requires [B,C,F,H,W].", nameof(input));
-        return Forward(input, new Tensor<T>([input.Shape[0], _timeEmbeddingDim]));
-    }
+        => throw new InvalidOperationException(
+            "TemporalModule3DLayer requires an explicit diffusion timestep embedding.");
 
     /// <summary>Runs the temporal module with a projected diffusion timestep embedding.</summary>
     public Tensor<T> Forward(Tensor<T> input, Tensor<T> timeEmbedding)
     {
+        if (input is null) throw new ArgumentNullException(nameof(input));
+        if (timeEmbedding is null) throw new ArgumentNullException(nameof(timeEmbedding));
         if (input.Rank != 5)
             throw new ArgumentException("TemporalModule3DLayer requires [B,C,F,H,W].", nameof(input));
         if (input.Shape[1] != _channels)
@@ -163,7 +162,8 @@ public sealed class TemporalModule3DLayer<T> : LayerBase<T>
     public override LayerBase<T> Clone()
     {
         var clone = new TemporalModule3DLayer<T>(_channels, _timeEmbeddingDim, _spatialSize);
-        clone.SetParameters(GetParameters());
+        var parameters = GetParameters();
+        if (parameters.Length > 0) clone.SetParameters(parameters);
         return clone;
     }
 
@@ -174,7 +174,7 @@ public sealed class TemporalModule3DLayer<T> : LayerBase<T>
         metadata["Channels"] = _channels.ToString(System.Globalization.CultureInfo.InvariantCulture);
         metadata["TimeEmbeddingDim"] = _timeEmbeddingDim.ToString(System.Globalization.CultureInfo.InvariantCulture);
         metadata["SpatialSize"] = _spatialSize.ToString(System.Globalization.CultureInfo.InvariantCulture);
-        metadata["AttentionBlockTypes"] = ",";
+        metadata["AttentionBlockTypes"] = string.Empty;
         return metadata;
     }
 

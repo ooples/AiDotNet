@@ -152,10 +152,10 @@ public partial class CrossAttentionLayer<T> : LayerBase<T>, IShapeContract
 
     /// <param name="sequenceLength">Maximum sequence length for queries.</param>
     public CrossAttentionLayer(
-        [LayerState] int queryDim,
-        [LayerState] int contextDim,
-        [LayerState] int headCount,
-        [LayerState] int sequenceLength = 64)
+        int queryDim,
+        int contextDim,
+        int headCount,
+        int sequenceLength = 64)
         : this(queryDim, contextDim, headCount, sequenceLength, zeroOutputProjection: false)
     {
     }

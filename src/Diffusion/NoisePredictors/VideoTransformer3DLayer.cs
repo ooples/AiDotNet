@@ -122,6 +122,8 @@ public sealed class VideoTransformer3DLayer<T> : LayerBase<T>
     /// <summary>Runs the block for an NCFHW video and text encoder states.</summary>
     public Tensor<T> Forward(Tensor<T> input, Tensor<T> context)
     {
+        if (input is null) throw new ArgumentNullException(nameof(input));
+        if (context is null) throw new ArgumentNullException(nameof(context));
         if (input.Rank != 5)
             throw new ArgumentException("VideoTransformer3DLayer requires [B,C,F,H,W].", nameof(input));
         if (input.Shape[1] != _channels)
@@ -233,7 +235,8 @@ public sealed class VideoTransformer3DLayer<T> : LayerBase<T>
     {
         var clone = new VideoTransformer3DLayer<T>(
             _channels, _contextDimension, _headCount, _spatialSize, _onlyCrossAttention);
-        clone.SetParameters(GetParameters());
+        var parameters = GetParameters();
+        if (parameters.Length > 0) clone.SetParameters(parameters);
         return clone;
     }
 

@@ -30,5 +30,12 @@ public sealed class MedCLIPDefaultOptionsContractTests
         Assert.True(options.UseEntityExtraction);
         Assert.Equal(1.0, options.SemanticMatchingWeight);
         Assert.Equal(0.07, options.Temperature, precision: 10);
+        Assert.Equal(3, options.ImageMean.Length);
+        Assert.Equal(3, options.ImageStd.Length);
+        Assert.All(options.ImageMean,
+            value => Assert.Equal(0.5862785803043838, value, precision: 12));
+        Assert.All(options.ImageStd,
+            value => Assert.Equal(0.27950088968644304, value, precision: 12));
+        Assert.Null(options.TokenizerDirectory);
     }
 }

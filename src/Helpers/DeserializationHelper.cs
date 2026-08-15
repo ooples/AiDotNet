@@ -1997,6 +1997,7 @@ public static class DeserializationHelper
             int spatialSize = TryGetInt(additionalParams, "SpatialSize")
                 ?? (inputShape.Length > 2 ? inputShape[^1] : 1);
             int timeEmbedDim = TryGetInt(additionalParams, "TimeEmbedDim") ?? 0;
+            int numGroups = TryGetInt(additionalParams, "NumGroups") ?? 32;
             double epsilon = TryGetDouble(additionalParams, "Epsilon") ?? 1e-5;
             var ctor = type.GetConstructor(new Type[]
             {
@@ -2006,7 +2007,7 @@ public static class DeserializationHelper
                 throw new MissingLayerCtorException("Cannot find DiffusionResBlock constructor.");
             instance = ctor.Invoke(new object[]
             {
-                inChannels, outChannels, spatialSize, timeEmbedDim, 32, epsilon
+                inChannels, outChannels, spatialSize, timeEmbedDim, numGroups, epsilon
             });
         }
         else if (genericDef == typeof(PoolingLayer<>))

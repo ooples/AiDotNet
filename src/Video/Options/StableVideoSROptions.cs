@@ -40,6 +40,7 @@ public class StableVideoSROptions : NeuralNetworkOptions
             throw new ArgumentNullException(nameof(other));
 
         Variant = other.Variant;
+        Seed = other.Seed;
         NumFeatures = other.NumFeatures;
         NumDenoisingSteps = other.NumDenoisingSteps;
         NumTemporalModules = other.NumTemporalModules;

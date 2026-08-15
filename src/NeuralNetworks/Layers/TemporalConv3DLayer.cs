@@ -18,10 +18,6 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Convolution)]
 [LayerTask(LayerTask.TemporalProcessing)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 5)]
-[TensorLayout(TensorAxis.Channels, TensorAxis.Time, TensorAxis.Height, TensorAxis.Width,
-    Direction = TensorLayoutDirection.Input)]
-[TensorLayout(TensorAxis.Channels, TensorAxis.Time, TensorAxis.Height, TensorAxis.Width,
-    Direction = TensorLayoutDirection.Output)]
 [TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Time, TensorAxis.Height, TensorAxis.Width,
     Direction = TensorLayoutDirection.Input)]
 [TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Time, TensorAxis.Height, TensorAxis.Width,
@@ -42,7 +38,6 @@ public sealed partial class TemporalConv3DLayer<T> : LayerBase<T>, IShapeContrac
         var width = Window(TensorAxis.Width, _kernelWidth, _paddingWidth);
         return inputRank switch
         {
-            4 => [channels, time, height, width],
             5 =>
             [
                 new(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),

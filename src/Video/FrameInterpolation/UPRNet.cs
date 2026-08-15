@@ -1,7 +1,7 @@
 using System.IO;
-using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
+using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
@@ -33,11 +33,9 @@ namespace AiDotNet.Video.FrameInterpolation;
     Authors = "Xin Jin, Longhai Wu, Jie Chen, Youxin Chen, Jayoon Koo, Cheul-hee Hahm")]
 public partial class UPRNet<T> : FrameInterpolationBase<T>
 {
-    private const int FeatureStage0Channels = 16;
-    private const int FeatureStage1Channels = 32;
-    private const int FeatureStage2Channels = 64;
     private const int CorrelationRadius = 4;
     private const int CorrelationChannels = 81;
+    private const double SynthesisBlendEpsilon = 1e-6;
 
     private readonly UPRNetOptions _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
@@ -126,102 +124,8 @@ public partial class UPRNet<T> : FrameInterpolationBase<T>
     {
         Layers.Clear();
         ClearBindings();
-
-        AddLeakyConv(_featureStage0, FeatureStage0Channels, stride: 1);
-        AddLeakyConv(_featureStage0, FeatureStage0Channels, stride: 1);
-        AddLeakyConv(_featureStage0, FeatureStage0Channels, stride: 1);
-        AddLeakyConv(_featureStage0, FeatureStage0Channels, stride: 1);
-
-        AddLeakyConv(_featureStage1, FeatureStage1Channels, stride: 2);
-        AddLeakyConv(_featureStage1, FeatureStage1Channels, stride: 1);
-        AddLeakyConv(_featureStage1, FeatureStage1Channels, stride: 1);
-        AddLeakyConv(_featureStage1, FeatureStage1Channels, stride: 1);
-
-        AddLeakyConv(_featureStage2, FeatureStage2Channels, stride: 2);
-        AddLeakyConv(_featureStage2, FeatureStage2Channels, stride: 1);
-        AddLeakyConv(_featureStage2, FeatureStage2Channels, stride: 1);
-        AddLeakyConv(_featureStage2, FeatureStage2Channels, stride: 1);
-
-        AddLeakyConv(_motionEstimator, 160, kernelSize: 1, padding: 0);
-        AddLeakyConv(_motionEstimator, 128);
-        AddLeakyConv(_motionEstimator, 112);
-        AddLeakyConv(_motionEstimator, 96);
-        AddLeakyConv(_motionEstimator, 64);
-        AddConv(_motionEstimator, 4);
-
-        AddPReLUConv(_synthEncoder0, 32);
-        AddPReLUConv(_synthEncoder0, 32);
-
-        AddPReLUConv(_synthEncoder1, 64, stride: 2);
-        AddPReLUConv(_synthEncoder1, 64);
-        AddPReLUConv(_synthEncoder1, 64);
-
-        AddPReLUConv(_synthEncoder2, 128, stride: 2);
-        AddPReLUConv(_synthEncoder2, 128);
-        AddPReLUConv(_synthEncoder2, 128);
-
-        AddPReLUDeconv(_synthDecoder1, 64);
-        AddPReLUConv(_synthDecoder1, 64);
-
-        AddPReLUDeconv(_synthDecoder2, 32);
-        AddPReLUConv(_synthDecoder2, 32);
-
-        AddPReLUConv(_synthDecoder0, 32);
-        AddPReLUConv(_synthDecoder0, 32);
-        _synthPrediction = new ConvolutionalLayer<T>(
-            outputDepth: 5, kernelSize: 3, stride: 1, padding: 1,
-            activationFunction: new IdentityActivation<T>());
-        Layers.Add(_synthPrediction);
-    }
-
-    private void AddLeakyConv(
-        List<ILayer<T>> group,
-        int outputChannels,
-        int kernelSize = 3,
-        int stride = 1,
-        int padding = 1)
-    {
-        var layer = new ConvolutionalLayer<T>(
-            outputDepth: outputChannels,
-            kernelSize: kernelSize,
-            stride: stride,
-            padding: padding,
-            activationFunction: (IActivationFunction<T>)new LeakyReLUActivation<T>(0.1));
-        group.Add(layer);
-        Layers.Add(layer);
-    }
-
-    private void AddConv(List<ILayer<T>> group, int outputChannels)
-    {
-        var layer = new ConvolutionalLayer<T>(
-            outputDepth: outputChannels, kernelSize: 3, stride: 1, padding: 1,
-            activationFunction: (IActivationFunction<T>)new IdentityActivation<T>());
-        group.Add(layer);
-        Layers.Add(layer);
-    }
-
-    private void AddPReLUConv(List<ILayer<T>> group, int outputChannels, int stride = 1)
-    {
-        var conv = new ConvolutionalLayer<T>(
-            outputDepth: outputChannels, kernelSize: 3, stride: stride, padding: 1,
-            activationFunction: (IActivationFunction<T>)new IdentityActivation<T>());
-        var activation = new PReLULayer<T>(outputChannels, channelAxis: 1, initialAlpha: 0.25);
-        group.Add(conv);
-        group.Add(activation);
-        Layers.Add(conv);
-        Layers.Add(activation);
-    }
-
-    private void AddPReLUDeconv(List<ILayer<T>> group, int outputChannels)
-    {
-        var deconv = new DeconvolutionalLayer<T>(
-            outputChannels, kernelSize: 4, stride: 2, padding: 1,
-            activationFunction: new IdentityActivation<T>());
-        var activation = new PReLULayer<T>(outputChannels, channelAxis: 1, initialAlpha: 0.25);
-        group.Add(deconv);
-        group.Add(activation);
-        Layers.Add(deconv);
-        Layers.Add(activation);
+        Layers.AddRange(LayerHelper<T>.CreateDefaultUPRNetLayers());
+        EnsurePaperBindings();
     }
 
     private void ClearBindings()
@@ -273,6 +177,7 @@ public partial class UPRNet<T> : FrameInterpolationBase<T>
 
     private Tensor<T> ForwardAtTime(Tensor<T> input, double time)
     {
+        ThrowIfDisposed();
         if (_customArchitecture)
             return base.Forward(input);
         EnsurePaperBindings();
@@ -316,13 +221,7 @@ public partial class UPRNet<T> : FrameInterpolationBase<T>
             Tensor<T> lastFlow;
             Tensor<T> lastFeature;
             bool skipMotionAtFinest = level == 0 && _options.NumLevelsSkipped > 0;
-            if (skipMotionAtFinest && _options.NumLevelsSkipped == _options.NumPyramidLevels)
-            {
-                lastFlow = new Tensor<T>([batch, 4, motionHeight, motionWidth]);
-                lastFeature = new Tensor<T>([batch, 64, motionHeight, motionWidth]);
-                interpolation = null;
-            }
-            else if (flow is null || feature is null)
+            if (flow is null || feature is null)
             {
                 lastFlow = new Tensor<T>([batch, 4, motionHeight, motionWidth]);
                 lastFeature = new Tensor<T>([batch, 64, motionHeight, motionWidth]);
@@ -460,7 +359,8 @@ public partial class UPRNet<T> : FrameInterpolationBase<T>
         var numerator = Engine.TensorAdd(
             Engine.TensorBroadcastMultiply(warpedImage0, weight0),
             Engine.TensorBroadcastMultiply(warpedImage1, weight1));
-        var denominator = Engine.TensorAdd(weight0, weight1);
+        var denominator = Engine.TensorAddScalar(
+            Engine.TensorAdd(weight0, weight1), NumOps.FromDouble(SynthesisBlendEpsilon));
         var merged = Engine.TensorBroadcastDivide(numerator, denominator);
         return Engine.TensorClamp(Engine.TensorAdd(merged, residual), NumOps.Zero, NumOps.One);
     }

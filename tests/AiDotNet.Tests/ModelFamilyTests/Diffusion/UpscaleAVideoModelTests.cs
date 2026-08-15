@@ -1,4 +1,3 @@
-using System.Linq;
 using AiDotNet.Interfaces;
 using AiDotNet.Diffusion.SuperResolution;
 using AiDotNet.Diffusion.NoisePredictors;
@@ -11,8 +10,8 @@ namespace AiDotNet.Tests.ModelFamilyTests.Diffusion;
 
 public class UpscaleAVideoModelTests : DiffusionModelTestBase<float>
 {
-    protected override int[] InputShape => [1, 4, 4, 4];
-    protected override int[] OutputShape => [1, 4, 4, 4];
+    protected override int[] InputShape => [1, 1, 3, 4, 4];
+    protected override int[] OutputShape => [1, 1, 3, 16, 16];
     protected override int TrainingIterations => 1;
 
     // Upscale-A-Video defaults to a 320-base-channel video UNet + temporal VAE: a single forward
@@ -38,17 +37,7 @@ public class UpscaleAVideoModelTests : DiffusionModelTestBase<float>
         Tensor<float> expectedOutput)
     {
         var upscale = Assert.IsType<UpscaleAVideoModel<float>>(model);
-        upscale.TrainConditioned(
-            FilledVideo([1, 1, 3, 4, 4], 0.1f),
-            FilledVideo([1, 1, 3, 16, 16], 0.2f),
-            "test clip",
-            noiseLevel: 20);
-    }
-
-    private static Tensor<float> FilledVideo(int[] shape, float value)
-    {
-        int length = shape.Aggregate(1, (product, dimension) => product * dimension);
-        return new Tensor<float>(Enumerable.Repeat(value, length).ToArray(), shape);
+        upscale.TrainConditioned(input, expectedOutput, "test clip", noiseLevel: 20);
     }
 
     private sealed class TestConditioner : IConditioningModule<float>
@@ -63,14 +52,22 @@ public class UpscaleAVideoModelTests : DiffusionModelTestBase<float>
         public Tensor<float> EncodeText(
             Tensor<float> tokenIds,
             Tensor<float>? attentionMask = null)
-            => new(new float[tokenIds.Shape[0] * 1024], [tokenIds.Shape[0], 1, 1024]);
+            => Sequential(tokenIds.Shape[0] * 1024, 0.01f,
+                [tokenIds.Shape[0], 1, 1024]);
 
         public Tensor<float> GetPooledEmbedding(Tensor<float> sequenceEmbeddings)
-            => new(new float[sequenceEmbeddings.Shape[0] * 1024],
+            => Sequential(sequenceEmbeddings.Shape[0] * 1024, 0.02f,
                 [sequenceEmbeddings.Shape[0], 1024]);
 
         public Tensor<float> GetUnconditionalEmbedding(int batchSize)
-            => new(new float[batchSize * 1024], [batchSize, 1, 1024]);
+            => Sequential(batchSize * 1024, -0.01f, [batchSize, 1, 1024]);
+
+        private static Tensor<float> Sequential(int length, float step, int[] shape)
+        {
+            var data = new float[length];
+            for (int i = 0; i < length; i++) data[i] = (i + 1) * step;
+            return new Tensor<float>(data, shape);
+        }
 
         public Tensor<float> Tokenize(string text) => new(new float[1], [1, 1]);
 
