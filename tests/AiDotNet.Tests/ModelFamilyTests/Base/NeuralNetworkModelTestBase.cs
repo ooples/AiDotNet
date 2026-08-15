@@ -331,7 +331,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         int[] conformed = AiDotNet.Generators.GeneratedVisionFixtureContract.ConformToDeclaredShape(
             fallback,
             declared);
-        ClampFreeAxes(conformed, declared.Length);
+        ClampFreeAxes(conformed, conformed.Length - 1);
         return conformed;
     }
 

@@ -162,14 +162,11 @@ public class SVTRMixingBlockLayer<T> : LayerBase<T>
         // The engine currently requires concrete batch/head mask axes. Replicate the cached
         // geometry plane without recomputing the spatial-neighborhood predicate.
         var mask = new Tensor<bool>([batch, _numHeads, sequence, sequence]);
+        for (int b = 0; b < batch; b++)
+        for (int head = 0; head < _numHeads; head++)
         for (int query = 0; query < sequence; query++)
         for (int key = 0; key < sequence; key++)
-        {
-            bool allowed = plane[query, key];
-                for (int b = 0; b < batch; b++)
-                for (int head = 0; head < _numHeads; head++)
-                    mask[b, head, query, key] = allowed;
-        }
+            mask[b, head, query, key] = plane[query, key];
         return mask;
     }
 

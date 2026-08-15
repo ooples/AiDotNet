@@ -37,7 +37,38 @@ public class UpscaleAVideoModelTests : DiffusionModelTestBase<float>
         Tensor<float> expectedOutput)
     {
         var upscale = Assert.IsType<UpscaleAVideoModel<float>>(model);
-        upscale.TrainConditioned(input, expectedOutput, "test clip", noiseLevel: 20);
+        upscale.TrainConditioned(
+            input,
+            EnsureFourTimesTarget(input, expectedOutput),
+            "test clip",
+            noiseLevel: 20);
+    }
+
+    private static Tensor<float> EnsureFourTimesTarget(
+        Tensor<float> input,
+        Tensor<float> expectedOutput)
+    {
+        int targetHeight = input.Shape[3] * 4;
+        int targetWidth = input.Shape[4] * 4;
+        if (expectedOutput.Rank == 5 &&
+            expectedOutput.Shape[0] == input.Shape[0] &&
+            expectedOutput.Shape[1] == input.Shape[1] &&
+            expectedOutput.Shape[2] == input.Shape[2] &&
+            expectedOutput.Shape[3] == targetHeight &&
+            expectedOutput.Shape[4] == targetWidth)
+        {
+            return expectedOutput;
+        }
+
+        var target = new Tensor<float>(
+            [input.Shape[0], input.Shape[1], input.Shape[2], targetHeight, targetWidth]);
+        for (int batch = 0; batch < input.Shape[0]; batch++)
+        for (int frame = 0; frame < input.Shape[1]; frame++)
+        for (int channel = 0; channel < input.Shape[2]; channel++)
+        for (int y = 0; y < targetHeight; y++)
+        for (int x = 0; x < targetWidth; x++)
+            target[batch, frame, channel, y, x] = input[batch, frame, channel, y / 4, x / 4];
+        return target;
     }
 
     private sealed class TestConditioner : IConditioningModule<float>

@@ -37974,80 +37974,102 @@ public static class LayerHelper<T>
     /// <summary>
     /// Creates the 47-layer native UPR-Net graph from the authors' released base model.
     /// </summary>
+    /// <param name="architecture">The owning network architecture.</param>
+    /// <returns>The ordered UPR-Net layer sequence: feature pyramid, motion estimator,
+    /// synthesis encoder/decoder, and the final five-channel prediction head.</returns>
     /// <remarks>
     /// The returned order is the serialized topology contract consumed by UPR-Net: three
     /// four-convolution feature stages, the six-layer recurrent motion estimator, the synthesis
     /// encoder/decoder, and its final five-channel prediction head.
+    /// <para><b>For Beginners:</b> UPR-Net estimates motion between two video frames and blends
+    /// them into an in-between frame. This factory builds that network layer by layer: first it
+    /// extracts image features, then estimates motion, and finally synthesizes the output frame.</para>
     /// </remarks>
-    public static IEnumerable<ILayer<T>> CreateDefaultUPRNetLayers()
+    public static IEnumerable<ILayer<T>> CreateDefaultUPRNetLayers(
+        NeuralNetworkArchitecture<T> architecture)
     {
-        var layers = new List<ILayer<T>>(47);
+        if (architecture is null) throw new ArgumentNullException(nameof(architecture));
 
-        void AddLeakyConv(int outputChannels, int kernelSize = 3, int stride = 1, int padding = 1)
-        {
-            layers.Add(new ConvolutionalLayer<T>(
+        ILayer<T> LeakyConv(int outputChannels, int kernelSize = 3, int stride = 1, int padding = 1)
+            => new ConvolutionalLayer<T>(
                 outputDepth: outputChannels,
                 kernelSize: kernelSize,
                 stride: stride,
                 padding: padding,
-                activationFunction: (IActivationFunction<T>)new LeakyReLUActivation<T>(0.1)));
-        }
+                activationFunction: (IActivationFunction<T>)new LeakyReLUActivation<T>(0.1));
 
-        void AddConv(int outputChannels)
-        {
-            layers.Add(new ConvolutionalLayer<T>(
+        ILayer<T> Conv(int outputChannels)
+            => new ConvolutionalLayer<T>(
                 outputDepth: outputChannels, kernelSize: 3, stride: 1, padding: 1,
-                activationFunction: (IActivationFunction<T>)new IdentityActivation<T>()));
-        }
+                activationFunction: (IActivationFunction<T>)new IdentityActivation<T>());
 
-        void AddPReLUConv(int outputChannels, int stride = 1)
-        {
-            layers.Add(new ConvolutionalLayer<T>(
+        ILayer<T> StridedConv(int outputChannels, int stride = 1)
+            => new ConvolutionalLayer<T>(
                 outputDepth: outputChannels, kernelSize: 3, stride: stride, padding: 1,
-                activationFunction: (IActivationFunction<T>)new IdentityActivation<T>()));
-            layers.Add(new PReLULayer<T>(outputChannels, channelAxis: 1, initialAlpha: 0.25));
-        }
+                activationFunction: (IActivationFunction<T>)new IdentityActivation<T>());
 
-        void AddPReLUDeconv(int outputChannels)
-        {
-            layers.Add(new DeconvolutionalLayer<T>(
+        ILayer<T> Deconv(int outputChannels)
+            => new DeconvolutionalLayer<T>(
                 outputChannels, kernelSize: 4, stride: 2, padding: 1,
-                activationFunction: new IdentityActivation<T>()));
-            layers.Add(new PReLULayer<T>(outputChannels, channelAxis: 1, initialAlpha: 0.25));
-        }
+                activationFunction: new IdentityActivation<T>());
 
-        for (int i = 0; i < 4; i++) AddLeakyConv(16);
-        AddLeakyConv(32, stride: 2);
-        for (int i = 0; i < 3; i++) AddLeakyConv(32);
-        AddLeakyConv(64, stride: 2);
-        for (int i = 0; i < 3; i++) AddLeakyConv(64);
+        ILayer<T> PReLU(int channels)
+            => new PReLULayer<T>(channels, channelAxis: 1, initialAlpha: 0.25);
 
-        AddLeakyConv(160, kernelSize: 1, padding: 0);
-        AddLeakyConv(128);
-        AddLeakyConv(112);
-        AddLeakyConv(96);
-        AddLeakyConv(64);
-        AddConv(4);
+        // === Feature pyramid: three four-convolution stages ===
+        for (int i = 0; i < 4; i++)
+            yield return LeakyConv(16);
+        yield return LeakyConv(32, stride: 2);
+        for (int i = 0; i < 3; i++)
+            yield return LeakyConv(32);
+        yield return LeakyConv(64, stride: 2);
+        for (int i = 0; i < 3; i++)
+            yield return LeakyConv(64);
 
-        AddPReLUConv(32);
-        AddPReLUConv(32);
-        AddPReLUConv(64, stride: 2);
-        AddPReLUConv(64);
-        AddPReLUConv(64);
-        AddPReLUConv(128, stride: 2);
-        AddPReLUConv(128);
-        AddPReLUConv(128);
-        AddPReLUDeconv(64);
-        AddPReLUConv(64);
-        AddPReLUDeconv(32);
-        AddPReLUConv(32);
-        AddPReLUConv(32);
-        AddPReLUConv(32);
-        layers.Add(new ConvolutionalLayer<T>(
+        // === Recurrent motion estimator ===
+        yield return LeakyConv(160, kernelSize: 1, padding: 0);
+        yield return LeakyConv(128);
+        yield return LeakyConv(112);
+        yield return LeakyConv(96);
+        yield return LeakyConv(64);
+        yield return Conv(4);
+
+        // === Synthesis encoder ===
+        yield return StridedConv(32);
+        yield return PReLU(32);
+        yield return StridedConv(32);
+        yield return PReLU(32);
+        yield return StridedConv(64, stride: 2);
+        yield return PReLU(64);
+        yield return StridedConv(64);
+        yield return PReLU(64);
+        yield return StridedConv(64);
+        yield return PReLU(64);
+        yield return StridedConv(128, stride: 2);
+        yield return PReLU(128);
+        yield return StridedConv(128);
+        yield return PReLU(128);
+        yield return StridedConv(128);
+        yield return PReLU(128);
+
+        // === Synthesis decoder ===
+        yield return Deconv(64);
+        yield return PReLU(64);
+        yield return StridedConv(64);
+        yield return PReLU(64);
+        yield return Deconv(32);
+        yield return PReLU(32);
+        yield return StridedConv(32);
+        yield return PReLU(32);
+        yield return StridedConv(32);
+        yield return PReLU(32);
+        yield return StridedConv(32);
+        yield return PReLU(32);
+
+        // === Five-channel prediction head ===
+        yield return new ConvolutionalLayer<T>(
             outputDepth: 5, kernelSize: 3, stride: 1, padding: 1,
-            activationFunction: new IdentityActivation<T>()));
-
-        return layers;
+            activationFunction: new IdentityActivation<T>());
     }
 
     #endregion

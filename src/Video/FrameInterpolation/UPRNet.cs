@@ -124,7 +124,7 @@ public partial class UPRNet<T> : FrameInterpolationBase<T>
     {
         Layers.Clear();
         ClearBindings();
-        Layers.AddRange(LayerHelper<T>.CreateDefaultUPRNetLayers());
+        Layers.AddRange(LayerHelper<T>.CreateDefaultUPRNetLayers(Architecture));
         EnsurePaperBindings();
     }
 

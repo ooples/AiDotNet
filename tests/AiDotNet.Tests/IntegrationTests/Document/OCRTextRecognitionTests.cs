@@ -126,6 +126,7 @@ public class OCRTextRecognitionTests
     [Fact(Timeout = 120000)]
     public async Task SVTR_NativeConstruction_Succeeds()
     {
+        await Task.Yield();
         var arch = CreateArchitecture();
         var model = new SVTR<double>(arch);
         Assert.True(model.ParameterCount > 0,
@@ -135,6 +136,7 @@ public class OCRTextRecognitionTests
     [Fact(Timeout = 120000)]
     public async Task SVTR_Predict_ReturnsOutput()
     {
+        await Task.Yield();
         var arch = CreateArchitecture();
         var model = new SVTR<double>(arch);
         var input = CreateSmallImage();
@@ -147,6 +149,7 @@ public class OCRTextRecognitionTests
     [Fact(Timeout = 120000)]
     public async Task SVTR_GetModelMetadata_ReturnsValidData()
     {
+        await Task.Yield();
         var arch = CreateArchitecture();
         var model = new SVTR<double>(arch);
         var meta = model.GetModelMetadata();
@@ -193,6 +196,7 @@ public class OCRTextRecognitionTests
     [Fact(Timeout = 120000)]
     public async Task AllTextRecognizers_RequiresOCR_IsFalse()
     {
+        await Task.Yield();
         var arch = CreateArchitecture();
         var models = new DocumentNeuralNetworkBase<double>[]
         {
