@@ -574,7 +574,21 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
                 nameof(input));
         }
 
-        bool needsResize = _gamma.Length != numFeatures
+        // Correctly SIZED is not the same question as correctly REGISTERED, and this guard
+        // replaced WeightsAlreadyAllocated, which answered both. Gamma can already be the right
+        // length while the trainable registry is still empty -- a shape-only walk resolves the
+        // width without allocating, and a deserialize installs values into the fields before any
+        // forward has registered them. Comparing lengths alone skipped the block in exactly those
+        // cases, so RegisterTrainableParameter never ran and the layer reported zero registered
+        // parameters against a layout that carried two ("has 0 registered parameters but
+        // received 2" on every clone/deserialize through BatchNorm).
+        //
+        // Re-entering the block when registration is missing is safe for trained values: the
+        // preserveExistingValues copy below carries them into the new tensors whenever the widths
+        // already agree, which is the whole reason that copy exists.
+        bool affineParametersRegistered = RegisteredTrainableParameterCount >= 2;
+        bool needsResize = !affineParametersRegistered
+            || _gamma.Length != numFeatures
             || _beta.Length != numFeatures
             || _runningMean.Length != numFeatures
             || _runningVariance.Length != numFeatures;
