@@ -37,7 +37,7 @@ public class FusedSpecMatchesEagerBehaviourTests
             InitialMomentum = 0.9,
             UseAdaptiveLearningRate = false,
         };
-        var optimizer = new StochasticGradientDescentOptimizer<double, Matrix<double>, Vector<double>>(null!, options);
+        var optimizer = new StochasticGradientDescentOptimizer<double, Matrix<double>, Vector<double>>(null, options);
 
         Assert.True(TryGetConfig(optimizer, out var config));
         Assert.Equal(Tensors.Engines.Compilation.OptimizerType.SGDMomentum, config.Type);
@@ -52,7 +52,7 @@ public class FusedSpecMatchesEagerBehaviourTests
             InitialMomentum = 0.0,
             UseAdaptiveLearningRate = false,
         };
-        var optimizer = new StochasticGradientDescentOptimizer<double, Matrix<double>, Vector<double>>(null!, options);
+        var optimizer = new StochasticGradientDescentOptimizer<double, Matrix<double>, Vector<double>>(null, options);
 
         Assert.True(TryGetConfig(optimizer, out var config));
         Assert.Equal(Tensors.Engines.Compilation.OptimizerType.SGD, config.Type);
@@ -67,7 +67,7 @@ public class FusedSpecMatchesEagerBehaviourTests
             InitialMomentum = 0.9,
             UseAdaptiveLearningRate = false,
         };
-        var optimizer = new GradientDescentOptimizer<double, Matrix<double>, Vector<double>>(null!, options);
+        var optimizer = new GradientDescentOptimizer<double, Matrix<double>, Vector<double>>(null, options);
 
         Assert.True(TryGetConfig(optimizer, out var config));
         Assert.Equal(Tensors.Engines.Compilation.OptimizerType.SGDMomentum, config.Type);
@@ -86,7 +86,7 @@ public class FusedSpecMatchesEagerBehaviourTests
             InitialMomentum = 0.9,   // present, but unused by this optimizer's loop
             UseAdaptiveLearningRate = false,
         };
-        var optimizer = new MiniBatchGradientDescentOptimizer<double, Matrix<double>, Vector<double>>(null!, options);
+        var optimizer = new MiniBatchGradientDescentOptimizer<double, Matrix<double>, Vector<double>>(null, options);
 
         Assert.True(TryGetConfig(optimizer, out var config));
         Assert.Equal(Tensors.Engines.Compilation.OptimizerType.SGD, config.Type);
@@ -105,7 +105,7 @@ public class FusedSpecMatchesEagerBehaviourTests
             InitialMomentum = 0.9,
             UseAdaptiveLearningRate = false,
         };
-        var optimizer = new RootMeanSquarePropagationOptimizer<double, Matrix<double>, Vector<double>>(null!, options);
+        var optimizer = new RootMeanSquarePropagationOptimizer<double, Matrix<double>, Vector<double>>(null, options);
 
         Assert.False(TryGetConfig(optimizer, out _),
             "RMSprop reported a fused config despite carrying momentum the kernel cannot express.");
@@ -119,7 +119,7 @@ public class FusedSpecMatchesEagerBehaviourTests
             InitialMomentum = 0.0,
             UseAdaptiveLearningRate = false,
         };
-        var optimizer = new RootMeanSquarePropagationOptimizer<double, Matrix<double>, Vector<double>>(null!, options);
+        var optimizer = new RootMeanSquarePropagationOptimizer<double, Matrix<double>, Vector<double>>(null, options);
 
         Assert.True(TryGetConfig(optimizer, out var config));
         Assert.Equal(Tensors.Engines.Compilation.OptimizerType.RMSprop, config.Type);
@@ -137,7 +137,7 @@ public class FusedSpecMatchesEagerBehaviourTests
             UseAdaptiveMomentum = true,
             UseAdaptiveLearningRate = false,
         };
-        var optimizer = new MomentumOptimizer<double, Matrix<double>, Vector<double>>(null!, options);
+        var optimizer = new MomentumOptimizer<double, Matrix<double>, Vector<double>>(null, options);
 
         Assert.False(TryGetConfig(optimizer, out _),
             "MomentumOptimizer fused despite adapting its momentum, which the plan bakes in at build time.");
