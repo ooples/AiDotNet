@@ -65,11 +65,13 @@ public class DeepGaussianProcess<T> : GaussianProcessBase<T>
     /// <summary>
     /// The training input data.
     /// </summary>
+    [Buffer]
     private Matrix<T> _X;
 
     /// <summary>
     /// The training target values.
     /// </summary>
+    [Buffer]
     private Vector<T> _y;
 
     /// <summary>

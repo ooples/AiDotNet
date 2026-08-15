@@ -335,8 +335,11 @@ public class GroundingDINO<T> : VisionLanguageModelBase<T>, IVisualGroundingMode
 
     private void ComputeEncoderDecoderBoundary()
     {
-        int lpb = _options.DropoutRate > 0 ? 6 : 5;
-        _encoderLayerEnd = 1 + _options.NumVisionLayers * lpb;
+        // Each vision block is one residual TransformerEncoderLayer (+ an optional DropoutLayer);
+        // the encoder prefix is the linear input projection (patch-embedding stand-in) and the
+        // trailing prefix is the final encoder LayerNorm — 2 non-block layers total.
+        int lpb = _options.DropoutRate > 0 ? 2 : 1;
+        _encoderLayerEnd = 2 + _options.NumVisionLayers * lpb;
     }
 
     private Tensor<T> TokenizeText(string text)
@@ -367,23 +370,15 @@ public class GroundingDINO<T> : VisionLanguageModelBase<T>, IVisualGroundingMode
         if (IsOnnxMode)
             throw new NotSupportedException("Training is not supported in ONNX mode.");
         SetTrainingMode(true);
-        TrainWithTape(input, expected);
+        TrainWithTape(input, expected, _optimizer);
         SetTrainingMode(false);
     }
 
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        if (!_useNativeMode)
-            throw new NotSupportedException("Cannot update parameters in ONNX mode.");
-        int idx = 0;
-        foreach (var l in Layers)
-        {
-            int c = (int)l.ParameterCount;
-            l.UpdateParameters(parameters.Slice(idx, c));
-            idx += c;
-        }
-    }
-
+    /// <inheritdoc />
+    /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
+    /// write on every parameter surface, so the guard is stated once here instead of being
+    /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
+    protected override bool SupportsParameterMutation => _useNativeMode;
     protected override Tensor<T> PreprocessImage(Tensor<T> image) =>
         NormalizeImage(image, _options.ImageMean, _options.ImageStd);
 

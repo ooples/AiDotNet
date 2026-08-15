@@ -53,7 +53,7 @@ namespace AiDotNet.TimeSeries;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("Time Series Analysis: Forecasting and Control", "https://doi.org/10.1002/9781118619193", Year = 1970, Authors = "George E. P. Box, Gwilym M. Jenkins")]
-public class ARIMAXModel<T> : TimeSeriesModelBase<T>, IExogenousForecastModel<T>
+public partial class ARIMAXModel<T> : TimeSeriesModelBase<T>, IExogenousForecastModel<T>
 {
     /// <summary>
     /// Forecasts from future exogenous regressors (the unified facade-forecast entry point).
@@ -116,6 +116,7 @@ public class ARIMAXModel<T> : TimeSeriesModelBase<T>, IExogenousForecastModel<T>
     /// To convert predictions back to the original scale, we need to "undo" this differencing,
     /// and these stored values help with that process.
     /// </remarks>
+    [Buffer]
     private Vector<T> _differenced;
 
     /// <summary>

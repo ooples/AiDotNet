@@ -66,7 +66,14 @@ namespace AiDotNet.NeuralNetworks.Layers.SSM;
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerTask(LayerTask.AttentionComputation)]
 [LayerProperty(IsTrainable = true, IsStateful = true, Cost = ComputeCost.High, TestInputShape = "4, 256", TestConstructorArgs = "4")]
-public partial class GatedSlotAttentionLayer<T> : LayerBase<T>
+// Shape-preserving. Relations discovered by probing; roles read from the forward - this folder's
+// convention is seqLen = Shape[rank-2], modelDim = Shape[rank-1], so rank 2 is [Time, Features].
+[TensorLayout(TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
+[AutoParameters]
+public partial class GatedSlotAttentionLayer<T> : LayerBase<T>, IShapeContract
 {
     private readonly int _modelDimension;
     private readonly int _numHeads;
@@ -101,6 +108,7 @@ public partial class GatedSlotAttentionLayer<T> : LayerBase<T>
     private Tensor<T> _inputGateBias;
 
     // Initial slot embeddings: [numHeads, numSlots, headDim]
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
     private Tensor<T> _initialSlots;
 
     // Output gate: [modelDim, modelDim]
@@ -169,17 +177,6 @@ public partial class GatedSlotAttentionLayer<T> : LayerBase<T>
     /// Gets the number of memory slots per head.
     /// </summary>
     public int NumSlots => _numSlots;
-
-    /// <summary>
-    /// Gets the total number of trainable parameters.
-    /// </summary>
-    public override long ParameterCount =>
-        _queryWeights.Length + _keyWeights.Length + _valueWeights.Length +
-        _forgetGateWeights.Length + _forgetGateBias.Length +
-        _inputGateWeights.Length + _inputGateBias.Length +
-        _initialSlots.Length +
-        _outputGateWeights.Length + _outputGateBias.Length +
-        _outputProjectionWeights.Length + _outputProjectionBias.Length;
 
     /// <summary>
     /// Creates a new Gated Slot Attention layer.
@@ -301,7 +298,7 @@ public partial class GatedSlotAttentionLayer<T> : LayerBase<T>
     }
 
     /// <inheritdoc />
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         _originalInputShape = input._shape;
 
@@ -350,7 +347,59 @@ public partial class GatedSlotAttentionLayer<T> : LayerBase<T>
         _lastOutputGateRaw = gateRaw;
 
         // Step 3: Slot update recurrence and slot read
-        var slotOutput = SlotRecurrenceForward(q, k, v, forgetGate, inputGate, batchSize, seqLen);
+        // The modular slot mapping means all slots with the same key index
+        // receive identical dynamic updates. Aggregate those slots into the
+        // square per-head state consumed by the fused GLA scan, then add the
+        // learned initial-state contribution decayed by cumulative forget.
+        var slotCounts = new T[_headDimension];
+        for (int slot = 0; slot < _numSlots; slot++)
+            slotCounts[slot % _headDimension] = NumOps.Add(
+                slotCounts[slot % _headDimension], NumOps.One);
+        var countTensor = new Tensor<T>(slotCounts, new[] { 1, 1, 1, _headDimension });
+        var kHeads = Engine.Reshape(
+            k,
+            new[] { batchSize, seqLen, _numHeads, _headDimension });
+        var scaledKeyHeads = Engine.TensorMultiplyScalar(
+            kHeads,
+            NumOps.FromDouble(1.0 / Math.Sqrt(_headDimension)));
+        var countedKey = Engine.Reshape(
+            Engine.TensorBroadcastMultiply(scaledKeyHeads, countTensor),
+            new[] { batchSize, seqLen, _modelDimension });
+        var dynamicValue = Engine.Reshape(
+            Engine.TensorBroadcastMultiply(
+                Engine.Reshape(v, new[] { batchSize, seqLen, _numHeads, _headDimension }),
+                Engine.TensorExpandDims(inputGate, axis: 3)),
+            new[] { batchSize, seqLen, _modelDimension });
+        var dynamicOutput = Engine.GlaScanForward(
+            q, countedKey, dynamicValue, forgetGate, _numHeads);
+
+        var slotToKeyValues = new T[_numSlots * _headDimension];
+        for (int slot = 0; slot < _numSlots; slot++)
+            slotToKeyValues[slot * _headDimension + slot % _headDimension] = NumOps.One;
+        var slotToKey = Engine.TensorBroadcastTo(
+            Engine.Reshape(
+                new Tensor<T>(slotToKeyValues, new[] { _numSlots, _headDimension }),
+                new[] { 1, _numSlots, _headDimension }),
+            new[] { _numHeads, _numSlots, _headDimension });
+        var initialAggregated = Engine.BatchMatMul(
+            Engine.TensorPermute(_initialSlots, new[] { 0, 2, 1 }),
+            slotToKey);
+        var initialMatrices = Engine.Reshape(
+            Engine.TensorBroadcastTo(
+                Engine.Reshape(initialAggregated, new[] { 1, 1, _numHeads, _headDimension, _headDimension }),
+                new[] { batchSize, seqLen, _numHeads, _headDimension, _headDimension }),
+            new[] { batchSize * seqLen * _numHeads, _headDimension, _headDimension });
+        var queryHeads = Engine.Reshape(
+            q,
+            new[] { batchSize * seqLen * _numHeads, _headDimension, 1 });
+        var initialRead = Engine.Reshape(
+            Engine.BatchMatMul(initialMatrices, queryHeads),
+            new[] { batchSize, seqLen, _numHeads, _headDimension });
+        var decay = Engine.TensorCumProd(forgetGate, axis: 1);
+        var decayedInitialRead = Engine.Reshape(
+            Engine.TensorBroadcastMultiply(initialRead, Engine.TensorExpandDims(decay, axis: 3)),
+            new[] { batchSize, seqLen, _modelDimension });
+        var slotOutput = Engine.TensorAdd(dynamicOutput, decayedInitialRead);
         _lastSlotReadOutput = slotOutput;
 
         // Step 4: Gated output
@@ -525,28 +574,6 @@ public partial class GatedSlotAttentionLayer<T> : LayerBase<T>
         _outputProjectionWeights = Engine.TensorAdd(_outputProjectionWeights, Engine.TensorMultiplyScalar(_outputProjectionWeightsGradient!, negLR));
         _outputProjectionBias = Engine.TensorAdd(_outputProjectionBias, Engine.TensorMultiplyScalar(_outputProjectionBiasGradient!, negLR));
 
-    }
-
-    /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        var parameters = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
-        int index = 0;
-        foreach (var tensor in GetAllTensors())
-            for (int i = 0; i < tensor.Length; i++)
-                parameters[index++] = tensor[i];
-        return parameters;
-    }
-
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (parameters.Length != ParameterCount)
-            throw new ArgumentException($"Expected {ParameterCount} parameters, got {parameters.Length}");
-        int index = 0;
-        foreach (var tensor in GetAllTensors())
-            for (int i = 0; i < tensor.Length; i++)
-                tensor[i] = parameters[index++];
     }
 
     private Tensor<T>[] GetAllTensors() =>

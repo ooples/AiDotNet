@@ -7,14 +7,14 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Normalization)]
 [LayerTask(LayerTask.Projection)]
 [LayerProperty(IsTrainable = true, TestInputShape = "1, 4", TestConstructorArgs = "0.07")]
-public class LearnableLogitScaleLayer<T> : LayerBase<T>
+[ElementWiseShape(Note = "A learned scalar rescales values without changing any axis.")]
+[AutoParameters]
+public partial class LearnableLogitScaleLayer<T> : LayerBase<T>
 {
     [TrainableParameter(Role = PersistentTensorRole.Weights)]
-    private readonly Tensor<T> _logScale;
+    private Tensor<T> _logScale;
 
     public override bool SupportsTraining => true;
-    public override long ParameterCount => 1;
-
     public LearnableLogitScaleLayer(double temperature = 0.07)
         : base([-1], [-1])
     {
@@ -24,24 +24,15 @@ public class LearnableLogitScaleLayer<T> : LayerBase<T>
         RegisterTrainableParameter(_logScale, PersistentTensorRole.Weights);
     }
 
-    public T Scale => NumOps.Exp(NumOps.FromDouble(Math.Clamp(
-        NumOps.ToDouble(_logScale[0]), 0.0, 4.605170185988092)));
+    public T Scale => NumOps.Exp(NumOps.FromDouble(Math.Max(
+        0.0, Math.Min(NumOps.ToDouble(_logScale[0]), 4.605170185988092))));
 
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         var clamped = Engine.TensorClamp(
             _logScale, NumOps.Zero, NumOps.FromDouble(4.605170185988092));
         var scale = Engine.TensorExp(clamped);
         return Engine.TensorMultiply(input, scale);
-    }
-
-    public override Vector<T> GetParameters() => Vector<T>.FromMemory(_logScale.Data);
-
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (parameters.Length != 1) throw new ArgumentException("Expected one log-scale parameter.");
-        _logScale[0] = parameters[0];
-        Engine.InvalidatePersistentTensor(_logScale);
     }
 
     public override void UpdateParameters(T learningRate)

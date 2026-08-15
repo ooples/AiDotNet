@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Diffusion.Audio;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -9,7 +9,8 @@ using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Onnx;
 using AiDotNet.Tensors.Helpers;
-using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Tensors.LinearAlgebra;
+using System.Collections.Generic;
 
 namespace AiDotNet.Audio.VoiceActivity;
 
@@ -72,7 +73,7 @@ namespace AiDotNet.Audio.VoiceActivity;
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     [ResearchPaper("Silero VAD: Pre-Trained Enterprise-Grade Voice Activity Detector", "https://github.com/snakers4/silero-vad")]
-public class SileroVad<T> : AudioNeuralNetworkBase<T>, IVoiceActivityDetector<T>
+public partial class SileroVad<T> : AudioNeuralNetworkBase<T>, IVoiceActivityDetector<T>
 {
     private readonly SileroVadOptions _options;
 
@@ -637,7 +638,7 @@ public class SileroVad<T> : AudioNeuralNetworkBase<T>, IVoiceActivityDetector<T>
         // detach the tape and leave the convs/LSTM untrained).
         if (output.Rank == 3)
         {
-            output = Engine.TensorPermute(output, [0, 2, 1]);
+            output = Engine.TensorPermute(output, [0, 2, 1]).Contiguous();
         }
 
         // Pass through LSTM layers
@@ -678,30 +679,6 @@ public class SileroVad<T> : AudioNeuralNetworkBase<T>, IVoiceActivityDetector<T>
         return Forward(PreprocessAudio(input));
     }
 
-    /// <summary>
-    /// Extracts the last timestep from a sequence tensor.
-    /// </summary>
-    private Tensor<T> ExtractLastTimestep(Tensor<T> sequenceOutput)
-    {
-        var shape = sequenceOutput._shape;
-        if (shape.Length < 2) return sequenceOutput;
-
-        // Assuming shape [batch, seq, hidden] or [batch, hidden]
-        var data = sequenceOutput.ToVector().ToArray();
-        int lastDim = shape[^1];
-        int resultSize = shape[0] * lastDim;
-
-        // Extract last timestep values
-        var result = new Tensor<T>([shape[0], lastDim]);
-        var resultVector = result.ToVector();
-        int offset = data.Length - resultSize;
-        for (int i = 0; i < resultSize && offset + i < data.Length; i++)
-        {
-            resultVector[i] = data[offset + i];
-        }
-
-        return result;
-    }
 
     /// <inheritdoc/>
     /// <remarks>
@@ -730,7 +707,7 @@ public class SileroVad<T> : AudioNeuralNetworkBase<T>, IVoiceActivityDetector<T>
 
         if (current.Rank == 3)
         {
-            current = Engine.TensorPermute(current, [0, 2, 1]);
+            current = Engine.TensorPermute(current, [0, 2, 1]).Contiguous();
         }
 
         foreach (var layer in _lstmLayers)
@@ -769,25 +746,10 @@ public class SileroVad<T> : AudioNeuralNetworkBase<T>, IVoiceActivityDetector<T>
         }
     }
 
-    /// <inheritdoc/>
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        // Apply gradient descent updates to all layers
-        var learningRate = NumOps.FromDouble(0.001);
+    // The layer streams this model holds outside Layers are discovered by ModelParameterGenerator and surfaced automatically; the hand-written hook that used to sit here was an override wearing a different name.
 
-        foreach (var layer in _convLayers)
-        {
-            layer.UpdateParameters(learningRate);
-        }
-
-        foreach (var layer in _lstmLayers)
-        {
-            layer.UpdateParameters(learningRate);
-        }
-
-        _outputLayer?.UpdateParameters(learningRate);
-    }
-
+    // UpdateParameters restated a fold the base now derives from generated component registration.
+    // Removed under AIDN082.
     /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()
     {

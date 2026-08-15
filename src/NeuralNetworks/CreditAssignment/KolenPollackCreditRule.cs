@@ -1,4 +1,4 @@
-using AiDotNet.Interfaces;
+﻿using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 
 namespace AiDotNet.NeuralNetworks.CreditAssignment;
@@ -32,10 +32,16 @@ internal sealed class KolenPollackCreditRule<T> : CreditRuleBase<T>
 {
     private readonly double _feedbackLearningRate;
     private readonly double _weightDecay;
+    private Matrix<T>?[]? _previousForwardWeights;
 
-    public KolenPollackCreditRule(int? seed = null, double feedbackLearningRate = 0.05, double weightDecay = 0.001)
+    public KolenPollackCreditRule(int? seed = null, double feedbackLearningRate = 1.0, double weightDecay = 0.001)
         : base(seed)
     {
+        if (double.IsNaN(feedbackLearningRate) || double.IsInfinity(feedbackLearningRate) || feedbackLearningRate < 0)
+            throw new ArgumentOutOfRangeException(nameof(feedbackLearningRate), "The feedback update scale must be finite and non-negative.");
+        if (double.IsNaN(weightDecay) || double.IsInfinity(weightDecay) || weightDecay < 0 || weightDecay >= 1)
+            throw new ArgumentOutOfRangeException(nameof(weightDecay), "Weight decay must be finite and in [0, 1).");
+
         _feedbackLearningRate = feedbackLearningRate;
         _weightDecay = weightDecay;
     }
@@ -51,6 +57,12 @@ internal sealed class KolenPollackCreditRule<T> : CreditRuleBase<T>
         var feedback = EnsureFeedback(context);
         var layers = context.Layers;
         int last = layers.Count - 1;
+
+        // The gradient hook runs before the external optimizer mutates W. At the beginning of the next
+        // step, observe the completed optimizer delta and give B that same increment. This preserves the
+        // Kolen-Pollack symmetry rule for Adam and other adaptive optimizers; the old fixed-rate SGD
+        // approximation updated B differently from W and therefore could not reliably align them.
+        ApplyObservedForwardUpdates(layers, feedback, context.NumOps);
 
         // δ starts as the output error at the output layer's output space, then is transported down one trainable
         // layer at a time via that layer's learned feedback matrix.
@@ -76,20 +88,90 @@ internal sealed class KolenPollackCreditRule<T> : CreditRuleBase<T>
 
     protected override void UpdateFeedback(ICreditAssignmentContext<T> context)
     {
-        var feedback = Feedback;
-        if (feedback.Count == 0) return;
-        var layers = context.Layers;
-        int last = layers.Count - 1;
-        var ops = context.NumOps;
+        // This hook runs before the caller's optimizer step, while W still has its old value.
+        // ApplyObservedForwardUpdates consumes the completed delta at the next step.
+    }
 
-        // Each feedback matrix receives the same mean outer-product increment its forward weight receives:
-        // ΔB_j ∝ (δ_j^out)ᵀ · input_j, with weight decay — driving B_j → W_j (Kolen-Pollack).
-        for (int j = 1; j <= last; j++)
+    /// <summary>
+    /// Returns immutable copies of the forward/feedback pairs used by the sequential KP rule, for
+    /// inspecting how far feedback alignment has progressed.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Kolen-Pollack works by driving the feedback matrices toward the transpose of the forward ones;
+    /// whether that is actually happening is invisible from the loss curve alone, and a rule that has
+    /// stopped aligning trains without ever failing. This is how a caller sees the two matrices and
+    /// measures the angle between them. Internal rather than public so the credit-rule surface stays
+    /// small.
+    /// </para>
+    /// <para>
+    /// DIAGNOSTIC ONLY, NOT PER-STEP. Every call clones two matrices per trainable layer, so calling
+    /// it inside a training loop adds an allocation pass proportional to the whole parameter set to
+    /// each step. Sample it, or use it from a test.
+    /// </para>
+    /// </remarks>
+    internal IReadOnlyList<(Matrix<T> Forward, Matrix<T> Feedback)> GetAlignmentSnapshot()
+    {
+        var snapshot = new List<(Matrix<T> Forward, Matrix<T> Feedback)>();
+        if (_previousForwardWeights is null)
+            return snapshot;
+
+        for (int j = 1; j < _previousForwardWeights.Length; j++)
         {
-            Matrix<T> deltaOut = j == last ? ErrorMatrix(context) : FlatMatrix(layers[j].TeachingSignal!);
-            Matrix<T> input = FlatMatrix(layers[j].Input); // [B, inFeatures_j]
-            Matrix<T> grad = MeanOuter(deltaOut, input, ops); // [outFeatures_j, inFeatures_j]
-            KpUpdate(feedback[j]!, grad, _feedbackLearningRate, _weightDecay, ops);
+            if (_previousForwardWeights[j] is Matrix<T> forward && Feedback[j] is Matrix<T> feedback)
+                snapshot.Add((forward.Clone(), feedback.Clone()));
+        }
+
+        return snapshot;
+    }
+
+    private void ApplyObservedForwardUpdates(
+        IReadOnlyList<ICreditLayer<T>> layers,
+        IReadOnlyList<Matrix<T>?> feedback,
+        INumericOperations<T> ops)
+    {
+        if (_previousForwardWeights is null || _previousForwardWeights.Length != layers.Count)
+            _previousForwardWeights = new Matrix<T>?[layers.Count];
+
+        T decay = ops.FromDouble(_weightDecay);
+        T updateScale = ops.FromDouble(_feedbackLearningRate);
+
+        for (int j = 1; j < layers.Count; j++)
+        {
+            Matrix<T> current = layers[j].Weights ?? throw new NotSupportedException(
+                $"KolenPollack requires layer {j} to expose a single rank-2 forward weight matrix. " +
+                "Use CreditRule.DirectKolenPollack for attention, normalization, or composite layers.");
+            Matrix<T> b = feedback[j]!;
+            Matrix<T>? previous = _previousForwardWeights[j];
+
+            if (previous is not null &&
+                previous.Rows == current.Rows && previous.Columns == current.Columns &&
+                b.Rows == current.Columns && b.Columns == current.Rows)
+            {
+                // THE FORWARD MATRIX IS INDEXED TRANSPOSED, because B and W have opposite
+                // orientations. EnsureFeedback declares B_j as [outFeatures, inFeatures] -- confirmed
+                // by delta.Multiply(b) mapping [B, outFeatures] to [B, inFeatures] -- so W_j is
+                // [inFeatures, outFeatures]. Reading current[row, column] with B-shaped indices threw
+                // IndexOutOfRangeException whenever inFeatures != outFeatures, and when they were
+                // equal it raised nothing and accumulated the TRANSPOSE of the intended increment:
+                // Kolen-Pollack needs B to converge to W, so the rule quietly stopped aligning.
+                //
+                // The shape guard above previously compared previous against current only, never
+                // either against b, so it could not catch this. It does now.
+                for (int row = 0; row < b.Rows; row++)
+                {
+                    for (int column = 0; column < b.Columns; column++)
+                    {
+                        T forwardIncrement = ops.Subtract(current[column, row], previous[column, row]);
+                        T alignmentError = ops.Subtract(b[row, column], previous[column, row]);
+                        b[row, column] = ops.Subtract(
+                            ops.Add(b[row, column], ops.Multiply(updateScale, forwardIncrement)),
+                            ops.Multiply(decay, alignmentError));
+                    }
+                }
+            }
+
+            _previousForwardWeights[j] = current.Clone();
         }
     }
 }

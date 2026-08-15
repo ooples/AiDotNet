@@ -49,7 +49,7 @@ namespace AiDotNet.Finance.NLP;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("FinGPT: Open-Source Financial Large Language Models", "https://arxiv.org/abs/2306.06031", Year = 2023, Authors = "Hongyang Yang, Xiao-Yang Liu, Christina Dan Wang")]
-public class FinGPT<T> : FinancialNLPModelBase<T>
+public partial class FinGPT<T> : FinancialNLPModelBase<T>
 {
     #region Native Mode Fields
 
@@ -218,25 +218,8 @@ public class FinGPT<T> : FinancialNLPModelBase<T>
         SetTrainingMode(false);
     }
 
-    /// <summary>
-    /// Executes UpdateParameters for the FinGPT.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the FinGPT model, UpdateParameters updates internal parameters or state. This keeps the FinGPT architecture aligned with the latest values.
-    /// </para>
-    /// </remarks>
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        int offset = 0;
-        foreach (var layer in Layers)
-        {
-            var layerParams = layer.GetParameters();
-            layer.SetParameters(parameters.Slice(offset, layerParams.Length));
-            offset += layerParams.Length;
-        }
-    }
-
+    // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
+    // exactly the same enumeration, so this said nothing the base does not already say.
     /// <summary>
     /// Executes CreateNewInstance for the FinGPT.
     /// </summary>

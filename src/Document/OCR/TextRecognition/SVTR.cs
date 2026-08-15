@@ -10,7 +10,6 @@ using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Optimizers;
-using Microsoft.ML.OnnxRuntime;
 
 namespace AiDotNet.Document.OCR.TextRecognition;
 
@@ -55,7 +54,7 @@ namespace AiDotNet.Document.OCR.TextRecognition;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("SVTR: Scene Text Recognition with a Single Visual Model", "https://doi.org/10.48550/arXiv.2205.00159", Year = 2022, Authors = "Yongkun Du, Zhineng Chen, Caiyan Jia, Xiaoting Yin, Tianlun Zheng, Chenxia Li, Yuning Du, Yu-Gang Jiang")]
-public class SVTR<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
+public partial class SVTR<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
 {
     private readonly SVTROptions _options;
 
@@ -65,8 +64,7 @@ public class SVTR<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
     #region Fields
 
     private readonly bool _useNativeMode;
-    private readonly InferenceSession? _onnxSession;
-    private readonly IOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private readonly int _embedDim;
     private readonly int _numLayers;
     private readonly int _numHeads;
@@ -150,7 +148,7 @@ public class SVTR<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
         int numLayers = 12,
         int numHeads = 8,
         string? charset = null,
-        IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         SVTROptions? options = null)
         : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
@@ -181,7 +179,10 @@ public class SVTR<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
         ImageSize = imageWidth;
         base.MaxSequenceLength = maxSequenceLength;
 
-        _onnxSession = new InferenceSession(onnxModelPath);
+        // Install the ONNX model through the base abstraction so DocumentNeuralNetworkBase.RunOnnxInference
+        // (which reads OnnxModel/OnnxEncoder/OnnxDecoder) actually runs it. The previous code created a raw
+        // InferenceSession the base never consulted, so every ONNX PredictCore hit "No ONNX model loaded".
+        OnnxModel = new AiDotNet.Onnx.OnnxModel<T>(onnxModelPath);
 
         InitializeLayers();
     }
@@ -207,7 +208,7 @@ public class SVTR<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
         int numLayers = 12,
         int numHeads = 8,
         string? charset = null,
-        IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         SVTROptions? options = null)
         : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
@@ -232,6 +233,11 @@ public class SVTR<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
 
         ImageSize = imageWidth;
         base.MaxSequenceLength = maxSequenceLength;
+
+        // Wire SVTR's optimizer into the base tape-training loop. base.Train drives training through
+        // the base training optimizer, not this private field, so without this a caller-supplied
+        // optimizer would be silently ignored (the field and the base trainer would disagree).
+        SetBaseTrainOptimizer(_optimizer);
 
         InitializeLayers();
     }
@@ -738,6 +744,19 @@ public class SVTR<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
 
     #region NeuralNetworkBase Implementation
 
+    /// <summary>
+    /// Deferred on purpose. The base walk resolves each lazy layer's shape from the architecture's
+    /// DECLARED input shape and, in doing so, pins the conv patch-embed's input channel count. That
+    /// declared channel count does not match the RGB image actually fed at inference/training, so the
+    /// eager walk would lock the conv to the wrong depth and throw "Expected input depth N, but got M"
+    /// on the first forward. SVTR's conv stem is channel- and resolution-agnostic and resolves
+    /// correctly from the FIRST real forward, so we skip the eager shape walk (pre-#1688 behavior:
+    /// every layer resolves lazily on first Forward).
+    /// </summary>
+    protected override void ResolveLazyLayerShapes()
+    {
+    }
+
     /// <inheritdoc/>
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
@@ -760,34 +779,17 @@ public class SVTR<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
         if (!_useNativeMode)
             throw new NotSupportedException("Training not supported in ONNX mode.");
 
-        SetTrainingMode(true);
-        TrainWithTape(input, expectedOutput);
-
-        UpdateParameters(CollectGradients());
-        SetTrainingMode(false);
+        // Delegate to the base tape-training loop: forward via our ForwardForTraining, autodiff
+        // backward, then the configured optimizer's in-place step (Adam). The previous override
+        // ran a manual SGD (params - grads*1e-4) on top of TrainWithTape, which fought the optimizer
+        // and, at lr 1e-4 over the smoke iterations, barely changed the weights or the loss.
+        base.Train(input, expectedOutput);
     }
 
-    /// <inheritdoc/>
-    public override void UpdateParameters(Vector<T> gradients)
-    {
-        if (!_useNativeMode)
-            throw new NotSupportedException("Parameter updates not supported in ONNX mode.");
-
-        var currentParams = GetParameters();
-        T lr = NumOps.FromDouble(0.0001);
-        
-        currentParams = Engine.Subtract(currentParams, Engine.Multiply(gradients, lr));
-        SetParameters(currentParams);
-    }
-
-    private Vector<T> CollectGradients()
-    {
-        var grads = new List<T>();
-        foreach (var layer in Layers)
-            grads.AddRange(layer.GetParameterGradients());
-        return new Vector<T>([.. grads]);
-    }
-
+    /// <inheritdoc />
+    /// <remarks>The weights belong to the loaded graph in this mode. The base refuses
+    /// the write on every parameter surface, so the guard is stated once, here.</remarks>
+    protected override bool SupportsParameterMutation => _useNativeMode;
     #endregion
 
     #region Disposal
@@ -795,8 +797,7 @@ public class SVTR<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
     /// <inheritdoc/>
     protected override void Dispose(bool disposing)
     {
-        if (disposing)
-            _onnxSession?.Dispose();
+        // The ONNX model is owned by the base (DocumentNeuralNetworkBase.OnnxModel) and disposed there.
         base.Dispose(disposing);
     }
 

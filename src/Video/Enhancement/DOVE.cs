@@ -50,10 +50,10 @@ namespace AiDotNet.Video.Enhancement;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("DOVE: Harnessing Large-Scale Video Diffusion Priors for General Video Restoration",
-    "https://arxiv.org/abs/2501.00766",
+[ResearchPaper("DOVE: Efficient One-Step Diffusion Model for Real-World Video Super-Resolution",
+    "https://arxiv.org/abs/2505.16239",
     Year = 2025,
-    Authors = "Zheyuan Chen, Yue Wu, Zijian Chen, Ming Lu, Shanghang Zhang")]
+    Authors = "Zheng Chen, Zichen Zou, Kewei Zhang, Xiongfei Su, Xin Yuan, Yong Guo, Yulun Zhang")]
 public class DOVE<T> : VideoSuperResolutionBase<T>
 {
     #region Fields
@@ -146,7 +146,7 @@ public class DOVE<T> : VideoSuperResolutionBase<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expected);
+            TrainWithTape(input, expected, _optimizer);
         }
         finally
         {
@@ -154,18 +154,11 @@ public class DOVE<T> : VideoSuperResolutionBase<T>
         }
     }
 
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        if (!_useNativeMode) throw new NotSupportedException("Parameter updates are not supported in ONNX mode.");
-        int idx = 0;
-        foreach (var layer in Layers)
-        {
-            int count = checked((int)layer.ParameterCount);
-            layer.UpdateParameters(parameters.Slice(idx, count));
-            idx += count;
-        }
-    }
-
+    /// <inheritdoc />
+    /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
+    /// write on every parameter surface, so the guard is stated once here instead of being
+    /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
+    protected override bool SupportsParameterMutation => _useNativeMode;
     protected override Tensor<T> PreprocessFrames(Tensor<T> rawFrames) => NormalizeFrames(rawFrames);
 
     protected override Tensor<T> PostprocessOutput(Tensor<T> modelOutput) => DenormalizeFrames(modelOutput);

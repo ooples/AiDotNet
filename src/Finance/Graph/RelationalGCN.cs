@@ -89,7 +89,7 @@ namespace AiDotNet.Finance.Graph;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Modeling Relational Data with Graph Convolutional Networks", "https://arxiv.org/abs/1703.06103", Year = 2018, Authors = "Michael Schlichtkrull, Thomas N. Kipf, Peter Bloem, Rianne van den Berg, Ivan Titov, Max Welling")]
-public class RelationalGCN<T> : ForecastingModelBase<T>
+public partial class RelationalGCN<T> : ForecastingModelBase<T>
 {
     #region Execution Mode
     private readonly bool _useNativeMode;
@@ -649,20 +649,8 @@ public class RelationalGCN<T> : ForecastingModelBase<T>
         }
     }
 
-    /// <summary>
-    /// Updates parameters using the provided gradients.
-    /// </summary>
-    /// <param name="gradients">Gradient vector.</param>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Parameters are updated through the optimizer in Train().
-    /// This method is part of the interface but the main update happens in Train().
-    /// </para>
-    /// </remarks>
-    public override void UpdateParameters(Vector<T> gradients)
-    {
-        // Parameters are updated through the optimizer in Train()
-    }
-
+    // UpdateParameters was an empty override, silently dropping every restore. The base
+    // distributes the vector over the declared enumeration.
     /// <summary>
     /// Gets metadata about the RelationalGCN model.
     /// </summary>

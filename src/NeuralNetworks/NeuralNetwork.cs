@@ -49,7 +49,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     [ResearchPaper("Learning Internal Representations by Error Propagation", "https://doi.org/10.21236/ADA164453")]
-public class NeuralNetwork<T> : NeuralNetworkBase<T>
+public class NeuralNetwork<T> : VectorModelLayoutBase<T>
 {
     private readonly NeuralNetworkDefaultOptions _options;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
@@ -174,51 +174,8 @@ public class NeuralNetwork<T> : NeuralNetworkBase<T>
         }
     }
 
-    /// <summary>
-    /// Updates the parameters (weights and biases) of the neural network.
-    /// </summary>
-    /// <param name="parameters">A vector containing all parameters for the entire network</param>
-    /// <remarks>
-    /// <para>
-    /// This method distributes the provided parameters to each layer of the neural network.
-    /// It's typically used during training when an optimization algorithm has calculated
-    /// new parameter values to improve the network's performance.
-    /// 
-    /// The parameters vector must contain values for all trainable parameters in the network,
-    /// arranged in the same order as the layers.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method updates the internal values that the network has learned.
-    /// 
-    /// Neural networks learn by adjusting their "parameters" (weights and biases):
-    /// - Weights determine how strongly neurons are connected to each other
-    /// - Biases allow neurons to activate more or less easily
-    /// 
-    /// During training, the network figures out what parameters work best by:
-    /// 1. Making predictions on training examples
-    /// 2. Comparing predictions to correct answers
-    /// 3. Calculating how to change parameters to improve accuracy
-    /// 4. Using this method to update those parameters
-    /// 
-    /// Think of it like adjusting the settings on a complex machine to improve its performance.
-    /// This method takes a long list of new parameter values and distributes them to the right
-    /// places throughout the network.
-    /// </para>
-    /// </remarks>
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        int startIndex = 0;
-        foreach (var layer in Layers)
-        {
-            int layerParameterCount = checked((int)layer.ParameterCount);
-            if (layerParameterCount > 0)
-            {
-                Vector<T> layerParameters = parameters.SubVector(startIndex, layerParameterCount);
-                layer.UpdateParameters(layerParameters);
-                startIndex += layerParameterCount;
-            }
-        }
-    }
-
+    // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
+    // exactly the same enumeration, so this said nothing the base does not already say.
     /// <summary>
     /// Makes a prediction using the neural network.
     /// </summary>

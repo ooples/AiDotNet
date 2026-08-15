@@ -74,7 +74,7 @@ namespace AiDotNet.MetaLearning.Algorithms;
     Authors = "Jaehoon Oh, Hyungjun Yoo, ChangHwan Kim, Se-Young Yun")]
 [ComponentType(ComponentType.MetaLearner)]
 [PipelineStage(PipelineStage.Training)]
-public class BOILAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
+public partial class BOILAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
     private IParameterizable<T, TInput, TOutput>? _cachedParamModel;
     private IParameterizable<T, TInput, TOutput> ParamModel => _cachedParamModel ??= InterfaceGuard.Parameterizable(MetaModel);

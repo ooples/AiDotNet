@@ -49,7 +49,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Searching for MobileNetV3", "https://arxiv.org/abs/1905.02244", Year = 2019, Authors = "Andrew Howard, Mark Sandler, Grace Chu, Liang-Chieh Chen, Bo Chen, Mingxing Tan, Weijun Wang, Yukun Zhu, Ruoming Pang, Vijay Vasudevan, Quoc V. Le, Hartwig Adam")]
-public class MobileNetV3Network<T> : NeuralNetworkBase<T>
+public class MobileNetV3Network<T> : ImageClassifierModelLayoutBase<T>
 {
     private readonly MobileNetV3Options _options;
 
@@ -255,19 +255,8 @@ public class MobileNetV3Network<T> : NeuralNetworkBase<T>
         SetTrainingMode(false);
     }
 
-    /// <inheritdoc />
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        int index = 0;
-        foreach (var layer in Layers)
-        {
-            int layerParameterCount = checked((int)layer.ParameterCount);
-            var layerParameters = parameters.Slice(index, layerParameterCount);
-            layer.UpdateParameters(layerParameters);
-            index += layerParameterCount;
-        }
-    }
-
+    // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
+    // exactly the same enumeration, so this said nothing the base does not already say.
     /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {

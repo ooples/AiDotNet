@@ -76,6 +76,12 @@ namespace AiDotNet.Tests.IntegrationTests.NeuralNetworks;
 /// triage data for future investigations.
 /// </para>
 /// </summary>
+// SerialPerf: this class's CpuToWallRatio guard measures single-process CPU-vs-wall time, which is
+// only valid when nothing else runs concurrently. [Collection] disables parallelism WITHIN its own
+// collection, but sibling collections in the same CI shard still contend for CPU and invalidate the
+// ratio (flaked on Integration N-O). The Category=SerialPerf trait routes it to a dedicated serial CI
+// shard where it runs alone — keeping the assertion at full strength instead of relaxing the bound.
+[Xunit.Trait("Category", "SerialPerf")]
 [Collection("NonParallelIntegration")]
 public class TransformerTrainPathReproIssue1227And1228Tests
 {

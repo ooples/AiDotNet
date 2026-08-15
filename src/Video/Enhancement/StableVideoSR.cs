@@ -54,7 +54,7 @@ namespace AiDotNet.Video.Enhancement;
     "https://arxiv.org/abs/2312.06640",
     Year = 2024,
     Authors = "Shangchen Zhou, Peiqing Yang, Jianyi Wang, Yihang Luo, Chen Change Loy")]
-public class StableVideoSR<T> : VideoSuperResolutionBase<T>
+public partial class StableVideoSR<T> : VideoSuperResolutionBase<T>
 {
     #region Fields
 
@@ -64,6 +64,7 @@ public class StableVideoSR<T> : VideoSuperResolutionBase<T>
     private bool _useNativeMode;
     private bool _disposed;
     private UpscaleAVideoModel<T>? _diffusionCore;
+    [ExternalState]
     private readonly IConditioningModule<T>? _conditioner;
 
     #endregion
@@ -201,31 +202,14 @@ public class StableVideoSR<T> : VideoSuperResolutionBase<T>
         {
             if (_diffusionCore is not null)
                 _diffusionCore.TrainConditioned(input, expected, _options.Prompt, _options.NoiseLevel);
-            else TrainWithTape(input, expected);
+            else
+                TrainWithTape(input, expected, _optimizer);
         }
         finally
         {
             SetTrainingMode(false);
         }
     }
-
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        if (!_useNativeMode) throw new NotSupportedException("Parameter updates are not supported in ONNX mode.");
-        if (_diffusionCore is not null)
-        {
-            _diffusionCore.SetParameters(parameters);
-            return;
-        }
-        base.SetParameters(parameters);
-    }
-
-    /// <inheritdoc />
-    public override Vector<T> GetParameters() =>
-        _diffusionCore?.GetParameters() ?? base.GetParameters();
-
-    /// <inheritdoc />
-    public override long ParameterCount => _diffusionCore?.ParameterCount ?? base.ParameterCount;
 
     protected override Tensor<T> PreprocessFrames(Tensor<T> rawFrames) => NormalizeFrames(rawFrames);
 
@@ -250,7 +234,7 @@ public class StableVideoSR<T> : VideoSuperResolutionBase<T>
         m.AdditionalInfo["TemporalWindow"] = $"{_options.TemporalWindowSize} (overlap {_options.TemporalWindowOverlap})";
         m.AdditionalInfo["FlowGuidedPropagation"] = _options.EnableFlowGuidedPropagation.ToString();
         m.AdditionalInfo["NoiseLevel"] = _options.NoiseLevel.ToString();
-        m.AdditionalInfo["PropagationSteps"] = string.Join(',', _options.PropagationSteps);
+        m.AdditionalInfo["PropagationSteps"] = string.Join(",", _options.PropagationSteps);
         m.AdditionalInfo["TextConditioner"] = _conditioner is null
             ? "required for guidance > 1"
             : $"{_conditioner.GetType().Name} ({_conditioner.EmbeddingDimension}D)";

@@ -45,10 +45,15 @@ namespace AiDotNet.SelfSupervisedLearning;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("An Empirical Study of Training Self-Supervised Vision Transformers", "https://arxiv.org/abs/2104.02057", Year = 2021, Authors = "Xinlei Chen, Saining Xie, Kaiming He")]
-public class MoCoV3<T> : SelfSupervisedLearningMethodBase<T>
+public partial class MoCoV3<T> : SelfSupervisedLearningMethodBase<T>
 {
+    [FrozenParameter]
     private readonly IMomentumEncoder<T> _momentumEncoder;
+
+    [FrozenParameter]
     private readonly IProjectorHead<T>? _momentumProjector;
+
+    [TrainableParameter(Optional = true)]
     private readonly IProjectorHead<T>? _predictor;
     private readonly InfoNCELoss<T> _loss;
     private readonly SelfSupervisedLearningAugmentationPolicies<T> _augmentation;

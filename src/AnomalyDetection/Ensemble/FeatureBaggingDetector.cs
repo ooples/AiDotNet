@@ -46,13 +46,14 @@ namespace AiDotNet.AnomalyDetection.Ensemble;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("Feature Bagging for Outlier Detection", "https://doi.org/10.1145/1081870.1081891", Year = 2005, Authors = "Aleksandar Lazarevic, Vipin Kumar")]
-public class FeatureBaggingDetector<T> : AnomalyDetectorBase<T>
+public partial class FeatureBaggingDetector<T> : AnomalyDetectorBase<T>
 {
     private readonly int _nEstimators;
     private readonly double _maxFeatures;
     private readonly CombinationMethod _combination;
     private List<IAnomalyDetector<T>>? _baseDetectors;
     private List<int[]>? _featureSubsets;
+    [Buffer]
     private Matrix<T>? _trainingData;
 
     /// <summary>

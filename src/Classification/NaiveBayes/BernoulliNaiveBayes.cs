@@ -70,7 +70,7 @@ namespace AiDotNet.Classification.NaiveBayes;
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
     [ResearchPaper("A Comparison of Event Models for Naive Bayes Text Classification", "https://www.cs.cmu.edu/~knigam/papers/multinomial-aaaiws98.pdf")]
-public class BernoulliNaiveBayes<T> : NaiveBayesBase<T>
+public partial class BernoulliNaiveBayes<T> : NaiveBayesBase<T>
 {
     /// <summary>
     /// Log of feature probabilities for presence (P(f=1|c)) for each class.

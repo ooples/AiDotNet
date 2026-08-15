@@ -5,16 +5,16 @@ using AiDotNet.Onnx;
 namespace AiDotNet.Video.Options;
 
 /// <summary>
-/// Configuration options for UDVD unidirectional deep video denoising.
+/// Configuration options for UDVD unsupervised deep video denoising.
 /// </summary>
 /// <remarks>
 /// <para>
-/// UDVD (Sheth et al., CVPR 2021) performs blind video denoising without paired training data:
+/// UDVD (Sheth et al., ICCV 2021) performs blind video denoising without paired training data:
 /// - Blind denoising: requires only noisy video for training (no clean ground truth),
-///   using a self-supervised loss that exploits temporal redundancy
-/// - Unidirectional: processes frames in a single forward pass using only past frames,
-///   enabling real-time streaming operation
-/// - Multi-frame fusion: combines features from multiple past frames with learned weights
+///   predicting each noisy pixel from a neighborhood that excludes that pixel
+/// - Multi-frame fusion: maps five contiguous frames to an estimate of the middle frame
+/// - Directional blind spots: combines four rotated, vertically-causal branches
+/// - Spatio-temporal adaptation: combines features from nearby frames with learned weights
 ///   that adapt to content and noise characteristics
 /// - Noise-adaptive: handles varying and unknown noise levels including real camera noise
 ///   (not just synthetic Gaussian), making it practical for real-world footage
@@ -45,13 +45,15 @@ public class UDVDOptions : NeuralNetworkOptions
         if (other == null)
             throw new ArgumentNullException(nameof(other));
 
+        Seed = other.Seed;
+        EncoderLayerCount = other.EncoderLayerCount;
         Variant = other.Variant;
         NumFeatures = other.NumFeatures;
         NumLevels = other.NumLevels;
         NumResBlocks = other.NumResBlocks;
         TemporalBufferSize = other.TemporalBufferSize;
         ModelPath = other.ModelPath;
-        OnnxOptions = other.OnnxOptions;
+        OnnxOptions = new OnnxModelOptions(other.OnnxOptions);
         LearningRate = other.LearningRate;
         DropoutRate = other.DropoutRate;
     }
@@ -70,7 +72,7 @@ public class UDVDOptions : NeuralNetworkOptions
     /// <summary>Gets or sets the number of residual blocks per level.</summary>
     public int NumResBlocks { get; set; } = 2;
 
-    /// <summary>Gets or sets the temporal buffer size (past frames to use).</summary>
+    /// <summary>Gets or sets the number of contiguous frames used for temporal context.</summary>
     public int TemporalBufferSize { get; set; } = 5;
 
     #endregion
@@ -87,7 +89,7 @@ public class UDVDOptions : NeuralNetworkOptions
 
     #region Training
 
-    /// <summary>Gets or sets the learning rate.</summary>
+    /// <summary>Gets or sets Adam's initial learning rate (paper/released-code default: 1e-4).</summary>
     public double LearningRate { get; set; } = 1e-4;
 
     /// <summary>Gets or sets the dropout rate.</summary>

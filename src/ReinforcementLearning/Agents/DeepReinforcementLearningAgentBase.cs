@@ -80,23 +80,40 @@ public abstract class DeepReinforcementLearningAgentBase<T> : ReinforcementLearn
     }
 
     /// <summary>
-    /// Gets the total number of trainable parameters across all networks.
+    /// Copies a complete, materialized parameter state between topology-compatible networks.
     /// </summary>
     /// <remarks>
-    /// This sums the parameter counts from all neural networks used by the agent.
-    /// Useful for monitoring model complexity and memory requirements.
+    /// Target-network agents must not copy the lazy, pre-forward view: a concrete architecture can
+    /// have shape-resolved weights whose storage has not been allocated yet, in which case a bare
+    /// <c>GetParameters()</c> honestly returns an empty vector. Materializing both peers here gives
+    /// every DQN/actor-critic implementation the same lifecycle rule. Comparing stable manifest
+    /// fingerprints before applying values is stronger than a length check: it also rejects shifted
+    /// slot boundaries or semantic-role changes that happen to preserve the aggregate count.
     /// </remarks>
-    public override long ParameterCount
+    protected static void CopyNetworkWeights(INeuralNetwork<T> source, INeuralNetwork<T> target)
     {
-        get
+        if (source is null) throw new ArgumentNullException(nameof(source));
+        if (target is null) throw new ArgumentNullException(nameof(target));
+        if (ReferenceEquals(source, target)) return;
+
+        if (source is NeuralNetworkBase<T> sourceBase) sourceBase.MaterializeParameters();
+        if (target is NeuralNetworkBase<T> targetBase) targetBase.MaterializeParameters();
+
+        if (source is AiDotNet.Models.Parameters.IParameterManifestProvider sourceManifest &&
+            target is AiDotNet.Models.Parameters.IParameterManifestProvider targetManifest)
         {
-            int count = 0;
-            foreach (var network in Networks)
+            var sourceLayout = sourceManifest.ParameterLayout;
+            var targetLayout = targetManifest.ParameterLayout;
+            if (!string.Equals(sourceLayout.Fingerprint, targetLayout.Fingerprint, StringComparison.Ordinal))
             {
-                count += (int)network.ParameterCount;
+                throw new InvalidOperationException(
+                    $"Cannot copy network weights from {source.GetType().Name} to {target.GetType().Name}: " +
+                    $"their stable parameter manifests differ ({sourceLayout.Fingerprint} vs " +
+                    $"{targetLayout.Fingerprint}).");
             }
-            return count;
         }
+
+        target.UpdateParameters(source.GetParameters());
     }
 
     /// <summary>

@@ -210,6 +210,12 @@ public class Wav2Vec2LidOptions : LanguageIdentifierOptions
 public class VoxLingua107Options : ECAPATDNNOptions
 {
     /// <summary>
+    /// Gets or sets the learning rate used by the default AdamW optimizer.
+    /// </summary>
+    /// <value>Default is 0.0001.</value>
+    public double LearningRate { get; set; } = 1e-4;
+
+    /// <summary>
     /// Initializes a new instance with VoxLingua107 defaults.
     /// </summary>
     public VoxLingua107Options()

@@ -75,7 +75,11 @@ namespace AiDotNet.PhysicsInformed.PINNs
     [ModelComplexity(ModelComplexity.VeryHigh)]
     [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     [ResearchPaper("Multi-scale Physics-Informed Neural Networks for Stiff Chemical Kinetics", "https://doi.org/10.1021/acs.jpca.1c05102", Year = 2022, Authors = "Weiqi Ji, Wai Tong Chung, Sili Deng")]
-    public class MultiScalePINN<T> : NeuralNetworkBase<T>
+    [TensorLayout(TensorAxis.Batch, TensorAxis.Features,
+        Direction = TensorLayoutDirection.Input, BatchOptional = true)]
+    [TensorLayout(TensorAxis.Batch, TensorAxis.Features,
+        Direction = TensorLayoutDirection.Output, BatchOptional = true)]
+    public partial class MultiScalePINN<T> : NeuralNetworkBase<T>
     {
         private readonly MultiScalePINNOptions _options;
 
@@ -679,36 +683,17 @@ namespace AiDotNet.PhysicsInformed.PINNs
             }
 
             SetTrainingMode(true);
-            try { TrainWithTape(input, expectedOutput); }
+            try { TrainWithTape(input, expectedOutput, _optimizer); }
             finally { SetTrainingMode(false); }
         }
 
-        /// <inheritdoc/>
-        public override void UpdateParameters(Vector<T> parameters)
-        {
-            int offset = 0;
-
-            foreach (var network in _scaleNetworks)
-            {
-                int paramCount = (int)network.GetParameterCount();
-                var subParams = parameters.GetSubVector(offset, paramCount);
-                network.UpdateParameters(subParams);
-                offset += paramCount;
-            }
-        }
-
-        /// <inheritdoc/>
-        public override Vector<T> GetParameters()
-        {
-            var allParams = new List<Vector<T>>();
-
-            foreach (var network in _scaleNetworks)
-            {
-                allParams.Add(network.GetParameters());
-            }
-
-            return Vector<T>.Concatenate(allParams.ToArray());
-        }
+    // UpdateParameters restated a fold the base now derives from generated component registration.
+    // Removed under AIDN082.
+        // ParameterCount and GetParameters were overridden here to fold the scale sub-networks
+        // directly. InitializeLayers already does Layers.AddRange(scaleNet.Layers) for every scale,
+        // and each scale network is a FeedForwardNeuralNetwork whose parameters ARE its layers, so
+        // the base walk over Layers covers exactly the same tensors in exactly the same order.
+        // GetGradients below still folds the sub-networks, and stays consistent with that order.
 
         /// <inheritdoc/>
         public override Vector<T> GetGradients()
@@ -723,8 +708,8 @@ namespace AiDotNet.PhysicsInformed.PINNs
             return Vector<T>.Concatenate(allGradients.ToArray());
         }
 
-        /// <inheritdoc/>
-        public override long ParameterCount => _scaleNetworks.Sum(n => n.GetParameterCount());
+        // ParameterCount summed _scaleNetworks.GetParameterCount() -- the SHADOWING accessor, whose
+        // result depends on the static type of the reference. Deleted with GetParameters above.
 
         /// <inheritdoc/>
         public override ModelMetadata<T> GetModelMetadata()

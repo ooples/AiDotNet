@@ -40,6 +40,12 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Normalization)]
 [LayerTask(LayerTask.ActivationNormalization)]
 [LayerProperty(NormalizesInput = true, IsTrainable = true, TestInputShape = "1, 4", TestConstructorArgs = "2, 4")]
+// Shape-preserving at every rank it accepts. ForwardTraced reshapes the input to 4-D purely so
+// `Engine.GroupNorm` can be called uniformly, then undoes exactly that reshape on the way out - the
+// rank-3 branch restores [C, H, W] from _addedBatchDimension, and the rank >= 5 branch rebuilds
+// _originalInputShape entry by entry. Normalization rescales values; it never resizes an axis.
+[ElementWiseShape(Note = "Group normalization: grouping partitions the channel axis for the statistics only, so the shape is untouched at any rank >= 2.")]
+[AutoParameters]
 public partial class GroupNormalizationLayer<T> : LayerBase<T>
 {
     private readonly T _epsilon;
@@ -82,7 +88,6 @@ public partial class GroupNormalizationLayer<T> : LayerBase<T>
 
     #endregion
 
-    public override long ParameterCount => _gamma.Length + _beta.Length;
     public override bool SupportsTraining => true;
 
     /// <summary>
@@ -144,7 +149,7 @@ public partial class GroupNormalizationLayer<T> : LayerBase<T>
     /// </summary>
     private int[]? _originalInputShape;
 
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // Retain backward-activation caches (_lastInput / _lastMean / _lastVariance)
         // only when an eager manual Backward will read them; skip in inference/under
@@ -380,29 +385,6 @@ public partial class GroupNormalizationLayer<T> : LayerBase<T>
         var updBeta = Engine.TensorSubtract(_beta, Engine.TensorMultiplyScalar(_betaGradient, learningRate));
         for (int i = 0; i < _gamma.Length; i++) _gamma[i] = updGamma[i];
         for (int i = 0; i < _beta.Length; i++) _beta[i] = updBeta[i];
-
-        // Notify GPU that tensor data has changed
-        Engine.InvalidatePersistentTensor(_gamma);
-        Engine.InvalidatePersistentTensor(_beta);
-    }
-
-    public override Vector<T> GetParameters()
-    {
-        return Vector<T>.Concatenate(_gamma.ToVector(), _beta.ToVector());
-    }
-
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int totalParams = _gamma.Length + _beta.Length;
-
-        if (parameters.Length != totalParams)
-            throw new ArgumentException($"Expected {totalParams} parameters, but got {parameters.Length}");
-
-        // Write in-place to preserve engine persistent tensor references
-        var gSpan = _gamma.Data.Span;
-        for (int i = 0; i < _gamma.Length; i++) gSpan[i] = parameters[i];
-        var bSpan = _beta.Data.Span;
-        for (int i = 0; i < _beta.Length; i++) bSpan[i] = parameters[_gamma.Length + i];
 
         // Notify GPU that tensor data has changed
         Engine.InvalidatePersistentTensor(_gamma);

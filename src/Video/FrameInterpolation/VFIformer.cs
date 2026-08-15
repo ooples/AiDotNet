@@ -174,7 +174,7 @@ public class VFIformer<T> : FrameInterpolationBase<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expected);
+            TrainWithTape(input, expected, _optimizer);
         }
         finally
         {
@@ -192,21 +192,8 @@ public class VFIformer<T> : FrameInterpolationBase<T>
     protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> GetOrCreateBaseOptimizer()
         => _optimizer ?? base.GetOrCreateBaseOptimizer();
 
-    /// <inheritdoc/>
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        int offset = 0;
-        foreach (var layer in Layers)
-        {
-            var p = layer.GetParameters();
-            if (offset + p.Length > parameters.Length) break;
-            var sub = new Vector<T>(p.Length);
-            for (int i = 0; i < p.Length; i++) sub[i] = parameters[offset + i];
-            layer.SetParameters(sub);
-            offset += p.Length;
-        }
-    }
-
+    // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
+    // exactly the same enumeration, so this said nothing the base does not already say.
     /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()
     {

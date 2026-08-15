@@ -53,7 +53,7 @@ namespace AiDotNet.MetaLearning.Algorithms;
     Authors = "Jathushan Rajasegaran, Salman Khan, Munawar Hayat, et al.")]
 [ComponentType(ComponentType.MetaLearner)]
 [PipelineStage(PipelineStage.Training)]
-public class iTAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
+public partial class iTAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
     private IParameterizable<T, TInput, TOutput>? _cachedParamModel;
     private IParameterizable<T, TInput, TOutput> ParamModel => _cachedParamModel ??= InterfaceGuard.Parameterizable(MetaModel);
@@ -62,6 +62,7 @@ public class iTAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
     private readonly int _paramDim;
 
     /// <summary>Teacher model parameters (EMA of student).</summary>
+    [Buffer]
     private Vector<T> _teacherParams;
 
     /// <inheritdoc/>

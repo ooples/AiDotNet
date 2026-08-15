@@ -41,10 +41,15 @@ public class NBEATSModelOptions<T> : TimeSeriesRegressionOptions<T>
     /// </summary>
     /// <param name="other">The options instance to copy from.</param>
     public NBEATSModelOptions(NBEATSModelOptions<T> other)
+        : base(other)
     {
         if (other == null)
             throw new ArgumentNullException(nameof(other));
 
+        // Seed is declared on ModelOptions rather than in this file, so a copy constructor
+        // written from the local declarations alone misses it. Losing it on a clone silently
+        // changes deterministic initialization.
+        Seed = other.Seed;
         NumStacks = other.NumStacks;
         NumBlocksPerStack = other.NumBlocksPerStack;
         PolynomialDegree = other.PolynomialDegree;
@@ -56,6 +61,9 @@ public class NBEATSModelOptions<T> : TimeSeriesRegressionOptions<T>
         GradientClipNorm = other.GradientClipNorm;
         Epochs = other.Epochs;
         BatchSize = other.BatchSize;
+        OptimizerBeta1 = other.OptimizerBeta1;
+        OptimizerBeta2 = other.OptimizerBeta2;
+        OptimizerEpsilon = other.OptimizerEpsilon;
         ShareWeightsInStack = other.ShareWeightsInStack;
         UseInterpretableBasis = other.UseInterpretableBasis;
     }
@@ -233,18 +241,27 @@ public class NBEATSModelOptions<T> : TimeSeriesRegressionOptions<T>
     /// <summary>
     /// Gets or sets the batch size for training.
     /// </summary>
-    /// <value>The batch size, defaulting to 32.</value>
+    /// <value>The batch size, defaulting to the paper's 1024.</value>
     /// <remarks>
     /// <para>
     /// Determines how many samples are processed together before updating model parameters.
     /// Larger batches provide more stable gradients but require more memory.
     /// </para>
     /// <para><b>For Beginners:</b> Instead of updating the model after every single example,
-    /// we group examples into batches. A batch size of 32 means the model looks at 32 examples
+    /// we group examples into batches. A batch size of 1024 matches the paper's generic setup
     /// before adjusting its parameters. This makes training more efficient and stable.
     /// </para>
     /// </remarks>
-    public int BatchSize { get; set; } = 32;
+    public int BatchSize { get; set; } = 1024;
+
+    /// <summary>Gets or sets Adam's first-moment decay.</summary>
+    public double OptimizerBeta1 { get; set; } = 0.9;
+
+    /// <summary>Gets or sets Adam's second-moment decay.</summary>
+    public double OptimizerBeta2 { get; set; } = 0.999;
+
+    /// <summary>Gets or sets Adam's numerical-stability epsilon.</summary>
+    public double OptimizerEpsilon { get; set; } = 1e-8;
 
     /// <summary>
     /// Gets or sets whether to share weights across blocks within a stack.

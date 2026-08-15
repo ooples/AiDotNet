@@ -31,9 +31,31 @@ namespace AiDotNet.ComputerVision.OCR.EndToEnd;
 [ModelTask(ModelTask.Detection)]
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
-[ResearchPaper("ABCNet: Real-time Scene Text Spotting", "https://arxiv.org/abs/1911.09941")]
+// The ABCNet [ResearchPaper] attribution was REMOVED from this class rather than having its gap closed.
+//
+// This is an honest, useful thing: a detector-agnostic, recognizer-agnostic two-stage text spotter that
+// composes CRAFT/EAST/DBNet with CRNN/TrOCR. What it is NOT is ABCNet. ABCNet's two contributions are a
+// cubic Bezier boundary representation and the BezierAlign sampling layer, and neither can be bolted onto
+// a pipeline that crops a box and hands it to a separate recognizer — the whole point of ABCNet is that
+// the curve parameters couple the two branches over one shared feature map.
+//
+// Rebuilding this class into ABCNet would have destroyed a working generic pipeline to satisfy a
+// citation. Instead ABCNet exists as its own model (see ABCNet.cs, with CubicBezierCurve and
+// BezierAlign), and this class keeps its own identity with no paper claim it does not implement.
+//
+// (For the record, the attribution was doubly wrong before: the URL originally pointed at arXiv
+// 1911.09941, "Josephson linewidth in a resistively-shunted model with non-sinusoidal current-phase
+// relation" — an unrelated condensed-matter paper.)
+//
+// [ModelMetadataExempt] is therefore required, because AIDN001 makes [ResearchPaper] mandatory on every
+// concrete model. The exemption is the honest outcome here and not a way around the rule: this class
+// implements no single published method, it composes methods that each carry their own citation (CRAFT,
+// EAST, DBNet, CRNN, TrOCR). Substituting a survey to satisfy the attribute would re-introduce exactly
+// the defect being removed — a paper reference that does not describe what the code does. Every other
+// metadata attribute stays, so the class remains fully discoverable.
+[ModelMetadataExempt]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-public class SceneTextReader<T> : ModelBase<T, Tensor<T>, Tensor<T>>
+public partial class SceneTextReader<T> : ModelBase<T, Tensor<T>, Tensor<T>>
 {
     private readonly TextDetectorBase<T> _detector;
     private readonly OCRBase<T> _recognizer;
@@ -652,12 +674,6 @@ public class SceneTextReader<T> : ModelBase<T, Tensor<T>, Tensor<T>>
 
     /// <inheritdoc />
     public override ILossFunction<T> DefaultLossFunction => new MeanSquaredErrorLoss<T>();
-
-    /// <inheritdoc />
-    public override Vector<T> GetParameters() => new Vector<T>(0);
-
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters) { }
 
     /// <inheritdoc />
     public override IFullModel<T, Tensor<T>, Tensor<T>> WithParameters(Vector<T> parameters)

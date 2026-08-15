@@ -44,12 +44,22 @@ namespace AiDotNet.Audio.SourceSeparation;
 [ResearchPaper("SCNet: Sparse Compression Network for Music Source Separation", "https://doi.org/10.48550/arXiv.2401.13276", Year = 2024, Authors = "Weinan Tong, Jiaxu Zhu, Jun Chen, Shiyin Kang, Tao Jiang, Yang Li, Zhiyong Wu, Helen Meng")]
 public class SCNet<T> : AudioNeuralNetworkBase<T>, IMusicSourceSeparator<T>
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// DERIVED, not stored: PredictCore calls ForwardNative, which walks Layers in order and only
+    /// adds shape-preserving residuals. The last layer CreateDefaultSCNetLayers emits is the
+    /// decompression head <c>DenseLayer&lt;T&gt;(numFreqBins * numStems)</c>; CompressionDim is the
+    /// intermediate one layer earlier, not the output width. 4100 (1025 x 4) is stored nowhere.
+    /// </remarks>
+    protected override int OutputFeatureWidth => _options.NumFreqBins * _options.NumStems;
+
     #region Fields
 
     private readonly SCNetOptions _options;
     public override ModelOptions GetOptions() => _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private readonly ShortTimeFourierTransform<T> _stft;
+    [Scratch]
     private Tensor<T>? _lastPhase;
     private bool _useNativeMode;
     private bool _disposed;
@@ -289,12 +299,11 @@ public class SCNet<T> : AudioNeuralNetworkBase<T>, IMusicSourceSeparator<T>
         SetTrainingMode(true); try { TrainWithTape(input, expected, _optimizer); } finally { SetTrainingMode(false); }
     }
 
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        if (!_useNativeMode) throw new NotSupportedException("ONNX mode.");
-        int idx = 0; foreach (var l in Layers) { int c = (int)l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; }
-    }
-
+    /// <inheritdoc />
+    /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
+    /// write on every parameter surface, so the guard is stated once here instead of being
+    /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
+    protected override bool SupportsParameterMutation => _useNativeMode;
     protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio) => ComputeSTFT(rawAudio);
     protected override Tensor<T> PostprocessOutput(Tensor<T> o) => o;
 

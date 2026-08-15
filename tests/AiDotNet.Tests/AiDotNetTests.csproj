@@ -42,7 +42,9 @@
 
   <!-- Source generator for auto-generating test scaffolds for untested models -->
   <ItemGroup>
-    <ProjectReference Include="..\..\src\AiDotNet.Generators\AiDotNet.Generators.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+    <!-- Keep the generator active as an analyzer and reference its assembly so the analyzer's
+         diagnostics can also be exercised directly by the Roslyn contract tests below. -->
+    <ProjectReference Include="..\..\src\AiDotNet.Generators\AiDotNet.Generators.csproj" OutputItemType="Analyzer" />
   </ItemGroup>
 
   <!-- Shared-compile the generator's Roslyn-free floatify helper so its (#1679) logic can be
@@ -56,9 +58,24 @@
          be driven directly in a Roslyn generator unit test. Referenced above only as an analyzer,
          whose compiled assembly is not callable from tests. -->
     <Compile Include="..\..\src\AiDotNet.Generators\ModelMetadataValidationGenerator.cs" Link="Generators\ModelMetadataValidationGenerator.cs" />
+    <Compile Include="..\..\src\AiDotNet.Generators\ComponentMetadataValidationGenerator.cs" Link="Generators\ComponentMetadataValidationGenerator.cs" />
+    <Compile Include="..\..\src\AiDotNet.Generators\TensorPortContractGenerator.cs" Link="Generators\TensorPortContractGenerator.cs" />
+    <!-- B1 semantic contract: these generators and their shared classifier are linked so tests can
+         execute Roslyn directly. The production project reference is analyzer-only and therefore
+         intentionally does not expose generator types as a compile reference. -->
+    <Compile Include="..\..\src\AiDotNet.Generators\ParameterMemberSemanticModel.cs" Link="Generators\ParameterMemberSemanticModel.cs" />
+    <Compile Include="..\..\src\AiDotNet.Generators\ParameterAutomationAnalyzer.cs" Link="Generators\ParameterAutomationAnalyzer.cs" />
+    <Compile Include="..\..\src\AiDotNet.Generators\TrainableParameterGenerator.cs" Link="Generators\TrainableParameterGenerator.cs" />
+    <Compile Include="..\..\src\AiDotNet.Generators\ModelParameterGenerator.cs" Link="Generators\ModelParameterGenerator.cs" />
+    <!-- Linked so GeneratorAxisMirrorTests can compare ShapeContractGenerator.Axis to TensorAxis by
+         REFLECTION rather than by regex-parsing the source. The generator mirrors TensorAxis because it
+         targets netstandard2.0 and cannot reference the analysed assembly; if the two ever disagree it
+         emits the wrong axis name into generated contracts, which compiles and is silently wrong. -->
+    <Compile Include="..\..\src\AiDotNet.Generators\ShapeContractGenerator.cs" Link="Generators\ShapeContractGenerator.cs" />
   </ItemGroup>
 
   <ItemGroup Condition="'$(TargetFramework)' == 'net10.0'">
+    <ProjectReference Include="..\AiDotNet.ParameterSweepWorker\AiDotNet.ParameterSweepWorker.csproj" ReferenceOutputAssembly="false" />
     <ProjectReference Include="..\..\tools\AiDotNet.ProgramSynthesis.Tooling\AiDotNet.ProgramSynthesis.Tooling.csproj" />
     <ProjectReference Include="..\..\src\AiDotNet.Serving\AiDotNet.Serving.csproj" />
     <ProjectReference Include="..\..\src\AiDotNet.Storage.Postgres\AiDotNet.Storage.Postgres.csproj" />

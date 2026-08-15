@@ -62,42 +62,50 @@ public class StudentTGaussianProcess<T> : GaussianProcessBase<T>
     /// <summary>
     /// Training input data.
     /// </summary>
+    [Buffer]
     private Matrix<T>? _X;
 
     /// <summary>
     /// Training target values.
     /// </summary>
+    [Buffer]
     private Vector<T>? _y;
     private Vector<T> FittedY => _y ?? throw new InvalidOperationException("GP not fitted. Call Fit() first.");
 
     /// <summary>
     /// Prior covariance matrix.
     /// </summary>
+    [Buffer]
     private Matrix<T>? _K;
 
     /// <summary>
     /// Approximate posterior mean.
     /// </summary>
+    [Buffer]
     private Vector<T>? _posteriorMean;
 
     /// <summary>
     /// Approximate posterior covariance.
     /// </summary>
+    [Buffer]
     private Matrix<T>? _posteriorCov;
 
     /// <summary>
     /// Site natural parameters (precision).
     /// </summary>
+    [Buffer]
     private Vector<T>? _sitePrecisions;
 
     /// <summary>
     /// Site natural parameters (precision * mean).
     /// </summary>
+    [Buffer]
     private Vector<T>? _siteNaturalMeans;
 
     /// <summary>
     /// Outlier weights (downweights outliers).
     /// </summary>
+    [Buffer]
     private Vector<T>? _weights;
 
     /// <summary>

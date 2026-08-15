@@ -49,12 +49,14 @@ namespace AiDotNet.Finance.Trading.Agents;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Playing Atari with Deep Reinforcement Learning", "https://arxiv.org/abs/1312.5602", Year = 2013, Authors = "Volodymyr Mnih, Koray Kavukcuoglu, David Silver, Alex Graves, Ioannis Antonoglou, Daan Wierstra, Martin Riedmiller")]
-public class FinancialDQNAgent<T> : TradingAgentBase<T>, IGradientComputable<T, Vector<T>, Vector<T>>
+public partial class FinancialDQNAgent<T> : TradingAgentBase<T>, IGradientComputable<T, Vector<T>, Vector<T>>
 {
+
     #region Fields
 
     private readonly FinancialDQNAgentOptions<T> _options;
     private readonly INeuralNetwork<T> _qNetwork;
+    [Buffer]
     private readonly INeuralNetwork<T> _targetNetwork;
     private readonly ReplayBuffer<T> ReplayBuffer;
     private readonly NeuralNetworkArchitecture<T> _architecture;
@@ -68,9 +70,6 @@ public class FinancialDQNAgent<T> : TradingAgentBase<T>, IGradientComputable<T, 
 
     /// <inheritdoc/>
     public override int FeatureCount => TradingOptions.StateSize;
-
-    /// <inheritdoc/>
-    public override long ParameterCount => _qNetwork.ParameterCount;
 
     #endregion
 
@@ -350,26 +349,6 @@ public class FinancialDQNAgent<T> : TradingAgentBase<T>, IGradientComputable<T, 
     public override void Deserialize(byte[] data)
     {
         _qNetwork.Deserialize(data);
-        UpdateTargetNetwork();
-    }
-
-    /// <inheritdoc/>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the FinancialDQNAgent model, GetParameters performs a supporting step in the workflow. It keeps the FinancialDQNAgent architecture pipeline consistent.
-    /// </para>
-    /// </remarks>
-    public override Vector<T> GetParameters() => _qNetwork.GetParameters();
-
-    /// <inheritdoc/>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the FinancialDQNAgent model, SetParameters performs a supporting step in the workflow. It keeps the FinancialDQNAgent architecture pipeline consistent.
-    /// </para>
-    /// </remarks>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        _qNetwork.SetParameters(parameters);
         UpdateTargetNetwork();
     }
 

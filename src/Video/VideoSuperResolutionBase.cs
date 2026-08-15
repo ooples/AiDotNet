@@ -1,3 +1,8 @@
+using System.Collections.Generic;
+// AiDotNet.Attributes is REQUIRED for [TensorLayout] to bind to the right type: two other Tensors
+// namespaces declare a TensorLayout, and without this using the attribute silently resolves to one
+// of those and the contract is never seen.
+using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
@@ -27,8 +32,76 @@ namespace AiDotNet.Video;
 /// temporal consistency (no flickering between frames).
 /// </para>
 /// </remarks>
-public abstract class VideoSuperResolutionBase<T> : VideoNeuralNetworkBase<T>
+[TensorLayout(TensorAxis.Batch, TensorAxis.Frames, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Input,
+    Note = "A clip of low-resolution frames.")]
+// The rank-4 layouts are REQUIRED, not decorative. [TensorLayout] is declared once PER ACCEPTED RANK,
+// and the first version of this contract declared only the rank-5 clip form while claiming in a note
+// that a single frame was "also accepted". The sweep then reported 25 declared / 0 agreed / 25
+// DECLINED for the whole family: it feeds a rank-4 image, no rank-4 input layout existed, and the
+// contract correctly refused to answer. A prose note is not a declaration.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Input,
+    Note = "A single low-resolution frame - the degenerate one-frame clip.")]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Frames, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Output,
+    Note = "The same clip with both spatial axes multiplied by ScaleFactor. Frame count and channel "
+         + "count are carried through - upscaling changes resolution, not length.")]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Output,
+    Note = "A single frame with both spatial axes multiplied by ScaleFactor.")]
+public abstract class VideoSuperResolutionBase<T> : VideoNeuralNetworkBase<T>, IVideoSuperResolution<T>, IShapeContract
 {
+    /// <summary>
+    /// The super-resolution family's law: both spatial axes scale by <see cref="ScaleFactor"/> and
+    /// every other axis is carried through unchanged.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// One declaration serves the family because <see cref="ScaleFactor"/> lives on this base and each
+    /// model sets its own (2x, 4x, 8x). The relation is <c>Scaled</c>, not a constant: a contract that
+    /// recorded "512" would be right for one input size and wrong for every other, whereas
+    /// <c>Scaled(Height, ScaleFactor)</c> is correct for resolutions nobody has run.
+    /// </para>
+    /// <para>
+    /// Stated for BOTH video ranks. Rank 5 is the clip form; rank 4 is a single frame, which the
+    /// harnesses build and which a VSR model handles as a one-frame clip. Declining on rank 4 would
+    /// have made the family look unverifiable when it is simply being handed the degenerate case.
+    /// </para>
+    /// </remarks>
+    public virtual IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+        => SpatialUpscaleContract(inputRank);
+
+    /// <summary>The family law, exposed so a model with an extra axis can still reuse it.</summary>
+    protected IReadOnlyList<OutputAxisContract>? SpatialUpscaleContract(int inputRank)
+    {
+        int scale = ScaleFactor;
+        if (scale <= 0) return null;
+
+        AxisRelation Spatial(TensorAxis axis)
+            => scale == 1 ? AxisRelation.Same(axis) : AxisRelation.Scaled(axis, scale);
+
+        return inputRank switch
+        {
+            4 =>
+            [
+                new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+                new OutputAxisContract(TensorAxis.Channels, AxisRelation.Same(TensorAxis.Channels)),
+                new OutputAxisContract(TensorAxis.Height, Spatial(TensorAxis.Height)),
+                new OutputAxisContract(TensorAxis.Width, Spatial(TensorAxis.Width)),
+            ],
+            5 =>
+            [
+                new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+                new OutputAxisContract(TensorAxis.Frames, AxisRelation.Same(TensorAxis.Frames)),
+                new OutputAxisContract(TensorAxis.Channels, AxisRelation.Same(TensorAxis.Channels)),
+                new OutputAxisContract(TensorAxis.Height, Spatial(TensorAxis.Height)),
+                new OutputAxisContract(TensorAxis.Width, Spatial(TensorAxis.Width)),
+            ],
+            _ => null,
+        };
+    }
+
     /// <summary>
     /// Gets the spatial upscaling factor (e.g., 2 for 2x, 4 for 4x).
     /// </summary>
@@ -98,12 +171,27 @@ public abstract class VideoSuperResolutionBase<T> : VideoNeuralNetworkBase<T>
     /// <param name="frame1">First frame [channels, height, width].</param>
     /// <param name="frame2">Second frame [channels, height, width].</param>
     /// <returns>Optical flow field [2, height, width] representing (dx, dy) displacement.</returns>
-    protected virtual Tensor<T> EstimateFlow(Tensor<T> frame1, Tensor<T> frame2)
+    public virtual Tensor<T> EstimateFlow(Tensor<T> frame1, Tensor<T> frame2)
     {
-        int height = frame1.Shape[^2];
-        int width = frame1.Shape[^1];
-        return new Tensor<T>([2, height, width]);
+        // Delegates to the library's RAFT implementation (Teed & Deng 2020) instead of returning zeros.
+        //
+        // The previous default returned `new Tensor<T>([2, height, width])` — an all-zero flow field,
+        // i.e. "no motion" — and NO video super-resolution model overrode it. Every temporal-alignment
+        // path in all 26 VSR models was therefore a no-op: warping a neighbouring frame by zero flow
+        // just returns that frame unchanged, so the models were doing per-frame image upscaling while
+        // their architectures claimed to exploit motion. Temporal alignment is the whole distinction
+        // between video and image super-resolution.
+        //
+        // RAFT<T> already exists in this assembly (src/Video/Motion/RAFT.cs) and is the estimator the
+        // VSR literature standardly builds on, so this reuses it rather than adding a second one.
+        // Created lazily and cached: constructing it per call would allocate a full flow network on
+        // every frame pair.
+        _flowEstimator ??= new AiDotNet.Video.Motion.RAFT<T>();
+        return _flowEstimator.EstimateFlow(frame1, frame2);
     }
+
+    /// <summary>Lazily created RAFT estimator backing the default <see cref="EstimateFlow"/>.</summary>
+    private AiDotNet.Video.Motion.RAFT<T>? _flowEstimator;
 
     /// <summary>
     /// Performs bilinear upsampling as a baseline or initialization.

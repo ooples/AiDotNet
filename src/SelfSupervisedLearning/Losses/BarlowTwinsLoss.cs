@@ -1,4 +1,4 @@
-using AiDotNet.Interfaces;
+﻿using AiDotNet.Interfaces;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -38,10 +38,15 @@ namespace AiDotNet.SelfSupervisedLearning.Losses;
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Barlow Twins: Self-Supervised Learning via Redundancy Reduction", "https://arxiv.org/abs/2103.03230", Year = 2021, Authors = "Jure Zbontar, Li Jing, Ishan Misra, Yann LeCun, Stéphane Deny")]
-public class BarlowTwinsLoss<T> : IContrastiveLoss<T>
+public class BarlowTwinsLoss<T> : ContrastiveLossBase<T>
 {
-    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
-    private static IEngine Engine => AiDotNetEngine.Current;
+    // NumOps and Engine are inherited from ContrastiveLossBase; redeclaring them here would shadow
+    // the base members rather than add anything.
+    /// <summary>
+    /// Added inside the square root when standardizing over the batch, so a constant feature scales
+    /// by a finite value instead of dividing by zero.
+    /// </summary>
+    private const double BatchVarianceEpsilon = 1e-12;
 
     private readonly double _lambda;
     private readonly bool _normalize;
@@ -71,7 +76,63 @@ public class BarlowTwinsLoss<T> : IContrastiveLoss<T>
     /// <param name="z1">Embeddings from view 1 [batch_size, dim].</param>
     /// <param name="z2">Embeddings from view 2 [batch_size, dim].</param>
     /// <returns>The computed loss value.</returns>
-    public T ComputeLoss(Tensor<T> z1, Tensor<T> z2)
+    /// <remarks>
+    /// Differentiable Barlow Twins (Zbontar et al. 2021): sum_i (1 - C_ii)^2 + lambda * sum_{i!=j}
+    /// C_ij^2 over the cross-correlation C. Diagonal and off-diagonal terms are selected with
+    /// constant masks and reduced, rather than read out by indexing, so the tape survives.
+    /// </remarks>
+    public override Tensor<T> ComputeLoss(Tensor<T> z1, Tensor<T> z2)
+    {
+        // Shapes, not just ranks: the engine broadcasts, so a [8, 1] against a [8, 768] returns a
+        // finite loss computed against the wrong target instead of failing.
+        ContrastiveTapeOps<T>.RequireMatchingRank2(
+            z1, z2, "BarlowTwins", nameof(z1), nameof(z2));
+
+        if (z1 is null) throw new ArgumentNullException(nameof(z1));
+        if (z2 is null) throw new ArgumentNullException(nameof(z2));
+
+        int batchSize = z1.Shape[0];
+        int dim = z1.Shape[1];
+
+        var a = _normalize ? BatchNormalizeDifferentiable(z1) : z1;
+        var b = _normalize ? BatchNormalizeDifferentiable(z2) : z2;
+
+        // C = (a^T @ b) / batchSize
+        var cross = Engine.TensorMatMul(Engine.TensorTranspose(a), b);
+        var c = Engine.TensorDivideScalar(cross, NumOps.FromDouble(batchSize));
+
+        var eye = ObjectiveOps.Identity<T>(dim);
+        var offMask = Engine.TensorAddScalar(
+            Engine.TensorMultiplyScalar(eye, NumOps.FromDouble(-1.0)), NumOps.One);
+
+        // invariance: sum over the diagonal of (1 - C)^2
+        var oneMinusC = Engine.TensorNegate(Engine.TensorAddScalar(c, NumOps.FromDouble(-1.0)));
+        var diagPart = Engine.TensorMultiply(oneMinusC, eye);
+        var invariance = Engine.ReduceSum(Engine.TensorMultiply(diagPart, diagPart), null, keepDims: false);
+
+        // redundancy: sum over the off-diagonal of C^2
+        var offPart = Engine.TensorMultiply(c, offMask);
+        var redundancy = Engine.ReduceSum(Engine.TensorMultiply(offPart, offPart), null, keepDims: false);
+
+        return Engine.TensorAdd(
+            invariance, Engine.TensorMultiplyScalar(redundancy, NumOps.FromDouble(_lambda)));
+    }
+
+    /// <summary>Per-feature standardization across the batch, built from IEngine ops.</summary>
+    private Tensor<T> BatchNormalizeDifferentiable(Tensor<T> z)
+    {
+        int batchSize = z.Shape[0];
+        var mean = Engine.TensorDivideScalar(
+            Engine.ReduceSum(z, new[] { 0 }, keepDims: true), NumOps.FromDouble(batchSize));
+        var centered = Engine.TensorBroadcastSubtract(z, mean);
+        var variance = Engine.TensorDivideScalar(
+            Engine.ReduceSum(Engine.TensorMultiply(centered, centered), new[] { 0 }, keepDims: true),
+            NumOps.FromDouble(batchSize));
+        var std = Engine.TensorSqrt(Engine.TensorAddScalar(variance, NumOps.FromDouble(1e-12)));
+        return Engine.TensorBroadcastDivide(centered, std);
+    }
+
+    private T ComputeLossScalarLegacy(Tensor<T> z1, Tensor<T> z2)
     {
         if (z1 is null) throw new ArgumentNullException(nameof(z1));
         if (z2 is null) throw new ArgumentNullException(nameof(z2));
@@ -302,4 +363,31 @@ public class BarlowTwinsLoss<T> : IContrastiveLoss<T>
 
         return sum;
     }
+
+    /// <summary>
+    /// Centres and scales each feature across the batch, on the tape.
+    /// </summary>
+    /// <remarks>
+    /// The epsilon is inside the square root rather than added to the standard deviation afterwards,
+    /// so a constant feature yields a finite scale instead of a division by zero, and the derivative
+    /// stays finite there too.
+    /// </remarks>
+    // Instance, not static: Engine is an instance member of ContrastiveLossBase now that the base
+    // owns it, so a static helper cannot reach it.
+    private Tensor<T> StandardizeOverBatch(Tensor<T> z)
+    {
+        var batchAxis = new[] { 0 };
+        var mean = Engine.ReduceMean(z, batchAxis, keepDims: true);
+        var centred = Engine.TensorSubtract(z, mean);
+        var variance = Engine.ReduceMean(Engine.TensorMultiply(centred, centred), batchAxis, keepDims: true);
+        var scale = Engine.TensorSqrt(Engine.TensorAddScalar(variance, NumOps.FromDouble(BatchVarianceEpsilon)));
+
+        return Engine.TensorDivide(centred, scale);
+    }
+
+    /// <summary>Constant [dim, dim] identity. Constant DATA, so building it by index costs no gradient.</summary>
+
+    /// <summary>
+    /// Constant [dim, dim] weights: 1 on the diagonal, <paramref name="lambda"/> off it.
+    /// </summary>
 }

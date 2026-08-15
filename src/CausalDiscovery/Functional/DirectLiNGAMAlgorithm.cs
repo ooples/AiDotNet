@@ -47,6 +47,19 @@ public class DirectLiNGAMAlgorithm<T> : FunctionalBase<T>
 {
     private double _threshold = 0.1;
 
+    /// <summary>
+    /// The structural coefficients from the most recent run, BEFORE the edge threshold is applied.
+    /// Null until <c>DiscoverStructure</c> has run.
+    /// </summary>
+    /// <remarks>
+    /// The returned graph is the thresholded view, which is the right thing to report. But an
+    /// algorithm that does ALGEBRA with B_0 -- VARLiNGAM forms (I - B_0) M_tau -- needs the real
+    /// signed values: treating every sub-threshold coefficient as an exact zero biases the product.
+    /// Internal because it is a detail of that collaboration, not public API.
+    /// </remarks>
+    internal Matrix<T>? RawCoefficients { get; private set; }
+
+
     /// <inheritdoc/>
     public override string Name => "DirectLiNGAM";
 
@@ -132,6 +145,12 @@ public class DirectLiNGAMAlgorithm<T> : FunctionalBase<T>
 
         // Estimate B matrix using OLS in causal order
         var B = new Matrix<T>(d, d);
+
+        // The UNTHRESHOLDED coefficients are kept alongside the thresholded graph. VARLiNGAM forms
+        // (I - B_0) M_tau from B_0, and a matrix operation on a thresholded matrix biases its result:
+        // every coefficient below the edge threshold is treated as an exact zero rather than as the
+        // small value it is. Thresholding belongs to the reported GRAPH, not to the algebra.
+        var raw = new Matrix<T>(d, d);
         for (int idx = 1; idx < d; idx++)
         {
             int j = causalOrder[idx];
@@ -164,11 +183,13 @@ public class DirectLiNGAMAlgorithm<T> : FunctionalBase<T>
                 double sxx_d = NumOps.ToDouble(sxx);
                 T beta = sxx_d > 1e-10 ? NumOps.Divide(sxy, sxx) : NumOps.Zero;
                 double beta_d = NumOps.ToDouble(beta);
+                raw[parent, j] = beta;
                 if (Math.Abs(beta_d) >= _threshold)
                     B[parent, j] = beta;
             }
         }
 
+        RawCoefficients = raw;
         return B;
     }
 }

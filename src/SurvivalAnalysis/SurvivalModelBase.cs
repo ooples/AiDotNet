@@ -7,6 +7,7 @@ using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
 using Newtonsoft.Json;
 
+using AiDotNet.Models.Parameters;
 namespace AiDotNet.SurvivalAnalysis;
 
 /// <summary>
@@ -29,7 +30,7 @@ namespace AiDotNet.SurvivalAnalysis;
 /// - Managing trained model state
 /// </para>
 /// </remarks>
-public abstract class SurvivalModelBase<T> : ISurvivalModel<T>, IModelShape, IParameterizable<T, Matrix<T>, Vector<T>>
+public abstract class SurvivalModelBase<T> : ISurvivalModel<T>, IModelShape, IParameterizable<T, Matrix<T>, Vector<T>>, IParameterManifestProvider
 {
     /// <summary>
     /// Numeric operations helper for generic math.
@@ -87,12 +88,93 @@ public abstract class SurvivalModelBase<T> : ISurvivalModel<T>, IModelShape, IPa
     public ILossFunction<T> DefaultLossFunction => _defaultLossFunction;
 
     /// <summary>
-    /// Gets the total number of parameters in the model.
+    /// The components the parameters of this model live in. Empty until the model registers
+    /// some, in which case the surfaces below fall back to what they always did.
     /// </summary>
-    public virtual long ParameterCount => NumFeatures;
+    private readonly ParameterComponentRegistry<T> _parameterRegistry = new();
+    private bool _componentsRegistered;
+
+    /// <summary>
+    /// Declares a component whose parameters belong to the surface of this model.
+    /// Registration
+    /// order is serialization order, so keep it stable.
+    /// </summary>
+    protected void RegisterParameterComponent(
+        IParameterSource<T>? component,
+        [System.Runtime.CompilerServices.CallerArgumentExpression(nameof(component))] string? componentExpression = null,
+        [System.Runtime.CompilerServices.CallerMemberName] string? memberName = null)
+        => _parameterRegistry.RegisterLegacy(GetType().FullName ?? GetType().Name,
+            memberName, componentExpression, component);
+
+    protected void RegisterParameterComponent(string stableId, IParameterSource<T>? component,
+        ParameterSlotRole role = ParameterSlotRole.Trainable,
+        ParameterAvailability availability = ParameterAvailability.Construction)
+        => _parameterRegistry.Register(stableId, component, role, availability);
+
+    /// <summary>
+    /// Declare the trainable components of this model here with
+    /// <see cref="RegisterParameterComponent"/>. Called once, lazily, so it runs after the
+    /// constructor has built them.
+    /// </summary>
+    protected virtual void RegisterComponents()
+    {
+    }
+
+    protected virtual void RegisterGeneratedParameterComponents(ParameterComponentRegistry<T> registry)
+    {
+    }
+
+    /// <summary>
+    /// Runs after <see cref="SetParameters"/> has distributed values into the components.
+    /// </summary>
+    protected virtual void OnParametersRestored()
+    {
+    }
+
+    private ParameterComponentRegistry<T> Registry
+    {
+        get
+        {
+            if (!_componentsRegistered)
+            {
+                RegisterGeneratedParameterComponents(_parameterRegistry);
+                RegisterComponents();
+                _componentsRegistered = true;
+            }
+            return _parameterRegistry;
+        }
+    }
+
+    public ParameterLayoutSnapshot ParameterLayout => Registry.ParameterLayout;
 
     /// <inheritdoc/>
-    public virtual bool SupportsParameterInitialization => ParameterCount > 0;
+    /// <remarks>
+    /// Virtual rather than abstract: a model that registers its components inherits all
+    /// three surfaces and writes no parameter plumbing. It was abstract, which FORCED every
+    /// descendant to hand-write the triple -- the same defect ModelBase and LayerBase had.
+    /// </remarks>
+    public virtual Vector<T> GetParameters()
+        => Registry.HasComponents ? Registry.GetParameters() : new Vector<T>(0);
+
+    /// <inheritdoc/>
+    public virtual void SetParameters(Vector<T> parameters)
+    {
+        if (parameters is null) throw new ArgumentNullException(nameof(parameters));
+        if (!Registry.HasComponents) return;
+        Registry.SetParameters(parameters);
+        OnParametersRestored();
+    }
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// Folds the same enumeration the vector does once components are registered. Models still
+    /// awaiting manifest conversion fall back to their concrete vector length, so the count cannot
+    /// invent values that their read/write surface does not own.
+    /// </remarks>
+    public virtual long ParameterCount
+        => Registry.HasComponents ? Registry.ParameterCount : GetParameters().Length;
+    /// <inheritdoc/>
+    public virtual bool SupportsParameterInitialization => Registry.CanInitializeOptimizerParameters;
     /// <inheritdoc/>
     public virtual Vector<T> SanitizeParameters(Vector<T> parameters) => parameters;
 
@@ -565,19 +647,9 @@ public abstract class SurvivalModelBase<T> : ISurvivalModel<T>, IModelShape, IPa
     }
 
     /// <summary>
-    /// Gets all model parameters as a single vector.
-    /// </summary>
-    public abstract Vector<T> GetParameters();
-
-    /// <summary>
     /// Creates a new instance of the model with specified parameters.
     /// </summary>
     public abstract IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters);
-
-    /// <summary>
-    /// Sets the parameters for this model.
-    /// </summary>
-    public abstract void SetParameters(Vector<T> parameters);
 
     /// <summary>
     /// Gets the indices of features that are actively used in the model.
@@ -644,6 +716,18 @@ public abstract class SurvivalModelBase<T> : ISurvivalModel<T>, IModelShape, IPa
             if (copy is SurvivalModelBase<T> copyBase)
             {
                 copyBase.DeserializeInternalUnchecked(serialized);
+
+                // SerializeInternalUnchecked captures only NumFeatures/IsFitted — NOT the model's
+                // fitted parameters — so without this transfer every parametric survival model
+                // (LogNormalAFT/WeibullAFT/CoxPH/etc.) would clone into an unfitted shell whose
+                // Predict throws "Coefficients is null". Round-trip the fitted state through the
+                // GetParameters/SetParameters contract each subclass already implements.
+                // Non-parametric models (Kaplan-Meier, survival forests) return an empty/degenerate
+                // parameter vector, so this is a no-op for them.
+                if (IsFitted)
+                {
+                    copyBase.SetParameters(GetParameters());
+                }
             }
             else
             {

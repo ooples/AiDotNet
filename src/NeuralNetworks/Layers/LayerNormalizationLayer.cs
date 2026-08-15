@@ -40,7 +40,10 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Normalization)]
 [LayerTask(LayerTask.ActivationNormalization)]
 [LayerProperty(NormalizesInput = true, IsTrainable = true, HasTrainingMode = false, TestInputShape = "1, 4", TestConstructorArgs = "")]
-public partial class LayerNormalizationLayer<T> : LayerBase<T>
+// Rescales values, never resizes. Rank-agnostic, so its axes carry no intrinsic meaning to name.
+[ElementWiseShape(Note = "Normalises over the feature axis; every dimension is carried through.")]
+[AutoParameters]
+public partial class LayerNormalizationLayer<T> : LayerBase<T>, IShapeContract
 {
     /// <summary>
     /// A small value added to the variance for numerical stability.
@@ -66,13 +69,21 @@ public partial class LayerNormalizationLayer<T> : LayerBase<T>
     /// <summary>
     /// The scale parameters learned during training.
     /// </summary>
-    [TrainableParameter(Role = PersistentTensorRole.NormalizationParams)]
-
+    // The parameterless constructor still resolves the normalized width from the actual first
+    // input's last axis. This declaration describes that width only AFTER the layer itself is
+    // resolved; it never materializes gamma from a model's public architecture shape. That lets a
+    // generated manifest validate lazy restore/COW without locking LayerNorm to an upstream width.
+    [TrainableParameter(
+        Role = PersistentTensorRole.NormalizationParams,
+        Shape = "OutputShape[0]")]
     private Tensor<T> _gamma;
 
     /// <summary>
     /// The shift parameters learned during training.
     /// </summary>
+    [TrainableParameter(
+        Role = PersistentTensorRole.NormalizationParams,
+        Shape = "OutputShape[0]")]
     private Tensor<T> _beta;
 
     /// <summary>
@@ -146,6 +157,10 @@ public partial class LayerNormalizationLayer<T> : LayerBase<T>
     /// </para>
     /// </remarks>
     public override bool SupportsTraining => true;
+
+    /// <inheritdoc/>
+    /// <remarks>Normalization is elementwise over the feature axis, so the output shape is the input shape.</remarks>
+    protected override bool IsShapePreserving => true;
 
     /// <summary>
     /// Indicates whether this layer supports GPU-resident execution.
@@ -256,7 +271,9 @@ public partial class LayerNormalizationLayer<T> : LayerBase<T>
     /// </para>
     /// </remarks>
     /// <exception cref="ArgumentOutOfRangeException">When <paramref name="featureSize"/> is not positive.</exception>
-    public LayerNormalizationLayer(int featureSize, double epsilon = NumericalStabilityHelper.LargeEpsilon)
+    public LayerNormalizationLayer(
+        int featureSize,
+        double epsilon = NumericalStabilityHelper.LargeEpsilon)
         : base(new[] { featureSize }, new[] { featureSize })
     {
         if (featureSize <= 0)
@@ -280,6 +297,16 @@ public partial class LayerNormalizationLayer<T> : LayerBase<T>
     /// </summary>
     protected override void OnFirstForward(Tensor<T> input)
     {
+        // A chain-level shape walk is only a projection. LayerNorm is rank-agnostic and its
+        // normalized width is the last axis of the tensor that reaches it in the model's real
+        // topology; a custom forward may not follow the public Layers list sequentially. An
+        // explicit [SubLayerInput] supplied by the owning composite is different: that declaration
+        // describes the real internal edge and is authoritative. This provenance distinction keeps
+        // model-level probes deferred while letting generated composites expose a complete parameter
+        // surface without asking their authors for any normalization-specific plumbing.
+        if (IsResolvingShapesOnly && !IsResolvingDeclaredSubLayerShapeOnly)
+            return;
+
         int featureSize = input.Shape[input.Shape.Length - 1];
         if (featureSize <= 0)
         {
@@ -288,13 +315,116 @@ public partial class LayerNormalizationLayer<T> : LayerBase<T>
                 nameof(input));
         }
 
-        _gamma = Tensor<T>.CreateDefault([featureSize], NumOps.One);
-        _beta = Tensor<T>.CreateDefault([featureSize], NumOps.Zero);
+        if (IsResolvingShapesOnly)
+        {
+            ResolveShapes(new[] { featureSize }, new[] { featureSize });
+            return;
+        }
 
-        RegisterTrainableParameter(_gamma, PersistentTensorRole.NormalizationParams);
-        RegisterTrainableParameter(_beta, PersistentTensorRole.NormalizationParams);
+        EnsureAffineParameters(featureSize);
+        ResolveShapes(new[] { featureSize }, new[] { featureSize });
+    }
+
+    /// <summary>
+    /// Resolves an architecture-declared normalization width without allocating affine parameters.
+    /// </summary>
+    /// <remarks>
+    /// This is the authoritative counterpart to a speculative chain-level
+    /// <see cref="LayerBase{T}.ResolveShapesOnly(int[])"/> walk. Composite base factories call it
+    /// when their own topology fixes the LayerNorm width, allowing generated parameter manifests
+    /// and copy-on-write clones to reason about gamma and beta before materialization.
+    /// </remarks>
+    internal void ResolveArchitectureFeatureSizeOnly(int featureSize)
+    {
+        if (featureSize <= 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(featureSize),
+                $"Layer normalization requires a positive feature size; got {featureSize}.");
+        }
+
+        if (IsShapeResolved)
+        {
+            int resolvedFeatureSize = InputShape[InputShape.Length - 1];
+            if (resolvedFeatureSize != featureSize)
+            {
+                throw new InvalidOperationException(
+                    $"Layer normalization is already resolved for width {resolvedFeatureSize} and cannot be rebound to {featureSize}.");
+            }
+
+            return;
+        }
 
         ResolveShapes(new[] { featureSize }, new[] { featureSize });
+    }
+
+    /// <inheritdoc />
+    protected override void EnsureInitialized()
+    {
+        if (_gamma.Length > 0 || !IsShapeResolved) return;
+
+        int featureSize = InputShape[InputShape.Length - 1];
+        if (featureSize > 0)
+            EnsureAffineParameters(featureSize);
+    }
+
+    private void EnsureAffineParameters(int featureSize)
+    {
+        if (_gamma.Length > 0) return;
+
+        _gamma = Tensor<T>.CreateDefault([featureSize], NumOps.One);
+        _beta = Tensor<T>.CreateDefault([featureSize], NumOps.Zero);
+        RegisterTrainableParameter(_gamma, PersistentTensorRole.NormalizationParams);
+        RegisterTrainableParameter(_beta, PersistentTensorRole.NormalizationParams);
+    }
+
+    /// <summary>
+    /// Rebinds a lazy LayerNorm to the feature width observed by its first real forward when a
+    /// prior shape-only network walk used an approximate sequential shape.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Shape-only propagation is intentionally allocation-compatible so parameter manifests can
+    /// be inspected before execution. For a custom or branched model, however, the sequential
+    /// walker can only approximate what a later layer receives. Treating that approximation as a
+    /// binding LayerNorm width caused one wrong guess to surface as the same gamma/input mismatch
+    /// in every model that reused the base lifecycle.
+    /// </para>
+    /// <para>
+    /// Only the shape-only provenance path reaches this hook. The eager
+    /// <see cref="LayerNormalizationLayer{T}(int, double)"/> contract remains strict and will not
+    /// silently resize an architecture-defined feature width.
+    /// </para>
+    /// </remarks>
+    protected override void ReconcileShapeOnlyResolution(Tensor<T> input)
+    {
+        int featureSize = input.Shape[input.Shape.Length - 1];
+        if (featureSize <= 0)
+        {
+            throw new ArgumentException(
+                $"LayerNormalizationLayer cannot reconcile featureSize: input.Shape[^1] = {featureSize}.",
+                nameof(input));
+        }
+
+        if (_gamma.Length != featureSize || _beta.Length != featureSize)
+        {
+            var gamma = Tensor<T>.CreateDefault([featureSize], NumOps.One);
+            var beta = Tensor<T>.CreateDefault([featureSize], NumOps.Zero);
+
+            if (!ReplaceTrainableParameter(_gamma, gamma, PersistentTensorRole.NormalizationParams))
+                RegisterTrainableParameter(gamma, PersistentTensorRole.NormalizationParams);
+            if (!ReplaceTrainableParameter(_beta, beta, PersistentTensorRole.NormalizationParams))
+                RegisterTrainableParameter(beta, PersistentTensorRole.NormalizationParams);
+
+            _gamma = gamma;
+            _beta = beta;
+            _gammaGradient = null;
+            _betaGradient = null;
+            _gammaVelocity = null;
+            _betaVelocity = null;
+        }
+
+        ResolveShapes([featureSize], [featureSize]);
     }
 
     /// <summary>
@@ -317,7 +447,7 @@ public partial class LayerNormalizationLayer<T> : LayerBase<T>
     /// This is much faster than doing it manually for each sample.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         EnsureInitializedFromInput(input);
 
@@ -456,71 +586,6 @@ public partial class LayerNormalizationLayer<T> : LayerBase<T>
             Engine.InvalidatePersistentTensor(_gamma);
             Engine.InvalidatePersistentTensor(_beta);
         }
-    }
-
-    /// <summary>
-    /// Gets all trainable parameters of the layer as a single vector.
-    /// </summary>
-    /// <returns>A vector containing all trainable parameters.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method retrieves all trainable parameters (gamma and beta) and combines them into a single vector.
-    /// This is useful for optimization algorithms that operate on all parameters at once, or for saving and loading
-    /// model weights.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method collects all the learnable values from the layer.
-    /// 
-    /// The parameters:
-    /// - Are the numbers that the neural network learns during training
-    /// - Include gamma (scaling) and beta (shifting) values
-    /// - Are combined into a single long list (vector)
-    /// 
-    /// This is useful for:
-    /// - Saving the model to disk
-    /// - Loading parameters from a previously trained model
-    /// - Advanced optimization techniques that need access to all parameters
-    /// </para>
-    /// </remarks>
-    public override long ParameterCount => _gamma.Length + _beta.Length;
-
-    /// <inheritdoc/>
-    public override Vector<T> GetParameters()
-    {
-        return Vector<T>.Concatenate(_gamma.ToVector(), _beta.ToVector());
-    }
-
-    public override void SetParameters(Vector<T> parameters)
-    {
-        // Round-trip from saved parameters when the layer is still in lazy
-        // placeholder state. Vector layout is [gamma, beta] both of length
-        // featureSize, so featureSize = parameters.Length / 2.
-        if (!IsShapeResolved)
-        {
-            if (parameters.Length == 0) return;
-            if (parameters.Length % 2 != 0 || parameters.Length == 0)
-                throw new ArgumentException(
-                    $"Cannot infer featureSize for LayerNormalizationLayer from {parameters.Length} parameters " +
-                    "(expected even length for [gamma, beta]).");
-            int featureSize = parameters.Length / 2;
-            ResolveFromShape(new[] { featureSize });
-        }
-
-        int totalParams = _gamma.Length + _beta.Length;
-
-        if (parameters.Length != totalParams)
-        {
-            throw new ArgumentException($"Expected {totalParams} parameters, but got {parameters.Length}");
-        }
-
-        // Write in-place to preserve engine persistent tensor references
-        var gSpan = _gamma.Data.Span;
-        for (int i = 0; i < _gamma.Length; i++) gSpan[i] = parameters[i];
-        var bSpan = _beta.Data.Span;
-        for (int i = 0; i < _beta.Length; i++) bSpan[i] = parameters[_gamma.Length + i];
-
-        // Notify GPU that tensor data has changed
-        Engine.InvalidatePersistentTensor(_gamma);
-        Engine.InvalidatePersistentTensor(_beta);
     }
 
     /// <summary>

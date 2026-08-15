@@ -57,7 +57,7 @@ namespace AiDotNet.MetaLearning.Algorithms;
     Authors = "Menglin Jia, Luming Tang, Bor-Chun Chen, et al.")]
 [ComponentType(ComponentType.MetaLearner)]
 [PipelineStage(PipelineStage.Training)]
-public class FreqPromptAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
+public partial class FreqPromptAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
     private IParameterizable<T, TInput, TOutput>? _cachedParamModel;
     private IParameterizable<T, TInput, TOutput> ParamModel => _cachedParamModel ??= InterfaceGuard.Parameterizable(MetaModel);

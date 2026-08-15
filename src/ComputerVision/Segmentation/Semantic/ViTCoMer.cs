@@ -6,6 +6,7 @@ using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Optimizers;
+using AiDotNet.Models.Options;
 using Microsoft.ML.OnnxRuntime;
 using OnnxTensors = Microsoft.ML.OnnxRuntime.Tensors;
 
@@ -59,8 +60,16 @@ namespace AiDotNet.ComputerVision.Segmentation.Semantic;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("ViT-CoMer: Vision Transformer with Convolutional Multi-scale Feature Interaction for Dense Predictions", "https://arxiv.org/abs/2403.07392", Year = 2024, Authors = "Xia et al.")]
-public class ViTCoMer<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
+public class ViTCoMer<T> : Common.SemanticSegmentationBase<T>
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// Downsamples by 4, not the family's 32 - measured: [1,3,64,64] returns [1,C,16,16]. Its parallel
+    /// CNN branch keeps far more spatial resolution than a plain /32 backbone.
+    /// </remarks>
+    public override IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+        => SpatialStrideContract(inputRank, 4);
+
     private readonly ViTCoMerOptions _options;
 
     /// <summary>
@@ -76,40 +85,24 @@ public class ViTCoMer<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
 
     #region Fields
 
-    private readonly int _height;
-    private readonly int _width;
-    private readonly int _channels;
-    private readonly int _numClasses;
+    // Only ViT-CoMer's OWN configuration lives here. _height, _width, _channels, _numClasses,
+    // _useNativeMode, _onnxModelPath, _onnxSession, _optimizer, _disposed and _encoderLayerEnd all
+    // come from SemanticSegmentationBase -> SegmentationModelBase.
     private readonly ViTCoMerModelSize _modelSize;
     private readonly int _embedDim;
     private readonly int[] _cnnChannels;
     private readonly int _decoderDim;
     private readonly int[] _depths;
     private readonly double _dropRate;
-    private readonly bool _useNativeMode;
-    private readonly string? _onnxModelPath;
-    private InferenceSession? _onnxSession;
-    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
-    private bool _disposed;
-    private int _encoderLayerEnd;
 
     #endregion
 
     #region Properties
 
-    /// <summary>
-    /// Gets whether this ViT-CoMer instance supports training.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Returns <c>true</c> in native mode (trainable) and <c>false</c>
-    /// in ONNX mode (inference only).
-    /// </para>
-    /// </remarks>
-    public override bool SupportsTraining => _useNativeMode;
+    // SupportsTraining and NumClasses are inherited from SegmentationModelBase and say exactly the
+    // same thing, so re-declaring them here would only create two sources of one fact.
     internal bool UseNativeMode => _useNativeMode;
     internal ViTCoMerModelSize ModelSize => _modelSize;
-    internal int NumClasses => _numClasses;
 
     #endregion
 
@@ -140,24 +133,38 @@ public class ViTCoMer<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
         ViTCoMerModelSize modelSize = ViTCoMerModelSize.Small,
         double dropRate = 0.1,
         ViTCoMerOptions? options = null)
-        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>())
+        : base(architecture, optimizer, lossFunction, numClasses)
     {
         _options = options ?? new ViTCoMerOptions();
         Options = _options;
-        _height = architecture.InputHeight > 0 ? architecture.InputHeight : 512;
-        _width = architecture.InputWidth > 0 ? architecture.InputWidth : 512;
-        _channels = architecture.InputDepth > 0 ? architecture.InputDepth : 3;
-        _numClasses = numClasses;
         _modelSize = modelSize;
         _dropRate = dropRate;
-        _useNativeMode = true;
-        _onnxModelPath = null;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
         (_embedDim, _cnnChannels, _depths, _decoderDim) = GetModelConfig(modelSize);
 
         InitializeLayers();
     }
+
+    /// <summary>
+    /// Creates ViT-CoMer's AdamW default (paper settings, learning rate from options) when the
+    /// caller supplies no optimizer.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// These are the exact hyper-parameters the constructor used to inline
+    /// (<c>optimizer ?? new AdamWOptimizer&lt;...&gt;(this, ...)</c>). They live here because a
+    /// base-constructor argument cannot reference <c>this</c>; the base resolves this lazily after
+    /// construction, by which point <c>_options</c> is assigned.
+    /// </para>
+    /// </remarks>
+    protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreateDefaultOptimizer()
+        => new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate,
+                UseAdaptiveLearningRate = false
+            });
 
     /// <summary>
     /// Initializes a new instance of ViT-CoMer in ONNX (inference-only) mode.
@@ -181,30 +188,14 @@ public class ViTCoMer<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
         int numClasses = 150,
         ViTCoMerModelSize modelSize = ViTCoMerModelSize.Small,
         ViTCoMerOptions? options = null)
-        : base(architecture, new CrossEntropyWithLogitsLoss<T>())
+        : base(architecture, onnxModelPath, numClasses)
     {
         _options = options ?? new ViTCoMerOptions();
         Options = _options;
-
-        if (string.IsNullOrWhiteSpace(onnxModelPath))
-            throw new ArgumentException("ONNX model path cannot be null or empty.", nameof(onnxModelPath));
-        if (!File.Exists(onnxModelPath))
-            throw new FileNotFoundException($"ViT-CoMer ONNX model not found: {onnxModelPath}");
-
-        _height = architecture.InputHeight > 0 ? architecture.InputHeight : 512;
-        _width = architecture.InputWidth > 0 ? architecture.InputWidth : 512;
-        _channels = architecture.InputDepth > 0 ? architecture.InputDepth : 3;
-        _numClasses = numClasses;
         _modelSize = modelSize;
         _dropRate = 0.0;
-        _useNativeMode = false;
-        _onnxModelPath = onnxModelPath;
-        _optimizer = null;
 
         (_embedDim, _cnnChannels, _depths, _decoderDim) = GetModelConfig(modelSize);
-
-        try { _onnxSession = new InferenceSession(onnxModelPath); }
-        catch (Exception ex) { throw new InvalidOperationException($"Failed to load ViT-CoMer ONNX model: {ex.Message}", ex); }
 
         InitializeLayers();
     }
@@ -248,7 +239,7 @@ public class ViTCoMer<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expectedOutput);
+            TrainWithTape(input, expectedOutput, Optimizer);
         }
         finally
         {
@@ -272,7 +263,7 @@ public class ViTCoMer<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
         };
     }
 
-    private Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> Forward(Tensor<T> input)
     {
         bool hasBatch = input.Rank == 4;
         if (!hasBatch) input = AddBatchDimension(input);
@@ -283,7 +274,7 @@ public class ViTCoMer<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
         return features;
     }
 
-    private Tensor<T> PredictOnnx(Tensor<T> input)
+    protected override Tensor<T> PredictOnnx(Tensor<T> input)
     {
         if (_onnxSession is null) throw new InvalidOperationException("ONNX session is not initialized.");
         bool hasBatch = input.Rank == 4;
@@ -301,20 +292,29 @@ public class ViTCoMer<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
         return result;
     }
 
-    private Tensor<T> AddBatchDimension(Tensor<T> tensor)
+    /// <summary>Adds a leading batch axis through a RECORDED reshape, so it stays on the autodiff tape.</summary>
+    /// <remarks>
+    /// <para>
+    /// These deliberately SHADOW <c>SegmentationModelBase</c>'s versions rather than inheriting them, and
+    /// that is load-bearing. The base copies raw spans into a freshly allocated tensor, which detaches the
+    /// result from the tape; <c>Engine.Reshape</c> records the operation instead. This model trains -
+    /// <see cref="Train"/> calls <c>TrainWithTape</c> - and <see cref="Forward"/> routes unbatched input
+    /// through both helpers, so inheriting the copying versions would break the gradient chain and train
+    /// nothing. VideoLISA and EfficientTAM carry the same shadowing for the same measured reason
+    /// (zero-gradient failures in GradientFlow_ShouldBeNonZeroAndFinite).
+    /// </para>
+    /// </remarks>
+    private new Tensor<T> AddBatchDimension(Tensor<T> tensor)
     {
-        var result = new Tensor<T>([1, tensor.Shape[0], tensor.Shape[1], tensor.Shape[2]]);
-        tensor.Data.Span.CopyTo(result.Data.Span);
-        return result;
+        return Engine.Reshape(tensor, [1, tensor.Shape[0], tensor.Shape[1], tensor.Shape[2]]);
     }
 
-    private Tensor<T> RemoveBatchDimension(Tensor<T> tensor)
+    /// <summary>Drops the leading batch axis through a RECORDED reshape. See <see cref="AddBatchDimension"/>.</summary>
+    private new Tensor<T> RemoveBatchDimension(Tensor<T> tensor)
     {
         int[] newShape = new int[tensor.Shape.Length - 1];
         for (int i = 0; i < newShape.Length; i++) newShape[i] = tensor.Shape[i + 1];
-        var result = new Tensor<T>(newShape);
-        tensor.Data.Span.CopyTo(result.Data.Span);
-        return result;
+        return Engine.Reshape(tensor, newShape);
     }
 
     #endregion
@@ -337,53 +337,19 @@ public class ViTCoMer<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
         if (Architecture.Layers != null && Architecture.Layers.Count > 0)
         {
             Layers.AddRange(Architecture.Layers);
-            _encoderLayerEnd = Architecture.Layers.Count / 2;
+            _encoderLayerEnd = _options.EncoderLayerCount ?? Architecture.Layers.Count;
         }
         else
         {
-            var encoderLayers = LayerHelper<T>.CreateViTCoMerEncoderLayers(
-                _channels, _height, _width, _embedDim, _cnnChannels, _depths, _dropRate).ToList();
-            _encoderLayerEnd = encoderLayers.Count;
-            Layers.AddRange(encoderLayers);
-
-            int[] patchKernels = [7, 3, 3, 3]; int[] patchStrides = [4, 2, 2, 2]; int[] patchPaddings = [3, 1, 1, 1];
-            int featureH = _height, featureW = _width;
-            for (int stage = 0; stage < 4; stage++)
-            {
-                featureH = (featureH + 2 * patchPaddings[stage] - patchKernels[stage]) / patchStrides[stage] + 1;
-                featureW = (featureW + 2 * patchPaddings[stage] - patchKernels[stage]) / patchStrides[stage] + 1;
-            }
-
-            Layers.AddRange(LayerHelper<T>.CreateViTCoMerDecoderLayers(
-                _cnnChannels[^1], _decoderDim, _numClasses, featureH, featureW));
+            Layers.AddRange(LayerHelper<T>.CreateViTCoMerLayers(
+                _channels, _height, _width, _embedDim, _cnnChannels, _depths,
+                _decoderDim, _numClasses, _dropRate));
+            _encoderLayerEnd = Layers.Count;
         }
     }
 
-    /// <summary>
-    /// Updates all trainable parameters from a flat vector.
-    /// </summary>
-    /// <param name="parameters">Flat parameter vector.</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Replaces model weights, used during optimization and loading.
-    /// </para>
-    /// </remarks>
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        int offset = 0;
-        foreach (var layer in Layers)
-        {
-            var lp = layer.GetParameters();
-            if (offset + lp.Length <= parameters.Length)
-            {
-                var np = new Vector<T>(lp.Length);
-                for (int i = 0; i < lp.Length; i++) np[i] = parameters[offset + i];
-                layer.UpdateParameters(np);
-                offset += lp.Length;
-            }
-        }
-    }
-
+    // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
+    // exactly the same enumeration, so this said nothing the base does not already say.
     /// <summary>
     /// Collects model metadata.
     /// </summary>
@@ -425,6 +391,7 @@ public class ViTCoMer<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
         writer.Write(_embedDim); writer.Write(_decoderDim); writer.Write(_dropRate);
         writer.Write(_useNativeMode); writer.Write(_onnxModelPath ?? string.Empty);
         writer.Write(_encoderLayerEnd);
+        writer.Write(_options.LearningRate);
         writer.Write(_cnnChannels.Length);
         foreach (int c in _cnnChannels) writer.Write(c);
         writer.Write(_depths.Length);
@@ -447,6 +414,7 @@ public class ViTCoMer<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
         _ = reader.ReadInt32(); _ = reader.ReadInt32(); _ = reader.ReadDouble();
         _ = reader.ReadBoolean(); _ = reader.ReadString();
         _ = reader.ReadInt32();
+        _ = reader.ReadDouble();
         int cc = reader.ReadInt32(); for (int i = 0; i < cc; i++) _ = reader.ReadInt32();
         int dc = reader.ReadInt32(); for (int i = 0; i < dc; i++) _ = reader.ReadInt32();
     }
@@ -463,40 +431,9 @@ public class ViTCoMer<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
         return _useNativeMode
-            ? new ViTCoMer<T>(Architecture, _optimizer, LossFunction, _numClasses, _modelSize, _dropRate, _options)
-            : new ViTCoMer<T>(Architecture, _onnxModelPath ?? throw new InvalidOperationException("ONNX model path not initialized."), _numClasses, _modelSize, _options);
+            ? new ViTCoMer<T>(Architecture, optimizer: null, LossFunction, _numClasses, _modelSize, _dropRate, new ViTCoMerOptions(_options))
+            : new ViTCoMer<T>(Architecture, _onnxModelPath ?? throw new InvalidOperationException("ONNX model path not initialized."), _numClasses, _modelSize, new ViTCoMerOptions(_options));
     }
-
-    /// <summary>
-    /// Releases managed resources.
-    /// </summary>
-    /// <param name="disposing">True from Dispose().</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Frees ONNX session resources.
-    /// </para>
-    /// </remarks>
-    protected override void Dispose(bool disposing)
-    {
-        if (!_disposed) { if (disposing) { _onnxSession?.Dispose(); _onnxSession = null; } _disposed = true; }
-        base.Dispose(disposing);
-    }
-
-    #endregion
-
-    #region ISemanticSegmentation Implementation
-
-    int ISegmentationModel<T>.NumClasses => _numClasses;
-    int ISegmentationModel<T>.InputHeight => _height;
-    int ISegmentationModel<T>.InputWidth => _width;
-    bool ISegmentationModel<T>.IsOnnxMode => !_useNativeMode;
-    Tensor<T> ISegmentationModel<T>.Segment(Tensor<T> image) => Predict(image);
-
-    Tensor<T> ISemanticSegmentation<T>.GetClassMap(Tensor<T> image)
-        => Common.SegmentationTensorOps.ArgmaxAlongClassDim(Predict(image));
-
-    Tensor<T> ISemanticSegmentation<T>.GetProbabilityMap(Tensor<T> image)
-        => Common.SegmentationTensorOps.SoftmaxAlongClassDim(Predict(image));
 
     #endregion
 }

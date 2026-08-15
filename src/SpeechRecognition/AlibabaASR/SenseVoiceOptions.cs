@@ -1,11 +1,13 @@
-using AiDotNet.Models.Options;
+﻿using AiDotNet.Models.Options;
 using AiDotNet.Onnx;
 
 namespace AiDotNet.SpeechRecognition.AlibabaASR;
 
 /// <summary>Options for SenseVoice: multi-task speech understanding model.</summary>
 /// <remarks>
-/// <para><b>For Beginners:</b> These options configure the SenseVoice model. Default values follow the original paper's recommended settings for optimal speech recognition accuracy.</para>
+/// <para><b>For Beginners:</b> These options configure SenseVoice-Small. Supported defaults follow
+/// the released FunASR configuration: 512-wide SAN-M-style encoder, 50 blocks, 4 attention heads,
+/// 2048-wide feed-forward layers, 25,055 tokens, 80 mel bands, and AdamW at 2e-5.</para>
 /// </remarks>
 public class SenseVoiceOptions : ModelOptions
 {
@@ -20,6 +22,12 @@ public class SenseVoiceOptions : ModelOptions
         if (other == null)
             throw new ArgumentNullException(nameof(other));
 
+        // INHERITED FROM ModelOptions, AND THEREFORE EASY TO MISS. Every declared property is copied
+        // below; Seed is not declared here, so it was silently dropped and a copied configuration
+        // produced a DIFFERENT model from the one it was copied from -- the failure mode that costs
+        // the most to diagnose, because the two configurations compare equal on everything visible.
+        Seed = other.Seed;
+
         SampleRate = other.SampleRate;
         MaxAudioLengthSeconds = other.MaxAudioLengthSeconds;
         EncoderDim = other.EncoderDim;
@@ -32,18 +40,30 @@ public class SenseVoiceOptions : ModelOptions
         OnnxOptions = new OnnxModelOptions(other.OnnxOptions);
         DropoutRate = other.DropoutRate;
         Language = other.Language;
+        DecoderDim = other.DecoderDim;
+        NumDecoderLayers = other.NumDecoderLayers;
+        FeedForwardDim = other.FeedForwardDim;
+        UseCifAlignment = other.UseCifAlignment;
+        LearningRate = other.LearningRate;
+        WeightDecay = other.WeightDecay;
     }
 
     public int SampleRate { get; set; } = 16000;
     public int MaxAudioLengthSeconds { get; set; } = 30;
     public int EncoderDim { get; set; } = 512;
-    public int NumEncoderLayers { get; set; } = 12;
-    public int NumAttentionHeads { get; set; } = 8;
+    public int NumEncoderLayers { get; set; } = 50;
+    public int NumAttentionHeads { get; set; } = 4;
     public int NumMels { get; set; } = 80;
-    public int VocabSize { get; set; } = 25000;
+    public int VocabSize { get; set; } = 25055;
     public int MaxTextLength { get; set; } = 512;
     public string? ModelPath { get; set; }
     public OnnxModelOptions OnnxOptions { get; set; } = new();
     public double DropoutRate { get; set; } = 0.1;
     public string Language { get; set; } = "en";
+    public int DecoderDim { get; set; } = 512;
+    public int NumDecoderLayers { get; set; } = 0;
+    public int FeedForwardDim { get; set; } = 2048;
+    public bool UseCifAlignment { get; set; } = false;
+    public double LearningRate { get; set; } = 2e-5;
+    public double WeightDecay { get; set; } = 0.01;
 }

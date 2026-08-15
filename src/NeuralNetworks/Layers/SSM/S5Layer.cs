@@ -73,7 +73,14 @@ namespace AiDotNet.NeuralNetworks.Layers.SSM;
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerTask(LayerTask.TemporalProcessing)]
 [LayerProperty(IsTrainable = true, IsStateful = true, Cost = ComputeCost.High, TestInputShape = "4, 256", TestConstructorArgs = "4")]
-public partial class S5Layer<T> : LayerBase<T>
+// Shape-preserving. Relations discovered by probing; roles read from the forward - this folder's
+// convention is seqLen = Shape[rank-2], modelDim = Shape[rank-1], so rank 2 is [Time, Features].
+[TensorLayout(TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
+[AutoParameters]
+public partial class S5Layer<T> : LayerBase<T>, IShapeContract
 {
     private readonly int _modelDimension;
     private readonly int _stateDimension;
@@ -156,20 +163,6 @@ public partial class S5Layer<T> : LayerBase<T>
     /// are 64 (as in the S5 paper) for a good balance of expressivity and efficiency.</para>
     /// </remarks>
     public int StateDimension => _stateDimension;
-
-    /// <summary>
-    /// Gets the total number of trainable parameters.
-    /// </summary>
-    public override long ParameterCount =>
-        // Cast the first term to long so the sum widens to 64-bit before any
-        // addend can wrap — twelve tensor lengths in 32-bit math will
-        // overflow on large state-space configs.
-        (long)_aReal.Length + _aImag.Length +
-        _bReal.Length + _bImag.Length +
-        _cReal.Length + _cImag.Length +
-        _dParam.Length + _logDelta.Length +
-        _inputProjectionWeights.Length + _inputProjectionBias.Length +
-        _outputProjectionWeights.Length + _outputProjectionBias.Length;
 
     /// <summary>
     /// Creates a new S5 (Simplified State Space) layer.
@@ -288,7 +281,7 @@ public partial class S5Layer<T> : LayerBase<T>
     }
 
     /// <inheritdoc />
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         _originalInputShape = input._shape;
 
@@ -315,8 +308,8 @@ public partial class S5Layer<T> : LayerBase<T>
         var projected3D = Engine.Reshape(projectedWithBias, new[] { batchSize, seqLen, _modelDimension });
         _lastProjectedInput = projected3D;
 
-        // Step 2: Kernel-based MIMO SSM (numerically stable for gradient checking)
-        var scanOutput = KernelBasedMIMOForward(projected3D, batchSize, seqLen);
+        // Step 2: ZOH discretization followed by one fused differentiable MIMO scan.
+        var scanOutput = FusedMimoScanForward(projected3D, batchSize, seqLen);
         _lastScanOutputReal = scanOutput;
 
         // Step 3: Output projection [batch*seq, modelDim] -> [batch*seq, modelDim]
@@ -374,94 +367,52 @@ public partial class S5Layer<T> : LayerBase<T>
         return (quotR * br - quotI * bi, quotR * bi + quotI * br);
     }
 
-    /// <summary>Kernel-based MIMO forward for S5. K[h_out, h_in, l] = Re(sum_n C[h_out,n] * Bbar[n,h_in] * Abar[n]^l)</summary>
-    private Tensor<T> KernelBasedMIMOForward(Tensor<T> u, int batchSize, int seqLen)
+    /// <summary>
+    /// Discretizes the continuous MIMO SSM parameters and evaluates the recurrence through
+    /// the engine's fused, tape-aware complex diagonal scan.
+    /// </summary>
+    private Tensor<T> FusedMimoScanForward(Tensor<T> u, int batchSize, int seqLen)
     {
-        var delta = new double[_stateDimension];
-        for (int n = 0; n < _stateDimension; n++)
-            delta[n] = NumOps.ToDouble(NumOps.Exp(_logDelta[n]));
+        var delta = Engine.TensorExp(_logDelta);
+        var scaledReal = Engine.TensorMultiply(delta, _aReal);
+        var scaledImag = Engine.TensorMultiply(delta, _aImag);
+        var expReal = Engine.TensorExp(scaledReal);
+        var aBarReal = Engine.TensorMultiply(expReal, Engine.TensorCos(scaledImag));
+        var aBarImag = Engine.TensorMultiply(expReal, Engine.TensorSin(scaledImag));
+        var diffReal = Engine.TensorSubtractScalar(aBarReal, NumOps.One);
+        var denominator = Engine.TensorAddScalar(
+            Engine.TensorAdd(Engine.TensorMultiply(_aReal, _aReal), Engine.TensorMultiply(_aImag, _aImag)),
+            NumOps.FromDouble(1e-12));
+        var quotientReal = Engine.TensorDivide(
+            Engine.TensorAdd(Engine.TensorMultiply(diffReal, _aReal), Engine.TensorMultiply(aBarImag, _aImag)),
+            denominator);
+        var quotientImag = Engine.TensorDivide(
+            Engine.TensorSubtract(Engine.TensorMultiply(aBarImag, _aReal), Engine.TensorMultiply(diffReal, _aImag)),
+            denominator);
+        var quotientReal2D = Engine.Reshape(quotientReal, new[] { _stateDimension, 1 });
+        var quotientImag2D = Engine.Reshape(quotientImag, new[] { _stateDimension, 1 });
+        var bBarReal = Engine.TensorSubtract(
+            Engine.TensorBroadcastMultiply(_bReal, quotientReal2D),
+            Engine.TensorBroadcastMultiply(_bImag, quotientImag2D));
+        var bBarImag = Engine.TensorAdd(
+            Engine.TensorBroadcastMultiply(_bImag, quotientReal2D),
+            Engine.TensorBroadcastMultiply(_bReal, quotientImag2D));
 
-        // Build kernel K[h_out, h_in, l]
-        var kernelD = new double[_modelDimension, _modelDimension, seqLen];
-        _cachedDelta = new Vector<T>(delta.Select(d => NumOps.FromDouble(d)));
-
-        for (int n = 0; n < _stateDimension; n++)
-        {
-            double dt = delta[n];
-            double ar = NumOps.ToDouble(_aReal[n]);
-            double ai = NumOps.ToDouble(_aImag[n]);
-
-            double expR = Math.Exp(dt * ar);
-            double abar_r = expR * Math.Cos(dt * ai);
-            double abar_i = expR * Math.Sin(dt * ai);
-
-            // For each (h_out, h_in): K_contribution = C[h_out,n] * Bbar[n,h_in] * Abar[n]^l
-            for (int ho = 0; ho < _modelDimension; ho++)
-            {
-                double cr = NumOps.ToDouble(_cReal[ho, n]);
-                double ci = NumOps.ToDouble(_cImag[ho, n]);
-
-                for (int hi = 0; hi < _modelDimension; hi++)
-                {
-                    double br = NumOps.ToDouble(_bReal[n, hi]);
-                    double bi = NumOps.ToDouble(_bImag[n, hi]);
-                    var bbar = ComputeBBarScalar(dt, ar, ai, br, bi);
-
-                    // C_eff = C * Bbar (complex multiply)
-                    double ceff_r = cr * bbar.r - ci * bbar.i;
-                    double ceff_i = cr * bbar.i + ci * bbar.r;
-
-                    double pow_r = 1.0, pow_i = 0.0;
-                    for (int l = 0; l < seqLen; l++)
-                    {
-                        kernelD[ho, hi, l] += ceff_r * pow_r - ceff_i * pow_i;
-                        double new_r = pow_r * abar_r - pow_i * abar_i;
-                        double new_i = pow_r * abar_i + pow_i * abar_r;
-                        pow_r = new_r; pow_i = new_i;
-                    }
-                }
-            }
-        }
-
-        // Convert kernel to T[,,]
-        _cachedKernel = new T[_modelDimension, _modelDimension, seqLen];
-        for (int ho = 0; ho < _modelDimension; ho++)
-            for (int hi = 0; hi < _modelDimension; hi++)
-                for (int l = 0; l < seqLen; l++)
-                    _cachedKernel[ho, hi, l] = NumOps.FromDouble(kernelD[ho, hi, l]);
-
-        // Causal matrix convolution: y[b,t,ho] = sum_l sum_hi K[ho,hi,l] * u[b,t-l,hi] + D[ho] * u[b,t,ho]
-        var output = TensorAllocator.Rent<T>([batchSize, seqLen, _modelDimension]);
-        for (int b = 0; b < batchSize; b++)
-        {
-            // Pre-allocate reusable vectors outside hot loops
-            var kRow = new Vector<T>(_modelDimension);
-            var uLag = new Vector<T>(_modelDimension);
-
-            for (int t = 0; t < seqLen; t++)
-            {
-                for (int ho = 0; ho < _modelDimension; ho++)
-                {
-                    T sum = NumOps.Multiply(_dParam[ho], u[b, t, ho]);
-                    for (int l = 0; l <= t; l++)
-                    {
-                        for (int hi = 0; hi < _modelDimension; hi++)
-                        {
-                            kRow[hi] = _cachedKernel[ho, hi, l];
-                            uLag[hi] = u[b, t - l, hi];
-                        }
-                        sum = NumOps.Add(sum, Engine.DotProduct(kRow, uLag));
-                    }
-                    output[b, t, ho] = sum;
-                }
-            }
-        }
-
-        return output;
+        var groupedInput = Engine.Reshape(u, new[] { batchSize, seqLen, 1, _modelDimension });
+        var output = Engine.ComplexDiagonalSsmScanForward(
+            groupedInput,
+            Engine.Reshape(aBarReal, new[] { 1, _stateDimension }),
+            Engine.Reshape(aBarImag, new[] { 1, _stateDimension }),
+            Engine.Reshape(bBarReal, new[] { 1, _stateDimension, _modelDimension }),
+            Engine.Reshape(bBarImag, new[] { 1, _stateDimension, _modelDimension }),
+            Engine.Reshape(_cReal, new[] { 1, _modelDimension, _stateDimension }),
+            Engine.Reshape(_cImag, new[] { 1, _modelDimension, _stateDimension }),
+            Engine.Reshape(_dParam, new[] { 1, _modelDimension }));
+        return Engine.Reshape(output, new[] { batchSize, seqLen, _modelDimension });
     }
 
-    private T[,,]? _cachedKernel;
-    private Vector<T>? _cachedDelta;
+    private T[,,]? _cachedKernel = null;
+    private Vector<T>? _cachedDelta = null;
 
     private Tensor<T> MIMOParallelScan(Tensor<T> u, int batchSize, int seqLen)
     {
@@ -986,28 +937,6 @@ public partial class S5Layer<T> : LayerBase<T>
         RegisterTrainableParameter(_outputProjectionWeights, PersistentTensorRole.Weights);
         RegisterTrainableParameter(_outputProjectionBias, PersistentTensorRole.Biases);
 
-    }
-
-    /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        var parameters = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
-        int index = 0;
-        foreach (var tensor in GetAllTensors())
-            for (int i = 0; i < tensor.Length; i++)
-                parameters[index++] = tensor[i];
-        return parameters;
-    }
-
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (parameters.Length != ParameterCount)
-            throw new ArgumentException($"Expected {ParameterCount} parameters, got {parameters.Length}");
-        int index = 0;
-        foreach (var tensor in GetAllTensors())
-            for (int i = 0; i < tensor.Length; i++)
-                tensor[i] = parameters[index++];
     }
 
     private Tensor<T>[] GetAllTensors() =>

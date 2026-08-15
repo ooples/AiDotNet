@@ -18,13 +18,33 @@ namespace AiDotNet.Video.Denoising;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet">
-/// <item>Paper: "An Efficient Recurrent Architecture for Video Denoising via Temporal Shift" (Maggioni et al., 2021)</item>
+/// <item>Paper: "A Simple Baseline for Video Restoration with Grouped Spatial-temporal Shift"
+/// (Li et al., CVPR 2023, arXiv:2206.10810)</item>
 /// </list></para>
 /// <para><b>For Beginners:</b> ShiftNet uses efficient shift operations instead of expensive 3D convolutions for video denoising. By shifting feature maps along the temporal dimension, it captures motion at minimal computational cost.</para>
 /// <para>
-/// ShiftNet shifts feature channels along the temporal dimension without explicit alignment,
-/// using a U-Net backbone where each conv block incorporates channel shifting for temporal
-/// awareness, avoiding expensive optical flow or attention.
+/// <b>CITATION CORRECTED.</b> This class previously cited arXiv:2106.10948 as "An Efficient Recurrent
+/// Architecture for Video Denoising via Temporal Shift" by "Marco Maggioni" et al. (2021). That
+/// identifier is "A scalar Riemann-Hilbert problem on the torus: Applications to the KdV equation" —
+/// integrable systems, not video. The claimed title does not exist, and the author list was a blend:
+/// Maggioni/Huang/Li are real co-authors of the unrelated EMVD paper (arXiv:2103.05407, and the first
+/// name is Matteo, not Marco), while Rao/Lu/Zhou are from a different group entirely.
+/// </para>
+/// <para>
+/// The mechanism was also absent: the class described channel shifting but contained no shift operation
+/// at all, and its NumShifts / ShiftRadius options were consumed by nothing. The real technique lives in
+/// <see cref="GroupedSpatialTemporalShift{T}"/>:
+/// </para>
+/// <code>
+///   temporal   f_i split equally into f_i^a, f_i^b; FTS and BTS blocks alternate over frame pairs
+///   spatial    f_{i-1}^b split into M = 25 slices, each shifted by (dx, dy) from {-9,-5,0,5,9}^2
+///   loss       L = (1/T) sum_i ||H_i - O_i||_1
+/// </code>
+/// <para>
+/// Both halves are required. The temporal half moves information BETWEEN frames; the spatial half moves
+/// it WITHIN a frame across 25 displacements, supplying the large effective receptive field that stands
+/// in for explicit correspondence search. Implementing only the temporal shift — the obvious reading of
+/// "temporal shift" — cannot align anything that moved sideways.
 /// </para>
 /// </remarks>
 /// <example>
@@ -46,13 +66,25 @@ namespace AiDotNet.Video.Denoising;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("An Efficient Recurrent Architecture for Video Denoising via Temporal Shift",
-    "https://arxiv.org/abs/2106.10948",
-    Year = 2021,
-    Authors = "Marco Maggioni, Yibin Huang, Cheng Li, Yongming Rao, Jiwen Lu, Jie Zhou")]
+[ResearchPaper("A Simple Baseline for Video Restoration with Grouped Spatial-temporal Shift",
+    "https://arxiv.org/abs/2206.10810",
+    Year = 2023,
+    Authors = "Dasong Li, Xiaoyu Shi, Yi Zhang, Ka Chun Cheung, Simon See, Xiaogang Wang, Hongwei Qin, Hongsheng Li")]
 public class ShiftNet<T> : VideoDenoisingBase<T>
 {
     private readonly ShiftNetOptions _options;
+
+    private readonly GroupedSpatialTemporalShift<T> _shift = new();
+
+    /// <summary>
+    /// Gets the grouped spatial-temporal shift module — the paper's alignment mechanism.
+    /// </summary>
+    /// <remarks>
+    /// Exposed rather than buried because it is the model's whole contribution, and because it is
+    /// verifiable independently of the U-Net backbone: shifting is parameter-free, so its correctness is
+    /// a property of the operation and not of any trained weights.
+    /// </remarks>
+    public GroupedSpatialTemporalShift<T> Shift => _shift;
 
     /// <inheritdoc/>
     public override ModelOptions GetOptions() => _options;
@@ -89,7 +121,11 @@ public class ShiftNet<T> : VideoDenoisingBase<T>
     {
         _options = options ?? new ShiftNetOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
+            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate
+            });
         TemporalRadius = _options.ShiftRadius;
         InitializeLayers();
     }
@@ -100,6 +136,23 @@ public class ShiftNet<T> : VideoDenoisingBase<T>
         ThrowIfDisposed();
         var preprocessed = PreprocessFrames(noisyFrames);
         var output = IsOnnxMode ? RunOnnxInference(preprocessed) : Forward(preprocessed);
+        return PostprocessOutput(output);
+    }
+
+    /// <inheritdoc/>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input)
+    {
+        // Mirror Denoise() so training optimises the SAME function inference evaluates. The base
+        // ForwardForTraining walked the RAW (unnormalised) input, whereas Denoise normalises the
+        // input (÷255) before the conv stack and denormalises after. Running the layers on a
+        // completely different input scale in training than at inference made the trained weights
+        // explode under Predict (loss 0.25 → ~198). Normalise → tape-aware layer walk →
+        // denormalise, all via Engine ops so gradients flow to the layer weights. (A residual
+        // input+correction connection isn't applicable here: the encoder/decoder conv stack does
+        // not preserve spatial size — e.g. 32×32 in → 29×29 out — so the output can't be added
+        // back to the input.)
+        var norm = PreprocessFrames(input);
+        var output = base.ForwardForTraining(norm);
         return PostprocessOutput(output);
     }
 
@@ -137,7 +190,7 @@ public class ShiftNet<T> : VideoDenoisingBase<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expected);
+            TrainWithTape(input, expected, _optimizer);
         }
         finally
         {
@@ -145,21 +198,8 @@ public class ShiftNet<T> : VideoDenoisingBase<T>
         }
     }
 
-    /// <inheritdoc/>
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        int offset = 0;
-        foreach (var layer in Layers)
-        {
-            var p = layer.GetParameters();
-            if (offset + p.Length > parameters.Length) break;
-            var sub = new Vector<T>(p.Length);
-            for (int i = 0; i < p.Length; i++) sub[i] = parameters[offset + i];
-            layer.SetParameters(sub);
-            offset += p.Length;
-        }
-    }
-
+    // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
+    // exactly the same enumeration, so this said nothing the base does not already say.
     /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()
     {

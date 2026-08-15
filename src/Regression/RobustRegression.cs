@@ -105,7 +105,14 @@ public class RobustRegression<T> : RegressionBase<T>
     /// <summary>
     /// Robust regression uses IRLS internally — random parameter injection is not helpful.
     /// </summary>
-    public override long ParameterCount => 0;
+        /// <remarks>
+    /// Expressed as a capability, not as a count. A zero ParameterCount also suppresses
+    /// injection -- that is why this was written that way -- but it overloads a COUNT to carry
+    /// a CAPABILITY: the model does have parameters (the base getter returns its coefficients
+    /// and intercept), so the count contradicted the vector and anything pairing the two by
+    /// length saw parameters the model claimed not to have.
+    /// </remarks>
+    public override bool SupportsParameterInitialization => false;
 
     /// <summary>
     /// Trains the robust regression model using the provided input data and target values.
@@ -321,37 +328,13 @@ public class RobustRegression<T> : RegressionBase<T>
         _options.WeightFunction = (WeightFunction)reader.ReadInt32();
     }
 
-    /// <summary>
-    /// Gets the model parameters (coefficients and intercept) as a single vector.
-    /// </summary>
-    /// <returns>A vector containing all model parameters.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> This method packages all the model's parameters into a single vector.
-    /// 
-    /// The returned vector combines:
-    /// - All the coefficients (the weights for each feature)
-    /// - The intercept (baseline value when all features are zero)
-    /// 
-    /// This is useful for optimization algorithms that need to work with all parameters at once.
-    /// </para>
-    /// </remarks>
-    public override Vector<T> GetParameters()
-    {
-        // Create a new vector with enough space for coefficients + intercept
-        Vector<T> parameters = new Vector<T>(Coefficients.Length + 1);
-
-        // Copy coefficients to the parameters vector
-        for (int i = 0; i < Coefficients.Length; i++)
-        {
-            parameters[i] = Coefficients[i];
-        }
-
-        // Add the intercept as the last element
-        parameters[Coefficients.Length] = Intercept;
-
-        return parameters;
-    }
-
+    // GetParameters is NOT overridden here. The override that used to be at this point built a
+    // vector of Coefficients.Length + 1, adding the intercept UNCONDITIONALLY, while the count
+    // it was paired with -- RegressionBase.ParameterCount -- honours Options.UseIntercept. With
+    // UseIntercept = false the model reported 3 parameters and handed back 4, and its own vector
+    // could not be restored into itself: SetParameters threw "Expected 3 parameters, but got 4".
+    // The base implementation does exactly the same packing and respects the flag, so the
+    // override was redundant as well as wrong.
     /// <summary>
     /// Creates a new model instance with the specified parameters.
     /// </summary>

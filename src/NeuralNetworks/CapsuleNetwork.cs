@@ -44,7 +44,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Dynamic Routing Between Capsules", "https://arxiv.org/abs/1710.09829", Year = 2017, Authors = "Sara Sabour, Nicholas Frosst, Geoffrey E. Hinton")]
-public class CapsuleNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
+public class CapsuleNetwork<T> : ImageClassifierModelLayoutBase<T>, IAuxiliaryLossLayer<T>
 {
     private readonly CapsuleNetworkOptions _options;
 
@@ -71,11 +71,13 @@ public class CapsuleNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
     /// <summary>
     /// Stores the last capsule outputs for reconstruction loss computation.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastCapsuleOutputs;
 
     /// <summary>
     /// Stores the last input for reconstruction loss computation.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastInput;
 
     /// <summary>
@@ -193,43 +195,8 @@ public class CapsuleNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
         }
     }
 
-    /// <summary>
-    /// Updates the parameters of all layers in the Capsule Network.
-    /// </summary>
-    /// <param name="parameters">A vector containing the parameters to update all layers with.</param>
-    /// <remarks>
-    /// <para>
-    /// This method distributes the provided parameter vector among all the layers in the network.
-    /// Each layer receives a portion of the parameter vector corresponding to its number of parameters.
-    /// The method keeps track of the starting index for each layer's parameters in the input vector.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method updates the network's internal values during training.
-    /// 
-    /// When updating parameters:
-    /// - The input is a long list of numbers representing all values in the entire network
-    /// - The method divides this list into smaller chunks
-    /// - Each layer gets its own chunk of values
-    /// - The layers use these values to adjust their internal settings
-    /// 
-    /// Think of it like giving each department in a company their specific budget allocations
-    /// from the overall company budget.
-    /// </para>
-    /// </remarks>
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        int startIndex = 0;
-        foreach (var layer in Layers)
-        {
-            int layerParameterCount = checked((int)layer.ParameterCount);
-            if (layerParameterCount > 0)
-            {
-                Vector<T> layerParameters = parameters.SubVector(startIndex, layerParameterCount);
-                layer.UpdateParameters(layerParameters);
-                startIndex += layerParameterCount;
-            }
-        }
-    }
-
+    // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
+    // exactly the same enumeration, so this said nothing the base does not already say.
     /// <summary>
     /// Performs a forward pass through the Capsule Network to make a prediction.
     /// </summary>
@@ -504,7 +471,13 @@ public class CapsuleNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "InputDimension", Layers[0].GetInputShape()[0] },
-                { "OutputDimension", Layers[Layers.Count - 1].GetOutputShape()[0] },
+                // METADATA DOES NOT THROW. RequireConcrete here turned a diagnostic read into a hard
+                // failure in the network's normal pre-forward state: this model's ActivationLayer is
+                // built with new[] { -1 } and resolves only in OnFirstForward, so a freshly constructed
+                // CapsuleNetwork could not report its own metadata. The indexer reports
+                // LayerShape.Dynamic (-1) for an axis that is not known yet, which is the honest answer
+                // and is what a caller inspecting a half-built model is asking for.
+                { "OutputDimension", Layers[Layers.Count - 1].GetOutputLayerShape()[0] },
                 { "LayerCount", Layers.Count },
                 { "LayerTypes", Layers.Select(l => l.GetType().Name).ToArray() }
             },

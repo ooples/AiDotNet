@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -225,7 +225,36 @@ public class QLambdaAgent<T> : ReinforcementLearningAgentBase<T>
     public Task<Vector<T>> PredictAsync(Vector<T> input) => Task.FromResult(Predict(input));
     public Task TrainAsync() { Train(); return Task.CompletedTask; }
     public override ModelMetadata<T> GetModelMetadata() => new ModelMetadata<T> { FeatureCount = this.FeatureCount, Complexity = ParameterCount };
-    public override long ParameterCount => _qTable.Count * _options.ActionSize;
+    /// <summary>
+    /// The number of Q-values actually stored: the sum of each state's action entries.
+    /// </summary>
+    /// <remarks>
+    /// NOT <c>_qTable.Count * ActionSize</c>, which is what ParameterCount, GetParameters and
+    /// SetParameters all used to compute. That product is only correct when every visited state has
+    /// explored every action, which is exactly what a tabular agent does not do — states are added
+    /// as they are seen and actions as they are tried. Meanwhile GetParameters' write loop always
+    /// wrote the REAL entry count, so the allocated length and the written length disagreed
+    /// whenever the table was ragged: trailing slots left as default, or an index overflow.
+    /// </remarks>
+    private long QTableEntryCount
+    {
+        get
+        {
+            long total = 0;
+            foreach (var state in _qTable) total += state.Value.Count;
+            return total;
+        }
+    }
+
+    /// <inheritdoc />
+    protected override void RegisterComponents()
+    {
+        base.RegisterComponents();
+        RegisterParameterComponent(
+            "q-table",
+            new AiDotNet.Models.Parameters.NestedKeyedScalarCollectionParameterSource<T, string, int>(
+                () => _qTable));
+    }
     public override int FeatureCount => _options.StateSize;
     public override byte[] Serialize()
     {
@@ -259,50 +288,6 @@ public class QLambdaAgent<T> : ReinforcementLearningAgentBase<T>
         _eligibilityTraces = JsonConvert.DeserializeObject<Dictionary<string, Dictionary<int, T>>>(state.EligibilityTraces.ToString()) ?? new Dictionary<string, Dictionary<int, T>>();
         _activeTraceStates = JsonConvert.DeserializeObject<HashSet<string>>(state.ActiveTraceStates.ToString()) ?? new HashSet<string>();
         _epsilon = state.Epsilon;
-    }
-    public override Vector<T> GetParameters()
-    {
-        int paramCount = _qTable.Count > 0 ? _qTable.Count * _options.ActionSize : 1;
-        var v = new Vector<T>(paramCount);
-        int idx = 0;
-
-        foreach (var s in _qTable)
-            foreach (var a in s.Value)
-                v[idx++] = a.Value;
-
-        if (idx == 0)
-            v[0] = NumOps.Zero;
-
-        return v;
-    }
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (parameters is null)
-        {
-            throw new ArgumentNullException(nameof(parameters), "Parameters vector cannot be null.");
-        }
-
-        int expectedSize = _qTable.Count * _options.ActionSize;
-
-        if (expectedSize == 0)
-        {
-            // Q-table is empty, nothing to set
-            return;
-        }
-
-        if (parameters.Length != expectedSize)
-        {
-            throw new ArgumentException($"Parameter vector size mismatch. Expected {expectedSize} parameters (states: {_qTable.Count}, actions: {_options.ActionSize}), but got {parameters.Length}.", nameof(parameters));
-        }
-
-        int idx = 0;
-        foreach (var s in _qTable.ToList())
-        {
-            for (int a = 0; a < _options.ActionSize; a++)
-            {
-                _qTable[s.Key][a] = parameters[idx++];
-            }
-        }
     }
     public override IFullModel<T, Vector<T>, Vector<T>> Clone()
     {

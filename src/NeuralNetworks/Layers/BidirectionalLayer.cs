@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
@@ -38,8 +38,88 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerTask(LayerTask.TemporalProcessing)]
 [LayerProperty(IsTrainable = true, IsStateful = true, HasTrainingMode = true, ChangesShape = true, Cost = ComputeCost.High, TestInputShape = "1, 4", TestConstructorArgs = "new AiDotNet.NeuralNetworks.Layers.RecurrentLayer<double>(8, (AiDotNet.Interfaces.IActivationFunction<double>?)null), true, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
-public class BidirectionalLayer<T> : LayerBase<T>
+// A DECORATOR whose relation depends on the merge mode, so it delegates in one mode and COMPOSES in the
+// other. Read off ForwardTraced -> MergeOutputs:
+//
+//   mergeMode = true  - "return Engine.TensorAdd(forward, backward)". An element-wise add of two tensors
+//                       the same inner layer produced, so the shape is the inner layer's untouched.
+//   mergeMode = false - "return Engine.TensorStack([forward, backward], 0)". A size-2 DIRECTION axis is
+//                       prepended and the rank goes up by one. CalculateOutputShape says the same thing
+//                       from the constructor's side: "newShape[0] = 2" ahead of the inner output shape.
+//
+// ONLY RANK 2 IS DECLARED, and that is a deliberate refusal rather than an omission. ForwardTraced hands
+// the input STRAIGHT to _forwardLayer, so the axis roles named here must be the roles the wrapped
+// recurrent layer reads - and at rank 3 the candidates disagree irreconcilably: RecurrentLayer declares
+// time-major [Time, Batch, Features] while LSTMLayer and GRULayer declare batch-major
+// [Batch, Time, Features]. One type-level layout cannot be both, and picking either would resolve the
+// OTHER family's delegated Same(Time)/Same(Batch) against transposed extents - a confidently wrong shape,
+// which is worse than none. At rank 2 all three agree on [Time, Features], so rank 2 is safe, and it is
+// also the rank this layer is exercised at (TestInputShape = "1, 4").
+[TensorLayout(TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Input,
+    Note = "Handed to the wrapped layer unchanged; reversing for the backward direction preserves shape.")]
+[TensorLayout(TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Output,
+    Note = "mergeMode = true: the two directions are added element-wise.")]
+[TensorLayout(TensorAxis.Other, TensorAxis.Time, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Output,
+    Note = "mergeMode = false: a size-2 direction axis is stacked in front of the inner output.")]
+[AutoParameters]
+public partial class BidirectionalLayer<T> : LayerBase<T>, IShapeContract
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// BOTH merge modes are stated, because they are genuinely different shape laws and a contract
+    /// covering only one would be silently wrong for half this layer's configurations.
+    /// </para>
+    /// <para>
+    /// <b>mergeMode = true</b> delegates outright: <c>MergeOutputs</c> returns
+    /// <c>Engine.TensorAdd(forward, backward)</c>, an element-wise add of two tensors the wrapped layer
+    /// and its clone produced, so the result carries the wrapped layer's shape exactly.
+    /// </para>
+    /// <para>
+    /// <b>mergeMode = false</b> composes: <c>Engine.TensorStack([forward, backward], 0)</c> prepends a
+    /// new leading axis holding the two directions, so the rank is the inner rank plus one. Its size is
+    /// <c>Fixed(2)</c> because there are exactly two directions - a structural fact of bidirectionality
+    /// rather than a configured width - and <c>CalculateOutputShape</c> writes the same literal 2 into
+    /// the layer's declared output shape. The role is <c>Other</c>: nothing in the vocabulary means
+    /// "direction", and calling it Batch or Channels would be a false claim something downstream acts on.
+    /// </para>
+    /// <para>
+    /// Answers only at rank 2, for the reason recorded on the layouts above: at rank 3 the wrapped
+    /// layer's axis ORDER is a property of which recurrent layer was wrapped, which no type-level layout
+    /// can express. Declining there is the honest outcome.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        // Rank 3 is deliberately unanswered: see the layouts above. The wrapped layer runs at rank 3
+        // perfectly well, but its axis order is not knowable from this type.
+        if (inputRank != 2) return null;
+
+        var inner = (_forwardLayer as IShapeContract)?.OutputAxesFor(inputRank);
+        if (inner is null || inner.Count == 0) return null;
+
+        // mergeMode = true: an element-wise add cannot move an axis, so this IS the inner relation.
+        if (_mergeMode) return inner;
+
+        foreach (var axis in inner)
+        {
+            // A repeated role cannot be addressed by name, so the whole naming would be refused
+            // (ADNSHAPE002). If the inner layer already used Other, prepending a second one is not a
+            // contract, it is a contradiction.
+            if (axis.Axis == TensorAxis.Other) return null;
+        }
+
+        var axes = new List<OutputAxisContract>(inner.Count + 1)
+        {
+            new OutputAxisContract(TensorAxis.Other, AxisRelation.Fixed(2)),
+        };
+
+        axes.AddRange(inner);
+
+        return axes;
+    }
+
     private readonly LayerBase<T> _forwardLayer;
     private readonly LayerBase<T> _backwardLayer;
     private readonly bool _mergeMode;
@@ -52,30 +132,6 @@ public class BidirectionalLayer<T> : LayerBase<T>
     /// The computation engine (CPU or GPU) for vectorized operations.
     /// </summary>
 
-    /// <summary>
-    /// Gets a value indicating whether this layer supports training.
-    /// </summary>
-    /// <value>
-    /// <c>true</c> if either the forward or backward layer supports training; otherwise, <c>false</c>.
-    /// </value>
-    /// <remarks>
-    /// <para>
-    /// This property indicates whether the bidirectional layer can be trained through backpropagation. 
-    /// The layer supports training if either of its internal layers (forward or backward) supports training.
-    /// This is typically the case for layers that have trainable parameters, such as weights or biases.
-    /// </para>
-    /// <para><b>For Beginners:</b> This property tells you if the layer can learn from data.
-    /// 
-    /// A value of true means:
-    /// - The layer can adjust its internal values during training
-    /// - It will improve its performance as it sees more data
-    /// - It participates in the learning process
-    /// 
-    /// The bidirectional layer supports training if either of its two internal layers
-    /// (forward or backward) supports training.
-    /// </para>
-    /// </remarks>
-    public override long ParameterCount => _forwardLayer.ParameterCount + _backwardLayer.ParameterCount;
     public override bool SupportsTraining => _forwardLayer.SupportsTraining || _backwardLayer.SupportsTraining;
 
     public override Vector<T> GetParameterGradients()
@@ -291,7 +347,7 @@ public class BidirectionalLayer<T> : LayerBase<T>
     /// the backward layer sees "world Hello", and then the results are combined.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         _lastInput = ShouldCacheForBackward ? input : null; // #1668: skip in inference (arena safety)
 
@@ -602,52 +658,6 @@ public class BidirectionalLayer<T> : LayerBase<T>
     }
 
     /// <summary>
-    /// Gets all trainable parameters from both the forward and backward layers as a single vector.
-    /// </summary>
-    /// <returns>A vector containing all trainable parameters.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method retrieves all trainable parameters from both the forward and backward inner layers and combines them
-    /// into a single vector. This is useful for optimization algorithms that operate on all parameters at once, or for
-    /// saving and loading model weights.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method collects all the learnable values from both forward and backward layers.
-    /// 
-    /// The parameters:
-    /// - Are the numbers that the neural network learns during training
-    /// - Include weights and biases from both forward and backward layers
-    /// - Are combined into a single long list (vector)
-    /// 
-    /// This is useful for:
-    /// - Saving the model to disk
-    /// - Loading parameters from a previously trained model
-    /// - Advanced optimization techniques that need access to all parameters
-    /// </para>
-    /// </remarks>
-    public override Vector<T> GetParameters()
-    {
-        // Combine parameters from both forward and backward layers
-        var forwardParams = _forwardLayer.GetParameters();
-        var backwardParams = _backwardLayer.GetParameters();
-
-        var combinedParams = new Vector<T>(forwardParams.Length + backwardParams.Length);
-
-        // Copy forward parameters
-        for (int i = 0; i < forwardParams.Length; i++)
-        {
-            combinedParams[i] = forwardParams[i];
-        }
-
-        // Copy backward parameters
-        for (int i = 0; i < backwardParams.Length; i++)
-        {
-            combinedParams[i + forwardParams.Length] = backwardParams[i];
-        }
-
-        return combinedParams;
-    }
-
-    /// <summary>
     /// Sets the trainable parameters for both the forward and backward layers.
     /// </summary>
     /// <param name="parameters">A vector containing all parameters to set.</param>
@@ -709,45 +719,6 @@ public class BidirectionalLayer<T> : LayerBase<T>
             if (!_backwardLayer.IsShapeResolved) _backwardLayer.ResolveFromShape(savedInput);
         }
         base.Deserialize(reader);
-    }
-
-    public override void SetParameters(Vector<T> parameters)
-    {
-        // Lazy ctor: if inner layers aren't shape-resolved, derive their
-        // input shape from this wrapper's resolved input shape.
-        if (parameters.Length > 0 && IsShapeResolved && !_forwardLayer.IsShapeResolved)
-        {
-            var wrapperInput = GetInputShape();
-            if (wrapperInput != null && wrapperInput.Length > 0
-                && System.Array.TrueForAll(wrapperInput, d => d > 0))
-            {
-                _forwardLayer.ResolveFromShape(wrapperInput);
-                _backwardLayer.ResolveFromShape(wrapperInput);
-            }
-        }
-
-        var forwardParams = _forwardLayer.GetParameters();
-        var backwardParams = _backwardLayer.GetParameters();
-
-        if (parameters.Length != forwardParams.Length + backwardParams.Length)
-            throw new ArgumentException($"Expected {forwardParams.Length + backwardParams.Length} parameters, but got {parameters.Length}");
-
-        // Extract and set forward parameters
-        var newForwardParams = new Vector<T>(forwardParams.Length);
-        for (int i = 0; i < forwardParams.Length; i++)
-        {
-            newForwardParams[i] = parameters[i];
-        }
-
-        // Extract and set backward parameters
-        var newBackwardParams = new Vector<T>(backwardParams.Length);
-        for (int i = 0; i < backwardParams.Length; i++)
-        {
-            newBackwardParams[i] = parameters[i + forwardParams.Length];
-        }
-
-        _forwardLayer.SetParameters(newForwardParams);
-        _backwardLayer.SetParameters(newBackwardParams);
     }
 
     /// <summary>

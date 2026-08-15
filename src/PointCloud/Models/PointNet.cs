@@ -69,7 +69,12 @@ namespace AiDotNet.PointCloud.Models;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Vector<>))]
 [ResearchPaper("PointNet: Deep Learning on Point Sets for 3D Classification and Segmentation", "https://doi.org/10.48550/arXiv.1612.00593", Year = 2017, Authors = "Charles R. Qi, Hao Su, Kaichun Mo, Leonidas J. Guibas")]
-public class PointNet<T> : NeuralNetworkBase<T>, IPointCloudModel<T>, IPointCloudClassification<T>
+[TensorLayout(TensorAxis.Batch, TensorAxis.Length, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Input, BatchOptional = true)]
+[TensorLayout(TensorAxis.Classes, Direction = TensorLayoutDirection.Output)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Other, TensorAxis.Classes,
+    Direction = TensorLayoutDirection.Output, BatchOptional = true)]
+public partial class PointNet<T> : NeuralNetworkBase<T>, IPointCloudModel<T>, IPointCloudClassification<T>
 {
     private readonly PointNetModelOptions _options;
 
@@ -91,6 +96,7 @@ public class PointNet<T> : NeuralNetworkBase<T>, IPointCloudModel<T>, IPointClou
     private int[] _inputTransformFcChannels;
     private int[] _featureTransformMlpChannels;
     private int[] _featureTransformFcChannels;
+    [Scratch]
     private Vector<T>? _globalFeatures;
     private readonly List<ILayer<T>> _classificationHeadLayers;
 
@@ -386,21 +392,8 @@ public class PointNet<T> : NeuralNetworkBase<T>, IPointCloudModel<T>, IPointClou
 
     public override bool SupportsTraining => true;
 
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        int startIndex = 0;
-        foreach (var layer in Layers)
-        {
-            int layerParameterCount = checked((int)layer.ParameterCount);
-            if (layerParameterCount > 0)
-            {
-                Vector<T> layerParameters = parameters.SubVector(startIndex, layerParameterCount);
-                layer.UpdateParameters(layerParameters);
-                startIndex += layerParameterCount;
-            }
-        }
-    }
-
+    // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
+    // exactly the same enumeration, so this said nothing the base does not already say.
     public override ModelMetadata<T> GetModelMetadata()
     {
         return new ModelMetadata<T>

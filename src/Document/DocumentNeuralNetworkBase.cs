@@ -1,3 +1,8 @@
+using System.Collections.Generic;
+// AiDotNet.Attributes is REQUIRED for [TensorLayout] to bind to the right type: two other Tensors
+// namespaces declare a TensorLayout, and without this using the attribute silently resolves to one
+// of those and the contract is never seen.
+using AiDotNet.Attributes;
 using AiDotNet.Document.Interfaces;
 using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
@@ -33,8 +38,75 @@ namespace AiDotNet.Document;
 /// 2. Build and train a new model from scratch
 /// </para>
 /// </remarks>
-public abstract class DocumentNeuralNetworkBase<T> : NeuralNetworkBase<T>
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Input,
+    Note = "A page or line image.")]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Classes,
+    Direction = TensorLayoutDirection.Output,
+    Note = "One class distribution per decode step: MaxSequenceLength steps, OutputClassCount "
+         + "classes. Both are model constants, so neither spatial axis reaches the output.")]
+[TensorPort("input", TensorPortDirection.Input, LayerInputDomainKind.Continuous,
+    Role = TensorPortRole.Features,
+    DomainResolver = nameof(ResolveDocumentInputDomain))]
+public abstract partial class DocumentNeuralNetworkBase<T> : NeuralNetworkBase<T>, IShapeContract
 {
+    /// <summary>
+    /// Resolves the public document-input domain from the first semantic consumer in the model graph.
+    /// </summary>
+    /// <remarks>
+    /// Document models are deliberately heterogeneous: page-image models accept continuous pixels,
+    /// token-first models accept bounded integer IDs, and layout-aware models accept packed continuous
+    /// rows which split into validated token and coordinate streams internally.  The base neural-network
+    /// graph already owns that distinction, so the generated public contract delegates to it instead of
+    /// forcing every document model to repeat a hand-written override.
+    /// </remarks>
+    protected virtual LayerInputDomain ResolveDocumentInputDomain(int[]? inputShape) =>
+        inputShape is { Length: >= 3 }
+            ? LayerInputDomain.Continuous
+            : base.GetInputDomain(inputShape);
+
+    /// <summary>
+    /// The number of classes this model emits per decode step, or 0 for "not stated".
+    /// </summary>
+    /// <remarks>
+    /// Per-model rather than on the base, because it is the CHARSET size and every recognizer carries
+    /// its own - and it is the charset PLUS ONE, for the CTC blank. ABINet and CRNN both end at
+    /// <c>[MaxSequenceLength, _charset.Length + 1]</c>, which is where this law was read from.
+    /// </remarks>
+    protected virtual int OutputClassCount => 0;
+
+    /// <summary>
+    /// The document family's law: <c>[Batch, MaxSequenceLength, OutputClassCount]</c>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// MEASURED by probing, and the striking part is what does NOT appear. ABINet answered
+    /// <c>[1,3,8,8] -&gt; [1,256,96]</c> and CRNN <c>[1,3,8,8] -&gt; [1,32,96]</c>, and moving EITHER
+    /// spatial axis - <c>[1,3,12,8]</c>, <c>[1,3,8,12]</c> - left the output unchanged. A recognizer
+    /// decodes a fixed number of steps regardless of how large the page it was handed is, so neither
+    /// Height nor Width reaches the output at all. Only the batch axis is carried.
+    /// </para>
+    /// <para>
+    /// Both constants are model configuration rather than literals: the step count is
+    /// <see cref="MaxSequenceLength"/> on this base, and the class count is the model's own charset.
+    /// Recording the probed 256 and 96 would have been right for one construction and wrong for any
+    /// other - the error that made three vision-language contracts wrong.
+    /// </para>
+    /// </remarks>
+    [ShapeContractRequiresPropertyOverride(nameof(OutputClassCount),
+        "The generic document contract is concrete only when a model supplies its output class count.")]
+    public virtual IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        int classes = OutputClassCount;
+        if (inputRank != 4 || classes <= 0 || MaxSequenceLength <= 0) return null;
+        return
+        [
+            new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+            new OutputAxisContract(TensorAxis.Time, AxisRelation.Fixed(MaxSequenceLength)),
+            new OutputAxisContract(TensorAxis.Classes, AxisRelation.Fixed(classes)),
+        ];
+    }
+
     #region Document-Specific Properties
 
     /// <summary>
@@ -330,9 +402,11 @@ public abstract class DocumentNeuralNetworkBase<T> : NeuralNetworkBase<T>
         bool hasPassedConvLayer = false;
         foreach (var layer in Layers)
         {
-            // Track whether we've passed through any convolutional/pooling layer
-            if (layer is ConvolutionalLayer<T> or BatchNormalizationLayer<T>
-                     or PoolingLayer<T> or MaxPoolingLayer<T> or AveragePoolingLayer<T>)
+            // Track whether we've passed through any convolutional/pooling layer. The set mirrors
+            // IsSpatialLayer below: residual conv blocks (BasicBlock/BottleneckBlock) and the
+            // element-wise layers interleaved in a CNN backbone (activation, dropout) all keep the
+            // [B,C,H,W] spatial layout, so passing one still counts as "inside the CNN stem".
+            if (IsSpatialLayer(layer))
             {
                 hasPassedConvLayer = true;
             }
@@ -348,9 +422,12 @@ public abstract class DocumentNeuralNetworkBase<T> : NeuralNetworkBase<T>
 
             // Auto-reshape once when transitioning from spatial (CNN) to non-spatial layers
             // Only reshape if we actually went through conv layers (not raw image input)
-            // CNN outputs [B, C, H, W] or [C, H, W]; non-spatial layers expect [SeqLen, EmbDim]
-            bool isNonSpatialLayer = layer is not (ConvolutionalLayer<T> or BatchNormalizationLayer<T>
-                or PoolingLayer<T> or MaxPoolingLayer<T> or AveragePoolingLayer<T>);
+            // CNN outputs [B, C, H, W] or [C, H, W]; non-spatial layers expect [SeqLen, EmbDim].
+            // A residual CNN backbone (PSENet's ResNet: BasicBlock/BottleneckBlock, with the usual
+            // activation/dropout between stages) stays spatial the whole way; without treating those
+            // as spatial the reshape fired at the FIRST residual block, handing the next MaxPool /
+            // block a rank-2 [patches, channels] tensor ("MaxPooling requires rank-3/4; got rank 2").
+            bool isNonSpatialLayer = !IsSpatialLayer(layer);
             if (!hasReshapedToSequence && hasPassedConvLayer && output.Shape.Length >= 3 && isNonSpatialLayer)
             {
                 int channels = output.Shape.Length == 4 ? output.Shape[1] : output.Shape[0];
@@ -374,6 +451,22 @@ public abstract class DocumentNeuralNetworkBase<T> : NeuralNetworkBase<T>
         }
         return output;
     }
+
+    /// <summary>
+    /// True when <paramref name="layer"/> preserves the CNN spatial layout ([B,C,H,W] / [C,H,W]),
+    /// so the inference Forward's spatial→sequence auto-reshape must NOT fire on it. Covers the
+    /// convolution / normalization / pooling primitives AND the residual conv blocks
+    /// (<see cref="BasicBlock{T}"/>, <see cref="BottleneckBlock{T}"/>) and the element-wise layers
+    /// (activation, dropout) that a residual CNN backbone interleaves between stages — a genuine
+    /// paper-faithful ResNet backbone (e.g. PSENet) is entirely spatial. The reshape still fires at
+    /// the first ACTUAL non-spatial layer (a transformer / attention / dense block), so transformer
+    /// document models are unaffected.
+    /// </summary>
+    private static bool IsSpatialLayer(ILayer<T> layer) =>
+        layer is ConvolutionalLayer<T> or BatchNormalizationLayer<T>
+              or PoolingLayer<T> or MaxPoolingLayer<T> or AveragePoolingLayer<T>
+              or ActivationLayer<T> or DropoutLayer<T>
+              or BasicBlock<T> or BottleneckBlock<T>;
 
     /// <summary>
     /// Validates that an input image tensor has the correct shape.

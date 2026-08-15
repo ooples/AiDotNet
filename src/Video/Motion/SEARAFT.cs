@@ -48,7 +48,7 @@ namespace AiDotNet.Video.Motion;
     "https://arxiv.org/abs/2405.14793",
     Year = 2024,
     Authors = "Yihan Wang, Lahav Lipson, Jia Deng")]
-public class SEARAFT<T> : OpticalFlowBase<T>
+public partial class SEARAFT<T> : OpticalFlowBase<T>
 {
     private readonly SEARAFTOptions _options;
 
@@ -163,14 +163,15 @@ public class SEARAFT<T> : OpticalFlowBase<T>
         }
         var rawFlow = _outputConv.Forward(feat);
 
-        // Extract 2-channel flow field
-        var flow = new Tensor<T>([2, height, width]);
-        for (int i = 0; i < Math.Min(rawFlow.Length, flow.Length); i++)
-        {
-            flow.Data.Span[i] = rawFlow.Data.Span[i];
-        }
-
-        return flow;
+        // The output convolution already emits exactly 2 channels at the input resolution
+        // (ConvolutionalLayer(2, kernel 3, stride 1, padding 1)), so rawFlow IS the flow field.
+        //
+        // This previously allocated a second tensor and copied into it element-by-element through
+        // Data.Span. That copy was a numeric no-op, but a raw buffer write is not a recorded
+        // operation, so it severed the autodiff tape at the very END of the forward pass — throwing
+        // away the gradient path for the whole network behind it. Returning the tensor directly is
+        // bit-identical and keeps the graph intact.
+        return rawFlow;
     }
 
     /// <inheritdoc/>
@@ -187,44 +188,7 @@ public class SEARAFT<T> : OpticalFlowBase<T>
         }
     }
 
-    /// <inheritdoc/>
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        int offset = 0;
-        if (_featureExtract is not null)
-        {
-            var p = _featureExtract.GetParameters();
-            if (offset + p.Length <= parameters.Length)
-            {
-                var sub = new Vector<T>(p.Length);
-                for (int i = 0; i < p.Length; i++) sub[i] = parameters[offset + i];
-                _featureExtract.SetParameters(sub);
-                offset += p.Length;
-            }
-        }
-        foreach (var block in _processingBlocks)
-        {
-            var p = block.GetParameters();
-            if (offset + p.Length <= parameters.Length)
-            {
-                var sub = new Vector<T>(p.Length);
-                for (int i = 0; i < p.Length; i++) sub[i] = parameters[offset + i];
-                block.SetParameters(sub);
-                offset += p.Length;
-            }
-        }
-        if (_outputConv is not null)
-        {
-            var p = _outputConv.GetParameters();
-            if (offset + p.Length <= parameters.Length)
-            {
-                var sub = new Vector<T>(p.Length);
-                for (int i = 0; i < p.Length; i++) sub[i] = parameters[offset + i];
-                _outputConv.SetParameters(sub);
-            }
-        }
-    }
-
+    // UpdateParameters restated the base verbatim; ModelBase routes it to SetParameters.
     /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()
     {

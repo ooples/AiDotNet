@@ -65,8 +65,9 @@ public sealed class CensusPaperFidelityContractTests
     public void SvtrTps_ReleasedInitializationUsesDistinctSourceAndTargetMargins()
     {
         var layer = new SVTRThinPlateSplineLayer<double>();
-        var parameters = layer.GetParameters().AsSpan();
-        var localizationBias = parameters[^40..];
+        var trainable = layer.GetTrainableParameters();
+        var localizationWeights = Assert.Single(trainable.Where(tensor => tensor.Length == 512 * 40));
+        var localizationBias = Assert.Single(trainable.Where(tensor => tensor.Length == 40)).AsSpan();
 
         Assert.Equal(0.05, layer.MarginX, 12);
         Assert.Equal(0.05, layer.MarginY, 12);
@@ -78,7 +79,7 @@ public sealed class CensusPaperFidelityContractTests
         Assert.Equal(0.99, localizationBias[21], 12);
         Assert.Equal(0.99, localizationBias[38], 12);
         Assert.Equal(0.99, localizationBias[39], 12);
-        Assert.All(parameters[^(40 + 512 * 40)..^40].ToArray(),
+        Assert.All(localizationWeights.AsSpan().ToArray(),
             value => Assert.Equal(0.0, value, 12));
     }
 
@@ -107,7 +108,8 @@ public sealed class CensusPaperFidelityContractTests
         var output = model.Interpolate(frame0, frame1, 0.25);
 
         Assert.Equal([3, 16, 16], output.Shape.ToArray());
-        Assert.All(output.AsSpan().ToArray(), value => Assert.True(double.IsFinite(value)));
+        Assert.All(output.AsSpan().ToArray(), value =>
+            Assert.True(!double.IsNaN(value) && !double.IsInfinity(value)));
         Assert.Equal(1_653_961, model.ParameterCount);
 
         var payload = model.Serialize();
@@ -135,7 +137,8 @@ public sealed class CensusPaperFidelityContractTests
             0.5);
 
         Assert.Equal([3, 16, 16], output.Shape.ToArray());
-        Assert.All(output.AsSpan().ToArray(), value => Assert.True(double.IsFinite(value)));
+        Assert.All(output.AsSpan().ToArray(), value =>
+            Assert.True(!double.IsNaN(value) && !double.IsInfinity(value)));
     }
 
     [Fact]
@@ -335,7 +338,8 @@ public sealed class CensusPaperFidelityContractTests
         var output = transformer.Forward(input, context);
 
         Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
-        Assert.All(output.AsSpan().ToArray(), value => Assert.True(double.IsFinite(value)));
+        Assert.All(output.AsSpan().ToArray(), value =>
+            Assert.True(!double.IsNaN(value) && !double.IsInfinity(value)));
         Assert.True(transformer.OnlyCrossAttention);
         Assert.True(transformer.UsesTemporalAttention);
         Assert.True(transformer.TemporalAttentionIsZeroInitialized);
@@ -371,6 +375,22 @@ public sealed class CensusPaperFidelityContractTests
             clone.VAE.GetParameters().AsSpan().ToArray());
         Assert.Equal(model.ParameterCount, clone.ParameterCount);
         Assert.Equal(model.GetParameters().AsSpan().ToArray(), clone.GetParameters().AsSpan().ToArray());
+    }
+
+    [Fact]
+    public void ChannelPinnedConvolutions_MaterializeConsistentParameterSurfaces()
+    {
+        var conv3D = Conv3DLayer<double>.WithInputChannels(
+            inputChannels: 3, outputChannels: 4, kernelSize: 3, padding: 1);
+        var deconvolution = DeconvolutionalLayer<double>.WithInputDepth(
+            inputDepth: 4, outputDepth: 2, kernelSize: 3, padding: 1);
+
+        Assert.Equal(conv3D.ParameterCount, conv3D.GetParameters().Length);
+        Assert.Equal(conv3D.ParameterCount,
+            conv3D.GetTrainableParameters().Sum(tensor => tensor.Length));
+        Assert.Equal(deconvolution.ParameterCount, deconvolution.GetParameters().Length);
+        Assert.Equal(deconvolution.ParameterCount,
+            deconvolution.GetTrainableParameters().Sum(tensor => tensor.Length));
     }
 
     [Fact]

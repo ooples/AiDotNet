@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 
 namespace AiDotNet.NeuralNetworks.Layers;
@@ -36,7 +36,17 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Structural)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = true, Cost = ComputeCost.Medium, TestInputShape = "2, 4", TestConstructorArgs = "4, 3")]
-public class PrototypeAlignmentLayer<T> : LayerBase<T>
+// Shape-preserving at every rank, per ForwardTraced's three exits: rank 1 returns [_embedDim], rank 2
+// returns the [N, D] it computed, and every higher rank is reshaped back to the captured origShape. The
+// leading axes are only flattened for the matmul and restored afterwards, so nothing about them changes.
+//
+// The prototype count K is a real intermediate width - weights are [N, K] after the softmax - but it
+// never reaches the output, because the aggregation weights @ prototypes ([N,K] @ [K,D]) contracts it
+// away. Reading K as an output axis would be the mistake this annotation exists to prevent; the layer
+// returns a blend of prototypes in the INPUT's own embedding space, which is the point of the method.
+[ElementWiseShape(Note = "Re-expresses each token as a softmax blend of the prototype bank; shape is untouched at any rank.")]
+[AutoParameters]
+public partial class PrototypeAlignmentLayer<T> : LayerBase<T>
 {
     private readonly int _embedDim;
     private readonly int _numPrototypes;
@@ -90,7 +100,7 @@ public class PrototypeAlignmentLayer<T> : LayerBase<T>
     }
 
     /// <inheritdoc/>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // Built entirely out of Engine ops so the gradient tape records the
         // cosine-similarity → softmax → aggregate chain. The old per-element
@@ -172,30 +182,6 @@ public class PrototypeAlignmentLayer<T> : LayerBase<T>
         if (rank == 1)
             return Engine.Reshape(output2D, new[] { _embedDim });
         return output2D;
-    }
-
-    /// <inheritdoc/>
-    /// <remarks>
-    /// No-op by design. Prototypes were registered with
-    /// <see cref="LayerBase{T}.RegisterTrainableParameter"/>, so the tape-based
-    /// <c>NeuralNetworkBase.TrainWithTape</c> path updates them through the optimizer's
-    /// <c>Step(TapeStepContext)</c>. For non-tape training paths (legacy per-layer
-    /// <c>UpdateParameters(learningRate)</c> flow), the parameter is still addressable
-    /// via <see cref="GetParameters"/> / <see cref="SetParameters"/> so external
-    /// drivers can apply updates explicitly — there is no internal gradient buffer to
-    /// consume here.
-    /// </remarks>
-    public override void UpdateParameters(T learningRate)
-    {
-    }
-
-    /// <inheritdoc/>
-    public override Vector<T> GetParameters()
-    {
-        var vec = new T[_numPrototypes * _embedDim];
-        for (int i = 0; i < vec.Length; i++)
-            vec[i] = _prototypes.Data.Span[i];
-        return new Vector<T>(vec);
     }
 
     /// <inheritdoc/>

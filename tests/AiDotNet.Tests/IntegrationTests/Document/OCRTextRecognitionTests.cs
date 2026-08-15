@@ -34,6 +34,27 @@ public class OCRTextRecognitionTests
         return new Tensor<double>(new[] { 1, 3, height, width }, data);
     }
 
+    private static TrOCR<double> CreateSmallTrOCR(NeuralNetworkArchitecture<double> architecture)
+    {
+        // Keep the production constructor's TrOCR-base paper defaults intact. These integration
+        // invariants exercise native construction, prediction, metadata, and OCR capabilities, so
+        // use the model's public topology controls to avoid allocating the full 50,265 x 768
+        // double-precision embedding table repeatedly on a 16 GiB CI runner.
+        return new TrOCR<double>(
+            architecture,
+            imageHeight: 32,
+            imageWidth: 128,
+            maxSequenceLength: 16,
+            encoderHiddenDim: 32,
+            decoderHiddenDim: 32,
+            numEncoderLayers: 1,
+            numDecoderLayers: 1,
+            numEncoderHeads: 4,
+            numDecoderHeads: 4,
+            patchSize: 16,
+            vocabSize: 128);
+    }
+
     #region CRNN Tests
 
     [Fact(Timeout = 120000)]
@@ -73,7 +94,7 @@ public class OCRTextRecognitionTests
     public async Task TrOCR_NativeConstruction_Succeeds()
     {
         var arch = CreateArchitecture();
-        var model = new TrOCR<double>(arch, imageHeight: 32, imageWidth: 128);
+        var model = CreateSmallTrOCR(arch);
         Assert.NotNull(model);
     }
 
@@ -81,7 +102,7 @@ public class OCRTextRecognitionTests
     public async Task TrOCR_Predict_ReturnsOutput()
     {
         var arch = CreateArchitecture();
-        var model = new TrOCR<double>(arch, imageHeight: 32, imageWidth: 128);
+        var model = CreateSmallTrOCR(arch);
         var input = CreateSmallImage();
         var output = model.Predict(input);
         Assert.NotNull(output);
@@ -93,7 +114,7 @@ public class OCRTextRecognitionTests
     public async Task TrOCR_GetModelMetadata_ReturnsValidData()
     {
         var arch = CreateArchitecture();
-        var model = new TrOCR<double>(arch, imageHeight: 32, imageWidth: 128);
+        var model = CreateSmallTrOCR(arch);
         var meta = model.GetModelMetadata();
         Assert.Equal("TrOCR", meta.Name);
     }
@@ -175,7 +196,7 @@ public class OCRTextRecognitionTests
         var models = new DocumentNeuralNetworkBase<double>[]
         {
             new CRNN<double>(arch, imageWidth: 128),
-            new TrOCR<double>(arch, imageHeight: 32, imageWidth: 128),
+            CreateSmallTrOCR(arch),
             new SVTR<double>(arch, imageWidth: 100, imageHeight: 32),
             new ABINet<double>(arch, imageWidth: 128, imageHeight: 32),
         };

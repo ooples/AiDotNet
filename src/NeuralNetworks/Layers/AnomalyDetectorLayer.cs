@@ -33,8 +33,47 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Other)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = false, NormalizesInput = true, IsStateful = true, TestInputShape = "1, 4", TestConstructorArgs = "4, 0.5")]
-public class AnomalyDetectorLayer<T> : LayerBase<T>
+// A REDUCTION TO A SCALAR, so the output rank is not the input rank and OutputAxesFor is hand-written.
+// Input roles from the constructor's own declared shape - base([inputSize], [1]) - which is rank 1
+// [Features]; rank 2 is that with a leading batch, the form [LayerProperty(TestInputShape = "1, 4")]
+// exercises. The output is a single anomaly score at either rank, so it is declared once, at rank 1.
+[TensorLayout(TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
+[AutoParameters]
+public partial class AnomalyDetectorLayer<T> : LayerBase<T>, IShapeContract
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// Hand-written because this layer COLLAPSES its input: <c>ForwardTraced</c> averages every anomaly
+    /// score it computes into one <c>meanScore</c> and returns <c>new Tensor&lt;T&gt;([1])</c>, whatever
+    /// the input rank. A generated <c>Same(role)</c> contract would have claimed the input shape came
+    /// back out.
+    /// </para>
+    /// <para>
+    /// The size is read off <c>GetOutputShape()</c> rather than written as the literal <c>1</c>, so the
+    /// declaration stays tied to the constructor's <c>base([inputSize], [1])</c> instead of to a number
+    /// observed once. Batch does NOT survive: a batched input still yields a single score, because the
+    /// mean is taken over every element rather than per row.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        // Ranks 1 and 2 only. ForwardTraced does accept higher ranks - it slices the LAST axis - but each
+        // extra leading axis would need a distinct role to be named, and none of them survives the
+        // reduction anyway, so declaring them would only add roles nothing refers to.
+        if (inputRank is not (1 or 2)) return null;
+
+        var outputShape = GetOutputShape();
+        if (outputShape.Length != 1 || outputShape[0] <= 0) return null;
+
+        return new[]
+        {
+            new OutputAxisContract(TensorAxis.Features, AxisRelation.Fixed(outputShape[0])),
+        };
+    }
+
     /// <summary>
     /// The threshold for determining anomalous inputs based on the anomaly score.
     /// </summary>
@@ -242,7 +281,7 @@ public class AnomalyDetectorLayer<T> : LayerBase<T>
     /// The output is a tensor with just one value: the anomaly score between 0 and 1.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         _lastInputShape = input._shape;
         int rank = input.Shape.Length;
@@ -579,52 +618,6 @@ public class AnomalyDetectorLayer<T> : LayerBase<T>
         var zeroGradient = new Tensor<T>(_lastInputShape);
         zeroGradient.Fill(NumOps.Zero);
         return zeroGradient;
-    }
-
-    /// <summary>
-    /// Updates the parameters of the layer.
-    /// </summary>
-    /// <param name="learningRate">The learning rate for parameter updates.</param>
-    /// <remarks>
-    /// <para>
-    /// This method is empty in the current implementation as the layer does not have trainable parameters
-    /// updated through gradient descent.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method is included for compatibility but doesn't do anything in this layer.
-    /// 
-    /// The reason this method is empty:
-    /// - This layer doesn't have weights or biases to update
-    /// - It performs calculations based on fixed formulas rather than learned parameters
-    /// - This method is included only to satisfy the requirements of the LayerBase class
-    /// </para>
-    /// </remarks>
-    public override void UpdateParameters(T learningRate)
-    {
-        // No parameters to update in this layer
-    }
-
-    /// <summary>
-    /// Gets all parameters of the layer as a single vector.
-    /// </summary>
-    /// <returns>An empty vector as this layer has no trainable parameters.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method returns an empty vector since the anomaly detection layer doesn't have trainable parameters.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method returns an empty list since this layer doesn't learn parameters.
-    /// 
-    /// Since this layer:
-    /// - Doesn't have weights or biases
-    /// - Uses fixed formulas rather than learned parameters
-    /// - Doesn't require training in the traditional sense
-    /// 
-    /// The method returns an empty vector to maintain compatibility with the layer interface.
-    /// </para>
-    /// </remarks>
-    public override Vector<T> GetParameters()
-    {
-        // This layer has no trainable parameters
-        return new Vector<T>(0);
     }
 
     /// <summary>

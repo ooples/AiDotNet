@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Extensions;
 using AiDotNet.Interfaces;
@@ -45,7 +46,8 @@ namespace AiDotNet.LoRA.Adapters;
 /// - When LoRA is still too expensive
 /// </para>
 /// </remarks>
-public class VeRAAdapter<T> : LoRAAdapterBase<T>
+[AutoParameters]
+public partial class VeRAAdapter<T> : LoRAAdapterBase<T>
 {
     /// <summary>
     /// Shared frozen random matrix A (inputSize × rank) used by all VeRA adapters.
@@ -78,7 +80,7 @@ public class VeRAAdapter<T> : LoRAAdapterBase<T>
     /// It is initialized to ones so VeRA has no effect initially.
     /// Reassigned with correct size in CreateLoRALayer() which is called by the base constructor.
     /// </remarks>
-    private Vector<T> _scalingVectorD = Vector<T>.Empty();
+    private Tensor<T> _scalingVectorD = new Tensor<T>([0]);
 
     /// <summary>
     /// Scaling vector b (rank) - trainable per-layer parameter.
@@ -88,7 +90,7 @@ public class VeRAAdapter<T> : LoRAAdapterBase<T>
     /// It is initialized to ones so VeRA has no effect initially.
     /// Reassigned with correct size in CreateLoRALayer() which is called by the base constructor.
     /// </remarks>
-    private Vector<T> _scalingVectorB = Vector<T>.Empty();
+    private Tensor<T> _scalingVectorB = new Tensor<T>([0]);
 
     /// <summary>
     /// Gradient for scaling vector d computed during backpropagation.
@@ -109,33 +111,6 @@ public class VeRAAdapter<T> : LoRAAdapterBase<T>
     /// Stored intermediate value (B * A * input) from forward pass, needed for backward pass.
     /// </summary>
     private Matrix<T>? _lastIntermediate;
-
-    /// <summary>
-    /// Gets the total number of trainable parameters (only the scaling vectors d and b).
-    /// </summary>
-    /// <remarks>
-    /// VeRA only trains the scaling vectors, not the shared matrices.
-    /// For a layer with outputSize and rank r, this is: outputSize + rank.
-    /// This is typically 10x fewer parameters than standard LoRA.
-    /// </remarks>
-    public override long ParameterCount
-    {
-        get
-        {
-            // Handle case where scaling vectors haven't been initialized yet
-            // (called from base constructor before derived constructor runs)
-            if (_scalingVectorD == null || _scalingVectorB == null)
-            {
-                // Return expected size based on layer dimensions and rank
-                int outputSize = GetOutputShape()[0];
-                int veraParams = outputSize + Rank;
-                return _freezeBaseLayer ? veraParams : (_baseLayer.ParameterCount + veraParams);
-            }
-
-            int actualVeraParams = _scalingVectorD.Length + _scalingVectorB.Length;
-            return _freezeBaseLayer ? actualVeraParams : (_baseLayer.ParameterCount + actualVeraParams);
-        }
-    }
 
     /// <summary>
     /// Initializes a new VeRA adapter wrapping an existing layer.
@@ -174,7 +149,7 @@ public class VeRAAdapter<T> : LoRAAdapterBase<T>
         }
 
         int inputSize = GetInputShape()[0];
-        int outputSize = GetOutputShape()[0];
+        int outputSize = GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0];
 
         // Ensure shared matrices are initialized
         if (_sharedMatrixA == null || _sharedMatrixB == null)
@@ -202,8 +177,6 @@ public class VeRAAdapter<T> : LoRAAdapterBase<T>
         // Note: Scaling vectors are already initialized in CreateLoRALayer() which runs before this point.
         // This is necessary because the base constructor accesses ParameterCount which uses the scaling vectors.
 
-        // Update parameter vector with scaling vectors
-        UpdateParametersFromVectors();
     }
 
     /// <summary>
@@ -283,27 +256,6 @@ public class VeRAAdapter<T> : LoRAAdapterBase<T>
     public static bool AreSharedMatricesInitialized => _sharedMatrixA != null && _sharedMatrixB != null;
 
     /// <summary>
-    /// Updates the parameter vector from the current layer states.
-    /// </summary>
-    /// <remarks>
-    /// VeRA overrides this to only copy scaling vectors (d and b), not the full LoRA layer parameters.
-    /// This is called from the base constructor before scaling vectors are initialized,
-    /// so we check for null and skip if not ready yet.
-    /// </remarks>
-    protected override void UpdateParametersFromLayers()
-    {
-        // This method is called from base constructor before scaling vectors are initialized.
-        // If vectors aren't ready yet, skip - they'll be set in VeRAAdapter constructor.
-        if (_scalingVectorD == null || _scalingVectorB == null)
-        {
-            return;
-        }
-
-        // Use VeRA's own method to properly pack only the scaling vectors
-        UpdateParametersFromVectors();
-    }
-
-    /// <summary>
     /// Creates a VeRA-specific layer (not used since VeRA doesn't use LoRALayer).
     /// </summary>
     /// <remarks>
@@ -316,13 +268,13 @@ public class VeRAAdapter<T> : LoRAAdapterBase<T>
         // VeRA doesn't use a standard LoRA layer, but we need to satisfy the base class
         // Create a minimal LoRA layer that won't be used
         int inputSize = GetInputShape()[0];
-        int outputSize = GetOutputShape()[0];
+        int outputSize = GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0];
 
         // IMPORTANT: Initialize scaling vectors here because this is called from the base constructor
         // BEFORE ParameterCount is accessed. If we wait until the VeRAAdapter constructor body,
         // the base constructor will try to access ParameterCount which uses these vectors, causing NullReferenceException.
-        _scalingVectorD = new Vector<T>(outputSize);
-        _scalingVectorB = new Vector<T>(rank);
+        _scalingVectorD = new Tensor<T>([outputSize]);
+        _scalingVectorB = new Tensor<T>([rank]);
 
         for (int i = 0; i < outputSize; i++)
         {
@@ -356,7 +308,7 @@ public class VeRAAdapter<T> : LoRAAdapterBase<T>
     /// The key difference from standard LoRA: A and B are shared and frozen, only d and b are trained!
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         _lastInput = input.Clone();
 
@@ -366,7 +318,7 @@ public class VeRAAdapter<T> : LoRAAdapterBase<T>
         // VeRA forward: d * (B * A * input) * b * scaling
         int batchSize = input.Shape[0];
         int inputSize = input.Shape.Length > 1 ? input.Shape[1] : input.Length;
-        int outputSize = GetOutputShape()[0];
+        int outputSize = GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0];
 
         // Convert input to matrix [batchSize, inputSize]
         Matrix<T> inputMatrix = new Matrix<T>(batchSize, inputSize);
@@ -466,130 +418,6 @@ public class VeRAAdapter<T> : LoRAAdapterBase<T>
             _baseLayer.UpdateParameters(learningRate);
         }
 
-        // Update parameter vector
-        UpdateParametersFromVectors();
-    }
-
-    /// <summary>
-    /// Gets the current parameters as a vector (scaling vectors only).
-    /// </summary>
-    /// <returns>Vector containing VeRA parameters (d and b vectors).</returns>
-    public override Vector<T> GetParameters()
-    {
-        return Parameters.Clone();
-    }
-
-    /// <summary>
-    /// Sets the layer parameters from a vector.
-    /// </summary>
-    /// <param name="parameters">Vector containing VeRA parameters.</param>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (parameters.Length != ParameterCount)
-        {
-            throw new ArgumentException($"Expected {ParameterCount} parameters, got {parameters.Length}", nameof(parameters));
-        }
-
-        Parameters = parameters.Clone();
-        UpdateVectorsFromParameters();
-    }
-
-    /// <summary>
-    /// Updates the parameter vector from the current scaling vector values.
-    /// </summary>
-    private void UpdateParametersFromVectors()
-    {
-        int idx = 0;
-
-        // Pack base layer parameters if not frozen
-        if (!_freezeBaseLayer)
-        {
-            Vector<T> baseParams = _baseLayer.GetParameters();
-            for (int i = 0; i < baseParams.Length; i++)
-            {
-                Parameters[idx++] = baseParams[i];
-            }
-        }
-
-        // Pack scaling vector d
-        for (int i = 0; i < _scalingVectorD.Length; i++)
-        {
-            Parameters[idx++] = _scalingVectorD[i];
-        }
-
-        // Pack scaling vector b
-        for (int i = 0; i < _scalingVectorB.Length; i++)
-        {
-            Parameters[idx++] = _scalingVectorB[i];
-        }
-    }
-
-    /// <summary>
-    /// Updates the scaling vectors from the parameter vector.
-    /// </summary>
-    private void UpdateVectorsFromParameters()
-    {
-        int idx = 0;
-
-        // Unpack base layer parameters if not frozen
-        if (!_freezeBaseLayer)
-        {
-            int baseParamCount = checked((int)_baseLayer.ParameterCount);
-            Vector<T> baseParams = new Vector<T>(baseParamCount);
-            for (int i = 0; i < baseParamCount; i++)
-            {
-                baseParams[i] = Parameters[idx++];
-            }
-            _baseLayer.SetParameters(baseParams);
-        }
-
-        // Unpack scaling vector d
-        for (int i = 0; i < _scalingVectorD.Length; i++)
-        {
-            _scalingVectorD[i] = Parameters[idx++];
-        }
-
-        // Unpack scaling vector b
-        for (int i = 0; i < _scalingVectorB.Length; i++)
-        {
-            _scalingVectorB[i] = Parameters[idx++];
-        }
-    }
-
-    /// <summary>
-    /// Updates the parameter gradients vector from the scaling vector gradients.
-    /// </summary>
-    private void UpdateParameterGradientsFromVectors()
-    {
-        if (_scalingVectorDGradient == null || _scalingVectorBGradient == null)
-        {
-            return;
-        }
-
-        ParameterGradients = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
-        int idx = 0;
-
-        // Pack base layer gradients if not frozen
-        if (!_freezeBaseLayer)
-        {
-            Vector<T> baseGrads = _baseLayer.GetParameterGradients();
-            for (int i = 0; i < baseGrads.Length; i++)
-            {
-                ParameterGradients[idx++] = baseGrads[i];
-            }
-        }
-
-        // Pack scaling vector d gradients
-        for (int i = 0; i < _scalingVectorDGradient.Length; i++)
-        {
-            ParameterGradients[idx++] = _scalingVectorDGradient[i];
-        }
-
-        // Pack scaling vector b gradients
-        for (int i = 0; i < _scalingVectorBGradient.Length; i++)
-        {
-            ParameterGradients[idx++] = _scalingVectorBGradient[i];
-        }
     }
 
     /// <summary>
@@ -623,7 +451,7 @@ public class VeRAAdapter<T> : LoRAAdapterBase<T>
         }
 
         int inputSize = GetInputShape()[0];
-        int outputSize = GetOutputShape()[0];
+        int outputSize = GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0];
         int rank = _scalingVectorB.Length;
 
         // Compute VeRA weight contribution: d * B * A * b * scaling

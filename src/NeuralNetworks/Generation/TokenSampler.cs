@@ -49,40 +49,7 @@ internal static class TokenSampler<T>
         if (options.IsGreedy) return ArgMax(logits);
 
         int n = logits.Length;
-        // Temperature-scaled logits in double space (sampling returns an index, so no T output).
-        var scaled = new double[n];
-        for (int i = 0; i < n; i++) scaled[i] = NumOps.ToDouble(logits[i]) / options.Temperature;
-
-        // Mask = "is this token a candidate". Top-k and top-p both narrow it.
-        var keep = new bool[n];
-        for (int i = 0; i < n; i++) keep[i] = true;
-
-        int topK = options.TopK;
-        if (topK > 0 && topK < n)
-        {
-            // Keep the topK highest-scaled logits.
-            var order = Enumerable.Range(0, n).OrderByDescending(i => scaled[i]).ToArray();
-            for (int r = topK; r < n; r++) keep[order[r]] = false;
-        }
-
-        // Softmax over the currently-kept set (numerically stable).
-        var probs = Softmax(scaled, keep);
-
-        double topP = options.TopP;
-        if (topP > 0.0 && topP < 1.0)
-        {
-            // Nucleus: keep the smallest high-prob set whose cumulative prob ≥ topP.
-            var order = Enumerable.Range(0, n).Where(i => keep[i]).OrderByDescending(i => probs[i]).ToArray();
-            double cum = 0.0;
-            int cutoff = order.Length; // default: keep all
-            for (int r = 0; r < order.Length; r++)
-            {
-                cum += probs[order[r]];
-                if (cum >= topP) { cutoff = r + 1; break; }
-            }
-            for (int r = cutoff; r < order.Length; r++) keep[order[r]] = false;
-            probs = Softmax(scaled, keep); // renormalise over the nucleus
-        }
+        var (probs, keep) = BuildProbabilityDistribution(logits, options);
 
         // Draw u in [0,1) and walk the cumulative distribution over the kept tokens.
         double u = (rng ?? ResolveRng(options)).NextDouble();
@@ -97,6 +64,67 @@ internal static class TokenSampler<T>
         }
         // Floating-point slack: return the last kept token (probs sum to ~1).
         return last >= 0 ? last : ArgMax(logits);
+    }
+
+    /// <summary>
+    /// Returns one token's probability under the exact temperature/top-k/top-p distribution used
+    /// by <see cref="Sample(Vector{T}, SamplingOptions, Random?)"/>.
+    /// </summary>
+    /// <remarks>
+    /// Generation algorithms such as Bark use an EOS probability threshold in addition to the
+    /// sampled token. Keeping that calculation here prevents model-specific softmax/filter logic
+    /// from drifting away from the shared sampler.
+    /// </remarks>
+    internal static double ProbabilityOf(Vector<T> logits, SamplingOptions options, int tokenIndex)
+    {
+        if (logits is null) throw new ArgumentNullException(nameof(logits));
+        if (options is null) throw new ArgumentNullException(nameof(options));
+        if (tokenIndex < 0 || tokenIndex >= logits.Length)
+            throw new ArgumentOutOfRangeException(nameof(tokenIndex));
+        if (logits.Length == 0) throw new ArgumentException("logits must be non-empty.", nameof(logits));
+        if (options.IsGreedy) return ArgMax(logits) == tokenIndex ? 1.0 : 0.0;
+        return BuildProbabilityDistribution(logits, options).Probabilities[tokenIndex];
+    }
+
+    private static (double[] Probabilities, bool[] Keep) BuildProbabilityDistribution(
+        Vector<T> logits,
+        SamplingOptions options)
+    {
+        int n = logits.Length;
+        var scaled = new double[n];
+        for (int i = 0; i < n; i++) scaled[i] = NumOps.ToDouble(logits[i]) / options.Temperature;
+
+        var keep = new bool[n];
+        for (int i = 0; i < n; i++) keep[i] = true;
+
+        int topK = options.TopK;
+        if (topK > 0 && topK < n)
+        {
+            var order = Enumerable.Range(0, n).OrderByDescending(i => scaled[i]).ToArray();
+            for (int r = topK; r < n; r++) keep[order[r]] = false;
+        }
+
+        var probs = Softmax(scaled, keep);
+        double topP = options.TopP;
+        if (topP > 0.0 && topP < 1.0)
+        {
+            var order = Enumerable.Range(0, n).Where(i => keep[i]).OrderByDescending(i => probs[i]).ToArray();
+            double cumulative = 0.0;
+            int cutoff = order.Length;
+            for (int rank = 0; rank < order.Length; rank++)
+            {
+                cumulative += probs[order[rank]];
+                if (cumulative >= topP)
+                {
+                    cutoff = rank + 1;
+                    break;
+                }
+            }
+            for (int rank = cutoff; rank < order.Length; rank++) keep[order[rank]] = false;
+            probs = Softmax(scaled, keep);
+        }
+
+        return (probs, keep);
     }
 
     private static double[] Softmax(double[] scaled, bool[] keep)

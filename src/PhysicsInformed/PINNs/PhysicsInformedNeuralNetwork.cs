@@ -89,6 +89,10 @@ namespace AiDotNet.PhysicsInformed.PINNs
     [ModelComplexity(ModelComplexity.High)]
     [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     [ResearchPaper("Physics-informed neural networks: A deep learning framework for solving forward and inverse problems involving nonlinear partial differential equations", "https://doi.org/10.1016/j.jcp.2018.10.045", Year = 2019, Authors = "M. Raissi, P. Perdikaris, G.E. Karniadakis")]
+    [TensorLayout(TensorAxis.Batch, TensorAxis.Features,
+        Direction = TensorLayoutDirection.Input, BatchOptional = true)]
+    [TensorLayout(TensorAxis.Batch, TensorAxis.Features,
+        Direction = TensorLayoutDirection.Output, BatchOptional = true)]
     public class PhysicsInformedNeuralNetwork<T> : NeuralNetworkBase<T>
     {
         private readonly PhysicsInformedNeuralNetworkOptions _options;
@@ -589,25 +593,8 @@ namespace AiDotNet.PhysicsInformed.PINNs
             }
         }
 
-        /// <summary>
-        /// Updates the network parameters from a flattened vector.
-        /// </summary>
-        /// <param name="parameters">Parameter vector.</param>
-        public override void UpdateParameters(Vector<T> parameters)
-        {
-            int index = 0;
-            foreach (var layer in Layers)
-            {
-                int layerParameterCount = checked((int)layer.ParameterCount);
-                if (layerParameterCount > 0)
-                {
-                    Vector<T> layerParameters = parameters.GetSubVector(index, layerParameterCount);
-                    layer.UpdateParameters(layerParameters);
-                    index += layerParameterCount;
-                }
-            }
-        }
-
+    // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
+    // exactly the same enumeration, so this said nothing the base does not already say.
         /// <summary>
         /// Performs a basic supervised training step using MSE loss.
         /// </summary>

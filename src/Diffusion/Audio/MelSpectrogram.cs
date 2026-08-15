@@ -185,28 +185,30 @@ public class MelSpectrogram<T>
         if (_fMax > sampleRate / 2.0)
             throw new ArgumentOutOfRangeException(nameof(fMax), "fMax cannot exceed Nyquist frequency.");
 
-        // Store FFT parameters for direct GPU operations
-        _nFft = nFft;
-        _hopLength = hopLength ?? nFft / 4;
-
-        // Initialize STFT (uses HanningWindow by default - industry standard for audio)
+        // Initialize STFT first so every path shares its exact FFT geometry. Arbitrary FFT
+        // lengths are supported, including Whisper's paper-faithful 400-sample window.
         _stft = new ShortTimeFourierTransform<T>(
             nFft: nFft,
             hopLength: hopLength,
             windowFunction: windowFunction);
 
-        // Create Mel filterbank
-        _melFilterbank = CreateMelFilterbank(nMels, nFft, sampleRate, _fMin, _fMax);
+        // Store FFT parameters for direct GPU operations
+        _nFft = _stft.NFft;
+        // Hop is derived from the REQUESTED nFft, matching librosa's default of nFft/4.
+        _hopLength = hopLength ?? nFft / 4;
+
+        // Create Mel filterbank against the effective FFT size
+        _melFilterbank = CreateMelFilterbank(nMels, _nFft, sampleRate, _fMin, _fMax);
 
         // Create window tensor for direct IEngine operations
         var window = windowFunction ?? new HanningWindow<T>();
-        var windowVector = window.Create(nFft);
-        var windowData = new T[nFft];
-        for (int i = 0; i < nFft; i++)
+        var windowVector = window.Create(_nFft);
+        var windowData = new T[_nFft];
+        for (int i = 0; i < _nFft; i++)
         {
             windowData[i] = windowVector[i];
         }
-        _windowTensor = new Tensor<T>(windowData, new[] { nFft });
+        _windowTensor = new Tensor<T>(windowData, new[] { _nFft });
     }
 
     /// <summary>
@@ -256,8 +258,8 @@ public class MelSpectrogram<T>
     /// <summary>
     /// Computes Mel spectrogram from a pre-computed power spectrogram.
     /// </summary>
-    /// <param name="powerSpectrogram">Power spectrogram [numFrames, numFreqs].</param>
-    /// <returns>Mel spectrogram tensor [numFrames, nMels].</returns>
+    /// <param name="powerSpectrogram">Power spectrogram [..., numFrames, numFreqs].</param>
+    /// <returns>Mel spectrogram tensor [..., numFrames, nMels].</returns>
     public Tensor<T> FromPowerSpectrogram(Tensor<T> powerSpectrogram)
     {
         var melSpec = ApplyMelFilterbank(powerSpectrogram);
@@ -275,8 +277,15 @@ public class MelSpectrogram<T>
     /// </summary>
     private Tensor<T> ApplyMelFilterbank(Tensor<T> powerSpec)
     {
-        int numFrames = powerSpec.Shape[0];
-        int numFreqs = powerSpec.Shape.Length > 1 ? powerSpec.Shape[1] : powerSpec.Data.Length;
+        if (powerSpec.Rank < 2)
+        {
+            throw new ArgumentException(
+                $"Power spectrogram must have shape [..., frames, frequencies], got rank {powerSpec.Rank}.",
+                nameof(powerSpec));
+        }
+
+        int numFrames = powerSpec.Shape[^2];
+        int numFreqs = powerSpec.Shape[^1];
         int nMels = _melFilterbank.Shape[0];
         int filterFreqs = _melFilterbank.Shape[1];
 
@@ -287,21 +296,35 @@ public class MelSpectrogram<T>
                 $"Power spectrogram has {numFreqs} frequency bins but filterbank expects {filterFreqs}.");
         }
 
-        var melSpec = new Tensor<T>(new[] { numFrames, nMels });
+        int leadingSize = 1;
+        for (int axis = 0; axis < powerSpec.Rank - 2; axis++)
+            leadingSize *= powerSpec.Shape[axis];
 
-        // Matrix multiplication: melSpec = powerSpec @ melFilterbank.T
-        for (int frame = 0; frame < numFrames; frame++)
+        var outputShape = powerSpec.Shape.ToArray();
+        outputShape[^1] = nMels;
+        var melSpec = new Tensor<T>(outputShape);
+
+        // Batched matrix multiplication: melSpec = powerSpec @ melFilterbank.T.
+        // Treat every leading axis as an independent spectrogram and preserve it.
+        for (int leading = 0; leading < leadingSize; leading++)
         {
-            for (int mel = 0; mel < nMels; mel++)
+            for (int frame = 0; frame < numFrames; frame++)
             {
-                T sum = NumOps.Zero;
-                for (int f = 0; f < numFreqs; f++)
+                int powerOffset = (leading * numFrames + frame) * numFreqs;
+                int melOffset = (leading * numFrames + frame) * nMels;
+                for (int mel = 0; mel < nMels; mel++)
                 {
-                    var power = powerSpec.Data.Span[frame * numFreqs + f];
-                    var filter = _melFilterbank.Data.Span[mel * filterFreqs + f];
-                    sum = NumOps.Add(sum, NumOps.Multiply(power, filter));
+                    T sum = NumOps.Zero;
+                    int filterOffset = mel * filterFreqs;
+                    for (int f = 0; f < numFreqs; f++)
+                    {
+                        var power = powerSpec.Data.Span[powerOffset + f];
+                        var filter = _melFilterbank.Data.Span[filterOffset + f];
+                        sum = NumOps.Add(sum, NumOps.Multiply(power, filter));
+                    }
+
+                    melSpec.Data.Span[melOffset + mel] = sum;
                 }
-                melSpec.Data.Span[frame * nMels + mel] = sum;
             }
         }
 

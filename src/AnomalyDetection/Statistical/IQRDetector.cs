@@ -40,10 +40,15 @@ namespace AiDotNet.AnomalyDetection.Statistical;
 public class IQRDetector<T> : AnomalyDetectorBase<T>
 {
     private readonly double _multiplier;
+    [Buffer]
     private Vector<T>? _q1;
+    [Buffer]
     private Vector<T>? _q3;
+    [Buffer]
     private Vector<T>? _iqr;
+    [Buffer]
     private Vector<T>? _lowerBounds;
+    [Buffer]
     private Vector<T>? _upperBounds;
 
     /// <summary>

@@ -87,7 +87,7 @@ namespace AiDotNet.NeuralNetworks.SyntheticData;
     "https://arxiv.org/abs/1906.09338",
     Year = 2019,
     Authors = "James Jordon, Jinsung Yoon, Mihaela van der Schaar")]
-public class PATEGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerator<T>
+public partial class PATEGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>, ISyntheticTabularGenerator<T>
 {
     private readonly PATEGANOptions<T> _options;
     // One dedicated optimizer per sub-network (Jordon et al. 2019 PATE-GAN trains
@@ -976,27 +976,7 @@ public class PATEGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenera
         }
     }
 
-    /// <inheritdoc />
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        int offset = 0;
-        foreach (var layer in Layers)
-        {
-            var layerParams = layer.GetParameters();
-            int count = layerParams.Length;
-            if (offset + count <= parameters.Length)
-            {
-                var newParams = new Vector<T>(count);
-                for (int i = 0; i < count; i++)
-                {
-                    newParams[i] = parameters[offset + i];
-                }
-                layer.SetParameters(newParams);
-                offset += count;
-            }
-        }
-    }
-
+    // UpdateParameters restated the base verbatim; ModelBase routes it to SetParameters.
     /// <inheritdoc />
     protected override void SerializeNetworkSpecificData(System.IO.BinaryWriter writer)
     {

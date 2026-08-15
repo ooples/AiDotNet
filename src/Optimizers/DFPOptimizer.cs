@@ -333,11 +333,19 @@ public class DFPOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TI
     /// </remarks>
     public override Vector<T> UpdateParameters(Vector<T> parameters, Vector<T> gradient)
     {
+        if (parameters.Length != gradient.Length)
+        {
+            throw new ArgumentException(
+                $"Parameter vector length ({parameters.Length}) must match gradient vector length ({gradient.Length}).",
+                nameof(gradient));
+        }
+
         // Initialize inverse Hessian as identity on first call
         if (_inverseHessian.Rows == 0 || _inverseHessian.Rows != parameters.Length)
         {
             _inverseHessian = Matrix<T>.CreateIdentity(parameters.Length);
             _previousGradient = Vector<T>.Empty();
+            _previousParameters = null;
         }
 
         // Update inverse Hessian if we have previous state
@@ -374,17 +382,29 @@ public class DFPOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TI
 
         // Compute search direction: d = -H * g
         var direction = _inverseHessian.Multiply(gradient);
-        direction = (Vector<T>)Engine.Multiply(direction, NumOps.Negate(NumOps.One));
-
-        // Update parameters: x_{k+1} = x_k + lr * d
-        var scaledDirection = (Vector<T>)Engine.Multiply(direction, _adaptiveLearningRate);
-        var newParameters = (Vector<T>)Engine.Add(parameters, scaledDirection);
+        var directionSpan = direction.AsWritableSpan();
+        var parameterSpan = parameters.AsSpan();
+        for (int i = 0; i < directionSpan.Length; i++)
+        {
+            T scaledDirection = NumOps.Multiply(
+                NumOps.Negate(directionSpan[i]),
+                _adaptiveLearningRate);
+            directionSpan[i] = NumOps.Add(parameterSpan[i], scaledDirection);
+        }
 
         // Store state for next iteration
-        _previousParameters = new Vector<T>(parameters);
-        _previousGradient = new Vector<T>(gradient);
+        if (_previousParameters is null || _previousParameters.Length != parameters.Length)
+        {
+            _previousParameters = new Vector<T>(parameters.Length, skipZeroInit: true);
+        }
+        if (_previousGradient.Length != parameters.Length)
+        {
+            _previousGradient = new Vector<T>(parameters.Length, skipZeroInit: true);
+        }
+        parameterSpan.CopyTo(_previousParameters.AsWritableSpan());
+        gradient.AsSpan().CopyTo(_previousGradient.AsWritableSpan());
 
-        return newParameters;
+        return direction;
     }
 
     /// <summary>

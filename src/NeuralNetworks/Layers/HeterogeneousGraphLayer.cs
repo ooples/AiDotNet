@@ -96,8 +96,47 @@ public partial class HeterogeneousGraphMetadata
     TestInputShape = "1, 4, 8",
     TestConstructorArgs = "new AiDotNet.NeuralNetworks.Layers.HeterogeneousGraphMetadata { NodeTypes = new[] { \"A\" }, EdgeTypes = new[] { \"e\" }, NodeTypeFeatures = new System.Collections.Generic.Dictionary<string, int> { [\"A\"] = 8 }, EdgeTypeSchema = new System.Collections.Generic.Dictionary<string, (string, string)> { [\"e\"] = (\"A\", \"A\") } }, 4",
     TestSetupCode = "var t = (AiDotNet.NeuralNetworks.Layers.HeterogeneousGraphLayer<double>)layer; var adj = new AiDotNet.Tensors.LinearAlgebra.Tensor<double>(new[] { 4, 4 }); for (int i = 0; i < 4; i++) { adj[i, i] = 1.0; if (i > 0) adj[i, i-1] = 1.0; } t.SetAdjacencyMatrices(new System.Collections.Generic.Dictionary<string, AiDotNet.Tensors.LinearAlgebra.Tensor<double>> { [\"e\"] = adj }); t.SetNodeTypeMap(new System.Collections.Generic.Dictionary<int, string> { [0] = \"A\", [1] = \"A\", [2] = \"A\", [3] = \"A\" });")]
-public partial class HeterogeneousGraphLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
+// Rank 3 - "Already 3D [batchSize, numNodes, features]", the branch that needs no reshape at all - is
+// both what the forward treats as canonical and the shape [LayerProperty(TestInputShape = "1, 4, 8")]
+// exercises. The rank-1 and rank-2 forms are handled by adding axes, and rank > 3 flattens leading axes
+// into an anonymous batch; none of those node counts can be checked against the separately-installed
+// per-edge-type adjacency matrices, so they are left undeclared.
+//
+// The node axis is TensorAxis.Other: nodes here are typed graph vertices, not a sequence or a spatial
+// extent, and their ordering is meaningful only as an index into the installed node-type map.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Other, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Input,
+    Note = "Typed node features; the node axis is indexed by the map installed via SetNodeTypeMap.")]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Other, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Output)]
+[AutoParameters]
+public partial class HeterogeneousGraphLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>, IShapeContract
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// HAND-WRITTEN because the emitted width is one constructor argument and NOT a sum over edge types.
+    /// That is worth stating rather than assuming: a relational layer running a separate projection per
+    /// edge type looks as though it ought to widen, but the accumulator is allocated once as
+    /// <c>[batchSize, processNumNodes, _outputFeatures]</c> and every edge type is ADDED into that same
+    /// buffer, so the width stays <c>_outputFeatures</c> however many edge types the metadata declares.
+    /// </para>
+    /// <para>
+    /// The node axis is Same: message passing rewrites what each node holds, never how many there are.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        if (inputRank != 3 || _outputFeatures <= 0) return null;
+
+        return new[]
+        {
+            new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+            new OutputAxisContract(TensorAxis.Other, AxisRelation.Same(TensorAxis.Other)),
+            new OutputAxisContract(TensorAxis.Features, AxisRelation.Fixed(_outputFeatures)),
+        };
+    }
+
     private readonly HeterogeneousGraphMetadata _metadata;
     private readonly int _outputFeatures;
     private readonly bool _useBasis;
@@ -353,7 +392,7 @@ public partial class HeterogeneousGraphLayer<T> : LayerBase<T>, IGraphConvolutio
     }
 
     /// <inheritdoc/>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         if (_adjacencyMatrices == null || _nodeTypeMap == null)
         {
@@ -1177,46 +1216,6 @@ public partial class HeterogeneousGraphLayer<T> : LayerBase<T>, IGraphConvolutio
             if (index < parameters.Count)
             {
                 _biases[nodeType] = parameters[index++];
-            }
-        }
-    }
-
-    /// <inheritdoc/>
-    public override long ParameterCount => GetParameterTensors().Sum(t => t.Length);
-
-    /// <inheritdoc/>
-    public override Vector<T> GetParameters()
-    {
-        // Flatten all tensors into a single vector
-        var tensorParams = GetParameterTensors();
-        var allValues = new List<T>();
-
-        foreach (var tensor in tensorParams)
-        {
-            for (int i = 0; i < tensor.Length; i++)
-            {
-                allValues.Add(tensor.GetFlat(i));
-            }
-        }
-
-        return new Vector<T>(allValues.ToArray());
-    }
-
-    /// <inheritdoc/>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        // Reconstruct tensors from flattened vector
-        var tensorParams = GetParameterTensors();
-        int index = 0;
-
-        foreach (var tensor in tensorParams)
-        {
-            for (int i = 0; i < tensor.Length; i++)
-            {
-                if (index < parameters.Length)
-                {
-                    tensor[i] = parameters[index++];
-                }
             }
         }
     }

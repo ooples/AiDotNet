@@ -215,7 +215,7 @@ public class VITS<T> : TtsModelBase<T>, IEndToEndTts<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expected);
+            TrainWithTape(input, expected, _optimizer);
         }
         finally
         {
@@ -224,19 +224,10 @@ public class VITS<T> : TtsModelBase<T>, IEndToEndTts<T>
     }
 
     /// <inheritdoc />
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        if (!_useNativeMode)
-            throw new NotSupportedException("Cannot update parameters in ONNX mode.");
-        int idx = 0;
-        foreach (var l in Layers)
-        {
-            int c = checked((int)l.ParameterCount);
-            l.UpdateParameters(parameters.Slice(idx, c));
-            idx += c;
-        }
-    }
-
+    /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
+    /// write on every parameter surface, so the guard is stated once here instead of being
+    /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
+    protected override bool SupportsParameterMutation => _useNativeMode;
     /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {

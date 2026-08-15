@@ -76,6 +76,11 @@ public class LBFGSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
     private Vector<T>? _lbfgsPreviousGradient;
 
     /// <summary>
+    /// Reused scalar coefficients for the two-loop recursion.
+    /// </summary>
+    private T[] _twoLoopAlphas = Array.Empty<T>();
+
+    /// <summary>
     /// Initializes a new instance of the LBFGSOptimizer class.
     /// </summary>
     /// <param name="model">The model to optimize.</param>
@@ -196,37 +201,67 @@ public class LBFGSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
         if (_s.Count == 0 || _y.Count == 0)
         {
             // First iteration: direction = -gradient
-            return (Vector<T>)Engine.Multiply(gradient, NumOps.Negate(NumOps.One));
+            return CreateNegativeGradient(gradient);
         }
 
         var q = new Vector<T>(gradient);
-        var alphas = new T[_s.Count];
+        if (_twoLoopAlphas.Length < _s.Count)
+        {
+            _twoLoopAlphas = new T[_s.Count];
+        }
 
         // First loop (backward)
         for (int i = _s.Count - 1; i >= 0; i--)
         {
-            alphas[i] = NumOps.Divide(_s[i].DotProduct(q), _y[i].DotProduct(_s[i]));
-            // Vectorized: q = q - alpha * y[i]
-            var alphaTimesY = (Vector<T>)Engine.Multiply(_y[i], alphas[i]);
-            q = (Vector<T>)Engine.Subtract(q, alphaTimesY);
+            _twoLoopAlphas[i] = NumOps.Divide(_s[i].DotProduct(q), _y[i].DotProduct(_s[i]));
+            var qSpan = q.AsWritableSpan();
+            var ySpan = _y[i].AsSpan();
+            T alpha = _twoLoopAlphas[i];
+            for (int j = 0; j < qSpan.Length; j++)
+            {
+                qSpan[j] = NumOps.Subtract(qSpan[j], NumOps.Multiply(alpha, ySpan[j]));
+            }
         }
 
         var gamma = NumOps.Divide(_s[_s.Count - 1].DotProduct(_y[_s.Count - 1]), _y[_s.Count - 1].DotProduct(_y[_s.Count - 1]));
         // Vectorized: z = gamma * q
-        var z = (Vector<T>)Engine.Multiply(q, gamma);
+        var z = q;
+        var zSpan = z.AsWritableSpan();
+        for (int j = 0; j < zSpan.Length; j++)
+        {
+            zSpan[j] = NumOps.Multiply(zSpan[j], gamma);
+        }
 
         // Second loop (forward)
         for (int i = 0; i < _s.Count; i++)
         {
             var beta = NumOps.Divide(_y[i].DotProduct(z), _y[i].DotProduct(_s[i]));
-            var alphaMinusBeta = NumOps.Subtract(alphas[i], beta);
-            // Vectorized: z = z + (alpha - beta) * s[i]
-            var scaledS = (Vector<T>)Engine.Multiply(_s[i], alphaMinusBeta);
-            z = (Vector<T>)Engine.Add(z, scaledS);
+            var alphaMinusBeta = NumOps.Subtract(_twoLoopAlphas[i], beta);
+            var sSpan = _s[i].AsSpan();
+            for (int j = 0; j < zSpan.Length; j++)
+            {
+                zSpan[j] = NumOps.Add(zSpan[j], NumOps.Multiply(alphaMinusBeta, sSpan[j]));
+            }
         }
 
         // Vectorized negation
-        return (Vector<T>)Engine.Multiply(z, NumOps.Negate(NumOps.One));
+        for (int j = 0; j < zSpan.Length; j++)
+        {
+            zSpan[j] = NumOps.Negate(zSpan[j]);
+        }
+        return z;
+    }
+
+    private Vector<T> CreateNegativeGradient(Vector<T> gradient)
+    {
+        var direction = new Vector<T>(gradient.Length, skipZeroInit: true);
+        var gradientSpan = gradient.AsSpan();
+        var directionSpan = direction.AsWritableSpan();
+        for (int i = 0; i < directionSpan.Length; i++)
+        {
+            directionSpan[i] = NumOps.Negate(gradientSpan[i]);
+        }
+        return direction;
     }
 
     /// <summary>
@@ -335,23 +370,67 @@ public class LBFGSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
     /// <returns>The updated parameter vector.</returns>
     public override Vector<T> UpdateParameters(Vector<T> parameters, Vector<T> gradient)
     {
+        if (parameters.Length != gradient.Length)
+        {
+            throw new ArgumentException(
+                $"Parameter vector length ({parameters.Length}) must match gradient vector length ({gradient.Length}).",
+                nameof(gradient));
+        }
+
+        if ((_lbfgsPreviousParameters is not null && _lbfgsPreviousParameters.Length != parameters.Length)
+            || (_lbfgsPreviousGradient is not null && _lbfgsPreviousGradient.Length != parameters.Length)
+            || (_s.Count > 0 && _s[0].Length != parameters.Length)
+            || (_y.Count > 0 && _y[0].Length != parameters.Length))
+        {
+            _s.Clear();
+            _y.Clear();
+            _lbfgsPreviousParameters = null;
+            _lbfgsPreviousGradient = null;
+            _iteration = 0;
+        }
+
         _iteration++;
 
         // Update L-BFGS memory with the difference between current and previous gradients/parameters
         if (_lbfgsPreviousParameters is not null && _lbfgsPreviousGradient is not null)
         {
-            var s = (Vector<T>)Engine.Subtract(parameters, _lbfgsPreviousParameters);
-            var y = (Vector<T>)Engine.Subtract(gradient, _lbfgsPreviousGradient);
-
             // Only add to memory if curvature condition is satisfied (s^T y > 0)
             // L-BFGS requires positive curvature to maintain positive-definite Hessian approximation
-            var sDotY = s.DotProduct(y);
+            T sDotY = NumOps.Zero;
+            var currentParameterSpan = parameters.AsSpan();
+            var currentGradientSpan = gradient.AsSpan();
+            var previousParameterSpan = _lbfgsPreviousParameters.AsSpan();
+            var previousGradientSpan = _lbfgsPreviousGradient.AsSpan();
+            for (int i = 0; i < currentParameterSpan.Length; i++)
+            {
+                T sValue = NumOps.Subtract(currentParameterSpan[i], previousParameterSpan[i]);
+                T yValue = NumOps.Subtract(currentGradientSpan[i], previousGradientSpan[i]);
+                sDotY = NumOps.Add(sDotY, NumOps.Multiply(sValue, yValue));
+            }
+
             if (NumOps.GreaterThan(sDotY, NumOps.FromDouble(1e-10)))
             {
+                Vector<T> s;
+                Vector<T> y;
                 if (_s.Count >= _options.MemorySize)
                 {
+                    s = _s[0];
+                    y = _y[0];
                     _s.RemoveAt(0);
                     _y.RemoveAt(0);
+                }
+                else
+                {
+                    s = new Vector<T>(parameters.Length, skipZeroInit: true);
+                    y = new Vector<T>(parameters.Length, skipZeroInit: true);
+                }
+
+                var sSpan = s.AsWritableSpan();
+                var ySpan = y.AsWritableSpan();
+                for (int i = 0; i < sSpan.Length; i++)
+                {
+                    sSpan[i] = NumOps.Subtract(currentParameterSpan[i], previousParameterSpan[i]);
+                    ySpan[i] = NumOps.Subtract(currentGradientSpan[i], previousGradientSpan[i]);
                 }
 
                 _s.Add(s);
@@ -362,17 +441,26 @@ public class LBFGSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
         // Calculate the L-BFGS search direction using two-loop recursion
         var direction = CalculateDirection(gradient);
 
-        // Apply learning rate to the direction
-        var scaledDirection = (Vector<T>)Engine.Multiply(direction, CurrentLearningRate);
-
-        // Update parameters: new_params = params + direction (direction is already negated in CalculateDirection)
-        var newParameters = (Vector<T>)Engine.Add(parameters, scaledDirection);
+        // Transform the direction allocation into the returned parameter vector.
+        var directionSpan = direction.AsWritableSpan();
+        var parameterSpan = parameters.AsSpan();
+        for (int i = 0; i < directionSpan.Length; i++)
+        {
+            directionSpan[i] = NumOps.Add(
+                parameterSpan[i],
+                NumOps.Multiply(directionSpan[i], CurrentLearningRate));
+        }
 
         // Store current parameters and gradient for next iteration
-        _lbfgsPreviousParameters = new Vector<T>(parameters);
-        _lbfgsPreviousGradient = new Vector<T>(gradient);
+        if (_lbfgsPreviousParameters is null || _lbfgsPreviousParameters.Length != parameters.Length)
+        {
+            _lbfgsPreviousParameters = new Vector<T>(parameters.Length, skipZeroInit: true);
+            _lbfgsPreviousGradient = new Vector<T>(parameters.Length, skipZeroInit: true);
+        }
+        parameterSpan.CopyTo(_lbfgsPreviousParameters.AsWritableSpan());
+        gradient.AsSpan().CopyTo(_lbfgsPreviousGradient!.AsWritableSpan());
 
-        return newParameters;
+        return direction;
     }
 
     /// <summary>

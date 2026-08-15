@@ -88,7 +88,7 @@ namespace AiDotNet.MetaLearning.Algorithms;
     Authors = "Johannes von Oswald, Christian Henning, Benjamin F. Grewe, Joao Sacramento")]
 [ComponentType(ComponentType.MetaLearner)]
 [PipelineStage(PipelineStage.Training)]
-public class HyperMAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
+public partial class HyperMAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
     private IParameterizable<T, TInput, TOutput>? _cachedParamModel;
     private IParameterizable<T, TInput, TOutput> ParamModel => _cachedParamModel ??= InterfaceGuard.Parameterizable(MetaModel);

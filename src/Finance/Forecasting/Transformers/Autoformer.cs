@@ -66,7 +66,7 @@ namespace AiDotNet.Finance.Forecasting.Transformers;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Autoformer: Decomposition Transformers with Auto-Correlation for Long-Term Series Forecasting", "https://arxiv.org/abs/2106.13008", Year = 2021, Authors = "Haixu Wu, Jiehui Xu, Jianmin Wang, Mingsheng Long")]
-public class Autoformer<T> : ForecastingModelBase<T>
+public partial class Autoformer<T> : ForecastingModelBase<T>
 {
     #region Execution Mode
 
@@ -108,21 +108,25 @@ public class Autoformer<T> : ForecastingModelBase<T>
     /// <summary>
     /// Instance normalization mean (for RevIN).
     /// </summary>
+    [Scratch]
     private Tensor<T>? _instanceMean;
 
     /// <summary>
     /// Instance normalization standard deviation (for RevIN).
     /// </summary>
+    [Scratch]
     private Tensor<T>? _instanceStd;
 
     /// <summary>
     /// Trend component from decomposition.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _trendComponent;
 
     /// <summary>
     /// Seasonal component from decomposition.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _seasonalComponent;
 
     #endregion
@@ -219,7 +223,7 @@ public class Autoformer<T> : ForecastingModelBase<T>
         OnnxSession = new InferenceSession(onnxModelPath);
         OnnxModelPath = onnxModelPath;
 
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? CreateDefaultOptimizer(options);
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
 
         _sequenceLength = options.LookbackWindow;
@@ -263,7 +267,7 @@ public class Autoformer<T> : ForecastingModelBase<T>
         OnnxSession = null;
         OnnxModelPath = null;
 
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? CreateDefaultOptimizer(options);
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
 
         _sequenceLength = options.LookbackWindow;
@@ -285,6 +289,19 @@ public class Autoformer<T> : ForecastingModelBase<T>
     #endregion
 
     #region Initialization
+
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreateDefaultOptimizer(
+        AutoformerOptions<T> options)
+    {
+        return new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = options.LearningRate,
+                EnableGradientClipping = true,
+                MaxGradientNorm = 1.0
+            });
+    }
 
     /// <summary>
     /// Initializes the layers for native mode operation.
@@ -424,27 +441,21 @@ public class Autoformer<T> : ForecastingModelBase<T>
         return Forward(input);
     }
 
+    /// <summary>
+    /// Autoformer's forward mutates per-input RevIN statistics and progressive
+    /// trend/seasonal decomposition state. Those values are data-dependent and
+    /// cannot be captured once in a static compiled plan and safely replayed
+    /// for later training inputs. Use the eager tape path so each step records
+    /// the current decomposition and applies finite-gradient validation and
+    /// clipping before Adam updates the live parameters.
+    /// </summary>
+    protected override bool SupportsFusedCompiledTraining => false;
+
     /// <inheritdoc/>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the Autoformer model, UpdateParameters updates internal parameters or state. This keeps the Autoformer architecture aligned with the latest values.
-    /// </para>
-    /// </remarks>
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        if (parameters is null)
-            throw new ArgumentNullException(nameof(parameters));
+    protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? TrainingOptimizer => _optimizer;
 
-        int offset = 0;
-        foreach (var layer in Layers)
-        {
-            var layerParams = layer.GetParameters();
-            var newParams = parameters.Slice(offset, layerParams.Length);
-            layer.SetParameters(newParams);
-            offset += layerParams.Length;
-        }
-    }
-
+    // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
+    // exactly the same enumeration, so this said nothing the base does not already say.
     /// <inheritdoc/>
     /// <remarks>
     /// <para>
@@ -481,22 +492,11 @@ public class Autoformer<T> : ForecastingModelBase<T>
     /// </remarks>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
-        var options = new AutoformerOptions<T>
-        {
-            LookbackWindow = _sequenceLength,
-            ForecastHorizon = _predictionHorizon,
-            NumEncoderLayers = _numEncoderLayers,
-            NumDecoderLayers = _numDecoderLayers,
-            NumAttentionHeads = _numHeads,
-            EmbeddingDim = _modelDimension,
-            MovingAverageKernel = _movingAverageKernel,
-            AutoCorrelationFactor = _topKFactor,
-            DropoutRate = _dropout
-        };
+        var options = new AutoformerOptions<T>(_options);
 
         return _useNativeMode
-            ? new Autoformer<T>(Architecture, options, _optimizer, _lossFunction)
-            : new Autoformer<T>(Architecture, OnnxModelPath!, options, _optimizer, _lossFunction);
+            ? new Autoformer<T>(Architecture, options, optimizer: null, lossFunction: _lossFunction)
+            : new Autoformer<T>(Architecture, OnnxModelPath!, options, optimizer: null, lossFunction: _lossFunction);
     }
 
     /// <inheritdoc/>
@@ -740,8 +740,18 @@ public class Autoformer<T> : ForecastingModelBase<T>
     /// </remarks>
     protected override Tensor<T> ForecastNative(Tensor<T> input, double[]? quantiles)
     {
-        SetTrainingMode(false);
-        return Forward(input);
+        bool wasTraining = IsTrainingMode;
+        if (wasTraining)
+            SetTrainingMode(false);
+        try
+        {
+            return Forward(input);
+        }
+        finally
+        {
+            if (wasTraining)
+                SetTrainingMode(true);
+        }
     }
 
     /// <summary>
@@ -818,31 +828,34 @@ public class Autoformer<T> : ForecastingModelBase<T>
     /// </remarks>
     private Tensor<T> MovingAverage(Tensor<T> input, int kernelSize)
     {
-        var result = new Tensor<T>(input._shape);
+        if (input.Rank != 3)
+            throw new ArgumentException("Autoformer moving average expects [batch, time, features].", nameof(input));
+
         int seqLen = input.Shape[1];
         int halfKernel = kernelSize / 2;
+        int window = (2 * halfKernel) + 1;
 
-        for (int b = 0; b < input.Shape[0]; b++)
+        // TensorAvgPool1D consumes [batch, channels, width], while Autoformer carries
+        // [batch, time, features]. Zero-pad the time axis, pool every position, and
+        // compensate at the boundaries so the divisor remains the number of real samples
+        // (the exact historical forward contract). Every transformation is an IEngine op,
+        // keeping the trend branch connected to the gradient tape.
+        var channelsFirst = Engine.TensorPermute(input, new[] { 0, 2, 1 });
+        var padded = Engine.TensorConstantPad(
+            channelsFirst, new[] { halfKernel, halfKernel }, NumOps.Zero);
+        var averaged = Engine.TensorAvgPool1D(padded, window, stride: 1);
+
+        var boundaryScale = new Tensor<T>(new[] { 1, 1, seqLen });
+        for (int t = 0; t < seqLen; t++)
         {
-            for (int t = 0; t < seqLen; t++)
-            {
-                int start = Math.Max(0, t - halfKernel);
-                int end = Math.Min(seqLen, t + halfKernel + 1);
-                int count = end - start;
-
-                for (int f = 0; f < input.Shape[2]; f++)
-                {
-                    T sum = NumOps.Zero;
-                    for (int i = start; i < end; i++)
-                    {
-                        sum = NumOps.Add(sum, input[b, i, f]);
-                    }
-                    result[b, t, f] = NumOps.Divide(sum, NumOps.FromDouble(count));
-                }
-            }
+            int start = Math.Max(0, t - halfKernel);
+            int end = Math.Min(seqLen, t + halfKernel + 1);
+            boundaryScale[0, 0, t] = NumOps.FromDouble((double)window / (end - start));
         }
 
-        return result;
+        return Engine.TensorPermute(
+            Engine.TensorBroadcastMultiply(averaged, boundaryScale),
+            new[] { 0, 2, 1 });
     }
 
     /// <summary>

@@ -7,6 +7,8 @@ using AiDotNet.Validation;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 
+using AiDotNet.Models.Parameters;
+
 namespace AiDotNet.Classification.MultiLabel;
 
 /// <summary>
@@ -85,6 +87,13 @@ namespace AiDotNet.Classification.MultiLabel;
 [ResearchPaper("Learning multi-label scene classification", "https://doi.org/10.1016/j.patcog.2004.01.013", Year = 2004, Authors = "Matthew R. Boutell, Jiebo Luo, Xipeng Shen, Christopher M. Brown")]
 public class LabelPowerset<T> : MultiLabelClassifierBase<T>
 {
+
+    /// <inheritdoc />
+    /// <remarks>The single multi-class classifier this transformation trains over the powerset of label combinations. Registration remains null-tolerant before training creates the classifier.</remarks>
+    protected override void RegisterComponents()
+    {
+        RegisterParameterComponent(_classifier);
+    }
     #region Fields
 
     /// <summary>
@@ -478,26 +487,6 @@ public class LabelPowerset<T> : MultiLabelClassifierBase<T>
     #region Abstract Method Implementations
 
     /// <summary>
-    /// Gets all learnable parameters of the model as a single vector.
-    /// </summary>
-    /// <returns>The parameters from the underlying multi-class classifier.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Label Powerset has just one classifier, so this returns
-    /// that classifier's parameters.
-    /// </para>
-    /// </remarks>
-    public override Vector<T> GetParameters()
-    {
-        if (_classifier is null)
-        {
-            return new Vector<T>(0);
-        }
-
-        return ((IParameterizable<T, Matrix<T>, Vector<T>>)_classifier).GetParameters();
-    }
-
-    /// <summary>
     /// Creates a new instance of the model with the specified parameters.
     /// </summary>
     /// <param name="parameters">The parameters to use.</param>
@@ -513,20 +502,6 @@ public class LabelPowerset<T> : MultiLabelClassifierBase<T>
         var clone = (LabelPowerset<T>)Clone();
         clone.SetParameters(parameters);
         return clone;
-    }
-
-    /// <summary>
-    /// Sets the parameters of this model.
-    /// </summary>
-    /// <param name="parameters">The parameters to set.</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> This sets the underlying classifier's parameters.
-    /// </para>
-    /// </remarks>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        (_classifier as IParameterizable<T, Matrix<T>, Vector<T>>)?.SetParameters(parameters);
     }
 
     /// <summary>

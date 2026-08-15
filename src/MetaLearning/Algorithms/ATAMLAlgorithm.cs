@@ -44,13 +44,23 @@ namespace AiDotNet.MetaLearning.Algorithms;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("Task-Agnostic Continual Learning with ATAML",
-    "https://arxiv.org/abs/1906.05080",
-    Year = 2019,
-    Authors = "Shaohua Li, Xiuchao Sui, Xinxing Xu, et al.")]
+// Citation corrected in full — title, URL, year and authors were all wrong. arXiv 1906.05080 is "On
+// the semisimple orbits of restricted Cartan type Lie algebras W, S and H", an unrelated pure-maths
+// paper, and the recorded authors are not ATAML's. The recorded title also named the wrong FIELD:
+// ATAML is few-shot meta-learning, not continual learning.
+//
+// ATAML separates task-agnostic representation learning from task-specific ATTENTIVE adaptation on top
+// of MAML, which is what this class implements (attention throughout, no continual-learning
+// machinery). The arXiv version carries the longer title used here; the shorter "Attentive
+// Task-Agnostic Meta-Learning for Few-Shot Text Classification" is the NeurIPS 2018 MetaLearn workshop
+// version of the same work.
+[ResearchPaper("On the Importance of Attention in Meta-Learning for Few-Shot Text Classification",
+    "https://arxiv.org/abs/1806.00852",
+    Year = 2018,
+    Authors = "Xiang Jiang, Mohammad Havaei, Gabriel Chartrand, Hassan Chouaib, Thomas Vincent, Andrew Jesson, Nicolas Chapados, Stan Matwin")]
 [ComponentType(ComponentType.MetaLearner)]
 [PipelineStage(PipelineStage.Training)]
-public class ATAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
+public partial class ATAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
     private IParameterizable<T, TInput, TOutput>? _cachedParamModel;
     private IParameterizable<T, TInput, TOutput> ParamModel => _cachedParamModel ??= InterfaceGuard.Parameterizable(MetaModel);

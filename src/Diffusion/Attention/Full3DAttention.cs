@@ -1,4 +1,5 @@
-using AiDotNet.ActivationFunctions;
+﻿using AiDotNet.ActivationFunctions;
+using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks.Attention;
 using AiDotNet.NeuralNetworks.Layers;
@@ -30,7 +31,11 @@ namespace AiDotNet.Diffusion.Attention;
 /// - Uses Flash Attention implementation for O(N) memory
 /// </para>
 /// </remarks>
-public class Full3DAttention<T> : LayerBase<T>
+// Shape-preserving at rank 3 [Batch, Time, Features]; only that rank was probed, so only it is declared.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
+[AutoParameters]
+public partial class Full3DAttention<T> : LayerBase<T>, IShapeContract
 {
     private readonly int _channels;
     private readonly int _numHeads;
@@ -102,7 +107,7 @@ public class Full3DAttention<T> : LayerBase<T>
     /// <summary>
     /// Applies full 3D attention across all spatio-temporal positions.
     /// </summary>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // #1668: skip the backward-activation cache in inference (denoise-loop arena safety).
         _lastInput = ShouldCacheForBackward ? input : null;
@@ -113,18 +118,6 @@ public class Full3DAttention<T> : LayerBase<T>
     public override void UpdateParameters(T learningRate)
     {
         _fullAttention.UpdateParameters(learningRate);
-    }
-
-    /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        return _fullAttention.GetParameters();
-    }
-
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        _fullAttention.SetParameters(parameters);
     }
 
     /// <inheritdoc />

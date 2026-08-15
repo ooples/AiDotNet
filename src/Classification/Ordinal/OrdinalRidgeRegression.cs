@@ -6,6 +6,7 @@ using AiDotNet.LinearAlgebra;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 
+using AiDotNet.Models.Parameters;
 namespace AiDotNet.Classification.Ordinal;
 
 /// <summary>
@@ -89,6 +90,20 @@ namespace AiDotNet.Classification.Ordinal;
 public class OrdinalRidgeRegression<T> : OrdinalClassifierBase<T>,
     IParameterizable<T, Matrix<T>, Vector<T>>, IGradientComputable<T, Matrix<T>, Vector<T>>
 {
+
+    /// <inheritdoc />
+    /// <remarks>The ridge coefficients followed by the ordinal thresholds. PackParameters and UnpackParameters ARE the previous
+    /// GetParameters and SetParameters, renamed rather than rewritten, so the layout is
+    /// byte-for-byte unchanged. What changes is that the COUNT now folds this same
+    /// component instead of ClassifierBase's NumFeatures * NumClasses formula, which
+    /// described the classifier's shape rather than what it serializes.</remarks>
+    protected override void RegisterComponents()
+    {
+        RegisterParameterComponent(new VariableLengthParameterSource<T>(
+            () => PackParameters().Length,
+            PackParameters,
+            UnpackParameters));
+    }
     /// <summary>
     /// The learned coefficient vector (β).
     /// </summary>
@@ -454,7 +469,7 @@ public class OrdinalRidgeRegression<T> : OrdinalClassifierBase<T>,
     /// <para><b>For Beginners:</b> This packs all learned parameters into a single vector:
     /// first the coefficients, then the bias, then the thresholds.</para>
     /// </remarks>
-    public Vector<T> GetParameters()
+    private Vector<T> PackParameters()
     {
         if (_coefficients is null || _thresholds is null)
         {
@@ -487,7 +502,7 @@ public class OrdinalRidgeRegression<T> : OrdinalClassifierBase<T>,
     /// <para><b>For Beginners:</b> This unpacks parameters from a single vector and sets
     /// the internal state. The vector format is: [coefficients..., bias, thresholds...].</para>
     /// </remarks>
-    public void SetParameters(Vector<T> parameters)
+    private void UnpackParameters(Vector<T> parameters)
     {
         if (parameters.Length == 0)
         {
@@ -552,7 +567,7 @@ public class OrdinalRidgeRegression<T> : OrdinalClassifierBase<T>,
     /// <para><b>For Beginners:</b> Creates a copy of this model with different parameter values.
     /// Useful for optimization or ensemble methods.</para>
     /// </remarks>
-    public IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
+    public override IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
     {
         var model = new OrdinalRidgeRegression<T>(_alpha, _fitIntercept);
         model.NumFeatures = NumFeatures;

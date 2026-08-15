@@ -48,7 +48,7 @@ namespace AiDotNet.Video.Enhancement;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("RealisVSR: Detail-Enhanced Diffusion for Real-World 4K Video Super-Resolution",
-    "https://arxiv.org/abs/2502.00459",
+    "https://arxiv.org/abs/2507.19138",
     Year = 2025,
     Authors = "Chao Ma, Shangchen Zhou, Chen Change Loy")]
 public class RealisVSR<T> : VideoSuperResolutionBase<T>
@@ -141,7 +141,7 @@ public class RealisVSR<T> : VideoSuperResolutionBase<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expected);
+            TrainWithTape(input, expected, _optimizer);
         }
         finally
         {
@@ -149,18 +149,11 @@ public class RealisVSR<T> : VideoSuperResolutionBase<T>
         }
     }
 
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        if (!_useNativeMode) throw new NotSupportedException("Parameter updates are not supported in ONNX mode.");
-        int idx = 0;
-        foreach (var layer in Layers)
-        {
-            int count = checked((int)layer.ParameterCount);
-            layer.UpdateParameters(parameters.Slice(idx, count));
-            idx += count;
-        }
-    }
-
+    /// <inheritdoc />
+    /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
+    /// write on every parameter surface, so the guard is stated once here instead of being
+    /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
+    protected override bool SupportsParameterMutation => _useNativeMode;
     protected override Tensor<T> PreprocessFrames(Tensor<T> rawFrames) => NormalizeFrames(rawFrames);
 
     protected override Tensor<T> PostprocessOutput(Tensor<T> modelOutput) => DenormalizeFrames(modelOutput);

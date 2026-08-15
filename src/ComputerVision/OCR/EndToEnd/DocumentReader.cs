@@ -36,7 +36,7 @@ namespace AiDotNet.ComputerVision.OCR.EndToEnd;
 [ModelComplexity(ModelComplexity.High)]
 [ResearchPaper("LayoutLMv3: Pre-training for Document AI", "https://arxiv.org/abs/2204.08387")]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-public class DocumentReader<T> : ModelBase<T, Tensor<T>, Tensor<T>>
+public partial class DocumentReader<T> : ModelBase<T, Tensor<T>, Tensor<T>>
 {
     private readonly TextDetectorBase<T> _detector;
     private readonly OCRBase<T> _recognizer;
@@ -399,12 +399,6 @@ public class DocumentReader<T> : ModelBase<T, Tensor<T>, Tensor<T>>
 
     /// <inheritdoc />
     public override ILossFunction<T> DefaultLossFunction => new MeanSquaredErrorLoss<T>();
-
-    /// <inheritdoc />
-    public override Vector<T> GetParameters() => new Vector<T>(0);
-
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters) { }
 
     /// <inheritdoc />
     public override IFullModel<T, Tensor<T>, Tensor<T>> WithParameters(Vector<T> parameters)

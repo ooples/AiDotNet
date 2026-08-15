@@ -283,15 +283,21 @@ public class VideoChat2<T> : VisionLanguageModelBase<T>, IVideoLanguageModel<T>
         }
         else
         {
+            // VideoChat2 (Li et al. 2023, arXiv:2311.17005) resamples the per-frame residual-ViT
+            // features with a Q-FORMER (learnable queries cross-attend to the visual tokens, BLIP-2
+            // §3.1) before the LLM. Residual ViT + LLM fix the old shared builder's post-training
+            // collapse; the Q-Former is the paper's temporal/visual connector.
             Layers.AddRange(
-                LayerHelper<T>.CreateDefaultVideoTemporalVLMLayers(
+                LayerHelper<T>.CreateDefaultVideoQFormerVLMLayers(
                     _options.VisionDim,
-                    _options.VisionDim,
+                    _options.QFormerDim,
                     _options.DecoderDim,
                     _options.NumVisionLayers,
-                    2,
+                    _options.NumQFormerLayers,
                     _options.NumDecoderLayers,
+                    _options.NumQueryTokens,
                     _options.NumHeads,
+                    _options.NumQFormerHeads,
                     _options.DropoutRate,
                     imageHeight: _options.ImageSize,
                     imageWidth: _options.ImageSize,
@@ -305,8 +311,13 @@ public class VideoChat2<T> : VisionLanguageModelBase<T>, IVideoLanguageModel<T>
 
     private void ComputeEncoderDecoderBoundary()
     {
-        int lpb = _options.DropoutRate > 0 ? 6 : 5;
-        _encoderLayerEnd = 2 + _options.NumVisionLayers * lpb + 2 * lpb + 2;
+        // CreateDefaultVideoQFormerVLMLayers: patch(1)+LN(1) + numVisionLayers·(block+optional dropout)
+        // + (visionDim!=qFormerDim ? 1 : 0) map + numQFormerLayers·(7 block layers + optional dropout)
+        // before the projection + LLM. The visual segment ends after the Q-Former.
+        int perBlock = _options.DropoutRate > 0 ? 2 : 1;
+        int qfPerBlock = _options.DropoutRate > 0 ? 8 : 7;
+        int mapLayers = _options.VisionDim != _options.QFormerDim ? 1 : 0;
+        _encoderLayerEnd = 2 + _options.NumVisionLayers * perBlock + mapLayers + _options.NumQFormerLayers * qfPerBlock;
     }
 
     private Tensor<T> TokenizeText(string text)
@@ -337,23 +348,15 @@ public class VideoChat2<T> : VisionLanguageModelBase<T>, IVideoLanguageModel<T>
         if (IsOnnxMode)
             throw new NotSupportedException("Training is not supported in ONNX mode.");
         SetTrainingMode(true);
-        TrainWithTape(input, expected);
+        TrainWithTape(input, expected, _optimizer);
         SetTrainingMode(false);
     }
 
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        if (!_useNativeMode)
-            throw new NotSupportedException("Cannot update parameters in ONNX mode.");
-        int idx = 0;
-        foreach (var l in Layers)
-        {
-            int c = (int)l.ParameterCount;
-            l.UpdateParameters(parameters.Slice(idx, c));
-            idx += c;
-        }
-    }
-
+    /// <inheritdoc />
+    /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
+    /// write on every parameter surface, so the guard is stated once here instead of being
+    /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
+    protected override bool SupportsParameterMutation => _useNativeMode;
     protected override Tensor<T> PreprocessImage(Tensor<T> image) =>
         NormalizeImage(image, _options.ImageMean, _options.ImageStd);
 

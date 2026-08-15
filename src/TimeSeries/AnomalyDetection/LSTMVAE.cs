@@ -49,7 +49,7 @@ namespace AiDotNet.TimeSeries.AnomalyDetection;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("A Multimodal Anomaly Detector for Robot-Assisted Feeding Using an LSTM-Based Variational Autoencoder", "https://arxiv.org/abs/1711.00614", Year = 2018, Authors = "Daehyung Park, Yuuna Hoshi, Charles C. Kemp")]
-public class LSTMVAE<T> : TimeSeriesModelBase<T>
+public partial class LSTMVAE<T> : TimeSeriesModelBase<T>
 {
     private readonly LSTMVAEOptions<T> _options;
 
@@ -65,6 +65,7 @@ public class LSTMVAE<T> : TimeSeriesModelBase<T>
 
     // Anomaly threshold
     private T _reconstructionThreshold;
+    [Buffer]
     private Vector<T> _trainingSeries = Vector<T>.Empty();
 
     /// <summary>
@@ -319,31 +320,6 @@ public class LSTMVAE<T> : TimeSeriesModelBase<T>
         return new LSTMVAE<T>(new LSTMVAEOptions<T>(_options));
     }
 
-    public override long ParameterCount => _encoder.ParameterCount + _decoder.ParameterCount;
-
-    public override Vector<T> GetParameters()
-    {
-        var encoderParams = _encoder.GetParameters();
-        var decoderParams = _decoder.GetParameters();
-        var combined = new Vector<T>(encoderParams.Length + decoderParams.Length);
-        for (int i = 0; i < encoderParams.Length; i++) combined[i] = encoderParams[i];
-        for (int i = 0; i < decoderParams.Length; i++) combined[encoderParams.Length + i] = decoderParams[i];
-        return combined;
-    }
-
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int encoderLen = checked((int)_encoder.ParameterCount);
-        var encoderParams = new Vector<T>(encoderLen);
-        for (int i = 0; i < encoderLen && i < parameters.Length; i++) encoderParams[i] = parameters[i];
-        _encoder.SetParameters(encoderParams);
-
-        int decoderLen = checked((int)_decoder.ParameterCount);
-        var decoderParams = new Vector<T>(decoderLen);
-        for (int i = 0; i < decoderLen && encoderLen + i < parameters.Length; i++) decoderParams[i] = parameters[encoderLen + i];
-        _decoder.SetParameters(decoderParams);
-    }
-
     protected override Vector<T> GetLayerParameterGradients()
     {
         var encoderGrads = _encoder.GetParameterGradients();
@@ -391,8 +367,33 @@ public class LSTMVAEOptions<T> : TimeSeriesRegressionOptions<T>
 /// <summary>
 /// Tensor-based LSTM Encoder for VAE with proper backpropagation.
 /// </summary>
-internal class LSTMEncoderTensor<T> : NeuralNetworks.Layers.LayerBase<T>
+// Rank 1 only, and that is the shape the layer is CONSTRUCTED at rather than an assumption:
+// `base(new[] { inputSize }, new[] { latentDim * 2 })`. ForwardTraced flattens with
+// `input.ToVector()`, so a higher-rank input would not throw - but nothing in this layer states what
+// one would mean, and the tensor it emits is rank 1 regardless.
+[TensorLayout(TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
+[AutoParameters]
+internal partial class LSTMEncoderTensor<T> : NeuralNetworks.Layers.LayerBase<T>, IShapeContract
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// HAND-WRITTEN because the emitted width is not carried through and is not a bare field: the
+    /// forward allocates <c>new Tensor&lt;T&gt;(new[] { _latentDim * 2 })</c>, filling the first
+    /// <c>_latentDim</c> slots with the mean and the next <c>_latentDim</c> with the log-variance.
+    /// That doubling IS the VAE's [mean | logVar] packing, so the output width is set by the latent
+    /// size alone and is independent of how wide the input window was.
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        if (inputRank != 1 || _latentDim <= 0) return null;
+
+        return new[]
+        {
+            new OutputAxisContract(TensorAxis.Features, AxisRelation.Fixed(_latentDim * 2)),
+        };
+    }
+
 
     private readonly int _inputSize;
     private readonly int _latentDim;
@@ -418,10 +419,6 @@ internal class LSTMEncoderTensor<T> : NeuralNetworks.Layers.LayerBase<T>
     private Tensor<T> _logVarWeightsGrad;
     private Tensor<T> _logVarBiasGrad;
 
-    public override long ParameterCount => _weights.Length + _bias.Length +
-                                  _meanWeights.Length + _meanBias.Length +
-                                  _logVarWeights.Length + _logVarBias.Length;
-
     public override bool SupportsTraining => true;
 
     public override void ResetState() { ResetGradients(); }
@@ -431,19 +428,11 @@ internal class LSTMEncoderTensor<T> : NeuralNetworks.Layers.LayerBase<T>
         ApplyGradients(learningRate, 1);
     }
 
-    public override Vector<T> GetParameters()
-    {
-        var p = new List<T>();
-        foreach (var t in new[] { _weights, _bias, _meanWeights, _meanBias, _logVarWeights, _logVarBias })
-            for (int i = 0; i < t.Length; i++) p.Add(t[i]);
-        return new Vector<T>(p.ToArray());
-    }
-
     /// <summary>
     /// Forward pass: takes input tensor, runs through LSTM + VAE projections.
     /// Output is [mean | logVar] concatenated (2 * latentDim).
     /// </summary>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         var vec = input.ToVector();
         var (mean, logVar) = Encode(vec);
@@ -606,16 +595,6 @@ internal class LSTMEncoderTensor<T> : NeuralNetworks.Layers.LayerBase<T>
             writer.Write(NumOps.ToDouble(tensor[i]));
     }
 
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int offset = 0;
-        foreach (var t in new[] { _weights, _bias, _meanWeights, _meanBias, _logVarWeights, _logVarBias })
-        {
-            for (int i = 0; i < t.Length && offset < parameters.Length; i++)
-                t[i] = parameters[offset++];
-        }
-    }
-
     public override Vector<T> GetParameterGradients()
     {
         var g = new List<T>();
@@ -645,8 +624,31 @@ internal class LSTMEncoderTensor<T> : NeuralNetworks.Layers.LayerBase<T>
 /// <summary>
 /// Tensor-based LSTM Decoder for VAE with proper backpropagation.
 /// </summary>
-internal class LSTMDecoderTensor<T> : NeuralNetworks.Layers.LayerBase<T>
+// Rank 1 only, matching the shapes the layer is CONSTRUCTED with:
+// `base(new[] { latentDim }, new[] { outputSize })`.
+[TensorLayout(TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
+[AutoParameters]
+internal partial class LSTMDecoderTensor<T> : NeuralNetworks.Layers.LayerBase<T>, IShapeContract
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// HAND-WRITTEN because the width is reconstruction size, not the latent size it was handed.
+    /// DecodeWithCache copies at most <c>_latentDim</c> values out of whatever it is given
+    /// (<c>Math.Min(latent.Length, _latentDim)</c>) and then projects through
+    /// <c>_outputWeights</c> [O, H], returning <c>Reshape(new[] { _outputSize })</c> - so the input
+    /// width does not reach the output at all.
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        if (inputRank != 1 || _outputSize <= 0) return null;
+
+        return new[]
+        {
+            new OutputAxisContract(TensorAxis.Features, AxisRelation.Fixed(_outputSize)),
+        };
+    }
+
 
     private readonly int _latentDim;
     private readonly int _outputSize;
@@ -666,9 +668,6 @@ internal class LSTMDecoderTensor<T> : NeuralNetworks.Layers.LayerBase<T>
     private Tensor<T> _outputWeightsGrad;
     private Tensor<T> _outputBiasGrad;
 
-    public override long ParameterCount => _weights.Length + _bias.Length +
-                                  _outputWeights.Length + _outputBias.Length;
-
     private Tensor<T>? _lastLatent;
     private Tensor<T>? _lastHidden;
 
@@ -681,15 +680,7 @@ internal class LSTMDecoderTensor<T> : NeuralNetworks.Layers.LayerBase<T>
         ApplyGradients(learningRate, 1);
     }
 
-    public override Vector<T> GetParameters()
-    {
-        var p = new List<T>();
-        foreach (var t in new[] { _weights, _bias, _outputWeights, _outputBias })
-            for (int i = 0; i < t.Length; i++) p.Add(t[i]);
-        return new Vector<T>(p.ToArray());
-    }
-
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         _lastLatent = input;
         var (output, hidden) = DecodeWithCache(input);
@@ -843,16 +834,6 @@ internal class LSTMDecoderTensor<T> : NeuralNetworks.Layers.LayerBase<T>
                 tensor[i] = NumOps.FromDouble(v);
         }
         return tensor;
-    }
-
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int offset = 0;
-        foreach (var t in new[] { _weights, _bias, _outputWeights, _outputBias })
-        {
-            for (int i = 0; i < t.Length && offset < parameters.Length; i++)
-                t[i] = parameters[offset++];
-        }
     }
 
     public override Vector<T> GetParameterGradients()

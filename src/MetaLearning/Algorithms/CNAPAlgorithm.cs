@@ -79,7 +79,7 @@ namespace AiDotNet.MetaLearning.Algorithms;
     Authors = "James Requeima, Jonathan Gordon, John Bronskill, et al.")]
 [ComponentType(ComponentType.MetaLearner)]
 [PipelineStage(PipelineStage.Training)]
-public class CNAPAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
+public partial class CNAPAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
     private IParameterizable<T, TInput, TOutput>? _cachedParamModel;
     private IParameterizable<T, TInput, TOutput> ParamModel => _cachedParamModel ??= InterfaceGuard.Parameterizable(MetaModel);
@@ -87,7 +87,9 @@ public class CNAPAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
     private readonly CNAPOptions<T, TInput, TOutput> _cnapOptions;
 
     // Task representation state
+    [Scratch]
     private Vector<T>? _currentTaskRepresentation;
+    [Scratch]
     private Vector<T>? _currentFastWeights;
 
     // Adaptation network parameters (learned during meta-training)

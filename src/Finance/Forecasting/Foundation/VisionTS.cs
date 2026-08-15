@@ -92,7 +92,9 @@ public class VisionTS<T> : TimeSeriesFoundationModelBase<T>
     // RevIN (reversible instance normalization, Kim et al. 2022) statistics.
     // VisionTS normalizes each input series before the ViT and restores the level
     // on the output so distinct input scales produce distinct forecasts.
+    [Scratch]
     private Vector<T> _revinMean = new Vector<T>(0);
+    [Scratch]
     private Vector<T> _revinStd = new Vector<T>(0);
 
     #endregion
@@ -250,12 +252,8 @@ public class VisionTS<T> : TimeSeriesFoundationModelBase<T>
         base.Train(input, target);
     }
 
-    /// <inheritdoc/>
-    public override void UpdateParameters(Vector<T> gradients)
-    {
-        // Parameters are updated through the optimizer in Train()
-    }
-
+    // UpdateParameters was an empty override, silently dropping every restore. The base
+    // distributes the vector over the declared enumeration.
     /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()
     {
@@ -380,28 +378,12 @@ public class VisionTS<T> : TimeSeriesFoundationModelBase<T>
 
     /// <inheritdoc/>
     public override Tensor<T> ApplyInstanceNormalization(Tensor<T> input)
-    {
-        int batchSize = input.Rank > 1 ? input.Shape[0] : 1;
-        int seqLen = input.Rank > 1 ? input.Shape[1] : input.Length;
-        var result = new Tensor<T>(input._shape);
-        _revinMean = new Vector<T>(batchSize);
-        _revinStd = new Vector<T>(batchSize);
-        for (int b = 0; b < batchSize; b++)
-        {
-            T mean = NumOps.Zero;
-            for (int t = 0; t < seqLen; t++) { int idx = b * seqLen + t; if (idx < input.Length) mean = NumOps.Add(mean, input[idx]); }
-            mean = NumOps.Divide(mean, NumOps.FromDouble(seqLen));
-            T variance = NumOps.Zero;
-            for (int t = 0; t < seqLen; t++) { int idx = b * seqLen + t; if (idx < input.Length) { var diff = NumOps.Subtract(input[idx], mean); variance = NumOps.Add(variance, NumOps.Multiply(diff, diff)); } }
-            variance = NumOps.Divide(variance, NumOps.FromDouble(seqLen));
-            T std = NumOps.Sqrt(NumOps.Add(variance, NumOps.FromDouble(1e-5)));
-            // Store per-instance stats so DenormalizeForecast can restore the scale.
-            _revinMean[b] = mean;
-            _revinStd[b] = std;
-            for (int t = 0; t < seqLen; t++) { int idx = b * seqLen + t; if (idx < input.Length && idx < result.Length) result.Data.Span[idx] = NumOps.Divide(NumOps.Subtract(input[idx], mean), std); }
-        }
-        return result;
-    }
+        // RevIN forward (Kim et al. 2022), delegated to the shared tape-tracked helper. The previous
+        // hand-rolled version accumulated mean/variance with scalar NumOps arithmetic and wrote the
+        // output through result.Data.Span[...], which the autodiff tape cannot observe: the normalised
+        // tensor came back as a LEAF, so no gradient could flow through the normalisation. RevIN is a
+        // differentiable layer in the paper, not a preprocessing step.
+        => NormalizeInstanceOnTape(input, DefaultRevInEpsilon, out _revinMean, out _revinStd);
 
     /// <summary>
     /// RevIN reverse step (Kim et al. 2022): restores each instance's mean/std to the

@@ -89,7 +89,9 @@ public class TOTO<T> : TimeSeriesFoundationModelBase<T>
     // Per-feature RevIN statistics (Kim et al. 2022) captured during
     // ApplyInstanceNormalization, used to denormalize the forecast back to the
     // input's scale so level-shifted inputs yield distinct forecasts.
+    [Scratch]
     private Vector<T> _revinMean = new Vector<T>(0);
+    [Scratch]
     private Vector<T> _revinStd = new Vector<T>(0);
 
     #endregion
@@ -250,12 +252,8 @@ public class TOTO<T> : TimeSeriesFoundationModelBase<T>
         base.Train(input, target);
     }
 
-    /// <inheritdoc/>
-    public override void UpdateParameters(Vector<T> gradients)
-    {
-        // Parameters are updated through the optimizer in Train()
-    }
-
+    // UpdateParameters was an empty override, silently dropping every restore. The base
+    // distributes the vector over the declared enumeration.
     /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()
     {
@@ -395,52 +393,12 @@ public class TOTO<T> : TimeSeriesFoundationModelBase<T>
 
     /// <inheritdoc/>
     public override Tensor<T> ApplyInstanceNormalization(Tensor<T> input)
-    {
-        // RevIN over a single series: normalize EACH feature (last axis) over the
-        // time axis and store per-feature mean/std for the reverse denormalization.
-        // Univariate inputs have features == 1 (one global mean/std).
-        int features = input.Rank > 1 ? input.Shape[input.Rank - 1] : 1;
-        int steps = features > 0 ? input.Length / features : input.Length;
-        var result = new Tensor<T>(input._shape);
-        _revinMean = new Vector<T>(features);
-        _revinStd = new Vector<T>(features);
-
-        for (int f = 0; f < features; f++)
-        {
-            T mean = NumOps.Zero;
-            for (int t = 0; t < steps; t++)
-            {
-                int idx = t * features + f;
-                if (idx < input.Length)
-                    mean = NumOps.Add(mean, input[idx]);
-            }
-            mean = NumOps.Divide(mean, NumOps.FromDouble(steps));
-
-            T variance = NumOps.Zero;
-            for (int t = 0; t < steps; t++)
-            {
-                int idx = t * features + f;
-                if (idx < input.Length)
-                {
-                    var diff = NumOps.Subtract(input[idx], mean);
-                    variance = NumOps.Add(variance, NumOps.Multiply(diff, diff));
-                }
-            }
-            variance = NumOps.Divide(variance, NumOps.FromDouble(steps));
-            T std = NumOps.Sqrt(NumOps.Add(variance, NumOps.FromDouble(1e-5)));
-            _revinMean[f] = mean;
-            _revinStd[f] = std;
-
-            for (int t = 0; t < steps; t++)
-            {
-                int idx = t * features + f;
-                if (idx < input.Length && idx < result.Length)
-                    result.Data.Span[idx] = NumOps.Divide(NumOps.Subtract(input[idx], mean), std);
-            }
-        }
-
-        return result;
-    }
+        // RevIN forward (Kim et al. 2022), delegated to the shared tape-tracked helper. The previous
+        // hand-rolled version accumulated mean/variance with scalar NumOps arithmetic and wrote the
+        // output through result.Data.Span[...], which the autodiff tape cannot observe: the normalised
+        // tensor came back as a LEAF, so no gradient could flow through the normalisation. RevIN is a
+        // differentiable layer in the paper, not a preprocessing step.
+        => NormalizePerFeatureOnTape(input, DefaultRevInEpsilon, out _revinMean, out _revinStd);
 
     /// <summary>
     /// RevIN reverse step (Kim et al. 2022): restores each feature's mean/std to
@@ -506,6 +464,43 @@ public class TOTO<T> : TimeSeriesFoundationModelBase<T>
             current = Engine.Reshape(current, new[] { current.Shape[1] });
 
         return current;
+    }
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// TOTO's native forward normalizes the series and presents the patch
+    /// reshape as one batch row. The base activation walker feeds the raw
+    /// rank-1 series directly to <see cref="ReshapeLayer{T}"/>, which treats
+    /// every scalar as a separate sample and cannot form a context patch.
+    /// Mirror the real forward preparation so introspection observes the same
+    /// paper path that prediction and training use.
+    /// </remarks>
+    public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input)
+    {
+        if (!_useNativeMode)
+            return base.GetNamedLayerActivations(input);
+
+        bool wasTraining = IsTrainingMode;
+        SetTrainingMode(false);
+        try
+        {
+            var activations = new Dictionary<string, Tensor<T>>();
+            var current = ApplyInstanceNormalization(input);
+            if (!(current.Rank == 2 && current.Shape[0] == 1))
+                current = current.Reshape(new[] { 1, current.Length });
+
+            for (int i = 0; i < Layers.Count; i++)
+            {
+                current = Layers[i].Forward(current);
+                activations[$"Layer_{i}_{Layers[i].GetType().Name}"] = current.Clone();
+            }
+
+            return activations;
+        }
+        finally
+        {
+            SetTrainingMode(wasTraining);
+        }
     }
 
     protected override Tensor<T> ForecastOnnx(Tensor<T> input)

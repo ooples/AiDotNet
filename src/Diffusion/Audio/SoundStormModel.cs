@@ -97,8 +97,17 @@ namespace AiDotNet.Diffusion.Audio;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("SoundStorm: Efficient Parallel Audio Generation", "https://arxiv.org/abs/2305.09636", Year = 2023, Authors = "Borsos et al.")]
-public class SoundStormModel<T> : AudioDiffusionModelBase<T>
+public partial class SoundStormModel<T> : AudioDiffusionModelBase<T>
 {
+    /// <inheritdoc />
+    /// <remarks>Registration order is serialization order, and matches the
+    /// concatenation the previous hand-written GetParameters performed.</remarks>
+    protected override void RegisterComponents()
+    {
+        RegisterParameterComponent(_conformer);
+        RegisterParameterComponent(_audioVAE);
+    }
+
     #region Constants
 
     private const int LATENT_CHANNELS = 8;
@@ -139,7 +148,6 @@ public class SoundStormModel<T> : AudioDiffusionModelBase<T>
     /// <inheritdoc />
     public override bool SupportsAudioToAudio => false;
     /// <inheritdoc />
-    public override long ParameterCount => _conformer.ParameterCount + _audioVAE.ParameterCount;
 
     #endregion
 
@@ -188,27 +196,7 @@ public class SoundStormModel<T> : AudioDiffusionModelBase<T>
 
     #region IParameterizable Implementation
 
-    /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        return Vector<T>.Concatenate(
-            _conformer.GetParameters(),
-            _audioVAE.GetParameters());
-    }
 
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int cCount = checked((int)_conformer.ParameterCount);
-        int vaeCount = checked((int)_audioVAE.ParameterCount);
-        if (parameters.Length != cCount + vaeCount)
-            throw new ArgumentException($"Expected {cCount + vaeCount} parameters, got {parameters.Length}.", nameof(parameters));
-        // Use Vector.Slice for zero-copy sub-vector extraction instead of element-by-element loops
-        var cParams = parameters.Slice(0, cCount);
-        var vaeParams = parameters.Slice(cCount, vaeCount);
-        _conformer.SetParameters(cParams);
-        _audioVAE.SetParameters(vaeParams);
-    }
 
     #endregion
 

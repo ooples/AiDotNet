@@ -14,8 +14,31 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, Cost = ComputeCost.High,
     TestInputShape = "1, 3, 32, 100", TestConstructorArgs = "3, 32, 64, 32, 100, 20")]
-public sealed class SVTRThinPlateSplineLayer<T> : LayerBase<T>
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    BatchOptional = true, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    BatchOptional = true, Direction = TensorLayoutDirection.Output)]
+public sealed class SVTRThinPlateSplineLayer<T> : LayerBase<T>, IShapeContract
 {
+    /// <inheritdoc />
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        if (inputRank is not (3 or 4)) return null;
+        var channels = new OutputAxisContract(
+            TensorAxis.Channels, AxisRelation.Same(TensorAxis.Channels));
+        var height = new OutputAxisContract(
+            TensorAxis.Height, AxisRelation.Fixed(_outputHeight));
+        var width = new OutputAxisContract(
+            TensorAxis.Width, AxisRelation.Fixed(_outputWidth));
+        return inputRank == 3
+            ? [channels, height, width]
+            :
+            [
+                new(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+                channels, height, width
+            ];
+    }
+
     private readonly int _inputChannels;
     private readonly int _localizationHeight;
     private readonly int _localizationWidth;
@@ -48,9 +71,6 @@ public sealed class SVTRThinPlateSplineLayer<T> : LayerBase<T>
     public double MarginX => _marginX;
     public double MarginY => _marginY;
     public override bool SupportsTraining => true;
-    public override long ParameterCount =>
-        ParameterLayers.Sum(layer => layer.ParameterCount) + _controlWeights.Length + _controlBias.Length;
-
     public SVTRThinPlateSplineLayer(
         int inputChannels = 3,
         int localizationHeight = 32,
@@ -122,7 +142,7 @@ public sealed class SVTRThinPlateSplineLayer<T> : LayerBase<T>
         }
     }
 
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         if (input.Rank != 4 || input.Shape[1] != _inputChannels)
             throw new ArgumentException($"Expected [B,{_inputChannels},H,W].", nameof(input));
@@ -158,15 +178,6 @@ public sealed class SVTRThinPlateSplineLayer<T> : LayerBase<T>
             input, grid, GridSampleMode.Bilinear, GridSamplePadding.Zeros, alignCorners: true);
     }
 
-    public override Vector<T> GetParameters()
-    {
-        var values = new List<T>();
-        foreach (var layer in ParameterLayers) values.AddRange(layer.GetParameters());
-        values.AddRange(_controlWeights.Data.ToArray());
-        values.AddRange(_controlBias.Data.ToArray());
-        return new Vector<T>([.. values]);
-    }
-
     public override Vector<T> GetParameterGradients()
     {
         var values = new List<T>();
@@ -174,26 +185,6 @@ public sealed class SVTRThinPlateSplineLayer<T> : LayerBase<T>
         var own = base.GetParameterGradients();
         values.AddRange(own);
         return new Vector<T>([.. values]);
-    }
-
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (ParameterLayers.Any(layer => layer.ParameterCount == 0))
-            _ = Forward(new Tensor<T>([1, _inputChannels, _localizationHeight, _localizationWidth]));
-        if (parameters.Length != ParameterCount)
-            throw new ArgumentException($"Expected {ParameterCount} parameters, got {parameters.Length}.");
-        int offset = 0;
-        foreach (var layer in ParameterLayers)
-        {
-            int count = checked((int)layer.ParameterCount);
-            layer.SetParameters(parameters.Slice(offset, count));
-            offset += count;
-        }
-        parameters.Slice(offset, _controlWeights.Length).AsSpan().CopyTo(_controlWeights.Data.Span);
-        offset += _controlWeights.Length;
-        parameters.Slice(offset, _controlBias.Length).AsSpan().CopyTo(_controlBias.Data.Span);
-        Engine.InvalidatePersistentTensor(_controlWeights);
-        Engine.InvalidatePersistentTensor(_controlBias);
     }
 
     public override void UpdateParameters(T learningRate)

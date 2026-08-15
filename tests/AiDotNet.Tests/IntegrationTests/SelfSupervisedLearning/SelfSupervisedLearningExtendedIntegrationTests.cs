@@ -32,7 +32,7 @@ public class SelfSupervisedLearningExtendedIntegrationTests
         var data = new double[] { s, 0, 0, s };
         var z = new Tensor<double>(data, [2, 2]);
 
-        var lossVal = loss.ComputeLoss(z, z);
+        var lossVal = loss.ComputeLoss(z, z)[0];
 
         Assert.True(Math.Abs(lossVal) < Tolerance,
             $"Loss should be 0 when cross-corr = I, got {lossVal}");
@@ -51,7 +51,7 @@ public class SelfSupervisedLearningExtendedIntegrationTests
         var data = new double[] { 1, 1, 1, 1 };
         var z = new Tensor<double>(data, [2, 2]);
 
-        var lossVal = loss.ComputeLoss(z, z);
+        var lossVal = loss.ComputeLoss(z, z)[0];
 
         var expected = lambda * 2.0;
         Assert.True(Math.Abs(lossVal - expected) < Tolerance,
@@ -72,7 +72,7 @@ public class SelfSupervisedLearningExtendedIntegrationTests
         var data = new double[] { 1, 0, 0, 1 };
         var z = new Tensor<double>(data, [2, 2]);
 
-        var lossVal = loss.ComputeLoss(z, z);
+        var lossVal = loss.ComputeLoss(z, z)[0];
 
         Assert.True(Math.Abs(lossVal - 0.5) < Tolerance,
             $"Expected 0.5, got {lossVal}");
@@ -86,7 +86,7 @@ public class SelfSupervisedLearningExtendedIntegrationTests
         var data = new double[] { 1, 1, 1, 1 }; // All-ones: C = all-ones
         var z = new Tensor<double>(data, [2, 2]);
 
-        var lossVal = loss.ComputeLoss(z, z);
+        var lossVal = loss.ComputeLoss(z, z)[0];
 
         // Invariance: (1-1)^2 + (1-1)^2 = 0 (diagonal C is all 1)
         // With lambda=0, off-diagonal doesn't matter
@@ -150,8 +150,8 @@ public class SelfSupervisedLearningExtendedIntegrationTests
                 z1Plus[b, d] = z1[b, d] + h;
                 z1Minus[b, d] = z1[b, d] - h;
 
-                var lossPlus = loss.ComputeLoss(z1Plus, z2);
-                var lossMinus = loss.ComputeLoss(z1Minus, z2);
+                var lossPlus = loss.ComputeLoss(z1Plus, z2)[0];
+                var lossMinus = loss.ComputeLoss(z1Minus, z2)[0];
                 var numericalGrad = (lossPlus - lossMinus) / (2 * h);
 
                 Assert.True(Math.Abs(gradZ1[b, d] - numericalGrad) < GradTolerance,
@@ -976,7 +976,7 @@ public class SelfSupervisedLearningExtendedIntegrationTests
         var z1 = new Tensor<double>(new double[] { 1, 0, 0, 1 }, [2, 2]);
         var z2 = new Tensor<double>(new double[] { 1, 0, 0, 1 }, [2, 2]);
 
-        var lossVal = loss.ComputeLoss(z1, z2);
+        var lossVal = loss.ComputeLoss(z1, z2)[0];
 
         double expected = Math.Log(1 + 2 * Math.Exp(-1));
         Assert.True(Math.Abs(lossVal - expected) < 1e-4,
@@ -1020,7 +1020,7 @@ public class SelfSupervisedLearningExtendedIntegrationTests
         var pred = new Tensor<double>(new double[] { 3, 4 }, [1, 2]);
         var target = new Tensor<double>(new double[] { 4, 3 }, [1, 2]);
 
-        var lossVal = loss.ComputeLoss(pred, target);
+        var lossVal = loss.ComputeLoss(pred, target)[0];
 
         Assert.True(Math.Abs(lossVal - 0.08) < 1e-4,
             $"Expected 0.08, got {lossVal:F6}");
@@ -1035,7 +1035,7 @@ public class SelfSupervisedLearningExtendedIntegrationTests
         var pred = CreateRandomTensor(4, 8, seed: 42);
         var target = CreateRandomTensor(4, 8, seed: 43);
 
-        var cosineLoss = byol.ComputeLoss(pred, target);
+        var cosineLoss = byol.ComputeLoss(pred, target)[0];
         var mseLoss = byol.ComputeMSELoss(pred, target);
 
         // MSE of normalized vectors = (1/dim) * sum ||p_norm - z_norm||^2
@@ -1072,8 +1072,8 @@ public class SelfSupervisedLearningExtendedIntegrationTests
                 predPlus[b, d] = pred[b, d] + h;
                 predMinus[b, d] = pred[b, d] - h;
 
-                var lossPlus = loss.ComputeLoss(predPlus, target);
-                var lossMinus = loss.ComputeLoss(predMinus, target);
+                var lossPlus = loss.ComputeLoss(predPlus, target)[0];
+                var lossMinus = loss.ComputeLoss(predMinus, target)[0];
                 var numericalGrad = (lossPlus - lossMinus) / (2 * h);
 
                 Assert.True(Math.Abs(gradPred[b, d] - numericalGrad) < GradTolerance,

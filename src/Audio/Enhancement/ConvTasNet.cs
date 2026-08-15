@@ -89,8 +89,8 @@ public class ConvTasNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
     private readonly int _encoderDim;
     private readonly int _kernelSize;
     private readonly int _stride;
-    private T[] _encoderWeight;
-    private T[] _encoderBias;
+    private Tensor<T> _encoderWeight;
+    private Tensor<T> _encoderBias;
 
     // Separator (TCN) parameters
     private readonly int _numSources;
@@ -104,15 +104,15 @@ public class ConvTasNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
     private readonly List<TcnBlock> _tcnBlocks;
 
     // Decoder parameters
-    private T[] _decoderWeight;
+    private Tensor<T> _decoderWeight;
 
     // Mask estimation
-    private T[] _maskWeight;
-    private T[] _maskBias;
+    private Tensor<T> _maskWeight;
+    private Tensor<T> _maskBias;
 
     // Normalization layers
-    private T[] _normGamma;
-    private T[] _normBeta;
+    private Tensor<T> _normGamma;
+    private Tensor<T> _normBeta;
 
     // State for streaming
     private T[]? _encoderBuffer;
@@ -198,13 +198,13 @@ public class ConvTasNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
         LatencySamples = kernelSize;
 
         // Initialize empty arrays (not used in ONNX mode)
-        _encoderWeight = Array.Empty<T>();
-        _encoderBias = Array.Empty<T>();
-        _decoderWeight = Array.Empty<T>();
-        _maskWeight = Array.Empty<T>();
-        _maskBias = Array.Empty<T>();
-        _normGamma = Array.Empty<T>();
-        _normBeta = Array.Empty<T>();
+        _encoderWeight = new Tensor<T>([0]);
+        _encoderBias = new Tensor<T>([0]);
+        _decoderWeight = new Tensor<T>([0]);
+        _maskWeight = new Tensor<T>([0]);
+        _maskBias = new Tensor<T>([0]);
+        _normGamma = new Tensor<T>([0]);
+        _normBeta = new Tensor<T>([0]);
         _tcnBlocks = new List<TcnBlock>();
 
         // These are set for consistency
@@ -367,6 +367,52 @@ public class ConvTasNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
         return SeparateSources(preprocessed);
     }
 
+    /// <inheritdoc/>
+    /// <remarks>
+    /// Conv-TasNet owns a manual encoder/TCN/mask/decoder graph rather than
+    /// populating the base <c>Layers</c> collection, so the base inspection
+    /// implementation has nothing to walk. Capture the actual semantic stages
+    /// of the same graph used by <see cref="PredictCore"/> instead.
+    /// </remarks>
+    public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input)
+    {
+        SetTrainingMode(false);
+        var activations = new Dictionary<string, Tensor<T>>();
+        var preprocessed = PreprocessAudio(input);
+        activations["PreprocessedWaveform"] = preprocessed.Clone();
+
+        if (IsOnnxMode)
+        {
+            var output = PostprocessOutput(RunOnnxInference(preprocessed));
+            activations["OnnxOutput"] = output.Clone();
+            return activations;
+        }
+
+        int originalLength = preprocessed.Shape[1];
+        var encoded = Encode(preprocessed);
+        activations["Encoder"] = encoded.Clone();
+
+        var normalized = LayerNorm(encoded);
+        activations["EncoderNormalization"] = normalized.Clone();
+
+        var bottleneck = BottleneckProject(normalized);
+        activations["BottleneckProjection"] = bottleneck.Clone();
+
+        var separatedFeatures = RunTcn(bottleneck);
+        activations["TemporalConvolutionalSeparator"] = separatedFeatures.Clone();
+
+        var masks = EstimateMasks(separatedFeatures);
+        activations["SourceMasks"] = masks.Clone();
+
+        var maskedSources = ApplyMasks(encoded, masks);
+        activations["MaskedEncoderSources"] = maskedSources.Clone();
+
+        var decoded = Decode(maskedSources, originalLength);
+        activations["WaveformDecoder"] = decoded.Clone();
+        activations["Output"] = PostprocessOutput(decoded).Clone();
+        return activations;
+    }
+
     /// <summary>
     /// Separates audio into individual source signals.
     /// </summary>
@@ -445,8 +491,9 @@ public class ConvTasNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
     /// </summary>
     private Tensor<T> LayerNorm(Tensor<T> input)
     {
-        var gammaTensor = new Tensor<T>(_normGamma, [_normGamma.Length]);
-        var betaTensor = new Tensor<T>(_normBeta, [_normBeta.Length]);
+        // _normGamma / _normBeta are already tensors -- no wrapping needed.
+        var gammaTensor = _normGamma;
+        var betaTensor = _normBeta;
         return Engine.LayerNorm(input, gammaTensor, betaTensor, 1e-5, out _, out _);
     }
 
@@ -749,20 +796,18 @@ public class ConvTasNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
         }
 
         SetTrainingMode(true);
-
-        // Forward pass
-        var predicted = Predict(input);
-
-        // Compute SI-SNR loss (Scale-Invariant Signal-to-Noise Ratio)
-        var loss = ComputeSiSnrLoss(predicted, expected);
-
-        // Backward pass (simplified gradient computation)
-        var gradients = ComputeGradients(predicted, expected);
-
-        // Update weights
-        UpdateWeights(gradients);
-
-        SetTrainingMode(false);
+        try
+        {
+            var predicted = PredictCore(input);
+            _ = ComputeSiSnrLoss(predicted, expected);
+            var gradients = ComputeGradients(predicted, expected);
+            PublishComputedGradients(gradients);
+            UpdateWeights(gradients);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
     }
 
     /// <summary>
@@ -860,6 +905,24 @@ public class ConvTasNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
         }
 
         return gradients;
+    }
+
+    /// <summary>Publishes the hand-derived Conv-TasNet gradients to the shared model surface.</summary>
+    private void PublishComputedGradients(Dictionary<string, T[]> gradients)
+    {
+        var published = new Dictionary<Tensor<T>, Tensor<T>>(
+            Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
+
+        void Add(string name, Tensor<T> parameter)
+        {
+            if (gradients.TryGetValue(name, out var values) && values.Length == parameter.Length)
+                published[parameter] = new Tensor<T>(values, parameter._shape);
+        }
+
+        Add("encoder", _encoderWeight);
+        Add("decoder", _decoderWeight);
+        Add("mask", _maskWeight);
+        PublishParameterGradients(published);
     }
 
     /// <summary>
@@ -964,6 +1027,14 @@ public class ConvTasNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
             writer.Write(_numOps.ToDouble(b));
         }
 
+        // The base Layers collection is intentionally empty for this manual graph.
+        // Persist the complete flat registry as well, including encoder/mask biases
+        // and every TCN block, which the legacy fields above omitted.
+        var parameters = GetParameters();
+        writer.Write(parameters.Length);
+        for (int i = 0; i < parameters.Length; i++)
+            writer.Write(_numOps.ToDouble(parameters[i]));
+
         return stream.ToArray();
     }
 
@@ -1023,15 +1094,21 @@ public class ConvTasNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
         {
             _normBeta[i] = _numOps.FromDouble(reader.ReadDouble());
         }
+
+        int parameterCount = reader.ReadInt32();
+        var parameters = new Vector<T>(parameterCount);
+        for (int i = 0; i < parameterCount; i++)
+            parameters[i] = _numOps.FromDouble(reader.ReadDouble());
+        SetParameters(parameters);
     }
 
     #endregion
 
     #region Helper Methods
 
-    private T[] InitializeWeights(int size, double initValue = double.NaN)
+    private Tensor<T> InitializeWeights(int size, double initValue = double.NaN)
     {
-        var weights = new T[size];
+        var weights = new Tensor<T>([size]);
         if (double.IsNaN(initValue))
         {
             // Xavier/Glorot initialization
@@ -1056,24 +1133,53 @@ public class ConvTasNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
 
     #region Abstract Method Implementations
 
-    /// <inheritdoc/>
-    public override void UpdateParameters(Vector<T> gradients)
+    /// <summary>
+    /// Declares every weight Conv-TasNet owns: the encoder, the separation mask, the decoder, the
+    /// layer-norm affine pair, and each temporal-convolution block's seven tensors.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Conv-TasNet implements its signal path with model-owned tensors rather than
+    /// <see cref="NeuralNetworkBase{T}.Layers"/>, so the base walk finds nothing unless they are
+    /// declared. Declared in the order the deleted GetParameters concatenated them -- encoder
+    /// weight and bias, decoder weight, mask weight and bias, norm gamma and beta, then each TCN
+    /// block -- so existing checkpoints still restore.
+    /// </para>
+    /// <para>
+    /// This replaces ParameterCount, GetParameters, GetParameterChunks and SetParameters here, four
+    /// more on TcnBlock, and the four Copy/Read helpers that moved values one element at a time.
+    /// </para>
+    /// <para>
+    /// The weights are <c>Tensor&lt;T&gt;</c> now rather than raw <c>T[]</c>, which is what the rest
+    /// of the library uses and what the trainable-parameter walk can see. A bare array cannot be
+    /// declared: a <c>Vector&lt;T&gt;</c> built over one COPIES it, so a restore driven through such
+    /// a view would have written into a temporary and been discarded.
+    /// </para>
+    /// </remarks>
+    protected override IEnumerable<Tensor<T>> GetExtraTrainableTensors()
     {
-        if (IsOnnxMode)
-        {
-            throw new NotSupportedException("Cannot update parameters in ONNX inference mode.");
-        }
+        yield return _encoderWeight;
+        yield return _encoderBias;
+        yield return _decoderWeight;
+        yield return _maskWeight;
+        yield return _maskBias;
+        yield return _normGamma;
+        yield return _normBeta;
 
-        // Get current parameters and apply gradient descent
-        var currentParams = GetParameters();
-        T learningRate = _numOps.FromDouble(0.001);
-        for (int i = 0; i < Math.Min(currentParams.Length, gradients.Length); i++)
+        foreach (var block in _tcnBlocks)
         {
-            currentParams[i] = _numOps.Subtract(currentParams[i], _numOps.Multiply(learningRate, gradients[i]));
+            foreach (var tensor in block.EnumerateTensors())
+            {
+                yield return tensor;
+            }
         }
-        SetParameters(currentParams);
     }
 
+    // UpdateParameters is NOT overridden. It used to throw NotSupportedException; the base
+    // implementation is virtual now and distributes a flat vector over the same enumeration
+    // GetParameters folds, which this model already exposes correctly. The throw existed
+    // because the member was ABSTRACT and demanded an answer -- 572 models answered it the
+    // same way.
     /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()
     {
@@ -1106,6 +1212,10 @@ public class ConvTasNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
         writer.Write(_numRepeats);
         writer.Write(_tcnKernelSize);
         writer.Write(EnhancementStrength);
+        var parameters = GetParameters();
+        writer.Write(parameters.Length);
+        for (int i = 0; i < parameters.Length; i++)
+            writer.Write(_numOps.ToDouble(parameters[i]));
     }
 
     /// <inheritdoc/>
@@ -1124,6 +1234,11 @@ public class ConvTasNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
         _ = reader.ReadInt32();   // _numRepeats
         _ = reader.ReadInt32();   // _tcnKernelSize
         EnhancementStrength = reader.ReadDouble();
+        int parameterCount = reader.ReadInt32();
+        var parameters = new Vector<T>(parameterCount);
+        for (int i = 0; i < parameterCount; i++)
+            parameters[i] = _numOps.FromDouble(reader.ReadDouble());
+        SetParameters(parameters);
     }
 
     /// <inheritdoc/>
@@ -1157,13 +1272,13 @@ public class ConvTasNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
         private readonly int _kernelSize;
         private readonly int _dilation;
 
-        private T[] _conv1Weight;
-        private T[] _conv1Bias;
-        private T[] _conv2Weight;
-        private T[] _conv2Bias;
-        private T[] _depthwiseWeight;
-        private T[] _normGamma;
-        private T[] _normBeta;
+        private Tensor<T> _conv1Weight;
+        private Tensor<T> _conv1Bias;
+        private Tensor<T> _conv2Weight;
+        private Tensor<T> _conv2Bias;
+        private Tensor<T> _depthwiseWeight;
+        private Tensor<T> _normGamma;
+        private Tensor<T> _normBeta;
 
         private T[] _gradConv1;
         private T[] _gradConv2;
@@ -1181,13 +1296,13 @@ public class ConvTasNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
             var rand = AiDotNet.Tensors.Helpers.RandomHelper.CreateSecureRandom();
             double scale = Math.Sqrt(2.0 / inputDim);
 
-            _conv1Weight = new T[hiddenDim * inputDim];
-            _conv1Bias = new T[hiddenDim];
-            _conv2Weight = new T[inputDim * hiddenDim];
-            _conv2Bias = new T[inputDim];
-            _depthwiseWeight = new T[hiddenDim * kernelSize];
-            _normGamma = new T[hiddenDim];
-            _normBeta = new T[hiddenDim];
+            _conv1Weight = new Tensor<T>([hiddenDim * inputDim]);
+            _conv1Bias = new Tensor<T>([hiddenDim]);
+            _conv2Weight = new Tensor<T>([inputDim * hiddenDim]);
+            _conv2Bias = new Tensor<T>([inputDim]);
+            _depthwiseWeight = new Tensor<T>([hiddenDim * kernelSize]);
+            _normGamma = new Tensor<T>([hiddenDim]);
+            _normBeta = new Tensor<T>([hiddenDim]);
 
             for (int i = 0; i < _conv1Weight.Length; i++)
             {
@@ -1336,6 +1451,24 @@ public class ConvTasNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
                 _depthwiseWeight[i] = _ops.FromDouble(weight - learningRate * grad);
                 _gradDepthwise[i] = _ops.Zero;
             }
+        }
+
+        /// <summary>The trainable tensors this block owns, in forward order.</summary>
+        /// <remarks>
+        /// Replaces this block's ParameterCount, GetParameterChunks, CopyParametersTo and
+        /// ReadParametersFrom -- four members that each listed the same seven weights in the same
+        /// order, plus a Copy/Read pair to move them element by element. ConvTasNet folds this one
+        /// enumeration for all four purposes.
+        /// </remarks>
+        internal IEnumerable<Tensor<T>> EnumerateTensors()
+        {
+            yield return _conv1Weight;
+            yield return _conv1Bias;
+            yield return _conv2Weight;
+            yield return _conv2Bias;
+            yield return _depthwiseWeight;
+            yield return _normGamma;
+            yield return _normBeta;
         }
     }
 

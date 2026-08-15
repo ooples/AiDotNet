@@ -1,4 +1,5 @@
 using AiDotNet.Attributes;
+using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 
 namespace AiDotNet.NeuralNetworks.Layers;
@@ -17,8 +18,40 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Convolution)]
 [LayerTask(LayerTask.TemporalProcessing)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 5)]
-public sealed class TemporalConv3DLayer<T> : LayerBase<T>
+[TensorLayout(TensorAxis.Channels, TensorAxis.Time, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Channels, TensorAxis.Time, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Output)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Time, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Time, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Output)]
+[AutoParameters]
+public sealed partial class TemporalConv3DLayer<T> : LayerBase<T>, IShapeContract
 {
+    /// <inheritdoc />
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        if (_outputChannels <= 0) return null;
+        OutputAxisContract Window(TensorAxis axis, int kernel, int padding) =>
+            new(axis, AxisRelation.Window(axis, kernel, stride: 1, padding: padding));
+        var channels = new OutputAxisContract(
+            TensorAxis.Channels, AxisRelation.Fixed(_outputChannels));
+        var time = Window(TensorAxis.Time, _kernelDepth, _paddingDepth);
+        var height = Window(TensorAxis.Height, _kernelHeight, _paddingHeight);
+        var width = Window(TensorAxis.Width, _kernelWidth, _paddingWidth);
+        return inputRank switch
+        {
+            4 => [channels, time, height, width],
+            5 =>
+            [
+                new(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+                channels, time, height, width
+            ],
+            _ => null
+        };
+    }
+
     private readonly int _inputChannels;
     private readonly int _outputChannels;
     private readonly int _kernelDepth;
@@ -29,10 +62,11 @@ public sealed class TemporalConv3DLayer<T> : LayerBase<T>
     private readonly int _paddingWidth;
     private readonly bool _zeroInitialize;
 
-    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+    [TrainableParameter(Role = PersistentTensorRole.Weights,
+        Shape = "_outputChannels, _inputChannels, _kernelDepth, _kernelHeight, _kernelWidth")]
     private Tensor<T> _kernels = new([0, 0, 0, 0, 0]);
 
-    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+    [TrainableParameter(Role = PersistentTensorRole.Biases, Shape = "_outputChannels")]
     private Tensor<T> _biases = new([0]);
 
     /// <summary>Gets the input channel count.</summary>
@@ -55,11 +89,6 @@ public sealed class TemporalConv3DLayer<T> : LayerBase<T>
 
     /// <inheritdoc />
     public override bool SupportsTraining => true;
-
-    /// <inheritdoc />
-    public override long ParameterCount =>
-        checked((long)_outputChannels * _inputChannels * _kernelDepth * _kernelHeight * _kernelWidth
-            + _outputChannels);
 
     /// <summary>Creates an anisotropic video convolution.</summary>
     public TemporalConv3DLayer(
@@ -119,7 +148,7 @@ public sealed class TemporalConv3DLayer<T> : LayerBase<T>
     }
 
     /// <inheritdoc />
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         EnsureInitializedFromInput(input);
         var convolved = Engine.Conv3D(
@@ -130,26 +159,6 @@ public sealed class TemporalConv3DLayer<T> : LayerBase<T>
             [1, 1, 1]);
         var bias = Engine.Reshape(_biases, [1, _outputChannels, 1, 1, 1]);
         return Engine.TensorBroadcastAdd(convolved, bias);
-    }
-
-    /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        MaterializeParameters();
-        return Vector<T>.Concatenate(_kernels.ToVector(), _biases.ToVector());
-    }
-
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (parameters.Length != ParameterCount)
-            throw new ArgumentException(
-                $"Expected {ParameterCount} parameters, got {parameters.Length}.", nameof(parameters));
-        MaterializeParameters();
-        parameters.AsSpan()[.._kernels.Length].CopyTo(_kernels.Data.Span);
-        parameters.AsSpan()[_kernels.Length..].CopyTo(_biases.Data.Span);
-        Engine.InvalidatePersistentTensor(_kernels);
-        Engine.InvalidatePersistentTensor(_biases);
     }
 
     /// <inheritdoc />

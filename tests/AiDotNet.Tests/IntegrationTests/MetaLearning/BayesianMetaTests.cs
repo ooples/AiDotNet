@@ -131,23 +131,42 @@ public class BayesianMetaTests
     }
 
     [Fact(Timeout = 120000)]
-    public async Task FlexPACBayes_FiniteLossAndParamChange()
+    public async Task SImPa_FiniteLossAndParamChange()
     {
+        // Small generator widths on purpose. The paper's 128/256/512 puts ~166k weights in the generator
+        // for even a 3-parameter base model, and this test is about the plumbing, not the capacity.
         var model = new LinearVectorModel(3);
-        var options = new FlexPACBayesOptions<double, Matrix<double>, Vector<double>>(model)
-        { InnerLearningRate = 0.01, OuterLearningRate = 0.01 };
-        var algorithm = new FlexPACBayesAlgorithm<double, Matrix<double>, Vector<double>>(options);
+        var options = new SImPaOptions<double, Matrix<double>, Vector<double>>(model)
+        {
+            InnerLearningRate = 0.01,
+            OuterLearningRate = 0.01,
+            LatentDimension = 8,
+            GeneratorFirstHiddenWidth = 8,
+            GeneratorSecondHiddenWidth = 8,
+            KLMonteCarloSamples = 16,
+            KLEstimatorSteps = 4,
+            AdaptationPosteriorSamples = 4,
+        };
+        var algorithm = new SImPaAlgorithm<double, Matrix<double>, Vector<double>>(options);
         var paramsBefore = model.GetParameters();
 
         var task = CreateTask(158);
         var batch = new TaskBatch<double, Matrix<double>, Vector<double>>(new[] { task });
 
         var loss = algorithm.MetaTrain(batch);
-        Assert.False(double.IsNaN(loss), "FlexPACBayes loss is NaN");
-        Assert.False(double.IsInfinity(loss), "FlexPACBayes loss is infinite");
-        Assert.True(ParamsChanged(paramsBefore, model.GetParameters()), "FlexPACBayes params unchanged");
-        Assert.Equal(MetaLearningAlgorithmType.FlexPACBayes, algorithm.AlgorithmType);
+        Assert.False(double.IsNaN(loss), "SImPa loss is NaN");
+        Assert.False(double.IsInfinity(loss), "SImPa loss is infinite");
+        Assert.True(ParamsChanged(paramsBefore, model.GetParameters()), "SImPa params unchanged");
+        Assert.Equal(MetaLearningAlgorithmType.SImPa, algorithm.AlgorithmType);
         Assert.NotNull(algorithm.Adapt(task).Predict(task.QuerySetX));
+
+        // A single task cannot support Theorem 2's meta-level term, which divides by (T - 1). Reporting
+        // NaN for the bound and falling back to the empirical loss is the honest outcome; inventing a
+        // number there would be a guarantee nobody proved.
+        Assert.True(double.IsNaN(algorithm.LastBound),
+            "With one task the meta-level term is undefined, so LastBound must be NaN.");
+        Assert.False(double.IsNaN(algorithm.LastTaskKL), "The task-level KL estimate should still exist.");
+        Assert.True(algorithm.LastTaskKL >= 0.0, "A KL estimate cannot be negative.");
     }
 
     [Fact(Timeout = 120000)]

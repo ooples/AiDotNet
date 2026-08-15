@@ -56,8 +56,44 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Convolution)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = true, ExpectedInputRank = 3, Cost = ComputeCost.High, TestInputShape = "4, 8, 8", TestConstructorArgs = "4, 4")]
-public class RRDBLayer<T> : LayerBase<T>
+// SHAPE-PRESERVING at every level: the three inner ResidualDenseBlocks each preserve shape, and
+// ForwardTraced closes with the global residual "AddResidual(x, input, _residualScale)", which requires
+// the stack's output to still match the input exactly. OnFirstForward states it outright -
+// "ResolveShapes(new[] { _numFeatures, inH, inW }, new[] { _numFeatures, inH, inW })".
+//
+// Ranks and roles from this layer's own guard, which rejects everything else: "requires rank-3 [C,H,W]
+// or rank-4 [B,C,H,W] input". BatchOptional carries both, including the rank 3 that its
+// [LayerProperty(ExpectedInputRank = 3)] is exercised at.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    BatchOptional = true, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    BatchOptional = true, Direction = TensorLayoutDirection.Output)]
+[AutoParameters]
+public partial class RRDBLayer<T> : LayerBase<T>, IShapeContract
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// Written by hand even though every axis is <c>Same</c>, because the generator keys its arms on the
+    /// DECLARED layout length and does not expand <c>BatchOptional</c> - it would cover rank 4 and return
+    /// null for the rank 3 this layer is actually tested at.
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        if (inputRank is not (3 or 4)) return null;
+
+        var channels = new OutputAxisContract(TensorAxis.Channels, AxisRelation.Same(TensorAxis.Channels));
+        var height = new OutputAxisContract(TensorAxis.Height, AxisRelation.Same(TensorAxis.Height));
+        var width = new OutputAxisContract(TensorAxis.Width, AxisRelation.Same(TensorAxis.Width));
+
+        return inputRank == 3
+            ? new[] { channels, height, width }
+            : new[]
+            {
+                new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+                channels, height, width,
+            };
+    }
+
     #region Fields
 
     /// <summary>
@@ -114,8 +150,6 @@ public class RRDBLayer<T> : LayerBase<T>
     /// </summary>
     public int GrowthChannels => _growthChannels;
 
-    /// <inheritdoc />
-    public override long ParameterCount => GetParameters().Length;
     public override bool SupportsTraining => true;
 
     /// <summary>
@@ -239,7 +273,7 @@ public class RRDBLayer<T> : LayerBase<T>
     /// Forward pass: input -> RDB1 -> RDB2 -> RDB3 -> scale + input (global residual)
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         if (!IsShapeResolved) OnFirstForward(input);
 
@@ -360,21 +394,6 @@ public class RRDBLayer<T> : LayerBase<T>
         }
     }
 
-    /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        var allParams = new List<T>();
-        foreach (var rdb in _rdbBlocks)
-        {
-            var rdbParams = rdb.GetParameters();
-            for (int i = 0; i < rdbParams.Length; i++)
-            {
-                allParams.Add(rdbParams[i]);
-            }
-        }
-        return new Vector<T>([.. allParams]);
-    }
-
     public override Vector<T> GetParameterGradients()
     {
         var gradVectors = _rdbBlocks.Select(r => r.GetParameterGradients()).ToArray();
@@ -385,26 +404,6 @@ public class RRDBLayer<T> : LayerBase<T>
     {
         foreach (var rdb in _rdbBlocks)
             rdb.ClearGradients();
-    }
-
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        // Pre-Forward: each inner RDB's shape is unresolved. Buffer
-        // and replay from OnFirstForward.
-        if (!IsShapeResolved)
-        {
-            _pendingParameters = parameters;
-            return;
-        }
-
-        int offset = 0;
-        foreach (var rdb in _rdbBlocks)
-        {
-            int count = rdb.GetParameters().Length;
-            rdb.SetParameters(parameters.SubVector(offset, count));
-            offset += count;
-        }
     }
 
     private Vector<T>? _pendingParameters;

@@ -6,7 +6,9 @@ using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
 using AiDotNet.Models;
-using AiDotNet.Serialization;
+using AiDotNet.Serialization;
+using System.Linq;
+using AiDotNet.Models.Parameters;
 
 namespace AiDotNet.AutoML;
 
@@ -46,7 +48,7 @@ namespace AiDotNet.AutoML;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("Ensemble Methods in Machine Learning", "https://doi.org/10.1007/3-540-45014-9_1")]
-public sealed class AutoMLEnsembleModel<T> : ModelBase<T, Matrix<T>, Vector<T>>
+public sealed partial class AutoMLEnsembleModel<T> : ModelBase<T, Matrix<T>, Vector<T>>
 {
 
     [JsonProperty("Members")]
@@ -254,47 +256,39 @@ public sealed class AutoMLEnsembleModel<T> : ModelBase<T, Matrix<T>, Vector<T>>
         Deserialize(ms.ToArray());
     }
 
-    public override Vector<T> GetParameters()
+    /// <summary>
+    /// The ensemble's parameters are its members', concatenated in member order.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Declared by hand rather than discovered, and the reason is worth recording: IFullModel does
+    /// NOT derive from IParameterizable or IParameterSource, so a collection of models is not
+    /// statically a collection of parameter sources and automatic discovery correctly skips it. The
+    /// three surfaces this replaces each got round that by CASTING members to IParameterizable --
+    /// they depended on a relationship the type system does not express, three separate times.
+    /// </para>
+    /// <para>
+    /// One source makes the count and the vector agree, and the cast now happens in one place
+    /// instead of three. If IFullModel ever declares the relationship it already relies on, this
+    /// becomes discoverable and the declaration can go.
+    /// </para>
+    /// <para>
+    /// Members are re-read on every access, not captured: an ensemble gains members after
+    /// construction, and registration runs once and lazily.
+    /// </para>
+    /// </remarks>
+    protected override void RegisterComponents()
     {
-        if (Members.Count == 0)
-        {
-            throw new InvalidOperationException("Ensemble has no members.");
-        }
-
-        var vectors = Members.Select(m => ((IParameterizable<T, Matrix<T>, Vector<T>>)m).GetParameters()).ToArray();
-        return Vector<T>.Concatenate(vectors);
+        base.RegisterComponents();
+        RegisterParameterComponent(new ComponentCollectionParameterSource<T>(
+            () => Members.OfType<IParameterizable<T, Matrix<T>, Vector<T>>>()));
     }
 
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (Members.Count == 0)
-        {
-            throw new InvalidOperationException("Ensemble has no members.");
-        }
+    // Replaced by the declared parameter source below. Removed under AIDN082.
 
-        int expected = ParameterCountHelper.ToFlatVectorSize(ParameterCount);
-        if (parameters.Length != expected)
-        {
-            throw new ArgumentException($"Parameter vector length {parameters.Length} does not match expected {expected}.", nameof(parameters));
-        }
+    // Replaced by the declared parameter source below. Removed under AIDN082.
 
-        int offset = 0;
-        foreach (var member in Members)
-        {
-            var paramMember = (IParameterizable<T, Matrix<T>, Vector<T>>)member;
-            int count = checked((int)paramMember.ParameterCount);
-            var segment = new Vector<T>(count);
-            for (int i = 0; i < count; i++)
-            {
-                segment[i] = parameters[offset + i];
-            }
-
-            paramMember.SetParameters(segment);
-            offset += count;
-        }
-    }
-
-    public override long ParameterCount => Members.Sum(m => ((IParameterizable<T, Matrix<T>, Vector<T>>)m).ParameterCount);
+    // Replaced by the declared parameter source below. Removed under AIDN082.
 
     public override IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
     {

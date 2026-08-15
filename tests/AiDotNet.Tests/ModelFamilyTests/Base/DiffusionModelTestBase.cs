@@ -1,4 +1,4 @@
-using System.Linq;
+﻿using System.Linq;
 using System.Runtime;
 using System.Threading;
 using AiDotNet.Helpers;
@@ -189,6 +189,20 @@ public abstract class DiffusionModelTestBase<TNum> : IAsyncLifetime
     protected abstract IDiffusionModel<TNum> CreateModel();
 
     /// <summary>
+    /// Relative tolerance for clone-output comparisons. Derived FP32 iterative samplers may
+    /// override this when identical COW-shared weights take a numerically equivalent cold
+    /// packed-weight path whose rounding error compounds across denoising steps.
+    /// </summary>
+    protected virtual double CloneOutputRelativeTolerance =>
+        typeof(TNum) == typeof(float) ? 1.3e-6 : 1e-7;
+
+    /// <summary>
+    /// Absolute tolerance for clone-output comparisons.
+    /// </summary>
+    protected virtual double CloneOutputAbsoluteTolerance =>
+        typeof(TNum) == typeof(float) ? 1e-5 : 1e-7;
+
+    /// <summary>
     /// Numeric-operation handle for <typeparamref name="TNum"/> — used by helpers
     /// that need to construct tensor elements from doubles (e.g. random fills,
     /// constant fills) without hard-coding the element type. The
@@ -209,6 +223,26 @@ public abstract class DiffusionModelTestBase<TNum> : IAsyncLifetime
     /// </summary>
     protected static double ToDouble(TNum v) => Convert.ToDouble(v);
 
+    /// <summary>
+    /// PyTorch <c>torch.testing.assert_close</c> / NumPy <c>allclose</c> tolerance:
+    /// <c>|actual - expected| &lt;= atol + rtol*|expected|</c>, with dtype-aware defaults selected by
+    /// <typeparamref name="TNum"/> (float32: rtol=1.3e-6, atol=1e-5; float64: rtol=1e-7, atol=1e-7).
+    /// Two independently-allocated model instances (e.g. original vs <c>Clone()</c>) can round the same
+    /// result by ~1 ULP due to FP-order/buffer-allocation differences, so exact float equality is the
+    /// wrong contract for cross-instance output comparisons.
+    /// </summary>
+    protected static void AssertClose(double expected, double actual)
+    {
+        // float32 gets the wider float32 tolerances; everything else (double) uses the tight float64 pair.
+        (double rtol, double atol) = typeof(TNum) == typeof(float)
+            ? (1.3e-6, 1e-5)
+            : (1e-7, 1e-7);
+        double allowed = atol + rtol * Math.Abs(expected);
+        double diff = Math.Abs(actual - expected);
+        Assert.True(diff <= allowed,
+            $"values differ beyond tolerance: expected {expected}, actual {actual}, |diff|={diff}, allowed={allowed} (rtol={rtol}, atol={atol})");
+    }
+
     protected virtual int[] InputShape => [1, 4];
     protected virtual int[] OutputShape => [1, 4];
 
@@ -219,6 +253,17 @@ public abstract class DiffusionModelTestBase<TNum> : IAsyncLifetime
     /// in <see cref="Training_ShouldReducePredictionError"/>.
     /// </summary>
     protected virtual int TrainingIterations => 10;
+
+    /// <summary>
+    /// Runs one model-appropriate training step. Most diffusion models consume a clean sample
+    /// directly; conditional super-resolution models override this boundary to supply their
+    /// distinct low-resolution condition and high-resolution target.
+    /// </summary>
+    protected virtual void TrainModel(
+        IDiffusionModel<TNum> model,
+        Tensor<TNum> input,
+        Tensor<TNum> expectedOutput)
+        => model.Train(input, expectedOutput);
 
     protected Tensor<TNum> CreateRandomTensor(int[] shape, Random rng)
     {
@@ -309,7 +354,7 @@ public abstract class DiffusionModelTestBase<TNum> : IAsyncLifetime
         // Train on x₀ (the diffusion data point). The target argument is unused by
         // the diffusion training path per the paper; pass x₀ for clarity.
         for (int i = 0; i < TrainingIterations; i++)
-            model.Train(x0, x0);
+            TrainModel(model, x0, x0);
 
         double errAfter = AveragedNoiseError();
 
@@ -463,7 +508,7 @@ public abstract class DiffusionModelTestBase<TNum> : IAsyncLifetime
         // even before full training has converged.
         int finiteCheckIters = Math.Max(1, TrainingIterations / 2);
         for (int i = 0; i < finiteCheckIters; i++)
-            model.Train(input, target);
+            TrainModel(model, input, target);
 
         var output = model.Predict(input);
         for (int i = 0; i < output.Length; i++)
@@ -579,8 +624,53 @@ public abstract class DiffusionModelTestBase<TNum> : IAsyncLifetime
         var clonedOutput = cloned.Predict(input);
 
         Assert.Equal(original.Length, clonedOutput.Length);
+        // EVERY ELEMENT AGAINST ITS OWN TOLERANCE. Tracking only the LARGEST difference and
+        // comparing it to THAT element's allowance let a genuine violation hide: the tolerance
+        // is relative to |expected|, so a small difference on a small-magnitude element can
+        // exceed its own tiny allowance while a bigger difference elsewhere stays inside a
+        // bigger one. The single comparison then passed on a Clone() that is demonstrably
+        // wrong at index i. Each element is checked where it is; the worst RATIO is kept only
+        // so the failure message points at the element that actually broke.
+        double worstRatio = 0.0;
+        double maxDiff = 0.0;
+        double maxAllowed = 0.0;
+        int maxDiffIndex = 0;
+        bool sawAny = false;
         for (int i = 0; i < original.Length; i++)
-            Assert.Equal(ToDouble(original[i]), ToDouble(clonedOutput[i]));
+        {
+            double expected = ToDouble(original[i]);
+            double actual = ToDouble(clonedOutput[i]);
+            double allowed = CloneOutputAbsoluteTolerance
+                + CloneOutputRelativeTolerance * Math.Abs(expected);
+            double diff = Math.Abs(actual - expected);
+
+            // A non-finite clone output is a failure in its own right: NaN fails every
+            // comparison, so without this it slips through as "not greater than".
+            Assert.True((!double.IsNaN(actual) && !double.IsInfinity(actual)),
+                $"Clone() output[{i}] is {actual}; the original was {expected:E6}.");
+
+            Assert.True(diff <= allowed,
+                $"Clone() output[{i}] = {actual:E6} differs from {expected:E6} by {diff:E6}, " +
+                $"which exceeds its own tolerance {allowed:E6}.");
+
+            double ratio = allowed > 0 ? diff / allowed : (diff > 0 ? double.PositiveInfinity : 0.0);
+            if (!sawAny || ratio > worstRatio)
+            {
+                sawAny = true;
+                worstRatio = ratio;
+                maxDiff = diff;
+                maxAllowed = allowed;
+                maxDiffIndex = i;
+            }
+        }
+
+        // Kept as a summary line: every element was already asserted individually above,
+        // so this reports WHICH element was worst relative to its own tolerance.
+        Assert.True(maxDiff <= maxAllowed,
+            $"Clone output differs for {model.GetType().FullName} at index {maxDiffIndex}: " +
+            $"expected={ToDouble(original[maxDiffIndex])}, actual={ToDouble(clonedOutput[maxDiffIndex])}, " +
+            $"max |diff|={maxDiff}, allowed={maxAllowed}, precision={typeof(TNum).FullName}, " +
+            $"length={original.Length}.");
     }
 
     [Fact(Timeout = 120000)]
@@ -592,7 +682,7 @@ public abstract class DiffusionModelTestBase<TNum> : IAsyncLifetime
         using var model = CreateModel();
         var input = CreateRandomTensor(InputShape, rng);
         var target = CreateRandomTensor(OutputShape, rng);
-        model.Train(input, target);
+        TrainModel(model, input, target);
         Assert.NotNull(model.GetModelMetadata());
     }
 

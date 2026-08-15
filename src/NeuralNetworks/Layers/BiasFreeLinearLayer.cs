@@ -1,4 +1,5 @@
 using AiDotNet.Attributes;
+using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 
 namespace AiDotNet.NeuralNetworks.Layers;
@@ -7,19 +8,50 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Dense)]
 [LayerTask(LayerTask.Projection)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, TestInputShape = "1, 4", TestConstructorArgs = "4, 8")]
-public sealed class BiasFreeLinearLayer<T> : LayerBase<T>
+[TensorLayout(TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features,
+    BatchOptional = true, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features,
+    BatchOptional = true, Direction = TensorLayoutDirection.Output)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Output)]
+[AutoParameters]
+public sealed partial class BiasFreeLinearLayer<T> : LayerBase<T>, IShapeContract
 {
+    /// <inheritdoc />
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        if (_outputSize <= 0 || inputRank < 1) return null;
+        var features = new OutputAxisContract(
+            TensorAxis.Features, AxisRelation.Fixed(_outputSize));
+        OutputAxisContract Pass(TensorAxis axis) =>
+            new(axis, AxisRelation.Same(axis));
+        return inputRank switch
+        {
+            1 => [features],
+            2 => [Pass(TensorAxis.Batch), features],
+            3 => [Pass(TensorAxis.Batch), Pass(TensorAxis.Time), features],
+            4 =>
+            [
+                Pass(TensorAxis.Batch), Pass(TensorAxis.Channels),
+                Pass(TensorAxis.Height), features
+            ],
+            _ => null
+        };
+    }
+
     private readonly int _inputSize;
     private readonly int _outputSize;
 
     [TrainableParameter(Role = PersistentTensorRole.Weights)]
-    private readonly Tensor<T> _weights;
+    private Tensor<T> _weights;
 
     public int InputSize => _inputSize;
     public int OutputSize => _outputSize;
     public override bool SupportsTraining => true;
-    public override long ParameterCount => _weights.Length;
-
     public BiasFreeLinearLayer(int inputSize, int outputSize)
         : base([inputSize], [outputSize])
     {
@@ -32,23 +64,13 @@ public sealed class BiasFreeLinearLayer<T> : LayerBase<T>
         RegisterTrainableParameter(_weights, PersistentTensorRole.Weights);
     }
 
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         if (input.Rank < 1 || input.Shape[^1] != _inputSize)
             throw new ArgumentException(
-                $"Expected last dimension {_inputSize}, got [{string.Join(',', input.Shape)}].",
+                $"Expected last dimension {_inputSize}, got [{string.Join(",", input.Shape)}].",
                 nameof(input));
         return Engine.TensorMatMul(input, _weights);
-    }
-
-    public override Vector<T> GetParameters() => Vector<T>.FromMemory(_weights.Data);
-
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (parameters.Length != _weights.Length)
-            throw new ArgumentException($"Expected {_weights.Length} parameters, got {parameters.Length}.");
-        parameters.AsSpan().CopyTo(_weights.Data.Span);
-        Engine.InvalidatePersistentTensor(_weights);
     }
 
     public override void UpdateParameters(T learningRate)

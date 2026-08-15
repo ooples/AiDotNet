@@ -5,6 +5,8 @@ using AiDotNet.LinearAlgebra;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 
+using AiDotNet.Models.Parameters;
+
 namespace AiDotNet.SurvivalAnalysis;
 
 /// <summary>
@@ -62,6 +64,19 @@ namespace AiDotNet.SurvivalAnalysis;
 [ResearchPaper("Regression Models and Life-Tables", "https://doi.org/10.1111/j.2517-6161.1972.tb00899.x", Year = 1972, Authors = "David R. Cox")]
 public class CoxProportionalHazards<T> : SurvivalModelBase<T>
 {
+
+    /// <inheritdoc />
+    /// <remarks>The log-hazard-ratio coefficients, one per covariate. Cox has no intercept -- it is absorbed into the baseline hazard -- which is why NumFeatures is the full length here and length minus one in the propensity models.</remarks>
+    protected override void RegisterComponents()
+    {
+        RegisterParameterComponent(new VectorFieldParameterSource<T>(
+            () => _coefficients,
+            value =>
+            {
+                _coefficients = value;
+                NumFeatures = value.Length;
+            }));
+    }
     /// <summary>
     /// The estimated coefficients (log hazard ratios).
     /// </summary>
@@ -499,43 +514,6 @@ public class CoxProportionalHazards<T> : SurvivalModelBase<T>
     #endregion
 
     #region IFullModel Implementation
-
-    /// <summary>
-    /// Gets all model parameters as a single vector.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> For Cox model, the parameters are the coefficients (β values)
-    /// that determine how each feature affects the hazard rate. These are the log hazard ratios.
-    /// </para>
-    /// </remarks>
-    public override Vector<T> GetParameters()
-    {
-        if (_coefficients is null)
-        {
-            return new Vector<T>(0);
-        }
-
-        return _coefficients;
-    }
-
-    /// <summary>
-    /// Sets the parameters for this model.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> This sets the Cox model coefficients. Each coefficient
-    /// represents the log hazard ratio for the corresponding feature.
-    /// </para>
-    /// </remarks>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (parameters.Length > 0)
-        {
-            _coefficients = parameters;
-            NumFeatures = parameters.Length;
-        }
-    }
 
     /// <summary>
     /// Creates a new instance of the model with specified parameters.

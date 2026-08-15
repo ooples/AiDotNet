@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Document.Interfaces;
 using AiDotNet.Document.Options;
 using AiDotNet.Enums;
@@ -55,7 +55,7 @@ namespace AiDotNet.Document.OCR.TextDetection;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Character Region Awareness for Text Detection", "https://doi.org/10.48550/arXiv.1904.01941", Year = 2019, Authors = "Youngmin Baek, Bado Lee, Dongyoon Han, Sangdoo Yun, Hwalsuk Lee")]
-public class CRAFT<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
+public partial class CRAFT<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
 {
     private readonly CRAFTOptions _options;
 
@@ -66,7 +66,7 @@ public class CRAFT<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
 
     private readonly bool _useNativeMode;
     private readonly InferenceSession? _onnxSession;
-    private readonly IOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private readonly int _backboneChannels;
     private readonly int _upscaleChannels;
 
@@ -132,7 +132,7 @@ public class CRAFT<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
         int imageSize = 768,
         int backboneChannels = 512,
         int upscaleChannels = 256,
-        IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         CRAFTOptions? options = null)
         : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>(), 1.0)
@@ -175,7 +175,7 @@ public class CRAFT<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
         int imageSize = 768,
         int backboneChannels = 512,
         int upscaleChannels = 256,
-        IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         CRAFTOptions? options = null)
         : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>(), 1.0)
@@ -495,32 +495,26 @@ public class CRAFT<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
             throw new NotSupportedException("Training not supported in ONNX mode.");
 
         SetTrainingMode(true);
-        TrainWithTape(input, expectedOutput);
-
-        UpdateParameters(CollectGradients());
-        SetTrainingMode(false);
+        try
+        {
+            TrainWithTape(input, expectedOutput, _optimizer);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
     }
 
-    /// <inheritdoc/>
-    public override void UpdateParameters(Vector<T> gradients)
-    {
-        if (!_useNativeMode)
-            throw new NotSupportedException("Parameter updates not supported in ONNX mode.");
-
-        var currentParams = GetParameters();
-        T lr = NumOps.FromDouble(0.0001);
-        
-        currentParams = Engine.Subtract(currentParams, Engine.Multiply(gradients, lr));
-        SetParameters(currentParams);
-    }
-
-    private Vector<T> CollectGradients()
-    {
-        var grads = new List<T>();
-        foreach (var layer in Layers)
-            grads.AddRange(layer.GetParameterGradients());
-        return new Vector<T>([.. grads]);
-    }
+    /// <summary>
+    /// Parameters cannot be written while the model is backed by a loaded ONNX graph: the weights
+    /// belong to that graph, not to this instance.
+    /// </summary>
+    /// <remarks>
+    /// Replaces a hand-written throw that used to sit inside UpdateParameters. The base checks this
+    /// on every mutating entry point rather than the one member the throw happened to guard, and
+    /// reading -- ParameterCount and GetParameters -- stays available either way.
+    /// </remarks>
+    protected override bool SupportsParameterMutation => _useNativeMode;
 
     #endregion
 

@@ -35,12 +35,13 @@ namespace AiDotNet.TextToSpeech.Vocoders;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper(
-    "UnivNet: A Neural Vocoder with Multi-Resolution Spectrogram Discriminator for High-Fidelity Waveform Generation",
+    // Title corrected to the published plural form ("Discriminators"); the arXiv id was already right.
+    "UnivNet: A Neural Vocoder with Multi-Resolution Spectrogram Discriminators for High-Fidelity Waveform Generation",
     "https://arxiv.org/abs/2106.07889",
     Year = 2021,
     Authors = "Jang et al."
 )]
-public class UnivNet<T> : TtsModelBase<T>, IVocoder<T>
+public class UnivNet<T> : VocoderBase<T>
 {
     private readonly UnivNetOptions _options;
 
@@ -87,9 +88,16 @@ public class UnivNet<T> : TtsModelBase<T>, IVocoder<T>
         InitializeLayers();
     }
 
-    int IVocoder<T>.SampleRate => _options.SampleRate;
-    int IVocoder<T>.MelChannels => _options.MelChannels;
-    public int UpsampleFactor => _options.HopSize;
+    /// <inheritdoc />
+    /// <remarks>
+    /// MEASURED: <c>[1,80,8] -&gt; [1,1,2048]</c>, 8 mel frames x an UpsampleFactor of 256. One of the
+    /// three vocoders whose Predict is a whole-waveform synthesis.
+    /// </remarks>
+    public override IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+        => WaveformUpsampleContract(inputRank);
+
+    // SampleRate, MelChannels and UpsampleFactor now come from VocoderBase - see BigVGAN for why
+    // these three restated what the base already derives from the same _options fields.
 
     /// <summary>
     /// Converts mel to waveform using UnivNet's LVC (Location-Variable Convolution) blocks.
@@ -99,7 +107,7 @@ public class UnivNet<T> : TtsModelBase<T>, IVocoder<T>
     /// (3) GABlock with gated activation + location-variable conv for adaptive frequency modeling,
     /// (4) Multi-resolution spectrogram discriminator (MRSD) for training.
     /// </summary>
-    public Tensor<T> MelToWaveform(Tensor<T> melSpectrogram)
+    public override Tensor<T> MelToWaveform(Tensor<T> melSpectrogram)
     {
         ThrowIfDisposed();
         if (IsOnnxMode && OnnxModel is not null)
@@ -153,7 +161,7 @@ public class UnivNet<T> : TtsModelBase<T>, IVocoder<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expected);
+            TrainWithTape(input, expected, _optimizer);
         }
         finally
         {
@@ -161,20 +169,22 @@ public class UnivNet<T> : TtsModelBase<T>, IVocoder<T>
         }
     }
 
-    public override void UpdateParameters(Vector<T> parameters)
+    /// <summary>
+    /// Refuses parameter work on a disposed model, on every entry point rather than one.
+    /// </summary>
+    /// <remarks>
+    /// This check used to live inside UpdateParameters, which meant ParameterCount, GetParameters
+    /// and SetParameters reached a disposed model unguarded. The base calls this hook from all of
+    /// them, so moving it here widens the guard and lets the hand-written UpdateParameters -- whose
+    /// only other content was a walk the base already performs -- be deleted.
+    /// </remarks>
+    protected override void EnsureParametersReady()
     {
         ThrowIfDisposed();
-        if (!_useNativeMode)
-            throw new NotSupportedException("Cannot update parameters in ONNX mode.");
-        int idx = 0;
-        foreach (var l in Layers)
-        {
-            int c = (int)l.ParameterCount;
-            l.UpdateParameters(parameters.Slice(idx, c));
-            idx += c;
-        }
+        base.EnsureParametersReady();
     }
 
+    // UpdateParameters folded one enumeration the base already folds. Removed under AIDN082.
     public override ModelMetadata<T> GetModelMetadata()
     {
         return new ModelMetadata<T>

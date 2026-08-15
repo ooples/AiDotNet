@@ -110,8 +110,18 @@ namespace AiDotNet.Diffusion.SuperResolution;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Upscale-A-Video: Temporal-Consistent Diffusion Model for Real-World Video Super-Resolution", "https://arxiv.org/abs/2312.06640", Year = 2024, Authors = "Zhou et al.")]
-public class UpscaleAVideoModel<T> : VideoDiffusionModelBase<T>
+public partial class UpscaleAVideoModel<T> : VideoDiffusionModelBase<T>
 {
+    /// <inheritdoc />
+    /// <remarks>Registration order is serialization order, and matches the
+    /// concatenation the previous hand-written GetParameters performed.</remarks>
+    protected override void RegisterComponents()
+    {
+        EnsureInitialized();
+        RegisterParameterComponent(_videoUNet);
+        RegisterParameterComponent(_temporalVAE);
+    }
+
     #region Constants
 
     /// <summary>
@@ -254,15 +264,6 @@ public class UpscaleAVideoModel<T> : VideoDiffusionModelBase<T>
     /// <inheritdoc />
     public override bool SupportsVideoToVideo => true;
 
-    /// <inheritdoc />
-    public override long ParameterCount
-    {
-        get
-        {
-            EnsureInitialized();
-            return checked(_videoUNet.ParameterCount + _temporalVAE.ParameterCount);
-        }
-    }
 
     /// <summary>
     /// Gets the video upscale factor (4x).
@@ -429,9 +430,12 @@ public class UpscaleAVideoModel<T> : VideoDiffusionModelBase<T>
         string prompt,
         int noiseLevel = 20)
     {
-        ArgumentNullException.ThrowIfNull(lowResolutionVideo);
-        ArgumentNullException.ThrowIfNull(highResolutionVideo);
-        ArgumentNullException.ThrowIfNull(prompt);
+        if (lowResolutionVideo is null)
+            throw new ArgumentNullException(nameof(lowResolutionVideo));
+        if (highResolutionVideo is null)
+            throw new ArgumentNullException(nameof(highResolutionVideo));
+        if (prompt is null)
+            throw new ArgumentNullException(nameof(prompt));
         if ((uint)noiseLevel > ReferenceMaximumNoiseLevel)
             throw new ArgumentOutOfRangeException(nameof(noiseLevel), noiseLevel,
                 $"Noise level must be in [0, {ReferenceMaximumNoiseLevel}].");
@@ -857,7 +861,7 @@ public class UpscaleAVideoModel<T> : VideoDiffusionModelBase<T>
         if (!forwardFlows.Shape.ToArray().SequenceEqual(expected) ||
             !backwardFlows.Shape.ToArray().SequenceEqual(expected))
             throw new ArgumentException(
-                $"Optical flow shape must be [{string.Join(',', expected)}] for these latents.");
+                $"Optical flow shape must be [{string.Join(",", expected)}] for these latents.");
     }
 
     private Tensor<T> PropagateDirection(
@@ -977,82 +981,7 @@ public class UpscaleAVideoModel<T> : VideoDiffusionModelBase<T>
 
     #region IParameterizable Implementation
 
-    /// <inheritdoc />
-    public override IEnumerable<Tensor<T>> GetParameterChunks()
-    {
-        EnsureInitialized();
-        foreach (var chunk in _videoUNet.GetParameterChunks()) yield return chunk;
-        foreach (var chunk in _temporalVAE.GetParameterChunks()) yield return chunk;
-    }
 
-    /// <inheritdoc />
-    public override void SetParameterChunks(IEnumerable<Tensor<T>> chunks)
-    {
-        ArgumentNullException.ThrowIfNull(chunks);
-        EnsureInitialized();
-        var supplied = chunks.ToList();
-        int predictorCount = _videoUNet.GetParameterChunks().Count();
-        int vaeCount = _temporalVAE.GetParameterChunks().Count();
-        if (supplied.Count != predictorCount + vaeCount)
-            throw new ArgumentException(
-                $"Expected {predictorCount + vaeCount} parameter chunks, got {supplied.Count}.",
-                nameof(chunks));
-        _videoUNet.SetParameterChunks(supplied.Take(predictorCount));
-        _temporalVAE.SetParameterChunks(supplied.Skip(predictorCount));
-    }
-
-    /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        EnsureInitialized();
-        var unetParams = _videoUNet.GetParameters();
-        var vaeParams = _temporalVAE.GetParameters();
-
-        var combined = new Vector<T>(unetParams.Length + vaeParams.Length);
-
-        for (int i = 0; i < unetParams.Length; i++)
-        {
-            combined[i] = unetParams[i];
-        }
-
-        for (int i = 0; i < vaeParams.Length; i++)
-        {
-            combined[unetParams.Length + i] = vaeParams[i];
-        }
-
-        return combined;
-    }
-
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        EnsureInitialized();
-        var unetCount = _videoUNet.GetParameters().Length;
-        var vaeCount = _temporalVAE.GetParameters().Length;
-
-        if (parameters.Length != unetCount + vaeCount)
-        {
-            throw new ArgumentException(
-                $"Expected {unetCount + vaeCount} parameters, got {parameters.Length}.",
-                nameof(parameters));
-        }
-
-        var unetParams = new Vector<T>(unetCount);
-        var vaeParams = new Vector<T>(vaeCount);
-
-        for (int i = 0; i < unetCount; i++)
-        {
-            unetParams[i] = parameters[i];
-        }
-
-        for (int i = 0; i < vaeCount; i++)
-        {
-            vaeParams[i] = parameters[unetCount + i];
-        }
-
-        _videoUNet.SetParameters(unetParams);
-        _temporalVAE.SetParameters(vaeParams);
-    }
 
     #endregion
 

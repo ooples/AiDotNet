@@ -1,4 +1,5 @@
 using AiDotNet.ActivationFunctions;
+using AiDotNet.Attributes;
 using AiDotNet.Initialization;
 using AiDotNet.NeuralNetworks.Layers;
 
@@ -13,6 +14,7 @@ namespace AiDotNet.Diffusion.NoisePredictors;
 /// branches. Consequently this layer contains the exact convolutional path and
 /// remains independent of the number of frames supplied at runtime.
 /// </remarks>
+[ElementWiseShape(Note = "Residual temporal module preserves NCFHW shape at every frame count.")]
 public sealed class TemporalModule3DLayer<T> : LayerBase<T>
 {
     private readonly int _channels;
@@ -40,13 +42,6 @@ public sealed class TemporalModule3DLayer<T> : LayerBase<T>
 
     /// <inheritdoc />
     public override bool SupportsTraining => true;
-
-    /// <inheritdoc />
-    public override long ParameterCount =>
-        _temporalNorm1.ParameterCount + _temporalConv1.ParameterCount +
-        _temporalTimeProjection.ParameterCount + _temporalNorm2.ParameterCount +
-        _temporalConv2.ParameterCount + _spatialResBlock.ParameterCount +
-        _shiftProjection.ParameterCount;
 
     /// <summary>Creates the paper/released-code temporal module.</summary>
     public TemporalModule3DLayer(int channels, int timeEmbeddingDim, int spatialSize)
@@ -84,7 +79,7 @@ public sealed class TemporalModule3DLayer<T> : LayerBase<T>
     }
 
     /// <inheritdoc />
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         if (input.Rank != 5)
             throw new ArgumentException("TemporalModule3DLayer requires [B,C,F,H,W].", nameof(input));
@@ -131,35 +126,6 @@ public sealed class TemporalModule3DLayer<T> : LayerBase<T>
             [_channels, input.Shape[2], input.Shape[3], input.Shape[4]],
             [_channels, output.Shape[2], output.Shape[3], output.Shape[4]]);
         return output;
-    }
-
-    /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        var values = new List<T>();
-        foreach (var layer in ParameterLayers())
-        {
-            var parameters = layer.GetParameters();
-            for (int i = 0; i < parameters.Length; i++) values.Add(parameters[i]);
-        }
-        return new Vector<T>(values.ToArray());
-    }
-
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (parameters.Length != ParameterCount)
-            throw new ArgumentException(
-                $"Expected {ParameterCount} parameters, got {parameters.Length}.", nameof(parameters));
-        int offset = 0;
-        foreach (var layer in ParameterLayers())
-        {
-            int count = checked((int)layer.ParameterCount);
-            var slice = new Vector<T>(count);
-            for (int i = 0; i < count; i++) slice[i] = parameters[offset + i];
-            layer.SetParameters(slice);
-            offset += count;
-        }
     }
 
     /// <inheritdoc />

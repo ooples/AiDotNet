@@ -30,7 +30,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     [ResearchPaper("Networks of Spiking Neurons: The Third Generation of Neural Network Models", "https://doi.org/10.1016/S0893-6080(97)00011-7")]
-public class SpikingNeuralNetwork<T> : NeuralNetworkBase<T>
+public class SpikingNeuralNetwork<T> : SequenceModelLayoutBase<T>
 {
     private readonly SpikingNeuralNetworkOptions _options;
 
@@ -133,6 +133,7 @@ public class SpikingNeuralNetwork<T> : NeuralNetworkBase<T>
     /// processing capability - neurons remember their recent inputs via this potential.
     /// </para>
     /// </remarks>
+    [Buffer]
     private List<Vector<T>> _membranePotentials;
 
     /// <summary>
@@ -179,6 +180,7 @@ public class SpikingNeuralNetwork<T> : NeuralNetworkBase<T>
     /// stronger signals before they respond.
     /// </para>
     /// </remarks>
+    [Buffer]
     private List<Vector<T>> _firingThresholds;
 
     // Adam optimizer state per Zenke 2018 §3.2 — supervised SNN training
@@ -188,7 +190,9 @@ public class SpikingNeuralNetwork<T> : NeuralNetworkBase<T>
     // direction stops being informative). Per-layer first / second
     // moment vectors keyed by layer index; step counter shared so bias
     // correction is consistent across layers.
+    [Buffer]
     private Dictionary<int, Vector<T>> _adamM = new Dictionary<int, Vector<T>>();
+    [Buffer]
     private Dictionary<int, Vector<T>> _adamV = new Dictionary<int, Vector<T>>();
     private int _adamStep = 0;
     private const double AdamBeta1 = 0.9;
@@ -380,25 +384,8 @@ public class SpikingNeuralNetwork<T> : NeuralNetworkBase<T>
         return output;
     }
 
-    /// <summary>
-    /// Updates the parameters of the spiking neural network layers.
-    /// </summary>
-    /// <param name="parameters">The vector of parameter updates to apply.</param>
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        int startIndex = 0;
-        foreach (var layer in Layers)
-        {
-            int layerParameterCount = checked((int)layer.ParameterCount);
-            if (layerParameterCount > 0)
-            {
-                Vector<T> layerParameters = parameters.SubVector(startIndex, layerParameterCount);
-                layer.UpdateParameters(layerParameters);
-                startIndex += layerParameterCount;
-            }
-        }
-    }
-
+    // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
+    // exactly the same enumeration, so this said nothing the base does not already say.
     /// <summary>
     /// Makes a prediction using the spiking neural network.
     /// </summary>
@@ -1596,7 +1583,8 @@ public class SpikingNeuralNetwork<T> : NeuralNetworkBase<T>
                 NumOps.ToDouble(_timeStep),
                 _simulationSteps,
                 _vectorActivation,
-                LossFunction);
+                LossFunction,
+                _options);
         }
         else
         {
@@ -1606,7 +1594,8 @@ public class SpikingNeuralNetwork<T> : NeuralNetworkBase<T>
                 NumOps.ToDouble(_timeStep),
                 _simulationSteps,
                 _scalarActivation,
-                LossFunction);
+                LossFunction,
+                _options);
         }
     }
 

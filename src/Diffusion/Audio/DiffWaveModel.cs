@@ -79,8 +79,16 @@ namespace AiDotNet.Diffusion.Audio;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("DiffWave: A Versatile Diffusion Model for Audio Synthesis", "https://arxiv.org/abs/2009.09761", Year = 2020, Authors = "Kong et al.")]
-public class DiffWaveModel<T> : DiffusionModelBase<T>
+public partial class DiffWaveModel<T> : DiffusionModelBase<T>
 {
+    /// <inheritdoc />
+    /// <remarks>Registration order is serialization order, and matches the
+    /// concatenation the previous hand-written GetParameters performed.</remarks>
+    protected override void RegisterComponents()
+    {
+        RegisterParameterComponent(_network);
+    }
+
     #region Constants
 
     /// <summary>
@@ -131,7 +139,6 @@ public class DiffWaveModel<T> : DiffusionModelBase<T>
     #region Properties
 
     /// <inheritdoc />
-    public override long ParameterCount => _network.ParameterCount;
 
     /// <summary>
     /// Gets the sample rate in Hz.
@@ -356,21 +363,7 @@ public class DiffWaveModel<T> : DiffusionModelBase<T>
 
     #region IParameterizable Implementation
 
-    /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        return _network.GetParameters();
-    }
 
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int expected = checked((int)_network.ParameterCount);
-        if (parameters.Length != expected)
-            throw new ArgumentException($"Expected {expected} parameters, got {parameters.Length}.");
-
-        _network.SetParameters(parameters);
-    }
 
     #endregion
 
@@ -434,7 +427,7 @@ public class DiffWaveModel<T> : DiffusionModelBase<T>
 /// DiffWave neural network with dilated convolutions.
 /// </summary>
 /// <typeparam name="T">The numeric type.</typeparam>
-public class DiffWaveNetwork<T>
+public class DiffWaveNetwork<T> : IParameterSource<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 

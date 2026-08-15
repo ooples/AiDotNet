@@ -33,7 +33,38 @@ namespace AiDotNet.ComputerVision.Segmentation.PointCloud;
 /// - Serialized point processing with space-filling curves
 /// </para>
 /// <para>
-/// <b>Reference:</b> Wu et al., "Sonata and Concerto: Mamba for 3D Point Clouds", arXiv 2024.
+/// <b>Reference:</b> "Concerto: Joint 2D-3D Self-Supervised Learning Emerges Spatial
+/// Representations" (arXiv:2510.23607).
+/// </para>
+/// <para>
+/// <b>Migration in progress — this class does not yet implement that paper.</b> Its attribution
+/// was previously wrong in three separate ways: a fabricated reference ("Sonata and Concerto:
+/// Mamba for 3D Point Clouds", which does not exist), a <c>[ResearchPaper]</c> attribute pointing
+/// at Mamba3D (arXiv:2404.14966 — a real but unrelated model by different authors), and an
+/// implementation matching neither. The citation now names the real Concerto, and
+/// <see cref="ConcertoOptions"/> carries that paper's hyperparameters.
+/// </para>
+/// <para>
+/// What the published method actually is, and what still has to be built here:
+/// </para>
+/// <list type="bullet">
+/// <item><b>3D intra-modal self-distillation.</b> A Point Transformer V3 student is trained to
+/// match a momentum-updated (EMA) teacher under a DINOv2-style online-clustering cross-entropy
+/// objective at decoder upcast level 2. Neither the teacher/student pair nor the clustering loss
+/// exists here yet.</item>
+/// <item><b>2D-3D cross-modal joint embedding.</b> A frozen DINOv2-L encoder at 518x518 supplies
+/// image patch features; 3D points are projected into the image and depth-checked for visibility
+/// (|d_c - d_proj| &lt; 0.01 m), point features falling in a patch are mean-pooled, and the result
+/// is matched to the image patch embedding by cosine similarity at upcast level 3. This requires
+/// paired imagery plus camera intrinsics and extrinsics, which this type's current API does not
+/// accept.</item>
+/// <item><b>Objective.</b> The two terms are combined at the paper's 2:2 weight ratio.</item>
+/// </list>
+/// <para>
+/// Because Concerto is a PRETRAINING method, segmentation is a downstream probe on the learned
+/// representation rather than the training objective. <see cref="ISemanticSegmentation{T}"/> is
+/// retained so existing consumers keep working, but the current backbone is the previous
+/// unattributed hybrid Mamba/Transformer stack, not PTv3, and no self-supervised objective runs.
 /// </para>
 /// </remarks>
 /// <example>
@@ -53,40 +84,28 @@ namespace AiDotNet.ComputerVision.Segmentation.PointCloud;
 [ModelTask(ModelTask.Segmentation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("Mamba3D: Enhancing Local Features for 3D Point Cloud Analysis via State Space Model", "https://arxiv.org/abs/2404.14966", Year = 2024, Authors = "Xu Han, Yuan Tang, Zhaoxuan Wang, Xianzhi Li")]
-public class Concerto<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
+[ResearchPaper("Concerto: Joint 2D-3D Self-Supervised Learning Emerges Spatial Representations", "https://arxiv.org/abs/2510.23607", Year = 2025)]
+public class Concerto<T> : Common.SemanticSegmentationBase<T>
 {
     private readonly ConcertoOptions _options;
     public override ModelOptions GetOptions() => _options;
 
     #region Fields
-    private readonly int _height, _width, _channels, _numClasses;
+    // Only Concerto's OWN configuration lives here. _height, _width, _channels, _numClasses,
+    // _useNativeMode, _onnxModelPath, _onnxSession, _optimizer, _disposed and _encoderLayerEnd all
+    // come from SemanticSegmentationBase -> SegmentationModelBase.
     private readonly ConcertoModelSize _modelSize;
     private readonly int[] _channelDims;
     private readonly int _decoderDim;
     private readonly int[] _depths;
     private readonly double _dropRate;
-    private readonly bool _useNativeMode;
-    private readonly string? _onnxModelPath;
-    private InferenceSession? _onnxSession;
-    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
-    private bool _disposed;
-    private int _encoderLayerEnd;
     #endregion
 
     #region Properties
-    /// <summary>
-    /// Gets whether this Concerto instance supports training.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Returns <c>true</c> in native mode, <c>false</c> in ONNX mode.
-    /// </para>
-    /// </remarks>
-    public override bool SupportsTraining => _useNativeMode;
+    // SupportsTraining, NumClasses, InputHeight, InputWidth and IsOnnxMode are all inherited and
+    // say exactly the same thing.
     internal bool UseNativeMode => _useNativeMode;
     internal ConcertoModelSize ModelSize => _modelSize;
-    internal int NumClasses => _numClasses;
     #endregion
 
     #region Constructors
@@ -110,15 +129,17 @@ public class Concerto<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
         ILossFunction<T>? lossFunction = null, int numClasses = 40,
         ConcertoModelSize modelSize = ConcertoModelSize.Base, double dropRate = 0.1,
         ConcertoOptions? options = null)
-        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>())
+        // The base resolves height/width/channels/numClasses/native-mode from the architecture and
+        // defaults `optimizer` lazily via CreateDefaultOptimizer(), so null is passed straight through.
+        : base(architecture, optimizer, lossFunction, numClasses)
     {
         _options = options ?? new ConcertoOptions(); Options = _options;
-        _height = architecture.InputHeight > 0 ? architecture.InputHeight : 1;
-        _width = architecture.InputWidth > 0 ? architecture.InputWidth : 1;
-        _channels = architecture.InputDepth > 0 ? architecture.InputDepth : 6;
-        _numClasses = numClasses; _modelSize = modelSize; _dropRate = dropRate;
-        _useNativeMode = true; _onnxModelPath = null;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        // Point clouds are [C, N] not images: this model's own fallback geometry is 1x1x6, not the
+        // base's 512x512x3.
+        if (architecture.InputHeight <= 0) _height = 1;
+        if (architecture.InputWidth <= 0) _width = 1;
+        if (architecture.InputDepth <= 0) _channels = 6;
+        _modelSize = modelSize; _dropRate = dropRate;
         (_channelDims, _depths, _decoderDim) = GetModelConfig(modelSize);
         InitializeLayers();
     }
@@ -142,21 +163,18 @@ public class Concerto<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
     public Concerto(NeuralNetworkArchitecture<T> architecture, string onnxModelPath,
         int numClasses = 40, ConcertoModelSize modelSize = ConcertoModelSize.Base,
         ConcertoOptions? options = null)
-        : base(architecture, new CrossEntropyWithLogitsLoss<T>())
+        // The base validates the path, sets ONNX mode, resolves the input geometry and opens the
+        // InferenceSession.
+        : base(architecture, onnxModelPath, numClasses)
     {
         _options = options ?? new ConcertoOptions(); Options = _options;
-        if (string.IsNullOrWhiteSpace(onnxModelPath))
-            throw new ArgumentException("ONNX model path cannot be null or empty.", nameof(onnxModelPath));
-        if (!File.Exists(onnxModelPath))
-            throw new FileNotFoundException($"Concerto ONNX model not found: {onnxModelPath}");
-        _height = architecture.InputHeight > 0 ? architecture.InputHeight : 1;
-        _width = architecture.InputWidth > 0 ? architecture.InputWidth : 1;
-        _channels = architecture.InputDepth > 0 ? architecture.InputDepth : 6;
-        _numClasses = numClasses; _modelSize = modelSize; _dropRate = 0.1;
-        _useNativeMode = false; _onnxModelPath = onnxModelPath; _optimizer = null;
+        // Point clouds are [C, N] not images: this model's own fallback geometry is 1x1x6, not the
+        // base's 512x512x3.
+        if (architecture.InputHeight <= 0) _height = 1;
+        if (architecture.InputWidth <= 0) _width = 1;
+        if (architecture.InputDepth <= 0) _channels = 6;
+        _modelSize = modelSize; _dropRate = 0.1;
         (_channelDims, _depths, _decoderDim) = GetModelConfig(modelSize);
-        try { _onnxSession = new InferenceSession(onnxModelPath); }
-        catch (Exception ex) { throw new InvalidOperationException($"Failed to load Concerto ONNX model: {ex.Message}", ex); }
         InitializeLayers();
     }
     #endregion
@@ -191,7 +209,7 @@ public class Concerto<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expectedOutput);
+            TrainWithTape(input, expectedOutput, Optimizer);
         }
         finally
         {
@@ -208,7 +226,7 @@ public class Concerto<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
         _ => ([48, 96, 192, 384], [2, 2, 6, 2], 256)
     };
 
-    private Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> Forward(Tensor<T> input)
     {
         bool hasBatch = input.Rank == 4; if (!hasBatch) input = AddBatchDimension(input);
         var features = input;
@@ -217,7 +235,7 @@ public class Concerto<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
         if (!hasBatch) features = RemoveBatchDimension(features); return features;
     }
 
-    private Tensor<T> PredictOnnx(Tensor<T> input)
+    protected override Tensor<T> PredictOnnx(Tensor<T> input)
     {
         if (_onnxSession is null) throw new InvalidOperationException("ONNX session is not initialized.");
         bool hasBatch = input.Rank == 4; if (!hasBatch) input = AddBatchDimension(input);
@@ -233,12 +251,6 @@ public class Concerto<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
         var result = new Tensor<T>(outputTensor.Dimensions.ToArray(), new Vector<T>(outputData));
         if (!hasBatch) result = RemoveBatchDimension(result); return result;
     }
-
-    private Tensor<T> AddBatchDimension(Tensor<T> tensor)
-    { var result = new Tensor<T>([1, tensor.Shape[0], tensor.Shape[1], tensor.Shape[2]]); tensor.Data.Span.CopyTo(result.Data.Span); return result; }
-
-    private Tensor<T> RemoveBatchDimension(Tensor<T> tensor)
-    { int[] s = new int[tensor.Shape.Length - 1]; for (int i = 0; i < s.Length; i++) s[i] = tensor.Shape[i + 1]; var r = new Tensor<T>(s); tensor.Data.Span.CopyTo(r.Data.Span); return r; }
     #endregion
 
     #region Abstract Implementation
@@ -266,18 +278,8 @@ public class Concerto<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
         }
     }
 
-    /// <summary>
-    /// Updates all trainable parameters from a flat parameter vector.
-    /// </summary>
-    /// <param name="parameters">Flat vector of all model parameters.</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Replaces all model weights with new values.
-    /// </para>
-    /// </remarks>
-    public override void UpdateParameters(Vector<T> parameters)
-    { int o = 0; foreach (var l in Layers) { var p = l.GetParameters(); int c = p.Length; if (o + c <= parameters.Length) { var n = new Vector<T>(c); for (int i = 0; i < c; i++) n[i] = parameters[o + i]; l.UpdateParameters(n); o += c; } } }
-
+    // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
+    // exactly the same enumeration, so this said nothing the base does not already say.
     /// <summary>
     /// Collects metadata describing this model's configuration.
     /// </summary>
@@ -329,29 +331,9 @@ public class Concerto<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() => _useNativeMode
         ? new Concerto<T>(Architecture, _optimizer, LossFunction, _numClasses, _modelSize, _dropRate, _options)
         : new Concerto<T>(Architecture, _onnxModelPath ?? throw new InvalidOperationException("ONNX model path not initialized."), _numClasses, _modelSize, _options);
-
-    /// <summary>
-    /// Releases managed resources including the ONNX inference session.
-    /// </summary>
-    /// <param name="disposing">True when called from Dispose().</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Frees memory used by the ONNX runtime.
-    /// </para>
-    /// </remarks>
-    protected override void Dispose(bool disposing)
-    { if (!_disposed) { if (disposing) { _onnxSession?.Dispose(); _onnxSession = null; } _disposed = true; } base.Dispose(disposing); }
     #endregion
 
-    #region ISemanticSegmentation Implementation
-    int ISegmentationModel<T>.NumClasses => _numClasses;
-    int ISegmentationModel<T>.InputHeight => _height;
-    int ISegmentationModel<T>.InputWidth => _width;
-    bool ISegmentationModel<T>.IsOnnxMode => !_useNativeMode;
-    Tensor<T> ISegmentationModel<T>.Segment(Tensor<T> image) => Predict(image);
-    Tensor<T> ISemanticSegmentation<T>.GetClassMap(Tensor<T> image)
-        => Common.SegmentationTensorOps.ArgmaxAlongClassDim(Predict(image));
-    Tensor<T> ISemanticSegmentation<T>.GetProbabilityMap(Tensor<T> image)
-        => Common.SegmentationTensorOps.SoftmaxAlongClassDim(Predict(image));
-    #endregion
+    // NumClasses, InputHeight, InputWidth, IsOnnxMode and Segment come from SegmentationModelBase;
+    // GetClassMap (argmax of Segment) and GetProbabilityMap (softmax of Segment) come from
+    // SemanticSegmentationBase and are the same two expressions this file used to spell out.
 }

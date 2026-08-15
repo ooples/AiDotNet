@@ -140,7 +140,7 @@ public class TimeBridge<T> : TimeSeriesFoundationModelBase<T>
         OnnxModelPath = onnxModelPath;
         OnnxSession = new InferenceSession(onnxModelPath);
 
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? CreateDefaultOptimizer(options);
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
 
         CopyOptionsToFields(options);
@@ -164,7 +164,7 @@ public class TimeBridge<T> : TimeSeriesFoundationModelBase<T>
         OnnxSession = null;
         OnnxModelPath = null;
 
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? CreateDefaultOptimizer(options);
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
 
         CopyOptionsToFields(options);
@@ -184,6 +184,19 @@ public class TimeBridge<T> : TimeSeriesFoundationModelBase<T>
         _modelSize = options.ModelSize;
         _bridgeDimension = options.BridgeDimension;
         _useStationarityGating = options.UseStationarityGating;
+    }
+
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreateDefaultOptimizer(
+        TimeBridgeOptions<T> options)
+    {
+        return new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = options.LearningRate,
+                EnableGradientClipping = true,
+                MaxGradientNorm = 1.0
+            });
     }
 
     #endregion
@@ -214,6 +227,9 @@ public class TimeBridge<T> : TimeSeriesFoundationModelBase<T>
     public override bool SupportsTraining => _useNativeMode;
 
     /// <inheritdoc/>
+    protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? TrainingOptimizer => _optimizer;
+
+    /// <inheritdoc/>
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         return _useNativeMode ? ForwardNative(input) : ForecastOnnx(input);
@@ -236,12 +252,8 @@ public class TimeBridge<T> : TimeSeriesFoundationModelBase<T>
         base.Train(input, target);
     }
 
-    /// <inheritdoc/>
-    public override void UpdateParameters(Vector<T> gradients)
-    {
-        // Parameters are updated through the optimizer in Train()
-    }
-
+    // UpdateParameters was an empty override, silently dropping every restore. The base
+    // distributes the vector over the declared enumeration.
     /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()
     {
@@ -281,7 +293,8 @@ public class TimeBridge<T> : TimeSeriesFoundationModelBase<T>
             DropoutRate = _dropout,
             ModelSize = _modelSize,
             BridgeDimension = _bridgeDimension,
-            UseStationarityGating = _useStationarityGating
+            UseStationarityGating = _useStationarityGating,
+            LearningRate = _options.LearningRate
         });
     }
 
@@ -378,45 +391,12 @@ public class TimeBridge<T> : TimeSeriesFoundationModelBase<T>
 
     /// <inheritdoc/>
     public override Tensor<T> ApplyInstanceNormalization(Tensor<T> input)
-    {
-        int batchSize = input.Shape[0];
-        int seqLen = input.Shape.Length > 1 ? input.Shape[1] : input.Length;
-        var result = new Tensor<T>(input._shape);
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            T mean = NumOps.Zero;
-            for (int t = 0; t < seqLen; t++)
-            {
-                int idx = b * seqLen + t;
-                if (idx < input.Length)
-                    mean = NumOps.Add(mean, input[idx]);
-            }
-            mean = NumOps.Divide(mean, NumOps.FromDouble(seqLen));
-
-            T variance = NumOps.Zero;
-            for (int t = 0; t < seqLen; t++)
-            {
-                int idx = b * seqLen + t;
-                if (idx < input.Length)
-                {
-                    var diff = NumOps.Subtract(input[idx], mean);
-                    variance = NumOps.Add(variance, NumOps.Multiply(diff, diff));
-                }
-            }
-            variance = NumOps.Divide(variance, NumOps.FromDouble(seqLen));
-            T std = NumOps.Sqrt(NumOps.Add(variance, NumOps.FromDouble(1e-5)));
-
-            for (int t = 0; t < seqLen; t++)
-            {
-                int idx = b * seqLen + t;
-                if (idx < input.Length && idx < result.Length)
-                    result.Data.Span[idx] = NumOps.Divide(NumOps.Subtract(input[idx], mean), std);
-            }
-        }
-
-        return result;
-    }
+        // RevIN forward (Kim et al. 2022), delegated to the shared tape-tracked helper. The previous
+        // hand-rolled version accumulated mean/variance with scalar NumOps arithmetic and wrote the
+        // output through result.Data.Span[...], which the autodiff tape cannot observe: the normalised
+        // tensor came back as a LEAF, so no gradient could flow through the normalisation. RevIN is a
+        // differentiable layer in the paper, not a preprocessing step.
+        => NormalizeInstanceOnTape(input, DefaultRevInEpsilon, out _, out _);
 
     /// <inheritdoc/>
     public override Dictionary<string, T> GetFinancialMetrics()
@@ -460,6 +440,40 @@ public class TimeBridge<T> : TimeSeriesFoundationModelBase<T>
             current = Engine.Reshape(current, new[] { current.Shape[1] });
 
         return current;
+    }
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// TimeBridge normalizes the input and adds a batch axis before its
+    /// helper-created reshape layer. Mirror that preparation here instead of
+    /// feeding a raw rank-1 series into the base class's flat activation walk.
+    /// </remarks>
+    public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input)
+    {
+        if (!_useNativeMode)
+            return base.GetNamedLayerActivations(input);
+
+        bool wasTraining = IsTrainingMode;
+        SetTrainingMode(false);
+        try
+        {
+            var activations = new Dictionary<string, Tensor<T>>();
+            var current = ApplyInstanceNormalization(input);
+            if (current.Rank == 1)
+                current = current.Reshape(new[] { 1, current.Length });
+
+            for (int i = 0; i < Layers.Count; i++)
+            {
+                current = Layers[i].Forward(current);
+                activations[$"Layer_{i}_{Layers[i].GetType().Name}"] = current.Clone();
+            }
+
+            return activations;
+        }
+        finally
+        {
+            SetTrainingMode(wasTraining);
+        }
     }
 
     protected override Tensor<T> ForecastOnnx(Tensor<T> input)

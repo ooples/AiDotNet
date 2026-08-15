@@ -81,8 +81,18 @@ namespace AiDotNet.Diffusion.ThreeD;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Magic3D: High-Resolution Text-to-3D Content Creation", "https://arxiv.org/abs/2211.10440", Year = 2023, Authors = "Lin et al.")]
-public class Magic3DModel<T> : ThreeDDiffusionModelBase<T>
+public partial class Magic3DModel<T> : ThreeDDiffusionModelBase<T>
 {
+    /// <inheritdoc />
+    /// <remarks>Registration order is serialization order, and matches the
+    /// concatenation the previous hand-written GetParameters performed.</remarks>
+    protected override void RegisterComponents()
+    {
+        RegisterParameterComponent(_coarseUnet);
+        RegisterParameterComponent(_fineUnet);
+        RegisterParameterComponent(_vae);
+    }
+
     #region Constants
 
     private const int MAGIC3D_LATENT_CHANNELS = 4;
@@ -131,7 +141,6 @@ public class Magic3DModel<T> : ThreeDDiffusionModelBase<T>
     public override bool SupportsScoreDistillation => true;
 
     /// <inheritdoc />
-    public override long ParameterCount => _coarseUnet.ParameterCount + _fineUnet.ParameterCount + _vae.ParameterCount;
 
     /// <summary>
     /// Gets the coarse-stage noise predictor (pixel-space SDS).
@@ -232,65 +241,7 @@ public class Magic3DModel<T> : ThreeDDiffusionModelBase<T>
 
     #region IParameterizable Implementation
 
-    /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        var coarseParams = _coarseUnet.GetParameters();
-        var fineParams = _fineUnet.GetParameters();
-        var vaeParams = _vae.GetParameters();
 
-        var totalLength = coarseParams.Length + fineParams.Length + vaeParams.Length;
-        var combined = new Vector<T>(totalLength);
-
-        var offset = 0;
-        for (int i = 0; i < coarseParams.Length; i++)
-            combined[offset + i] = coarseParams[i];
-        offset += coarseParams.Length;
-
-        for (int i = 0; i < fineParams.Length; i++)
-            combined[offset + i] = fineParams[i];
-        offset += fineParams.Length;
-
-        for (int i = 0; i < vaeParams.Length; i++)
-            combined[offset + i] = vaeParams[i];
-
-        return combined;
-    }
-
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int coarseCount = checked((int)_coarseUnet.ParameterCount);
-        int fineCount = checked((int)_fineUnet.ParameterCount);
-        var vaeCount = checked((int)_vae.ParameterCount);
-
-        if (parameters.Length != coarseCount + fineCount + vaeCount)
-        {
-            throw new ArgumentException(
-                $"Expected {coarseCount + fineCount + vaeCount} parameters, got {parameters.Length}.",
-                nameof(parameters));
-        }
-
-        var coarseParams = new Vector<T>(coarseCount);
-        var fineParams = new Vector<T>(fineCount);
-        var vaeParams = new Vector<T>(vaeCount);
-
-        var offset = 0;
-        for (int i = 0; i < coarseCount; i++)
-            coarseParams[i] = parameters[offset + i];
-        offset += coarseCount;
-
-        for (int i = 0; i < fineCount; i++)
-            fineParams[i] = parameters[offset + i];
-        offset += fineCount;
-
-        for (int i = 0; i < vaeCount; i++)
-            vaeParams[i] = parameters[offset + i];
-
-        _coarseUnet.SetParameters(coarseParams);
-        _fineUnet.SetParameters(fineParams);
-        _vae.SetParameters(vaeParams);
-    }
 
     #endregion
 

@@ -102,7 +102,13 @@ public class ShowO<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<T>
     {
         _options = options ?? new ShowOOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate,
+                WeightDecay = _options.WeightDecay,
+            });
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.DecoderDim;
@@ -203,7 +209,10 @@ public class ShowO<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<T>
         int hiddenDim = textHidden.Length;
 
         // Step 2: Initialize with all-MASK tokens
-        int numGenTokens = 256; // 16x16 grid
+        int numGenTokens = _options.ImageTokenCount;
+        int gridSize = (int)Math.Sqrt(numGenTokens);
+        if (numGenTokens <= 0 || gridSize * gridSize != numGenTokens)
+            throw new InvalidOperationException("ImageTokenCount must be a positive perfect square.");
         var visualTokenIds = new int[numGenTokens];
         var isMasked = new bool[numGenTokens];
         for (int i = 0; i < numGenTokens; i++)
@@ -213,7 +222,9 @@ public class ShowO<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<T>
         }
 
         // Step 3: Discrete diffusion - iterative mask-predict
-        int numDiffusionSteps = 16; // Unmask ~16 tokens per step
+        int numDiffusionSteps = _options.DiffusionSteps;
+        if (numDiffusionSteps <= 0)
+            throw new InvalidOperationException("DiffusionSteps must be positive.");
         int tokensPerStep = Math.Max(1, numGenTokens / numDiffusionSteps);
 
         for (int step = 0; step < numDiffusionSteps; step++)
@@ -239,14 +250,14 @@ public class ShowO<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<T>
                 double contextVal = 0;
                 int neighborCount = 0;
                 // Check 4-connected spatial neighbors
-                int row = t / 16,
-                    col = t % 16;
+                int row = t / gridSize,
+                    col = t % gridSize;
                 int[] neighbors =
                 {
-                    (row - 1) * 16 + col,
-                    (row + 1) * 16 + col,
-                    row * 16 + col - 1,
-                    row * 16 + col + 1,
+                    (row - 1) * gridSize + col,
+                    (row + 1) * gridSize + col,
+                    row * gridSize + col - 1,
+                    row * gridSize + col + 1,
                 };
                 foreach (int n in neighbors)
                 {
@@ -303,7 +314,6 @@ public class ShowO<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<T>
                 visualTokenIds[t] = t % numVisTokens;
 
         // Step 4: Decode tokens to pixels
-        int gridSize = 16;
         int patchSize = outSize / gridSize;
         if (patchSize < 1)
             patchSize = 1;
@@ -412,23 +422,21 @@ public class ShowO<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<T>
         if (IsOnnxMode)
             throw new NotSupportedException("Training is not supported in ONNX mode.");
         SetTrainingMode(true);
-        TrainWithTape(input, expected);
-        SetTrainingMode(false);
-    }
-
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        if (!_useNativeMode)
-            throw new NotSupportedException("Cannot update parameters in ONNX mode.");
-        int idx = 0;
-        foreach (var l in Layers)
+        try
         {
-            int c = (int)l.ParameterCount;
-            l.UpdateParameters(parameters.Slice(idx, c));
-            idx += c;
+            TrainWithTape(input, expected, _optimizer);
+        }
+        finally
+        {
+            SetTrainingMode(false);
         }
     }
 
+    /// <inheritdoc />
+    /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
+    /// write on every parameter surface, so the guard is stated once here instead of being
+    /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
+    protected override bool SupportsParameterMutation => _useNativeMode;
     protected override Tensor<T> PreprocessImage(Tensor<T> image) =>
         NormalizeImage(image, _options.ImageMean, _options.ImageStd);
 
@@ -460,6 +468,10 @@ public class ShowO<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<T>
         writer.Write(_options.NumHeads);
         writer.Write(_options.SupportsGeneration);
         writer.Write(_options.OutputImageSize);
+        writer.Write(_options.ImageTokenCount);
+        writer.Write(_options.DiffusionSteps);
+        writer.Write(_options.LearningRate);
+        writer.Write(_options.WeightDecay);
     }
 
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
@@ -476,15 +488,24 @@ public class ShowO<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<T>
         _options.NumHeads = reader.ReadInt32();
         _options.SupportsGeneration = reader.ReadBoolean();
         _options.OutputImageSize = reader.ReadInt32();
+        if (reader.BaseStream.Position < reader.BaseStream.Length)
+            _options.ImageTokenCount = reader.ReadInt32();
+        if (reader.BaseStream.Position < reader.BaseStream.Length)
+            _options.DiffusionSteps = reader.ReadInt32();
+        if (reader.BaseStream.Position < reader.BaseStream.Length)
+            _options.LearningRate = reader.ReadDouble();
+        if (reader.BaseStream.Position < reader.BaseStream.Length)
+            _options.WeightDecay = reader.ReadDouble();
         if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
             OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
     }
 
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
+        var options = new ShowOOptions(_options);
         if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new ShowO<T>(Architecture, mp, _options);
-        return new ShowO<T>(Architecture, _options);
+            return new ShowO<T>(Architecture, mp, options);
+        return new ShowO<T>(Architecture, options);
     }
 
     private void ThrowIfDisposed()

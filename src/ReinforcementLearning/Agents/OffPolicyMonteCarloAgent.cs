@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -300,7 +300,30 @@ public class OffPolicyMonteCarloAgent<T> : ReinforcementLearningAgentBase<T>
         };
     }
 
-    public override long ParameterCount => _qTable.Count * _options.ActionSize;
+    /// <summary>
+    /// The number of Q-values actually stored, not <c>_qTable.Count * ActionSize</c>. That product
+    /// assumes every visited state has explored every action, which a tabular agent does not do --
+    /// states appear as they are seen and actions as they are tried.
+    /// </summary>
+    private long QTableEntryCount
+    {
+        get
+        {
+            long total = 0;
+            foreach (var state in _qTable) total += state.Value.Count;
+            return total;
+        }
+    }
+
+    /// <inheritdoc />
+    protected override void RegisterComponents()
+    {
+        base.RegisterComponents();
+        RegisterParameterComponent(
+            "q-table",
+            new AiDotNet.Models.Parameters.NestedKeyedScalarCollectionParameterSource<T, string, int>(
+                () => _qTable));
+    }
 
     public override int FeatureCount => _options.ActionSize;
 
@@ -332,47 +355,6 @@ public class OffPolicyMonteCarloAgent<T> : ReinforcementLearningAgentBase<T>
 
         _qTable = JsonConvert.DeserializeObject<Dictionary<string, Dictionary<int, T>>>(state.QTable.ToString()) ?? new Dictionary<string, Dictionary<int, T>>();
         _cTable = JsonConvert.DeserializeObject<Dictionary<string, Dictionary<int, T>>>(state.CTable.ToString()) ?? new Dictionary<string, Dictionary<int, T>>();
-    }
-
-    public override Vector<T> GetParameters()
-    {
-        var paramsList = new List<T>();
-        foreach (var stateEntry in _qTable)
-        {
-            foreach (var actionValue in stateEntry.Value)
-            {
-                paramsList.Add(actionValue.Value);
-            }
-        }
-
-        if (paramsList.Count == 0)
-        {
-            paramsList.Add(NumOps.Zero);
-        }
-
-        var paramsVector = new Vector<T>(paramsList.Count);
-        for (int i = 0; i < paramsList.Count; i++)
-        {
-            paramsVector[i] = paramsList[i];
-        }
-
-        return paramsVector;
-    }
-
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int index = 0;
-        foreach (var stateEntry in _qTable.ToList())
-        {
-            for (int a = 0; a < _options.ActionSize; a++)
-            {
-                if (index < parameters.Length)
-                {
-                    _qTable[stateEntry.Key][a] = parameters[index];
-                    index++;
-                }
-            }
-        }
     }
 
     public override IFullModel<T, Vector<T>, Vector<T>> Clone()

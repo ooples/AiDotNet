@@ -49,7 +49,11 @@ namespace AiDotNet.Finance.Volatility;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Generalized Autoregressive Conditional Heteroskedasticity", "https://doi.org/10.1016/0304-4076(86)90063-1", Year = 1986, Authors = "Tim Bollerslev")]
-public class NeuralGARCH<T> : FinancialModelBase<T>, IVolatilityModel<T>
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Input, BatchOptional = true)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Output, BatchOptional = true)]
+public partial class NeuralGARCH<T> : FinancialModelBase<T>, IVolatilityModel<T>
 {
     #region Native Mode Fields
 
@@ -258,7 +262,7 @@ public class NeuralGARCH<T> : FinancialModelBase<T>, IVolatilityModel<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, target);
+            TrainWithTape(input, target, _optimizer);
         }
         finally
         {
@@ -266,23 +270,8 @@ public class NeuralGARCH<T> : FinancialModelBase<T>, IVolatilityModel<T>
         }
     }
 
-    /// <summary>
-    /// Updates model parameters from a flat vector.
-    /// </summary>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> This lets optimizers update every weight at once.</para>
-    /// </remarks>
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        int offset = 0;
-        foreach (var layer in Layers)
-        {
-            var layerParams = layer.GetParameters();
-            layer.SetParameters(parameters.Slice(offset, layerParams.Length));
-            offset += layerParams.Length;
-        }
-    }
-
+    // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
+    // exactly the same enumeration, so this said nothing the base does not already say.
     /// <summary>
     /// Returns metadata describing the model.
     /// </summary>

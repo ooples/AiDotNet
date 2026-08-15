@@ -52,7 +52,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Learning Phrase Representations using RNN Encoder-Decoder for Statistical Machine Translation", "https://arxiv.org/abs/1406.1078", Year = 2014, Authors = "Kyunghyun Cho, Bart van Merrienboer, Caglar Gulcehre, Dzmitry Bahdanau, Fethi Bougares, Holger Schwenk, Yoshua Bengio")]
-public class GRUNeuralNetwork<T> : NeuralNetworkBase<T>
+public class GRUNeuralNetwork<T> : SequenceModelLayoutBase<T>
 {
     private readonly GRUOptions _options;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
@@ -177,48 +177,8 @@ public class GRUNeuralNetwork<T> : NeuralNetworkBase<T>
         }
     }
 
-    /// <summary>
-    /// Updates the parameters of all layers in the network using the provided parameter vector.
-    /// </summary>
-    /// <param name="parameters">A vector containing updated parameters for all layers.</param>
-    /// <remarks>
-    /// <para>
-    /// This method distributes the provided parameter values to each layer in the network. It extracts
-    /// the appropriate segment of the parameter vector for each layer based on the layer's parameter count.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method updates all the learned values in the network.
-    /// 
-    /// During training, a neural network adjusts its internal values (parameters) to make
-    /// better predictions. This method:
-    /// 
-    /// 1. Takes a long list of new parameter values
-    /// 2. Figures out which values belong to which layers
-    /// 3. Updates each layer with its corresponding values
-    /// 
-    /// Think of it like fine-tuning different parts of a machine based on how well it performed.
-    /// GRU networks have several important parameters:
-    /// - Update gate parameters: control what information to add from the current input
-    /// - Reset gate parameters: control what past information to forget
-    /// - Memory parameters: store information across the sequence
-    /// 
-    /// This method ensures all these parameters get updated correctly during training.
-    /// </para>
-    /// </remarks>
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        int startIndex = 0;
-        foreach (var layer in Layers)
-        {
-            int layerParameterCount = checked((int)layer.ParameterCount);
-            if (layerParameterCount > 0)
-            {
-                Vector<T> layerParameters = parameters.SubVector(startIndex, layerParameterCount);
-                layer.UpdateParameters(layerParameters);
-                startIndex += layerParameterCount;
-            }
-        }
-    }
-
+    // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
+    // exactly the same enumeration, so this said nothing the base does not already say.
     /// <summary>
     /// Performs a forward pass through the network and generates predictions.
     /// </summary>

@@ -38,10 +38,15 @@ namespace AiDotNet.Safety.Image;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("Unmasking DeepFakes with Simple Features",
-    "https://arxiv.org/abs/2003.08685",
-    Year = 2020,
-    Authors = "Ricard Durall, Margret Keuper, Janis Keuper")]
+// Citation URL corrected to arXiv 1911.00686, the actual id for this title. The recorded 2003.08685
+// is "Leveraging Frequency Analysis for Deep Fake Image Recognition" (Frank et al.) — a real and
+// closely related paper, but a different one, and it detects via the DCT. This implementation uses the
+// DFT power spectrum with no DCT anywhere, which matches Durall et al., so the recorded title is the
+// correct attribution and only the identifier was wrong.
+[ResearchPaper("Unmasking DeepFakes with simple Features",
+    "https://arxiv.org/abs/1911.00686",
+    Year = 2019,
+    Authors = "Ricard Durall, Margret Keuper, Franz-Josef Pfreundt, Janis Keuper")]
 public class FrequencyDeepfakeDetector<T> : ImageSafetyModuleBase<T>
 {
 

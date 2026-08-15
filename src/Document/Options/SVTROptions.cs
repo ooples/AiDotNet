@@ -13,7 +13,8 @@ public class SVTROptions : DocumentNeuralNetworkOptions
 
     public SVTROptions(SVTROptions other)
     {
-        ArgumentNullException.ThrowIfNull(other);
+        if (other is null)
+            throw new ArgumentNullException(nameof(other));
         InputHeight = other.InputHeight;
         InputWidth = other.InputWidth;
         EmbedDimensions = (int[])other.EmbedDimensions.Clone();

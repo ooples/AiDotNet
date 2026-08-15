@@ -45,12 +45,23 @@ namespace AiDotNet.Audio.SourceSeparation;
 [ResearchPaper("Danna-Sep: Unite to Separate - A Unified Model for Audio Source Separation", "https://doi.org/10.48550/arXiv.2410.11145", Year = 2024, Authors = "Dongchao Yang, Songxiang Liu, Yuanyuan Wang, Helen Meng")]
 public class DannaSep<T> : AudioNeuralNetworkBase<T>, IMusicSourceSeparator<T>
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// DERIVED, not stored: PredictCore folds over Layers, and the last layer
+    /// CreateDefaultDannaSepLayers emits is the multi-source mask head
+    /// <c>DenseLayer&lt;T&gt;(numFreqBins * numSources)</c> with a sigmoid. Note this model names the
+    /// stem count <c>NumSources</c>, not <c>NumStems</c> like its siblings; 8196 (2049 x 4) is stored
+    /// nowhere.
+    /// </remarks>
+    protected override int OutputFeatureWidth => _options.NumFreqBins * _options.NumSources;
+
     #region Fields
 
     private readonly DannaSepOptions _options;
     public override ModelOptions GetOptions() => _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private readonly ShortTimeFourierTransform<T> _stft;
+    [Scratch]
     private Tensor<T>? _lastPhase;
     private bool _useNativeMode;
     private bool _disposed;
@@ -226,7 +237,7 @@ public class DannaSep<T> : AudioNeuralNetworkBase<T>, IMusicSourceSeparator<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expected);
+            TrainWithTape(input, expected, _optimizer);
         }
         finally
         {
@@ -234,12 +245,11 @@ public class DannaSep<T> : AudioNeuralNetworkBase<T>, IMusicSourceSeparator<T>
         }
     }
 
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        if (!_useNativeMode) throw new NotSupportedException("ONNX mode.");
-        int idx = 0; foreach (var l in Layers) { int c = (int)l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; }
-    }
-
+    /// <inheritdoc />
+    /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
+    /// write on every parameter surface, so the guard is stated once here instead of being
+    /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
+    protected override bool SupportsParameterMutation => _useNativeMode;
     protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio) => ComputeSTFT(rawAudio);
     protected override Tensor<T> PostprocessOutput(Tensor<T> o) => o;
 

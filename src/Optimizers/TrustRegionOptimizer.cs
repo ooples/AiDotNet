@@ -116,6 +116,22 @@ public class TrustRegionOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBa
     /// </remarks>
     public override Vector<T> UpdateParameters(Vector<T> parameters, Vector<T> gradient)
     {
+        if (parameters.Length != gradient.Length)
+        {
+            throw new ArgumentException(
+                $"Parameter vector length ({parameters.Length}) must match gradient vector length ({gradient.Length}).",
+                nameof(gradient));
+        }
+
+        if ((_trustRegionPreviousParameters is not null && _trustRegionPreviousParameters.Length != parameters.Length)
+            || (_trustRegionPreviousGradient is not null && _trustRegionPreviousGradient.Length != parameters.Length))
+        {
+            _trustRegionPreviousParameters = null;
+            _trustRegionPreviousGradient = null;
+            _trustRegionRadius = NumOps.FromDouble(_options.InitialTrustRegionRadius);
+            _iteration = 0;
+        }
+
         _iteration++;
 
         // Initialize trust region radius if needed
@@ -149,24 +165,31 @@ public class TrustRegionOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBa
             alpha = maxAlpha;
         }
 
-        // Compute the descent direction (negative gradient normalized, then scaled)
-        var direction = (Vector<T>)Engine.Multiply(gradient, NumOps.Negate(NumOps.One));
-        var normalizedDirection = (Vector<T>)Engine.Divide(direction, gradientNorm);
-
-        // Step is alpha * ||g|| in the normalized direction = alpha * (-g/||g||) * ||g|| = -alpha * g
-        var stepSize = NumOps.Multiply(alpha, gradientNorm);
-        var step = (Vector<T>)Engine.Multiply(normalizedDirection, stepSize);
-
-        // New parameters
-        var newParameters = (Vector<T>)Engine.Add(parameters, step);
+        // The normalized-direction expression simplifies exactly to -alpha * gradient.
+        var newParameters = new Vector<T>(parameters.Length, skipZeroInit: true);
+        var parameterSpan = parameters.AsSpan();
+        var gradientSpan = gradient.AsSpan();
+        var newParameterSpan = newParameters.AsWritableSpan();
+        for (int i = 0; i < newParameterSpan.Length; i++)
+        {
+            newParameterSpan[i] = NumOps.Subtract(
+                parameterSpan[i],
+                NumOps.Multiply(alpha, gradientSpan[i]));
+        }
 
         // Adapt trust region radius based on gradient change (proxy for step success)
         if (_trustRegionPreviousGradient is not null && _trustRegionPreviousParameters is not null)
         {
-            // Compute the gradient difference to estimate curvature
-            var gradDiff = (Vector<T>)Engine.Subtract(gradient, _trustRegionPreviousGradient);
-            var paramDiff = (Vector<T>)Engine.Subtract(parameters, _trustRegionPreviousParameters);
-            var paramDiffNorm = paramDiff.Norm();
+            T paramDiffSquaredNorm = NumOps.Zero;
+            var previousParameterSpan = _trustRegionPreviousParameters.AsSpan();
+            for (int i = 0; i < parameterSpan.Length; i++)
+            {
+                T difference = NumOps.Subtract(parameterSpan[i], previousParameterSpan[i]);
+                paramDiffSquaredNorm = NumOps.Add(
+                    paramDiffSquaredNorm,
+                    NumOps.Multiply(difference, difference));
+            }
+            var paramDiffNorm = NumOps.Sqrt(paramDiffSquaredNorm);
 
             if (NumOps.GreaterThan(paramDiffNorm, NumOps.FromDouble(1e-10)))
             {
@@ -193,8 +216,13 @@ public class TrustRegionOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBa
         }
 
         // Store current state for next iteration
-        _trustRegionPreviousParameters = new Vector<T>(parameters);
-        _trustRegionPreviousGradient = new Vector<T>(gradient);
+        if (_trustRegionPreviousParameters is null || _trustRegionPreviousParameters.Length != parameters.Length)
+        {
+            _trustRegionPreviousParameters = new Vector<T>(parameters.Length, skipZeroInit: true);
+            _trustRegionPreviousGradient = new Vector<T>(parameters.Length, skipZeroInit: true);
+        }
+        parameterSpan.CopyTo(_trustRegionPreviousParameters.AsWritableSpan());
+        gradientSpan.CopyTo(_trustRegionPreviousGradient!.AsWritableSpan());
 
         return newParameters;
     }

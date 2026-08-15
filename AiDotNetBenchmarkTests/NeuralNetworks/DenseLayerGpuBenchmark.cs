@@ -1,8 +1,12 @@
-using System;
+﻿using System;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.NeuralNetworks.Layers;
+// AiDotNet.Helpers, for the EngineBroadcastCompatibilityExtensions shim. It moved out of
+// AiDotNet.Tensors.Engines so a future Tensors release re-adding these members cannot silently
+// shadow it. src/AiDotNet.csproj imports AiDotNet.Helpers implicitly; this project does not.
+using AiDotNet.Helpers;
 using AiDotNet.Tensors.Engines;
 using BenchmarkDotNet.Attributes;
 using BenchmarkDotNet.Jobs;

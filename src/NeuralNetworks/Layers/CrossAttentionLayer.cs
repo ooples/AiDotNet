@@ -31,8 +31,40 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.CrossModalAttention)]
 [LayerTask(LayerTask.AttentionComputation)]
 [LayerProperty(IsTrainable = true, ChangesShape = false, ApiShape = LayerApiShape.DualTensor, TestInputShape = "1, 16", TestConstructorArgs = "16, 16, 2, 4")]
-public partial class CrossAttentionLayer<T> : LayerBase<T>
+// A DUAL-INPUT layer that is nonetheless safe to declare, and it is worth saying why: a contract
+// resolves against ONE input's axes, so a layer whose output size depends on its second input cannot be
+// declared at all. This one does not. ForwardCrossAttention returns "Output tensor with same shape as
+// query" - attention emits one row per QUERY position, and the context only sets how many keys each of
+// those rows attends over. The context's own length never reaches the output. The query is input 0 in
+// every entry point: ForwardTraced passes it as both query and context, ForwardTracedMany takes
+// inputs[0] as query, and ForwardTracedPorts takes it by the name "query".
+//
+// SHAPE-PRESERVING at each declared rank, from the restore block at the end of that method: rank 2 comes
+// back as [queryLen, _queryDim], rank 4 as [batch, _queryDim, height, width]. The feature axis looks
+// fixed but is genuinely Same, because the layer REJECTS a query whose feature width is not _queryDim
+// ("Query feature dimension ... must match expected") rather than reshaping it - so in and out always
+// agree, and matching layouts let the generator derive Same for every axis.
+//
+// Rank 4 is named [Batch, Channels, Height, Width] because that is what the method's own parameter doc
+// calls it ("[batch, channels, H, W]"); the layer folds H*W into the query length and unfolds it again.
+// Ranks above 4 are handled by collapsing the leading axes into batch, but those axes have no roles to
+// name, so they are not declared.
+[TensorLayout(TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Output)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Output)]
+[AutoParameters]
+public partial class CrossAttentionLayer<T> : LayerBase<T>, IShapeContract
 {
+
+    /// <summary>Construction state, retained so the layer can be rebuilt exactly rather than inferred from its shape.</summary>
+    private readonly int _sequenceLength;
     private readonly int _queryDim;
     private readonly int _contextDim;
     private readonly int _headCount;
@@ -40,21 +72,24 @@ public partial class CrossAttentionLayer<T> : LayerBase<T>
     private readonly bool _zeroOutputProjection;
 
     // Query projection: queryDim -> queryDim
-    [TrainableParameter(Role = PersistentTensorRole.Weights)]
-
+    [TrainableParameter(Role = PersistentTensorRole.Weights, Shape = "_queryDim, _queryDim")]
     private Tensor<T> _queryWeights;
 
     // Key projection: contextDim -> queryDim
+    [TrainableParameter(Role = PersistentTensorRole.Weights, Shape = "_contextDim, _queryDim")]
     private Tensor<T> _keyWeights;
 
     // Value projection: contextDim -> queryDim
+    [TrainableParameter(Role = PersistentTensorRole.Weights, Shape = "_contextDim, _queryDim")]
     private Tensor<T> _valueWeights;
 
     // Output projection: queryDim -> queryDim
+    [TrainableParameter(Role = PersistentTensorRole.Weights, Shape = "_queryDim, _queryDim")]
     private Tensor<T> _outputWeights;
-    [TrainableParameter(Role = PersistentTensorRole.Biases)]
-
+    [TrainableParameter(Role = PersistentTensorRole.Biases, Shape = "_queryDim")]
     private Tensor<T> _outputBias;
+
+    private bool _isInitialized;
 
     // Cached values for backward pass
     private Tensor<T>? _lastQuery;
@@ -94,19 +129,33 @@ public partial class CrossAttentionLayer<T> : LayerBase<T>
     /// </summary>
     protected override bool SupportsGpuExecution => true;
 
-    /// <inheritdoc/>
-    public override long ParameterCount =>
-        _queryWeights.Length + _keyWeights.Length + _valueWeights.Length +
-        _outputWeights.Length + _outputBias.Length;
-
     /// <summary>
     /// Creates a new cross-attention layer for conditioning.
     /// </summary>
     /// <param name="queryDim">Dimension of query features (spatial channels).</param>
     /// <param name="contextDim">Dimension of context features (text embedding).</param>
     /// <param name="headCount">Number of attention heads.</param>
+    /// <inheritdoc/>
+    /// <remarks>
+    /// Cross-attention emits one vector per QUERY position, so its output length is its input
+    /// length; only the feature width is fixed, at queryDim.
+    ///
+    /// The declared shape used to be [sequenceLength, queryDim], where sequenceLength is the
+    /// constructor's "maximum sequence length for queries" and defaults to 64. That is a
+    /// CAPACITY, not what the layer produces: a forward over 4 query positions still emits 4.
+    /// Every consumer reading the declaration believed the sequence was 64 long, and because
+    /// chain resolution seeds each layer from the previous layer's declaration, the wrong length
+    /// propagated into the attention and decoder layers downstream -- which then reported
+    /// [64, 32] and [4, 32] while producing [4, 32] and [2, 32].
+    /// </remarks>
+    protected override bool IsShapePreserving => true;
+
     /// <param name="sequenceLength">Maximum sequence length for queries.</param>
-    public CrossAttentionLayer(int queryDim, int contextDim, int headCount, int sequenceLength = 64)
+    public CrossAttentionLayer(
+        [LayerState] int queryDim,
+        [LayerState] int contextDim,
+        [LayerState] int headCount,
+        [LayerState] int sequenceLength = 64)
         : this(queryDim, contextDim, headCount, sequenceLength, zeroOutputProjection: false)
     {
     }
@@ -116,13 +165,14 @@ public partial class CrossAttentionLayer<T> : LayerBase<T>
     /// projection, as used by residual temporal-attention adapters.
     /// </summary>
     public CrossAttentionLayer(
-        int queryDim,
-        int contextDim,
-        int headCount,
-        int sequenceLength,
-        bool zeroOutputProjection)
-        : base(new[] { sequenceLength, queryDim }, new[] { sequenceLength, queryDim }, (IActivationFunction<T>)new IdentityActivation<T>())
+        [LayerState] int queryDim,
+        [LayerState] int contextDim,
+        [LayerState] int headCount,
+        [LayerState] int sequenceLength,
+        [LayerState] bool zeroOutputProjection)
+        : base(new[] { -1, queryDim }, new[] { -1, queryDim }, (IActivationFunction<T>)new IdentityActivation<T>())
     {
+        _sequenceLength = sequenceLength;
         _queryDim = queryDim;
         _contextDim = contextDim;
         _headCount = headCount;
@@ -134,32 +184,58 @@ public partial class CrossAttentionLayer<T> : LayerBase<T>
             throw new ArgumentException($"Query dimension ({queryDim}) must be divisible by head count ({headCount}).");
         }
 
-        // Initialize projection matrices
-        // Q projection: queryDim -> queryDim (same dimension)
-        _queryWeights = new Tensor<T>(new[] { queryDim, queryDim });
+        // Projection dimensions are completely known at construction, but their values are not
+        // needed for shape discovery or parameter manifests. Empty placeholders preserve a stable
+        // generated parameter surface while deferring the potentially foundation-scale allocation
+        // until forward/value access or chunk enumeration reaches this layer.
+        _queryWeights = new Tensor<T>([0, 0]);
+        _keyWeights = new Tensor<T>([0, 0]);
+        _valueWeights = new Tensor<T>([0, 0]);
+        _outputWeights = new Tensor<T>([0, 0]);
+        _outputBias = new Tensor<T>([0]);
+        _isInitialized = false;
+    }
 
-        // K and V projections: contextDim -> queryDim (different input/output dims)
-        _keyWeights = new Tensor<T>(new[] { contextDim, queryDim });
-        _valueWeights = new Tensor<T>(new[] { contextDim, queryDim });
+    protected override bool ParametersAreConstructionSized => true;
 
-        // Output projection: queryDim -> queryDim
-        _outputWeights = new Tensor<T>(new[] { queryDim, queryDim });
-        _outputBias = new Tensor<T>(new[] { queryDim });
+    protected override void EnsureInitialized()
+    {
+        if (_isInitialized) return;
 
-        InitializeParameters();
-
-        if (_zeroOutputProjection)
+        lock (InitializationLock)
         {
-            _outputWeights.Fill(NumOps.Zero);
-            _outputBias.Fill(NumOps.Zero);
-        }
+            if (_isInitialized) return;
 
-        // Register trainable parameters for GPU memory optimization
-        RegisterTrainableParameter(_queryWeights, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_keyWeights, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_valueWeights, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_outputWeights, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_outputBias, PersistentTensorRole.Biases);
+            if (WeightsAlreadyAllocated(_queryWeights, _queryDim, _queryDim)
+                && WeightsAlreadyAllocated(_keyWeights, _contextDim, _queryDim)
+                && WeightsAlreadyAllocated(_valueWeights, _contextDim, _queryDim)
+                && WeightsAlreadyAllocated(_outputWeights, _queryDim, _queryDim)
+                && WeightsAlreadyAllocated(_outputBias, _queryDim))
+            {
+                _isInitialized = true;
+                return;
+            }
+
+            _queryWeights = AllocateLazyWeight([_queryDim, _queryDim]);
+            _keyWeights = AllocateLazyWeight([_contextDim, _queryDim]);
+            _valueWeights = AllocateLazyWeight([_contextDim, _queryDim]);
+            _outputWeights = AllocateLazyWeight([_queryDim, _queryDim]);
+            _outputBias = AllocateLazyWeight([_queryDim]);
+            InitializeParameters();
+
+            if (_zeroOutputProjection)
+            {
+                _outputWeights.Fill(NumOps.Zero);
+                _outputBias.Fill(NumOps.Zero);
+            }
+
+            RegisterTrainableParameter(_queryWeights, PersistentTensorRole.Weights);
+            RegisterTrainableParameter(_keyWeights, PersistentTensorRole.Weights);
+            RegisterTrainableParameter(_valueWeights, PersistentTensorRole.Weights);
+            RegisterTrainableParameter(_outputWeights, PersistentTensorRole.Weights);
+            RegisterTrainableParameter(_outputBias, PersistentTensorRole.Biases);
+            _isInitialized = true;
+        }
     }
 
     /// <summary>
@@ -182,29 +258,44 @@ public partial class CrossAttentionLayer<T> : LayerBase<T>
         return metadata;
     }
 
+    /// <summary>
+    /// Xavier-initializes the four projections through the base initializer.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// THREE DEFECTS IN ONE HAND-ROLLED LOOP, all fixed by routing to the base. The loop this replaced
+    /// computed <c>(rng.NextDouble() - 0.5) * s</c> with <c>s = sqrt(2/(fanIn+fanOut))</c>, and called
+    /// itself Xavier.
+    /// </para>
+    /// <para>
+    /// <b>It was not Xavier.</b> That draw is uniform on <c>[-s/2, +s/2]</c>, whose variance is
+    /// <c>s^2/12</c>; Xavier wants variance <c>s^2</c>. So every weight came out 3.46x too small in
+    /// standard deviation. Xavier exists to hold activation variance constant across a layer, and being
+    /// short by that factor shrinks the signal at every step - stacked 28 deep in the perceiver
+    /// resampler these layers are built for, activations collapse toward zero before training begins.
+    /// </para>
+    /// <para>
+    /// <b>It ignored the seed.</b> It called <c>RandomHelper.CreateSecureRandom()</c>, which is
+    /// entropy-seeded per call, so it bypassed <c>LayerInitializationSeedScope</c> and produced different
+    /// weights on every construction even when the caller asked for a fixed
+    /// <c>architecture.RandomSeed</c> - precisely the cross-run non-reproducibility that seed scope was
+    /// introduced to eliminate.
+    /// </para>
+    /// <para>
+    /// <b>It was slow, and measurably so.</b> <c>CreateSecureRandom</c> returns a <c>LockedRandom</c>,
+    /// which takes a lock on EVERY call. Filling ~31.5M weights one element at a time - each iteration a
+    /// lock plus two <c>NumOps</c> interface calls - cost ~975 ms per layer, which was 78% of the 35
+    /// seconds it took to construct a Qwen2VL. The base path writes the raw <c>double[]</c> with an
+    /// unlocked local RNG instead.
+    /// </para>
+    /// </remarks>
     private void InitializeParameters()
     {
-        // Xavier initialization for each weight matrix
-        InitializeWeights(_queryWeights);
-        InitializeWeights(_keyWeights);
-        InitializeWeights(_valueWeights);
-        InitializeWeights(_outputWeights);
+        InitializeLayerWeights(_queryWeights, _queryWeights.Shape[0], _queryWeights.Shape[1]);
+        InitializeLayerWeights(_keyWeights, _keyWeights.Shape[0], _keyWeights.Shape[1]);
+        InitializeLayerWeights(_valueWeights, _valueWeights.Shape[0], _valueWeights.Shape[1]);
+        InitializeLayerWeights(_outputWeights, _outputWeights.Shape[0], _outputWeights.Shape[1]);
         _outputBias.Fill(NumOps.Zero);
-    }
-
-    private void InitializeWeights(Tensor<T> weights)
-    {
-        int rows = weights.Shape[0];
-        int cols = weights.Shape[1];
-        T scale = NumOps.Sqrt(NumOps.FromDouble(2.0 / (rows + cols)));
-
-        var span = weights.AsWritableSpan();
-        var rng = RandomHelper.CreateSecureRandom();
-        for (int i = 0; i < span.Length; i++)
-        {
-            double val = (rng.NextDouble() - 0.5) * NumOps.ToDouble(scale);
-            span[i] = NumOps.FromDouble(val);
-        }
     }
 
     /// <summary>
@@ -221,7 +312,7 @@ public partial class CrossAttentionLayer<T> : LayerBase<T>
     /// <summary>
     /// Forward pass for self-attention (not typically used for cross-attention).
     /// </summary>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // For single input, use it as both query and context (self-attention fallback)
         return ForwardCrossAttention(input, input);
@@ -230,7 +321,7 @@ public partial class CrossAttentionLayer<T> : LayerBase<T>
     /// <summary>
     /// Named multi-input forward pass. Accepts "query" and optional "context" by name.
     /// </summary>
-    public override Tensor<T> Forward(IReadOnlyDictionary<string, Tensor<T>> inputs)
+    protected override Tensor<T> ForwardTracedPorts(IReadOnlyDictionary<string, Tensor<T>> inputs)
     {
         if (inputs == null) throw new ArgumentNullException(nameof(inputs));
         if (!inputs.TryGetValue("query", out var query) || query == null)
@@ -253,7 +344,7 @@ public partial class CrossAttentionLayer<T> : LayerBase<T>
     /// </summary>
     /// <param name="inputs">Array of inputs: [query] or [query, context].</param>
     /// <returns>Output tensor with same shape as query.</returns>
-    public override Tensor<T> Forward(params Tensor<T>[] inputs)
+    protected override Tensor<T> ForwardTracedMany(params Tensor<T>[] inputs)
     {
         if (inputs.Length == 1)
         {
@@ -275,6 +366,11 @@ public partial class CrossAttentionLayer<T> : LayerBase<T>
     /// <returns>Output tensor with same shape as query.</returns>
     private Tensor<T> ForwardCrossAttention(Tensor<T> query, Tensor<T> context)
     {
+        if (IsInferringShapes)
+            return ShapeInferenceOutput(query);
+
+        EnsureInitializationSerialized();
+
         // Store original shape for any-rank tensor support
         _originalQueryShape = query._shape;
         var queryShape = query._shape;
@@ -622,6 +718,8 @@ public partial class CrossAttentionLayer<T> : LayerBase<T>
         if (Engine is not DirectGpuTensorEngine gpuEngine)
             throw new InvalidOperationException("ForwardGpu requires DirectGpuTensorEngine.");
 
+        EnsureInitializationSerialized();
+
         // Handle single or dual input
         Tensor<T> query = inputs[0];
         Tensor<T> context = inputs.Length >= 2 ? inputs[1] : inputs[0];
@@ -825,41 +923,6 @@ public partial class CrossAttentionLayer<T> : LayerBase<T>
 
         // Permute NHWC to NCHW: [B, H, W, C] -> [B, C, H, W]
         return gpuEngine.PermuteGpu(nhwc, new[] { 0, 3, 1, 2 });
-    }
-
-    /// <inheritdoc/>
-    public override Vector<T> GetParameters()
-    {
-        return Vector<T>.Concatenate(
-            new Vector<T>(_queryWeights.ToArray()),
-            new Vector<T>(_keyWeights.ToArray()),
-            new Vector<T>(_valueWeights.ToArray()),
-            new Vector<T>(_outputWeights.ToArray()),
-            new Vector<T>(_outputBias.ToArray()));
-    }
-
-    /// <inheritdoc/>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int qLen = _queryWeights.Length;
-        int kLen = _keyWeights.Length;
-        int vLen = _valueWeights.Length;
-        int oLen = _outputWeights.Length;
-        int bLen = _outputBias.Length;
-
-        int index = 0;
-        CopyToTensor(parameters, index, _queryWeights); index += qLen;
-        CopyToTensor(parameters, index, _keyWeights); index += kLen;
-        CopyToTensor(parameters, index, _valueWeights); index += vLen;
-        CopyToTensor(parameters, index, _outputWeights); index += oLen;
-        CopyToTensor(parameters, index, _outputBias);
-
-        // Notify GPU that tensor data has changed
-        Engine.InvalidatePersistentTensor(_queryWeights);
-        Engine.InvalidatePersistentTensor(_keyWeights);
-        Engine.InvalidatePersistentTensor(_valueWeights);
-        Engine.InvalidatePersistentTensor(_outputWeights);
-        Engine.InvalidatePersistentTensor(_outputBias);
     }
 
     private void CopyToTensor(Vector<T> source, int offset, Tensor<T> dest)

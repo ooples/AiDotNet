@@ -37,11 +37,68 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Convolution)]
 [LayerTask(LayerTask.SpatialProcessing)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 3, Cost = ComputeCost.High, TestInputShape = "4, 128, 128", TestConstructorArgs = "2")]
-public class SpyNetLayer<T> : LayerBase<T>
+// NCHW, per OnFirstForward's own guard - "requires rank-3 [2C,H,W] or rank-4 [B,2C,H,W]". The channel
+// axis carries TWO STACKED FRAMES on the way in and a TWO-COMPONENT FLOW FIELD on the way out; those
+// are different quantities that happen to share an axis, which is exactly why the output channel width
+// is not a function of the input channel width.
+//
+// _numLevels shapes the internal pyramid, not the result: BuildPyramid halves each level and
+// EstimateFlow upsamples back, so the flow returned is always at full input resolution.
+[TensorLayout(TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Input,
+    Note = "Two frames stacked along the channel axis; the count must be even.")]
+[TensorLayout(TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Output)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Output)]
+[AutoParameters]
+public partial class SpyNetLayer<T> : LayerBase<T>, IShapeContract
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// Straight from <c>OnFirstForward</c>:
+    /// <c>ResolveShapes(new[] { totalChannels, inH, inW }, new[] { 2, inH, inW })</c>. The spatial axes
+    /// are carried through untouched and the channel axis becomes 2.
+    /// </para>
+    /// <para>
+    /// THE LITERAL 2 IS DELIBERATE AND IS NOT AN OBSERVED CONSTANT - the usual objection to a hardcoded
+    /// size does not apply. It is the (dx, dy) component count of an optical flow field, stated in
+    /// <c>EstimateFlow</c>'s own return doc ("[2, H, W] representing (dx, dy) per pixel") and written
+    /// literally into <c>ResolveShapes</c>. No constructor argument can change it: <c>_numLevels</c>
+    /// drives the pyramid depth and the input channel count is discovered per input, but neither
+    /// reaches this axis. A field would be a rename of the number, not a source for it.
+    /// </para>
+    /// <para>
+    /// Note the input channel count is DIVIDED by two internally (<c>_inputChannels = totalChannels /
+    /// 2</c>) to recover the per-frame width, but that value never reaches the output either - the flow
+    /// field is two-wide regardless of how many channels each frame carries.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        var flow = new OutputAxisContract(TensorAxis.Channels, AxisRelation.Fixed(2));
+        var height = new OutputAxisContract(TensorAxis.Height, AxisRelation.Same(TensorAxis.Height));
+        var width = new OutputAxisContract(TensorAxis.Width, AxisRelation.Same(TensorAxis.Width));
+
+        return inputRank switch
+        {
+            3 => new[] { flow, height, width },
+            4 => new[]
+            {
+                new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+                flow,
+                height,
+                width,
+            },
+            _ => null,
+        };
+    }
+
     #region Fields
 
-    private readonly IEngine _engine;
     private readonly int _numLevels;
     // Non-readonly: lazy ctor leaves these = -1 until OnFirstForward.
     private int _inputChannels;
@@ -71,10 +128,8 @@ public class SpyNetLayer<T> : LayerBase<T>
     /// <param name="inputWidth">Width of input frames.</param>
     /// <param name="inputChannels">Number of input channels (typically 3 for RGB).</param>
     /// <param name="numLevels">Number of pyramid levels (default: 5).</param>
-    /// <param name="engine">Optional computation engine (CPU or GPU). If null, uses default CPU engine.</param>
     public SpyNetLayer(
-        int numLevels = 5,
-        IEngine? engine = null)
+        int numLevels = 5)
         : base([-1, -1, -1], [2, -1, -1])
     {
         // Reject numLevels <= 0 at construction. The pyramid loop below
@@ -88,7 +143,6 @@ public class SpyNetLayer<T> : LayerBase<T>
                 nameof(numLevels),
                 $"SpyNetLayer requires numLevels >= 1; got {numLevels}.");
 
-        _engine = engine ?? new CpuEngine();
         _inputHeight = -1; // resolved in OnFirstForward
         _inputWidth = -1;  // resolved in OnFirstForward
         _inputChannels = -1; // resolved in OnFirstForward (single-frame channels)
@@ -195,7 +249,7 @@ public class SpyNetLayer<T> : LayerBase<T>
     #region Forward Pass
 
     /// <inheritdoc/>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         if (!IsShapeResolved) OnFirstForward(input);
 
@@ -260,9 +314,16 @@ public class SpyNetLayer<T> : LayerBase<T>
         _cachedPyramid1.AddRange(pyramid1);
         _cachedPyramid2.AddRange(pyramid2);
 
-        // Initialize flow at coarsest level (zeros)
-        int coarseH = height >> (_numLevels - 1);
-        int coarseW = width >> (_numLevels - 1);
+        // Initialize flow at the coarsest level (zeros). Size it from the ACTUAL coarsest pyramid
+        // level rather than `height >> (_numLevels - 1)`: BuildPyramid's per-level halving rounds
+        // (e.g. ceil / floor of odd dims) independently of the shift, so the two can disagree by a
+        // pixel — leaving the initial flow mismatched with img1/img2 at the coarsest level and
+        // overrunning the warp/concat buffers (IndexOutOfRange in ConcatenateForModule on the
+        // BasicVSR++ second-order alignment path). Deriving from the pyramid keeps flow, img1 and
+        // warped2 exactly aligned at every level (finer levels already upsample flow to levelH/levelW).
+        var coarsestLevel = pyramid1[_numLevels - 1];
+        int coarseH = hasBatch ? coarsestLevel.Shape[2] : coarsestLevel.Shape[1];
+        int coarseW = hasBatch ? coarsestLevel.Shape[3] : coarsestLevel.Shape[2];
         var flowShape = hasBatch ? new[] { batch, 2, coarseH, coarseW } : new[] { 2, coarseH, coarseW };
         var flow = new Tensor<T>(flowShape);
 
@@ -604,37 +665,10 @@ public class SpyNetLayer<T> : LayerBase<T>
 
     private (Tensor<T> frame1, Tensor<T> frame2) SplitFrames(Tensor<T> input, int channels, bool hasBatch)
     {
-        int height = hasBatch ? input.Shape[2] : input.Shape[1];
-        int width = hasBatch ? input.Shape[3] : input.Shape[2];
-        int batch = hasBatch ? input.Shape[0] : 1;
-
-        var shape = hasBatch ? new[] { batch, channels, height, width } : new[] { channels, height, width };
-        var frame1 = new Tensor<T>(shape);
-        var frame2 = new Tensor<T>(shape);
-
-        int pixelsPerChannel = height * width;
-        var inputData = input.Data.ToArray();
-
-        var frame1Data = frame1.Data.Span;
-        var frame2Data = frame2.Data.Span;
-        for (int b = 0; b < batch; b++)
-        {
-            int batchOffset = b * 2 * channels * pixelsPerChannel;
-            int outBatchOffset = b * channels * pixelsPerChannel;
-
-            // Copy first frame channels
-            for (int i = 0; i < channels * pixelsPerChannel; i++)
-            {
-                frame1Data[outBatchOffset + i] = inputData[batchOffset + i];
-            }
-            // Copy second frame channels
-            for (int i = 0; i < channels * pixelsPerChannel; i++)
-            {
-                frame2Data[outBatchOffset + i] = inputData[batchOffset + channels * pixelsPerChannel + i];
-            }
-        }
-
-        return (frame1, frame2);
+        int channelAxis = hasBatch ? 1 : 0;
+        return (
+            Engine.TensorNarrow(input, channelAxis, 0, channels),
+            Engine.TensorNarrow(input, channelAxis, channels, channels));
     }
 
     private List<Tensor<T>> BuildPyramid(Tensor<T> image, bool hasBatch)
@@ -657,45 +691,13 @@ public class SpyNetLayer<T> : LayerBase<T>
         int channels = hasBatch ? input.Shape[1] : input.Shape[0];
         int height = hasBatch ? input.Shape[2] : input.Shape[1];
         int width = hasBatch ? input.Shape[3] : input.Shape[2];
-
-        int newH = height / 2;
-        int newW = width / 2;
-
-        var outShape = hasBatch ? new[] { batch, channels, newH, newW } : new[] { channels, newH, newW };
-        var output = TensorAllocator.Rent<T>(outShape);
-
-        // Simple average pooling 2x2
-        for (int b = 0; b < batch; b++)
-        {
-            for (int c = 0; c < channels; c++)
-            {
-                for (int h = 0; h < newH; h++)
-                {
-                    for (int w = 0; w < newW; w++)
-                    {
-                        T sum = NumOps.Zero;
-                        for (int dh = 0; dh < 2; dh++)
-                        {
-                            for (int dw = 0; dw < 2; dw++)
-                            {
-                                int ih = h * 2 + dh;
-                                int iw = w * 2 + dw;
-                                int idx = hasBatch
-                                    ? b * channels * height * width + c * height * width + ih * width + iw
-                                    : c * height * width + ih * width + iw;
-                                sum = NumOps.Add(sum, input.Data.Span[idx]);
-                            }
-                        }
-                        int outIdx = hasBatch
-                            ? b * channels * newH * newW + c * newH * newW + h * newW + w
-                            : c * newH * newW + h * newW + w;
-                        output.Data.Span[outIdx] = NumOps.Divide(sum, NumOps.FromDouble(4.0));
-                    }
-                }
-            }
-        }
-
-        return output;
+        var input4D = hasBatch
+            ? input
+            : Engine.Reshape(input, new[] { 1, channels, height, width });
+        var output4D = Engine.AvgPool2D(input4D, poolSize: 2, stride: 2, padding: 0);
+        return hasBatch
+            ? output4D
+            : Engine.Reshape(output4D, new[] { channels, height / 2, width / 2 });
     }
 
     private Tensor<T> UpsampleFlow(Tensor<T> flow, int targetH, int targetW, bool hasBatch)
@@ -703,63 +705,21 @@ public class SpyNetLayer<T> : LayerBase<T>
         int batch = hasBatch ? flow.Shape[0] : 1;
         int height = hasBatch ? flow.Shape[2] : flow.Shape[1];
         int width = hasBatch ? flow.Shape[3] : flow.Shape[2];
-
-        var outShape = hasBatch ? new[] { batch, 2, targetH, targetW } : new[] { 2, targetH, targetW };
-        var output = TensorAllocator.Rent<T>(outShape);
-
-        // Bilinear upsampling with scale factor for flow values
-        double scaleH = (double)targetH / height;
-        double scaleW = (double)targetW / width;
-
-        for (int b = 0; b < batch; b++)
-        {
-            for (int c = 0; c < 2; c++)
+        var flow4D = hasBatch
+            ? flow
+            : Engine.Reshape(flow, new[] { 1, 2, height, width });
+        var upsampled = Engine.TensorUpsampleBilinear(flow4D, new[] { targetH, targetW });
+        var channelScale = new Tensor<T>(
+            new[]
             {
-                for (int h = 0; h < targetH; h++)
-                {
-                    for (int w = 0; w < targetW; w++)
-                    {
-                        double srcH = h / scaleH;
-                        double srcW = w / scaleW;
-
-                        int h0 = (int)Math.Floor(srcH);
-                        int w0 = (int)Math.Floor(srcW);
-                        int h1 = Math.Min(h0 + 1, height - 1);
-                        int w1 = Math.Min(w0 + 1, width - 1);
-
-                        double hWeight = srcH - h0;
-                        double wWeight = srcW - w0;
-
-                        // Bilinear interpolation
-                        T v00 = GetFlowValue(flow, b, c, h0, w0, hasBatch, height, width);
-                        T v01 = GetFlowValue(flow, b, c, h0, w1, hasBatch, height, width);
-                        T v10 = GetFlowValue(flow, b, c, h1, w0, hasBatch, height, width);
-                        T v11 = GetFlowValue(flow, b, c, h1, w1, hasBatch, height, width);
-
-                        T top = NumOps.Add(
-                            NumOps.Multiply(v00, NumOps.FromDouble(1 - wWeight)),
-                            NumOps.Multiply(v01, NumOps.FromDouble(wWeight)));
-                        T bottom = NumOps.Add(
-                            NumOps.Multiply(v10, NumOps.FromDouble(1 - wWeight)),
-                            NumOps.Multiply(v11, NumOps.FromDouble(wWeight)));
-                        T value = NumOps.Add(
-                            NumOps.Multiply(top, NumOps.FromDouble(1 - hWeight)),
-                            NumOps.Multiply(bottom, NumOps.FromDouble(hWeight)));
-
-                        // Scale flow value by upsample factor
-                        double flowScale = c == 0 ? scaleW : scaleH;
-                        value = NumOps.Multiply(value, NumOps.FromDouble(flowScale));
-
-                        int outIdx = hasBatch
-                            ? b * 2 * targetH * targetW + c * targetH * targetW + h * targetW + w
-                            : c * targetH * targetW + h * targetW + w;
-                        output.Data.Span[outIdx] = value;
-                    }
-                }
-            }
-        }
-
-        return output;
+                NumOps.FromDouble((double)targetW / width),
+                NumOps.FromDouble((double)targetH / height),
+            },
+            new[] { 1, 2, 1, 1 });
+        var scaled = Engine.TensorBroadcastMultiply(upsampled, channelScale);
+        return hasBatch
+            ? scaled
+            : Engine.Reshape(scaled, new[] { 2, targetH, targetW });
     }
 
     private T GetFlowValue(Tensor<T> flow, int b, int c, int h, int w, bool hasBatch, int height, int width)
@@ -785,67 +745,51 @@ public class SpyNetLayer<T> : LayerBase<T>
         int height = hasBatch ? image.Shape[2] : image.Shape[1];
         int width = hasBatch ? image.Shape[3] : image.Shape[2];
 
-        // Create grid tensor: [batch, height, width, 2] where last dim is (x, y) in [-1, 1]
-        var gridShape = new[] { batch, height, width, 2 };
-        var grid = new Tensor<T>(gridShape);
-
-        // Build sampling grid from flow
-        // Grid coordinates are normalized to [-1, 1]
-        // Flow is in pixel coordinates, need to convert:
-        // grid_x = (x + flow_x) / (width - 1) * 2 - 1
-        // grid_y = (y + flow_y) / (height - 1) * 2 - 1
-        T widthNorm = NumOps.FromDouble(2.0 / (width - 1));
-        T heightNorm = NumOps.FromDouble(2.0 / (height - 1));
-        T one = NumOps.One;
-
-        for (int b = 0; b < batch; b++)
+        // Construct the align-corners identity grid as a constant, then add the
+        // flow displacement through recorded tensor operations. The previous
+        // scalar writes detached the entire warp from both the input and flow.
+        double widthNormValue = width > 1 ? 2.0 / (width - 1) : 0.0;
+        double heightNormValue = height > 1 ? 2.0 / (height - 1) : 0.0;
+        var identityValues = new T[height * width * 2];
+        for (int h = 0; h < height; h++)
         {
-            for (int h = 0; h < height; h++)
+            for (int w = 0; w < width; w++)
             {
-                for (int w = 0; w < width; w++)
-                {
-                    // Get flow at this position
-                    int flowIdxX = hasBatch
-                        ? b * 2 * height * width + 0 * height * width + h * width + w
-                        : 0 * height * width + h * width + w;
-                    int flowIdxY = hasBatch
-                        ? b * 2 * height * width + 1 * height * width + h * width + w
-                        : 1 * height * width + h * width + w;
-
-                    T dx = flow.Data.Span[flowIdxX];
-                    T dy = flow.Data.Span[flowIdxY];
-
-                    // Source coordinates (pixel space)
-                    T srcX = NumOps.Add(NumOps.FromDouble(w), dx);
-                    T srcY = NumOps.Add(NumOps.FromDouble(h), dy);
-
-                    // Convert to normalized coordinates [-1, 1]
-                    T gridX = NumOps.Subtract(NumOps.Multiply(srcX, widthNorm), one);
-                    T gridY = NumOps.Subtract(NumOps.Multiply(srcY, heightNorm), one);
-
-                    // Store in grid
-                    int gridIdx = b * height * width * 2 + h * width * 2 + w * 2;
-                    grid.Data.Span[gridIdx] = gridX;
-                    grid.Data.Span[gridIdx + 1] = gridY;
-                }
+                int index = (h * width + w) * 2;
+                identityValues[index] = NumOps.FromDouble(width > 1 ? w * widthNormValue - 1.0 : 0.0);
+                identityValues[index + 1] = NumOps.FromDouble(height > 1 ? h * heightNormValue - 1.0 : 0.0);
             }
         }
+        var identity = Engine.TensorBroadcastTo(
+            Engine.Reshape(
+                new Tensor<T>(identityValues, new[] { height, width, 2 }),
+                new[] { 1, height, width, 2 }),
+            new[] { batch, height, width, 2 });
+        var flow4D = hasBatch
+            ? flow
+            : Engine.Reshape(flow, new[] { 1, 2, height, width });
+        var flowNhwc = Engine.TensorPermute(flow4D, new[] { 0, 2, 3, 1 });
+        var normalization = new Tensor<T>(
+            new[] { NumOps.FromDouble(widthNormValue), NumOps.FromDouble(heightNormValue) },
+            new[] { 1, 1, 1, 2 });
+        var grid = Engine.TensorAdd(
+            identity,
+            Engine.TensorBroadcastMultiply(flowNhwc, normalization));
 
-        // Ensure image is in 4D format for GridSample
-        var image4D = image;
-        if (!hasBatch)
-        {
-            image4D = image.Reshape(new[] { 1, channels, height, width });
-        }
+        // Engine.GridSample is NCHW (PyTorch F.grid_sample convention, standardized in Tensors #777):
+        // input [batch, C, H, W], grid [batch, outH, outW, 2] -> output [batch, C, outH, outW]. SpyNet
+        // already works in channels-first [C, H, W], so pass the NCHW image directly — no permute. (An
+        // earlier revision permuted to NHWC because the engine was NHWC at the time; that flipped after
+        // #777, so the permute became backwards: it re-labelled the image's H dim as "channels", warping
+        // a 3-channel frame into a 2-"channel" tensor at the coarse 2×2 pyramid level, which made
+        // ConcatenateForModule read past its end → IndexOutOfRange. The grid is already in GridSample's
+        // [B, outH, outW, 2] layout with align-corners normalization, so it needs no change.)
+        var image4D = hasBatch ? image : image.Reshape(new[] { 1, channels, height, width });
+        var warped = Engine.GridSample(image4D, grid);                           // [B, C, H, W]
 
-        // Use IEngine.GridSample for hardware-accelerated bilinear sampling
-        var warped = _engine.GridSample(image4D, grid);
-
-        // Remove batch dimension if input didn't have it
+        // Remove batch dimension if input didn't have it.
         if (!hasBatch && warped.Rank == 4)
         {
-            // Use actual warped dimensions, not original image dimensions
-            // (GridSample output may differ from input at different pyramid levels)
             warped = warped.Reshape(new[] { warped.Shape[1], warped.Shape[2], warped.Shape[3] });
         }
 
@@ -940,94 +884,14 @@ public class SpyNetLayer<T> : LayerBase<T>
 
     private Tensor<T> ConcatenateForModule(Tensor<T> img1, Tensor<T> warped2, Tensor<T> flow, bool hasBatch)
     {
-        int batch = hasBatch ? img1.Shape[0] : 1;
-        int channels = hasBatch ? img1.Shape[1] : img1.Shape[0];
-        int height = hasBatch ? img1.Shape[2] : img1.Shape[1];
-        int width = hasBatch ? img1.Shape[3] : img1.Shape[2];
-
-        int outChannels = 2 * channels + 2;
-        var outShape = hasBatch
-            ? new[] { batch, outChannels, height, width }
-            : new[] { outChannels, height, width };
-        var output = TensorAllocator.Rent<T>(outShape);
-
-        int pixelsPerChannel = height * width;
-
-        var outputData = output.Data.Span;
-        var img1Data = img1.Data.Span;
-        var warped2Data = warped2.Data.Span;
-        var flowData = flow.Data.Span;
-
-        for (int b = 0; b < batch; b++)
-        {
-            int batchOffset = b * outChannels * pixelsPerChannel;
-
-            // Copy img1
-            for (int c = 0; c < channels; c++)
-            {
-                int srcOffset = hasBatch ? b * channels * pixelsPerChannel + c * pixelsPerChannel : c * pixelsPerChannel;
-                int dstOffset = batchOffset + c * pixelsPerChannel;
-                for (int i = 0; i < pixelsPerChannel; i++)
-                {
-                    outputData[dstOffset + i] = img1Data[srcOffset + i];
-                }
-            }
-
-            // Copy warped2
-            for (int c = 0; c < channels; c++)
-            {
-                int srcOffset = hasBatch ? b * channels * pixelsPerChannel + c * pixelsPerChannel : c * pixelsPerChannel;
-                int dstOffset = batchOffset + (channels + c) * pixelsPerChannel;
-                for (int i = 0; i < pixelsPerChannel; i++)
-                {
-                    outputData[dstOffset + i] = warped2Data[srcOffset + i];
-                }
-            }
-
-            // Copy flow
-            for (int c = 0; c < 2; c++)
-            {
-                int srcOffset = hasBatch ? b * 2 * pixelsPerChannel + c * pixelsPerChannel : c * pixelsPerChannel;
-                int dstOffset = batchOffset + (2 * channels + c) * pixelsPerChannel;
-                for (int i = 0; i < pixelsPerChannel; i++)
-                {
-                    outputData[dstOffset + i] = flowData[srcOffset + i];
-                }
-            }
-        }
-
-        return output;
+        return Engine.TensorConcatenate(
+            new[] { img1, warped2, flow },
+            axis: hasBatch ? 1 : 0);
     }
 
     private Tensor<T> AddResidualFlow(Tensor<T> flow, Tensor<T> residual, bool hasBatch)
     {
-        // Extract first 2 channels from residual (flow residual)
-        int batch = hasBatch ? flow.Shape[0] : 1;
-        int height = hasBatch ? flow.Shape[2] : flow.Shape[1];
-        int width = hasBatch ? flow.Shape[3] : flow.Shape[2];
-
-        var output = TensorAllocator.Rent<T>(flow._shape);
-        int pixelsPerChannel = height * width;
-
-        for (int b = 0; b < batch; b++)
-        {
-            for (int c = 0; c < 2; c++)
-            {
-                for (int i = 0; i < pixelsPerChannel; i++)
-                {
-                    int flowIdx = hasBatch
-                        ? b * 2 * pixelsPerChannel + c * pixelsPerChannel + i
-                        : c * pixelsPerChannel + i;
-                    int residualIdx = hasBatch
-                        ? b * residual.Shape[1] * pixelsPerChannel + c * pixelsPerChannel + i
-                        : c * pixelsPerChannel + i;
-
-                    output.Data.Span[flowIdx] = NumOps.Add(flow.Data.Span[flowIdx], residual.Data.Span[residualIdx]);
-                }
-            }
-        }
-
-        return output;
+        return Engine.TensorAdd(flow, residual);
     }
 
     #endregion
@@ -1322,49 +1186,6 @@ public class SpyNetLayer<T> : LayerBase<T>
     #endregion
 
     #region Parameter Management
-
-    /// <inheritdoc/>
-    public override long ParameterCount => (int)_basicModules.Sum(m => m.ParameterCount);
-
-    /// <inheritdoc/>
-    public override Vector<T> GetParameters()
-    {
-        var allParams = new List<T>();
-        foreach (var module in _basicModules)
-        {
-            var moduleParams = module.GetParameters();
-            for (int i = 0; i < moduleParams.Length; i++)
-            {
-                allParams.Add(moduleParams[i]);
-            }
-        }
-        return new Vector<T>([.. allParams]);
-    }
-
-    /// <inheritdoc/>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        // Pre-Forward: per-pyramid-level conv shapes are unresolved.
-        // Buffer and replay from OnFirstForward.
-        if (!IsShapeResolved)
-        {
-            _pendingParameters = parameters;
-            return;
-        }
-
-        int offset = 0;
-        foreach (var module in _basicModules)
-        {
-            var moduleParams = module.GetParameters();
-            var newParams = new T[moduleParams.Length];
-            for (int i = 0; i < moduleParams.Length; i++)
-            {
-                newParams[i] = parameters[offset + i];
-            }
-            module.SetParameters(new Vector<T>(newParams));
-            offset += moduleParams.Length;
-        }
-    }
 
     private Vector<T>? _pendingParameters;
 

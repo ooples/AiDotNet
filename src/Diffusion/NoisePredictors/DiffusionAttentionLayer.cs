@@ -1,4 +1,5 @@
 using AiDotNet.Attributes;
+using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 
 namespace AiDotNet.Diffusion.NoisePredictors;
@@ -12,23 +13,42 @@ namespace AiDotNet.Diffusion.NoisePredictors;
 /// width. All math uses engine operations, including fused scaled-dot-product
 /// attention, so the same graph is tape-connected on CPU and every GPU backend.
 /// </remarks>
-public sealed class DiffusionAttentionLayer<T> : LayerBase<T>
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Output)]
+[AutoParameters]
+public sealed partial class DiffusionAttentionLayer<T> : LayerBase<T>, IShapeContract
 {
+    /// <inheritdoc />
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank) => inputRank == 3
+        ?
+        [
+            new(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+            new(TensorAxis.Time, AxisRelation.Same(TensorAxis.Time)),
+            new(TensorAxis.Features, AxisRelation.Fixed(_queryDimension))
+        ]
+        : null;
+
     private readonly int _queryDimension;
     private readonly int _contextDimension;
     private readonly int _headCount;
     private readonly int _headDimension;
     private readonly bool _zeroOutputProjection;
 
-    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+    [TrainableParameter(Role = PersistentTensorRole.Weights,
+        Shape = "_queryDimension, _queryDimension")]
     private Tensor<T> _queryWeights = new([0, 0]);
-    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+    [TrainableParameter(Role = PersistentTensorRole.Weights,
+        Shape = "_contextDimension, _queryDimension")]
     private Tensor<T> _keyWeights = new([0, 0]);
-    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+    [TrainableParameter(Role = PersistentTensorRole.Weights,
+        Shape = "_contextDimension, _queryDimension")]
     private Tensor<T> _valueWeights = new([0, 0]);
-    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+    [TrainableParameter(Role = PersistentTensorRole.Weights,
+        Shape = "_queryDimension, _queryDimension")]
     private Tensor<T> _outputWeights = new([0, 0]);
-    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+    [TrainableParameter(Role = PersistentTensorRole.Biases, Shape = "_queryDimension")]
     private Tensor<T> _outputBias = new([0]);
 
     /// <summary>Gets the query/output feature width.</summary>
@@ -45,13 +65,6 @@ public sealed class DiffusionAttentionLayer<T> : LayerBase<T>
 
     /// <inheritdoc />
     public override bool SupportsTraining => true;
-
-    /// <inheritdoc />
-    public override long ParameterCount => checked(
-        (long)_queryDimension * _queryDimension +
-        (long)_contextDimension * _queryDimension * 2 +
-        (long)_queryDimension * _queryDimension +
-        _queryDimension);
 
     /// <summary>Creates self- or cross-attention without eager weight allocation.</summary>
     public DiffusionAttentionLayer(
@@ -73,7 +86,7 @@ public sealed class DiffusionAttentionLayer<T> : LayerBase<T>
     }
 
     /// <inheritdoc />
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         if (_queryDimension != _contextDimension)
             throw new ArgumentException(
@@ -117,30 +130,6 @@ public sealed class DiffusionAttentionLayer<T> : LayerBase<T>
         attended = Engine.Reshape(attended, [batch, queryLength, _queryDimension]);
         var projected = Engine.TensorMatMul(attended, _outputWeights);
         return Engine.TensorBroadcastAdd(projected, _outputBias);
-    }
-
-    /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        MaterializeParameters();
-        return Vector<T>.Concatenate(
-            _queryWeights.ToVector(), _keyWeights.ToVector(), _valueWeights.ToVector(),
-            _outputWeights.ToVector(), _outputBias.ToVector());
-    }
-
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (parameters.Length != ParameterCount)
-            throw new ArgumentException(
-                $"Expected {ParameterCount} parameters, got {parameters.Length}.", nameof(parameters));
-        MaterializeParameters();
-        int offset = 0;
-        Copy(_queryWeights, parameters, ref offset);
-        Copy(_keyWeights, parameters, ref offset);
-        Copy(_valueWeights, parameters, ref offset);
-        Copy(_outputWeights, parameters, ref offset);
-        Copy(_outputBias, parameters, ref offset);
     }
 
     /// <inheritdoc />
@@ -210,9 +199,4 @@ public sealed class DiffusionAttentionLayer<T> : LayerBase<T>
         initialized.AsSpan().CopyTo(tensor.Data.Span);
     }
 
-    private void Copy(Tensor<T> target, Vector<T> source, ref int offset)
-    {
-        for (int i = 0; i < target.Length; i++) target[i] = source[offset++];
-        Engine.InvalidatePersistentTensor(target);
-    }
 }

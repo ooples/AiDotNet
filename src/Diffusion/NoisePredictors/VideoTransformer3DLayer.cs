@@ -1,4 +1,5 @@
 using AiDotNet.ActivationFunctions;
+using AiDotNet.Attributes;
 using AiDotNet.Initialization;
 using AiDotNet.NeuralNetworks.Layers;
 
@@ -12,6 +13,7 @@ namespace AiDotNet.Diffusion.NoisePredictors;
 /// transformer processing, zero-initialized temporal attention, GEGLU, and an
 /// outer residual. The implementation accepts arbitrary frame counts.
 /// </remarks>
+[ElementWiseShape(Note = "Released Transformer3D residual block preserves NCFHW shape.")]
 public sealed class VideoTransformer3DLayer<T> : LayerBase<T>
 {
     private readonly int _channels;
@@ -55,9 +57,6 @@ public sealed class VideoTransformer3DLayer<T> : LayerBase<T>
 
     /// <inheritdoc />
     public override bool SupportsTraining => true;
-
-    /// <inheritdoc />
-    public override long ParameterCount => ParameterLayers().Sum(layer => layer.ParameterCount);
 
     /// <summary>Creates the released Transformer3D block.</summary>
     public VideoTransformer3DLayer(
@@ -116,7 +115,7 @@ public sealed class VideoTransformer3DLayer<T> : LayerBase<T>
     }
 
     /// <inheritdoc />
-    public override Tensor<T> Forward(Tensor<T> input) =>
+    protected override Tensor<T> ForwardTraced(Tensor<T> input) =>
         throw new InvalidOperationException(
             "VideoTransformer3DLayer requires text encoder states [B,N,contextDim].");
 
@@ -196,35 +195,6 @@ public sealed class VideoTransformer3DLayer<T> : LayerBase<T>
             [_channels, frames, height, width],
             [_channels, frames, height, width]);
         return output;
-    }
-
-    /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        var values = new List<T>();
-        foreach (var layer in ParameterLayers())
-        {
-            var parameters = layer.GetParameters();
-            for (int i = 0; i < parameters.Length; i++) values.Add(parameters[i]);
-        }
-        return new Vector<T>(values.ToArray());
-    }
-
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (parameters.Length != ParameterCount)
-            throw new ArgumentException(
-                $"Expected {ParameterCount} parameters, got {parameters.Length}.", nameof(parameters));
-        int offset = 0;
-        foreach (var layer in ParameterLayers())
-        {
-            int count = checked((int)layer.ParameterCount);
-            var slice = new Vector<T>(count);
-            for (int i = 0; i < count; i++) slice[i] = parameters[offset + i];
-            layer.SetParameters(slice);
-            offset += count;
-        }
     }
 
     /// <inheritdoc />

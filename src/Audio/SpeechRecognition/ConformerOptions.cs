@@ -1,4 +1,4 @@
-using AiDotNet.Models.Options;
+﻿using AiDotNet.Models.Options;
 using AiDotNet.Onnx;
 
 namespace AiDotNet.Audio.SpeechRecognition;
@@ -23,6 +23,42 @@ namespace AiDotNet.Audio.SpeechRecognition;
 /// </remarks>
 public class ConformerOptions : ModelOptions
 {
+    /// <summary>Initializes a Conformer configuration with paper-default settings.</summary>
+    public ConformerOptions()
+    {
+    }
+
+    /// <summary>Initializes a new instance by deep-copying all Conformer settings.</summary>
+    public ConformerOptions(ConformerOptions other)
+    {
+        if (other is null) throw new ArgumentNullException(nameof(other));
+
+        // INHERITED FROM ModelOptions, AND THEREFORE EASY TO MISS. Every declared property is copied
+        // below; Seed is not declared here, so it was silently dropped and a copied configuration
+        // produced a DIFFERENT model from the one it was copied from -- the failure mode that costs
+        // the most to diagnose, because the two configurations compare equal on everything visible.
+        Seed = other.Seed;
+        SampleRate = other.SampleRate;
+        MaxAudioLengthSeconds = other.MaxAudioLengthSeconds;
+        Variant = other.Variant;
+        EncoderDim = other.EncoderDim;
+        NumEncoderLayers = other.NumEncoderLayers;
+        NumAttentionHeads = other.NumAttentionHeads;
+        FeedForwardExpansionFactor = other.FeedForwardExpansionFactor;
+        ConvKernelSize = other.ConvKernelSize;
+        NumMels = other.NumMels;
+        SubsamplingFactor = other.SubsamplingFactor;
+        VocabSize = other.VocabSize;
+        ModelPath = other.ModelPath;
+        OnnxOptions = new OnnxModelOptions(other.OnnxOptions);
+        LearningRate = other.LearningRate;
+        DropoutRate = other.DropoutRate;
+        LabelSmoothing = other.LabelSmoothing;
+        WarmupSteps = other.WarmupSteps;
+        Vocabulary = [.. other.Vocabulary];
+        Language = other.Language;
+    }
+
     #region Audio
 
     /// <summary>Gets or sets the expected audio sample rate in Hz.</summary>

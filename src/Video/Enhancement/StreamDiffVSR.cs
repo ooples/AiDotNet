@@ -46,10 +46,14 @@ namespace AiDotNet.Video.Enhancement;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("Stream-DiffVSR: Low-Latency Streamable Diffusion-based Video Super-Resolution",
-    "https://arxiv.org/abs/2501.14727",
+// Citation corrected: the title, arXiv id and author list were all wrong. arXiv 2501.14727 is
+// "Estimation-theoretic analysis of lensless imaging" (Kabuli, Singh & Waller) — an unrelated
+// computational-imaging paper — so anyone following this reference found nothing about video
+// super-resolution, and the recorded authors belonged to a different work entirely.
+[ResearchPaper("Stream-DiffVSR: Low-Latency Streamable Video Super-Resolution via Auto-Regressive Diffusion",
+    "https://arxiv.org/abs/2512.23709",
     Year = 2025,
-    Authors = "Guanlin Li, Jianyi Wang, Shangchen Zhou, Chen Change Loy")]
+    Authors = "Hau-Shiang Shiu, Chin-Yang Lin, Zhixiang Wang, Chi-Wei Hsiao, Po-Fan Yu, Yu-Chih Chen, Yu-Lun Liu")]
 public class StreamDiffVSR<T> : VideoSuperResolutionBase<T>
 {
     #region Fields
@@ -85,7 +89,28 @@ public class StreamDiffVSR<T> : VideoSuperResolutionBase<T>
     {
         _options = options ?? new StreamDiffVSROptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        // Appendix C: "AdamW optimizer (beta1 = 0.9, beta2 = 0.999, weight decay 0.01)" at a CONSTANT
+        // learning rate of 5e-5, for every training stage. These now come from StreamDiffVSROptions,
+        // which carries the paper's values as its defaults.
+        //
+        // Two defects were fixed here. The optimizer was constructed as AdamWOptimizer(this) with
+        // DEFAULT options, discarding the paper's learning rate entirely and running 20x higher at
+        // AdamW's own 1e-3. Worse, the field was never published to the tape trainer at all — no
+        // SetBaseTrainOptimizer call and no GetOrCreateBaseOptimizer override — so training silently
+        // used the base class's lazily-created Adam and this field was dead. The measured symptom was
+        // the memorization probe rising monotonically (0.256 -> 0.471) instead of descending.
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new AiDotNet.Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate,
+                Beta1 = _options.AdamBeta1,
+                Beta2 = _options.AdamBeta2,
+                WeightDecay = _options.WeightDecay,
+                EnableGradientClipping = true,
+                MaxGradientNorm = 1.0
+            });
+        SetBaseTrainOptimizer(_optimizer);
         ScaleFactor = _options.ScaleFactor;
         InitializeLayers();
     }
@@ -140,7 +165,7 @@ public class StreamDiffVSR<T> : VideoSuperResolutionBase<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expected);
+            TrainWithTape(input, expected, _optimizer);
         }
         finally
         {
@@ -148,18 +173,11 @@ public class StreamDiffVSR<T> : VideoSuperResolutionBase<T>
         }
     }
 
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        if (!_useNativeMode) throw new NotSupportedException("Parameter updates are not supported in ONNX mode.");
-        int idx = 0;
-        foreach (var layer in Layers)
-        {
-            int count = checked((int)layer.ParameterCount);
-            layer.UpdateParameters(parameters.Slice(idx, count));
-            idx += count;
-        }
-    }
-
+    /// <inheritdoc />
+    /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
+    /// write on every parameter surface, so the guard is stated once here instead of being
+    /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
+    protected override bool SupportsParameterMutation => _useNativeMode;
     protected override Tensor<T> PreprocessFrames(Tensor<T> rawFrames) => NormalizeFrames(rawFrames);
 
     protected override Tensor<T> PostprocessOutput(Tensor<T> modelOutput) => DenormalizeFrames(modelOutput);

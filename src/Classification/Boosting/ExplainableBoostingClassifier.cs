@@ -74,7 +74,7 @@ namespace AiDotNet.Classification.Boosting;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("InterpretML: A Unified Framework for Machine Learning Interpretability", "https://arxiv.org/abs/1909.09223", Year = 2019, Authors = "Harsha Nori, Samuel Jenkins, Paul Koch, Rich Caruana")]
-public class ExplainableBoostingClassifier<T> : EnsembleClassifierBase<T>
+public partial class ExplainableBoostingClassifier<T> : EnsembleClassifierBase<T>
 {
     /// <summary>
     /// Shape functions for each feature (additive terms).
@@ -86,6 +86,7 @@ public class ExplainableBoostingClassifier<T> : EnsembleClassifierBase<T>
     /// Bin edges for each feature.
     /// Indexed as: _binEdges[featureIndex][edgeIndex]
     /// </summary>
+    [Buffer]
     private List<Vector<T>> _binEdges;
 
     /// <summary>

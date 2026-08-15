@@ -9,6 +9,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Transformer)]
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerProperty(IsTrainable = true, Cost = ComputeCost.High, TestInputShape = "1, 8, 8", TestConstructorArgs = "8, 2, 2, 4, 4, 2")]
+[ElementWiseShape(Note = "Attention and MLP residuals preserve the token grid and hidden width.")]
 public class SVTRMixingBlockLayer<T> : LayerBase<T>
 {
     private readonly int _hiddenSize;
@@ -43,8 +44,6 @@ public class SVTRMixingBlockLayer<T> : LayerBase<T>
     public int WindowWidth => _windowWidth;
     public double DropPathRate => _dropPathRate;
     public override bool SupportsTraining => true;
-    public override long ParameterCount => ParameterLayers.Sum(layer => layer.ParameterCount);
-
     public SVTRMixingBlockLayer(
         int hiddenSize, int numHeads, int height, int width,
         int windowHeight = 7, int windowWidth = 11, bool local = true,
@@ -76,13 +75,13 @@ public class SVTRMixingBlockLayer<T> : LayerBase<T>
         foreach (var layer in ParameterLayers) RegisterSubLayer(layer);
     }
 
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         bool unbatched = input.Rank == 2;
         var x = unbatched ? Engine.Reshape(input, [1, input.Shape[0], input.Shape[1]]) : input;
         if (x.Rank != 3 || x.Shape[1] != _height * _width || x.Shape[2] != _hiddenSize)
             throw new ArgumentException(
-                $"Expected [B,{_height * _width},{_hiddenSize}], got [{string.Join(',', input.Shape)}].",
+                $"Expected [B,{_height * _width},{_hiddenSize}], got [{string.Join(",", input.Shape)}].",
                 nameof(input));
 
         int batch = x.Shape[0];
@@ -165,7 +164,6 @@ public class SVTRMixingBlockLayer<T> : LayerBase<T>
         return Engine.TensorMultiply(branch, mask);
     }
 
-    public override Vector<T> GetParameters() => Concatenate(layer => layer.GetParameters());
     public override Vector<T> GetParameterGradients() => Concatenate(layer => layer.GetParameterGradients());
 
     private Vector<T> Concatenate(Func<ILayer<T>, Vector<T>> selector)
@@ -179,20 +177,6 @@ public class SVTRMixingBlockLayer<T> : LayerBase<T>
             offset += part.Length;
         }
         return new Vector<T>(result);
-    }
-
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (ParameterCount == 0) _ = Forward(new Tensor<T>([1, _height * _width, _hiddenSize]));
-        if (parameters.Length != ParameterCount)
-            throw new ArgumentException($"Expected {ParameterCount} parameters, got {parameters.Length}.");
-        int offset = 0;
-        foreach (var layer in ParameterLayers)
-        {
-            int count = checked((int)layer.ParameterCount);
-            layer.SetParameters(parameters.Slice(offset, count));
-            offset += count;
-        }
     }
 
     public override void UpdateParameters(T learningRate)

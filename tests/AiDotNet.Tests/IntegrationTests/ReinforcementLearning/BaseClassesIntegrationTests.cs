@@ -208,14 +208,30 @@ public class BaseClassesIntegrationTests
 
     private sealed class TestDeepAgent : DeepReinforcementLearningAgentBase<double>
     {
-        private readonly Vector<double> _parameters;
+        private readonly INeuralNetwork<double> _network;
 
         public TestDeepAgent(ReinforcementLearningOptions<double> options)
             : base(options)
         {
-            Networks.Add(CreateNetwork());
-            _parameters = new Vector<double>(1);
-            _parameters[0] = 0.1;
+            _network = CreateNetwork();
+            Networks.Add(_network);
+        }
+
+        /// <summary>
+        /// Declares the one trainable network, the way a real agent does (see DQNAgent).
+        /// </summary>
+        /// <remarks>
+        /// This fixture used to hold a private one-element vector and override GetParameters /
+        /// SetParameters to expose THAT, while still adding a real 42-parameter network to
+        /// <c>Networks</c>. The count then described the network and the vector described the
+        /// one-element store -- the exact count-vs-vector split the base was changed to make
+        /// impossible. With the base now folding the registry for both, a fixture that registers
+        /// nothing reports zero, which is what made this test read 1 against an expected 42.
+        /// Registering the network is what a real agent does and makes all three agree.
+        /// </remarks>
+        protected override void RegisterComponents()
+        {
+            RegisterParameterComponent(_network);
         }
 
         public int NetworkParameterCount => (int)Networks.Sum(network => network.ParameterCount);
@@ -253,18 +269,10 @@ public class BaseClassesIntegrationTests
         {
         }
 
-        public override Vector<double> GetParameters()
-        {
-            return _parameters.Clone();
-        }
-
-        public override void SetParameters(Vector<double> parameters)
-        {
-            if (parameters.Length > 0)
-            {
-                _parameters[0] = parameters[0];
-            }
-        }
+        // GetParameters and SetParameters are NOT overridden. The base folds the registered
+        // network for both, so the count, the vector and NetworkParameterCount all describe the
+        // same weights -- which is what DeepReinforcementLearningAgentBase_ParameterCount_SumsNetworks
+        // is actually asserting.
 
         public override IFullModel<double, Vector<double>, Vector<double>> Clone()
         {

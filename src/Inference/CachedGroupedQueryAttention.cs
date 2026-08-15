@@ -1,4 +1,7 @@
-﻿using AiDotNet.Autodiff;
+﻿// File-level, deliberately: two Tensors namespaces in the project's global usings also define a
+// TensorLayout, so [TensorLayout(...)] only binds when this import shadows them from a nearer scope.
+using AiDotNet.Attributes;
+using AiDotNet.Autodiff;
 using AiDotNet.Enums;
 using AiDotNet.NeuralNetworks.Attention;
 using AiDotNet.NeuralNetworks.Layers;
@@ -25,7 +28,19 @@ namespace AiDotNet.Inference;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for computations.</typeparam>
-internal class CachedGroupedQueryAttention<T> : LayerBase<T>
+// Rank 3 ONLY, forced by the code: both ForwardStandard and ForwardWithCache read `input.Shape[0]` as
+// batch and `input.Shape[1]` as sequence length, then reshape to [batch, seqLen, heads, headDimension].
+//
+// Shape-preserving at that rank. Sharing KV heads across query heads is a MEMORY optimisation, not a
+// shape one - ExpandKVHeads widens the cached keys and values back to _numHeads before the attention,
+// and both paths end `.Reshape(batchSize, seqLen, _embeddingDimension)` followed by a square output
+// projection - so neither the grouping nor the cache is visible in the output shape.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Output)]
+[AutoParameters]
+public partial class CachedGroupedQueryAttention<T> : LayerBase<T>, IShapeContract
 {
     private readonly int _numHeads;
     private readonly int _numKVHeads;
@@ -36,11 +51,11 @@ internal class CachedGroupedQueryAttention<T> : LayerBase<T>
     private readonly bool _useCausalMask;
 
     // Projection weights (initialized in constructor, never reassigned)
-    private readonly Matrix<T> _queryWeights;
-    private readonly Matrix<T> _keyWeights;  // Reduced: [embDim, numKVHeads * headDim]
-    private readonly Matrix<T> _valueWeights; // Reduced: [embDim, numKVHeads * headDim]
-    private readonly Matrix<T> _outputWeights;
-    private Vector<T> _outputBias;
+    private Tensor<T> _queryWeights;
+    private Tensor<T> _keyWeights;  // Reduced: [embDim, numKVHeads * headDim]
+    private Tensor<T> _valueWeights; // Reduced: [embDim, numKVHeads * headDim]
+    private Tensor<T> _outputWeights;
+    private Tensor<T> _outputBias;
 
     // KV-Cache reference
     private KVCache<T>? _cache;
@@ -133,11 +148,11 @@ internal class CachedGroupedQueryAttention<T> : LayerBase<T>
 
         int kvDim = numKVHeads * _headDimension;
 
-        _queryWeights = new Matrix<T>(embeddingDimension, embeddingDimension);
-        _keyWeights = new Matrix<T>(embeddingDimension, kvDim);
-        _valueWeights = new Matrix<T>(embeddingDimension, kvDim);
-        _outputWeights = new Matrix<T>(embeddingDimension, embeddingDimension);
-        _outputBias = new Vector<T>(embeddingDimension);
+        _queryWeights = new Tensor<T>([embeddingDimension, embeddingDimension]);
+        _keyWeights = new Tensor<T>([embeddingDimension, kvDim]);
+        _valueWeights = new Tensor<T>([embeddingDimension, kvDim]);
+        _outputWeights = new Tensor<T>([embeddingDimension, embeddingDimension]);
+        _outputBias = new Tensor<T>([embeddingDimension]);
 
         InitializeWeights();
     }
@@ -174,15 +189,26 @@ internal class CachedGroupedQueryAttention<T> : LayerBase<T>
 
     private void InitializeWeights()
     {
-        T scale = NumOps.Sqrt(NumOps.FromDouble(2.0 / (_queryWeights.Rows + _queryWeights.Columns)));
+        T scale = NumOps.Sqrt(NumOps.FromDouble(2.0 / (_queryWeights.Shape[0] + _queryWeights.Shape[1])));
         InitializeMatrix(_queryWeights, scale);
 
-        T kvScale = NumOps.Sqrt(NumOps.FromDouble(2.0 / (_keyWeights.Rows + _keyWeights.Columns)));
+        T kvScale = NumOps.Sqrt(NumOps.FromDouble(2.0 / (_keyWeights.Shape[0] + _keyWeights.Shape[1])));
         InitializeMatrix(_keyWeights, kvScale);
         InitializeMatrix(_valueWeights, kvScale);
         InitializeMatrix(_outputWeights, scale);
 
-        _outputBias = Vector<T>.CreateDefault(_outputBias.Length, NumOps.Zero);
+        _outputBias = new Tensor<T>([_outputBias.Length]);   // a fresh tensor is already zero-filled
+    }
+
+    private void InitializeMatrix(Tensor<T> matrix, T scale)
+    {
+        for (int i = 0; i < matrix.Shape[0]; i++)
+        {
+            for (int j = 0; j < matrix.Shape[1]; j++)
+            {
+                matrix[i, j] = NumOps.Multiply(NumOps.FromDouble(Random.NextDouble() - 0.5), scale);
+            }
+        }
     }
 
     private void InitializeMatrix(Matrix<T> matrix, T scale)
@@ -197,7 +223,7 @@ internal class CachedGroupedQueryAttention<T> : LayerBase<T>
     }
 
     /// <inheritdoc />
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         _lastInput = input;
 
@@ -405,48 +431,6 @@ internal class CachedGroupedQueryAttention<T> : LayerBase<T>
         }
 
         return output;
-    }
-
-    /// <inheritdoc />
-    public override void UpdateParameters(T learningRate)
-    {
-        // Simplified for inference-focused layer
-    }
-
-    /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        int qSize = _queryWeights.Rows * _queryWeights.Columns;
-        int kvSize = _keyWeights.Rows * _keyWeights.Columns;
-        int oSize = _outputWeights.Rows * _outputWeights.Columns;
-        int totalParams = qSize + kvSize * 2 + oSize + _outputBias.Length;
-        var parameters = new Vector<T>(totalParams);
-        int index = 0;
-
-        foreach (var matrix in new[] { _queryWeights, _keyWeights, _valueWeights, _outputWeights })
-        {
-            for (int i = 0; i < matrix.Rows; i++)
-                for (int j = 0; j < matrix.Columns; j++)
-                    parameters[index++] = matrix[i, j];
-        }
-        for (int i = 0; i < _outputBias.Length; i++)
-            parameters[index++] = _outputBias[i];
-
-        return parameters;
-    }
-
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int index = 0;
-        foreach (var matrix in new[] { _queryWeights, _keyWeights, _valueWeights, _outputWeights })
-        {
-            for (int i = 0; i < matrix.Rows; i++)
-                for (int j = 0; j < matrix.Columns; j++)
-                    matrix[i, j] = parameters[index++];
-        }
-        for (int i = 0; i < _outputBias.Length; i++)
-            _outputBias[i] = parameters[index++];
     }
 
     /// <inheritdoc />

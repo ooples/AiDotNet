@@ -67,7 +67,14 @@ namespace AiDotNet.NeuralNetworks.Layers.SSM;
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerTask(LayerTask.AttentionComputation)]
 [LayerProperty(IsTrainable = true, IsStateful = true, Cost = ComputeCost.High, TestInputShape = "4, 256", TestConstructorArgs = "4")]
-public partial class PaTHAttentionLayer<T> : LayerBase<T>
+// Shape-preserving. Relations discovered by probing; roles read from the forward - this folder's
+// convention is seqLen = Shape[rank-2], modelDim = Shape[rank-1], so rank 2 is [Time, Features].
+[TensorLayout(TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
+[AutoParameters]
+public partial class PaTHAttentionLayer<T> : LayerBase<T>, IShapeContract
 {
     private readonly int _sequenceLength;
     private readonly int _modelDimension;
@@ -143,13 +150,6 @@ public partial class PaTHAttentionLayer<T> : LayerBase<T>
 
     /// <summary>Gets the dimension per head.</summary>
     public int HeadDimension => _headDimension;
-
-    /// <inheritdoc />
-    public override long ParameterCount =>
-        _queryWeights.Length + _keyWeights.Length + _valueWeights.Length +
-        _householderVectors.Length +
-        _outputGateWeights.Length + _outputGateBias.Length +
-        _outputProjectionWeights.Length + _outputProjectionBias.Length;
 
     /// <summary>
     /// Creates a new PaTH Attention layer.
@@ -298,7 +298,7 @@ public partial class PaTHAttentionLayer<T> : LayerBase<T>
     }
 
     /// <inheritdoc />
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         _originalInputShape = input._shape;
 
@@ -327,48 +327,14 @@ public partial class PaTHAttentionLayer<T> : LayerBase<T>
         _lastValue = v;
 
         // Step 2: Apply Householder reflections to Q and K
-        var reflectedQ = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
-        var reflectedK = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
-
-        for (int bi = 0; bi < batchSize; bi++)
-        {
-            for (int t = 0; t < seqLen; t++)
-            {
-                int posIndex = Math.Min(t, _sequenceLength - 1);
-                for (int hi = 0; hi < _numHeads; hi++)
-                {
-                    int dimStart = hi * _headDimension;
-
-                    // Extract head-specific Q and K vectors
-                    var qHead = new T[_headDimension];
-                    var kHead = new T[_headDimension];
-                    for (int di = 0; di < _headDimension; di++)
-                    {
-                        int flatDi = dimStart + di;
-                        qHead[di] = q[new[] { bi, t, flatDi }];
-                        kHead[di] = k[new[] { bi, t, flatDi }];
-                    }
-
-                    // Apply Householder reflection
-                    var rQ = new T[_headDimension];
-                    var rK = new T[_headDimension];
-                    ApplyHouseholderReflection(qHead, posIndex, hi, rQ);
-                    ApplyHouseholderReflection(kHead, posIndex, hi, rK);
-
-                    for (int di = 0; di < _headDimension; di++)
-                    {
-                        int flatDi = dimStart + di;
-                        reflectedQ[new[] { bi, t, flatDi }] = rQ[di];
-                        reflectedK[new[] { bi, t, flatDi }] = rK[di];
-                    }
-                }
-            }
-        }
+        var reflectedQ = ApplyHouseholderReflection(q, batchSize, seqLen);
+        var reflectedK = ApplyHouseholderReflection(k, batchSize, seqLen);
         _lastReflectedQ = reflectedQ;
         _lastReflectedK = reflectedK;
 
         // Step 3: Compute attention with reflected Q and K
-        var attnOutput = ComputeAttention(reflectedQ, reflectedK, v, batchSize, seqLen);
+        var attnOutput = CausalLinearAttention.ScaledDotProduct(
+            Engine, reflectedQ, reflectedK, v, _numHeads, causal: false);
         _lastAttentionOutput = attnOutput;
 
         // Step 4: Output gate
@@ -401,6 +367,37 @@ public partial class PaTHAttentionLayer<T> : LayerBase<T>
         outputShape[rank - 2] = seqLen;
         outputShape[rank - 1] = _modelDimension;
         return Engine.Reshape(result, outputShape);
+    }
+
+    private Tensor<T> ApplyHouseholderReflection(
+        Tensor<T> input, int batchSize, int seqLen)
+    {
+        var heads = Engine.Reshape(
+            input,
+            new[] { batchSize, seqLen, _numHeads, _headDimension });
+        var positionVectors = Engine.TensorSlice(
+            _householderVectors,
+            new[] { 0, 0, 0 },
+            new[] { seqLen, _numHeads, _headDimension });
+        var vectors = Engine.TensorBroadcastTo(
+            Engine.Reshape(
+                positionVectors,
+                new[] { 1, seqLen, _numHeads, _headDimension }),
+            new[] { batchSize, seqLen, _numHeads, _headDimension });
+        var dot = Engine.ReduceSum(
+            Engine.TensorMultiply(vectors, heads), new[] { 3 }, keepDims: true);
+        var normSquared = Engine.TensorAddScalar(
+            Engine.ReduceSum(
+                Engine.TensorSquare(vectors), new[] { 3 }, keepDims: true),
+            NumOps.FromDouble(1e-10));
+        var coefficient = Engine.TensorMultiplyScalar(
+            Engine.TensorDivide(dot, normSquared), NumOps.FromDouble(2.0));
+        var reflected = Engine.TensorSubtract(
+            heads,
+            Engine.TensorBroadcastMultiply(vectors, coefficient));
+        return Engine.Reshape(
+            reflected,
+            new[] { batchSize, seqLen, _modelDimension });
     }
 
     /// <summary>
@@ -563,28 +560,6 @@ public partial class PaTHAttentionLayer<T> : LayerBase<T>
         _outputProjectionWeights = Engine.TensorAdd(_outputProjectionWeights, Engine.TensorMultiplyScalar(_outputProjectionWeightsGradient!, negLR));
         _outputProjectionBias = Engine.TensorAdd(_outputProjectionBias, Engine.TensorMultiplyScalar(_outputProjectionBiasGradient!, negLR));
 
-    }
-
-    /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        var parameters = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
-        int index = 0;
-        foreach (var tensor in GetAllTensors())
-            for (int i = 0; i < tensor.Length; i++)
-                parameters[index++] = tensor[i];
-        return parameters;
-    }
-
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (parameters.Length != ParameterCount)
-            throw new ArgumentException($"Expected {ParameterCount} parameters, got {parameters.Length}");
-        int index = 0;
-        foreach (var tensor in GetAllTensors())
-            for (int i = 0; i < tensor.Length; i++)
-                tensor[i] = parameters[index++];
     }
 
     private Tensor<T>[] GetAllTensors() =>

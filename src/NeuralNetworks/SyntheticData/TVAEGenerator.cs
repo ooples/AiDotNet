@@ -85,7 +85,7 @@ namespace AiDotNet.NeuralNetworks.SyntheticData;
     "https://arxiv.org/abs/1907.00503",
     Year = 2019,
     Authors = "Lei Xu, Maria Skoularidou, Alfredo Cuesta-Infante, Kalyan Veeramachaneni")]
-public class TVAEGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerator<T>
+public partial class TVAEGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>, ISyntheticTabularGenerator<T>
 {
     private readonly TVAEOptions<T> _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
@@ -173,7 +173,11 @@ public class TVAEGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerator
     {
         _options = options ?? new TVAEOptions<T>();
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
+            new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate
+            });
 
         int? seed = _options.Seed;
         _random = seed.HasValue
@@ -351,22 +355,8 @@ public class TVAEGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerator
         }
     }
 
-    /// <inheritdoc />
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        int startIndex = 0;
-        foreach (var layer in Layers)
-        {
-            int layerParameterCount = checked((int)layer.ParameterCount);
-            if (layerParameterCount > 0)
-            {
-                Vector<T> layerParameters = parameters.SubVector(startIndex, layerParameterCount);
-                layer.UpdateParameters(layerParameters);
-                startIndex += layerParameterCount;
-            }
-        }
-    }
-
+    // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
+    // exactly the same enumeration, so this said nothing the base does not already say.
     #endregion
 
     #region ISyntheticTabularGenerator<T> Implementation
@@ -892,11 +882,23 @@ public class TVAEGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerator
     /// <inheritdoc/>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
-        return new TVAEGenerator<T>(
+        var copy = new TVAEGenerator<T>(
             Architecture,
-            _options,
-            _optimizer,
-            _lossFunction);
+            new TVAEOptions<T>(_options),
+            optimizer: null,
+            lossFunction: _lossFunction);
+
+        // Predict/Train can adapt an unfitted TVAE from the constructor's nominal width to the
+        // caller's actual tabular width. Build the clone at that same resolved width before the
+        // base clone path transfers layer tensors; otherwise its fresh decoder still targets the
+        // parameterless 10-column shape while the source emits the adapted width.
+        if (_dataWidth > 0)
+        {
+            copy._dataWidth = _dataWidth;
+            copy.RebuildLayersWithActualDimensions(_dataWidth);
+        }
+
+        return copy;
     }
 
     /// <inheritdoc/>

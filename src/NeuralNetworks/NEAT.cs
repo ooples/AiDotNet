@@ -1,6 +1,7 @@
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
-using AiDotNet.NeuralNetworks.Options;
+using AiDotNet.NeuralNetworks.Options;
+using AiDotNet.Models.Parameters;
 
 namespace AiDotNet.NeuralNetworks;
 
@@ -52,7 +53,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Evolving Neural Networks through Augmenting Topologies", "https://nn.cs.utexas.edu/downloads/papers/stanley.ec02.pdf", Year = 2002, Authors = "Kenneth O. Stanley, Risto Miikkulainen")]
-public class NEAT<T> : NeuralNetworkBase<T>
+public partial class NEAT<T> : VectorModelLayoutBase<T>
 {
     private readonly NEATOptions _options;
 
@@ -291,26 +292,55 @@ public class NEAT<T> : NeuralNetworkBase<T>
     }
 
     /// <summary>
-    /// Gets the total number of trainable parameters (connections) in the best genome.
+    /// NEAT's parameters are the connection weights of the best genome in the population.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// In NEAT, parameters are the connection weights in a genome. This property returns
-    /// the number of connections in the best-performing genome in the population.
+    /// A COMPUTED surface: the weights are not in a field, they are read out of a structure that
+    /// evolves. Declaring a source rather than overriding the fold is what makes the count and the
+    /// vector agree by construction -- both now read this one accessor, where three hand-written
+    /// members were three chances to disagree.
+    /// </para>
+    /// <para>
+    /// The count legitimately CHANGES as the population evolves, and that is not a defect: adding
+    /// or removing a connection is what NEAT does. What must hold is that the count and the vector
+    /// agree at any single instant, which they do because they come from the same source. This is
+    /// stronger than the usual arrangement, where a framework tells you to rebuild the optimizer
+    /// after mutating the parameter set and nothing checks that you did.
     /// </para>
     /// </remarks>
-    public override long ParameterCount
+    protected override void RegisterComponents()
     {
-        get
-        {
-            if (_population == null || _population.Count == 0)
-                return 0;
-
-            // Return the connection count from the best genome
-            var bestGenome = GetBestGenome();
-            return bestGenome?.Connections?.Count ?? 0;
-        }
+        base.RegisterComponents();
+        RegisterParameterComponent(new DelegatingParameterSource<T>(
+            () => GetBestGenome()?.Connections?.Count ?? 0,
+            () =>
+            {
+                var genome = GetBestGenome();
+                int n = genome?.Connections?.Count ?? 0;
+                var values = new Vector<T>(n);
+                for (int i = 0; i < n; i++) values[i] = genome!.Connections[i].Weight;
+                return values;
+            },
+            values =>
+            {
+                var genome = GetBestGenome();
+                int n = genome?.Connections?.Count ?? 0;
+                for (int i = 0; i < n && i < values.Length; i++)
+                {
+                    genome!.Connections[i].Weight = values[i];
+                }
+            }));
     }
+
+    /// <summary>
+    /// NEAT evolves connection weights and does not compute gradient-descent derivatives.
+    /// </summary>
+    public override Vector<T> GetParameterGradients()
+        => throw new NotSupportedException(
+            "NEAT is an evolutionary optimizer and does not expose parameter gradients.");
+
+    // Replaced by the declared parameter source below. Removed under AIDN082.
 
     /// <summary>
     /// Creates the initial population of genomes with minimal network structures.
@@ -773,53 +803,7 @@ public class NEAT<T> : NeuralNetworkBase<T>
         return NumOps.FromDouble(_rng.NextDouble() * 2 - 1);
     }
 
-    /// <summary>
-    /// Updates the connection weights of the best genome using the provided parameter vector.
-    /// </summary>
-    /// <param name="parameters">A vector containing parameters to update.</param>
-    /// <exception cref="InvalidOperationException">Thrown when the best genome has no connections.</exception>
-    /// <exception cref="ArgumentException">Thrown when parameter vector length doesn't match connection count.</exception>
-    /// <remarks>
-    /// <para>
-    /// This method allows direct parameter updates to the best genome's connection weights, enabling
-    /// integration with external optimization or parameter management systems. Note that this bypasses
-    /// NEAT's evolutionary mechanisms and should be used carefully.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method allows direct weight updates when needed.
-    ///
-    /// In traditional NEAT:
-    /// - Parameters evolve through natural selection
-    /// - Better-performing networks reproduce more often
-    /// - Parameters change through crossover and mutation
-    ///
-    /// However, this method allows you to:
-    /// - Directly set connection weights on the best genome
-    /// - Integrate with external optimization algorithms
-    /// - Transfer parameters from other sources
-    ///
-    /// <b>Important:</b> Changes may be lost if the modified genome doesn't survive selection
-    /// in subsequent evolution cycles. For typical NEAT training, use the EvolvePopulation method instead.
-    /// </para>
-    /// </remarks>
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        var bestGenome = GetBestGenome();
-
-        if (bestGenome.Connections.Count == 0)
-        {
-            throw new InvalidOperationException("Best genome has no connections to update.");
-        }
-
-        if (parameters.Length != bestGenome.Connections.Count)
-        {
-            throw new ArgumentException($"Parameter vector length mismatch. Expected {bestGenome.Connections.Count} parameters but got {parameters.Length}.", nameof(parameters));
-        }
-
-        for (int i = 0; i < bestGenome.Connections.Count; i++)
-        {
-            bestGenome.Connections[i].Weight = parameters[i];
-        }
-    }
+    // Replaced by the declared parameter source below. Removed under AIDN082.
 
     /// <summary>
     /// Predicts output values for input data using the best genome in the population.
@@ -1599,35 +1583,23 @@ public class NEAT<T> : NeuralNetworkBase<T>
         };
     }
 
-    /// <summary>
-    /// Gets the parameters (connection weights) of the best genome.
-    /// </summary>
-    public override Vector<T> GetParameters()
-    {
-        var bestGenome = GetBestGenome();
-        if (bestGenome.Connections.Count == 0)
-            return new Vector<T>(0);
-
-        var parameters = new Vector<T>(bestGenome.Connections.Count);
-        for (int i = 0; i < bestGenome.Connections.Count; i++)
-        {
-            parameters[i] = bestGenome.Connections[i].Weight;
-        }
-
-        return parameters;
-    }
+    // Replaced by the declared parameter source below. Removed under AIDN082.
 
     /// <summary>
     /// Yields the best genome's connection weights as a single chunk so
     /// snapshot-based parameter-change probes (Training_ShouldChangeParameters,
     /// GradientFlow_ShouldBeNonZeroAndFinite) see real evolutionary
     /// updates. The base <see cref="NeuralNetworkBase{T}.GetParameterChunks"/>
-    /// walks <see cref="Layers"/>, but NEAT populates Layers with a stub
-    /// representation of the best genome and the actual trainable surface
-    /// lives in the genome's <c>Connections</c> list — so the inherited
-    /// chunk walk reported zero changes after Train and produced false
-    /// "no parameters changed" failures (#1224 Cluster F). Yielding a
-    /// genome-derived chunk surfaces the evolutionary delta.
+    /// walks <see cref="Layers"/>, which NEAT leaves EMPTY — its trainable
+    /// surface is the best genome's <c>Connections</c> list, and there is no
+    /// fixed layer partition to publish because the topology is evolved and
+    /// mutates every generation. So the inherited chunk walk reported zero
+    /// changes after Train and produced false "no parameters changed"
+    /// failures (#1224 Cluster F). Yielding a genome-derived chunk surfaces
+    /// the evolutionary delta.
+    /// (This previously said NEAT "populates Layers with a stub representation
+    /// of the best genome". It does not: Layers is written nowhere in this
+    /// file. The override is right; the reason given for it was not.)
     /// </summary>
     public override System.Collections.Generic.IEnumerable<Tensor<T>> GetParameterChunks()
     {

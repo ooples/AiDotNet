@@ -70,7 +70,7 @@ namespace AiDotNet.Classification.Meta;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
     [ResearchPaper("Classifier Chains for Multi-label Classification", "https://doi.org/10.1007/s10994-011-5256-5")]
-public class ClassifierChain<T> : MetaClassifierBase<T>
+public partial class ClassifierChain<T> : MetaClassifierBase<T>
 {
     /// <summary>
     /// Initializes a new instance with default settings using Gaussian Naive Bayes as the base estimator.

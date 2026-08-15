@@ -49,7 +49,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Attention Is All You Need", "https://arxiv.org/abs/1706.03762", Year = 2017, Authors = "Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N. Gomez, Lukasz Kaiser, Illia Polosukhin")]
-public class AttentionNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
+public class AttentionNetwork<T> : SequenceModelLayoutBase<T>, IAuxiliaryLossLayer<T>
 {
     private readonly AttentionNetworkOptions _options;
 
@@ -239,43 +239,8 @@ public class AttentionNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
         }
     }
 
-    /// <summary>
-    /// Updates the parameters of the attention network.
-    /// </summary>
-    /// <param name="parameters">The parameters to update the network with.</param>
-    /// <remarks>
-    /// <para>
-    /// This method updates the parameters of each layer in the network with the provided parameter values.
-    /// It distributes the parameters to each layer based on the number of parameters in each layer.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method adjusts the network's internal values to improve its performance.
-    /// 
-    /// During training:
-    /// - The learning algorithm calculates how the parameters should change
-    /// - This method applies those changes to the actual parameters
-    /// - Each layer gets its own portion of the parameter updates
-    /// 
-    /// Think of it like fine-tuning all the components of the network based on feedback:
-    /// - Attention mechanisms learn to focus on more relevant parts
-    /// - Embedding layers learn better representations of the input
-    /// - Feed-forward layers learn to process the information more effectively
-    /// </para>
-    /// </remarks>
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        int startIndex = 0;
-        foreach (var layer in Layers)
-        {
-            int layerParameterCount = checked((int)layer.ParameterCount);
-            if (layerParameterCount > 0)
-            {
-                Vector<T> layerParameters = parameters.SubVector(startIndex, layerParameterCount);
-                layer.UpdateParameters(layerParameters);
-                startIndex += layerParameterCount;
-            }
-        }
-    }
-
+    // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
+    // exactly the same enumeration, so this said nothing the base does not already say.
     /// <summary>
     /// Makes a prediction using the current state of the Attention Network.
     /// </summary>

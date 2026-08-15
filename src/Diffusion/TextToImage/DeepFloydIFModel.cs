@@ -86,8 +86,18 @@ namespace AiDotNet.Diffusion.TextToImage;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Photorealistic Text-to-Image Diffusion Models with Deep Language Understanding", "https://arxiv.org/abs/2205.11487", Year = 2022, Authors = "Saharia et al.")]
-public class DeepFloydIFModel<T> : LatentDiffusionModelBase<T>
+public partial class DeepFloydIFModel<T> : LatentDiffusionModelBase<T>
 {
+    /// <inheritdoc />
+    /// <remarks>Registration order is serialization order, and matches the
+    /// concatenation the previous hand-written GetParameters performed.</remarks>
+    protected override void RegisterComponents()
+    {
+        RegisterParameterComponent(_stageIUnet);
+        RegisterParameterComponent(_stageIIUnet);
+        RegisterParameterComponent(_vae);
+    }
+
     #region Constants
 
     /// <summary>
@@ -140,7 +150,6 @@ public class DeepFloydIFModel<T> : LatentDiffusionModelBase<T>
     public override int LatentChannels => IF_PIXEL_CHANNELS;
 
     /// <inheritdoc />
-    public override long ParameterCount => _stageIUnet.ParameterCount + _stageIIUnet.ParameterCount + _vae.ParameterCount;
 
     /// <summary>
     /// Gets the Stage II super-resolution noise predictor.
@@ -321,77 +330,7 @@ public class DeepFloydIFModel<T> : LatentDiffusionModelBase<T>
 
     #region IParameterizable Implementation
 
-    /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        var stage1Params = _stageIUnet.GetParameters();
-        var stage2Params = _stageIIUnet.GetParameters();
-        var vaeParams = _vae.GetParameters();
 
-        var totalLength = stage1Params.Length + stage2Params.Length + vaeParams.Length;
-        var combined = new Vector<T>(totalLength);
-
-        var offset = 0;
-        for (int i = 0; i < stage1Params.Length; i++)
-        {
-            combined[offset + i] = stage1Params[i];
-        }
-        offset += stage1Params.Length;
-
-        for (int i = 0; i < stage2Params.Length; i++)
-        {
-            combined[offset + i] = stage2Params[i];
-        }
-        offset += stage2Params.Length;
-
-        for (int i = 0; i < vaeParams.Length; i++)
-        {
-            combined[offset + i] = vaeParams[i];
-        }
-
-        return combined;
-    }
-
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int stage1Count = checked((int)_stageIUnet.ParameterCount);
-        int stage2Count = checked((int)_stageIIUnet.ParameterCount);
-        var vaeCount = checked((int)_vae.ParameterCount);
-
-        if (parameters.Length != stage1Count + stage2Count + vaeCount)
-        {
-            throw new ArgumentException(
-                $"Expected {stage1Count + stage2Count + vaeCount} parameters, got {parameters.Length}.",
-                nameof(parameters));
-        }
-
-        var stage1Params = new Vector<T>(stage1Count);
-        var stage2Params = new Vector<T>(stage2Count);
-        var vaeParams = new Vector<T>(vaeCount);
-
-        var offset = 0;
-        for (int i = 0; i < stage1Count; i++)
-        {
-            stage1Params[i] = parameters[offset + i];
-        }
-        offset += stage1Count;
-
-        for (int i = 0; i < stage2Count; i++)
-        {
-            stage2Params[i] = parameters[offset + i];
-        }
-        offset += stage2Count;
-
-        for (int i = 0; i < vaeCount; i++)
-        {
-            vaeParams[i] = parameters[offset + i];
-        }
-
-        _stageIUnet.SetParameters(stage1Params);
-        _stageIIUnet.SetParameters(stage2Params);
-        _vae.SetParameters(vaeParams);
-    }
 
     #endregion
 

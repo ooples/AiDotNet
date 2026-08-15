@@ -29,7 +29,7 @@ namespace AiDotNet.Diffusion.Conditioning;
     "https://arxiv.org/abs/2103.00020",
     Year = 2021,
     Authors = "Alec Radford, Jong Wook Kim, Chris Hallacy, Aditya Ramesh, Gabriel Goh, Sandhini Agarwal, Girish Sastry, Amanda Askell, Pamela Mishkin, Jack Clark, Gretchen Krueger, Ilya Sutskever")]
-public class CLIPTextConditioner<T> : TextConditioningBase<T>
+public partial class CLIPTextConditioner<T> : TextConditioningBase<T>
 {
     private readonly CLIPVariant _variant;
 
@@ -132,42 +132,8 @@ public class CLIPTextConditioner<T> : TextConditioningBase<T>
         return _textProjection.Forward(eosTensor);
     }
 
-    /// <summary>
-    /// CLIP parameter count = layer-stack params + the post-pool projection.
-    /// </summary>
-    public override long ParameterCount
-    {
-        get
-        {
-            long basePc = 0;
-            foreach (var layer in Layers) basePc += layer.ParameterCount;
-            return basePc + _textProjection.ParameterCount;
-        }
-    }
-
-    /// <inheritdoc/>
-    public override Vector<T> GetParameters()
-    {
-        var basePart = base.GetParameters();
-        return Vector<T>.Concatenate(basePart, _textProjection.GetParameters());
-    }
-
-    /// <inheritdoc/>
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        int idx = 0;
-        foreach (var layer in Layers)
-        {
-            int count = (int)layer.ParameterCount;
-            if (count == 0) continue;
-            layer.UpdateParameters(parameters.Slice(idx, count));
-            idx += count;
-        }
-        int projCount = (int)_textProjection.ParameterCount;
-        if (projCount > 0)
-            _textProjection.UpdateParameters(parameters.Slice(idx, projCount));
-    }
-
+    // UpdateParameters restated a fold the base now derives from generated component registration.
+    // Removed under AIDN082.
     /// <summary>
     /// PyTorch-style lazy architecture: token-ID inputs are rank-2
     /// <c>[batch, seqLen]</c>. We use <see cref="InputType.TwoDimensional"/>

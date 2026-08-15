@@ -68,7 +68,7 @@ namespace AiDotNet.Regression.MixedEffects;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("Generalized Linear Mixed Models", "https://doi.org/10.1201/b13459")]
-public class GeneralizedLinearMixedModel<T> : RegressionBase<T>
+public partial class GeneralizedLinearMixedModel<T> : RegressionBase<T>
 {
     /// <summary>
     /// Numeric operations for type T.
@@ -215,7 +215,13 @@ public class GeneralizedLinearMixedModel<T> : RegressionBase<T>
     /// <param name="x">Feature matrix (including grouping variables).</param>
     /// <param name="y">Response vector.</param>
     /// <summary>GLMM doesn't benefit from optimizer parameter injection.</summary>
-    public override long ParameterCount => 0;
+        /// <remarks>
+    /// Expressed as a capability, not as a count. A zero ParameterCount also suppresses
+    /// injection -- that is why this was written that way -- but it overloads a COUNT to carry
+    /// a CAPABILITY: the model does have parameters (the base getter returns its coefficients
+    /// and intercept), so the count contradicted the vector.
+    /// </remarks>
+    public override bool SupportsParameterInitialization => false;
 
     private bool _useOLS;
 

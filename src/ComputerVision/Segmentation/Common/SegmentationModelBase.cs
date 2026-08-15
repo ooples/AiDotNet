@@ -1,4 +1,9 @@
 using System.IO;
+// File-level, deliberately: two Tensors namespaces in the project's global usings also define a
+// TensorLayout, so [TensorLayout(...)] only binds to ours when this import shadows them from a nearer
+// scope. Without it the attribute silently resolves to the wrong type and ADNSHAPE003 reports this
+// contract as having no input layout - which is exactly what happened before this line was added.
+using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
@@ -29,8 +34,85 @@ namespace AiDotNet.ComputerVision.Segmentation.Common;
 /// or SAM that extends this base class.
 /// </para>
 /// </remarks>
-public abstract class SegmentationModelBase<T> : NeuralNetworkBase<T>, ISegmentationModel<T>
+// MEASURED, not assumed. Every axis below was falsified by building each model under four profiles
+// that differ in exactly one variable and comparing what Predict returned (ModelFamilyLawTests):
+//
+//   classes 7 -> 13   moved axis 1 only          => Fixed(_numClasses)
+//   extent 64 -> 128  moved axes 2,3: 2 -> 4     => Scaled(1/32), a /32-stride encoder
+//   batch 1 -> 2      moved axis 0 only          => Same(Batch)
+//
+// 10 models probed, 0 skipped, unanimous. The geometries STRADDLE the stride deliberately: a first
+// attempt at 8 and 16 reported every spatial axis as a constant 1, because /32 floors both to 1 - so
+// it could not tell Fixed(1) from Scaled(1/32), and declaring Fixed(1) would have been wrong for all
+// 69 models inheriting this. Probing below the stride cannot falsify a spatial constant.
+//
+// RANK 4 ONLY. Forward also accepts rank-3 [C,H,W] by promoting it, but no rank-3 output was measured,
+// so OutputAxesFor declines that rank rather than guessing - see its remarks.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Input,
+    Note = "A batched image. Forward rejects every rank but 3 and 4.")]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Classes, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Output,
+    Note = "Per-class logits over a /32 feature grid; the class axis IS the channel axis of the output.")]
+public abstract class SegmentationModelBase<T> : NeuralNetworkBase<T>, ISegmentationModel<T>, IShapeContract
 {
+    /// <summary>
+    /// The output axes for a segmentation model, shared by every model in the family.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Declared ONCE here rather than on each of the 69 derived models, which is the whole point of a
+    /// family contract: [TensorLayout] is inherited and this method is virtual, so a model whose law
+    /// genuinely differs overrides it and every other model needs no shape code at all.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> segmentation labels every pixel, so the output has one value per class per
+    /// position. The class count comes from the model's configuration, and the spatial grid is 32x
+    /// smaller than the input because the encoder downsamples.
+    /// </para>
+    /// <para>
+    /// Returns null for any rank but 4, and null when the class count is unresolved - declining is the
+    /// honest answer where nothing was measured, and a contract that cannot fire is better than one
+    /// that fires wrongly.
+    /// </para>
+    /// </remarks>
+    public virtual IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+        => SpatialStrideContract(inputRank, 32);
+
+    /// <summary>
+    /// The family contract at a given encoder stride: [Batch, Classes, H/stride, W/stride].
+    /// </summary>
+    /// <param name="inputRank">Rank of the incoming shape; only rank 4 is declared.</param>
+    /// <param name="stride">Total downsampling factor of this model's encoder.</param>
+    /// <remarks>
+    /// <para>
+    /// The STRIDE is the only thing that varies across the family, so it is the only thing an override
+    /// has to supply. Measured across all 69 models: 59 are /32 (the default here), SAM/SAMHQ/EoMT/
+    /// EfficientTAM are /16, ViTCoMer is /4, and four models do not downsample at all (stride 1).
+    /// Batch and the class axis are unanimous, so they live here once rather than in ten overrides.
+    /// </para>
+    /// <para>
+    /// Every one of those numbers came from the conformance sweep comparing the declaration against a
+    /// real Predict, not from reading encoders. The first attempt declared /32 for the whole family and
+    /// the sweep rejected it for exactly these ten models.
+    /// </para>
+    /// </remarks>
+    protected IReadOnlyList<OutputAxisContract>? SpatialStrideContract(int inputRank, int stride)
+    {
+        if (inputRank != 4 || _numClasses <= 0 || stride <= 0) return null;
+
+        AxisRelation Spatial(TensorAxis axis)
+            => stride == 1 ? AxisRelation.Same(axis) : AxisRelation.Scaled(axis, 1, stride);
+
+        return new[]
+        {
+            new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+            new OutputAxisContract(TensorAxis.Classes, AxisRelation.Fixed(_numClasses)),
+            new OutputAxisContract(TensorAxis.Height, Spatial(TensorAxis.Height)),
+            new OutputAxisContract(TensorAxis.Width, Spatial(TensorAxis.Width)),
+        };
+    }
+
     #region Fields
 
     /// <summary>
@@ -69,9 +151,21 @@ public abstract class SegmentationModelBase<T> : NeuralNetworkBase<T>, ISegmenta
     protected InferenceSession? _onnxSession;
 
     /// <summary>
-    /// Gradient-based optimizer for training (null in ONNX mode).
+    /// Gradient-based optimizer for training (null in ONNX mode until <see cref="Optimizer"/> resolves it).
     /// </summary>
-    protected readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
+    /// <remarks>
+    /// <para>
+    /// NOT readonly, and that is what makes this base adoptable at all. It was <c>protected readonly</c>,
+    /// assignable only from a base-constructor parameter - and the default every segmentation model
+    /// actually wants is <c>new AdamWOptimizer&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;(this)</c>, which
+    /// a derived type CANNOT pass to a base constructor because <c>this</c> is not available in a
+    /// constructor initializer (CS0027), and CANNOT assign afterwards because the field was readonly
+    /// (CS0191). So a model wanting the standard default had no way to express it through this base and
+    /// had to keep its own field and derive from NeuralNetworkBase instead. All 70 concrete segmentation
+    /// models did exactly that, which is why this base and its 8 family bases had zero users.
+    /// </para>
+    /// </remarks>
+    protected IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
 
     /// <summary>
     /// Whether this instance has been disposed.
@@ -86,6 +180,29 @@ public abstract class SegmentationModelBase<T> : NeuralNetworkBase<T>, ISegmenta
     #endregion
 
     #region ISegmentationModel Implementation
+
+    /// <summary>
+    /// The optimizer used for training, created on first use if the constructor was given none.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Resolving LAZILY is the point: it runs after construction completes, so <c>this</c> is a fully
+    /// built model and the default optimizer can bind to it. That is the one thing a constructor
+    /// parameter cannot do, and its absence is what made this base unusable.
+    /// </para>
+    /// <para>
+    /// Null in ONNX mode, where training is not supported and asking for an optimizer is a caller error
+    /// rather than something to satisfy with a default.
+    /// </para>
+    /// </remarks>
+    protected IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? Optimizer
+        => _useNativeMode ? _optimizer ??= CreateDefaultOptimizer() : null;
+
+    /// <summary>
+    /// Creates the optimizer used when the constructor was given none. Override to change the default.
+    /// </summary>
+    protected virtual IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreateDefaultOptimizer()
+        => new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
     /// <inheritdoc/>
     public int NumClasses => _numClasses;
@@ -106,6 +223,12 @@ public abstract class SegmentationModelBase<T> : NeuralNetworkBase<T>, ISegmenta
 
     #region Constructors
 
+    /// <summary>Chooses a non-degenerate default objective for the declared mask shape.</summary>
+    private static ILossFunction<T> CreateDefaultSegmentationLoss(int numClasses)
+        => numClasses == 1
+            ? new BinaryCrossEntropyWithLogitsLoss<T>()
+            : new CrossEntropyWithLogitsLoss<T>();
+
     /// <summary>
     /// Initializes the base in native (trainable) mode.
     /// </summary>
@@ -118,7 +241,7 @@ public abstract class SegmentationModelBase<T> : NeuralNetworkBase<T>, ISegmenta
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer,
         ILossFunction<T>? lossFunction,
         int numClasses)
-        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>())
+        : base(architecture, lossFunction ?? CreateDefaultSegmentationLoss(numClasses))
     {
         if (numClasses <= 0)
             throw new ArgumentOutOfRangeException(nameof(numClasses), "numClasses must be > 0.");
@@ -144,7 +267,7 @@ public abstract class SegmentationModelBase<T> : NeuralNetworkBase<T>, ISegmenta
         NeuralNetworkArchitecture<T> architecture,
         string onnxModelPath,
         int numClasses)
-        : base(architecture, new CrossEntropyWithLogitsLoss<T>())
+        : base(architecture, CreateDefaultSegmentationLoss(numClasses))
     {
         if (numClasses <= 0)
             throw new ArgumentOutOfRangeException(nameof(numClasses), "numClasses must be > 0.");
@@ -342,7 +465,6 @@ public abstract class SegmentationModelBase<T> : NeuralNetworkBase<T>, ISegmenta
 
     #region Parameter Updates
 
-    /// <inheritdoc/>
     public override void UpdateParameters(Vector<T> parameters)
     {
         int offset = 0;
@@ -367,7 +489,6 @@ public abstract class SegmentationModelBase<T> : NeuralNetworkBase<T>, ISegmenta
             offset += layerParamCount;
         }
     }
-
     #endregion
 
     #region Serialization Helpers

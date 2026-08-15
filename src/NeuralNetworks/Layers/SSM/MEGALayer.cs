@@ -62,7 +62,14 @@ namespace AiDotNet.NeuralNetworks.Layers.SSM;
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerTask(LayerTask.TemporalProcessing)]
 [LayerProperty(IsTrainable = true, IsStateful = true, Cost = ComputeCost.High, TestInputShape = "4, 256", TestConstructorArgs = "4")]
-public partial class MEGALayer<T> : LayerBase<T>
+// Shape-preserving. Relations discovered by probing; roles read from the forward - this folder's
+// convention is seqLen = Shape[rank-2], modelDim = Shape[rank-1], so rank 2 is [Time, Features].
+[TensorLayout(TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
+[AutoParameters]
+public partial class MEGALayer<T> : LayerBase<T>, IShapeContract
 {
     private readonly int _modelDimension;
     private readonly int _numHeads;
@@ -181,19 +188,6 @@ public partial class MEGALayer<T> : LayerBase<T>
     /// Gets the EMA dimension.
     /// </summary>
     public int EmaDimension => _emaDimension;
-
-    /// <summary>
-    /// Gets the total number of trainable parameters.
-    /// </summary>
-    public override long ParameterCount =>
-        _emaAlphaLogit.Length +
-        _emaProjectInWeights.Length + _emaProjectInBias.Length +
-        _emaProjectOutWeights.Length + _emaProjectOutBias.Length +
-        _queryWeights.Length + _queryBias.Length +
-        _keyWeights.Length + _keyBias.Length +
-        _valueWeights.Length + _valueBias.Length +
-        _outputGateWeights.Length + _outputGateBias.Length +
-        _outputProjectionWeights.Length + _outputProjectionBias.Length;
 
     /// <summary>
     /// Creates a new MEGA (Moving Average Equipped Gated Attention) layer.
@@ -328,7 +322,7 @@ public partial class MEGALayer<T> : LayerBase<T>
     }
 
     /// <inheritdoc />
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         _originalInputShape = input._shape;
 
@@ -354,8 +348,31 @@ public partial class MEGALayer<T> : LayerBase<T>
             Engine.Reshape(_emaProjectInBias, new[] { 1, _emaDimension })), new[] { batchSize, seqLen, _emaDimension });
         _lastEmaInput = emaInput;
 
-        // Step 2: Apply multi-dimensional EMA: h_t = alpha * h_{t-1} + (1 - alpha) * x_t
-        var emaOutput = EmaForward(emaInput, batchSize, seqLen);
+        // Step 2: Apply multi-dimensional EMA through the fused RG-LRU scan.
+        // RG-LRU evolves h_t = a*h_{t-1} + sqrt(1-a^2)*(i_t*v_t).
+        // Choosing a = alpha and i_t = (1-alpha)/sqrt(1-alpha^2)
+        // gives exactly h_t = alpha*h_{t-1} + (1-alpha)*x_t while
+        // retaining one analytic BPTT tape node instead of a detached scalar loop.
+        var alpha = Engine.Sigmoid(_emaAlphaLogit);
+        var channelOnes = new Tensor<T>(new[] { _emaDimension });
+        channelOnes.Fill(NumOps.One);
+        var oneMinusAlpha = Engine.TensorSubtract(channelOnes, alpha);
+        var inputScale = Engine.TensorDivide(
+            oneMinusAlpha,
+            Engine.TensorSqrt(Engine.TensorSubtract(
+                channelOnes,
+                Engine.TensorMultiply(alpha, alpha))));
+        var recurrenceGate = Engine.TensorBroadcastTo(
+            Engine.Reshape(channelOnes, new[] { 1, 1, _emaDimension }),
+            new[] { batchSize, seqLen, _emaDimension });
+        var inputGate = Engine.TensorBroadcastTo(
+            Engine.Reshape(inputScale, new[] { 1, 1, _emaDimension }),
+            new[] { batchSize, seqLen, _emaDimension });
+        var emaOutput = Engine.RgLruScanForward(
+            emaInput,
+            recurrenceGate,
+            inputGate,
+            Engine.TensorNegate(_emaAlphaLogit));
 
         // Step 3: Project EMA output back to model dimension
         var emaFlat = Engine.Reshape(emaOutput, new[] { batchSize * seqLen, _emaDimension });
@@ -388,7 +405,8 @@ public partial class MEGALayer<T> : LayerBase<T>
         _lastGate = gate;
 
         // Step 6: Multi-head causal attention
-        var attnOutput = CausalAttentionForward(q, k, v, batchSize, seqLen);
+        var attnOutput = CausalLinearAttention.ScaledDotProduct(
+            Engine, q, k, v, _numHeads, causal: true);
         _lastAttnOutput = attnOutput;
 
         // Step 7: Gated output
@@ -612,28 +630,6 @@ public partial class MEGALayer<T> : LayerBase<T>
         _outputProjectionWeights = Engine.TensorAdd(_outputProjectionWeights, Engine.TensorMultiplyScalar(_outputProjectionWeightsGradient!, negLR));
         _outputProjectionBias = Engine.TensorAdd(_outputProjectionBias, Engine.TensorMultiplyScalar(_outputProjectionBiasGradient!, negLR));
 
-    }
-
-    /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        var parameters = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
-        int index = 0;
-        foreach (var tensor in GetAllTensors())
-            for (int i = 0; i < tensor.Length; i++)
-                parameters[index++] = tensor[i];
-        return parameters;
-    }
-
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (parameters.Length != ParameterCount)
-            throw new ArgumentException($"Expected {ParameterCount} parameters, got {parameters.Length}");
-        int index = 0;
-        foreach (var tensor in GetAllTensors())
-            for (int i = 0; i < tensor.Length; i++)
-                tensor[i] = parameters[index++];
     }
 
     private Tensor<T>[] GetAllTensors() =>

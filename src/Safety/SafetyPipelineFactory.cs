@@ -159,8 +159,10 @@ internal static class SafetyPipelineFactory<T>
     {
         if (config.Video.EffectiveContentModeration)
         {
-            pipeline.AddModule(new MultimodalVideoModerator<T>(
-                samplingRate: config.Video.EffectiveFrameSamplingRate));
+            // The taxonomy moderator samples a FIXED budget of frames per video (14 + thumbnail,
+            // per arXiv:2411.05854) rather than a frames-per-second rate, so the configured
+            // sampling rate no longer applies to it.
+            pipeline.AddModule(new MultimodalVideoModerator<T>());
         }
 
         if (config.Video.EffectiveDeepfakeDetection)

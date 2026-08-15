@@ -36,7 +36,15 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = true, Cost = ComputeCost.High, ApiShape = LayerApiShape.DualTensor, TestInputShape = "4, 8", TestConstructorArgs = "2, 16, 4, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
-public class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
+// Transformer decoder over a sequence: shape-preserving at rank 3 [Batch, Time, Features].
+// Rank 2 comes from this layer's own [LayerProperty(TestInputShape = "4, 8")] - 4 positions of an
+// 8-wide model dim, so [Time, Features] unbatched. ADNSHAPE005 caught the rank-3-only declaration.
+[TensorLayout(TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
+[AutoParameters]
+public partial class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IShapeContract
 {
     /// <summary>
     /// Gets or sets a value indicating whether auxiliary loss is enabled for this layer.
@@ -497,21 +505,6 @@ public class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     public override bool SupportsTraining => true;
 
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (!_isInitialized)
-        {
-            throw new InvalidOperationException(
-                "TransformerDecoderLayer.SetParameters cannot run before sublayers are " +
-                "constructed. Run a Forward pass (or call EnsureInitialized via reflection) " +
-                "first so _embeddingSize is resolved and the sublayers exist.");
-        }
-        int idx = 0;
-        void Set(ILayer<T> layer) { int c = (int)layer.ParameterCount; layer.SetParameters(parameters.Slice(idx, c)); idx += c; }
-        Set(_selfAttention); Set(_norm1); Set(_crossAttention); Set(_norm2);
-        Set(_feedForward); Set(_feedForwardProjection); Set(_norm3);
-    }
-
     public override Vector<T> GetParameterGradients()
     {
         if (!_isInitialized) return new Vector<T>(0);
@@ -538,25 +531,6 @@ public class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     protected override bool SupportsGpuExecution => true;
 
     /// <summary>
-    /// Gets the total number of trainable parameters in this layer.
-    /// </summary>
-    /// <remarks>
-    /// This returns the sum of all parameters from sublayers: self-attention, cross-attention,
-    /// layer norms, feed-forward layer, and feed-forward projection layer.
-    /// </remarks>
-    public override long ParameterCount =>
-        _isInitialized
-            ? _selfAttention.ParameterCount +
-              _norm1.ParameterCount +
-              _crossAttention.ParameterCount +
-              _norm2.ParameterCount +
-              _feedForward.ParameterCount +
-              _feedForwardProjection.ParameterCount +
-              _norm3.ParameterCount
-            : 0;
-
-
-    /// <summary>
     /// Lazy ctor: <see cref="_embeddingSize"/> is resolved from <c>input.Shape[^1]</c>
     /// on first <see cref="Forward(Tensor{T})"/>; the inner attention/cross-attention/
     /// FFN/norm sublayers are constructed then.
@@ -565,8 +539,10 @@ public class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// <param name="feedForwardDim">Hidden dimension of the FFN (default 2048).</param>
     /// <param name="sequenceLength">Maximum sequence length (default 512).</param>
     /// <param name="ffnActivation">FFN activation (default GELU).</param>
-    public TransformerDecoderLayer(int numHeads, int feedForwardDim,
-        int sequenceLength = 512,
+    public TransformerDecoderLayer(
+        [LayerState] int numHeads,
+        [LayerState] int feedForwardDim,
+        [LayerState] int sequenceLength = 512,
         IActivationFunction<T>? ffnActivation = null)
         : base(new[] { -1, -1, -1 }, new[] { -1, -1, -1 })
     {
@@ -623,7 +599,20 @@ public class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
         var resolved = new int[input.Shape.Length];
         for (int i = 0; i < input.Shape.Length; i++) resolved[i] = input.Shape[i];
-        ResolveShapes(resolved, resolved);
+
+        // The output keeps the embedding width but NOT the sequence length. A decoder emits one
+        // position per TARGET token, which is not this layer's input length and is not the same
+        // from call to call -- UDOP drives it with 4 positions and then 2.
+        //
+        // Declaring output == input made the declaration not merely wrong but stale: it froze
+        // whatever the first input happened to be, and every later forward contradicted it
+        // ([4, 32] declared, [2, 32] produced). There is no single correct constant, so the
+        // sequence axis stays dynamic and only the width is committed to.
+        var declaredOutput = new int[resolved.Length];
+        for (int i = 0; i < resolved.Length; i++) declaredOutput[i] = LayerShape.Dynamic;
+        declaredOutput[resolved.Length - 1] = _embeddingSize;
+
+        ResolveShapes(resolved, declaredOutput);
     }
 
     /// <summary>
@@ -671,13 +660,26 @@ public class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             // sub-layer ResolveFromShape pattern (which already gets this
             // right).
             int[] subInputShape = new[] { _embeddingSize };
-            _selfAttention.ResolveFromShape(new[] { 1, _embeddingSize });
-            _norm1.ResolveFromShape(subInputShape);
-            _crossAttention.ResolveFromShape(new[] { 1, _embeddingSize });
-            _norm2.ResolveFromShape(subInputShape);
-            _feedForward.ResolveFromShape(subInputShape);
-            _feedForwardProjection.ResolveFromShape(new[] { _feedForwardDim });
-            _norm3.ResolveFromShape(subInputShape);
+            if (IsResolvingShapesOnly)
+            {
+                _selfAttention.ResolveShapesOnly(new[] { 1, _embeddingSize });
+                _norm1.ResolveShapesOnly(subInputShape);
+                _crossAttention.ResolveShapesOnly(new[] { 1, _embeddingSize });
+                _norm2.ResolveShapesOnly(subInputShape);
+                _feedForward.ResolveShapesOnly(subInputShape);
+                _feedForwardProjection.ResolveShapesOnly(new[] { _feedForwardDim });
+                _norm3.ResolveShapesOnly(subInputShape);
+            }
+            else
+            {
+                _selfAttention.ResolveFromShape(new[] { 1, _embeddingSize });
+                _norm1.ResolveFromShape(subInputShape);
+                _crossAttention.ResolveFromShape(new[] { 1, _embeddingSize });
+                _norm2.ResolveFromShape(subInputShape);
+                _feedForward.ResolveFromShape(subInputShape);
+                _feedForwardProjection.ResolveFromShape(new[] { _feedForwardDim });
+                _norm3.ResolveFromShape(subInputShape);
+            }
 
             _isInitialized = true;
         }
@@ -696,7 +698,7 @@ public class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// <summary>
     /// Named multi-input forward pass.
     /// </summary>
-    public override Tensor<T> Forward(IReadOnlyDictionary<string, Tensor<T>> inputs)
+    protected override Tensor<T> ForwardTracedPorts(IReadOnlyDictionary<string, Tensor<T>> inputs)
     {
         if (inputs == null) throw new ArgumentNullException(nameof(inputs));
         if (!inputs.TryGetValue("decoder_input", out var decoderInput) || decoderInput == null)
@@ -728,7 +730,7 @@ public class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// if someone tries to use it. The correct method to use is the one that accepts both inputs.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // Decoder-only mode (GPT-style): use self-attention only, skip cross-attention
         // Per Vaswani et al. 2017, the decoder can operate without encoder output
@@ -954,61 +956,6 @@ public class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         _feedForward.UpdateParametersGpu(config);
         _feedForwardProjection.UpdateParametersGpu(config);
         _norm3.UpdateParametersGpu(config);
-    }
-
-    /// <summary>
-    /// Gets all trainable parameters of the transformer decoder layer as a single vector.
-    /// </summary>
-    /// <returns>A vector containing all trainable parameters from all sublayers.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method retrieves all trainable parameters from all sublayers of the transformer decoder layer and combines
-    /// them into a single vector. This is useful for optimization algorithms that operate on all parameters at once,
-    /// or for saving and loading model weights.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method collects all the learnable values from all parts of the decoder.
-    /// 
-    /// The parameters:
-    /// - Are the numbers that the neural network learns during training
-    /// - Include weights from attention mechanisms, normalization layers, and the feed-forward network
-    /// - Are combined into a single long list (vector)
-    /// 
-    /// This is useful for:
-    /// - Saving the model to disk
-    /// - Loading parameters from a previously trained model
-    /// - Advanced optimization techniques that need access to all parameters
-    /// 
-    /// A transformer decoder layer typically has millions of parameters, all of which
-    /// contribute to its ability to generate high-quality sequences.
-    /// </para>
-    /// </remarks>
-    public override Vector<T> GetParameters()
-    {
-        // Sublayers do not exist on a lazy decoder until first Forward.
-        if (!_isInitialized) return new Vector<T>(0);
-
-        // === Vectorized Parameter Concatenation (Phase B: US-GPU-015) ===
-        // Collect parameters from all sublayers
-        var selfAttentionParams = _selfAttention.GetParameters();
-        var norm1Params = _norm1.GetParameters();
-        var crossAttentionParams = _crossAttention.GetParameters();
-        var norm2Params = _norm2.GetParameters();
-        var feedForwardParams = _feedForward.GetParameters();
-        var feedForwardProjectionParams = _feedForwardProjection.GetParameters();
-        var norm3Params = _norm3.GetParameters();
-
-        // Concatenate all parameter vectors efficiently
-        return Vector<T>.Concatenate(
-            Vector<T>.Concatenate(
-                Vector<T>.Concatenate(
-                    Vector<T>.Concatenate(
-                        Vector<T>.Concatenate(
-                            Vector<T>.Concatenate(selfAttentionParams, norm1Params),
-                            crossAttentionParams),
-                        norm2Params),
-                    feedForwardParams),
-                feedForwardProjectionParams),
-            norm3Params);
     }
 
     /// <summary>

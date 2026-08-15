@@ -41,8 +41,18 @@ namespace AiDotNet.SpeechRecognition.Multilingual;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("OWSM v3.1: Better and Faster Open Whisper-Style Speech Models based on E-Branchformer", "https://arxiv.org/abs/2401.16658", Year = 2024, Authors = "Peng et al.")]
-public class OWSM<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
+public partial class OWSM<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// Traced through the graph, not read off a name: InitializeLayers builds
+    /// <c>LayerHelper.CreateDefaultConformerLayers(..., vocabSize: _options.VocabSize)</c>, whose last
+    /// emitted layer is the CTC output head <c>DenseLayer&lt;T&gt;(vocabSize)</c> (after the final
+    /// LayerNorm). PredictCore folds Layers in order and PostprocessOutput is the identity, so that
+    /// head's width is the last axis Predict returns.
+    /// </remarks>
+    protected override int OutputFeatureWidth => _options.VocabSize;
+
     private readonly OWSMOptions _options; public override ModelOptions GetOptions() => _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer; private bool _useNativeMode; private bool _disposed;
     public IReadOnlyList<string> SupportedLanguages { get; }
@@ -94,14 +104,37 @@ public class OWSM<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 
     protected override void InitializeLayers() { if (!_useNativeMode) return; if (Architecture.Layers is not null && Architecture.Layers.Count > 0) Layers.AddRange(Architecture.Layers); else Layers.AddRange(LayerHelper<T>.CreateDefaultConformerLayers(encoderDim: _options.EncoderDim, numLayers: _options.NumEncoderLayers, numAttentionHeads: _options.NumAttentionHeads, numMels: _options.NumMels, vocabSize: _options.VocabSize, dropoutRate: _options.DropoutRate)); }
     protected override Tensor<T> PredictCore(Tensor<T> input) { ThrowIfDisposed(); if (IsOnnxMode && OnnxEncoder is not null) return OnnxEncoder.Run(input); var c = input; foreach (var l in Layers) c = l.Forward(c); return c; }
-    public override void Train(Tensor<T> input, Tensor<T> expected) { if (IsOnnxMode) throw new NotSupportedException("Training not supported in ONNX mode."); SetTrainingMode(true); TrainWithTape(input, expected); SetTrainingMode(false); }
-    public override void UpdateParameters(Vector<T> parameters) { if (!_useNativeMode) throw new NotSupportedException("ONNX mode."); int idx = 0; foreach (var l in Layers) { int c = (int)l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; } }
+    public override void Train(Tensor<T> input, Tensor<T> expected)
+    {
+        if (IsOnnxMode)
+            throw new NotSupportedException("Training not supported in ONNX mode.");
+        SetTrainingMode(true);
+        try
+        {
+            TrainWithTape(input, expected, _optimizer);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
+    }
+    /// <inheritdoc />
+    /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
+    /// write on every parameter surface, so the guard is stated once here instead of being
+    /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
+    protected override bool SupportsParameterMutation => _useNativeMode;
     protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio) { if (MelSpec is not null) return MelSpec.Forward(rawAudio); return rawAudio; }
     protected override Tensor<T> PostprocessOutput(Tensor<T> o) => o;
     public override ModelMetadata<T> GetModelMetadata() => new() { Name = _useNativeMode ? "OWSM-Native" : "OWSM-ONNX", Description = "OWSM: open Whisper-style multilingual ASR (CMU, 2024)", FeatureCount = _options.NumMels, Complexity = _options.NumEncoderLayers, AdditionalInfo = BaseAudioMetadataInfo() };
     protected override void SerializeNetworkSpecificData(BinaryWriter w) { w.Write(_useNativeMode); w.Write(_options.ModelPath ?? string.Empty); w.Write(_options.SampleRate); w.Write(_options.EncoderDim); w.Write(_options.NumEncoderLayers); w.Write(_options.NumAttentionHeads); w.Write(_options.NumMels); w.Write(_options.VocabSize); w.Write(_options.MaxTextLength); w.Write(_options.DropoutRate); w.Write(_options.Language); }
     protected override void DeserializeNetworkSpecificData(BinaryReader r) { _useNativeMode = r.ReadBoolean(); string mp = r.ReadString(); if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp; _options.SampleRate = r.ReadInt32(); _options.EncoderDim = r.ReadInt32(); _options.NumEncoderLayers = r.ReadInt32(); _options.NumAttentionHeads = r.ReadInt32(); _options.NumMels = r.ReadInt32(); _options.VocabSize = r.ReadInt32(); _options.MaxTextLength = r.ReadInt32(); _options.DropoutRate = r.ReadDouble(); _options.Language = r.ReadString(); base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxEncoder = new OnnxModel<T>(p, _options.OnnxOptions); }
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() { if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp)) return new OWSM<T>(Architecture, mp, _options); return new OWSM<T>(Architecture, _options); }
+    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
+    {
+        var options = new OWSMOptions(_options);
+        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
+            return new OWSM<T>(Architecture, mp, options);
+        return new OWSM<T>(Architecture, options);
+    }
 
     private (List<int> tokens, double confidence) CTCGreedyDecodeWithConfidence(Tensor<T> logits) { var tokens = new List<int>(); double totalConf = 0; int confCount = 0; int prevToken = -1; int numFrames = logits.Rank >= 2 ? logits.Shape[0] : 1; int vocabSize = logits.Rank >= 2 ? logits.Shape[^1] : logits.Shape[0]; for (int t = 0; t < numFrames && tokens.Count < _options.MaxTextLength; t++) { int maxIdx = 0; double maxVal = double.NegativeInfinity; for (int v = 0; v < vocabSize; v++) { double val = logits.Rank >= 2 ? NumOps.ToDouble(logits[t, v]) : NumOps.ToDouble(logits[v]); if (val > maxVal) { maxVal = val; maxIdx = v; } } double sumExp = 0; for (int v = 0; v < vocabSize; v++) { double val = logits.Rank >= 2 ? NumOps.ToDouble(logits[t, v]) : NumOps.ToDouble(logits[v]); sumExp += Math.Exp(val - maxVal); } double frameConf = 1.0 / sumExp; if (maxIdx != prevToken && maxIdx > 0) { tokens.Add(maxIdx); totalConf += frameConf; confCount++; } prevToken = maxIdx; } return (tokens, confCount > 0 ? totalConf / confCount : 0.0); }
     private static string TokensToText(List<int> tokens) { var sb = new System.Text.StringBuilder(); foreach (var t in tokens) { if (t > 0 && t <= char.MaxValue) sb.Append((char)t); else if (t > char.MaxValue && t <= 0x10FFFF) sb.Append(char.ConvertFromUtf32(t)); } return sb.ToString().Trim(); }

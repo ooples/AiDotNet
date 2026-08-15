@@ -3,6 +3,7 @@ using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Onnx;
 using AiDotNet.Optimizers;
@@ -44,6 +45,16 @@ namespace AiDotNet.Audio.Generation;
 [ResearchPaper("YuE: Open Music Foundation Models for Full-Song Generation", "https://arxiv.org/abs/2503.08638", Year = 2025, Authors = "Ruibin Yuan, Hanfeng Lin, Ge Zhang, Jiahao Pan, Jiatong Shi, Tian Yuan, Yinghao Ma, Xingjian Du, Haohe Liu, Yiming Liang, Ziyang Ma, Siqi Zheng, Zuoxian Liang, Ziyu Wang, Chenghua Lin, Tianyu Zheng, Yizhi Li, Yifei Yuan, Shangda Wu, Yifu Sun, Peng Li, Wenye Ma, Jie Fu, Roger Dannenberg, Xie Chen, Emmanouil Benetos, Wenwu Wang, Wei Xue, Yike Guo")]
 public class YuE<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// Traced from output construction, and deliberately NOT a vocabulary: PredictCore folds over
+    /// Layers, and the final layer CreateDefaultYuELayers emits is
+    /// <c>FullyConnectedLayer&lt;T&gt;(semanticDim)</c> - the stack projects back to the hidden width
+    /// (2048), it does not project to LyricsVocabSize (32000) or SemanticVocabSize (16384). Reading
+    /// either "VocabSize" field by name would be wrong here.
+    /// </remarks>
+    protected override int OutputFeatureWidth => _options.SemanticDim;
+
     #region Fields
 
     private readonly YuEOptions _options;
@@ -101,7 +112,14 @@ public class YuE<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
     {
         _options = options ?? new YuEOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate,
+                EnableGradientClipping = true,
+                MaxGradientNorm = 1.0
+            });
         base.SampleRate = _options.SampleRate;
         InitializeLayers();
     }
@@ -248,7 +266,7 @@ public class YuE<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expected);
+            TrainWithTape(input, expected, _optimizer);
         }
         finally
         {
@@ -256,12 +274,11 @@ public class YuE<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
         }
     }
 
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        if (!_useNativeMode) throw new NotSupportedException("ONNX mode.");
-        int idx = 0; foreach (var l in Layers) { int c = (int)l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; }
-    }
-
+    /// <inheritdoc />
+    /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
+    /// write on every parameter surface, so the guard is stated once here instead of being
+    /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
+    protected override bool SupportsParameterMutation => _useNativeMode;
     protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio) => rawAudio;
     protected override Tensor<T> PostprocessOutput(Tensor<T> o) => o;
 

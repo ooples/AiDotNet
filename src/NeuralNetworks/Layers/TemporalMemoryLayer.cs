@@ -36,8 +36,54 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerTask(LayerTask.TemporalProcessing)]
 [LayerProperty(NormalizesInput = true, IsTrainable = true, SupportsBackpropagation = false, IsStateful = true, TestInputShape = "1, 4", TestConstructorArgs = "4, 4")]
-public class TemporalMemoryLayer<T> : LayerBase<T>
+// A COLUMN-ACTIVATION VECTOR IN, A CELL-ACTIVATION VECTOR OUT - and the output is always rank 1,
+// whatever the input rank. The constructor states the pair outright:
+// base([columnCount], [columnCount * cellsPerColumn]).
+//
+// The input is declared batch-optional because the layer is tested at rank 2
+// ([LayerProperty(TestInputShape = "1, 4")]) and defined at rank 1: ForwardTraced opens with
+// Engine.Reshape(input, [ColumnCount]), which flattens either form into the same vector. That reshape
+// is also why the leading axis is only ever a singleton here - it must be, or the element count would
+// not match ColumnCount - so the rank-2 form is a batch of one, not a batch this layer processes.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features,
+    BatchOptional = true, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Features, Direction = TensorLayoutDirection.Output,
+    Note = "Always rank 1: the columns-by-cells grid leaves flattened into one activation vector.")]
+[AutoParameters]
+public partial class TemporalMemoryLayer<T> : LayerBase<T>, IShapeContract
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// Hand-written because the output rank does not follow the input rank. From <c>ForwardTraced</c>:
+    /// the cell grid is flattened with <c>Engine.Reshape(CellStates, [ColumnCount * CellsPerColumn])</c>,
+    /// the input is expanded to match with
+    /// <c>Engine.TensorRepeatElements(inputFlat, CellsPerColumn, axis: 0)</c>, and the returned value is
+    /// their element-wise product - so a rank-2 <c>[1, ColumnCount]</c> input yields a rank-1 result,
+    /// which no generated <c>Same</c>-per-axis derivation could express.
+    /// </para>
+    /// <para>
+    /// <c>Fixed</c> rather than <c>Scaled(Features, CellsPerColumn)</c>, even though the two agree
+    /// numerically whenever the input is the width this layer was built for. The size comes from the
+    /// layer's OWN cell grid, allocated once in the constructor as
+    /// <c>new Tensor&lt;T&gt;([columnCount, cellsPerColumn])</c> and never resized; the input does not
+    /// get a say in it, and the constructor's declared output shape,
+    /// <c>[columnCount * cellsPerColumn]</c>, is that same constant.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        // Ranks 1 and 2 only - the reshape to [ColumnCount] is what any accepted input must satisfy,
+        // and a rank-3+ input would have to be a genuine batch, which this layer has no notion of.
+        if (inputRank is not (1 or 2) || ColumnCount <= 0 || CellsPerColumn <= 0) return null;
+
+        return new[]
+        {
+            new OutputAxisContract(
+                TensorAxis.Features, AxisRelation.Fixed(ColumnCount * CellsPerColumn)),
+        };
+    }
+
     /// <summary>
     /// The number of columns in the temporal memory layer.
     /// </summary>
@@ -124,29 +170,6 @@ public class TemporalMemoryLayer<T> : LayerBase<T>
     /// </remarks>
     public Vector<T> PreviousState { get; set; }
 
-    /// <summary>
-    /// Gets a value indicating whether this layer supports training.
-    /// </summary>
-    /// <value>
-    /// <c>true</c> for this layer, as it implements temporal learning mechanisms.
-    /// </value>
-    /// <remarks>
-    /// <para>
-    /// This property indicates whether the temporal memory layer can be trained. Since this layer implements
-    /// mechanisms for learning sequential patterns, it supports training.
-    /// </para>
-    /// <para><b>For Beginners:</b> This property tells you if the layer can learn from data.
-    /// 
-    /// A value of true means:
-    /// - The layer has internal states that can be adjusted during training
-    /// - It will improve its performance as it sees more data
-    /// - It participates in the learning process
-    /// 
-    /// For this layer, the value is always true because it needs to learn which sequences
-    /// of patterns commonly occur in the input data.
-    /// </para>
-    /// </remarks>
-    public override long ParameterCount => CellStates.Length;
     public override bool SupportsTraining => true;
 
     /// <inheritdoc/>
@@ -176,7 +199,9 @@ public class TemporalMemoryLayer<T> : LayerBase<T>
     /// patterns, each in 4 different temporal contexts.
     /// </para>
     /// </remarks>
-    public TemporalMemoryLayer(int columnCount, int cellsPerColumn)
+    public TemporalMemoryLayer(
+        [LayerState] int columnCount,
+        [LayerState] int cellsPerColumn)
         : base([columnCount], [columnCount * cellsPerColumn])
     {
         ColumnCount = columnCount;
@@ -248,7 +273,7 @@ public class TemporalMemoryLayer<T> : LayerBase<T>
     /// will reflect which specific "a" contexts are currently active based on past inputs.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         _lastInput = ShouldCacheForBackward ? input : null; // #1668: skip in inference (arena safety)
         // Reshape CellStates from [ColumnCount, CellsPerColumn] to [ColumnCount * CellsPerColumn]
@@ -420,85 +445,6 @@ public class TemporalMemoryLayer<T> : LayerBase<T>
         return new Vector<T>(predictions.ToArray());
     }
 
-
-    /// <summary>
-    /// Updates the parameters of the layer.
-    /// </summary>
-    /// <param name="learningRate">The learning rate for parameter updates.</param>
-    /// <remarks>
-    /// <para>
-    /// This method is empty in the current implementation as the layer does not have traditional trainable parameters
-    /// updated through gradient descent. Instead, learning occurs in the Learn method which directly updates cell states.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method is included for compatibility but doesn't do anything in this layer.
-    /// 
-    /// The reason this method is empty:
-    /// - This layer doesn't use traditional gradient-based parameter updates
-    /// - Instead, it learns by directly modifying cell states in the Learn method
-    /// - This method is included only to satisfy the requirements of the LayerBase class
-    /// 
-    /// Think of it like this: while standard neural network layers learn through small
-    /// adjustments based on error gradients, this layer learns through its specialized
-    /// temporal learning algorithm implemented in the Learn method.
-    /// </para>
-    /// </remarks>
-    public override void UpdateParameters(T learningRate)
-    {
-        // In this implementation, we don't have trainable parameters to update
-        // The learning is done in the Learn method by adjusting cell states
-    }
-
-    /// <summary>
-    /// Gets all cell states of the layer as a single vector.
-    /// </summary>
-    /// <returns>A vector containing all cell states.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method retrieves all cell states in the temporal memory layer and combines them into a single vector.
-    /// This is useful for saving the layer's state or for visualization purposes.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method collects all the cell activation values into a single list.
-    /// 
-    /// The parameters:
-    /// - Are the current activation values of all cells in the layer
-    /// - Represent what the layer has learned about temporal sequences
-    /// - Are flattened into a single long list (vector)
-    /// 
-    /// This is useful for:
-    /// - Saving the layer's current state to disk
-    /// - Visualizing what patterns the layer has learned
-    /// - Transferring the learned state to another network
-    /// </para>
-    /// </remarks>
-    public override Vector<T> GetParameters()
-    {
-        // Use Tensor.ToArray() to efficiently convert to vector
-        return new Vector<T>(CellStates.ToArray());
-    }
-
-    /// <summary>
-    /// Sets the trainable parameters of the layer from a single vector.
-    /// </summary>
-    /// <param name="parameters">A vector containing all parameters to set.</param>
-    /// <exception cref="ArgumentException">Thrown when the parameters vector has incorrect length.</exception>
-    /// <remarks>
-    /// <para>
-    /// This method sets the cell states from a flattened vector. This is useful for loading
-    /// saved model states or for transferring learned patterns to another network.
-    /// </para>
-    /// </remarks>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int expectedParams = ColumnCount * CellsPerColumn;
-
-        if (parameters.Length != expectedParams)
-        {
-            throw new ArgumentException($"Expected {expectedParams} parameters, but got {parameters.Length}");
-        }
-
-        // Use Tensor<T>.FromVector and reshape to restore cell states
-        CellStates = new Tensor<T>(new[] { ColumnCount, CellsPerColumn }, parameters);
-    }
 
     /// <summary>
     /// Resets the internal state of the layer.

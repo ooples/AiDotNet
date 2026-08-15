@@ -40,8 +40,81 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.UpSampling)]
 [LayerTask(LayerTask.SpatialProcessing)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 4, Cost = ComputeCost.High, TestInputShape = "1, 1, 4, 4", TestConstructorArgs = "1, 2, 3, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
-public partial class SubpixelConvolutionalLayer<T> : LayerBase<T>
+// NCHW, ranks 3 and 4, per OnFirstForward's guard ("requires rank-3 [C,H,W] or rank-4 [B,C,H,W]") and
+// ForwardTraced's matching branches, which read the last three axes as [C, H, W] either way.
+//
+// The convolution itself is spatially NEUTRAL here - it runs at padSize = _kernelSize / 2, i.e. "same"
+// padding - so _kernelSize does NOT appear in the contract. All of the spatial growth comes from the
+// pixel shuffle that follows, which is why the relation is a clean Scaled rather than a Window.
+[TensorLayout(TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Output)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Output)]
+[AutoParameters]
+public partial class SubpixelConvolutionalLayer<T> : LayerBase<T>, IShapeContract
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// Read straight off <c>OnFirstForward</c>:
+    /// <c>ResolveShapes(new[] { _inputDepth, inH, inW }, new[] { _outputDepth, inH * _upscaleFactor,
+    /// inW * _upscaleFactor })</c>. Both relations come from constructor arguments.
+    /// </para>
+    /// <para>
+    /// THE CHANNEL RELATION IS THE INTERESTING ONE. The kernel is allocated with
+    /// <c>_outputDepth * _upscaleFactor * _upscaleFactor</c> filters, so the convolution's immediate
+    /// result is that much wider - but the pixel shuffle then TRADES those extra channels for
+    /// resolution, moving a factor of <c>_upscaleFactor</c> into each spatial axis and leaving exactly
+    /// <c>_outputDepth</c> channels behind. Declaring the pre-shuffle width would describe an
+    /// intermediate; <c>Fixed(_outputDepth)</c> is what the caller receives.
+    /// </para>
+    /// <para>
+    /// THE CONVOLUTION IS NOT SPATIALLY NEUTRAL, which this contract originally assumed. It runs at
+    /// <c>padSize = _kernelSize / 2</c>, and that is "same" padding only for an ODD kernel. For an
+    /// even one it pads a half-step too much and each spatial axis GROWS by one before the shuffle:
+    /// with <c>_kernelSize = 2</c> a height of 8 becomes <c>(8 + 2*1 - 2) / 1 + 1 = 9</c>, so the
+    /// output is <c>9 * _upscaleFactor</c>, not <c>8 * _upscaleFactor</c>. The conformance sweep caught
+    /// it at exactly that kernel - a plain <c>Scaled</c> was right for every odd kernel and quietly
+    /// off by <c>_upscaleFactor</c> for every even one.
+    /// </para>
+    /// <para>
+    /// So the spatial axes are the convolution's window and THEN the shuffle's factor.
+    /// <see cref="AxisRelation.ProductOf"/> composes the two: a windowed axis multiplied by a constant.
+    /// Neither <see cref="AxisRelation.Scaled"/> (one raw source) nor <see cref="AxisRelation.Window"/>
+    /// (no scaling) can say this alone.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        if (_outputDepth <= 0 || _upscaleFactor <= 0 || _kernelSize <= 0) return null;
+
+        // Mirrors the layer's own padSize = _kernelSize / 2, stride 1.
+        AxisRelation Spatial(TensorAxis axis) => AxisRelation.ProductOf(
+            AxisRelation.Window(axis, kernel: _kernelSize, stride: 1, padding: _kernelSize / 2),
+            AxisRelation.Fixed(_upscaleFactor));
+
+        var channels = new OutputAxisContract(TensorAxis.Channels, AxisRelation.Fixed(_outputDepth));
+        var height = new OutputAxisContract(TensorAxis.Height, Spatial(TensorAxis.Height));
+        var width = new OutputAxisContract(TensorAxis.Width, Spatial(TensorAxis.Width));
+
+        return inputRank switch
+        {
+            3 => new[] { channels, height, width },
+            4 => new[]
+            {
+                new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+                channels,
+                height,
+                width,
+            },
+            _ => null,
+        };
+    }
+
     /// <summary>
     /// The number of channels in the input tensor.
     /// </summary>
@@ -376,29 +449,6 @@ public partial class SubpixelConvolutionalLayer<T> : LayerBase<T>
     /// </remarks>
     private readonly T _weightDecay;
 
-    /// <summary>
-    /// Gets a value indicating whether this layer supports training.
-    /// </summary>
-    /// <value>
-    /// <c>true</c> for this layer, as it contains trainable parameters (kernels and biases).
-    /// </value>
-    /// <remarks>
-    /// <para>
-    /// This property indicates whether the subpixel convolutional layer can be trained through backpropagation.
-    /// Since this layer has trainable parameters (kernels and biases), it supports training.
-    /// </para>
-    /// <para><b>For Beginners:</b> This property tells you if the layer can learn from data.
-    /// 
-    /// A value of true means:
-    /// - The layer has internal values (kernels and biases) that can be adjusted during training
-    /// - It will improve its performance as it sees more data
-    /// - It participates in the learning process
-    /// 
-    /// For this layer, the value is always true because it needs to learn which patterns
-    /// are most important for upscaling the input effectively.
-    /// </para>
-    /// </remarks>
-    public override long ParameterCount => GetParameters().Length;
     public override bool SupportsTraining => true;
 
     /// <summary>
@@ -440,7 +490,7 @@ public partial class SubpixelConvolutionalLayer<T> : LayerBase<T>
     /// call (<see cref="OnFirstForward"/>); only outputDepth/upscaleFactor/kernelSize
     /// are required at construction since they don't depend on input spatial dims.
     /// </summary>
-    public SubpixelConvolutionalLayer(int outputDepth, int upscaleFactor, int kernelSize,
+    public SubpixelConvolutionalLayer([LayerState] int outputDepth, [LayerState] int upscaleFactor, [LayerState] int kernelSize,
                                     IActivationFunction<T>? activation = null)
         : base(new[] { -1, -1, -1 }, new[] { outputDepth, -1, -1 },
             activation ?? new ReLUActivation<T>())
@@ -490,7 +540,7 @@ public partial class SubpixelConvolutionalLayer<T> : LayerBase<T>
     /// <summary>
     /// Lazy ctor with vector activation — see the scalar-activation overload above.
     /// </summary>
-    public SubpixelConvolutionalLayer(int outputDepth, int upscaleFactor, int kernelSize,
+    public SubpixelConvolutionalLayer([LayerState] int outputDepth, [LayerState] int upscaleFactor, [LayerState] int kernelSize,
                                     IVectorActivationFunction<T>? vectorActivation = null)
         : base(new[] { -1, -1, -1 }, new[] { outputDepth, -1, -1 },
             vectorActivation ?? new ReLUActivation<T>())
@@ -643,7 +693,7 @@ public partial class SubpixelConvolutionalLayer<T> : LayerBase<T>
     /// - Then become 64×64×64 after pixel shuffling (4 times more pixels, 1/4 the channels)
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // Lazy ctor leaves _inputDepth = -1; resolve from input.Shape on
         // first call, allocate kernel + bias against the resolved channel
@@ -1006,34 +1056,6 @@ public partial class SubpixelConvolutionalLayer<T> : LayerBase<T>
         _biasGradients = null;
     }
 
-    /// <summary>
-    /// Gets all trainable parameters of the layer as a single vector.
-    /// </summary>
-    /// <returns>A vector containing all trainable parameters.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method retrieves all trainable parameters (kernels and biases) of the layer and combines them into a
-    /// single vector. This is useful for optimization algorithms that operate on all parameters at once, or for
-    /// saving and loading model weights.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method collects all the learnable values from the layer.
-    /// 
-    /// The parameters:
-    /// - Are the numbers that the neural network learns during training
-    /// - Include all kernels and biases from the layer
-    /// - Are combined into a single long list (vector)
-    /// 
-    /// This is useful for:
-    /// - Saving the model to disk
-    /// - Loading parameters from a previously trained model
-    /// - Advanced optimization techniques that need access to all parameters
-    /// </para>
-    /// </remarks>
-    public override Vector<T> GetParameters()
-    {
-        return Vector<T>.Concatenate(new Vector<T>(_kernels.ToArray()), new Vector<T>(_biases.ToArray()));
-    }
-
     public override Vector<T> GetParameterGradients()
     {
         var kGrad = _kernelGradients != null ? new Vector<T>(_kernelGradients.ToArray()) : new Vector<T>(_kernels.Length);
@@ -1045,28 +1067,6 @@ public partial class SubpixelConvolutionalLayer<T> : LayerBase<T>
     {
         _kernelGradients = null;
         _biasGradients = null;
-    }
-
-    public override void SetParameters(Vector<T> parameters)
-    {
-        // Pre-Forward: _kernels/_biases are still 0-shaped (channel count
-        // unknown). Buffer the vector and replay from OnFirstForward
-        // after _inputDepth is resolved and the tensors are allocated.
-        if (!IsShapeResolved)
-        {
-            _pendingParameters = parameters;
-            return;
-        }
-
-        if (parameters.Length != ParameterCount)
-            throw new ArgumentException($"Expected {ParameterCount} parameters, got {parameters.Length}");
-        int idx = 0;
-        var kSpan = _kernels.Data.Span;
-        for (int i = 0; i < _kernels.Length; i++) kSpan[i] = parameters[idx++];
-        var bSpan = _biases.Data.Span;
-        for (int i = 0; i < _biases.Length; i++) bSpan[i] = parameters[idx++];
-        Engine.InvalidatePersistentTensor(_kernels);
-        Engine.InvalidatePersistentTensor(_biases);
     }
 
     private Vector<T>? _pendingParameters;

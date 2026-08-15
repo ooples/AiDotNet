@@ -1,4 +1,6 @@
 using AiDotNet.Attributes;
+using System.Collections.Generic;
+using AiDotNet.Interfaces;
 using AiDotNet.Enums;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks.Layers;
@@ -41,9 +43,11 @@ namespace AiDotNet.NeuralNetworks.Tabular;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("TabDPT: Scaling Tabular Foundation Models",
-    "https://arxiv.org/abs/2501.02487",
-    Year = 2025,
+// Citation corrected. arXiv 2501.02487 is "ACE++: Instruction-Based Image Creation and Editing",
+// unrelated. TabDPT is arXiv 2410.18164 (2024) and its full title ends "on Real Data".
+[ResearchPaper("TabDPT: Scaling Tabular Foundation Models on Real Data",
+    "https://arxiv.org/abs/2410.18164",
+    Year = 2024,
     Authors = "Junwei Ma, Valentin Thomas, Rasa Hosseinzadeh, Hamidreza Kamkari, Alex Lacoste, Keyvan Golestan, Guangwei Yu, Maksims Volkovs, Anthony L. Caterini")]
 public class TabDPTClassifier<T> : TabDPTBase<T>
 {
@@ -62,7 +66,14 @@ public class TabDPTClassifier<T> : TabDPTBase<T>
     /// <summary>
     /// Gets the total number of trainable parameters.
     /// </summary>
-    public override long ParameterCount => base.ParameterCount + _classificationHead.ParameterCount;
+    /// <summary>The final projection this variant adds to the shared backbone.</summary>
+    /// <remarks>
+    /// Was an override that added the head to the COUNT only. The base had no read or
+    /// restore path at all, so the head was counted and never checkpointed; declaring it
+    /// here puts it in all three surfaces at once.
+    /// </remarks>
+    protected override IEnumerable<IParameterSource<T>> GetExtraTrainableLayers()
+        => new IParameterSource<T>[] { _classificationHead };
 
     /// <summary>
     /// Initializes a new instance of the TabDPTClassifier class.
@@ -81,6 +92,7 @@ public class TabDPTClassifier<T> : TabDPTBase<T>
         _numClasses = numClasses;
 
         _classificationHead = new FullyConnectedLayer<T>(
+            MLPOutputDimension,
             numClasses,
             (IActivationFunction<T>?)null);
     }

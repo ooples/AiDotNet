@@ -94,7 +94,7 @@ namespace AiDotNet.MetaLearning.Algorithms;
     Authors = "Malik Boudiaf, Ziko Imtiaz Masud, Jerome Rony, Jose Dolz, Pablo Piantanida, Ismail Ben Ayed")]
 [ComponentType(ComponentType.MetaLearner)]
 [PipelineStage(PipelineStage.Training)]
-public class SIBAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
+public partial class SIBAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
     private IParameterizable<T, TInput, TOutput>? _cachedParamModel;
     private IParameterizable<T, TInput, TOutput> ParamModel => _cachedParamModel ??= InterfaceGuard.Parameterizable(MetaModel);

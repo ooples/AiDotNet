@@ -62,8 +62,62 @@ namespace AiDotNet.NeuralNetworks.Layers.SSM;
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerTask(LayerTask.TemporalProcessing)]
 [LayerProperty(IsTrainable = true, SupportsBackpropagation = false, IsStateful = true, Cost = ComputeCost.High, TestInputShape = "4, 256", TestConstructorArgs = "4")]
-public partial class RWKVLayer<T> : LayerBase<T>
+// SEQUENCE IS A FREE AXIS, and the constructor already says why at length: sequenceLength is a MAXIMUM
+// used for validation only, no weight is sized against it, and publishing it as a concrete contract made
+// the layer claim an output it does not produce for any other length. So Time is carried, never pinned -
+// ForwardTraced writes "outputShape[rank - 2] = seqLen", the length it was handed.
+//
+// BatchOptional covers both accepted forms from one declaration: rank 2 is the [Time, Features] the
+// layer's own [LayerProperty(TestInputShape = "4, 256")] exercises, rank 3 the batched form. Rank 1 is
+// NOT declared, and that is a real limit rather than caution: at rank 1 the tail of ForwardTraced
+// indexes outputShape[rank - 2], i.e. outputShape[-1]. Rank 4+ runs and carries its leading axes, but
+// each would need a distinct role to be named and there is no second batch-like role to give it.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    BatchOptional = true, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    BatchOptional = true, Direction = TensorLayoutDirection.Output)]
+// [AutoParameters]: every non-nullable tensor field here is a trainable parameter unless it opts
+// out. Before this, the layer registered its 8 weight matrices and silently omitted 10 more
+// LEARNED tensors -- _timeMixR/K/V and _channelMixR/K (the mixing coefficients RWKV is named
+// for), _bonus, and both LayerNorm affine pairs. The optimizer never updated them, so the layer
+// only partly trained and nothing reported it.
+[AutoParameters]
+public partial class RWKVLayer<T> : LayerBase<T>, IShapeContract
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// Hand-written for two reasons. The generator keys its arms on the declared layout length and does
+    /// not expand <c>BatchOptional</c>, so it would cover rank 3 and decline the rank 2 this layer is
+    /// tested at; and the trailing axis is <c>Fixed</c>, not <c>Same</c>, which the generator cannot
+    /// derive from roles alone.
+    /// </para>
+    /// <para>
+    /// <c>Fixed(_modelDimension)</c> is what the code actually does - <c>ForwardTraced</c> writes
+    /// <c>outputShape[rank - 1] = _modelDimension</c>, the field, not <c>input.Shape[rank - 1]</c>. The
+    /// two coincide for any input the layer accepts, because both residual adds
+    /// (<c>TensorAdd(input3D, timeMixOut)</c> and <c>TensorAdd(afterTimeMix, channelMixOut)</c>) require
+    /// the incoming width to equal the model dimension. Declaring the field is the stronger and more
+    /// honest of the two readings: it says the width is a property of the LAYER, which is what makes a
+    /// mismatched input a shape error rather than something inference should propagate.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        if (inputRank is not (2 or 3) || _modelDimension <= 0) return null;
+
+        var time = new OutputAxisContract(TensorAxis.Time, AxisRelation.Same(TensorAxis.Time));
+        var features = new OutputAxisContract(TensorAxis.Features, AxisRelation.Fixed(_modelDimension));
+
+        return inputRank == 2
+            ? new[] { time, features }
+            : new[]
+            {
+                new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+                time, features,
+            };
+    }
+
     // Configuration
     private readonly int _modelDimension;
     private readonly int _numHeads;
@@ -171,17 +225,6 @@ public partial class RWKVLayer<T> : LayerBase<T>
     public int HeadDimension => _headDimension;
 
     /// <summary>
-    /// Gets the total number of trainable parameters.
-    /// </summary>
-    public override long ParameterCount =>
-        _timeMixR.Length + _timeMixK.Length + _timeMixV.Length +
-        _receptanceWeights.Length + _keyWeights.Length + _valueWeights.Length + _outputWeights.Length +
-        _decayBias.Length + _bonus.Length +
-        _channelMixR.Length + _channelMixK.Length +
-        _channelKeyWeights.Length + _channelValueWeights.Length + _channelReceptanceWeights.Length +
-        _normGamma1.Length + _normBeta1.Length + _normGamma2.Length + _normBeta2.Length;
-
-    /// <summary>
     /// Creates a new RWKV layer.
     /// </summary>
     /// <param name="sequenceLength">Maximum sequence length.</param>
@@ -204,8 +247,16 @@ public partial class RWKVLayer<T> : LayerBase<T>
         IActivationFunction<T>? activationFunction = null,
         IInitializationStrategy<T>? initializationStrategy = null)
         : base(
-            [sequenceLength, modelDimension],
-            [sequenceLength, modelDimension],
+            // Sequence is a FREE axis: -1, not the configured maximum. sequenceLength is
+            // documented as a MAXIMUM and is used here for nothing but validation -- no weight and
+            // no buffer is sized against it, because the recurrence runs over whatever length it
+            // is handed. Publishing it as a concrete contract made the layer claim an output it
+            // does not produce for any other length, which VerifyReportedOutputShape reports as
+            // "[maxLen, D] declared but [B, actualLen, D] produced" and which anything sizing
+            // itself from the declaration -- parameter slicing, chain resolution, ONNX export --
+            // reads as fact. modelDimension IS structural and stays concrete.
+            [-1, modelDimension],
+            [-1, modelDimension],
             activationFunction ?? new IdentityActivation<T>())
     {
         InitializationStrategy = initializationStrategy ?? InitializationStrategies<T>.Eager;
@@ -291,7 +342,7 @@ public partial class RWKVLayer<T> : LayerBase<T>
     }
 
     /// <inheritdoc />
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         _originalInputShape = input._shape;
 
@@ -393,9 +444,19 @@ public partial class RWKVLayer<T> : LayerBase<T>
 
         for (int t = 0; t < seqLen; t++)
         {
-            var k_t = Engine.Reshape(Kall.GetSliceAlongDimension(t, 1), new[] { batchSize, _modelDimension });
-            var v_t = Engine.Reshape(Vall.GetSliceAlongDimension(t, 1), new[] { batchSize, _modelDimension });
-            var r_t = Engine.Reshape(Rall.GetSliceAlongDimension(t, 1), new[] { batchSize, _modelDimension });
+            // RECORDED slice via Engine.TensorNarrow. Wrapping a BARE
+            // GetSliceAlongDimension view in Engine.Reshape is NOT sufficient: the Reshape is a
+            // recorded op but its INPUT is still a non-owning view that no compiled step produces,
+            // so the fused compiled-training plan captures it as a graph LEAF frozen at trace time
+            // and every timestep then reads abandoned trace-time storage (zeros first, recycled
+            // garbage later). It also means the slice never joined the gradient tape, so the
+            // upstream weights received no gradient through it.
+            // Same defect and same fix as RealGatedLinearRecurrenceLayer — see the detailed
+            // rationale there (#1789 Generated Q-S). RWKV4's failures were the identical signature:
+            // Clone_AfterTraining / MoreData / OptimizerStep_ParamL2.
+            var k_t = Engine.Reshape(Engine.TensorNarrow(Kall, 1, t, 1), new[] { batchSize, _modelDimension });
+            var v_t = Engine.Reshape(Engine.TensorNarrow(Vall, 1, t, 1), new[] { batchSize, _modelDimension });
+            var r_t = Engine.Reshape(Engine.TensorNarrow(Rall, 1, t, 1), new[] { batchSize, _modelDimension });
 
             // Output for this token (current key boosted by the time_first bonus u).
             var ww = Engine.TensorBroadcastAdd(k_t, u);
@@ -529,37 +590,6 @@ public partial class RWKVLayer<T> : LayerBase<T>
         RegisterTrainableParameter(_channelValueWeights, PersistentTensorRole.Weights);
         RegisterTrainableParameter(_channelReceptanceWeights, PersistentTensorRole.Weights);
 
-    }
-
-    /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        int totalParams = ParameterCountHelper.ToFlatVectorSize(ParameterCount);
-        var parameters = new Vector<T>(totalParams);
-        int index = 0;
-
-        foreach (var tensor in GetAllTensors())
-        {
-            for (int i = 0; i < tensor.Length; i++)
-                parameters[index++] = tensor[i];
-        }
-
-        return parameters;
-    }
-
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int expectedParams = ParameterCountHelper.ToFlatVectorSize(ParameterCount);
-        if (parameters.Length != expectedParams)
-            throw new ArgumentException($"Expected {expectedParams} parameters, got {parameters.Length}");
-
-        int index = 0;
-        foreach (var tensor in GetAllTensors())
-        {
-            for (int i = 0; i < tensor.Length; i++)
-                tensor[i] = parameters[index++];
-        }
     }
 
     private Tensor<T>[] GetAllTensors() =>

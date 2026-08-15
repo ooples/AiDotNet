@@ -150,7 +150,7 @@ public class GIMMVFI<T> : FrameInterpolationBase<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expected);
+            TrainWithTape(input, expected, _optimizer);
         }
         finally
         {
@@ -158,18 +158,11 @@ public class GIMMVFI<T> : FrameInterpolationBase<T>
         }
     }
 
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        if (!_useNativeMode) throw new NotSupportedException("Parameter updates are not supported in ONNX mode.");
-        int idx = 0;
-        foreach (var layer in Layers)
-        {
-            int count = checked((int)layer.ParameterCount);
-            layer.UpdateParameters(parameters.Slice(idx, count));
-            idx += count;
-        }
-    }
-
+    /// <inheritdoc />
+    /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
+    /// write on every parameter surface, so the guard is stated once here instead of being
+    /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
+    protected override bool SupportsParameterMutation => _useNativeMode;
     // Identity: tape training runs the raw layer stack (no NormalizeFrames) and the sigmoid head
     // emits [0,1] frames, so /255+*255 only on inference was a train/eval mismatch (MoreData).
     protected override Tensor<T> PreprocessFrames(Tensor<T> rawFrames) => rawFrames;

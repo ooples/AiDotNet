@@ -60,8 +60,26 @@ namespace AiDotNet.ReinforcementLearning.Agents.DQN;
     "https://arxiv.org/abs/1312.5602",
     Year = 2015,
     Authors = "Mnih, V., Kavukcuoglu, K., Silver, D., Rusu, A. A., Veness, J., Bellemare, M. G., et al.")]
-public class DQNAgent<T> : DeepReinforcementLearningAgentBase<T>, IActionValueProvider<T>, IGradientComputable<T, Vector<T>, Vector<T>>
+public partial class DQNAgent<T> : DeepReinforcementLearningAgentBase<T>, IActionValueProvider<T>, IGradientComputable<T, Vector<T>, Vector<T>>
 {
+
+    /// <inheritdoc />
+    /// <remarks>Only the online Q-network is a parameter. The target network is a periodic
+    /// COPY of it, refreshed in <see cref="OnParametersRestored"/>; registering it too would
+    /// double the count and expose weights an optimizer must never move.</remarks>
+    protected override void RegisterComponents()
+    {
+        RegisterParameterComponent(_qNetwork);
+    }
+
+    /// <inheritdoc />
+    /// <remarks>The target network is derived from the online one, so a restore has to
+    /// refresh it. Without this the agent trains against a stale target and diverges quietly,
+    /// which no assertion would catch.</remarks>
+    protected override void OnParametersRestored()
+    {
+        CopyNetworkWeights(_qNetwork, _targetNetwork);
+    }
     private DQNOptions<T> _dqnOptions;
 
     /// <inheritdoc/>
@@ -69,6 +87,7 @@ public class DQNAgent<T> : DeepReinforcementLearningAgentBase<T>, IActionValuePr
     private readonly UniformReplayBuffer<T, Vector<T>, Vector<T>> _replayBuffer;
 
     private INeuralNetwork<T> _qNetwork;
+    [Buffer]
     private INeuralNetwork<T> _targetNetwork;
     private double _epsilon;
     private int _steps;
@@ -352,22 +371,14 @@ public class DQNAgent<T> : DeepReinforcementLearningAgentBase<T>, IActionValuePr
     }
 
     /// <inheritdoc/>
-    public override Vector<T> GetParameters()
-    {
-        return _qNetwork.GetParameters();
-    }
-
-    /// <inheritdoc/>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        _qNetwork.UpdateParameters(parameters);
-        // Sync target network to match Q-network after parameter update
-        CopyNetworkWeights(_qNetwork, _targetNetwork);
-    }
-
-    /// <inheritdoc/>
     public override IFullModel<T, Vector<T>, Vector<T>> Clone()
     {
+        // Dense layers are shape-lazy. A clone requested before the first inference used to see an
+        // empty parameter vector, so the source and clone independently initialized different random
+        // policies on their first Predict call. Materialize both online/target networks before the
+        // snapshot, and the corresponding clone networks before restoring it.
+        MaterializeNetworks();
+
         var clonedOptions = new DQNOptions<T>
         {
             StateSize = _dqnOptions.StateSize,
@@ -387,8 +398,16 @@ public class DQNAgent<T> : DeepReinforcementLearningAgentBase<T>, IActionValuePr
         };
 
         var clone = new DQNAgent<T>(clonedOptions);
+        clone.MaterializeNetworks();
         clone.SetParameters(GetParameters());
         return clone;
+    }
+
+    private void MaterializeNetworks()
+    {
+        var state = new Tensor<T>([_dqnOptions.StateSize]);
+        _ = _qNetwork.Predict(state);
+        _ = _targetNetwork.Predict(state);
     }
 
     /// <summary>
@@ -430,14 +449,6 @@ public class DQNAgent<T> : DeepReinforcementLearningAgentBase<T>, IActionValuePr
         }
 
         SetParameters(Engine.Subtract(currentParams, Engine.Multiply(gradients, learningRate)));
-    }
-
-    // Helper methods
-
-    private void CopyNetworkWeights(INeuralNetwork<T> source, INeuralNetwork<T> target)
-    {
-        var sourceParams = source.GetParameters();
-        target.UpdateParameters(sourceParams);
     }
 
     private int ArgMax(Vector<T> vector)

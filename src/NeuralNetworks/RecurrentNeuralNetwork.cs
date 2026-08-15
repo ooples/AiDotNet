@@ -53,7 +53,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Learning Long-Term Dependencies with Gradient Descent is Difficult", "https://doi.org/10.1109/72.279181")]
-public class RecurrentNeuralNetwork<T> : NeuralNetworkBase<T>
+public class RecurrentNeuralNetwork<T> : SequenceModelLayoutBase<T>
 {
     private readonly RecurrentNeuralNetworkOptions _options;
 
@@ -171,50 +171,8 @@ public class RecurrentNeuralNetwork<T> : NeuralNetworkBase<T>
         }
     }
 
-    /// <summary>
-    /// Updates the parameters of the recurrent neural network layers.
-    /// </summary>
-    /// <param name="parameters">The vector of parameter updates to apply.</param>
-    /// <remarks>
-    /// <para>
-    /// This method updates the parameters of each layer in the recurrent neural network based on the provided parameter
-    /// updates. The parameters vector is divided into segments corresponding to each layer's parameter count,
-    /// and each segment is applied to its respective layer. In an RNN, these parameters typically include weights
-    /// for both the input connections and the recurrent connections that maintain state.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method updates how the RNN makes decisions based on training.
-    /// 
-    /// During training:
-    /// - The network learns by adjusting its internal parameters
-    /// - This method applies those adjustments
-    /// - Each layer gets the portion of updates meant specifically for it
-    /// 
-    /// For an RNN, these adjustments might include:
-    /// - How much attention to pay to the current input
-    /// - How much to rely on memory of previous inputs
-    /// - How to combine different pieces of information
-    /// 
-    /// These parameter updates help the network learn to:
-    /// - Recognize important patterns in sequences
-    /// - Decide what information is worth remembering
-    /// - Make better predictions based on both current and past information
-    /// </para>
-    /// </remarks>
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        int startIndex = 0;
-        foreach (var layer in Layers)
-        {
-            int layerParameterCount = checked((int)layer.ParameterCount);
-            if (layerParameterCount > 0)
-            {
-                Vector<T> layerParameters = parameters.SubVector(startIndex, layerParameterCount);
-                layer.UpdateParameters(layerParameters);
-                startIndex += layerParameterCount;
-            }
-        }
-    }
-
+    // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
+    // exactly the same enumeration, so this said nothing the base does not already say.
     /// <summary>
     /// Makes a prediction using the current state of the Recurrent Neural Network.
     /// </summary>

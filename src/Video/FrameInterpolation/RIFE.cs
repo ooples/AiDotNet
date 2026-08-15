@@ -5,6 +5,7 @@ using AiDotNet.Helpers;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Optimizers;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Video.Options;
 
@@ -65,7 +66,7 @@ namespace AiDotNet.Video.FrameInterpolation;
     "https://arxiv.org/abs/2011.06294",
     Year = 2022,
     Authors = "Zhewei Huang, Tianyuan Zhang, Wen Heng, Boxin Shi, Shuchang Zhou")]
-public class RIFE<T> : FrameInterpolationBase<T>
+public partial class RIFE<T> : FrameInterpolationBase<T>
 {
     private readonly RIFEOptions _options;
 
@@ -79,6 +80,7 @@ public class RIFE<T> : FrameInterpolationBase<T>
     private int _channels;
     private int _numFeatures;
     private int _numFlowBlocks;
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
 
     // IFNet components - coarse to fine flow estimation
     private readonly List<ConvolutionalLayer<T>> _encoder;
@@ -97,24 +99,44 @@ public class RIFE<T> : FrameInterpolationBase<T>
     private const int DefaultNumFlowBlocks = 3;
 
     // Activation cache for backward pass
+    [Scratch]
     private Tensor<T>? _cachedConcatenatedFrames;
+    [Scratch]
     private Tensor<T>? _cachedFrame1;
+    [Scratch]
     private Tensor<T>? _cachedFrame2;
+    [Scratch]
     private Tensor<T>? _cachedFlow;
+    [Scratch]
     private Tensor<T>? _cachedFlow_0_1;
+    [Scratch]
     private Tensor<T>? _cachedFlow_1_0;
+    [Scratch]
+    private Tensor<T>? _cachedFusionMask;
+    [Scratch]
     private Tensor<T>? _cachedFlow_t_0;
+    [Scratch]
     private Tensor<T>? _cachedFlow_t_1;
+    [Scratch]
     private Tensor<T>? _cachedFrame1Warped;
+    [Scratch]
     private Tensor<T>? _cachedFrame2Warped;
+    [Scratch]
     private Tensor<T>? _cachedContext;
+    [Scratch]
     private Tensor<T>? _cachedFusionInput;
+    [Scratch]
     private Tensor<T>? _cachedFused;
     private double _cachedTimestep;
+    [Scratch]
     private readonly List<Tensor<T>> _cachedEncoderOutputs;
+    [Scratch]
     private readonly List<Tensor<T>> _cachedFlowDecoderOutputs;
+    [Scratch]
     private readonly List<Tensor<T>> _cachedContextEncoderOutputs;
+    [Scratch]
     private readonly List<Tensor<T>> _cachedFlowBlockInputs;
+    [Scratch]
     private readonly List<Tensor<T>> _cachedFlowBlockOutputs;
 
     #endregion
@@ -146,12 +168,6 @@ public class RIFE<T> : FrameInterpolationBase<T>
     #region Constructors
 
     /// <summary>
-    /// Initializes a new instance of the RIFE class.
-    /// </summary>
-    /// <param name="architecture">The neural network architecture configuration.</param>
-    /// <param name="numFeatures">The number of features in intermediate layers.</param>
-    /// <param name="numFlowBlocks">The number of flow refinement blocks.</param>
-    /// <summary>
     /// Initializes a new instance with default architecture settings.
     /// </summary>
     public RIFE()
@@ -170,15 +186,33 @@ public class RIFE<T> : FrameInterpolationBase<T>
     {
     }
 
+    /// <summary>
+    /// Initializes a new instance of the RIFE class.
+    /// </summary>
+    /// <param name="architecture">The neural network architecture configuration.</param>
+    /// <param name="numFeatures">The number of features in intermediate layers.</param>
+    /// <param name="numFlowBlocks">The number of flow refinement blocks.</param>
+    /// <param name="options">The RIFE training options, or <see langword="null"/> for paper defaults.</param>
+    /// <param name="optimizer">The optimizer to use, or <see langword="null"/> for AdamW configured from <paramref name="options"/>.</param>
     public RIFE(
         NeuralNetworkArchitecture<T> architecture,
         int numFeatures = DefaultNumFeatures,
         int numFlowBlocks = DefaultNumFlowBlocks,
-        RIFEOptions? options = null)
+        RIFEOptions? options = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
         : base(architecture, new CharbonnierLoss<T>())
     {
         _options = options ?? new RIFEOptions();
         Options = _options;
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new AiDotNet.Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate,
+                WeightDecay = _options.WeightDecay,
+                UseAMSGrad = false,
+            });
+        SetBaseTrainOptimizer(_optimizer);
 
         _height = architecture.InputHeight > 0 ? architecture.InputHeight : 480;
         _width = architecture.InputWidth > 0 ? architecture.InputWidth : 640;
@@ -293,7 +327,7 @@ public class RIFE<T> : FrameInterpolationBase<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expectedOutput);
+            TrainWithTape(input, expectedOutput, _optimizer);
         }
         finally
         {
@@ -400,9 +434,23 @@ public class RIFE<T> : FrameInterpolationBase<T>
             }
         }
 
-        _cachedFlow = flowFeatures;
+        // Huang et al. (ECCV 2022, Sec. 3.2) make every IFBlock predict
+        // two intermediate flows AND a one-channel fusion mask. The old
+        // helper emitted only the four flow channels, so the model could
+        // warp the inputs but had no paper-defined way to reconstruct an
+        // intermediate frame from them.
+        if (flowFeatures.Shape[1] < 5)
+        {
+            throw new InvalidOperationException(
+                $"RIFE's final flow decoder must emit 5 channels " +
+                $"(4 flow + 1 fusion mask), but emitted {flowFeatures.Shape[1]}. " +
+                "Custom RIFE layer stacks must follow the paper's IFNet output contract.");
+        }
+
+        _cachedFlow = SliceChannels(flowFeatures, 0, 4);
         _cachedFlow_0_1 = SliceChannels(_cachedFlow, 0, 2);
         _cachedFlow_1_0 = SliceChannels(_cachedFlow, 2, 4);
+        _cachedFusionMask = Engine.TensorSigmoid(SliceChannels(flowFeatures, 4, 5));
 
         var t = NumOps.FromDouble(timestep);
         var oneMinusT = NumOps.FromDouble(1.0 - timestep);
@@ -426,7 +474,9 @@ public class RIFE<T> : FrameInterpolationBase<T>
 
         _cachedFusionInput = ConcatenateChannels(
             ConcatenateChannels(_cachedFrame1Warped, _cachedFrame2Warped),
-            ConcatenateChannels(_cachedContext, _cachedFlow));
+            ConcatenateChannels(
+                ConcatenateChannels(_cachedContext, _cachedFlow),
+                _cachedFusionMask));
 
         var fusion = _fusion ?? throw new InvalidOperationException("Fusion layer has not been initialized.");
         _cachedFused = fusion.Forward(_cachedFusionInput);
@@ -442,7 +492,24 @@ public class RIFE<T> : FrameInterpolationBase<T>
         }
 
         var rifeOutputConv = _outputConv ?? throw new InvalidOperationException("Output convolution has not been initialized.");
-        var rifeOutput = rifeOutputConv.Forward(fused);
+        var residual = Engine.TensorSubtractScalar(
+            Engine.TensorMultiplyScalar(
+                Engine.TensorSigmoid(rifeOutputConv.Forward(fused)),
+                NumOps.FromDouble(2.0)),
+            NumOps.One);
+
+        // Official RIFE reconstruction (model/IFNet.py): blend the two
+        // backward-warped frames with sigmoid(mask), then add the FusionNet
+        // residual and clamp to the normalized image range. Returning the raw
+        // output convolution here discarded both source frames and produced
+        // unconstrained values whose loss grew rapidly under training.
+        var inverseMask = Engine.TensorAddScalar(
+            Engine.TensorNegate(_cachedFusionMask), NumOps.One);
+        var blended = Engine.TensorAdd(
+            Engine.TensorBroadcastMultiply(_cachedFrame1Warped, _cachedFusionMask),
+            Engine.TensorBroadcastMultiply(_cachedFrame2Warped, inverseMask));
+        var rifeOutput = Engine.TensorClamp(
+            Engine.TensorAdd(blended, residual), NumOps.Zero, NumOps.One);
         return addedBatch
             ? Engine.Reshape(rifeOutput, [rifeOutput.Shape[1], rifeOutput.Shape[2], rifeOutput.Shape[3]])
             : rifeOutput;
@@ -731,6 +798,7 @@ public class RIFE<T> : FrameInterpolationBase<T>
         _cachedFlow = null;
         _cachedFlow_0_1 = null;
         _cachedFlow_1_0 = null;
+        _cachedFusionMask = null;
         _cachedFlow_t_0 = null;
         _cachedFlow_t_1 = null;
         _cachedFrame1Warped = null;
@@ -805,9 +873,9 @@ public class RIFE<T> : FrameInterpolationBase<T>
         var flowOffset = Engine.TensorMultiply(flowNHWC, scale);
         var grid = Engine.TensorAdd(baseGrid, flowOffset);
 
-        var imageNHWC = Engine.TensorPermute(image, [0, 2, 3, 1]);   // [B, H, W, C]
-        var warpedNHWC = Engine.GridSample(imageNHWC, grid);         // [B, H, W, C]
-        return Engine.TensorPermute(warpedNHWC, [0, 3, 1, 2]);       // [B, C, H, W]
+        // Engine.GridSample is NCHW (PyTorch convention): image is already [B, C, H, W],
+        // pass it directly. The grid is [B, H, W, 2] regardless of image layout.
+        return Engine.GridSample(image, grid);                      // [B, C, H, W]
     }
 
     private Tensor<T> BilinearUpsample(Tensor<T> input, int factor)
@@ -857,106 +925,7 @@ public class RIFE<T> : FrameInterpolationBase<T>
         foreach (var layer in _flowBlocks) Layers.Add(layer);
     }
 
-    /// <inheritdoc/>
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        int offset = 0;
-
-        // Update encoder layers
-        foreach (var layer in _encoder)
-        {
-            var layerParams = layer.GetParameters();
-            if (offset + layerParams.Length <= parameters.Length)
-            {
-                var newParams = new Vector<T>(layerParams.Length);
-                for (int i = 0; i < layerParams.Length; i++)
-                {
-                    newParams[i] = parameters[offset + i];
-                }
-                layer.SetParameters(newParams);
-                offset += layerParams.Length;
-            }
-        }
-
-        // Update flow decoder layers
-        foreach (var layer in _flowDecoder)
-        {
-            var layerParams = layer.GetParameters();
-            if (offset + layerParams.Length <= parameters.Length)
-            {
-                var newParams = new Vector<T>(layerParams.Length);
-                for (int i = 0; i < layerParams.Length; i++)
-                {
-                    newParams[i] = parameters[offset + i];
-                }
-                layer.SetParameters(newParams);
-                offset += layerParams.Length;
-            }
-        }
-
-        // Update context encoder layers
-        foreach (var layer in _contextEncoder)
-        {
-            var layerParams = layer.GetParameters();
-            if (offset + layerParams.Length <= parameters.Length)
-            {
-                var newParams = new Vector<T>(layerParams.Length);
-                for (int i = 0; i < layerParams.Length; i++)
-                {
-                    newParams[i] = parameters[offset + i];
-                }
-                layer.SetParameters(newParams);
-                offset += layerParams.Length;
-            }
-        }
-
-        // Update flow blocks
-        foreach (var layer in _flowBlocks)
-        {
-            var layerParams = layer.GetParameters();
-            if (offset + layerParams.Length <= parameters.Length)
-            {
-                var newParams = new Vector<T>(layerParams.Length);
-                for (int i = 0; i < layerParams.Length; i++)
-                {
-                    newParams[i] = parameters[offset + i];
-                }
-                layer.SetParameters(newParams);
-                offset += layerParams.Length;
-            }
-        }
-
-        // Update fusion and output layers
-        if (_fusion != null)
-        {
-            var layerParams = _fusion.GetParameters();
-            if (offset + layerParams.Length <= parameters.Length)
-            {
-                var newParams = new Vector<T>(layerParams.Length);
-                for (int i = 0; i < layerParams.Length; i++)
-                {
-                    newParams[i] = parameters[offset + i];
-                }
-                _fusion.SetParameters(newParams);
-                offset += layerParams.Length;
-            }
-        }
-
-        if (_outputConv != null)
-        {
-            var layerParams = _outputConv.GetParameters();
-            if (offset + layerParams.Length <= parameters.Length)
-            {
-                var newParams = new Vector<T>(layerParams.Length);
-                for (int i = 0; i < layerParams.Length; i++)
-                {
-                    newParams[i] = parameters[offset + i];
-                }
-                _outputConv.SetParameters(newParams);
-            }
-        }
-    }
-
+    // UpdateParameters restated the base verbatim; ModelBase routes it to SetParameters.
     /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()
     {
@@ -1011,7 +980,8 @@ public class RIFE<T> : FrameInterpolationBase<T>
     /// <inheritdoc/>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
-        return new RIFE<T>(Architecture, _numFeatures, _numFlowBlocks);
+        return new RIFE<T>(
+            Architecture, _numFeatures, _numFlowBlocks, new RIFEOptions(_options));
     }
 
     #endregion

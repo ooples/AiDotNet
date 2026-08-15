@@ -19,8 +19,13 @@ namespace AiDotNet.ComputerVision.Segmentation.Common;
 /// </remarks>
 public abstract class PanopticSegmentationBase<T> : SegmentationModelBase<T>, IPanopticSegmentation<T>
 {
-    private readonly int _numStuffClasses;
-    private readonly int _numThingClasses;
+    // protected, and NOT readonly, for the same reason _optimizer on SegmentationModelBase is not: a
+    // base field a derived model can neither read nor restore makes the base unadoptable. XDecoder
+    // rebuilds its stuff-class count in DeserializeNetworkSpecificData, so with a readonly field it
+    // would report the CONSTRUCTOR-time count through IPanopticSegmentation while its own
+    // SegmentPanoptic used the deserialized one - a silent divergence after every load.
+    protected int _numStuffClasses;
+    protected int _numThingClasses;
 
     /// <inheritdoc/>
     public int NumStuffClasses => _numStuffClasses;
