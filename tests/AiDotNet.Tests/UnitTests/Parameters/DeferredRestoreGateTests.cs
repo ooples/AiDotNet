@@ -36,7 +36,7 @@ namespace AiDotNet.Tests.UnitTests.Parameters;
 /// simply wrong.
 /// </para>
 /// </remarks>
-public class DeferredRestoreGateTests
+public partial class DeferredRestoreGateTests
 {
     /// <summary>
     /// A deferred layer must ACCEPT a restore rather than reject it for having a zero count.
@@ -126,7 +126,7 @@ public class DeferredRestoreGateTests
         Assert.Equal(checkpoint.ToArray(), target.GetParameters().ToArray());
     }
 
-    private sealed class ExtraLayerRestoreNetwork : NeuralNetworkBase<double>
+    private sealed partial class ExtraLayerRestoreNetwork : NeuralNetworkBase<double>
     {
         private TransformerEncoderLayer<double>? _extraLayer;
 
