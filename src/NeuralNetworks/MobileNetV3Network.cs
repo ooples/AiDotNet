@@ -308,14 +308,6 @@ public class MobileNetV3Network<T> : NeuralNetworkBase<T>
         }
     }
 
-    /// <inheritdoc />
-    public override void Deserialize(byte[] data)
-    {
-        base.Deserialize(data);
-        // Restore eval mode after deserialization (training/eval state is not serialized).
-        SetAllLayersEvalMode();
-    }
-
     /// <summary>
     /// Gets the layer at the specified index.
     /// </summary>

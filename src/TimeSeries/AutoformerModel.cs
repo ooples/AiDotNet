@@ -1251,38 +1251,6 @@ internal partial class AutoformerEncoderLayer<T> : NeuralNetworks.Layers.LayerBa
     public Tensor<T> GetLayerNorm2Gamma() => _layerNorm2Gamma;
     public Tensor<T> GetLayerNorm2Beta() => _layerNorm2Beta;
 
-    public override void Serialize(BinaryWriter writer)
-    {
-        WriteTensor(writer, _queryProj);
-        WriteTensor(writer, _keyProj);
-        WriteTensor(writer, _valueProj);
-        WriteTensor(writer, _outputProj);
-        WriteTensor(writer, _ff1Weight);
-        WriteTensor(writer, _ff1Bias);
-        WriteTensor(writer, _ff2Weight);
-        WriteTensor(writer, _ff2Bias);
-        WriteTensor(writer, _layerNorm1Gamma);
-        WriteTensor(writer, _layerNorm1Beta);
-        WriteTensor(writer, _layerNorm2Gamma);
-        WriteTensor(writer, _layerNorm2Beta);
-    }
-
-    public override void Deserialize(BinaryReader reader)
-    {
-        _queryProj = ReadTensor(reader);
-        _keyProj = ReadTensor(reader);
-        _valueProj = ReadTensor(reader);
-        _outputProj = ReadTensor(reader);
-        _ff1Weight = ReadTensor(reader);
-        _ff1Bias = ReadTensor(reader);
-        _ff2Weight = ReadTensor(reader);
-        _ff2Bias = ReadTensor(reader);
-        _layerNorm1Gamma = ReadTensor(reader);
-        _layerNorm1Beta = ReadTensor(reader);
-        _layerNorm2Gamma = ReadTensor(reader);
-        _layerNorm2Beta = ReadTensor(reader);
-    }
-
     private void WriteTensor(BinaryWriter writer, Tensor<T> tensor)
     {
         writer.Write(tensor.Shape.Length);
@@ -1477,50 +1445,6 @@ internal partial class AutoformerDecoderLayer<T> : NeuralNetworks.Layers.LayerBa
     public Tensor<T> GetLayerNorm2Beta() => _layerNorm2Beta;
     public Tensor<T> GetLayerNorm3Gamma() => _layerNorm3Gamma;
     public Tensor<T> GetLayerNorm3Beta() => _layerNorm3Beta;
-
-    public override void Serialize(BinaryWriter writer)
-    {
-        WriteTensor(writer, _selfQueryProj);
-        WriteTensor(writer, _selfKeyProj);
-        WriteTensor(writer, _selfValueProj);
-        WriteTensor(writer, _selfOutputProj);
-        WriteTensor(writer, _crossQueryProj);
-        WriteTensor(writer, _crossKeyProj);
-        WriteTensor(writer, _crossValueProj);
-        WriteTensor(writer, _crossOutputProj);
-        WriteTensor(writer, _ff1Weight);
-        WriteTensor(writer, _ff1Bias);
-        WriteTensor(writer, _ff2Weight);
-        WriteTensor(writer, _ff2Bias);
-        WriteTensor(writer, _layerNorm1Gamma);
-        WriteTensor(writer, _layerNorm1Beta);
-        WriteTensor(writer, _layerNorm2Gamma);
-        WriteTensor(writer, _layerNorm2Beta);
-        WriteTensor(writer, _layerNorm3Gamma);
-        WriteTensor(writer, _layerNorm3Beta);
-    }
-
-    public override void Deserialize(BinaryReader reader)
-    {
-        _selfQueryProj = ReadTensor(reader);
-        _selfKeyProj = ReadTensor(reader);
-        _selfValueProj = ReadTensor(reader);
-        _selfOutputProj = ReadTensor(reader);
-        _crossQueryProj = ReadTensor(reader);
-        _crossKeyProj = ReadTensor(reader);
-        _crossValueProj = ReadTensor(reader);
-        _crossOutputProj = ReadTensor(reader);
-        _ff1Weight = ReadTensor(reader);
-        _ff1Bias = ReadTensor(reader);
-        _ff2Weight = ReadTensor(reader);
-        _ff2Bias = ReadTensor(reader);
-        _layerNorm1Gamma = ReadTensor(reader);
-        _layerNorm1Beta = ReadTensor(reader);
-        _layerNorm2Gamma = ReadTensor(reader);
-        _layerNorm2Beta = ReadTensor(reader);
-        _layerNorm3Gamma = ReadTensor(reader);
-        _layerNorm3Beta = ReadTensor(reader);
-    }
 
     private void WriteTensor(BinaryWriter writer, Tensor<T> tensor)
     {

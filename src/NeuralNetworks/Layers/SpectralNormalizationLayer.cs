@@ -519,50 +519,6 @@ public partial class SpectralNormalizationLayer<T> : LayerBase<T>, IShapeContrac
         _innerLayer.ResetState();
     }
 
-    public override void Serialize(BinaryWriter writer)
-    {
-        base.Serialize(writer);
-        // Serialize power iteration vectors for deterministic deserialization
-        bool hasU = _u != null;
-        writer.Write(hasU);
-        if (hasU && _u != null)
-        {
-            writer.Write(_u.Length);
-            for (int i = 0; i < _u.Length; i++)
-                writer.Write(NumOps.ToDouble(_u[i]));
-        }
-        bool hasV = _v != null;
-        writer.Write(hasV);
-        if (hasV && _v != null)
-        {
-            writer.Write(_v.Length);
-            for (int i = 0; i < _v.Length; i++)
-                writer.Write(NumOps.ToDouble(_v[i]));
-        }
-    }
-
-    public override void Deserialize(BinaryReader reader)
-    {
-        base.Deserialize(reader);
-        // Restore power iteration vectors
-        bool hasU = reader.ReadBoolean();
-        if (hasU)
-        {
-            int uLen = reader.ReadInt32();
-            _u = new Tensor<T>([uLen]);
-            for (int i = 0; i < uLen; i++)
-                _u[i] = NumOps.FromDouble(reader.ReadDouble());
-        }
-        bool hasV = reader.ReadBoolean();
-        if (hasV)
-        {
-            int vLen = reader.ReadInt32();
-            _v = new Tensor<T>([vLen]);
-            for (int i = 0; i < vLen; i++)
-                _v[i] = NumOps.FromDouble(reader.ReadDouble());
-        }
-    }
-
     /// <summary>
     /// GPU-resident parameter update using the provided optimizer configuration.
     /// Delegates to the inner layer's UpdateParametersGpu method.

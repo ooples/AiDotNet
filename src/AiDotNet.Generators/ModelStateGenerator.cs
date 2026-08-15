@@ -299,11 +299,11 @@ public class ModelStateGenerator : IIncrementalGenerator
             // that is never assigned, which the compiler reported as CS0649 and which would have
             // travelled in every payload as a null. So a nested model is carried when somebody says it
             // is state, and otherwise left alone.
-            _ when annotated && memberType.AllInterfaces.Any(i => i.Name == "IParameterSource")
+            _ when !IsInfrastructure(memberType) && memberType.AllInterfaces.Any(i => i.Name == "IParameterSource")
                    && !IsSerializableModel(memberType) =>
                 $"state.DeclareParameterSource(\"{id}\", {getter});",
 
-            _ when annotated && IsSerializableModel(memberType) =>
+            _ when !IsInfrastructure(memberType) && IsSerializableModel(memberType) =>
                 $"state.DeclareChild<{memberType.ToDisplayString().TrimEnd('?')}>(\"{id}\", {getter});",
 
             // A list of nested models -- an agent's per-actor target networks, a mixer's per-agent
@@ -448,6 +448,29 @@ public class ModelStateGenerator : IIncrementalGenerator
         }
 
         return $"state.DeclareGraph<{qualified}>(\"{id}\", () => {name}, v => {name} = v, n => n{shape});";
+    }
+
+    /// <summary>True for a member that is training machinery rather than state to restore.</summary>
+    /// <remarks>
+    /// THE RIGHT DISCRIMINATOR, replacing "single children are opt-in". That gate was written to keep a
+    /// model's optimizer out of the payload, and it did -- along with every legitimate sub-model held in
+    /// a field of its own. SiameseNetwork keeps its twin in <c>_subnetwork</c> and its head in
+    /// <c>_outputLayer</c>, both single, and lost both: clone output moved 0.585 -> 0.502. Its optimizer
+    /// sits in the very next field, which is what makes the distinction clear -- it is not arity that
+    /// separates them, it is WHAT THEY ARE.
+    /// <para>
+    /// Matched by interface name so a consumer's own optimizer is excluded on the same terms as ours,
+    /// and kept short on purpose: everything not on this list is state, which is the direction the
+    /// default should fail in.
+    /// </para>
+    /// </remarks>
+    private static bool IsInfrastructure(ITypeSymbol type)
+    {
+        static bool Machinery(string name)
+            => name is "IOptimizer" or "IGradientBasedOptimizer" or "ILossFunction"
+                or "ILearningRateScheduler" or "IRegularization" or "IActivationFunction";
+
+        return Machinery(type.Name) || type.AllInterfaces.Any(i => Machinery(i.Name));
     }
 
     private static bool IsPartial(INamedTypeSymbol type)

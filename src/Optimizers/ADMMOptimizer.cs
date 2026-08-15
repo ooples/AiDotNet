@@ -356,65 +356,6 @@ public partial class ADMMOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
     }
 
     /// <summary>
-    /// Converts the current state of the optimizer into a byte array for storage or transmission.
-    /// </summary>
-    /// <returns>A byte array representing the serialized state of the optimizer.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> This method saves all the important information about the optimizer's current state.
-    /// It's like taking a snapshot of the optimizer that can be used to recreate its exact state later.
-    /// </para>
-    /// </remarks>
-    public override byte[] Serialize()
-    {
-        using (MemoryStream ms = new MemoryStream())
-        using (BinaryWriter writer = new BinaryWriter(ms))
-        {
-            byte[] baseData = base.Serialize();
-            writer.Write(baseData.Length);
-            writer.Write(baseData);
-
-            string optionsJson = JsonConvert.SerializeObject(_options);
-            writer.Write(optionsJson);
-
-            writer.Write(_iteration);
-            writer.Write(_z.Serialize());
-            writer.Write(_u.Serialize());
-
-            return ms.ToArray();
-        }
-    }
-
-    /// <summary>
-    /// Restores the optimizer's state from a byte array previously created by the Serialize method.
-    /// </summary>
-    /// <param name="data">The byte array containing the serialized optimizer state.</param>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> This method rebuilds the optimizer's state from a saved snapshot.
-    /// It's like restoring a machine to a previous configuration using a backup.
-    /// </para>
-    /// </remarks>
-    public override void Deserialize(byte[] data)
-    {
-        using (MemoryStream ms = new MemoryStream(data))
-        using (BinaryReader reader = new BinaryReader(ms))
-        {
-            int baseDataLength = reader.ReadInt32();
-            byte[] baseData = reader.ReadBytes(baseDataLength);
-            base.Deserialize(baseData);
-
-            string optionsJson = reader.ReadString();
-            _options = JsonConvert.DeserializeObject<ADMMOptimizerOptions<T, TInput, TOutput>>(optionsJson)
-                ?? throw new InvalidOperationException("Failed to deserialize optimizer options.");
-
-            _iteration = reader.ReadInt32();
-            _z = Vector<T>.Deserialize(reader.ReadBytes(reader.ReadInt32()));
-            _u = Vector<T>.Deserialize(reader.ReadBytes(reader.ReadInt32()));
-
-            _regularization = GetRegularizationFromOptions(_options);
-        }
-    }
-
-    /// <summary>
     /// Generates a unique key for caching gradients based on the current state of the optimizer and input data.
     /// </summary>
     /// <param name="model">The symbolic model being optimized.</param>

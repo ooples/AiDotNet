@@ -1029,24 +1029,6 @@ internal partial class DeepARLstmCellTape<T> : NeuralNetworks.Layers.LayerBase<T
         return (hNew, cNew);
     }
 
-    public override void Serialize(BinaryWriter writer)
-    {
-        writer.Write(_inputSize);
-        writer.Write(_hiddenSize);
-        WriteTensor(writer, _wx);
-        WriteTensor(writer, _wh);
-        WriteTensor(writer, _bias);
-    }
-
-    public override void Deserialize(BinaryReader reader)
-    {
-        reader.ReadInt32(); // inputSize
-        reader.ReadInt32(); // hiddenSize
-        ReadTensorInto(reader, _wx);
-        ReadTensorInto(reader, _wh);
-        ReadTensorInto(reader, _bias);
-    }
-
     private static void WriteTensor(BinaryWriter writer, Tensor<T> tensor)
     {
         writer.Write(tensor.Shape.Length);

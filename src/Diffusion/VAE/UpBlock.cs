@@ -374,63 +374,6 @@ public partial class UpBlock<T> : LayerBase<T>, IShapeContract
 
 
     /// <summary>
-    /// Saves the block's state to a binary writer.
-    /// </summary>
-    public override void Serialize(BinaryWriter writer)
-    {
-        base.Serialize(writer);
-
-        writer.Write(_inChannels);
-        writer.Write(_outChannels);
-        writer.Write(_numLayers);
-        writer.Write(_numGroups);
-        writer.Write(_inputSpatialSize);
-        writer.Write(_hasUpsample);
-
-        if (_hasUpsample && _upsample != null)
-        {
-            _upsample.Serialize(writer);
-        }
-
-        foreach (var block in _resBlocks)
-        {
-            block.Serialize(writer);
-        }
-    }
-
-    /// <summary>
-    /// Loads the block's state from a binary reader.
-    /// </summary>
-    public override void Deserialize(BinaryReader reader)
-    {
-        base.Deserialize(reader);
-
-        var inChannels = reader.ReadInt32();
-        var outChannels = reader.ReadInt32();
-        var numLayers = reader.ReadInt32();
-        var numGroups = reader.ReadInt32();
-        var inputSpatialSize = reader.ReadInt32();
-        var hasUpsample = reader.ReadBoolean();
-
-        if (inChannels != _inChannels || outChannels != _outChannels ||
-            numLayers != _numLayers || hasUpsample != _hasUpsample)
-        {
-            throw new InvalidOperationException(
-                $"Architecture mismatch in UpBlock deserialization.");
-        }
-
-        if (_hasUpsample && _upsample != null)
-        {
-            _upsample.Deserialize(reader);
-        }
-
-        foreach (var block in _resBlocks)
-        {
-            block.Deserialize(reader);
-        }
-    }
-
-    /// <summary>
     /// Gets the residual blocks for external access.
     /// </summary>
     /// <returns>Array of residual blocks.</returns>

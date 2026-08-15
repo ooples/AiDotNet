@@ -42,7 +42,7 @@ namespace AiDotNet.Diffusion.NoisePredictors;
 [ModelComplexity(ModelComplexity.VeryHigh)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Lumina-T2X: Transforming Text into Any Modality with Flow Matching", "https://arxiv.org/abs/2405.05945")]
-public class FlagDiTPredictor<T> : NoisePredictorBase<T>
+public partial class FlagDiTPredictor<T> : NoisePredictorBase<T>
 {
     /// <summary>Patch size (p): a p×p block of the latent becomes one token (paper uses 2).</summary>
     private const int PatchSize = 2;

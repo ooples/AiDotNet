@@ -305,28 +305,6 @@ public partial class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     /// </remarks>
     public override bool SupportsTraining => true;
 
-    public override void Serialize(BinaryWriter writer)
-    {
-        // Persist _embeddingSize so Deserialize can re-resolve sublayers
-        // before SetParameters runs. The composite param vector layout
-        // requires _embeddingSize to compute sublayer sizes; without
-        // it, SetParameters throws (sublayers haven't been constructed).
-        writer.Write(_embeddingSize);
-        base.Serialize(writer);
-    }
-
-    public override void Deserialize(BinaryReader reader)
-    {
-        int savedEmbeddingSize = reader.ReadInt32();
-        if (!_isInitialized && savedEmbeddingSize > 0)
-        {
-            // ResolveFromShape with [embeddingSize] triggers
-            // EnsureInitialized which constructs the sublayers.
-            ResolveFromShape(new[] { savedEmbeddingSize });
-        }
-        base.Deserialize(reader);
-    }
-
     public override Vector<T> GetParameterGradients()
     {
         if (!_isInitialized) return new Vector<T>(0);

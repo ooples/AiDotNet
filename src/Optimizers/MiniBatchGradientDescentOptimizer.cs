@@ -319,65 +319,6 @@ public class MiniBatchGradientDescentOptimizer<T, TInput, TOutput> : GradientBas
     }
 
     /// <summary>
-    /// Serializes the optimizer's state into a byte array.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This method converts the current state of the optimizer, including its base class state and options, 
-    /// into a byte array. This is useful for saving the optimizer's state or transferring it between systems.
-    /// </para>
-    /// <para><b>For Beginners:</b>
-    /// Think of this as taking a snapshot of your entire journey so far. It captures all the details of your 
-    /// current position, your hiking plan, and how you got there. This snapshot can be used to continue your 
-    /// journey later or share your exact situation with others.
-    /// </para>
-    /// </remarks>
-    /// <returns>A byte array representing the serialized state of the optimizer.</returns>
-    public override byte[] Serialize()
-    {
-        using MemoryStream ms = new MemoryStream();
-        using BinaryWriter writer = new BinaryWriter(ms);
-
-        byte[] baseData = base.Serialize();
-        writer.Write(baseData.Length);
-        writer.Write(baseData);
-
-        string optionsJson = JsonConvert.SerializeObject(_options);
-        writer.Write(optionsJson);
-
-        return ms.ToArray();
-    }
-
-    /// <summary>
-    /// Deserializes a byte array to restore the optimizer's state.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This method takes a byte array (previously created by Serialize) and uses it to restore the optimizer's state, 
-    /// including its base class state and options.
-    /// </para>
-    /// <para><b>For Beginners:</b>
-    /// This is like using a detailed map and instructions to recreate your exact position and plan from a previous 
-    /// point in your journey. It allows you to pick up right where you left off, with all your strategies and progress intact.
-    /// </para>
-    /// </remarks>
-    /// <param name="data">The byte array containing the serialized optimizer state.</param>
-    /// <exception cref="InvalidOperationException">Thrown when the optimizer options cannot be deserialized.</exception>
-    public override void Deserialize(byte[] data)
-    {
-        using MemoryStream ms = new MemoryStream(data);
-        using BinaryReader reader = new BinaryReader(ms);
-
-        int baseDataLength = reader.ReadInt32();
-        byte[] baseData = reader.ReadBytes(baseDataLength);
-        base.Deserialize(baseData);
-
-        string optionsJson = reader.ReadString();
-        _options = JsonConvert.DeserializeObject<MiniBatchGradientDescentOptions<T, TInput, TOutput>>(optionsJson)
-            ?? throw new InvalidOperationException("Failed to deserialize optimizer options.");
-    }
-
-    /// <summary>
     /// Generates a unique key for caching gradients based on the model and input data.
     /// </summary>
     /// <remarks>

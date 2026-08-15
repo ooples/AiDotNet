@@ -1756,25 +1756,6 @@ internal partial class ChronosTransformerLayerTensor<T> : NeuralNetworks.Layers.
         }
     }
 
-    public override void Serialize(BinaryWriter writer)
-    {
-        writer.Write(_embeddingDim);
-        writer.Write(_numHeads);
-
-        SerializeTensor(writer, _queryProj);
-        SerializeTensor(writer, _keyProj);
-        SerializeTensor(writer, _valueProj);
-        SerializeTensor(writer, _outputProj);
-        SerializeTensor(writer, _ffn1);
-        SerializeTensor(writer, _ffn1Bias);
-        SerializeTensor(writer, _ffn2);
-        SerializeTensor(writer, _ffn2Bias);
-        SerializeTensor(writer, _layerNorm1Gamma);
-        SerializeTensor(writer, _layerNorm1Beta);
-        SerializeTensor(writer, _layerNorm2Gamma);
-        SerializeTensor(writer, _layerNorm2Beta);
-    }
-
     private void SerializeTensor(BinaryWriter writer, Tensor<T> tensor)
     {
         writer.Write(tensor.Shape.Length);
@@ -1782,29 +1763,6 @@ internal partial class ChronosTransformerLayerTensor<T> : NeuralNetworks.Layers.
             writer.Write(dim);
         for (int i = 0; i < tensor.Length; i++)
             writer.Write(Convert.ToDouble(tensor[i]));
-    }
-
-    public override void Deserialize(BinaryReader reader)
-    {
-        int embeddingDim = reader.ReadInt32();
-        int numHeads = reader.ReadInt32();
-
-        _embeddingDim = embeddingDim;
-        _numHeads = numHeads;
-        _headDim = embeddingDim / numHeads;
-
-        _queryProj = DeserializeTensor(reader);
-        _keyProj = DeserializeTensor(reader);
-        _valueProj = DeserializeTensor(reader);
-        _outputProj = DeserializeTensor(reader);
-        _ffn1 = DeserializeTensor(reader);
-        _ffn1Bias = DeserializeTensor(reader);
-        _ffn2 = DeserializeTensor(reader);
-        _ffn2Bias = DeserializeTensor(reader);
-        _layerNorm1Gamma = DeserializeTensor(reader);
-        _layerNorm1Beta = DeserializeTensor(reader);
-        _layerNorm2Gamma = DeserializeTensor(reader);
-        _layerNorm2Beta = DeserializeTensor(reader);
     }
 
     private Tensor<T> DeserializeTensor(BinaryReader reader)

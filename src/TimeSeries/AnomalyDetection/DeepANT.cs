@@ -745,44 +745,4 @@ internal partial class ConvLayerTensor<T> : NeuralNetworks.Layers.LayerBase<T>, 
         _kernelGradients = null;
         _biasGradients = null;
     }
-
-    public override void Serialize(BinaryWriter writer)
-    {
-        writer.Write(_outputChannels);
-        writer.Write(_kernelSize);
-        writer.Write(_kernels.Shape.Length);
-        foreach (int dim in _kernels._shape) writer.Write(dim);
-        writer.Write(_kernels.Length);
-        for (int i = 0; i < _kernels.Length; i++) writer.Write(NumOps.ToDouble(_kernels[i]));
-        writer.Write(_biases.Shape.Length);
-        foreach (int dim in _biases._shape) writer.Write(dim);
-        writer.Write(_biases.Length);
-        for (int i = 0; i < _biases.Length; i++) writer.Write(NumOps.ToDouble(_biases[i]));
-    }
-
-    public override void Deserialize(BinaryReader reader)
-    {
-        _outputChannels = reader.ReadInt32();
-        _kernelSize = reader.ReadInt32();
-
-        int kernelsRank = reader.ReadInt32();
-        int[] kernelsShape = new int[kernelsRank];
-        for (int i = 0; i < kernelsRank; i++) kernelsShape[i] = reader.ReadInt32();
-        int kernelsLength = reader.ReadInt32();
-        _kernels = new Tensor<T>(kernelsShape);
-        if (kernelsLength != _kernels.Length)
-            throw new InvalidOperationException(
-                $"Serialized kernel length ({kernelsLength}) does not match tensor shape ({_kernels.Length}).");
-        for (int i = 0; i < kernelsLength; i++) _kernels[i] = NumOps.FromDouble(reader.ReadDouble());
-
-        int biasesRank = reader.ReadInt32();
-        int[] biasesShape = new int[biasesRank];
-        for (int i = 0; i < biasesRank; i++) biasesShape[i] = reader.ReadInt32();
-        int biasesLength = reader.ReadInt32();
-        _biases = new Tensor<T>(biasesShape);
-        if (biasesLength != _biases.Length)
-            throw new InvalidOperationException(
-                $"Serialized bias length ({biasesLength}) does not match tensor shape ({_biases.Length}).");
-        for (int i = 0; i < biasesLength; i++) _biases[i] = NumOps.FromDouble(reader.ReadDouble());
-    }
 }

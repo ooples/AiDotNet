@@ -116,65 +116,6 @@ public partial class DecoderLayer<T> : LayerBase<T>, IShapeContract
     /// </summary>
     public override bool SupportsTraining => true;
 
-    public override void Serialize(BinaryWriter writer)
-    {
-        // Refuse to write malformed checkpoints. The lazy ctor leaves
-        // InputSize at -1 until the first forward (or a Deserialize
-        // round-trip) resolves it; serializing before that would emit a
-        // sentinel that Deserialize can't decode and that Set/GetParameters
-        // can't slice. Fail fast at the writer rather than producing a
-        // checkpoint that errors later at load time.
-        if (InputSize <= 0 || _feedForward2 is null)
-        {
-            throw new InvalidOperationException(
-                $"DecoderLayer.Serialize: layer must be shape-resolved before " +
-                $"serialization (InputSize={InputSize}, _feedForward2 " +
-                $"{(_feedForward2 is null ? "null" : "non-null")}). Run a " +
-                $"forward pass first so OnFirstForward materializes _feedForward2 " +
-                $"and resolves InputSize from the input shape.");
-        }
-
-        // Persist resolved InputSize so Deserialize can re-resolve the
-        // lazily-constructed _feedForward2 on the load side.
-        writer.Write(InputSize);
-        base.Serialize(writer);
-    }
-
-    public override void Deserialize(BinaryReader reader)
-    {
-        int savedInputSize = reader.ReadInt32();
-        // Reject malformed checkpoints up front. A Serialize from this
-        // class is now guaranteed to write InputSize > 0 (see the guard
-        // above), but a stream from an older build or a hand-crafted
-        // payload could contain anything; refusing here prevents
-        // ResolveFromShape / base.Deserialize / SetParameters from
-        // mutating layer state on bad input.
-        if (savedInputSize <= 0)
-        {
-            throw new InvalidDataException(
-                $"DecoderLayer.Deserialize: saved InputSize ({savedInputSize}) must be positive. " +
-                $"Stream is malformed or comes from an older build that emitted unresolved " +
-                $"layers. Discard the checkpoint or regenerate it from a shape-resolved layer.");
-        }
-
-        if (!IsShapeResolved)
-        {
-            ResolveFromShape(new[] { savedInputSize });
-        }
-        else if (savedInputSize != InputSize)
-        {
-            // Already-resolved instance with a mismatched persisted input
-            // size — silently loading would assign weights for a different
-            // (inputSize, …) factorization and produce garbage on first
-            // Forward. Fail fast with an actionable message.
-            throw new InvalidDataException(
-                $"DecoderLayer.Deserialize: saved InputSize ({savedInputSize}) does not match " +
-                $"the already-resolved layer's InputSize ({InputSize}). Recreate the layer to " +
-                $"match the saved shape, or load into a fresh (unresolved) instance.");
-        }
-        base.Deserialize(reader);
-    }
-
     /// <summary>
     /// Returns <see cref="_feedForward2"/> if it has been constructed; throws
     /// <see cref="InvalidOperationException"/> with the calling member's name

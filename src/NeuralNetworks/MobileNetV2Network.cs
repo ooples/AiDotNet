@@ -454,13 +454,6 @@ public class MobileNetV2Network<T> : NeuralNetworkBase<T>
         }
     }
 
-    /// <inheritdoc />
-    public override void Deserialize(byte[] data)
-    {
-        base.Deserialize(data);
-        SetAllLayersEvalMode();
-    }
-
     /// <summary>
     /// Gets the layer at the specified index.
     /// </summary>

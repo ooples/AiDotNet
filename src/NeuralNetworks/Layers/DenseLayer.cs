@@ -1633,61 +1633,6 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IShap
             Vector<T>.FromMemory(_biasesGradient.Data));
     }
 
-    public override void Serialize(BinaryWriter writer)
-    {
-        EnsureInitialized();
-        // Write weights
-        writer.Write(_weights.Length);
-        var wSpan = _weights.Data.Span;
-        for (int i = 0; i < _weights.Length; i++)
-            writer.Write(Convert.ToDouble(wSpan[i]));
-        // Write biases
-        writer.Write(_biases.Length);
-        var bSpan = _biases.Data.Span;
-        for (int i = 0; i < _biases.Length; i++)
-            writer.Write(Convert.ToDouble(bSpan[i]));
-    }
-
-    public override void Deserialize(BinaryReader reader)
-    {
-        // Lazy ctor: if shape isn't resolved, recover inputSize from the
-        // saved weights length (= wLen / outputSize) and resolve before
-        // EnsureInitialized tries to allocate with a -1 sentinel. We
-        // simply read wLen first, then resolve, then read the weight
-        // values — no rewinding needed since wLen is the first int we
-        // consume from the layer's blob.
-        int wLen = reader.ReadInt32();
-        if (!IsShapeResolved)
-        {
-            int outputSize = OutputShape[0];
-            if (outputSize > 0 && wLen > 0 && wLen % outputSize == 0)
-            {
-                int inferredInput = wLen / outputSize;
-                ResolveFromShape(new[] { inferredInput });
-            }
-        }
-        EnsureInitialized();
-        // Read weights IN PLACE to preserve engine's persistent tensor reference
-        var wSpan = _weights.Data.Span;
-        for (int i = 0; i < Math.Min(wLen, _weights.Length); i++)
-            wSpan[i] = NumOps.FromDouble(reader.ReadDouble());
-        // Skip any extra values if serialized layer was bigger
-        for (int i = _weights.Length; i < wLen; i++)
-            reader.ReadDouble();
-
-        // Read biases IN PLACE
-        int bLen = reader.ReadInt32();
-        var bSpan = _biases.Data.Span;
-        for (int i = 0; i < Math.Min(bLen, _biases.Length); i++)
-            bSpan[i] = NumOps.FromDouble(reader.ReadDouble());
-        for (int i = _biases.Length; i < bLen; i++)
-            reader.ReadDouble();
-
-        // Notify engine that data changed (for GPU re-upload)
-        Engine.InvalidatePersistentTensor(_weights);
-        Engine.InvalidatePersistentTensor(_biases);
-    }
-
     /// <summary>
     /// Clears stored gradients for weights and biases.
     /// </summary>

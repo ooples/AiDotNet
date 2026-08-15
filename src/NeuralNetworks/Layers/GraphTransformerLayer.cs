@@ -1264,37 +1264,6 @@ public partial class GraphTransformerLayer<T> : LayerBase<T>, IGraphConvolutionL
         _ffnBias2Gradient = null;
     }
 
-    /// <inheritdoc/>
-    public override void Serialize(BinaryWriter writer)
-    {
-        base.Serialize(writer);
-        bool hasBias = _structuralBias != null;
-        writer.Write(hasBias);
-        if (hasBias)
-        {
-            var bias = _structuralBias ?? throw new InvalidOperationException("Structural bias is null during serialization.");
-            writer.Write(bias.Shape.Length);
-            foreach (var dim in bias._shape) writer.Write(dim);
-            for (int i = 0; i < bias.Length; i++)
-                writer.Write(NumOps.ToDouble(bias[i]));
-        }
-    }
-
-    public override void Deserialize(BinaryReader reader)
-    {
-        base.Deserialize(reader);
-        bool hasBias = reader.ReadBoolean();
-        if (hasBias)
-        {
-            int rank = reader.ReadInt32();
-            var shape = new int[rank];
-            for (int i = 0; i < rank; i++) shape[i] = reader.ReadInt32();
-            _structuralBias = new Tensor<T>(shape);
-            for (int i = 0; i < _structuralBias.Length; i++)
-                _structuralBias[i] = NumOps.FromDouble(reader.ReadDouble());
-        }
-    }
-
     public override void ResetState()
     {
         _lastInput = null;

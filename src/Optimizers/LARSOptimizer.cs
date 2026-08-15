@@ -670,60 +670,6 @@ public partial class LARSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
     }
 
     /// <summary>
-    /// Serializes the optimizer's state into a byte array.
-    /// </summary>
-    public override byte[] Serialize()
-    {
-        using var ms = new MemoryStream();
-        using var writer = new BinaryWriter(ms);
-
-        byte[] baseData = base.Serialize();
-        writer.Write(baseData.Length);
-        writer.Write(baseData);
-
-        string optionsJson = JsonConvert.SerializeObject(_options);
-        writer.Write(optionsJson);
-
-        writer.Write(_t);
-        writer.Write(_warmupSteps);
-        writer.Write(_velocity.Length);
-        foreach (var value in _velocity)
-        {
-            writer.Write(Convert.ToDouble(value));
-        }
-
-        return ms.ToArray();
-    }
-
-    /// <summary>
-    /// Deserializes the optimizer's state from a byte array.
-    /// </summary>
-    public override void Deserialize(byte[] data)
-    {
-        using var ms = new MemoryStream(data);
-        using var reader = new BinaryReader(ms);
-
-        int baseDataLength = reader.ReadInt32();
-        byte[] baseData = reader.ReadBytes(baseDataLength);
-        base.Deserialize(baseData);
-
-        string optionsJson = reader.ReadString();
-        _options = JsonConvert.DeserializeObject<LARSOptimizerOptions<T, TInput, TOutput>>(optionsJson)
-            ?? throw new InvalidOperationException("Failed to deserialize optimizer options.");
-
-        _t = reader.ReadInt32();
-        _warmupSteps = reader.ReadInt32();
-        int vLength = reader.ReadInt32();
-        _velocity = new Vector<T>(vLength);
-        for (int i = 0; i < vLength; i++)
-        {
-            _velocity[i] = NumOps.FromDouble(reader.ReadDouble());
-        }
-
-        InitializeAdaptiveParameters();
-    }
-
-    /// <summary>
     /// Generates a unique key for caching gradients.
     /// </summary>
     protected override string GenerateGradientCacheKey(IFullModel<T, TInput, TOutput> model, TInput X, TOutput y)

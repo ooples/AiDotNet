@@ -1099,68 +1099,6 @@ public partial class Conv3DLayer<T> : LayerBase<T>, IShapeContract
 
     #region Serialization
 
-    /// <summary>
-    /// Serializes the layer to a binary stream.
-    /// </summary>
-    /// <param name="writer">The binary writer to serialize to.</param>
-    public override void Serialize(BinaryWriter writer)
-    {
-        base.Serialize(writer);
-        writer.Write(InputChannels);
-        writer.Write(OutputChannels);
-        writer.Write(KernelSize);
-        writer.Write(Stride);
-        writer.Write(Padding);
-        writer.Write(_inputDepth);
-        writer.Write(_inputHeight);
-        writer.Write(_inputWidth);
-
-        var kernelArray = _kernels.ToArray();
-        for (int i = 0; i < kernelArray.Length; i++)
-        {
-            writer.Write(NumOps.ToDouble(kernelArray[i]));
-        }
-
-        var biasArray = _biases.ToArray();
-        for (int i = 0; i < biasArray.Length; i++)
-        {
-            writer.Write(NumOps.ToDouble(biasArray[i]));
-        }
-    }
-
-    /// <summary>
-    /// Deserializes the layer from a binary stream.
-    /// </summary>
-    /// <param name="reader">The binary reader to deserialize from.</param>
-    public override void Deserialize(BinaryReader reader)
-    {
-        base.Deserialize(reader);
-        InputChannels = reader.ReadInt32();
-        OutputChannels = reader.ReadInt32();
-        KernelSize = reader.ReadInt32();
-        Stride = reader.ReadInt32();
-        Padding = reader.ReadInt32();
-        _inputDepth = reader.ReadInt32();
-        _inputHeight = reader.ReadInt32();
-        _inputWidth = reader.ReadInt32();
-
-        _kernels = new Tensor<T>([OutputChannels, InputChannels, KernelSize, KernelSize, KernelSize]);
-        var kernelArray = new T[_kernels.Length];
-        for (int i = 0; i < kernelArray.Length; i++)
-        {
-            kernelArray[i] = NumOps.FromDouble(reader.ReadDouble());
-        }
-        _kernels = new Tensor<T>(kernelArray, _kernels._shape);
-
-        _biases = new Tensor<T>([OutputChannels]);
-        var biasArray = new T[_biases.Length];
-        for (int i = 0; i < biasArray.Length; i++)
-        {
-            biasArray[i] = NumOps.FromDouble(reader.ReadDouble());
-        }
-        _biases = new Tensor<T>(biasArray, _biases._shape);
-    }
-
     #endregion
 
     #region JIT Compilation

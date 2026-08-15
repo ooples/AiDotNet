@@ -308,60 +308,6 @@ public partial class ConjugateGradientOptimizer<T, TInput, TOutput> : GradientBa
     }
 
     /// <summary>
-    /// Serializes the current state of the Conjugate Gradient optimizer into a byte array.
-    /// </summary>
-    /// <returns>A byte array representing the serialized state of the optimizer.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> This method saves the current state of the optimizer into a format
-    /// that can be stored or transmitted. This is useful for saving progress or sharing the optimizer's state.
-    /// </para>
-    /// </remarks>
-    public override byte[] Serialize()
-    {
-        using (MemoryStream ms = new MemoryStream())
-        using (BinaryWriter writer = new BinaryWriter(ms))
-        {
-            byte[] baseData = base.Serialize();
-            writer.Write(baseData.Length);
-            writer.Write(baseData);
-
-            string optionsJson = JsonConvert.SerializeObject(_options);
-            writer.Write(optionsJson);
-
-            writer.Write(_iteration);
-
-            return ms.ToArray();
-        }
-    }
-
-    /// <summary>
-    /// Deserializes a byte array to restore the state of the Conjugate Gradient optimizer.
-    /// </summary>
-    /// <param name="data">The byte array containing the serialized state of the optimizer.</param>
-    /// <exception cref="InvalidOperationException">Thrown when deserialization of optimizer options fails.</exception>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> This method loads a previously saved state of the optimizer.
-    /// It's like restoring a saved game, allowing you to continue from where you left off or use a shared optimizer state.
-    /// </para>
-    /// </remarks>
-    public override void Deserialize(byte[] data)
-    {
-        using (MemoryStream ms = new MemoryStream(data))
-        using (BinaryReader reader = new BinaryReader(ms))
-        {
-            int baseDataLength = reader.ReadInt32();
-            byte[] baseData = reader.ReadBytes(baseDataLength);
-            base.Deserialize(baseData);
-
-            string optionsJson = reader.ReadString();
-            _options = JsonConvert.DeserializeObject<ConjugateGradientOptimizerOptions<T, TInput, TOutput>>(optionsJson)
-                ?? throw new InvalidOperationException("Failed to deserialize optimizer options.");
-
-            _iteration = reader.ReadInt32();
-        }
-    }
-
-    /// <summary>
     /// Generates a unique key for caching gradients in the Conjugate Gradient optimizer.
     /// </summary>
     /// <param name="model">The symbolic model for which the gradient is calculated.</param>

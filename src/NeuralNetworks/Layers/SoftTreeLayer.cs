@@ -453,36 +453,6 @@ public partial class SoftTreeLayer<T> : LayerBase<T>, IShapeContract
         return importance;
     }
 
-    /// <inheritdoc/>
-    public override void Serialize(BinaryWriter writer)
-    {
-        base.Serialize(writer);
-
-        writer.Write(_inputDim);
-        writer.Write(_depth);
-        writer.Write(_outputDim);
-        writer.Write(_temperature);
-
-        SerializeTensor(writer, _splitWeights);
-        SerializeTensor(writer, _splitBiases);
-        SerializeTensor(writer, _leafValues);
-    }
-
-    /// <inheritdoc/>
-    public override void Deserialize(BinaryReader reader)
-    {
-        base.Deserialize(reader);
-
-        var inputDim = reader.ReadInt32();
-        var depth = reader.ReadInt32();
-        var outputDim = reader.ReadInt32();
-        var temperature = reader.ReadDouble();
-
-        _splitWeights = DeserializeTensor(reader);
-        _splitBiases = DeserializeTensor(reader);
-        _leafValues = DeserializeTensor(reader);
-    }
-
     private void SerializeTensor(BinaryWriter writer, Tensor<T> tensor)
     {
         writer.Write(tensor.Shape.Length);

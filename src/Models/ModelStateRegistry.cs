@@ -471,7 +471,7 @@ public sealed class ModelStateRegistry<T>
                     // were there, and nothing was listening.
                     while (children.Count <= i)
                     {
-                        children.Add(CreateChild(name));
+                        children.Add(CreateChild<TChild>(name));
                     }
 
                     children[i]?.Deserialize(bytes);

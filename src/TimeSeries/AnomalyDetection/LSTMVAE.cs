@@ -557,34 +557,6 @@ internal partial class LSTMEncoderTensor<T> : NeuralNetworks.Layers.LayerBase<T>
         updated.Data.Span.CopyTo(tensor.Data.Span);
     }
 
-    public override void Serialize(BinaryWriter writer)
-    {
-        WriteTensor(writer, _weights);
-        WriteTensor(writer, _bias);
-        WriteTensor(writer, _meanWeights);
-        WriteTensor(writer, _meanBias);
-        WriteTensor(writer, _logVarWeights);
-        WriteTensor(writer, _logVarBias);
-    }
-
-    public override void Deserialize(BinaryReader reader)
-    {
-        _weights = ReadTensor(reader);
-        _bias = ReadTensor(reader);
-        _meanWeights = ReadTensor(reader);
-        _meanBias = ReadTensor(reader);
-        _logVarWeights = ReadTensor(reader);
-        _logVarBias = ReadTensor(reader);
-
-        // Reinitialize gradient accumulators
-        _weightsGrad = new Tensor<T>(_weights._shape);
-        _biasGrad = new Tensor<T>(_bias._shape);
-        _meanWeightsGrad = new Tensor<T>(_meanWeights._shape);
-        _meanBiasGrad = new Tensor<T>(_meanBias._shape);
-        _logVarWeightsGrad = new Tensor<T>(_logVarWeights._shape);
-        _logVarBiasGrad = new Tensor<T>(_logVarBias._shape);
-    }
-
     private void WriteTensor(BinaryWriter writer, Tensor<T> tensor)
     {
         writer.Write(tensor.Shape.Length);
@@ -785,28 +757,6 @@ internal partial class LSTMDecoderTensor<T> : NeuralNetworks.Layers.LayerBase<T>
         var scaledGrad = Engine.TensorMultiplyScalar<T>(grad, scaledLR);
         var updated = Engine.TensorSubtract(tensor, scaledGrad);
         updated.Data.Span.CopyTo(tensor.Data.Span);
-    }
-
-    public override void Serialize(BinaryWriter writer)
-    {
-        WriteTensor(writer, _weights);
-        WriteTensor(writer, _bias);
-        WriteTensor(writer, _outputWeights);
-        WriteTensor(writer, _outputBias);
-    }
-
-    public override void Deserialize(BinaryReader reader)
-    {
-        _weights = ReadTensor(reader);
-        _bias = ReadTensor(reader);
-        _outputWeights = ReadTensor(reader);
-        _outputBias = ReadTensor(reader);
-
-        // Reinitialize gradient accumulators
-        _weightsGrad = new Tensor<T>(_weights._shape);
-        _biasGrad = new Tensor<T>(_bias._shape);
-        _outputWeightsGrad = new Tensor<T>(_outputWeights._shape);
-        _outputBiasGrad = new Tensor<T>(_outputBias._shape);
     }
 
     private void WriteTensor(BinaryWriter writer, Tensor<T> tensor)
