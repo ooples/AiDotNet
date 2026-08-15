@@ -43,11 +43,11 @@ public class ALIGNOptions : ContrastiveEncoderOptions
         ProjectionDim = other.ProjectionDim;
         Temperature = other.Temperature;
         DropoutRate = other.DropoutRate;
-        ImageMean = other.ImageMean;
-        ImageStd = other.ImageStd;
+        ImageMean = [.. other.ImageMean];
+        ImageStd = [.. other.ImageStd];
         ImageEncoderModelPath = other.ImageEncoderModelPath;
         TextEncoderModelPath = other.TextEncoderModelPath;
-        OnnxOptions = other.OnnxOptions;
+        OnnxOptions = new AiDotNet.Onnx.OnnxModelOptions(other.OnnxOptions);
         LearningRate = other.LearningRate;
         WeightDecay = other.WeightDecay;
         WarmUpSteps = other.WarmUpSteps;

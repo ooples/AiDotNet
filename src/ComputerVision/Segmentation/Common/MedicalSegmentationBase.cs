@@ -20,7 +20,9 @@ namespace AiDotNet.ComputerVision.Segmentation.Common;
 /// </remarks>
 public abstract class MedicalSegmentationBase<T> : SegmentationModelBase<T>, IMedicalSegmentation<T>
 {
-    private readonly List<string> _supportedModalities;
+    // protected and mutable so a derived model can read it and restore it on deserialization - see
+    // PanopticSegmentationBase._numStuffClasses for why private/readonly makes a base unadoptable.
+    protected List<string> _supportedModalities;
 
     /// <inheritdoc/>
     public IReadOnlyList<string> SupportedModalities => _supportedModalities;

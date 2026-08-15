@@ -12,4 +12,10 @@ public class FeedForwardNeuralNetworkTests : NeuralNetworkModelTestBase<float>
 
     protected override INeuralNetworkModel<float> CreateNetwork()
         => new FeedForwardNeuralNetwork<float>();
+
+    // Gradcheck canary (#1872): FeedForwardNeuralNetwork is a plain Dense-stack, standard-forward
+    // model with a known-correct backward, so it opts into the finite-difference gradcheck as the
+    // reference that keeps the harness itself honest (validated: passes on the correct backward,
+    // fails on an injected factor-of-2 gradient bug). Broader per-model enablement lands in Phase 2.
+    protected override bool GradientCheckApplicable => true;
 }

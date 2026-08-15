@@ -1,4 +1,8 @@
 using AiDotNet.ActivationFunctions;
+using System.Collections.Generic;
+using AiDotNet.Models.Parameters;
+using AiDotNet.LinearAlgebra;
+using AiDotNet.Interfaces;
 using AiDotNet.Engines;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
@@ -28,7 +32,7 @@ namespace AiDotNet.NeuralNetworks.Tabular;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-public abstract class SAINTBase<T>
+public abstract class SAINTBase<T> : IParameterSource<T>
 {
     protected readonly SAINTOptions<T> Options;
     protected readonly int NumNumericalFeatures;
@@ -59,42 +63,71 @@ public abstract class SAINTBase<T>
     private List<Tensor<T>>? _rowAttentionOutputsCache;
     private Tensor<T>? _mlpOutputCache;
 
+    /// <summary>Built once on first parameter access, then reused.</summary>
+    private ParameterComponentRegistry<T>? _parameterRegistry;
+
     /// <summary>
-    /// Gets the total number of trainable parameters.
+    /// Extra trainable layers a subclass contributes, folded after the shared backbone.
     /// </summary>
-    public virtual long ParameterCount
+    protected virtual IEnumerable<IParameterSource<T>> GetExtraTrainableLayers()
+        => System.Linq.Enumerable.Empty<IParameterSource<T>>();
+
+    /// <summary>The single ordered traversal of this model's parameter-bearing components.</summary>
+    private ParameterComponentRegistry<T> ParameterRegistry
     {
         get
         {
-            int count = checked((int)_numericalEmbedding.ParameterCount);
+            if (_parameterRegistry is not null) return _parameterRegistry;
 
-            if (_categoricalEmbeddings != null)
-            {
-                foreach (var emb in _categoricalEmbeddings)
-                    count += emb.Length;
-            }
-
-            if (_columnEmbeddings != null)
-                count += _columnEmbeddings.Length;
-
+            // Every attention projection is sized entirely by EmbeddingDimension and NumHeads.
+            // Materialize on first parameter-surface access so a fresh SAINT checkpoint describes
+            // the same model as one that has already run a prediction.
             foreach (var layer in _columnAttentionLayers)
-                count += (int)layer.ParameterCount;
-
+                layer.MaterializeParameters();
             if (_rowAttentionLayers != null)
             {
                 foreach (var layer in _rowAttentionLayers)
-                    count += (int)layer.ParameterCount;
+                    layer.MaterializeParameters();
             }
 
-            foreach (var layer in _ffnLayers)
-                count += (int)layer.ParameterCount;
+            var registry = new ParameterComponentRegistry<T>();
+            registry.Register("00000000/numerical", _numericalEmbedding);
+            registry.Register("00000001/categorical",
+                new TensorCollectionParameterSource<T>(() => _categoricalEmbeddings));
+            registry.Register("00000002/column",
+                new TensorFieldParameterSource<T>(() => _columnEmbeddings));
 
-            foreach (var layer in _mlpLayers)
-                count += (int)layer.ParameterCount;
+            for (int i = 0; i < _columnAttentionLayers.Count; i++)
+                registry.Register($"00000003/{i:D8}", _columnAttentionLayers[i]);
 
-            return count;
+            if (_rowAttentionLayers != null)
+                for (int i = 0; i < _rowAttentionLayers.Count; i++)
+                    registry.Register($"00000004/{i:D8}", _rowAttentionLayers[i]);
+
+            for (int i = 0; i < _ffnLayers.Count; i++)
+                registry.Register($"00000005/{i:D8}", _ffnLayers[i]);
+
+            if (_layerNorms != null)
+                for (int i = 0; i < _layerNorms.Count; i++)
+                    registry.Register($"00000006/{i:D8}", _layerNorms[i]);
+
+            for (int i = 0; i < _mlpLayers.Count; i++)
+                registry.Register($"00000007/{i:D8}", _mlpLayers[i]);
+
+            int extraIndex = 0;
+            foreach (var extra in GetExtraTrainableLayers())
+                if (extra is not null) registry.Register($"00009000/{extraIndex++:D8}", extra);
+
+            _parameterRegistry = registry;
+            return registry;
         }
     }
+
+    public virtual long ParameterCount => ParameterRegistry.ParameterCount;
+
+    public virtual Vector<T> GetParameters() => ParameterRegistry.GetParameters();
+
+    public virtual void SetParameters(Vector<T> parameters) => ParameterRegistry.SetParameters(parameters);
 
     /// <summary>
     /// Initializes a new instance of the SAINTBase class.
@@ -116,6 +149,7 @@ public abstract class SAINTBase<T>
 
         // Numerical feature embedding
         _numericalEmbedding = new FullyConnectedLayer<T>(
+            1,
             Options.EmbeddingDimension,
             Options.HiddenActivation ?? new GELUActivation<T>());
 
@@ -152,16 +186,22 @@ public abstract class SAINTBase<T>
         for (int i = 0; i < Options.NumLayers; i++)
         {
             // Column attention layer
-            _columnAttentionLayers.Add(new MultiHeadAttentionLayer<T>(Options.EmbeddingDimension / Options.NumHeads, (Options.NumHeads) / (Options.EmbeddingDimension / Options.NumHeads)));
+            _columnAttentionLayers.Add(new MultiHeadAttentionLayer<T>(
+                Options.NumHeads,
+                Options.EmbeddingDimension / Options.NumHeads));
 
             // Row attention layer (if enabled)
             if (Options.UseIntersampleAttention)
             {
-                (_rowAttentionLayers ?? throw new InvalidOperationException("Row attention layers not initialized.")).Add(new MultiHeadAttentionLayer<T>(Options.EmbeddingDimension / Options.NumHeads, (Options.NumHeads) / (Options.EmbeddingDimension / Options.NumHeads)));
+                (_rowAttentionLayers ?? throw new InvalidOperationException("Row attention layers not initialized.")).Add(
+                    new MultiHeadAttentionLayer<T>(
+                        Options.NumHeads,
+                        Options.EmbeddingDimension / Options.NumHeads));
             }
 
             // Feed-forward network
             _ffnLayers.Add(new FullyConnectedLayer<T>(
+                Options.EmbeddingDimension,
                 Options.EmbeddingDimension,
                 Options.HiddenActivation ?? new GELUActivation<T>()));
 
@@ -169,11 +209,11 @@ public abstract class SAINTBase<T>
             if (Options.UseLayerNorm)
             {
                 var layerNorms = _layerNorms ?? throw new InvalidOperationException("Layer norms not initialized.");
-                layerNorms.Add(new LayerNormalizationLayer<T>());
-                layerNorms.Add(new LayerNormalizationLayer<T>());
+                layerNorms.Add(new LayerNormalizationLayer<T>(Options.EmbeddingDimension));
+                layerNorms.Add(new LayerNormalizationLayer<T>(Options.EmbeddingDimension));
                 if (Options.UseIntersampleAttention)
                 {
-                    layerNorms.Add(new LayerNormalizationLayer<T>());
+                    layerNorms.Add(new LayerNormalizationLayer<T>(Options.EmbeddingDimension));
                 }
             }
         }
@@ -184,6 +224,7 @@ public abstract class SAINTBase<T>
         foreach (var hiddenDim in Options.MLPHiddenDimensions)
         {
             _mlpLayers.Add(new FullyConnectedLayer<T>(
+                mlpInput,
                 hiddenDim,
                 Options.HiddenActivation ?? new GELUActivation<T>()));
             mlpInput = hiddenDim;

@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -234,7 +234,36 @@ public class PrioritizedSweepingAgent<T> : ReinforcementLearningAgentBase<T>
     public Task<Vector<T>> PredictAsync(Vector<T> input) => Task.FromResult(Predict(input));
     public Task TrainAsync() { Train(); return Task.CompletedTask; }
     public override ModelMetadata<T> GetModelMetadata() => new ModelMetadata<T> { FeatureCount = this.FeatureCount, Complexity = ParameterCount };
-    public override long ParameterCount => _qTable.Count * _options.ActionSize;
+    /// <summary>
+    /// The number of Q-values actually stored: the sum of each state's action entries.
+    /// </summary>
+    /// <remarks>
+    /// NOT <c>_qTable.Count * ActionSize</c>, which is what ParameterCount, GetParameters and
+    /// SetParameters all used to compute. That product is only correct when every visited state has
+    /// explored every action, which is exactly what a tabular agent does not do — states are added
+    /// as they are seen and actions as they are tried. Meanwhile GetParameters' write loop always
+    /// wrote the REAL entry count, so the allocated length and the written length disagreed
+    /// whenever the table was ragged: trailing slots left as default, or an index overflow.
+    /// </remarks>
+    private long QTableEntryCount
+    {
+        get
+        {
+            long total = 0;
+            foreach (var state in _qTable) total += state.Value.Count;
+            return total;
+        }
+    }
+
+    /// <inheritdoc />
+    protected override void RegisterComponents()
+    {
+        base.RegisterComponents();
+        RegisterParameterComponent(
+            "q-table",
+            new AiDotNet.Models.Parameters.NestedKeyedScalarCollectionParameterSource<T, string, int>(
+                () => _qTable));
+    }
     public override int FeatureCount => _options.StateSize;
     public override byte[] Serialize()
     {
@@ -277,44 +306,6 @@ public class PrioritizedSweepingAgent<T> : ReinforcementLearningAgentBase<T>
         }
 
         _epsilon = state.Epsilon;
-    }
-    public override Vector<T> GetParameters()
-    {
-        int paramCount = _qTable.Count > 0 ? _qTable.Count * _options.ActionSize : 1;
-        var v = new Vector<T>(paramCount);
-        int idx = 0;
-
-        // Sort states by key for deterministic ordering
-        var sortedStates = _qTable.OrderBy(kvp => kvp.Key);
-        foreach (var stateEntry in sortedStates)
-        {
-            // Actions are already in deterministic order (0 to ActionSize-1)
-            for (int a = 0; a < _options.ActionSize; a++)
-            {
-                v[idx++] = stateEntry.Value[a];
-            }
-        }
-
-        if (idx == 0)
-            v[0] = NumOps.Zero;
-
-        return v;
-    }
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int idx = 0;
-        // Sort states by key for deterministic ordering
-        var sortedStates = _qTable.Keys.OrderBy(k => k).ToList();
-        foreach (var stateKey in sortedStates)
-        {
-            for (int a = 0; a < _options.ActionSize; a++)
-            {
-                if (idx < parameters.Length)
-                {
-                    _qTable[stateKey][a] = parameters[idx++];
-                }
-            }
-        }
     }
     public override IFullModel<T, Vector<T>, Vector<T>> Clone()
     {

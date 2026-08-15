@@ -55,7 +55,14 @@ namespace AiDotNet.NeuralNetworks.Layers.SSM;
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerTask(LayerTask.AttentionComputation)]
 [LayerProperty(IsTrainable = true, IsStateful = true, Cost = ComputeCost.High, TestInputShape = "4, 256", TestConstructorArgs = "4")]
-internal partial class GatedLinearAttentionLayer<T> : LayerBase<T>
+// Shape-preserving. Relations discovered by probing; roles read from the forward - this folder's
+// convention is seqLen = Shape[rank-2], modelDim = Shape[rank-1], so rank 2 is [Time, Features].
+[TensorLayout(TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
+[AutoParameters]
+public partial class GatedLinearAttentionLayer<T> : LayerBase<T>, IShapeContract
 {
     private readonly int _modelDimension;
     private readonly int _numHeads;
@@ -133,17 +140,6 @@ internal partial class GatedLinearAttentionLayer<T> : LayerBase<T>
     public int HeadDimension => _headDimension;
 
     /// <summary>
-    /// Gets the total number of trainable parameters.
-    /// </summary>
-    public override long ParameterCount =>
-        // Cast the first term to long so the running sum widens to 64-bit
-        // and never wraps before reaching ToFlatVectorSize on multi-billion-
-        // parameter linear-attention configs.
-        (long)_queryWeights.Length + _keyWeights.Length + _valueWeights.Length +
-        _gateWeights.Length + _gateBias.Length +
-        _outputWeights.Length + _outputBias.Length;
-
-    /// <summary>
     /// Creates a new Gated Linear Attention layer.
     /// </summary>
     /// <param name="sequenceLength">Maximum sequence length.</param>
@@ -218,7 +214,7 @@ internal partial class GatedLinearAttentionLayer<T> : LayerBase<T>
     }
 
     /// <inheritdoc />
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         _originalInputShape = input._shape;
 
@@ -255,57 +251,18 @@ internal partial class GatedLinearAttentionLayer<T> : LayerBase<T>
         _lastValue = v;
         _lastGate = gate;
 
-        // Gated linear attention recurrence per head
-        var output = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, totalDim });
-
-        for (int hi = 0; hi < _numHeads; hi++)
-        {
-            int dimStart = hi * _headDimension;
-
-            // State matrix: [batch, headDim, keyDim] (KV outer product accumulator)
-            var state = TensorAllocator.Rent<T>(new[] { batchSize, _headDimension, _keyDimension });
-
-            for (int t = 0; t < seqLen; t++)
-            {
-                for (int bi = 0; bi < batchSize; bi++)
-                {
-                    // Gate value for this head (use first element per head as scalar gate)
-                    T gateVal = gate[new[] { bi, t, dimStart }];
-
-                    // Gated state update: S = gate * S + K^T * V (outer product of K and V)
-                    for (int di = 0; di < _headDimension; di++)
-                    {
-                        for (int ki = 0; ki < _keyDimension; ki++)
-                        {
-                            int flatK = dimStart + ki;
-                            int flatD = dimStart + di;
-                            T kVal = k[new[] { bi, t, flatK }];
-                            T vVal = v[new[] { bi, t, flatD }];
-
-                            T prevState = state[new[] { bi, di, ki }];
-                            T kvOuter = NumOps.Multiply(kVal, vVal);
-                            T newState = NumOps.Add(
-                                NumOps.Multiply(gateVal, prevState), kvOuter);
-                            state[new[] { bi, di, ki }] = newState;
-                        }
-                    }
-
-                    // Output: O = Q * S → O[k] = sum_d Q[d] * S[d, k]
-                    for (int ki = 0; ki < _keyDimension; ki++)
-                    {
-                        int flatK = dimStart + ki;
-                        T sum = NumOps.Zero;
-                        for (int di = 0; di < _headDimension; di++)
-                        {
-                            T qVal = q[new[] { bi, t, dimStart + di }];
-                            sum = NumOps.Add(sum, NumOps.Multiply(qVal, state[new[] { bi, di, ki }]));
-                        }
-                        output[new[] { bi, t, flatK }] = NumOps.Add(
-                            output[new[] { bi, t, flatK }], sum);
-                    }
-                }
-            }
-        }
+        // The recurrence consumes one scalar gate per head. Extract the first channel from each
+        // head exactly as the original implementation did, but keep the extraction and scan on the
+        // tape. GlaScanForward records one analytic BPTT node instead of detaching through scalar
+        // writes or expanding O(sequence * heads * headDim^2) tiny operations.
+        var gateByHead = Engine.Reshape(
+            Engine.TensorSliceAxis(
+                Engine.Reshape(gate,
+                    new[] { batchSize, seqLen, _numHeads, _headDimension }),
+                axis: 3,
+                index: 0),
+            new[] { batchSize, seqLen, _numHeads });
+        var output = Engine.GlaScanForward(q, k, v, gateByHead, _numHeads);
 
         _lastAttnOutput = output;
 
@@ -374,28 +331,6 @@ internal partial class GatedLinearAttentionLayer<T> : LayerBase<T>
         RegisterTrainableParameter(_outputWeights, PersistentTensorRole.Weights);
         RegisterTrainableParameter(_outputBias, PersistentTensorRole.Biases);
 
-    }
-
-    /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        var parameters = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
-        int index = 0;
-        foreach (var tensor in GetAllTensors())
-            for (int i = 0; i < tensor.Length; i++)
-                parameters[index++] = tensor[i];
-        return parameters;
-    }
-
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (parameters.Length != ParameterCount)
-            throw new ArgumentException($"Expected {ParameterCount} parameters, got {parameters.Length}");
-        int index = 0;
-        foreach (var tensor in GetAllTensors())
-            for (int i = 0; i < tensor.Length; i++)
-                tensor[i] = parameters[index++];
     }
 
     private Tensor<T>[] GetAllTensors() =>

@@ -37,7 +37,12 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Attention)]
 [LayerTask(LayerTask.AttentionComputation)]
 [LayerProperty(IsTrainable = true, Cost = ComputeCost.High, TestInputShape = "1, 4, 4", TestConstructorArgs = "4, (AiDotNet.Interfaces.IVectorActivationFunction<double>?)null")]
-public partial class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
+// Attention over a sequence: shape-preserving at rank 3 [Batch, Time, Features], which is the rank the
+// discovery sweep probed. Not declared rank-agnostic - attention needs a real sequence axis.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
+[AutoParameters]
+public partial class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IShapeContract
 {
     /// <summary>
     /// The weight tensor for the query transformation.
@@ -180,79 +185,6 @@ public partial class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     public T AuxiliaryLossWeight { get; set; }
 
     /// <summary>
-    /// Gets the total number of trainable parameters in the layer.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This property calculates the total number of trainable parameters in the Attention Layer,
-    /// which includes all the weights for query, key, and value transformations.
-    /// </para>
-    /// <para><b>For Beginners:</b> This tells you how many numbers the layer needs to learn.
-    ///
-    /// It counts all the weights in the four transformation matrices (Wq, Wk, Wv, Wo).
-    /// A higher number means the layer can potentially learn more complex patterns,
-    /// but also requires more data and time to train effectively.
-    /// </para>
-    /// </remarks>
-    public override long ParameterCount =>
-        // _inputSize stays sentinel -1 until OnFirstForward resolves it from the
-        // input tensor; before that point we can't predict the parameter count
-        // (unlike layers whose input dim is given to the ctor). Return 0 in the
-        // unresolved state — the alternative `_attentionSize * -1 * 3 +
-        // -1 * _attentionSize` produces a negative count that breaks
-        // ParameterCount-non-negative invariants.
-        _inputSize > 0
-            ? (long)_attentionSize * _inputSize * 3 + (long)_inputSize * _attentionSize  // Wq, Wk, Wv, Wo
-            : 0L;
-
-    public override void SetParameters(Vector<T> parameters)
-    {
-        // Lazy ctor: if shape isn't resolved (placeholder _Wq/_Wk/_Wv/_Wo
-        // with Length 0), infer inputSize from the param vector layout.
-        // 4 weight matrices total: Wq/Wk/Wv = [_attentionSize, inputSize]
-        // and Wo = [inputSize, _attentionSize]. So total = 4 * attentionSize
-        // * inputSize → inputSize = total / (4 * attentionSize).
-        if (!IsShapeResolved && _attentionSize > 0)
-        {
-            int divisor = 4 * _attentionSize;
-            int candidateInput = parameters.Length / divisor;
-            if (candidateInput > 0 && candidateInput * divisor == parameters.Length)
-            {
-                ResolveFromShape(new[] { candidateInput });
-            }
-        }
-        if (parameters.Length != ParameterCount)
-            throw new ArgumentException($"Expected {ParameterCount} parameters, got {parameters.Length}");
-        int wqLen = _Wq.Length;
-        int wkLen = _Wk.Length;
-        int wvLen = _Wv.Length;
-        int idx = 0;
-
-        // Create new mutable tensors to avoid immutable Engine tensor issue
-        _Wq = new Tensor<T>(_Wq._shape);
-        var wqSpan = _Wq.Data.Span;
-        for (int i = 0; i < wqLen; i++) wqSpan[i] = parameters[idx++];
-
-        _Wk = new Tensor<T>(_Wk._shape);
-        var wkSpan = _Wk.Data.Span;
-        for (int i = 0; i < wkLen; i++) wkSpan[i] = parameters[idx++];
-
-        _Wv = new Tensor<T>(_Wv._shape);
-        var wvSpan = _Wv.Data.Span;
-        for (int i = 0; i < wvLen; i++) wvSpan[i] = parameters[idx++];
-
-        int woLen = _Wo.Length;
-        _Wo = new Tensor<T>(_Wo._shape);
-        var woSpan = _Wo.Data.Span;
-        for (int i = 0; i < woLen; i++) woSpan[i] = parameters[idx++];
-
-        RegisterTrainableParameter(_Wq, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_Wk, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_Wv, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_Wo, PersistentTensorRole.Weights);
-    }
-
-    /// <summary>
     /// Gradient of the weight tensor for the value transformation.
     /// </summary>
     private Tensor<T>? _dWv;
@@ -323,7 +255,9 @@ public partial class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// This is useful when you want to treat each attention score separately.
     /// </para>
     /// </remarks>
-    public AttentionLayer(int attentionSize, IActivationFunction<T>? activation = null,
+    public AttentionLayer(
+        [LayerState] int attentionSize,
+        IActivationFunction<T>? activation = null,
         IInitializationStrategy<T>? initializationStrategy = null)
         : base(new[] { -1 }, new[] { -1 }, activation ?? new SoftmaxActivation<T>())
     {
@@ -449,7 +383,7 @@ public partial class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// <summary>
     /// Named multi-input forward pass.
     /// </summary>
-    public override Tensor<T> Forward(IReadOnlyDictionary<string, Tensor<T>> inputs)
+    protected override Tensor<T> ForwardTracedPorts(IReadOnlyDictionary<string, Tensor<T>> inputs)
     {
         if (inputs == null) throw new ArgumentNullException(nameof(inputs));
         if (!inputs.TryGetValue("input", out var input) || input == null)
@@ -480,7 +414,7 @@ public partial class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// This process allows the layer to focus on different parts of the input as needed.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         if (input != null) EnsureInitializedFromInput(input);
         // Validate input tensor
@@ -836,7 +770,7 @@ public partial class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// that need to attend to both their own outputs and the encoder's outputs.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(params Tensor<T>[] inputs)
+    protected override Tensor<T> ForwardTracedMany(params Tensor<T>[] inputs)
     {
         if (inputs == null || inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required for attention mechanism.");
@@ -1165,21 +1099,6 @@ public partial class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         Engine.InvalidatePersistentTensor(_Wo);
     }
 
-    /// <summary>
-    /// Updates the layer's parameters with the provided values.
-    /// </summary>
-    /// <param name="parameters">A vector containing new parameter values.</param>
-    /// <remarks>
-    /// <para>
-    /// This method replaces the current values of the layer's weights with new values provided in the parameters vector.
-    /// It's useful for setting the layer's state to a specific configuration, such as when loading a pre-trained model.
-    /// </para>
-    /// <para><b>For Beginners:</b> This allows you to directly set the layer's internal weights.
-    /// 
-    /// Instead of the layer learning these weights through training, you're providing them directly.
-    /// This is often used when you want to use a pre-trained attention layer or set up the layer with specific initial values.
-    /// </para>
-    /// </remarks>
     public override void UpdateParameters(Vector<T> parameters)
     {
         // === Vectorized Parameter Updates (Phase B: US-GPU-015) ===
@@ -1204,35 +1123,6 @@ public partial class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         Engine.InvalidatePersistentTensor(_Wk);
         Engine.InvalidatePersistentTensor(_Wv);
     }
-
-    /// <summary>
-    /// Retrieves the current parameters of the layer.
-    /// </summary>
-    /// <returns>A vector containing all the parameters of the layer.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method collects all the weights of the attention layer (Wq, Wk, Wv) into a single vector.
-    /// It's useful for operations that need to work with all the layer's parameters at once,
-    /// such as certain optimization algorithms or when saving the model's state.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method gives you all the layer's learned values in one list.
-    /// 
-    /// It's like taking a snapshot of everything the layer has learned.
-    /// This can be useful for saving the layer's current state or for advanced training techniques.
-    /// </para>
-    /// </remarks>
-    public override Vector<T> GetParameters()
-    {
-        // === Vectorized Parameter Extraction (Phase B: US-GPU-015) ===
-        // Flatten each tensor to vector and concatenate
-        var wqVec = _Wq.ToVector();
-        var wkVec = _Wk.ToVector();
-        var wvVec = _Wv.ToVector();
-
-        var woVec = _Wo.ToVector();
-        return Vector<T>.Concatenate(Vector<T>.Concatenate(wqVec, wkVec), Vector<T>.Concatenate(wvVec, woVec));
-    }
-
     public override Vector<T> GetParameterGradients()
     {
         var gQ = _dWq != null ? _dWq.ToVector() : new Vector<T>(_Wq.Length);

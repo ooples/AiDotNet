@@ -157,4 +157,58 @@ public sealed class OnnxFullModelAdapter<T> : IFullModel<T, Tensor<T>, Tensor<T>
 
     /// <inheritdoc/>
     public void Dispose() => _model.Dispose();
+
+    // --- Parameter surface -------------------------------------------------------------------
+    //
+    // The weights belong to the loaded ONNX graph, not to this adapter, so there is no vector to
+    // hand out and nothing to write into. Reporting zero and refusing writes is the truthful
+    // answer, and it is stated here rather than inherited because this adapter implements
+    // IFullModel directly instead of deriving from a model base.
+
+    /// <summary>Always zero: the graph owns its weights, this adapter does not.</summary>
+    public long ParameterCount => 0;
+
+    /// <summary>Always false: a frozen ONNX graph cannot be initialized from a flat vector.</summary>
+    public bool SupportsParameterInitialization => false;
+
+    /// <summary>An empty vector, matching <see cref="ParameterCount"/>.</summary>
+    public Vector<T> GetParameters() => new Vector<T>(0);
+
+    /// <inheritdoc/>
+    public Vector<T> SanitizeParameters(Vector<T> parameters) =>
+        parameters ?? throw new ArgumentNullException(nameof(parameters));
+
+    /// <summary>
+    /// Writes a parameter vector into this adapter. Only an EMPTY vector is accepted.
+    /// </summary>
+    /// <remarks>
+    /// The weights belong to the loaded ONNX graph, so this adapter owns none and reports zero.
+    /// Accepting the empty vector that implies -- rather than throwing on any call -- is what keeps
+    /// a caller that walks every model uniformly from having to special-case ONNX-backed ones. A
+    /// non-empty vector still fails on the length.
+    /// </remarks>
+    public void SetParameters(Vector<T> parameters)
+    {
+        if (parameters is null) throw new ArgumentNullException(nameof(parameters));
+        if (parameters.Length == 0) return;
+
+        throw new ArgumentException(
+            "Expected 0 parameters: an ONNX-backed model's weights belong to the loaded graph, not "
+            + $"to this adapter, so none can be written. Got {parameters.Length}. Load the model in "
+            + "a native mode to train or restore parameters.",
+            nameof(parameters));
+    }
+
+    /// <inheritdoc />
+    public IFullModel<T, Tensor<T>, Tensor<T>> WithParameters(Vector<T> parameters)
+    {
+        if (parameters is null) throw new ArgumentNullException(nameof(parameters));
+        if (parameters.Length == 0) return this;
+
+        throw new ArgumentException(
+            "Expected 0 parameters: an ONNX-backed model cannot be rebuilt from a parameter vector; "
+            + $"its weights live in the loaded graph. Got {parameters.Length}.",
+            nameof(parameters));
+    }
+
 }

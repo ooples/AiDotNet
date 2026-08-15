@@ -7,6 +7,7 @@ using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
 using Newtonsoft.Json;
 
+using AiDotNet.Models.Parameters;
 namespace AiDotNet.OnlineLearning;
 
 /// <summary>
@@ -29,7 +30,7 @@ namespace AiDotNet.OnlineLearning;
 /// - Standard IFullModel interface implementation
 /// </para>
 /// </remarks>
-public abstract class OnlineLearningModelBase<T> : IOnlineLearningModel<T>, IModelShape
+public abstract class OnlineLearningModelBase<T> : IOnlineLearningModel<T>, IModelShape, IParameterManifestProvider
 {
     /// <summary>
     /// Numeric operations helper for generic math.
@@ -82,10 +83,91 @@ public abstract class OnlineLearningModelBase<T> : IOnlineLearningModel<T>, IMod
     public ILossFunction<T> DefaultLossFunction => _defaultLossFunction;
 
     /// <summary>
-    /// Gets the total number of parameters in the model.
+    /// The components the parameters of this model live in. Empty until the model registers
+    /// some, in which case the surfaces below fall back to what they always did.
     /// </summary>
-    public virtual long ParameterCount => NumFeatures;
+    private readonly ParameterComponentRegistry<T> _parameterRegistry = new();
+    private bool _componentsRegistered;
 
+    /// <summary>
+    /// Declares a component whose parameters belong to the surface of this model.
+    /// Registration
+    /// order is serialization order, so keep it stable.
+    /// </summary>
+    protected void RegisterParameterComponent(
+        IParameterSource<T>? component,
+        [System.Runtime.CompilerServices.CallerArgumentExpression(nameof(component))] string? componentExpression = null,
+        [System.Runtime.CompilerServices.CallerMemberName] string? memberName = null)
+        => _parameterRegistry.RegisterLegacy(GetType().FullName ?? GetType().Name,
+            memberName, componentExpression, component);
+
+    protected void RegisterParameterComponent(string stableId, IParameterSource<T>? component,
+        ParameterSlotRole role = ParameterSlotRole.Trainable)
+        => _parameterRegistry.Register(stableId, component, role);
+
+    /// <summary>
+    /// Declare the trainable components of this model here with
+    /// <see cref="RegisterParameterComponent"/>. Called once, lazily, so it runs after the
+    /// constructor has built them.
+    /// </summary>
+    protected virtual void RegisterComponents()
+    {
+    }
+
+    protected virtual void RegisterGeneratedParameterComponents(ParameterComponentRegistry<T> registry)
+    {
+    }
+
+    /// <summary>
+    /// Runs after <see cref="SetParameters"/> has distributed values into the components.
+    /// </summary>
+    protected virtual void OnParametersRestored()
+    {
+    }
+
+    private ParameterComponentRegistry<T> Registry
+    {
+        get
+        {
+            if (!_componentsRegistered)
+            {
+                RegisterGeneratedParameterComponents(_parameterRegistry);
+                RegisterComponents();
+                _componentsRegistered = true;
+            }
+            return _parameterRegistry;
+        }
+    }
+
+    public ParameterLayoutSnapshot ParameterLayout => Registry.ParameterLayout;
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// Virtual rather than abstract: a model that registers its components inherits all
+    /// three surfaces and writes no parameter plumbing. It was abstract, which FORCED every
+    /// descendant to hand-write the triple -- the same defect ModelBase and LayerBase had.
+    /// </remarks>
+    public virtual Vector<T> GetParameters()
+        => Registry.HasComponents ? Registry.GetParameters() : new Vector<T>(0);
+
+    /// <inheritdoc/>
+    public virtual void SetParameters(Vector<T> parameters)
+    {
+        if (parameters is null) throw new ArgumentNullException(nameof(parameters));
+        if (!Registry.HasComponents) return;
+        Registry.SetParameters(parameters);
+        OnParametersRestored();
+    }
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// Folds the same enumeration the vector does once components are registered. The
+    /// previous expression is kept for models not yet converted -- and it is exactly why the
+    /// two could disagree: it described the MODEL, not the vector. Measured on
+    /// CausalForest: 5 against a 6-element vector after any restore.
+    /// </remarks>
+    public virtual long ParameterCount
+        => Registry.HasComponents ? Registry.ParameterCount : NumFeatures;
     /// <inheritdoc/>
     public virtual Vector<T> SanitizeParameters(Vector<T> parameters) => parameters;
 
@@ -183,7 +265,13 @@ public abstract class OnlineLearningModelBase<T> : IOnlineLearningModel<T>, IMod
             LearningRateSchedule.Constant => InitialLearningRate,
             LearningRateSchedule.InverseScaling => InitialLearningRate / (1.0 + 0.0001 * SampleCount),
             LearningRateSchedule.Exponential => InitialLearningRate * Math.Pow(0.9999, SampleCount),
-            LearningRateSchedule.StepDecay => InitialLearningRate * Math.Pow(0.5, SampleCount / 10000),
+            // The truncation here is DELIBERATE and is what makes this a step decay:
+            // the rate halves once per 10,000 samples and is flat between steps.
+            // Written as an explicit integer division so it reads as intent rather
+            // than as the accidental int/int that a reviewer (and CodeQL) sees. Using
+            // 10000.0 would silently turn this into a smooth exponential decay and
+            // change every schedule that selects StepDecay.
+            LearningRateSchedule.StepDecay => InitialLearningRate * Math.Pow(0.5, (double)(SampleCount / 10000)),
             _ => InitialLearningRate
         };
 
@@ -234,11 +322,25 @@ public abstract class OnlineLearningModelBase<T> : IOnlineLearningModel<T>, IMod
     /// </summary>
     private byte[] SerializeInternalUnchecked()
     {
+        // Persist the trained parameters (weights + bias etc.) so DeepCopy/Clone and
+        // save/load actually round-trip the learned model. Previously only the scalar
+        // bookkeeping (NumFeatures/SampleCount/IsInitialized) was serialized, so a clone
+        // came back with null weights and PredictSingle threw "_weights has not been
+        // initialized". Parameters are stored as double[] (via NumOps) so the JSON is
+        // type-agnostic; deserialization rebuilds the Vector<T> and calls SetParameters.
+        var parameterVector = GetParameters();
+        var parameterValues = new double[parameterVector.Length];
+        for (int i = 0; i < parameterVector.Length; i++)
+        {
+            parameterValues[i] = NumOps.ToDouble(parameterVector[i]);
+        }
+
         var modelData = new Dictionary<string, object>
         {
             { "NumFeatures", NumFeatures },
             { "SampleCount", SampleCount },
-            { "IsInitialized", IsInitialized }
+            { "IsInitialized", IsInitialized },
+            { "Parameters", parameterValues }
         };
 
         var modelMetadata = GetModelMetadata();
@@ -283,6 +385,23 @@ public abstract class OnlineLearningModelBase<T> : IOnlineLearningModel<T>, IMod
         NumFeatures = modelDataObj["NumFeatures"]?.ToObject<int>() ?? 0;
         SampleCount = modelDataObj["SampleCount"]?.ToObject<long>() ?? 0;
         IsInitialized = modelDataObj["IsInitialized"]?.ToObject<bool>() ?? false;
+
+        // Restore the trained parameters (weights + bias etc.). SetParameters rebuilds the
+        // subclass's parameter storage and re-derives NumFeatures/IsInitialized; we restore
+        // SampleCount afterwards since SetParameters does not touch it. Absent (older data
+        // without the field) leaves the model parameter-less, matching the pre-fix behaviour.
+        var parametersToken = modelDataObj["Parameters"];
+        var parameterValues = parametersToken?.ToObject<double[]>();
+        if (parameterValues is { Length: > 0 })
+        {
+            var parameterVector = new Vector<T>(parameterValues.Length);
+            for (int i = 0; i < parameterValues.Length; i++)
+            {
+                parameterVector[i] = NumOps.FromDouble(parameterValues[i]);
+            }
+            SetParameters(parameterVector);
+            SampleCount = modelDataObj["SampleCount"]?.ToObject<long>() ?? SampleCount;
+        }
     }
 
     /// <summary>
@@ -312,19 +431,9 @@ public abstract class OnlineLearningModelBase<T> : IOnlineLearningModel<T>, IMod
     }
 
     /// <summary>
-    /// Gets all model parameters as a single vector.
-    /// </summary>
-    public abstract Vector<T> GetParameters();
-
-    /// <summary>
     /// Creates a new instance of the model with specified parameters.
     /// </summary>
     public abstract IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters);
-
-    /// <summary>
-    /// Sets the parameters for this model.
-    /// </summary>
-    public abstract void SetParameters(Vector<T> parameters);
 
     /// <summary>
     /// Creates a new instance of the same type.

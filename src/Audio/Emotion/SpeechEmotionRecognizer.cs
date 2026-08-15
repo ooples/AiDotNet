@@ -83,8 +83,23 @@ namespace AiDotNet.Audio.Emotion;
 [ModelTask(ModelTask.FeatureExtraction)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("Speech Emotion Recognition Using Deep Learning Techniques: A Review", "https://arxiv.org/abs/2101.06572", Year = 2021, Authors = "Kexin Luo, Yun Cai")]
-public class SpeechEmotionRecognizer<T> : AudioClassifierBase<T>, IEmotionRecognizer<T>
+// Citation replaced: it named the WRONG KIND of source, not merely a wrong URL. The recorded title
+// was a REVIEW ("Speech Emotion Recognition Using Deep Learning Techniques: A Review"), which defines
+// no architecture and so cannot be what a model implements, and its arXiv id 2101.06572 resolves to
+// "Tracial smooth functions of non-commuting variables and the free Wasserstein manifold" — unrelated
+// to speech, emotion or learning.
+//
+// Identified the paper this class actually implements by matching the architecture: Badshah et al.
+// build "three convolutional layers and three fully connected layers" over SPECTROGRAMS to predict
+// SEVEN emotions. That is exactly this model — CreateSpeechEmotionRecognizerLayers emits 3 conv blocks
+// (conv + BatchNorm + pool) then 3 dense layers (hiddenDim, hiddenDim/2, numEmotions), with
+// numEmotions defaulting to 7 and mel-spectrogram input. Published at PlatCon 2017 and not on arXiv,
+// so the canonical DOI is used.
+[ResearchPaper("Speech Emotion Recognition from Spectrograms with Deep Convolutional Neural Network",
+    "https://doi.org/10.1109/PlatCon.2017.7883728",
+    Year = 2017,
+    Authors = "Abdul Malik Badshah, Jamil Ahmad, Nasir Rahim, Sung Wook Baik")]
+public partial class SpeechEmotionRecognizer<T> : AudioClassifierBase<T>, IEmotionRecognizer<T>
 {
     #region Execution Mode
 
@@ -177,6 +192,17 @@ public class SpeechEmotionRecognizer<T> : AudioClassifierBase<T>, IEmotionRecogn
     /// <summary>
     /// Standard emotions supported by this model.
     /// </summary>
+    /// <summary>
+    /// Default learning rate for the tape trainer's optimizer.
+    /// </summary>
+    /// <remarks>
+    /// A library default, not a paper value: Badshah et al. is an IEEE PlatCon publication whose
+    /// optimizer settings are not available in an accessible source. Chosen an order of magnitude below
+    /// Adam's own 1e-3 default because that default, combined with the absence of gradient clipping,
+    /// measurably drove the memorization probe's loss UP over 100 steps. Overridable per instance.
+    /// </remarks>
+    private const double DefaultLearningRate = 1e-4;
+
     private static readonly string[] DefaultEmotions =
     [
         "neutral",
@@ -318,13 +344,16 @@ public class SpeechEmotionRecognizer<T> : AudioClassifierBase<T>, IEmotionRecogn
         int nFft = 1024,
         int hopLength = 256,
         double inputDurationSeconds = 3.0,
-        int numConvBlocks = 4,
+        // Badshah et al. specify THREE convolutional layers; this defaulted to 4.
+        int numConvBlocks = 3,
         int baseFilters = 32,
         int hiddenDim = 256,
         double dropoutRate = 0.3,
         string[]? emotionLabels = null,
         bool includeArousalValence = true,
-        ILossFunction<T>? lossFunction = null)
+        ILossFunction<T>? lossFunction = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        double learningRate = DefaultLearningRate)
         : base(architecture)
     {
         if (architecture is null)
@@ -360,6 +389,29 @@ public class SpeechEmotionRecognizer<T> : AudioClassifierBase<T>, IEmotionRecogn
         {
             LossFunction = new CrossEntropyWithLogitsLoss<T>();
         }
+
+        // Publish an optimizer to the tape trainer.
+        //
+        // This model previously configured NO optimizer at all, so training silently fell back to the
+        // base class's lazily-created Adam at its own 1e-3 default with no gradient clipping. The
+        // measured consequence was that the 100-step memorization probe ended HIGHER than it started
+        // (1.386729 -> 1.475667): a spectrogram CNN whose dense head sees a large flattened feature
+        // vector produces big early gradients, and without clipping the first steps overshoot into a
+        // region the run does not recover from. Every other invariant passed, which is why this looked
+        // like a converging model.
+        //
+        // Clipping is a stability measure rather than a claim about the paper: Badshah et al. is an
+        // IEEE PlatCon publication whose optimizer settings are not available in an accessible source,
+        // so the learning rate is a documented library default and both it and the optimizer itself are
+        // caller-overridable.
+        SetBaseTrainOptimizer(optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = learningRate,
+                EnableGradientClipping = true,
+                MaxGradientNorm = 1.0
+            }));
 
         // Create mel spectrogram extractor
         _melSpec = CreateMelSpectrogram(sampleRate, numMels, nFft, hopLength);
@@ -482,6 +534,47 @@ public class SpeechEmotionRecognizer<T> : AudioClassifierBase<T>, IEmotionRecogn
 
     #region Forward Pass
 
+    /// <summary>
+    /// Shapes a mel spectrogram into the rank-4 <c>[B, C, H, W]</c> form the conv stack needs,
+    /// turning a rank-2 <c>[numFrames, numMels]</c> spectrogram into <c>[1, 1, numFrames, numMels]</c>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <see cref="PreprocessAudio"/> returns the mel spectrogram as a RANK-2 tensor, but the conv
+    /// stack built by <c>CreateSpeechEmotionRecognizerLayers</c> accepts only rank-3 <c>[C,H,W]</c>
+    /// or rank-4 <c>[B,C,H,W]</c>. Every native-mode inference path — <see cref="Forward"/> via
+    /// <see cref="GetEmotionProbabilities"/>, and <see cref="ExtractEmotionFeatures"/> — therefore
+    /// threw "ConvolutionalLayer expects rank-3 [C,H,W] or rank-4 [B,C,H,W] input; got rank 2"
+    /// before reaching the first layer, so the model could not run in native mode at all.
+    /// </para>
+    /// <para>
+    /// The batch axis is what matters, and rank-3 is NOT sufficient. With a rank-3 <c>[C,H,W]</c>
+    /// tensor the trailing <see cref="FlattenLayer{T}"/> reads dim 0 as a BATCH dimension, so a
+    /// measured <c>[16,4,32]</c> feature map flattened to <c>[16,128]</c> and the dense head emitted
+    /// <c>[16,4]</c> — 16 rows of 4 logits. <c>ApplySoftmax</c> then reported "Expected 4 logits but
+    /// got 64" (64 = 16 channels x 4 classes). Prepending an explicit singleton batch axis makes the
+    /// flatten collapse C*H*W into one row, so the head emits exactly <c>[1, numEmotions]</c>.
+    /// </para>
+    /// <para>
+    /// Reshaping goes through <c>Engine</c> so the operation is recorded on the autodiff tape:
+    /// a bare <c>tensor.Reshape</c> here would sever gradient flow for every training invariant.
+    /// Rank-4 input (already batched) passes through untouched; a rank-3 <c>[C,H,W]</c> input gets
+    /// the batch axis it is missing.
+    /// </para>
+    /// </remarks>
+    private Tensor<T> AddChannelAxisIfNeeded(Tensor<T> input)
+    {
+        int rank = input.Shape.Length;
+
+        if (rank == 2)
+            return Engine.Reshape(input, new[] { 1, 1, input.Shape[0], input.Shape[1] });
+
+        if (rank == 3)
+            return Engine.Reshape(input, new[] { 1, input.Shape[0], input.Shape[1], input.Shape[2] });
+
+        return input;
+    }
+
     /// <inheritdoc/>
     protected override Tensor<T> Forward(Tensor<T> input)
     {
@@ -490,7 +583,7 @@ public class SpeechEmotionRecognizer<T> : AudioClassifierBase<T>, IEmotionRecogn
             throw new InvalidOperationException("Forward pass only available in native mode.");
         }
 
-        var output = input;
+        var output = AddChannelAxisIfNeeded(input);
 
         // Convolutional layers
         foreach (var layer in _convLayers)
@@ -709,7 +802,7 @@ public class SpeechEmotionRecognizer<T> : AudioClassifierBase<T>, IEmotionRecogn
         }
 
         // For native mode, get embeddings before final classification layer
-        Tensor<T> features = preprocessed;
+        Tensor<T> features = AddChannelAxisIfNeeded(preprocessed);
 
         foreach (var layer in _convLayers)
         {
@@ -749,70 +842,7 @@ public class SpeechEmotionRecognizer<T> : AudioClassifierBase<T>, IEmotionRecogn
         }
     }
 
-    /// <inheritdoc/>
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        if (_isOnnxMode)
-        {
-            throw new InvalidOperationException("Cannot update parameters in ONNX mode.");
-        }
-
-        int offset = 0;
-
-        // Update conv layers
-        foreach (var layer in _convLayers)
-        {
-            var layerParams = layer.GetParameters();
-            int layerParamCount = layerParams.Length;
-
-            if (offset + layerParamCount <= parameters.Length)
-            {
-                var newParams = new Vector<T>(layerParamCount);
-                for (int i = 0; i < layerParamCount; i++)
-                {
-                    newParams[i] = parameters[offset + i];
-                }
-                layer.SetParameters(newParams);
-                offset += layerParamCount;
-            }
-        }
-
-        // Update dense layers
-        foreach (var layer in _denseLayers)
-        {
-            var layerParams = layer.GetParameters();
-            int layerParamCount = layerParams.Length;
-
-            if (offset + layerParamCount <= parameters.Length)
-            {
-                var newParams = new Vector<T>(layerParamCount);
-                for (int i = 0; i < layerParamCount; i++)
-                {
-                    newParams[i] = parameters[offset + i];
-                }
-                layer.SetParameters(newParams);
-                offset += layerParamCount;
-            }
-        }
-
-        // Update output layer
-        if (_outputLayer is not null)
-        {
-            var layerParams = _outputLayer.GetParameters();
-            int layerParamCount = layerParams.Length;
-
-            if (offset + layerParamCount <= parameters.Length)
-            {
-                var newParams = new Vector<T>(layerParamCount);
-                for (int i = 0; i < layerParamCount; i++)
-                {
-                    newParams[i] = parameters[offset + i];
-                }
-                _outputLayer.SetParameters(newParams);
-            }
-        }
-    }
-
+    // UpdateParameters restated the base verbatim; ModelBase routes it to SetParameters.
     #endregion
 
     #region Model Serialization
@@ -822,13 +852,18 @@ public class SpeechEmotionRecognizer<T> : AudioClassifierBase<T>, IEmotionRecogn
     {
         var probabilities = GetEmotionProbabilities(input);
 
+        // Write DIRECTLY into the result tensor. Tensor<T>.ToVector() materializes a COPY, not a
+        // view over the tensor's storage, so the previous `result.ToVector()[i] = prob` populated a
+        // throwaway vector and returned the freshly-allocated (all-zero) tensor: Predict emitted
+        // [0, 0, 0, 0] for EVERY input. That made all input-sensitivity invariants compare zeros to
+        // zeros — DifferentInputs saw L2 = 0 and read it as a collapsed network, while the network
+        // itself was healthy (measured L2 = 8.9e-1 between two probes at the output layer).
         var result = new Tensor<T>([_emotionLabels.Length]);
-        var resultVector = result.ToVector();
         for (int i = 0; i < _emotionLabels.Length; i++)
         {
             if (probabilities.TryGetValue(_emotionLabels[i], out var prob))
             {
-                resultVector[i] = prob;
+                result[i] = prob;
             }
         }
 

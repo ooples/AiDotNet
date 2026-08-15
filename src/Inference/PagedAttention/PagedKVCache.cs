@@ -23,7 +23,7 @@ namespace AiDotNet.Inference.PagedAttention;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for tensor computations.</typeparam>
-internal class PagedKVCache<T> : IDisposable
+public class PagedKVCache<T> : IDisposable
 {
     private readonly PagedKVCacheConfig _config;
     private readonly BlockManager<T> _blockManager;
@@ -580,7 +580,7 @@ internal class PagedKVCache<T> : IDisposable
 /// <summary>
 /// Configuration for PagedKVCache.
 /// </summary>
-internal class PagedKVCacheConfig
+public class PagedKVCacheConfig
 {
     /// <summary>
     /// Number of tokens per block.
@@ -657,7 +657,7 @@ internal class PagedKVCacheConfig
 /// <summary>
 /// Statistics about the paged KV cache.
 /// </summary>
-internal class PagedKVCacheStats
+public class PagedKVCacheStats
 {
     /// <summary>Number of active sequences.</summary>
     public int ActiveSequences { get; set; }

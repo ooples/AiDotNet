@@ -92,9 +92,6 @@ public class FlagDiTPredictor<T> : NoisePredictorBase<T>
     public override bool SupportsCrossAttention => true;
     /// <inheritdoc />
     public override int ContextDimension => _contextDim;
-    /// <inheritdoc />
-    public override long ParameterCount { get; }
-
     /// <summary>
     /// Initializes a new Flag-DiT predictor.
     /// </summary>
@@ -128,7 +125,6 @@ public class FlagDiTPredictor<T> : NoisePredictorBase<T>
         _seqLen = (latentSize / PatchSize) * (latentSize / PatchSize);
 
         InitializeLayers(seed);
-        ParameterCount = CalculateParameterCount();
     }
 
     [MemberNotNull(nameof(_patchEmbed), nameof(_timeEmbed1), nameof(_timeEmbed2), nameof(_contextProj),
@@ -182,19 +178,6 @@ public class FlagDiTPredictor<T> : NoisePredictorBase<T>
         _outputProj = LazyDense(_hiddenSize, _patchDim);
     }
 
-    private long CalculateParameterCount()
-    {
-        long count = _patchEmbed.ParameterCount + _timeEmbed1.ParameterCount
-            + _timeEmbed2.ParameterCount + _contextProj.ParameterCount;
-        for (int i = 0; i < _numLayers; i++)
-        {
-            count += _attnNormPre[i].ParameterCount + _attnNormPost[i].ParameterCount
-                + _attn[i].ParameterCount + _ffnNormPre[i].ParameterCount + _ffnNormPost[i].ParameterCount
-                + _ffn1[i].ParameterCount + _ffn2[i].ParameterCount + _adaLN[i].ParameterCount;
-        }
-        count += _finalNorm.ParameterCount + _finalAdaLN.ParameterCount + _outputProj.ParameterCount;
-        return count;
-    }
 
     /// <inheritdoc />
     public override Tensor<T> PredictNoise(Tensor<T> noisySample, int timestep, Tensor<T>? conditioning = null)
@@ -340,57 +323,6 @@ public class FlagDiTPredictor<T> : NoisePredictorBase<T>
         var unsplit = Engine.Reshape(patches, new[] { batch, nh, nw, _inputChannels, PatchSize, PatchSize });
         var permuted = Engine.TensorPermute(unsplit, new[] { 0, 3, 1, 4, 2, 5 }); // [B, C, nh, p, nw, p]
         return Engine.Reshape(permuted, new[] { batch, _inputChannels, height, width });
-    }
-
-    /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        var all = new List<T>();
-        foreach (var layer in FlagDiTLayerSequence()) Append(all, layer);
-        return new Vector<T>(all.ToArray());
-    }
-
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int offset = 0;
-        foreach (var layer in FlagDiTLayerSequence()) offset = Load(layer, parameters, offset);
-    }
-
-    /// <inheritdoc />
-    public override IEnumerable<Tensor<T>> GetParameterChunks()
-    {
-        // #1624: one chunk per layer in the SAME canonical order as GetParameters/SetParameters, so
-        // the flat concatenation of chunks is index-identical to GetParameters() (the per-index
-        // correspondence contract) WITHOUT ever materializing the full multi-billion-parameter
-        // aggregate that overflows/OOMs at Flag-DiT / Lumina scale.
-        foreach (var layer in FlagDiTLayerSequence())
-        {
-            var p = layer.GetParameters();
-            if (p.Length > 0) yield return new Tensor<T>(new[] { p.Length }, p);
-        }
-    }
-
-    /// <inheritdoc />
-    public override void SetParameterChunks(IEnumerable<Tensor<T>> chunks)
-    {
-        // Consume one chunk per parameterized layer in the same canonical order — one chunk in flight
-        // at a time, never a flat aggregate. Skips zero-parameter layers symmetrically with
-        // GetParameterChunks above.
-        using var e = chunks.GetEnumerator();
-        foreach (var layer in FlagDiTLayerSequence())
-        {
-            if (layer.ParameterCount == 0) continue;
-            if (!e.MoveNext())
-                throw new ArgumentException(
-                    "SetParameterChunks received fewer chunks than Flag-DiT has parameterized layers.",
-                    nameof(chunks));
-            layer.SetParameters(e.Current.ToVector());
-        }
-        if (e.MoveNext())
-            throw new ArgumentException(
-                "SetParameterChunks received more chunks than Flag-DiT has parameterized layers.",
-                nameof(chunks));
     }
 
     protected override Vector<T> GetParameterGradients()

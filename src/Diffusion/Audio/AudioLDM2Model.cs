@@ -78,8 +78,18 @@ namespace AiDotNet.Diffusion.Audio;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("AudioLDM 2: Learning Holistic Audio Generation with Self-supervised Pretraining", "https://arxiv.org/abs/2308.05734", Year = 2023, Authors = "Liu et al.")]
-public class AudioLDM2Model<T> : AudioDiffusionModelBase<T>
+public partial class AudioLDM2Model<T> : AudioDiffusionModelBase<T>
 {
+    /// <inheritdoc />
+    /// <remarks>Registration order is serialization order, and matches the
+    /// concatenation the previous hand-written GetParameters performed.</remarks>
+    protected override void RegisterComponents()
+    {
+        RegisterParameterComponent(_unet);
+        RegisterParameterComponent(_audioVAE);
+        RegisterParameterComponent(_projectionLayer);
+    }
+
     #region Constants
 
     /// <summary>
@@ -836,91 +846,11 @@ public class AudioLDM2Model<T> : AudioDiffusionModelBase<T>
 
     #region IParameterizable Implementation
 
-    /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        var unetParams = _unet.GetParameters();
-        var vaeParams = _audioVAE.GetParameters();
-        var projParams = _projectionLayer.GetParameters();
 
-        var totalLength = unetParams.Length + vaeParams.Length + projParams.Length;
-        var combined = new Vector<T>(totalLength);
 
-        int offset = 0;
 
-        // Copy U-Net parameters
-        for (int i = 0; i < unetParams.Length; i++)
-        {
-            combined[offset + i] = unetParams[i];
-        }
-        offset += unetParams.Length;
-
-        // Copy VAE parameters
-        for (int i = 0; i < vaeParams.Length; i++)
-        {
-            combined[offset + i] = vaeParams[i];
-        }
-        offset += vaeParams.Length;
-
-        // Copy projection parameters
-        for (int i = 0; i < projParams.Length; i++)
-        {
-            combined[offset + i] = projParams[i];
-        }
-
-        return combined;
-    }
 
     /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        // Use ParameterCount directly instead of materializing the U-Net
-        // weight vector just to read its length — the prior
-        // GetParameters().Length walked the full flat buffer for sizing
-        // purposes only, defeating the long-safe migration.
-        int unetCount = checked((int)_unet.ParameterCount);
-        int vaeCount = checked((int)_audioVAE.ParameterCount);
-        int projCount = checked((int)_projectionLayer.ParameterCount);
-        long expectedTotal = (long)unetCount + vaeCount + projCount;
-
-        if (parameters.Length != expectedTotal)
-            throw new ArgumentException($"Expected {expectedTotal} parameters, got {parameters.Length}.");
-
-        var unetParams = new Vector<T>(unetCount);
-        var vaeParams = new Vector<T>(vaeCount);
-        var projParams = new Vector<T>(projCount);
-
-        int offset = 0;
-
-        // Extract U-Net parameters
-        for (int i = 0; i < unetCount; i++)
-        {
-            unetParams[i] = parameters[offset + i];
-        }
-        offset += unetCount;
-
-        // Extract VAE parameters
-        for (int i = 0; i < vaeCount; i++)
-        {
-            vaeParams[i] = parameters[offset + i];
-        }
-        offset += vaeCount;
-
-        // Extract projection parameters
-        for (int i = 0; i < projCount; i++)
-        {
-            projParams[i] = parameters[offset + i];
-        }
-
-        _unet.SetParameters(unetParams);
-        _audioVAE.SetParameters(vaeParams);
-        _projectionLayer.SetParameters(projParams);
-    }
-
-    /// <inheritdoc />
-    public override long ParameterCount =>
-        _unet.ParameterCount + _audioVAE.ParameterCount + _projectionLayer.ParameterCount;
-
     #endregion
 
     #region ICloneable Implementation
@@ -993,7 +923,7 @@ public enum AudioLDM2Variant
 /// Projection layer for combining dual encoder outputs.
 /// </summary>
 /// <typeparam name="T">Numeric type.</typeparam>
-internal class ProjectionLayer<T>
+internal class ProjectionLayer<T> : IParameterSource<T>
 {
     private readonly INumericOperations<T> _numOps;
     private readonly Matrix<T> _weights;

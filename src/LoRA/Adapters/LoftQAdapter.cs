@@ -335,7 +335,7 @@ public class LoftQAdapter<T> : LoRAAdapterBase<T>
         // Get base layer parameters
         Vector<T> baseParams = _baseLayer.GetParameters();
         int inputSize = GetInputShape()[0];
-        int outputSize = GetOutputShape()[0];
+        int outputSize = GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0];
         int weightCount = inputSize * outputSize;
 
         // Extract weights (shape: [outputSize, inputSize])
@@ -394,7 +394,6 @@ public class LoftQAdapter<T> : LoRAAdapterBase<T>
         }
 
         // Update parameter vector
-        UpdateParametersFromLayers();
     }
 
     /// <summary>
@@ -652,7 +651,7 @@ public class LoftQAdapter<T> : LoRAAdapterBase<T>
         }
 
         int inputSize = GetInputShape()[0];
-        int outputSize = GetOutputShape()[0];
+        int outputSize = GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0];
         int weightCount = inputSize * outputSize;
 
         T[] dequantized = new T[weightCount];
@@ -736,29 +735,6 @@ public class LoftQAdapter<T> : LoRAAdapterBase<T>
     }
 
     /// <summary>
-    /// Updates the parameter vector from both layers.
-    /// </summary>
-    protected override void UpdateParametersFromLayers()
-    {
-        int idx = 0;
-
-        if (!_freezeBaseLayer)
-        {
-            Vector<T> baseParams = _baseLayer.GetParameters();
-            for (int i = 0; i < baseParams.Length; i++)
-            {
-                Parameters[idx++] = baseParams[i];
-            }
-        }
-
-        Vector<T> loraParams = _loraLayer.GetParameters();
-        for (int i = 0; i < loraParams.Length; i++)
-        {
-            Parameters[idx++] = loraParams[i];
-        }
-    }
-
-    /// <summary>
     /// Performs the forward pass through quantized base layer and LoRA.
     /// </summary>
     /// <param name="input">Input tensor.</param>
@@ -782,7 +758,7 @@ public class LoftQAdapter<T> : LoRAAdapterBase<T>
     /// LoftQ's better LoRA parameters lead to better combined results.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // Dequantize weights if not cached
         if (_dequantizedWeights == null)
@@ -793,7 +769,7 @@ public class LoftQAdapter<T> : LoRAAdapterBase<T>
         // Compute base layer output with dequantized weights
         int batchSize = input.Shape[0];
         int inputSize = input.Shape.Length > 1 ? input.Shape[1] : input.Length;
-        int outputSize = GetOutputShape()[0];
+        int outputSize = GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0];
 
         // Convert input to matrix
         Matrix<T> inputMatrix = new Matrix<T>(batchSize, inputSize);
@@ -886,7 +862,7 @@ public class LoftQAdapter<T> : LoRAAdapterBase<T>
 
         // Merge
         int inputSize = GetInputShape()[0];
-        int outputSize = GetOutputShape()[0];
+        int outputSize = GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0];
 
         Vector<T> mergedParams = new Vector<T>((inputSize * outputSize) + outputSize);
 

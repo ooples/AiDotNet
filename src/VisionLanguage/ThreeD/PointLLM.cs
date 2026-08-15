@@ -242,10 +242,14 @@ public class PointLLM<T> : VisionLanguageModelBase<T>, IThreeDVisionLanguageMode
             patchFeatures = newFeatures;
         }
 
-        // Step 3: Project patch tokens to LLM embedding space
-        int llmDim = _options.DecoderDim;
-        var pointTokens = new Tensor<T>([llmDim]);
-        for (int d = 0; d < llmDim; d++)
+        // Step 3: Project patch tokens to the encoder's vision-token space. The tokens must match the
+        // encoder input width (_options.VisionDim, wired in InitializeLayers); the configured
+        // encoder-to-decoder projection inside CreateDefaultPointCloudVLMLayers then maps them to the
+        // decoder/LLM width. (Building at DecoderDim threw at the first encoder attention layer whenever
+        // DecoderDim != VisionDim.)
+        int visionDim = _options.VisionDim;
+        var pointTokens = new Tensor<T>([visionDim]);
+        for (int d = 0; d < visionDim; d++)
         {
             double sum = 0;
             for (int p = 0; p < numPatches; p++)
@@ -259,7 +263,7 @@ public class PointLLM<T> : VisionLanguageModelBase<T>, IThreeDVisionLanguageMode
         // Step 4: Fuse with text prompt tokens
         var promptTokens = TokenizeText(prompt);
         int promptLen = promptTokens.Length;
-        for (int d = 0; d < llmDim; d++)
+        for (int d = 0; d < visionDim; d++)
         {
             if (promptLen > 0)
             {
@@ -296,7 +300,10 @@ public class PointLLM<T> : VisionLanguageModelBase<T>, IThreeDVisionLanguageMode
         {
             Layers.AddRange(
                 LayerHelper<T>.CreateDefaultPointCloudVLMLayers(
-                    512,
+                    // Was hard-coded 512; drive the encoder's vision-token dim from the configured
+                    // VisionDim so the encoder, the declared option, and the post-embedding token
+                    // input all agree (mirrors the LEOVL fix; see AiDotNet.Tensors#775 context).
+                    _options.VisionDim,
                     _options.DecoderDim,
                     _options.NumVisionLayers,
                     _options.NumDecoderLayers,
@@ -342,23 +349,15 @@ public class PointLLM<T> : VisionLanguageModelBase<T>, IThreeDVisionLanguageMode
         if (IsOnnxMode)
             throw new NotSupportedException("Training is not supported in ONNX mode.");
         SetTrainingMode(true);
-        TrainWithTape(input, expected);
+        TrainWithTape(input, expected, _optimizer);
         SetTrainingMode(false);
     }
 
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        if (!_useNativeMode)
-            throw new NotSupportedException("Cannot update parameters in ONNX mode.");
-        int idx = 0;
-        foreach (var l in Layers)
-        {
-            int c = (int)l.ParameterCount;
-            l.UpdateParameters(parameters.Slice(idx, c));
-            idx += c;
-        }
-    }
-
+    /// <inheritdoc />
+    /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
+    /// write on every parameter surface, so the guard is stated once here instead of being
+    /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
+    protected override bool SupportsParameterMutation => _useNativeMode;
     protected override Tensor<T> PreprocessImage(Tensor<T> image) =>
         NormalizeImage(image, _options.ImageMean, _options.ImageStd);
 

@@ -1,6 +1,7 @@
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
-using AiDotNet.Models.Options;
+using AiDotNet.Models.Options;
+using AiDotNet.Models.Parameters;
 
 namespace AiDotNet.TimeSeries;
 
@@ -18,7 +19,7 @@ namespace AiDotNet.TimeSeries;
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("Are Transformers Effective for Time Series Forecasting?", "https://arxiv.org/abs/2205.13504", Year = 2023, Authors = "Ailing Zeng, Muxi Chen, Lei Zhang, Qiang Xu")]
-public class DLinearModel<T> : TimeSeriesModelBase<T>
+public partial class DLinearModel<T> : TimeSeriesModelBase<T>
 {
     private readonly DLinearOptions<T> _options;
     private readonly Random _random;
@@ -27,9 +28,13 @@ public class DLinearModel<T> : TimeSeriesModelBase<T>
 
     // Two linear maps from the length-L window to a scalar next-step forecast (ForecastHorizon=1 in the
     // supervised harness): seasonal and trend weights + biases. Stored as double for the closed-form update.
+    [TrainableParameter]
     private readonly double[] _wSeasonal;
+    [TrainableParameter]
     private readonly double[] _wTrend;
+    [TrainableParameter]
     private double _bSeasonal;
+    [TrainableParameter]
     private double _bTrend;
 
     public DLinearModel(DLinearOptions<T>? options = null)
@@ -184,7 +189,6 @@ public class DLinearModel<T> : TimeSeriesModelBase<T>
             }
         }
 
-        ModelParameters = FlattenParameters();
     }
 
     public override T PredictSingle(Vector<T> input)
@@ -194,19 +198,6 @@ public class DLinearModel<T> : TimeSeriesModelBase<T>
         double pred = Forecast(trend, seasonal);
         return NumOps.FromDouble(IsFiniteValue(pred) ? pred : 0.0);
     }
-
-    private Vector<T> FlattenParameters()
-    {
-        var flat = new T[2 * _l + 2];
-        int k = 0;
-        for (int j = 0; j < _l; j++) { flat[k++] = NumOps.FromDouble(_wSeasonal[j]); }
-        for (int j = 0; j < _l; j++) { flat[k++] = NumOps.FromDouble(_wTrend[j]); }
-        flat[k++] = NumOps.FromDouble(_bSeasonal);
-        flat[k] = NumOps.FromDouble(_bTrend);
-        return new Vector<T>(flat);
-    }
-
-    public override long ParameterCount => 2L * _l + 2;
 
     protected override void SerializeCore(BinaryWriter writer)
     {

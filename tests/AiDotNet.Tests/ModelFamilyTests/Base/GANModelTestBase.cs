@@ -1,4 +1,5 @@
 using AiDotNet.Interfaces;
+using AiDotNet.NeuralNetworks;
 using AiDotNet.Tensors;
 using Xunit;
 using System.Threading.Tasks;
@@ -83,6 +84,7 @@ public abstract class GANModelTestBase<T> : NeuralNetworkModelTestBase<T>
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var network = CreateNetwork();
+        Assert.IsAssignableFrom<NeuralNetworkBase<T>>(network).MaterializeParameters();
         var parameters = network.GetParameters();
         Assert.True(parameters.Length > 100,
             $"GAN has only {parameters.Length} parameters — expected >100 for a real GAN architecture.");

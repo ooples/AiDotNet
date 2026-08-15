@@ -44,7 +44,7 @@ namespace AiDotNet.MetaLearning.Algorithms;
     Authors = "Marta Garnelo, Jonathan Schwarz, Dan Rosenbaum, Fabio Viola, et al.")]
 [ComponentType(ComponentType.MetaLearner)]
 [PipelineStage(PipelineStage.Training)]
-public class NPAlgorithm<T, TInput, TOutput> : NeuralProcessBase<T, TInput, TOutput>
+public partial class NPAlgorithm<T, TInput, TOutput> : NeuralProcessBase<T, TInput, TOutput>
 {
     private readonly NPOptions<T, TInput, TOutput> _npOptions;
     private Vector<T> _latentEncoderParams;

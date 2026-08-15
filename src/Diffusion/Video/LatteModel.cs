@@ -104,8 +104,17 @@ namespace AiDotNet.Diffusion.Video;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Latte: Latent Diffusion Transformer for Video Generation", "https://arxiv.org/abs/2401.03048", Year = 2024, Authors = "Ma et al.")]
-public class LatteModel<T> : VideoDiffusionModelBase<T>
+public partial class LatteModel<T> : VideoDiffusionModelBase<T>
 {
+    /// <inheritdoc />
+    /// <remarks>Registration order is serialization order, and matches the
+    /// concatenation the previous hand-written GetParameters performed.</remarks>
+    protected override void RegisterComponents()
+    {
+        RegisterParameterComponent(_dit);
+        RegisterParameterComponent(_vae);
+    }
+
     #region Constants
 
     /// <summary>
@@ -193,7 +202,6 @@ public class LatteModel<T> : VideoDiffusionModelBase<T>
     public override bool SupportsVideoToVideo => false;
 
     /// <inheritdoc />
-    public override long ParameterCount => _dit.ParameterCount + _vae.ParameterCount;
 
     #endregion
 
@@ -308,56 +316,7 @@ public class LatteModel<T> : VideoDiffusionModelBase<T>
 
     #region IParameterizable Implementation
 
-    /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        var ditParams = _dit.GetParameters();
-        var vaeParams = _vae.GetParameters();
 
-        var combined = new Vector<T>(ditParams.Length + vaeParams.Length);
-
-        for (int i = 0; i < ditParams.Length; i++)
-        {
-            combined[i] = ditParams[i];
-        }
-
-        for (int i = 0; i < vaeParams.Length; i++)
-        {
-            combined[ditParams.Length + i] = vaeParams[i];
-        }
-
-        return combined;
-    }
-
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int ditCount = checked((int)_dit.ParameterCount);
-        var vaeCount = checked((int)_vae.ParameterCount);
-
-        if (parameters.Length != ditCount + vaeCount)
-        {
-            throw new ArgumentException(
-                $"Expected {ditCount + vaeCount} parameters, got {parameters.Length}.",
-                nameof(parameters));
-        }
-
-        var ditParams = new Vector<T>(ditCount);
-        var vaeParams = new Vector<T>(vaeCount);
-
-        for (int i = 0; i < ditCount; i++)
-        {
-            ditParams[i] = parameters[i];
-        }
-
-        for (int i = 0; i < vaeCount; i++)
-        {
-            vaeParams[i] = parameters[ditCount + i];
-        }
-
-        _dit.SetParameters(ditParams);
-        _vae.SetParameters(vaeParams);
-    }
 
     #endregion
 

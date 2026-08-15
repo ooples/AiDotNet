@@ -59,6 +59,9 @@ public class MomentumEncoder<T> : IMomentumEncoder<T>
     /// <inheritdoc />
     public INeuralNetwork<T> Encoder => _encoder;
 
+    /// <inheritdoc />
+    public long ParameterCount => _encoder.ParameterCount;
+
     /// <summary>
     /// Initializes a new instance of the MomentumEncoder class.
     /// </summary>

@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using AiDotNet.Diffusion.NoisePredictors;
 using AiDotNet.LinearAlgebra;
 using Xunit;
@@ -36,8 +37,10 @@ public class DiTNoisePredictorResidentCloneTests
     }
 
     [Fact]
-    public void Clone_UnderFp16Resident_ReproducesSourceOutput()
+    public async System.Threading.Tasks.Task Clone_UnderFp16Resident_ReproducesSourceOutput()
     {
+        await System.Threading.Tasks.Task.Yield();
+
         var source = CreateResidentPredictor(seed: 123);
         var input = Rand(new[] { 1, 16, 8, 8 }, seed: 7);
         var conditioning = Rand(new[] { 1, 1, 64 }, seed: 9); // exercise the resident cross-attention path too
@@ -66,8 +69,10 @@ public class DiTNoisePredictorResidentCloneTests
     }
 
     [Fact]
-    public void GetSetParameters_UnderFp16Resident_RoundTrips()
+    public async System.Threading.Tasks.Task GetSetParameters_UnderFp16Resident_RoundTrips()
     {
+        await System.Threading.Tasks.Task.Yield();
+
         var predictor = CreateResidentPredictor(seed: 321);
         var input = Rand(new[] { 1, 16, 8, 8 }, seed: 11);
         var conditioning = Rand(new[] { 1, 1, 64 }, seed: 13);
@@ -87,5 +92,36 @@ public class DiTNoisePredictorResidentCloneTests
         for (int i = 0; i < before.Length; i++)
             Assert.True(Math.Abs((double)before[i] - (double)after[i]) < 1e-6,
                 $"resident GetParameters→SetParameters round-trip changed output at [{i}] (#1764)");
+    }
+
+    [Fact]
+    public async System.Threading.Tasks.Task GetSetParameterChunks_UnderFp16Resident_RoundTrips()
+    {
+        await System.Threading.Tasks.Task.Yield();
+
+        var source = CreateResidentPredictor(seed: 456);
+        var destination = CreateResidentPredictor(seed: 654);
+        var input = Rand(new[] { 1, 16, 8, 8 }, seed: 17);
+        var conditioning = Rand(new[] { 1, 1, 64 }, seed: 19);
+
+        // Materialize both predictors and force their ordinary fp32 tensors into resident fp16 masters.
+        var expected = source.PredictNoise(input, timestep: 0, conditioning: conditioning);
+        var before = destination.PredictNoise(input, timestep: 0, conditioning: conditioning);
+        Assert.Contains(Enumerable.Range(0, expected.Length), i =>
+            Math.Abs((double)expected[i] - (double)before[i]) > 1e-6);
+
+        var chunks = source.GetParameterChunks().ToList();
+        Assert.NotEmpty(chunks);
+        Assert.All(chunks, chunk => Assert.True(chunk.Length > 0));
+        Assert.Equal(source.ParameterCount, chunks.Sum(chunk => (long)chunk.Length));
+
+        destination.SetParameterChunks(chunks);
+        var actual = destination.PredictNoise(input, timestep: 0, conditioning: conditioning);
+        Assert.Equal(expected.Length, actual.Length);
+        for (int i = 0; i < expected.Length; i++)
+        {
+            Assert.True(Math.Abs((double)expected[i] - (double)actual[i]) < 1e-6,
+                $"resident chunk round-trip changed output at [{i}] (#1764)");
+        }
     }
 }

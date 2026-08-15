@@ -148,7 +148,7 @@ public class LoRAIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task StandardLoRAAdapter_WrapsDenseLayer_Correctly()
     {
-        var baseLayer = new DenseLayer<double>(OutputSize, (IActivationFunction<double>)new ReLUActivation<double>());
+        var baseLayer = CreateResolvedBaseLayer();
         var adapter = new StandardLoRAAdapter<double>(baseLayer, Rank, Alpha);
 
         Assert.Same(baseLayer, adapter.BaseLayer);
@@ -160,7 +160,7 @@ public class LoRAIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task StandardLoRAAdapter_Forward_CombinesBaseAndLoRA()
     {
-        var baseLayer = new DenseLayer<double>(OutputSize, (IActivationFunction<double>)new ReLUActivation<double>());
+        var baseLayer = CreateResolvedBaseLayer();
         var adapter = new StandardLoRAAdapter<double>(baseLayer, Rank, Alpha);
         var input = CreateTensor(1, InputSize);
 
@@ -333,6 +333,49 @@ public class LoRAIntegrationTests
     #region Parameter Efficiency Tests
 
     [Fact(Timeout = 120000)]
+    public async Task SpecializedAdapters_ManifestSurface_RoundTripsWithoutLegacySnapshots()
+    {
+        await Task.Yield();
+
+        DVoRAAdapter<double>.InitializeSharedMatrices(InputSize, OutputSize, Rank, seed: 17);
+        TiedLoRAAdapter<double>.InitializeSharedMatrices(InputSize, OutputSize, Rank, seed: 17);
+
+        var factories = new List<(string Name, Func<LoRAAdapterBase<double>> Create)>
+        {
+            ("Chain", () => new ChainLoRAAdapter<double>(CreateResolvedBaseLayer(), Rank, chainLength: 2, alpha: Alpha)),
+            ("DVoRA", () => new DVoRAAdapter<double>(CreateResolvedBaseLayer(), Rank, Alpha)),
+            ("GLoRA", () => new GLoRAAdapter<double>(CreateResolvedBaseLayer(), Rank, activationRank: 4, weightAlpha: Alpha)),
+            ("HRA", () => new HRAAdapter<double>(CreateResolvedBaseLayer(), Rank, sparsityRatio: 0.1, alpha: Alpha)),
+            ("LoKr", () => new LoKrAdapter<double>(CreateResolvedBaseLayer(), Rank, Alpha)),
+            ("LoRAXS", () => new LoRAXSAdapter<double>(CreateResolvedBaseLayer(), Rank, Alpha)),
+            ("LoRETTA", () => new LoRETTAAdapter<double>(CreateResolvedBaseLayer(), Rank, numCores: 3, alpha: Alpha)),
+            ("MoRA", () => new MoRAAdapter<double>(CreateSquareResolvedBaseLayer(OutputSize), Rank, Alpha)),
+            ("NOLA", () => new NOLAAdapter<double>(CreateResolvedBaseLayer(), Rank, numBasis: 4, alpha: Alpha)),
+            ("RoSA", () => new RoSAAdapter<double>(CreateResolvedBaseLayer(), Rank, Alpha, sparsityRatio: 0.9)),
+            ("TiedLoRA", () => new TiedLoRAAdapter<double>(CreateResolvedBaseLayer(), Rank, alpha: Alpha)),
+            ("XLoRA", () => new XLoRAAdapter<double>(CreateResolvedBaseLayer(), numberOfExperts: 2, expertRank: Rank, alpha: Alpha)),
+        };
+
+        foreach (var (name, create) in factories)
+        {
+            var source = create();
+            var original = source.GetParameters();
+            Assert.True(original.Length > 0, $"{name} exposed no manifest parameters.");
+            Assert.Equal((long)original.Length, source.ParameterCount);
+
+            var payload = new Vector<double>(original.Length);
+            for (int i = 0; i < payload.Length; i++) payload[i] = ((i % 19) - 9) / 20.0;
+
+            var target = create();
+            target.SetParameters(payload);
+            var restored = target.GetParameters();
+
+            Assert.Equal((long)payload.Length, target.ParameterCount);
+            Assert.Equal(payload.ToArray(), restored.ToArray());
+        }
+    }
+
+    [Fact(Timeout = 120000)]
     public async Task LoRA_ParameterReduction_SignificantForLargeLayers()
     {
         int largeInputSize = 1024;
@@ -340,6 +383,7 @@ public class LoRAIntegrationTests
         int rank = 8;
 
         var baseLayer = new DenseLayer<double>(largeOutputSize);
+        baseLayer.ResolveFromShape(new[] { largeInputSize });
         var adapter = new StandardLoRAAdapter<double>(baseLayer, rank, freezeBaseLayer: true);
 
         int fullParams = largeInputSize * largeOutputSize + largeOutputSize; // weights + bias

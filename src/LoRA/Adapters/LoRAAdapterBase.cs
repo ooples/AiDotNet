@@ -1,6 +1,10 @@
-using AiDotNet.Helpers;
+﻿using AiDotNet.Helpers;
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
+
+// File-level, deliberately: two Tensors namespaces in the project's global usings also define a
+// TensorLayout, so [TensorLayout(...)] only binds when this import shadows them from a nearer scope.
+using AiDotNet.Attributes;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors.LinearAlgebra;
 
@@ -33,7 +37,18 @@ namespace AiDotNet.LoRA.Adapters;
 /// The result is parameter-efficient fine-tuning that works across different layer architectures!
 /// </para>
 /// </remarks>
-public abstract class LoRAAdapterBase<T> : LayerBase<T>, ILoRAAdapter<T>, ILayerSerializationExtras<T>
+// LoRA targets linear projections, so the shapes it sees are [Batch, Features] and, for attention
+// projections over a sequence, [Batch, Time, Features]. Declared on the BASE: TensorLayoutAttribute is
+// Inherited, and IShapeContract on a base is inherited by definition, so all 34 adapters in this family
+// are covered by this one declaration rather than 34 transcriptions of the same thing.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Output)]
+[AutoParameters]
+public abstract partial class LoRAAdapterBase<T> : LayerBase<T>, ILoRAAdapter<T>, ILayerSerializationExtras<T>, IShapeContract
 {
     /// <summary>
     /// The base layer being adapted.
@@ -49,6 +64,13 @@ public abstract class LoRAAdapterBase<T> : LayerBase<T>, ILoRAAdapter<T>, ILayer
     /// Whether the base layer's parameters are frozen (not trainable).
     /// </summary>
     protected readonly bool _freezeBaseLayer;
+
+    /// <summary>
+    /// Whether the standard low-rank child participates in this adapter's parameter graph.
+    /// Specialized parameterizations can reuse rank/alpha metadata while supplying their own
+    /// trainable tensors, without exposing an unused second adaptation.
+    /// </summary>
+    private readonly bool _usesStandardLoRAParameters;
 
     /// <summary>
     /// Force-resolve <see cref="_baseLayer"/>'s lazy shape using the input
@@ -81,6 +103,27 @@ public abstract class LoRAAdapterBase<T> : LayerBase<T>, ILoRAAdapter<T>, ILayer
     }
 
     /// <summary>
+    /// Materializes the wrapped layer before an operation reads its parameter values.
+    /// </summary>
+    /// <remarks>
+    /// Shape resolution and parameter materialization are deliberately separate: ordinary
+    /// construction and count queries must remain allocation-free, while an explicit merge needs
+    /// the actual base weights. Keeping that distinction here prevents value-reading paths from
+    /// mistaking a shape-resolved placeholder for a populated parameter buffer.
+    /// </remarks>
+    protected void MaterializeBaseLayerParameters()
+    {
+        if (!EnsureBaseLayerShapeResolved())
+        {
+            throw new InvalidOperationException(
+                $"Cannot materialize {_baseLayer.GetType().Name} because its input shape is unresolved.");
+        }
+
+        if (_baseLayer is LayerBase<T> baseLayerBase)
+            baseLayerBase.MaterializeParameters();
+    }
+
+    /// <summary>
     /// Gets the base layer being adapted with LoRA.
     /// </summary>
     /// <remarks>
@@ -88,6 +131,24 @@ public abstract class LoRAAdapterBase<T> : LayerBase<T>, ILoRAAdapter<T>, ILayer
     /// It may be frozen (non-trainable) during fine-tuning for maximum efficiency.
     /// </remarks>
     public ILayer<T> BaseLayer => _baseLayer;
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// A LoRA adapter adds a low-rank delta to the wrapped layer's output and returns it, so its shape
+    /// law IS the wrapped layer's shape law - the constructor says as much, passing
+    /// <c>baseLayer.GetOutputShape()</c> straight through as this layer's output shape. The contract
+    /// therefore delegates rather than restating anything.
+    /// </para>
+    /// <para>
+    /// This is only possible because <c>OutputAxesFor</c> is an INSTANCE method: the answer depends on
+    /// which layer this adapter was constructed around, which no type-level attribute could express.
+    /// Wrap a Dense and the feature axis is <c>Fixed</c> at that Dense's width; wrap something with no
+    /// contract and this declines, which is the honest answer rather than a guess.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+        => (_baseLayer as IShapeContract)?.OutputAxesFor(inputRank);
 
     /// <summary>
     /// Gets the LoRA layer providing the low-rank adaptation.
@@ -134,17 +195,6 @@ public abstract class LoRAAdapterBase<T> : LayerBase<T>, ILoRAAdapter<T>, ILayer
     /// Common practice: alpha = rank (scaling factor of 1.0)
     /// </remarks>
     public double Alpha => Convert.ToDouble(_loraLayer.Alpha);
-
-    /// <summary>
-    /// Gets the total number of trainable parameters.
-    /// </summary>
-    /// <remarks>
-    /// If the base layer is frozen, this returns only the LoRA parameter count.
-    /// Otherwise, it returns the sum of base and LoRA parameters.
-    /// </remarks>
-    public override long ParameterCount => _freezeBaseLayer
-        ? _loraLayer.ParameterCount
-        : (_baseLayer.ParameterCount + _loraLayer.ParameterCount);
 
     /// <summary>
     /// Gets whether this adapter supports training.
@@ -194,9 +244,14 @@ public abstract class LoRAAdapterBase<T> : LayerBase<T>, ILoRAAdapter<T>, ILayer
     /// Derived classes will call this constructor and then add their own layer-specific logic.
     /// </para>
     /// </remarks>
-    protected LoRAAdapterBase(ILayer<T> baseLayer, int rank, double alpha = -1, bool freezeBaseLayer = true)
+    protected LoRAAdapterBase(
+        ILayer<T> baseLayer,
+        int rank,
+        double alpha = -1,
+        bool freezeBaseLayer = true,
+        bool usesStandardLoRAParameters = true)
         : this(baseLayer ?? throw new ArgumentNullException(nameof(baseLayer)),
-               rank, alpha, freezeBaseLayer,
+               rank, alpha, freezeBaseLayer, usesStandardLoRAParameters,
                ResolveBaseInputShapeWithProvenance(baseLayer))
     {
     }
@@ -205,25 +260,23 @@ public abstract class LoRAAdapterBase<T> : LayerBase<T>, ILoRAAdapter<T>, ILayer
     /// Internal ctor that takes the resolved-input-shape result tuple from
     /// <see cref="ResolveBaseInputShapeWithProvenance"/>. The IsAuthoritative
     /// flag tells us whether the shape came from the layer itself (or its
-    /// trainable parameters) versus the synthetic <c>outSize * 2</c> fallback
-    /// — we only eagerly call <see cref="LayerBase{T}.ResolveFromShape"/> in
-    /// the authoritative case, so a wrong heuristic guess never allocates
-    /// real weight tensors with mismatched dims.
+    /// trainable parameters). An unresolved result remains deferred and is
+    /// never used to allocate real weight tensors.
     /// </summary>
     private LoRAAdapterBase(
         ILayer<T> baseLayer, int rank, double alpha, bool freezeBaseLayer,
+        bool usesStandardLoRAParameters,
         (int[] Shape, bool IsAuthoritative) resolvedInput)
         : base(resolvedInput.Shape, baseLayer.GetOutputShape())
     {
         _baseLayer = baseLayer;
         _freezeBaseLayer = freezeBaseLayer;
+        _usesStandardLoRAParameters = usesStandardLoRAParameters;
 
         // Only eagerly resolve when the shape we just gave the base ctor is
-        // authoritative (came from the layer or its actual weights). The
-        // synthetic outSize*2 fallback is a guess for ParameterCount-readiness
-        // only; allocating real weights against it would burn RNG state and
-        // potentially produce wrong-shape kernels that throw later on actual
-        // forward.
+        // authoritative (came from the layer or its actual weights). A deferred
+        // shape stays deferred; allocating against anything else would burn RNG
+        // state and produce wrong-shape kernels.
         //
         // ALSO skip the eager resolve when the layer's TryDeclareShape()
         // oracle reports its parameters are already materialised
@@ -246,82 +299,26 @@ public abstract class LoRAAdapterBase<T> : LayerBase<T>, ILoRAAdapter<T>, ILayer
         // Create the LoRA layer - derived classes may override this via CreateLoRALayer
         _loraLayer = CreateLoRALayer(rank, alpha);
 
-        // Initialize Parameters using a NON-VIRTUAL base+LoRA-only sizing.
-        // Calling the virtual ParameterCount from a base ctor is a C#
-        // antipattern: derived adapters that override ParameterCount with
-        // derived state (delta weight matrices, importance scores, bank
-        // indices, etc.) dereference fields that the derived ctor body
-        // hasn't yet initialized — the derived state observed here is
-        // whatever default(T) the field type uses. Sizing against just
-        // _baseLayer + _loraLayer is always safe because both are fully
-        // constructed at this point.
-        //
-        // Derived adapters that override ParameterCount AND need their
-        // packed Parameters vector to round-trip (i.e., they don't
-        // override GetParameters / SetParameters with their own
-        // packing logic) MUST call RebuildParametersAfterDerivedInit()
-        // at the end of their constructor once their extra state is
-        // initialized. Most derived adapters override GetParameters
-        // and don't need this call.
-        // Match what PackBaseAndLoraParameters actually packs: base params
-        // are skipped when frozen (the optimizer doesn't update them, and
-        // they round-trip via ILayerSerializationExtras instead). Sizing
-        // against the unfrozen total when freezeBaseLayer=true would leave
-        // trailing unused elements in Parameters, breaking GetParameters()
-        // length and (de)serialization round-trip.
-        int baseAndLoraCount =
-            (_freezeBaseLayer ? 0 : _baseLayer.GetParameters().Length)
-            + _loraLayer.GetParameters().Length;
-        Parameters = new Vector<T>(baseAndLoraCount);
-        // Pack base + LoRA params directly (non-virtual) so the vector
-        // is initialized without invoking the derived
-        // UpdateParametersFromLayers override. Derived classes that
-        // need their own packing call RebuildParametersAfterDerivedInit
-        // which routes through the virtual UpdateParametersFromLayers.
-        PackBaseAndLoraParameters();
-    }
-
-    /// <summary>
-    /// Non-virtual pack of <see cref="_baseLayer"/> + <see cref="_loraLayer"/>
-    /// parameters into <see cref="LayerBase{T}.Parameters"/>. Used by the
-    /// base ctor where the derived <see cref="UpdateParametersFromLayers"/>
-    /// override would dereference uninitialised derived state.
-    /// </summary>
-    private void PackBaseAndLoraParameters()
-    {
-        int idx = 0;
-        if (!_freezeBaseLayer)
+        // Freezing is stated once, here. The generator discovers _baseLayer and _loraLayer as
+        // sub-layers and that discovered set is authoritative, so a frozen base cannot be
+        // expressed by declining to register it -- it is expressed by marking it frozen, which
+        // keeps it in Forward and in the serialized layout while taking its weights out of the
+        // parameter surface. ParameterCount, GetParameters and SetParameters then all fall out
+        // of the one fold, so the adapter no longer maintains a shadow copy that has to be
+        // re-packed after every update and can disagree with the count that describes it.
+        // Register unconditionally. Doing this only on the frozen path left an UNFROZEN adapter
+        // with no registered children at all, so its ParameterCount answered 0 instead of
+        // base + LoRA. The frozen case looked correct purely because freezing happened to force
+        // registration on the way past.
+        EnsureSubLayersRegistered();
+        if (!_usesStandardLoRAParameters)
         {
-            Vector<T> baseParams = _baseLayer.GetParameters();
-            for (int i = 0; i < baseParams.Length; i++)
-            {
-                Parameters[idx++] = baseParams[i];
-            }
+            FreezeSubLayerParameters(_loraLayer);
         }
-
-        Vector<T> loraParams = _loraLayer.GetParameters();
-        for (int i = 0; i < loraParams.Length; i++)
+        if (_freezeBaseLayer)
         {
-            Parameters[idx++] = loraParams[i];
+            FreezeSubLayerParameters(_baseLayer);
         }
-    }
-
-    /// <summary>
-    /// Derived adapter classes that override <see cref="LayerBase{T}.ParameterCount"/>
-    /// to include extra state (delta weights, importance scores, etc.) MUST
-    /// call this method at the end of their constructor body so the base
-    /// class's <see cref="LayerBase{T}.Parameters"/> vector is re-allocated
-    /// against the derived total. The base ctor calls
-    /// <c>UpdateParametersFromLayers</c> via this method, which in turn calls
-    /// the now-initialized derived <c>ParameterCount</c> via virtual dispatch.
-    /// Parameter count is cast to int because <c>Vector{T}.Length</c> is int
-    /// per the per-tensor &lt; 2.1 B contract; #1237's long aggregate applies
-    /// only to the model-level <c>ParameterCount</c> property.
-    /// </summary>
-    protected void RebuildParametersAfterDerivedInit()
-    {
-        Parameters = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
-        UpdateParametersFromLayers();
     }
 
     /// <summary>
@@ -417,7 +414,7 @@ public abstract class LoRAAdapterBase<T> : LayerBase<T>, ILoRAAdapter<T>, ILayer
             }
             else
             {
-                // DenseLayer + LoRA-test convention: [inputSize, outputSize].
+                // DenseLayer convention: [inputSize, outputSize].
                 if (matrix.Shape[0] > 0) inputSize = matrix.Shape[0];
                 if (matrix.Shape[1] > 0) outputSize = matrix.Shape[1];
             }
@@ -445,11 +442,9 @@ public abstract class LoRAAdapterBase<T> : LayerBase<T>, ILoRAAdapter<T>, ILayer
     }
 
     /// <summary>
-    /// Returns the resolved base-input shape AND a flag indicating whether
-    /// the shape is authoritative (came from the layer's own resolved
-    /// shape or its actual weight matrix) vs a synthetic
-    /// <c>outSize * 2</c> heuristic. Callers should only eagerly allocate
-    /// weights from authoritative shapes.
+    /// Returns the base-input shape and whether it came from an authoritative source: either the
+    /// wrapped layer's resolved shape or an actual parameter tensor. An unresolved shape remains
+    /// unresolved; this method never fabricates a width from the output size.
     /// </summary>
     private static (int[] Shape, bool IsAuthoritative) ResolveBaseInputShapeWithProvenance(ILayer<T> baseLayer)
     {
@@ -458,22 +453,32 @@ public abstract class LoRAAdapterBase<T> : LayerBase<T>, ILoRAAdapter<T>, ILayer
 
         if (baseLayer is LayerBase<T> layerBase)
         {
-            int inferred = InferInputSizeFromWeights(baseLayer, layerBase.GetTrainableParameters());
+            int inferred = InferInputSizeFromWeights(
+                baseLayer,
+                layerBase.GetTrainableParametersWithoutMaterialization());
             if (inferred > 0) return (new[] { inferred }, true);
+
+            // A lazy affine layer may have received a flat checkpoint before its input width was
+            // known. LayerBase marks that payload explicitly; for Dense/FC the exact inverse of
+            // total = input*output + bias(output) recovers the width without a heuristic or a
+            // warm-up forward. Resolving from this authoritative value materializes the generated
+            // slots, and LayerBase then replays the parked payload into them.
+            int deferredLength = layerBase.DeferredParameterPayloadLength;
+            var deferredOutputShape = baseLayer.GetOutputShape();
+            int outputSize = deferredOutputShape.Length > 0
+                ? deferredOutputShape[deferredOutputShape.Length - 1]
+                : -1;
+            if (deferredLength > outputSize && outputSize > 0
+                && (baseLayer is DenseLayer<T> || baseLayer is FullyConnectedLayer<T>)
+                && (deferredLength - outputSize) % outputSize == 0)
+            {
+                int exactInputSize = (deferredLength - outputSize) / outputSize;
+                if (exactInputSize > 0) return (new[] { exactInputSize }, true);
+            }
         }
 
-        // Convention encoded by the LoRA test suite (Assert.Equal(10, ...) on
-        // adapter wrapping DenseLayer(5)): input dim defaults to 2 × output
-        // dim. NOT authoritative — caller must NOT eagerly allocate weights
-        // against this guess; ResolveFromShape would otherwise materialize
-        // wrong-shape weight tensors.
-        var outShape = baseLayer.GetOutputShape();
-        int outSize = outShape.Length > 0 && outShape[0] > 0 ? outShape[0] : 1;
-        return (new[] { outSize * 2 }, false);
+        return (shape.Length == 0 ? new[] { -1 } : shape, false);
     }
-
-    private static int[] ResolveBaseInputShape(ILayer<T> baseLayer)
-        => ResolveBaseInputShapeWithProvenance(baseLayer).Shape;
 
     /// <summary>
     /// Exception-safe probe of the <see cref="LayerBase{T}.TryDeclareShape"/> oracle:
@@ -499,12 +504,9 @@ public abstract class LoRAAdapterBase<T> : LayerBase<T>, ILoRAAdapter<T>, ILayer
     protected virtual LoRALayer<T> CreateLoRALayer(int rank, double alpha)
     {
         // Resolution strategy: try every authoritative source for each
-        // dimension BEFORE falling through to a throw. Heuristics like
-        // "outputSize = inputSize" (symmetric assumption) or
-        // "inputSize = outputSize * 2" (LoRA-test convention) were
-        // flagged in review #1368 as silent fabrication; replaced with
-        // an explicit throw so callers either get the right dim from a
-        // real source or a clear error message naming the layer.
+        // dimension BEFORE falling through to a ShapeDeferred error. Callers
+        // either get the right dimensions from real state or a clear readiness
+        // result naming the unresolved layer.
         //
         // Sources, in preference order:
         //   1. Weight-matrix probe (TryInferBothDimsFromWeights): a
@@ -521,7 +523,7 @@ public abstract class LoRAAdapterBase<T> : LayerBase<T>, ILoRAAdapter<T>, ILayer
         // 1. Weight matrix
         if (_baseLayer is LayerBase<T> layerBase)
         {
-            var weights = layerBase.GetTrainableParameters();
+            var weights = layerBase.GetTrainableParametersWithoutMaterialization();
             if (TryInferBothDimsFromWeights(_baseLayer, weights, out var winSize, out var woutSize))
             {
                 if (winSize > 0) inputSize = winSize;
@@ -555,13 +557,10 @@ public abstract class LoRAAdapterBase<T> : LayerBase<T>, ILoRAAdapter<T>, ILayer
             }
         }
 
-        // If either dimension is still unresolved, fail fast. Callers are
-        // supposed to skip layers with IsShapeResolved=false (see
-        // DefaultLoRAConfiguration.ApplyLoRA) before invoking the adapter
-        // constructor. The previous fallback ("outputSize = inputSize" or
-        // "inputSize = outputSize * 2") would silently construct a LoRA
-        // layer with fabricated dimensions that produced nonsense
-        // activations at forward time (review #1368).
+        // If either dimension is still unresolved, report shape readiness instead of silently
+        // constructing factors with a made-up width. Builder/configuration paths resolve or skip
+        // lazy targets before wrapping; a direct caller can run a first forward, call
+        // ResolveFromShape, or restore a shape-describing parameter payload first.
         if (inputSize <= 0 || outputSize <= 0)
         {
             throw new InvalidOperationException(
@@ -573,13 +572,9 @@ public abstract class LoRAAdapterBase<T> : LayerBase<T>, ILoRAAdapter<T>, ILayer
                 $"Probe results: weight-matrix infer yielded inputSize={inputSize}, outputSize={outputSize} " +
                 $"(<=0 means the probe couldn't determine that dim); " +
                 $"GetInputShape() returned [{string.Join(", ", GetInputShape())}]; " +
-                $"GetOutputShape() returned [{string.Join(", ", GetOutputShape())}] " +
-                $"(review #1368 C88Pe: 'sources' was misleading — these are the OUTPUTS of probing those " +
-                $"sources, all <=0 meaning none of the probes succeeded). " +
-                "Callers should skip layers with IsShapeResolved=false before invoking the adapter constructor " +
-                "(see DefaultLoRAConfiguration.ApplyLoRA). Note: lazy-init layers (LayerNorm γ/β, MultiHeadAttention " +
-                "weight banks, etc.) materialise shapes only after first Forward. The LoRA warmup forward in " +
-                "AiModelBuilder.BuildSupervisedInternalAsync resolves these before wrapping.");
+                $"GetOutputShape() returned [{string.Join(", ", GetOutputShape())}]. " +
+                "Parameter readiness is ShapeDeferred; resolve the wrapped layer from a real input, " +
+                "an explicit shape, or a shape-describing restore before constructing the adapter.");
         }
         return new LoRALayer<T>(inputSize, outputSize, rank, alpha);
     }
@@ -598,7 +593,7 @@ public abstract class LoRAAdapterBase<T> : LayerBase<T>, ILoRAAdapter<T>, ILayer
     /// behavior plus the learned adaptation.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // Forward through base layer
         Tensor<T> baseOutput = _baseLayer.Forward(input);
@@ -625,105 +620,6 @@ public abstract class LoRAAdapterBase<T> : LayerBase<T>, ILoRAAdapter<T>, ILayer
             _baseLayer.UpdateParameters(learningRate);
         }
 
-        // Update parameter vector
-        UpdateParametersFromLayers();
-    }
-
-    /// <summary>
-    /// Gets the current parameters as a vector.
-    /// </summary>
-    /// <returns>Vector containing parameters (LoRA only if base is frozen, otherwise both).</returns>
-    public override Vector<T> GetParameters()
-    {
-        return Parameters.Clone();
-    }
-
-    /// <summary>
-    /// Sets the layer parameters from a vector.
-    /// </summary>
-    /// <param name="parameters">Vector containing parameters.</param>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (parameters.Length != ParameterCount)
-        {
-            throw new ArgumentException($"Expected {ParameterCount} parameters, got {parameters.Length}", nameof(parameters));
-        }
-
-        Parameters = parameters.Clone();
-        UpdateLayersFromParameters();
-    }
-
-    /// <summary>
-    /// Updates the layers from the parameter vector.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This method distributes the values from the parameter vector back to the base
-    /// and LoRA layers. If the base layer is frozen, only LoRA parameters are updated.
-    /// </para>
-    /// <para><b>For Beginners:</b> This does the opposite of UpdateParametersFromLayers.
-    /// It takes values from the big list and puts them back into the individual layers.
-    /// </para>
-    /// </remarks>
-    private void UpdateLayersFromParameters()
-    {
-        int idx = 0;
-
-        // If base layer is not frozen, unpack its parameters first
-        if (!_freezeBaseLayer)
-        {
-            int baseParamCount = checked((int)_baseLayer.ParameterCount);
-            Vector<T> baseParams = new Vector<T>(baseParamCount);
-            for (int i = 0; i < baseParamCount; i++)
-            {
-                baseParams[i] = Parameters[idx++];
-            }
-            _baseLayer.SetParameters(baseParams);
-        }
-
-        // Unpack LoRA parameters
-        int loraParamCount = checked((int)_loraLayer.ParameterCount);
-        Vector<T> loraParams = new Vector<T>(loraParamCount);
-        for (int i = 0; i < loraParamCount; i++)
-        {
-            loraParams[i] = Parameters[idx++];
-        }
-        _loraLayer.SetParameters(loraParams);
-    }
-
-    /// <summary>
-    /// Updates the parameter gradients vector from the layer gradients.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This method collects gradients from both layers into a single vector.
-    /// If the base layer is frozen, only LoRA gradients are included.
-    /// </para>
-    /// <para><b>For Beginners:</b> After backpropagation, this collects all the "improvement directions"
-    /// from both layers into one organized list for the optimizer to use.
-    /// </para>
-    /// </remarks>
-    private void UpdateParameterGradientsFromLayers()
-    {
-        ParameterGradients = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
-        int idx = 0;
-
-        // If base layer is not frozen, pack its gradients first
-        if (!_freezeBaseLayer)
-        {
-            Vector<T> baseGrads = _baseLayer.GetParameterGradients();
-            for (int i = 0; i < baseGrads.Length; i++)
-            {
-                ParameterGradients[idx++] = baseGrads[i];
-            }
-        }
-
-        // Pack LoRA gradients
-        Vector<T> loraGrads = _loraLayer.GetParameterGradients();
-        for (int i = 0; i < loraGrads.Length; i++)
-        {
-            ParameterGradients[idx++] = loraGrads[i];
-        }
     }
 
     /// <summary>
@@ -824,7 +720,7 @@ public abstract class LoRAAdapterBase<T> : LayerBase<T>, ILoRAAdapter<T>, ILayer
 
         // Calculate dimensions
         int inputSize = GetInputShape()[0];
-        int outputSize = GetOutputShape()[0];
+        int outputSize = GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0];
         int weightCount = inputSize * outputSize;
 
         // Create new parameters with merged weights
@@ -862,39 +758,6 @@ public abstract class LoRAAdapterBase<T> : LayerBase<T>, ILoRAAdapter<T>, ILayer
 
         // Use helper to clone base layer and preserve activation function
         return CreateMergedLayerWithClone(mergedParams);
-    }
-
-    /// <summary>
-    /// Updates the parameter vector from the current base and LoRA layer states.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This helper method synchronizes the adapter's parameter vector with the current state
-    /// of the base and LoRA layers after updates. It packs parameters in the standard order:
-    /// base layer parameters (if not frozen) followed by LoRA parameters.
-    /// </para>
-    /// <para><b>For Beginners:</b> This ensures the adapter's parameter vector stays in sync
-    /// with its component layers. Called after parameter updates.
-    /// </para>
-    /// </remarks>
-    protected virtual void UpdateParametersFromLayers()
-    {
-        int idx = 0;
-
-        if (!_freezeBaseLayer)
-        {
-            Vector<T> baseParams = _baseLayer.GetParameters();
-            for (int i = 0; i < baseParams.Length; i++)
-            {
-                Parameters[idx++] = baseParams[i];
-            }
-        }
-
-        Vector<T> loraParams = _loraLayer.GetParameters();
-        for (int i = 0; i < loraParams.Length; i++)
-        {
-            Parameters[idx++] = loraParams[i];
-        }
     }
 
     /// <summary>

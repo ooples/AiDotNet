@@ -48,7 +48,7 @@ namespace AiDotNet.TimeSeries;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("Forecasting time series with complex seasonal patterns using exponential smoothing", "https://doi.org/10.1198/jasa.2011.tm09771", Year = 2011, Authors = "Alysha M. De Livera, Rob J. Hyndman, Ralph D. Snyder")]
-public class TBATSModel<T> : TimeSeriesModelBase<T>
+public partial class TBATSModel<T> : TimeSeriesModelBase<T>
 {
     /// <summary>
     /// Configuration options for the TBATS model.
@@ -58,19 +58,23 @@ public class TBATSModel<T> : TimeSeriesModelBase<T>
     /// <summary>
     /// The level component of the time series, representing the current base value.
     /// </summary>
+    [Buffer]
     private Vector<T> _level;
 
     /// <summary>Stored training series for in-sample predictions.</summary>
+    [Buffer]
     private Vector<T> _trainingSeries = Vector<T>.Empty();
 
     /// <summary>
     /// The trend component of the time series, representing the rate of change.
     /// </summary>
+    [Buffer]
     private Vector<T> _trend;
 
     /// <summary>
     /// The seasonal components of the time series, one for each seasonal period.
     /// </summary>
+    [Buffer]
     private List<Vector<T>> _seasonalComponents;
 
     /// <summary>

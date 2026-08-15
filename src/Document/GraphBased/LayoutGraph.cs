@@ -51,7 +51,7 @@ namespace AiDotNet.Document.GraphBased;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Rethinking Table Structure Recognition Using Sequence Labeling Methods", "https://doi.org/10.48550/arXiv.2209.14469", Year = 2022, Authors = "Yibo Li, Yilun Huang, Ziyi Zhu, Lemeng Pan, Yongshuai Huang, Lin Du, Zhi Tang")]
-public class LayoutGraph<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, IReadingOrderDetector<T>
+public partial class LayoutGraph<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, IReadingOrderDetector<T>
 {
     private readonly LayoutGraphOptions _options;
 
@@ -62,7 +62,7 @@ public class LayoutGraph<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, 
 
     private readonly bool _useNativeMode;
     private readonly InferenceSession? _onnxSession;
-    private readonly IOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private int _nodeDim;
     private int _edgeDim;
     private int _graphLayers;
@@ -76,8 +76,6 @@ public class LayoutGraph<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, 
     private readonly List<ILayer<T>> _outputLayers = [];
 
     // Embeddings
-    private Tensor<T>? _nodeTypeEmbeddings;
-    private Tensor<T>? _positionEmbeddings;
 
     #endregion
 
@@ -126,7 +124,7 @@ public class LayoutGraph<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, 
         int graphLayers = 4,
         int numClasses = 9,
         int maxNodes = 256,
-        IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         LayoutGraphOptions? options = null)
         : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
@@ -145,7 +143,11 @@ public class LayoutGraph<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, 
         _graphLayers = graphLayers;
         _numClasses = numClasses;
         _maxNodes = maxNodes;
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
+            new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate
+            });
 
         _onnxSession = new InferenceSession(onnxModelPath);
 
@@ -162,7 +164,7 @@ public class LayoutGraph<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, 
         int graphLayers = 4,
         int numClasses = 9,
         int maxNodes = 256,
-        IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         LayoutGraphOptions? options = null)
         : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
@@ -176,7 +178,18 @@ public class LayoutGraph<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, 
         _graphLayers = graphLayers;
         _numClasses = numClasses;
         _maxNodes = maxNodes;
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        // Honor the model's configured LearningRate (the bare AdamOptimizer(this) ignored it and ran at Adam's
+        // 0.001) and enable gradient clipping so graph-conv training does not drift upward over more iterations
+        // (MoreData saw 200-iter loss 2.40 -> 2.82). Fully user-overridable via the optimizer parameter and
+        // LayoutGraphOptions.LearningRate. (#1789)
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
+            new AiDotNet.Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            { InitialLearningRate = _options.LearningRate, EnableGradientClipping = true, MaxGradientNorm = 1.0 });
+
+        // Route base tape training through the configured optimizer. Previously _optimizer was stored but
+        // never used — TrainWithTape resolved the default base optimizer, so a caller-supplied optimizer
+        // was silently ignored. Install it as the base-train optimizer (matches SVTR<T>).
+        SetBaseTrainOptimizer(_optimizer);
 
         InitializeLayers();
         InitializeEmbeddings();
@@ -205,17 +218,14 @@ public class LayoutGraph<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, 
             inputDim: _nodeDim,
             hiddenDim: _edgeDim,
             numGraphLayers: _graphLayers,
-            numClasses: _numClasses));
+            numClasses: _numClasses,
+            maxNodes: _maxNodes));
     }
 
     private void InitializeEmbeddings()
     {
         var random = RandomHelper.CreateSeededRandom(42);
-        _nodeTypeEmbeddings = Tensor<T>.CreateDefault([_numClasses, _nodeDim], NumOps.Zero);
-        _positionEmbeddings = Tensor<T>.CreateDefault([_maxNodes, _nodeDim], NumOps.Zero);
 
-        InitializeWithSmallRandomValues(_nodeTypeEmbeddings, random, 0.02);
-        InitializeWithSmallRandomValues(_positionEmbeddings, random, 0.02);
     }
 
     private void InitializeWithSmallRandomValues(Tensor<T> tensor, Random random, double stdDev)
@@ -517,6 +527,66 @@ public class LayoutGraph<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, 
         return _useNativeMode ? Forward(preprocessed) : RunOnnxInference(preprocessed);
     }
 
+    /// <summary>
+    /// Inference forward: runs the graph layer stack and returns the per-node class logits
+    /// [numNodes, numClasses] UNCHANGED. DetectLayout, DetectReadingOrder, and ParseLayoutOutput index
+    /// this rank-2 output per node (output[node, class]); pooling it to a rank-1 [numClasses] vector here
+    /// would collapse every node and break their two-dimensional indexing. The document-level pooling
+    /// needed to align with the classification target happens only on the training path
+    /// (<see cref="ForwardForTraining"/>).
+    /// </summary>
+    protected override Tensor<T> Forward(Tensor<T> input)
+    {
+        // Unchanged when no node types are supplied -- the plain walk below IS the previous
+        // behaviour, and keeping it byte-identical matters: routing the default path through a
+        // hand-written walk instead of the base one made the analytic and finite-difference
+        // gradients disagree on every sampled parameter, because the base path owns dropout,
+        // seed wiring and checkpointing that a bare Layers[i].Forward loop does not reproduce.
+        if (AuxiliaryInput is null || AuxiliaryInput.Length == 0)
+        {
+            var plain = input;
+            foreach (var layer in Layers) plain = layer.Forward(plain);
+            return plain;
+        }
+
+        return RunWithNodeTypes(input);
+    }
+
+    /// <summary>
+    /// Training forward: runs the base training forward (which wires layer seeds and applies gradient
+    /// checkpointing / weight streaming over the graph layers), then mean-pools every axis but the class
+    /// axis so the per-node logits [numNodes, numClasses] reduce to the document-level [numClasses] logit
+    /// vector the classification target expects. Without this pooling the rank-2 tensor cannot align to
+    /// the rank-1 [numClasses] target and CrossEntropyWithLogits over-indexes ClassIndicesToOneHot and
+    /// throws. All ops are tape-aware, so training back-propagates through the pool into the graph layers.
+    /// Inference (PredictCore → Forward) deliberately skips this pooling to keep the per-node output.
+    /// </summary>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input)
+    {
+        // Default path stays on base.ForwardForTraining, which owns seed wiring, gradient
+        // checkpointing and weight streaming. Only a call that actually supplies node types diverts,
+        // and that one wires seeds itself per EnsureLayerRandomSeedsWired's contract.
+        Tensor<T> output;
+        if (AuxiliaryInput is null || AuxiliaryInput.Length == 0)
+        {
+            output = base.ForwardForTraining(input);
+        }
+        else
+        {
+            EnsureLayerRandomSeedsWired();
+            output = RunWithNodeTypes(input);
+        }
+
+        if (output.Shape.Length >= 2)
+        {
+            int classAxis = output.Shape.Length - 1;
+            var poolAxes = new int[classAxis];
+            for (int a = 0; a < classAxis; a++) poolAxes[a] = a;
+            output = Engine.ReduceMean(output, poolAxes, keepDims: false); // → [numClasses]
+        }
+        return output;
+    }
+
     /// <inheritdoc/>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
@@ -524,33 +594,34 @@ public class LayoutGraph<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, 
             throw new NotSupportedException("Training not supported in ONNX mode.");
 
         SetTrainingMode(true);
-        TrainWithTape(input, expectedOutput);
-
-        UpdateParameters(CollectGradients());
-        SetTrainingMode(false);
+        try
+        {
+            // TrainWithTape performs the complete forward + backward + optimizer step over the tape. The
+            // previous code then ALSO ran a manual UpdateParameters(CollectGradients()) gradient-descent step
+            // on top of it — a double update that reads gradients TrainWithTape already consumed and pushes
+            // the weights past the tape's step. One tape step is the correct, complete update.
+            TrainWithTape(input, expectedOutput, _optimizer);
+        }
+        finally
+        {
+            // Restore inference mode even if TrainWithTape throws, so a failed step doesn't leave
+            // BatchNorm/Dropout stuck in training mode for subsequent inference.
+            SetTrainingMode(false);
+        }
     }
 
-    /// <inheritdoc/>
-    public override void UpdateParameters(Vector<T> gradients)
-    {
-        if (!_useNativeMode)
-            throw new NotSupportedException("Parameter updates not supported in ONNX mode.");
+    // UpdateParameters applied a GRADIENT STEP, but its one-argument form is the value setter and every caller passes values -- the override corrupted the model. Removed under AIDN082.
 
-        var currentParams = GetParameters();
-        T lr = NumOps.FromDouble(_options.LearningRate);
-
-        currentParams = Engine.Subtract(currentParams, Engine.Multiply(gradients, lr));
-        SetParameters(currentParams);
-    }
-
-    private Vector<T> CollectGradients()
-    {
-        var grads = new List<T>();
-        foreach (var layer in Layers)
-            grads.AddRange(layer.GetParameterGradients());
-        return new Vector<T>([.. grads]);
-    }
-
+    /// <summary>
+    /// Parameters cannot be written while the model is backed by a loaded ONNX graph: the weights
+    /// belong to that graph, not to this instance.
+    /// </summary>
+    /// <remarks>
+    /// Replaces a hand-written throw that used to sit inside UpdateParameters. The base checks this
+    /// on every mutating entry point rather than the one member the throw happened to guard, and
+    /// reading -- ParameterCount and GetParameters -- stays available either way.
+    /// </remarks>
+    protected override bool SupportsParameterMutation => _useNativeMode;
     #endregion
 
     #region Disposal
@@ -561,6 +632,96 @@ public class LayoutGraph<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, 
         if (disposing)
             _onnxSession?.Dispose();
         base.Dispose(disposing);
+    }
+
+    #endregion
+
+    #region Node-type fusion
+
+    /// <summary>
+    /// The per-node TYPE embedding. Held OUTSIDE Layers on purpose: it is not a step in the
+    /// sequential chain, and putting it there fed an index lookup a graph hidden state. It reaches
+    /// the parameter surface and the optimizer through GetExtraTrainableLayers instead, which is the
+    /// base's existing hook for exactly this -- a trainable layer that the chain does not walk.
+    /// </summary>
+    private readonly EmbeddingLayer<T> _nodeTypeEmbedding = new(NodeTypeCount, NodeTypeDim);
+
+    private const int NodeTypeCount = 64;
+    private const int NodeTypeDim = 256;
+
+    /// <inheritdoc/>
+    protected override IEnumerable<LayerBase<T>?> GetExtraTrainableLayers()
+    {
+        yield return _nodeTypeEmbedding;
+    }
+
+    /// <summary>
+    /// Runs the graph stack, adding a learned per-node TYPE vector when the caller supplies type ids
+    /// through the auxiliary input.
+    /// </summary>
+    /// <remarks>
+    /// _nodeTypeEmbeddings used to be a model field nothing read. Type is not derivable from the node
+    /// features -- it is a label the layout parser assigns ("title", "caption", "table") -- so unlike
+    /// node order it needs an input, which is what the base's auxiliary slot provides. Both forwards
+    /// route here, so the type embedding is on the gradient tape. With no type ids the model behaves
+    /// exactly as before.
+    /// </remarks>
+    private Tensor<T> RunWithNodeTypes(Tensor<T> input)
+    {
+        // Project to the graph hidden width first, so the type vector is added in that space rather
+        // than to the raw node features.
+        var hidden = Layers[0].Forward(input);
+
+        var types = AuxiliaryInput;
+        if (types is not null && types.Length > 0)
+        {
+            var typeVectors = _nodeTypeEmbedding.Forward(types);
+            if (typeVectors.Rank == hidden.Rank && typeVectors.Length == hidden.Length)
+            {
+                hidden = Engine.TensorAdd(hidden, typeVectors);
+            }
+        }
+
+        for (int i = 1; i < Layers.Count; i++)
+        {
+            hidden = Layers[i].Forward(hidden);
+        }
+
+        return hidden;
+    }
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// The base walks Layers as a chain and would hand the appended type table a graph hidden state.
+    /// This is the fourth site of that same pattern in this family (LiLT, SVTR, DocOwl were the
+    /// others), so the walk is reused rather than re-derived.
+    /// </remarks>
+    public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input)
+    {
+        using var _ = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+
+        var activations = new Dictionary<string, Tensor<T>>();
+        var hidden = Layers[0].Forward(input);
+        activations[$"0_{Layers[0].GetType().Name}"] = hidden;
+
+        var types = AuxiliaryInput;
+        if (types is not null && types.Length > 0)
+        {
+            var typeVectors = _nodeTypeEmbedding.Forward(types);
+            activations["node_type_embedding"] = typeVectors;
+            if (typeVectors.Rank == hidden.Rank && typeVectors.Length == hidden.Length)
+            {
+                hidden = Engine.TensorAdd(hidden, typeVectors);
+            }
+        }
+
+        for (int i = 1; i < Layers.Count; i++)
+        {
+            hidden = Layers[i].Forward(hidden);
+            activations[$"{i}_{Layers[i].GetType().Name}"] = hidden;
+        }
+
+        return activations;
     }
 
     #endregion

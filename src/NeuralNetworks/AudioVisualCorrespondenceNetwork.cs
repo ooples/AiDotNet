@@ -60,7 +60,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     [ResearchPaper("Look, Listen and Learn", "https://arxiv.org/abs/1705.08168")]
-public class AudioVisualCorrespondenceNetwork<T> : NeuralNetworkBase<T>, IAudioVisualCorrespondenceModel<T>
+public partial class AudioVisualCorrespondenceNetwork<T> : MultimodalModelLayoutBase<T>, IAudioVisualCorrespondenceModel<T>
 {
     private readonly AudioVisualCorrespondenceOptions _options;
 
@@ -90,13 +90,13 @@ public class AudioVisualCorrespondenceNetwork<T> : NeuralNetworkBase<T>, IAudioV
     private List<ILayer<T>>? _audioEncoderLayers;
     private ILayer<T>? _audioInputProjection;
     private ILayer<T>? _audioOutputProjection;
-    private Matrix<T>? _audioPositionalEmbedding;
+    private Tensor<T>? _audioPositionalEmbedding;
 
     // Visual encoder components
     private List<ILayer<T>>? _visualEncoderLayers;
     private ILayer<T>? _visualInputProjection;
     private ILayer<T>? _visualOutputProjection;
-    private Matrix<T>? _visualPositionalEmbedding;
+    private Tensor<T>? _visualPositionalEmbedding;
 
     // Cross-modal attention for localization
     private List<ILayer<T>>? _crossModalAttentionLayers;
@@ -228,14 +228,14 @@ public class AudioVisualCorrespondenceNetwork<T> : NeuralNetworkBase<T>, IAudioV
         const int maxAudioLength = 500;
         const int maxVisualLength = 256;
 
-        _audioPositionalEmbedding = new Matrix<T>(maxAudioLength, _embeddingDimension);
-        _visualPositionalEmbedding = new Matrix<T>(maxVisualLength, _embeddingDimension);
+        _audioPositionalEmbedding = new Tensor<T>([maxAudioLength, _embeddingDimension]);
+        _visualPositionalEmbedding = new Tensor<T>([maxVisualLength, _embeddingDimension]);
 
         InitializeSinusoidalEmbedding(_audioPositionalEmbedding, maxAudioLength);
         InitializeSinusoidalEmbedding(_visualPositionalEmbedding, maxVisualLength);
     }
 
-    private void InitializeSinusoidalEmbedding(Matrix<T> embedding, int maxLength)
+    private void InitializeSinusoidalEmbedding(Tensor<T> embedding, int maxLength)
     {
         for (int pos = 0; pos < maxLength; pos++)
         {
@@ -640,7 +640,7 @@ public class AudioVisualCorrespondenceNetwork<T> : NeuralNetworkBase<T>, IAudioV
         // Add positional embeddings
         if (_audioPositionalEmbedding is not null)
         {
-            var seqLen = Math.Min(projected.Shape[0], _audioPositionalEmbedding.Rows);
+            var seqLen = Math.Min(projected.Shape[0], _audioPositionalEmbedding.Shape[0]);
             for (int i = 0; i < seqLen; i++)
             {
                 for (int j = 0; j < _embeddingDimension; j++)
@@ -686,7 +686,7 @@ public class AudioVisualCorrespondenceNetwork<T> : NeuralNetworkBase<T>, IAudioV
         // Add positional embeddings
         if (_visualPositionalEmbedding is not null)
         {
-            var seqLen = Math.Min(projected.Shape[0], _visualPositionalEmbedding.Rows);
+            var seqLen = Math.Min(projected.Shape[0], _visualPositionalEmbedding.Shape[0]);
             for (int i = 0; i < seqLen; i++)
             {
                 for (int j = 0; j < _embeddingDimension; j++)
@@ -1049,22 +1049,39 @@ public class AudioVisualCorrespondenceNetwork<T> : NeuralNetworkBase<T>, IAudioV
         }
     }
 
-    /// <inheritdoc/>
-    public override void UpdateParameters(Vector<T> parameters)
+    // UpdateParameters was overridden here to validate against ParameterCount and walk
+    // Layers by hand. Both are the base's job, and keeping it would have broken as soon as
+    // the tables below joined the count: it walked only Layers, so it would have been short
+    // by exactly their size.
+    /// <summary>
+    /// Declares the audio and visual positional embedding tables, which live outside <see cref="NeuralNetworkBase{T}.Layers"/>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// These were in NEITHER surface. The base walks Layers, these are not in Layers, and
+    /// nothing declared them -- so they were never counted, never handed out, never restored,
+    /// and never trained through a flat-vector optimizer. Declaring them adds to the parameter
+    /// count, deliberately: the old number was not a smaller-but-correct total, it omitted real
+    /// weights.
+    /// </para>
+    /// <para>
+    /// A hook rather than a [TrainableParameter] attribute because TrainableParameterGenerator
+    /// only processes LayerBase subclasses (see its ExtendsLayerBase guard) -- the attribute
+    /// does nothing on a model. For a model, declaring through this hook IS the mechanism.
+    /// </para>
+    /// </remarks>
+    protected override IEnumerable<Tensor<T>> GetExtraTrainableTensors()
     {
-        // NeuralNetworkBase.UpdateParameters contract: caller passes the NEW
-        // parameter values (post-optimizer-step), NOT raw gradients. The
-        // previous body misread the contract — it computed
-        // `currentParams - 0.001 * input` and called SetParameters with that,
-        // which on top of Adam's own update produced a double-step that
-        // collapsed weights to near-zero. Training_ShouldChangeParameters
-        // saw no movement because the second-step output happened to equal
-        // the first-step output's hash. Forward straight to SetParameters
-        // per the base contract — Adam already produced the correct new
-        // values.
-        SetParameters(parameters);
-    }
+        if (_audioPositionalEmbedding is not null)
+        {
+            yield return _audioPositionalEmbedding;
+        }
 
+        if (_visualPositionalEmbedding is not null)
+        {
+            yield return _visualPositionalEmbedding;
+        }
+    }
     /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()
     {
@@ -1137,99 +1154,6 @@ public class AudioVisualCorrespondenceNetwork<T> : NeuralNetworkBase<T>, IAudioV
             _audioSampleRate,
             _videoFrameRate,
             _numEncoderLayers);
-    }
-
-    /// <inheritdoc/>
-    public override Vector<T> GetParameters()
-    {
-        // #1675 review: enumerate the Layers chain ONCE — the same order PredictCore runs — rather than the
-        // projection-field partition. The audio and visual encoders share the SAME Layers (the L3-Net shared
-        // encoder), and the four task heads all alias Layers[^1], so the field-based enumeration double-counted
-        // every shared/aliased layer; it also assumed a fixed 6-layer split (Layers.Count - 2) that the new
-        // Dense -> LayerNorm -> Tanh blocks broke. Iterating Layers is robust to the block count and lists each
-        // parameter exactly once. ResolveLazyLayerShapes first so lazy DenseLayers report their real params.
-        ResolveLazyLayerShapes();
-
-        var allParams = new List<T>();
-
-        void AddLayerParams(ILayer<T> layer)
-        {
-            var p = layer.GetParameters();
-            for (int i = 0; i < p.Length; i++)
-            {
-                allParams.Add(p[i]);
-            }
-        }
-
-        foreach (var layer in Layers) AddLayerParams(layer);
-
-        var result = new Vector<T>(allParams.Count);
-        for (int i = 0; i < allParams.Count; i++)
-        {
-            result[i] = allParams[i];
-        }
-
-        return result;
-    }
-
-    /// <inheritdoc/>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        // Force shape resolution before reading ParameterCount per layer.
-        // Without this, a freshly-cloned model (whose layers are all in lazy
-        // placeholder state until first Forward) would report ParameterCount=0
-        // for every DenseLayer, SetLayerParams would read zero bytes per call,
-        // and the orig→cloned weight transfer would silently drop every
-        // parameter — defeating Clone() and surfacing as "cloned output = 0"
-        // in Clone_ShouldProduceIdenticalOutput. Idempotent: ResolveLazyLayerShapes
-        // short-circuits via _layerShapesResolved on subsequent calls.
-        ResolveLazyLayerShapes();
-
-        var offset = 0;
-
-        void SetLayerParams(ILayer<T> layer)
-        {
-            int count = checked((int)layer.ParameterCount);
-            var p = new Vector<T>(count);
-            for (int i = 0; i < count; i++)
-            {
-                if (offset + i < parameters.Length)
-                {
-                    p[i] = parameters[offset + i];
-                }
-            }
-            layer.SetParameters(p);
-            offset += count;
-        }
-
-        // #1675 review: mirror GetParameters — iterate the Layers chain once (the shared encoder + aliased
-        // heads made the field-based enumeration double-write shared layers, and the Layers.Count - 2 split
-        // mis-partitioned the new Dense -> LayerNorm -> Tanh blocks). Each layer is assigned exactly once.
-        foreach (var layer in Layers) SetLayerParams(layer);
-    }
-
-    /// <inheritdoc/>
-    public override long ParameterCount
-    {
-        get
-        {
-            // Pre-resolve every lazy DenseLayer's input shape from the
-            // architecture's input width before reading sublayer parameter
-            // counts. The L3-Net encoder is a chain of lazy DenseLayers
-            // whose InputShape is the -1 sentinel until either a forward
-            // pass or ResolveLazyLayerShapes runs; without this call, the
-            // existence-check invariant Parameters_ShouldBeNonEmpty reads
-            // 0 immediately after construction. Idempotent across repeated
-            // ParameterCount queries.
-            ResolveLazyLayerShapes();
-
-            // #1675 review: sum the Layers chain once (consistent with GetParameters/SetParameters) — the
-            // field-based sum double-counted the shared encoder + aliased heads and depended on the now-broken
-            // Layers.Count - 2 partition.
-            var count = 0;
-            foreach (var layer in Layers) count += (int)layer.ParameterCount;
-            return count;
-        }
     }
 
     /// <inheritdoc/>

@@ -56,16 +56,19 @@ public class STLDecomposition<T> : TimeSeriesModelBase<T>
     /// <summary>
     /// The trend component of the time series.
     /// </summary>
+    [Buffer]
     private Vector<T> _trend;
 
     /// <summary>
     /// The seasonal component of the time series.
     /// </summary>
+    [Buffer]
     private Vector<T> _seasonal;
 
     /// <summary>
     /// The residual component of the time series.
     /// </summary>
+    [Buffer]
     private Vector<T> _residual;
 
     /// <summary>

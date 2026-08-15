@@ -2,6 +2,7 @@ using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Onnx;
 using AiDotNet.Optimizers;
@@ -28,9 +29,9 @@ namespace AiDotNet.Video.Enhancement;
 ///   temporal consistency, penalizing flickering and motion artifacts
 /// - Supports up to 8x upscaling with rich perceptual details
 ///
-/// <b>Note:</b> The full VideoGigaGAN architecture (GigaGAN backbone, high-frequency shuttle,
-/// temporal discriminator, anti-aliased flow warping) is available through ONNX inference mode.
-/// Native training mode uses a simplified baseline encoder-decoder for research and fine-tuning.
+/// Native mode implements the paper's generator: a style-conditioned spatial backbone with
+/// temporal inflation, anti-aliased flow-guided recurrent propagation, and the high-frequency
+/// shuttle. ONNX mode remains available for importing published generator checkpoints.
 /// </para>
 /// <para>
 /// <b>For Beginners:</b> VideoGigaGAN is like a very talented speed-painter. While
@@ -98,7 +99,13 @@ public class VideoGigaGAN<T> : VideoSuperResolutionBase<T>
     {
         _options = options ?? new VideoGigaGANOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate,
+                UseAdaptiveLearningRate = false
+            });
         ScaleFactor = _options.ScaleFactor;
         InitializeLayers();
     }
@@ -132,11 +139,14 @@ public class VideoGigaGAN<T> : VideoSuperResolutionBase<T>
             int ch = Architecture.InputDepth > 0 ? Architecture.InputDepth : 3;
             int h = Architecture.InputHeight > 0 ? Architecture.InputHeight : 64;
             int w = Architecture.InputWidth > 0 ? Architecture.InputWidth : 64;
-            Layers.AddRange(LayerHelper<T>.CreateDefaultVideoSuperResolutionLayers(
+            Layers.AddRange(LayerHelper<T>.CreateVideoGigaGANLayers(
                 inputChannels: ch, inputHeight: h, inputWidth: w,
                 numFeatures: _options.NumFeatures,
                 numResBlocks: _options.NumResBlocks,
-                scaleFactor: _options.ScaleFactor));
+                numStyleLayers: _options.NumStyleLayers,
+                scaleFactor: _options.ScaleFactor,
+                flowPyramidLevels: _options.FlowPyramidLevels,
+                hfShuttleWeight: _options.HFShuttleWeight));
         }
     }
 
@@ -153,7 +163,7 @@ public class VideoGigaGAN<T> : VideoSuperResolutionBase<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expected);
+            TrainWithTape(input, expected, _optimizer);
         }
         finally
         {
@@ -161,18 +171,11 @@ public class VideoGigaGAN<T> : VideoSuperResolutionBase<T>
         }
     }
 
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        if (!_useNativeMode) throw new NotSupportedException("Parameter updates are not supported in ONNX mode.");
-        int idx = 0;
-        foreach (var layer in Layers)
-        {
-            int count = checked((int)layer.ParameterCount);
-            layer.UpdateParameters(parameters.Slice(idx, count));
-            idx += count;
-        }
-    }
-
+    /// <inheritdoc />
+    /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
+    /// write on every parameter surface, so the guard is stated once here instead of being
+    /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
+    protected override bool SupportsParameterMutation => _useNativeMode;
     protected override Tensor<T> PreprocessFrames(Tensor<T> rawFrames) => NormalizeFrames(rawFrames);
 
     protected override Tensor<T> PostprocessOutput(Tensor<T> modelOutput) => DenormalizeFrames(modelOutput);
@@ -191,6 +194,8 @@ public class VideoGigaGAN<T> : VideoSuperResolutionBase<T>
         m.AdditionalInfo["NumStyleLayers"] = _options.NumStyleLayers.ToString();
         m.AdditionalInfo["PerceptualWeight"] = _options.PerceptualWeight.ToString();
         m.AdditionalInfo["GANWeight"] = _options.GANWeight.ToString();
+        m.AdditionalInfo["HFShuttleWeight"] = _options.HFShuttleWeight.ToString();
+        m.AdditionalInfo["FlowPyramidLevels"] = _options.FlowPyramidLevels.ToString();
         m.AdditionalInfo["ScaleFactor"] = _options.ScaleFactor.ToString();
         return m;
     }
@@ -208,6 +213,8 @@ public class VideoGigaGAN<T> : VideoSuperResolutionBase<T>
         w.Write(_options.GANWeight);
         w.Write(_options.HFShuttleWeight);
         w.Write(_options.DropoutRate);
+        w.Write(_options.FlowPyramidLevels);
+        w.Write(_options.LearningRate);
     }
 
     protected override void DeserializeNetworkSpecificData(BinaryReader r)
@@ -224,6 +231,8 @@ public class VideoGigaGAN<T> : VideoSuperResolutionBase<T>
         _options.GANWeight = r.ReadDouble();
         _options.HFShuttleWeight = r.ReadDouble();
         _options.DropoutRate = r.ReadDouble();
+        _options.FlowPyramidLevels = r.ReadInt32();
+        _options.LearningRate = r.ReadDouble();
         ScaleFactor = _options.ScaleFactor;
         if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
         {
@@ -240,8 +249,8 @@ public class VideoGigaGAN<T> : VideoSuperResolutionBase<T>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
         if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
-            return new VideoGigaGAN<T>(Architecture, p, _options);
-        return new VideoGigaGAN<T>(Architecture, _options);
+            return new VideoGigaGAN<T>(Architecture, p, new VideoGigaGANOptions(_options));
+        return new VideoGigaGAN<T>(Architecture, new VideoGigaGANOptions(_options));
     }
 
     #endregion

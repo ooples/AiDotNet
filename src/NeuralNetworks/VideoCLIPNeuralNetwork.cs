@@ -58,7 +58,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("VideoCLIP: Contrastive Pre-training for Zero-shot Video-Text Understanding", "https://arxiv.org/abs/2109.14084", Year = 2021, Authors = "Hu Xu, Gargi Ghosh, Po-Yao Huang, Dmytro Okhonko, Arber Zela, Florian Metze, Luke Zettlemoyer, Christoph Feichtenhofer")]
-public class VideoCLIPNeuralNetwork<T> : NeuralNetworkBase<T>, IVideoCLIPModel<T>
+public partial class VideoCLIPNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IVideoCLIPModel<T>
 {
     private readonly VideoCLIPOptions _options;
 
@@ -86,10 +86,10 @@ public class VideoCLIPNeuralNetwork<T> : NeuralNetworkBase<T>, IVideoCLIPModel<T
     private readonly List<ILayer<T>> _temporalEncoderLayers = [];
     private readonly List<ILayer<T>> _textEncoderLayers = [];
     private readonly List<ILayer<T>> _projectionLayers = [];
-    private Matrix<T>? _visionClsToken;
-    private Matrix<T>? _visionPositionalEmbeddings;
-    private Matrix<T>? _temporalPositionalEmbeddings;
-    private Matrix<T>? _textPositionalEmbeddings;
+    private Tensor<T>? _visionClsToken;
+    private Tensor<T>? _visionPositionalEmbeddings;
+    private Tensor<T>? _temporalPositionalEmbeddings;
+    private Tensor<T>? _textPositionalEmbeddings;
     private ILayer<T>? _patchEmbedding;
     private ILayer<T>? _textTokenEmbedding;
     private ILayer<T>? _videoProjection;
@@ -99,15 +99,13 @@ public class VideoCLIPNeuralNetwork<T> : NeuralNetworkBase<T>, IVideoCLIPModel<T
     // Gradient checkpointing: cached frames from the last forward pass for backward recomputation
     private List<Tensor<T>>? _cachedTrainingFrames;
 
-    // Cached pre-normalized embedding for L2 normalization backward
-    private Vector<T>? _cachedPreNormEmbedding;
 
     #endregion
 
     #region Shared Fields
 
     private readonly ITokenizer _tokenizer;
-    private readonly IOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private readonly ILossFunction<T> _lossFunction;
     private readonly int _embeddingDimension;
     private readonly int _maxSequenceLength;
@@ -168,10 +166,10 @@ public class VideoCLIPNeuralNetwork<T> : NeuralNetworkBase<T>, IVideoCLIPModel<T
         int embeddingDimension = 512,
         int maxSequenceLength = 77,
         int imageSize = 224,
-        IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         VideoCLIPOptions? options = null)
-        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
+        : base(architecture, lossFunction ?? new CosineSimilarityLoss<T>(), 1.0)
     {
         _options = options ?? new VideoCLIPOptions();
         Options = _options;
@@ -215,7 +213,7 @@ public class VideoCLIPNeuralNetwork<T> : NeuralNetworkBase<T>, IVideoCLIPModel<T
             Guard.NotNull(tokenizer);
             _tokenizer = tokenizer;
             _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
-            _lossFunction = lossFunction ?? new CrossEntropyWithLogitsLoss<T>();
+            _lossFunction = lossFunction ?? new CosineSimilarityLoss<T>();
             InitializeLayers();
         }
         catch
@@ -247,10 +245,10 @@ public class VideoCLIPNeuralNetwork<T> : NeuralNetworkBase<T>, IVideoCLIPModel<T
         double frameRate = 1.0,
         TemporalAggregationType temporalAggregation = TemporalAggregationType.TemporalTransformer,
         ITokenizer? tokenizer = null,
-        IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         VideoCLIPOptions? options = null)
-        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
+        : base(architecture, lossFunction ?? new CosineSimilarityLoss<T>(), 1.0)
     {
         _options = options ?? new VideoCLIPOptions();
         Options = _options;
@@ -273,7 +271,7 @@ public class VideoCLIPNeuralNetwork<T> : NeuralNetworkBase<T>, IVideoCLIPModel<T
 
         _tokenizer = tokenizer ?? Tokenization.ClipTokenizerFactory.CreateSimple();
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
-        _lossFunction = lossFunction ?? new CrossEntropyWithLogitsLoss<T>();
+        _lossFunction = lossFunction ?? new CosineSimilarityLoss<T>();
 
         InitializeNativeLayers(channels);
     }
@@ -324,10 +322,10 @@ public class VideoCLIPNeuralNetwork<T> : NeuralNetworkBase<T>, IVideoCLIPModel<T
         _captionHead = Layers[idx++];
 
         // Initialize positional embeddings
-        _visionClsToken = Matrix<T>.CreateDefault(1, _visionHiddenDim, NumOps.Zero);
-        _visionPositionalEmbeddings = Matrix<T>.CreateDefault(numPatches + 1, _visionHiddenDim, NumOps.Zero);
-        _temporalPositionalEmbeddings = Matrix<T>.CreateDefault(_numFrames, _visionHiddenDim, NumOps.Zero);
-        _textPositionalEmbeddings = Matrix<T>.CreateDefault(_maxSequenceLength, _textHiddenDim, NumOps.Zero);
+        _visionClsToken = new Tensor<T>([1, _visionHiddenDim]);
+        _visionPositionalEmbeddings = new Tensor<T>([numPatches + 1, _visionHiddenDim]);
+        _temporalPositionalEmbeddings = new Tensor<T>([_numFrames, _visionHiddenDim]);
+        _textPositionalEmbeddings = new Tensor<T>([_maxSequenceLength, _textHiddenDim]);
 
         InitializeWeights();
     }
@@ -343,13 +341,13 @@ public class VideoCLIPNeuralNetwork<T> : NeuralNetworkBase<T>, IVideoCLIPModel<T
         InitializeMatrix(_textPositionalEmbeddings, random, scale);
     }
 
-    private void InitializeMatrix(Matrix<T>? matrix, Random random, double scale)
+    private void InitializeMatrix(Tensor<T>? matrix, Random random, double scale)
     {
         if (matrix is null) return;
 
-        for (int i = 0; i < matrix.Rows; i++)
+        for (int i = 0; i < matrix.Shape[0]; i++)
         {
-            for (int j = 0; j < matrix.Columns; j++)
+            for (int j = 0; j < matrix.Shape[1]; j++)
             {
                 matrix[i, j] = NumOps.FromDouble(random.NextDouble() * scale - scale / 2);
             }
@@ -680,9 +678,9 @@ public class VideoCLIPNeuralNetwork<T> : NeuralNetworkBase<T>, IVideoCLIPModel<T
         var embedded = _textTokenEmbedding.Forward(tokenTensor);
 
         // Add positional embeddings
-        for (int i = 0; i < seqLen && i < _textPositionalEmbeddings.Rows; i++)
+        for (int i = 0; i < seqLen && i < _textPositionalEmbeddings.Shape[0]; i++)
         {
-            for (int j = 0; j < embedded.Shape[1] && j < _textPositionalEmbeddings.Columns; j++)
+            for (int j = 0; j < embedded.Shape[1] && j < _textPositionalEmbeddings.Shape[1]; j++)
             {
                 embedded[i, j] = NumOps.Add(embedded[i, j], _textPositionalEmbeddings[i, j]);
             }
@@ -1069,7 +1067,7 @@ public class VideoCLIPNeuralNetwork<T> : NeuralNetworkBase<T>, IVideoCLIPModel<T
         // Add temporal positional embeddings via Engine
         if (_temporalPositionalEmbeddings is not null)
         {
-            var tempPosEmb = Tensor<T>.FromMatrix(_temporalPositionalEmbeddings);
+            var tempPosEmb = _temporalPositionalEmbeddings;
             int numSampledFrames = stackedFeatures.Shape[0];
             int featureDim = stackedFeatures.Shape[1];
             int sliceRows = Math.Min(numSampledFrames, tempPosEmb.Shape[0]);
@@ -1098,16 +1096,21 @@ public class VideoCLIPNeuralNetwork<T> : NeuralNetworkBase<T>, IVideoCLIPModel<T
             pooled = Engine.Reshape(projected, [projected.Shape[^1]]);
         }
 
-        // Cache pre-normalized embedding for backward L2 norm Jacobian
+        // Paper-faithful contrastive training (Xu et al. 2021, §3.2): VideoCLIP average-pools the
+        // token sequence and contrasts the RAW pooled features with InfoNCE at temperature 1.0 — it
+        // does NOT L2-normalize the embeddings. We only normalize on the INFERENCE path (so the public
+        // similarity API returns cosine similarities). Normalizing on the TRAINING path additionally
+        // routes every gradient through the L2-norm Jacobian (I - yyᵀ)/‖x‖, whose 1/‖x‖ term produces a
+        // NaN gradient that drives the parameters to NaN on the first optimizer step (the batch's pooled
+        // embedding can sit near the origin for the random-init/random-target smoke fixture). Returning
+        // the un-normalized pooled features in training matches the paper and removes that NaN source;
+        // the encoder's LayerNorms keep the pooled features O(1) so the contrastive softmax stays stable.
         if (IsTrainingMode)
         {
-            int dim = pooled.Shape[0];
-            var preNorm = new Vector<T>(dim);
-            for (int i = 0; i < dim; i++) preNorm[i] = pooled[i];
-            _cachedPreNormEmbedding = preNorm;
+            return pooled;
         }
 
-        // L2 normalize via Engine ops
+        // L2 normalize via Engine ops (inference / similarity path only).
         return NormalizeTensor(pooled);
     }
 
@@ -1151,12 +1154,15 @@ public class VideoCLIPNeuralNetwork<T> : NeuralNetworkBase<T>, IVideoCLIPModel<T
             current = layer.Forward(current);
         }
 
-        // Take CLS token (row 0) as frame representation
-        // Extract first row from [seqLen, hiddenDim] → [hiddenDim]
+        // Take CLS token (row 0) as the frame representation. Use TAPE-TRACKED Engine ops
+        // (TensorNarrow + Reshape), NOT a raw Data.Span copy into a fresh Tensor: the raw copy
+        // produced a tensor with no GradFn, severing the ViT frame encoder from the gradient tape so
+        // its patch-embedding / attention / FFN weights received NO gradient and never trained — the
+        // opposite of the paper, where the frame encoder is learned end-to-end under the contrastive
+        // objective (Xu et al. 2021). Slicing row 0 through the Engine keeps the encoder on the tape.
         int hiddenDim = current.Shape[^1];
-        var clsData = new T[hiddenDim];
-        current.Data.Span.Slice(0, hiddenDim).CopyTo(clsData);
-        return new Tensor<T>(new[] { hiddenDim }, new Vector<T>(clsData));
+        var clsRow = Engine.TensorNarrow(current, 0, 0, 1); // [seqLen, hiddenDim] -> [1, hiddenDim]
+        return Engine.Reshape(clsRow, new[] { hiddenDim });
     }
 
     /// <summary>
@@ -1352,22 +1358,22 @@ public class VideoCLIPNeuralNetwork<T> : NeuralNetworkBase<T>, IVideoCLIPModel<T
 
     #region Helper Methods
 
-    private Tensor<T> PrependClsToken(Tensor<T> sequence, Matrix<T> clsToken)
+    private Tensor<T> PrependClsToken(Tensor<T> sequence, Tensor<T> clsToken)
     {
         // Convert CLS token matrix [1, hiddenDim] to tensor and expand for concat
-        var clsTensor = Tensor<T>.FromMatrix(clsToken); // [1, hiddenDim]
+        var clsTensor = clsToken; // [1, hiddenDim]
 
         // Concatenate CLS token with sequence along axis 0: [1+seqLen, hiddenDim]
         return Engine.TensorConcatenate([clsTensor, sequence], axis: 0);
     }
 
-    private Tensor<T> AddPositionalEmbeddings(Tensor<T> sequence, Matrix<T> posEmbeddings)
+    private Tensor<T> AddPositionalEmbeddings(Tensor<T> sequence, Tensor<T> posEmbeddings)
     {
         int seqLen = sequence.Shape[0];
         int hiddenDim = sequence.Shape[1];
 
         // Convert positional embeddings matrix to tensor
-        var posEmbTensor = Tensor<T>.FromMatrix(posEmbeddings);
+        var posEmbTensor = posEmbeddings;
 
         // Slice to match sequence length if needed
         int sliceLen = Math.Min(seqLen, posEmbTensor.Shape[0]);
@@ -1423,8 +1429,16 @@ public class VideoCLIPNeuralNetwork<T> : NeuralNetworkBase<T>, IVideoCLIPModel<T
         // Sum all elements to get ||x||^2
         var allAxes = Enumerable.Range(0, squared.Shape.Length).ToArray();
         var sumSquared = Engine.ReduceSum(squared, allAxes, keepDims: true);
-        // Add epsilon for numerical stability, then sqrt to get ||x||
-        var norm = Engine.TensorSqrt(Engine.TensorAddScalar(sumSquared, NumOps.FromDouble(1e-12)));
+        // Add epsilon for numerical stability, then sqrt to get ||x||. The epsilon is 1e-6, NOT a
+        // token 1e-12: ||x||^2 is a sum of squares that is mathematically >= 0, but a parallel-BLAS
+        // reduction can return a slightly NEGATIVE value from summation-order rounding (~float32
+        // machine-eps x num_terms). With a 1e-12 floor that negative survives into sqrt -> NaN, which
+        // then poisons the whole embedding (VideoCLIP DifferentInputs_AfterTraining saw L2 distance =
+        // NaN on the parallel CI runner while passing locally). A 1e-6 floor keeps the radicand
+        // positive under that drift and bounds the 1/||x|| normalize backward as the single-pair
+        // contrastive objective drives the embedding norm toward zero, while staying negligible for a
+        // well-formed unit embedding (||x||^2 ~ dim).
+        var norm = Engine.TensorSqrt(Engine.TensorAddScalar(sumSquared, NumOps.FromDouble(1e-6)));
         // Divide element-wise: x / ||x||
         return Engine.TensorBroadcastDivide(tensor, norm);
     }
@@ -1549,7 +1563,7 @@ public class VideoCLIPNeuralNetwork<T> : NeuralNetworkBase<T>, IVideoCLIPModel<T
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expectedOutput, _optimizer as IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>);
+            TrainWithTape(input, expectedOutput, _optimizer);
         }
         finally
         {
@@ -1557,224 +1571,55 @@ public class VideoCLIPNeuralNetwork<T> : NeuralNetworkBase<T>, IVideoCLIPModel<T
         }
     }
 
-    /// <inheritdoc/>
-    public override Vector<T> GetParameters()
+    /// <summary>
+    /// Declares the CLS token and the three positional embedding tables, which live outside
+    /// <see cref="NeuralNetworkBase{T}.Layers"/>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Declared in the order the deleted GetParameters concatenated them: vision CLS token, vision
+    /// positional embeddings, temporal positional embeddings, text positional embeddings.
+    /// </para>
+    /// <para>
+    /// This replaces 220 lines: ParameterCount, GetParameters, SetParameters, UpdateParameters and
+    /// SIX private helpers built only to serve them -- AppendLayerListParameters,
+    /// AppendSingleLayerParameters, AppendMatrixParameters and their Update counterparts. Every one
+    /// of those walked the same towers and tables the base already walks, each maintaining its own
+    /// running offset, and any of them could have been edited without the others.
+    /// </para>
+    /// <para>
+    /// The towers need no declaration and must not get one: <c>_frameEncoderLayers</c>,
+    /// <c>_temporalEncoderLayers</c>, <c>_textEncoderLayers</c> and the five projections are all
+    /// filled FROM <c>Layers</c> (<c>Layers[idx++]</c>), so they are typed views of layers the base
+    /// walk already reaches, and declaring them would double-count.
+    /// </para>
+    /// <para>
+    /// The tables became <c>Tensor&lt;T&gt;</c> because a <c>Matrix&lt;T&gt;</c> is invisible to the
+    /// trainable-parameter walk -- the reason these surfaces had to be hand-written at all. The
+    /// forward path, the initializer and the serializer took matrices only to serve these four
+    /// fields and now take tensors; nothing else called them.
+    /// </para>
+    /// </remarks>
+    protected override IEnumerable<Tensor<T>> GetExtraTrainableTensors()
     {
-        var parameters = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
-        if (!_useNativeMode)
+        if (_visionClsToken is not null)
         {
-            return parameters;
+            yield return _visionClsToken;
         }
 
-        int offset = 0;
-        offset = AppendLayerListParameters(_frameEncoderLayers, parameters, offset);
-        offset = AppendLayerListParameters(_temporalEncoderLayers, parameters, offset);
-        offset = AppendLayerListParameters(_textEncoderLayers, parameters, offset);
-        offset = AppendLayerListParameters(_projectionLayers, parameters, offset);
-
-        offset = AppendSingleLayerParameters(_patchEmbedding, parameters, offset);
-        offset = AppendSingleLayerParameters(_textTokenEmbedding, parameters, offset);
-        offset = AppendSingleLayerParameters(_videoProjection, parameters, offset);
-        offset = AppendSingleLayerParameters(_textProjection, parameters, offset);
-        offset = AppendSingleLayerParameters(_captionHead, parameters, offset);
-
-        offset = AppendMatrixParameters(_visionClsToken, parameters, offset);
-        offset = AppendMatrixParameters(_visionPositionalEmbeddings, parameters, offset);
-        offset = AppendMatrixParameters(_temporalPositionalEmbeddings, parameters, offset);
-        offset = AppendMatrixParameters(_textPositionalEmbeddings, parameters, offset);
-
-        return parameters;
-    }
-
-    /// <inheritdoc/>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (parameters == null)
+        if (_visionPositionalEmbeddings is not null)
         {
-            throw new ArgumentNullException(nameof(parameters));
+            yield return _visionPositionalEmbeddings;
         }
 
-        UpdateParameters(parameters);
-    }
-
-    /// <inheritdoc/>
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        int expectedCount = ParameterCountHelper.ToFlatVectorSize(ParameterCount);
-        if (parameters.Length != expectedCount)
+        if (_temporalPositionalEmbeddings is not null)
         {
-            throw new ArgumentException(
-                $"Expected {expectedCount} parameters, but got {parameters.Length}.",
-                nameof(parameters));
+            yield return _temporalPositionalEmbeddings;
         }
 
-        if (!_useNativeMode)
+        if (_textPositionalEmbeddings is not null)
         {
-            return;
-        }
-
-        int offset = 0;
-        offset = UpdateLayerListParameters(_frameEncoderLayers, parameters, offset);
-        offset = UpdateLayerListParameters(_temporalEncoderLayers, parameters, offset);
-        offset = UpdateLayerListParameters(_textEncoderLayers, parameters, offset);
-        offset = UpdateLayerListParameters(_projectionLayers, parameters, offset);
-
-        offset = UpdateSingleLayerParameters(_patchEmbedding, parameters, offset);
-        offset = UpdateSingleLayerParameters(_textTokenEmbedding, parameters, offset);
-        offset = UpdateSingleLayerParameters(_videoProjection, parameters, offset);
-        offset = UpdateSingleLayerParameters(_textProjection, parameters, offset);
-        offset = UpdateSingleLayerParameters(_captionHead, parameters, offset);
-
-        offset = UpdateMatrixParameters(_visionClsToken, parameters, offset);
-        offset = UpdateMatrixParameters(_visionPositionalEmbeddings, parameters, offset);
-        offset = UpdateMatrixParameters(_temporalPositionalEmbeddings, parameters, offset);
-        offset = UpdateMatrixParameters(_textPositionalEmbeddings, parameters, offset);
-    }
-
-    private int UpdateLayerListParameters(List<ILayer<T>> layers, Vector<T> parameters, int offset)
-    {
-        foreach (var layer in layers)
-        {
-            int layerParamCount = checked((int)layer.ParameterCount);
-            if (layerParamCount > 0)
-            {
-                var layerParams = new Vector<T>(layerParamCount);
-                for (int i = 0; i < layerParamCount; i++)
-                {
-                    layerParams[i] = parameters[offset + i];
-                }
-                layer.UpdateParameters(layerParams);
-                offset += layerParamCount;
-            }
-        }
-        return offset;
-    }
-
-    private int AppendLayerListParameters(List<ILayer<T>> layers, Vector<T> parameters, int offset)
-    {
-        foreach (var layer in layers)
-        {
-            var layerParams = layer.GetParameters();
-            for (int i = 0; i < layerParams.Length; i++)
-            {
-                parameters[offset + i] = layerParams[i];
-            }
-            offset += layerParams.Length;
-        }
-        return offset;
-    }
-
-    private int AppendSingleLayerParameters(ILayer<T>? layer, Vector<T> parameters, int offset)
-    {
-        if (layer is null)
-        {
-            return offset;
-        }
-
-        var layerParams = layer.GetParameters();
-        for (int i = 0; i < layerParams.Length; i++)
-        {
-            parameters[offset + i] = layerParams[i];
-        }
-
-        return offset + layerParams.Length;
-    }
-
-    private int AppendMatrixParameters(Matrix<T>? matrix, Vector<T> parameters, int offset)
-    {
-        if (matrix is null)
-        {
-            return offset;
-        }
-
-        for (int i = 0; i < matrix.Rows; i++)
-        {
-            for (int j = 0; j < matrix.Columns; j++)
-            {
-                parameters[offset++] = matrix[i, j];
-            }
-        }
-
-        return offset;
-    }
-
-    private int UpdateSingleLayerParameters(ILayer<T>? layer, Vector<T> parameters, int offset)
-    {
-        if (layer is null)
-        {
-            return offset;
-        }
-
-        int layerParamCount = checked((int)layer.ParameterCount);
-        if (layerParamCount > 0)
-        {
-            var layerParams = new Vector<T>(layerParamCount);
-            for (int i = 0; i < layerParamCount; i++)
-            {
-                layerParams[i] = parameters[offset + i];
-            }
-            layer.UpdateParameters(layerParams);
-        }
-
-        return offset + layerParamCount;
-    }
-
-    private int UpdateMatrixParameters(Matrix<T>? matrix, Vector<T> parameters, int offset)
-    {
-        if (matrix is null)
-        {
-            return offset;
-        }
-
-        for (int i = 0; i < matrix.Rows; i++)
-        {
-            for (int j = 0; j < matrix.Columns; j++)
-            {
-                matrix[i, j] = parameters[offset++];
-            }
-        }
-
-        return offset;
-    }
-
-    /// <inheritdoc/>
-    public override long ParameterCount
-    {
-        get
-        {
-            if (!_useNativeMode)
-            {
-                return 0; // ONNX mode doesn't expose parameters
-            }
-
-            // Accumulate in long so multi-billion-parameter native models
-            // (PaLM-E-scale captioning heads, large-vocab embeddings, etc.)
-            // don't wrap before reaching ToFlatVectorSize. Sublayer
-            // ParameterCount is already long; the matrix terms multiply two
-            // ints but get promoted via (long) on the first factor.
-            long count = 0;
-
-            // Layer lists
-            foreach (var layer in _frameEncoderLayers) count += layer.ParameterCount;
-            foreach (var layer in _temporalEncoderLayers) count += layer.ParameterCount;
-            foreach (var layer in _textEncoderLayers) count += layer.ParameterCount;
-            foreach (var layer in _projectionLayers) count += layer.ParameterCount;
-
-            // Single layers
-            if (_patchEmbedding is not null) count += _patchEmbedding.ParameterCount;
-            if (_textTokenEmbedding is not null) count += _textTokenEmbedding.ParameterCount;
-            if (_videoProjection is not null) count += _videoProjection.ParameterCount;
-            if (_textProjection is not null) count += _textProjection.ParameterCount;
-            if (_captionHead is not null) count += _captionHead.ParameterCount;
-
-            // Positional embeddings and CLS tokens (these are also parameters).
-            // Cast the first factor to long so the multiplication is 64-bit.
-            if (_visionClsToken is not null) count += (long)_visionClsToken.Rows * _visionClsToken.Columns;
-            if (_visionPositionalEmbeddings is not null) count += (long)_visionPositionalEmbeddings.Rows * _visionPositionalEmbeddings.Columns;
-            if (_temporalPositionalEmbeddings is not null) count += (long)_temporalPositionalEmbeddings.Rows * _temporalPositionalEmbeddings.Columns;
-            if (_textPositionalEmbeddings is not null) count += (long)_textPositionalEmbeddings.Rows * _textPositionalEmbeddings.Columns;
-
-            return count;
+            yield return _textPositionalEmbeddings;
         }
     }
 
@@ -1890,7 +1735,7 @@ public class VideoCLIPNeuralNetwork<T> : NeuralNetworkBase<T>, IVideoCLIPModel<T
         _captionHead = Layers[idx++];
     }
 
-    private static void SerializeMatrix(BinaryWriter writer, Matrix<T>? matrix)
+    private static void SerializeMatrix(BinaryWriter writer, Tensor<T>? matrix)
     {
         var ops = MathHelper.GetNumericOperations<T>();
         if (matrix is null)
@@ -1899,21 +1744,21 @@ public class VideoCLIPNeuralNetwork<T> : NeuralNetworkBase<T>, IVideoCLIPModel<T
             writer.Write(0);
             return;
         }
-        writer.Write(matrix.Rows);
-        writer.Write(matrix.Columns);
-        for (int r = 0; r < matrix.Rows; r++)
-            for (int c = 0; c < matrix.Columns; c++)
+        writer.Write(matrix.Shape[0]);
+        writer.Write(matrix.Shape[1]);
+        for (int r = 0; r < matrix.Shape[0]; r++)
+            for (int c = 0; c < matrix.Shape[1]; c++)
                 writer.Write(ops.ToDouble(matrix[r, c]));
     }
 
-    private static Matrix<T>? DeserializeMatrix(BinaryReader reader)
+    private static Tensor<T>? DeserializeMatrix(BinaryReader reader)
     {
         var ops = MathHelper.GetNumericOperations<T>();
         int rows = reader.ReadInt32();
         int cols = reader.ReadInt32();
         if (rows == 0 && cols == 0)
             return null;
-        var matrix = Matrix<T>.CreateDefault(rows, cols, ops.Zero);
+        var matrix = new Tensor<T>([rows, cols]);
         for (int r = 0; r < rows; r++)
             for (int c = 0; c < cols; c++)
                 matrix[r, c] = ops.FromDouble(reader.ReadDouble());

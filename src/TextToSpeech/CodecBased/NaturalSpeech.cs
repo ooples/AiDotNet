@@ -81,7 +81,13 @@ public class NaturalSpeech<T> : TtsModelBase<T>, IEndToEndTts<T>
     {
         _options = options ?? new NaturalSpeechOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate,
+                WeightDecay = _options.WeightDecay
+            });
         base.SampleRate = _options.SampleRate;
         base.MelChannels = _options.MelChannels;
         base.HopSize = _options.HopSize;
@@ -160,7 +166,7 @@ public class NaturalSpeech<T> : TtsModelBase<T>, IEndToEndTts<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expected);
+            TrainWithTape(input, expected, _optimizer);
         }
         finally
         {
@@ -168,19 +174,14 @@ public class NaturalSpeech<T> : TtsModelBase<T>, IEndToEndTts<T>
         }
     }
 
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        if (!_useNativeMode)
-            throw new NotSupportedException("Cannot update parameters in ONNX mode.");
-        int idx = 0;
-        foreach (var l in Layers)
-        {
-            int c = (int)l.ParameterCount;
-            l.UpdateParameters(parameters.Slice(idx, c));
-            idx += c;
-        }
-    }
+    protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> GetOrCreateBaseOptimizer()
+        => _optimizer ?? throw new InvalidOperationException("A native NaturalSpeech optimizer is not available in ONNX mode.");
 
+    /// <inheritdoc />
+    /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
+    /// write on every parameter surface, so the guard is stated once here instead of being
+    /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
+    protected override bool SupportsParameterMutation => _useNativeMode;
     public override ModelMetadata<T> GetModelMetadata()
     {
         return new ModelMetadata<T>
@@ -241,8 +242,14 @@ public class NaturalSpeech<T> : TtsModelBase<T>, IEndToEndTts<T>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
         if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new NaturalSpeech<T>(Architecture, mp, _options);
-        return new NaturalSpeech<T>(Architecture, _options);
+            return new NaturalSpeech<T>(Architecture, mp, new NaturalSpeechOptions(_options));
+
+        var cloneOptimizer = _optimizer?.GetOptions() is AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>> options
+            ? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+                null,
+                new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>(options))
+            : null;
+        return new NaturalSpeech<T>(Architecture, new NaturalSpeechOptions(_options), cloneOptimizer);
     }
 
     private void ThrowIfDisposed()

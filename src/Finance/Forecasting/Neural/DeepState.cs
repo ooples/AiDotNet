@@ -81,8 +81,14 @@ namespace AiDotNet.Finance.Forecasting.Neural;
 [ModelTask(ModelTask.Forecasting)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("Deep State Space Models for Time Series Forecasting", "https://arxiv.org/abs/1803.01271", Year = 2018, Authors = "Syama Sundar Rangapuram, Matthias Seeger, Jan Gasthaus, Lorenzo Stella, Yuyang Wang, Tim Januschowski")]
-public class DeepState<T> : ForecastingModelBase<T>
+// Citation URL corrected. arXiv 1803.01271 is "An Empirical Evaluation of Generic Convolutional and
+// Recurrent Networks for Sequence Modeling" (the TCN paper) — a real paper, but a different one. This
+// work appeared at NeurIPS 2018 and is not on arXiv, so the canonical proceedings URL replaces it.
+[ResearchPaper("Deep State Space Models for Time Series Forecasting",
+    "https://proceedings.neurips.cc/paper/2018/hash/5cf68969fb67aa6082363a6d4e6468e2-Abstract.html",
+    Year = 2018,
+    Authors = "Syama Sundar Rangapuram, Matthias Seeger, Jan Gasthaus, Lorenzo Stella, Yuyang Wang, Tim Januschowski")]
+public partial class DeepState<T> : ForecastingModelBase<T>
 {
     #region Execution Mode
 
@@ -524,16 +530,8 @@ public class DeepState<T> : ForecastingModelBase<T>
         return Forward(input);
     }
 
-    /// <inheritdoc/>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the DeepState model, UpdateParameters updates internal parameters or state. This keeps the DeepState architecture aligned with the latest values.
-    /// </para>
-    /// </remarks>
-    public override void UpdateParameters(Vector<T> gradients)
-    {
-    }
-
+    // UpdateParameters was an empty override, silently dropping every restore. The base
+    // distributes the vector over the declared enumeration.
     /// <inheritdoc/>
     /// <remarks>
     /// <para>
@@ -971,24 +969,31 @@ public class DeepState<T> : ForecastingModelBase<T>
         }
 
         // Mismatched element counts: prefer broadcasting if the shapes are
-        // compatible (e.g. [1, N] + [N]), otherwise fall back to a manual
-        // per-element combine that only touches the overlapping prefix.
-        // The upstream broadcaster throws for pathological cases like
-        // [1, 40] + [1, 1600] that arise when the SSM transition/observation
-        // heads produce different latent dims — clipping to the common
-        // prefix keeps the forward pass well-defined instead of collapsing
-        // Predict entirely.
+        // compatible (e.g. [1, N] + [N]), otherwise combine the overlapping
+        // prefix and preserve the remainder of a. Every operation here must
+        // go through Engine: the previous manual Tensor allocation copied
+        // scalar values outside the gradient tape. DeepState therefore
+        // produced correct finite differences but zero analytical gradients
+        // for its transition/observation branches.
         bool broadcastCompatible = BroadcastShapesMatch(a._shape, b._shape);
         if (broadcastCompatible)
             return Engine.TensorBroadcastAdd(a, b);
 
         int minLen = Math.Min(a.Length, b.Length);
-        var result = new Tensor<T>(a._shape);
-        for (int i = 0; i < minLen; i++)
-            result[i] = NumOps.Add(a[i], b[i]);
-        for (int i = minLen; i < a.Length; i++)
-            result[i] = a[i];
-        return result;
+        var flatA = Engine.Reshape(a, [a.Length]);
+        var flatB = Engine.Reshape(b, [b.Length]);
+        var aPrefix = Engine.TensorSlice(flatA, [0], [minLen]);
+        var bPrefix = Engine.TensorSlice(flatB, [0], [minLen]);
+        var sumPrefix = Engine.TensorAdd(aPrefix, bPrefix);
+
+        Tensor<T> flatResult = sumPrefix;
+        if (a.Length > minLen)
+        {
+            var aRemainder = Engine.TensorSlice(flatA, [minLen], [a.Length - minLen]);
+            flatResult = Engine.TensorConcatenate([sumPrefix, aRemainder], axis: 0);
+        }
+
+        return Engine.Reshape(flatResult, a._shape);
     }
 
     private static bool BroadcastShapesMatch(int[] x, int[] y)

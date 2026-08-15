@@ -55,13 +55,17 @@ namespace AiDotNet.MetaLearning.Algorithms;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("Applications of Diffusion Models on Few-Shot Learning",
-    "https://arxiv.org/abs/2409.15383",
-    Year = 2024,
-    Authors = "Kaiyu Hu")]
+// Citation corrected. arXiv 2409.15383 is "Generalization in birdsong classification", unrelated. The
+// paper is "Meta-DM: Applications of Diffusion Models on Few-Shot Learning" (arXiv 2305.08092, 2023) —
+// the recorded title had dropped the "Meta-DM:" prefix, which is what made the audit report it as a
+// near-miss rather than an exact match.
+[ResearchPaper("Meta-DM: Applications of Diffusion Models on Few-Shot Learning",
+    "https://arxiv.org/abs/2305.08092",
+    Year = 2023,
+    Authors = "Wentao Hu, Xiurong Jiang, Jiarun Liu, Yuqi Yang, Hui Tian")]
 [ComponentType(ComponentType.MetaLearner)]
 [PipelineStage(PipelineStage.Training)]
-public class MetaDMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
+public partial class MetaDMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
     private IParameterizable<T, TInput, TOutput>? _cachedParamModel;
     private IParameterizable<T, TInput, TOutput> ParamModel => _cachedParamModel ??= InterfaceGuard.Parameterizable(MetaModel);

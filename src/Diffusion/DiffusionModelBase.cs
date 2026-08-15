@@ -39,7 +39,9 @@ namespace AiDotNet.Diffusion;
 /// Specific diffusion models (like DDPM, Latent Diffusion) extend this base to implement
 /// their unique noise prediction architectures.</para>
 /// </remarks>
-public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableModel<T>, IModelShape, IDisposable, AiDotNet.Interfaces.ISelfSupervisedModel
+public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableModel<T>, IModelShape, IDisposable,
+    AiDotNet.Interfaces.ISelfSupervisedModel, AiDotNet.Models.Parameters.IParameterManifestProvider,
+    AiDotNet.Models.Parameters.IParameterSurfaceLifecycle
 {
     /// <summary>
     /// Concrete diffusion models can override this method to yield the components
@@ -334,8 +336,125 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
     /// <inheritdoc />
     public INoiseScheduler<T> Scheduler => _scheduler;
 
+    /// <summary>
+    /// Child components whose parameters belong to this model — the noise predictor, the VAE, a
+    /// conditioner — in the order they were registered.
+    /// </summary>
+    /// <remarks>
+    /// Registration order IS serialization order, because <see cref="GetParameters"/> concatenates
+    /// in this order and <see cref="SetParameters"/> slices back in it.
+    /// </remarks>
+    private readonly AiDotNet.Models.Parameters.ParameterComponentRegistry<T> _parameterRegistry = new();
+
+    /// <summary>
+    /// Declares a child component as part of this model's parameter surface. Call once per
+    /// component, in the constructor.
+    /// </summary>
+    /// <param name="component">The child. Null is ignored, so a component built only on a branch the constructor did not take is simply absent.</param>
+    /// <remarks>
+    /// <para>
+    /// This is the model-level counterpart of <c>LayerBase.RegisterSubLayer</c>, and it exists for
+    /// the same reason. These three surfaces used to be <c>abstract</c>, so all 221 diffusion models
+    /// hand-wrote them, and 44 of those wrote expressions like
+    /// <c>_predictor.ParameterCount + _vae.GetParameters().Length</c> — mixing a COUNT from one
+    /// child with a VECTOR LENGTH from another. Those agree only while both children agree with
+    /// themselves. <c>VideoUNetPredictor</c>'s count was a hand-written estimate that was nine times
+    /// out (32,385,924 against a real 295,840,220), and every model delegating to it inherited the
+    /// error; <c>SetParameters</c> pairs by length, so a checkpoint restored into the wrong tensors
+    /// with nothing reported.
+    /// </para>
+    /// <para>
+    /// Registration is identity-based and idempotent, matching <c>RegisterSubLayer</c>: registering
+    /// the same instance twice is a no-op rather than double-counting it.
+    /// </para>
+    /// <para><b>For Beginners:</b> tell the base what your model is made of and you never write
+    /// parameter counting, saving or loading code — it is derived from that one declaration.</para>
+    /// </remarks>
+    protected void RegisterParameterComponent(
+        IParameterSource<T>? component,
+        [System.Runtime.CompilerServices.CallerArgumentExpression(nameof(component))] string? componentExpression = null,
+        [System.Runtime.CompilerServices.CallerMemberName] string? memberName = null)
+    {
+        _parameterRegistry.RegisterLegacy(GetType().FullName ?? GetType().Name,
+            memberName, componentExpression, component);
+        InvalidateTrainableParametersCache();
+    }
+
+    protected void RegisterParameterComponent(string stableId, IParameterSource<T>? component,
+        AiDotNet.Models.Parameters.ParameterSlotRole role = AiDotNet.Models.Parameters.ParameterSlotRole.Trainable)
+    {
+        _parameterRegistry.Register(stableId, component, role);
+        InvalidateTrainableParametersCache();
+    }
+
+    /// <summary>The registered components, in registration order.</summary>
+    protected IReadOnlyList<IParameterSource<T>> ParameterComponents
+    {
+        get { EnsureComponentsRegistered(); return _parameterRegistry.Components; }
+    }
+
+    private bool _componentsRegistered;
+
+    /// <summary>
+    /// Declare this model's components here with <see cref="RegisterParameterComponent"/>.
+    /// </summary>
+    /// <remarks>
+    /// A hook rather than constructor code, for the same reason layers use a generated
+    /// <c>EnsureSubLayersRegistered</c>: it runs after every field is assigned, so a component
+    /// created late — or replaced by a subclass — is still seen, and field-initialisation order
+    /// stops being something the author has to reason about.
+    /// </remarks>
+    protected virtual void RegisterComponents()
+    {
+    }
+
+    protected virtual void RegisterGeneratedParameterComponents(
+        AiDotNet.Models.Parameters.ParameterComponentRegistry<T> registry)
+    {
+    }
+
+    /// <summary>Runs <see cref="RegisterComponents"/> once, before the parameter surface is read.</summary>
+    private void EnsureComponentsRegistered()
+    {
+        if (_componentsRegistered) return;
+        // Set BEFORE invoking: RegisterParameterComponent invalidates caches, which can re-enter
+        // through a parameter query, and this must not recurse.
+        _componentsRegistered = true;
+        RegisterGeneratedParameterComponents(_parameterRegistry);
+        RegisterComponents();
+    }
+
+    protected virtual void OnParametersRestored()
+    {
+    }
+
+    public AiDotNet.Models.Parameters.ParameterLayoutSnapshot ParameterLayout
+    {
+        get { EnsureComponentsRegistered(); return _parameterRegistry.ParameterLayout; }
+    }
+
     /// <inheritdoc />
-    public abstract long ParameterCount { get; }
+    void AiDotNet.Models.Parameters.IParameterSurfaceLifecycle.PrepareParameterSurface(
+        AiDotNet.Models.Parameters.ParameterSurfaceIntent intent)
+    {
+        EnsureComponentsRegistered();
+        _parameterRegistry.PrepareParameterSurface(intent);
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Derived from the registered components, in the same order <see cref="GetParameters"/> emits
+    /// them, so the two cannot disagree. A model that has registered nothing and overrides nothing
+    /// reports zero, which is the honest answer for a model that has declared no components.
+    /// </remarks>
+    public virtual long ParameterCount
+    {
+        get
+        {
+            EnsureComponentsRegistered();
+            return _parameterRegistry.ParameterCount;
+        }
+    }
 
     /// <summary>
     /// Streams the diffusion stack's trainable weight tensors per-tensor.
@@ -1414,10 +1533,40 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
     #region IParameterizable<T, Tensor<T>, Tensor<T>> Implementation
 
     /// <inheritdoc />
-    public abstract Vector<T> GetParameters();
+    /// <remarks>
+    /// Concatenates the registered components in registration order — the same order
+    /// <see cref="ParameterCount"/> sums and <see cref="SetParameters"/> slices back, so all three
+    /// describe one enumeration and cannot drift apart.
+    /// </remarks>
+    public virtual Vector<T> GetParameters()
+    {
+        EnsureComponentsRegistered();
+        return _parameterRegistry.GetParameters();
+    }
 
     /// <inheritdoc />
-    public abstract void SetParameters(Vector<T> parameters);
+    /// <remarks>
+    /// The exact inverse of <see cref="GetParameters"/>: each component is handed the slice it
+    /// produced, in the same order. Slice widths come from each component's OWN vector length, not
+    /// from its <c>ParameterCount</c> — those are the two numbers this whole design exists to stop
+    /// treating as interchangeable.
+    /// </remarks>
+    public virtual void SetParameters(Vector<T> parameters)
+    {
+        if (parameters is null) throw new ArgumentNullException(nameof(parameters));
+        EnsureComponentsRegistered();
+        if (!_parameterRegistry.HasComponents)
+        {
+            if (parameters.Length == 0) return;
+            throw new ArgumentException(
+                $"{GetType().Name} has no registered parameter components, but was given " +
+                $"{parameters.Length} parameters. Register its components with " +
+                "RegisterParameterComponent, or override SetParameters.", nameof(parameters));
+        }
+
+        _parameterRegistry.SetParameters(parameters);
+        OnParametersRestored();
+    }
 
     /// <inheritdoc />
     public virtual IFullModel<T, Tensor<T>, Tensor<T>> WithParameters(Vector<T> parameters)

@@ -25,8 +25,16 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Activation)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = false, TestInputShape = "1, 4", TestConstructorArgs = "(AiDotNet.Interfaces.IActivationFunction<double>)new AiDotNet.ActivationFunctions.ReLUActivation<double>()")]
-public class ActivationLayer<T> : LayerBase<T>
+// The canonical element-wise layer: applies a function to each value independently, so shape is
+// identical in and out at any rank.
+[ElementWiseShape(Note = "Applies the activation to each element independently.")]
+[AutoParameters]
+public partial class ActivationLayer<T> : LayerBase<T>, IShapeContract
 {
+    /// <inheritdoc />
+    /// <remarks>An activation is elementwise, so the shape is carried through unchanged.</remarks>
+    protected internal override ShapeRelationKind OutputShapeRelation => ShapeRelationKind.Identity;
+
     /// <summary>
     /// Stores the input from the most recent forward pass for use in the backward pass.
     /// </summary>
@@ -81,6 +89,10 @@ public class ActivationLayer<T> : LayerBase<T>
     /// </para>
     /// </remarks>
     public override bool SupportsTraining => false;
+
+    /// <inheritdoc/>
+    /// <remarks>An activation is applied elementwise, so the output shape is the input shape.</remarks>
+    protected override bool IsShapePreserving => true;
 
     /// <summary>
     /// Creates a new activation layer that applies a scalar activation function to each value individually.
@@ -226,7 +238,7 @@ public class ActivationLayer<T> : LayerBase<T>
     /// for learning complex patterns in the data.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         EnsureInitializedFromInput(input);
         _lastInput = ShouldCacheForBackward ? input : null; // #1668: skip in inference (arena safety)
@@ -263,87 +275,6 @@ public class ActivationLayer<T> : LayerBase<T>
     {
         var activation = VectorActivation ?? throw new InvalidOperationException("VectorActivation has not been initialized.");
         return ActivationHelper.ApplyActivation(activation, input, Engine);
-    }
-
-    /// <summary>
-    /// Updates the layer's internal parameters during training.
-    /// <para>
-    /// This method is part of the training process where layers adjust their parameters
-    /// (weights and biases) based on the gradients calculated during backpropagation.
-    /// </para>
-    /// <para>
-    /// For activation layers, this method does nothing because they have no trainable parameters.
-    /// Unlike layers such as Dense layers which need to update their weights and biases,
-    /// activation layers simply apply a fixed mathematical function.
-    /// </para>
-    /// </summary>
-    /// <param name="learningRate">How quickly the network should learn from new data. Higher values mean bigger parameter updates.</param>
-    /// <remarks>
-    /// <para>
-    /// This method is called during the training process after the forward and backward passes have been completed.
-    /// For layers with trainable parameters, this method would update those parameters based on the gradients
-    /// calculated during backpropagation and the provided learning rate. However, since activation layers have
-    /// no trainable parameters, this method does nothing.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method would update the layer's internal values during training, but activation layers have nothing to update.
-    /// 
-    /// In neural networks, training involves adjusting parameters to reduce errors.
-    /// This method is where those adjustments happen, but activation layers don't have
-    /// any adjustable parameters, so this method is empty.
-    /// 
-    /// For comparison:
-    /// - In a Dense layer, this would update weights and biases
-    /// - In a BatchNorm layer, this would update scale and shift parameters
-    /// - In this ActivationLayer, there's nothing to update
-    /// 
-    /// The learning rate parameter controls how big the updates would be if there
-    /// were any parameters to update - higher values mean bigger changes.
-    /// </para>
-    /// </remarks>
-    public override void UpdateParameters(T learningRate)
-    {
-        // Activation layer has no parameters to update
-    }
-
-    /// <summary>
-    /// Gets all trainable parameters of this layer as a flat vector.
-    /// <para>
-    /// This method is useful for operations that need to work with all parameters at once,
-    /// such as certain optimization algorithms, regularization techniques, or when saving a model.
-    /// </para>
-    /// <para>
-    /// Returns an empty vector since activation layers have no trainable parameters.
-    /// Other layer types like Dense layers would return their weights and biases.
-    /// </para>
-    /// </summary>
-    /// <returns>An empty vector representing the layer's parameters</returns>
-    /// <remarks>
-    /// <para>
-    /// This method returns all trainable parameters of the layer as a flat vector. For layers with trainable
-    /// parameters, this would involve reshaping multi-dimensional parameters (like weight matrices) into a
-    /// one-dimensional vector. However, since activation layers have no trainable parameters, this method
-    /// returns an empty vector.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method returns all the layer's trainable values as a single list, but activation layers have none.
-    /// 
-    /// Some operations in neural networks need to work with all parameters at once:
-    /// - Saving and loading models
-    /// - Applying regularization (techniques to prevent overfitting)
-    /// - Using advanced optimization algorithms
-    /// 
-    /// This method provides those parameters as a single vector, but since
-    /// activation layers don't have any trainable parameters, it returns an empty vector.
-    /// 
-    /// For comparison:
-    /// - A Dense layer with 100 inputs and 10 outputs would return a vector with 1,010 values
-    ///   (1,000 weights + 10 biases)
-    /// - This ActivationLayer returns an empty vector with 0 values
-    /// </para>
-    /// </remarks>
-    public override Vector<T> GetParameters()
-    {
-        // Activation layers don't have parameters, so return an empty vector
-        return Vector<T>.Empty();
     }
 
     /// <summary>

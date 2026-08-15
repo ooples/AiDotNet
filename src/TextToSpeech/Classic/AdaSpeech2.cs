@@ -207,11 +207,7 @@ public class AdaSpeech2<T> : TtsModelBase<T>, IAcousticModel<T>
         ThrowIfDisposed();
         if (IsOnnxMode && OnnxModel is not null)
             return OnnxModel.Run(input);
-        SetTrainingMode(false);
-        var c = input;
-        foreach (var l in Layers)
-            c = l.Forward(c);
-        return c;
+        return base.PredictCore(input);
     }
 
     public override void Train(Tensor<T> input, Tensor<T> expected)
@@ -221,7 +217,7 @@ public class AdaSpeech2<T> : TtsModelBase<T>, IAcousticModel<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expected);
+            TrainWithTape(input, expected, _optimizer);
         }
         finally
         {
@@ -229,19 +225,11 @@ public class AdaSpeech2<T> : TtsModelBase<T>, IAcousticModel<T>
         }
     }
 
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        if (!_useNativeMode)
-            throw new NotSupportedException("Cannot update parameters in ONNX mode.");
-        int idx = 0;
-        foreach (var l in Layers)
-        {
-            int c = checked((int)l.ParameterCount);
-            l.UpdateParameters(parameters.Slice(idx, c));
-            idx += c;
-        }
-    }
-
+    /// <inheritdoc />
+    /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
+    /// write on every parameter surface, so the guard is stated once here instead of being
+    /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
+    protected override bool SupportsParameterMutation => _useNativeMode;
     public override ModelMetadata<T> GetModelMetadata()
     {
         var m = new ModelMetadata<T>
@@ -289,9 +277,10 @@ public class AdaSpeech2<T> : TtsModelBase<T>, IAcousticModel<T>
 
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
+        var options = new AdaSpeech2Options(_options);
         if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new AdaSpeech2<T>(Architecture, mp, _options);
-        return new AdaSpeech2<T>(Architecture, _options);
+            return new AdaSpeech2<T>(Architecture, mp, options);
+        return new AdaSpeech2<T>(Architecture, options);
     }
 
     private void ThrowIfDisposed()

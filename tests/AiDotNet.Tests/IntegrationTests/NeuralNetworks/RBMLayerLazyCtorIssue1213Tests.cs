@@ -54,6 +54,8 @@ public class RBMLayerLazyCtorIssue1213Tests
         // ParameterCount jumps to full RBM total: weights (8×4 = 32)
         // + visible biases (4) + hidden biases (8) = 44.
         Assert.Equal(44, layer.ParameterCount);
+        Assert.Equal(44, layer.GetParameterLayout().Single().ParameterCount);
+        Assert.Equal(44, layer.GetParameters().Length);
 
         // Output shape: [batch=2, hidden=8] — same rank as input,
         // last axis swapped from visible to hidden.

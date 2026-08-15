@@ -57,39 +57,28 @@ namespace AiDotNet.ComputerVision.Segmentation.InstanceSegmentation;
 [ModelComplexity(ModelComplexity.Medium)]
 [ResearchPaper("Ultralytics YOLO11", "https://docs.ultralytics.com/models/yolo11/")]
     [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-public class YOLO11Seg<T> : NeuralNetworkBase<T>, IInstanceSegmentation<T>
+public class YOLO11Seg<T> : Common.InstanceSegmentationBase<T>
 {
     private readonly YOLO11SegOptions _options;
     public override ModelOptions GetOptions() => _options;
 
     #region Fields
-    private readonly int _height, _width, _channels, _numClasses;
+    // Only YOLO11Seg's OWN configuration lives here. _height, _width, _channels, _numClasses,
+    // _useNativeMode, _onnxModelPath, _onnxSession, _optimizer, _disposed and _encoderLayerEnd all
+    // come from InstanceSegmentationBase -> SegmentationModelBase, as do the detection knobs
+    // MaxInstances / ConfidenceThreshold / NmsThreshold.
     private readonly YOLO11SegModelSize _modelSize;
     private readonly int[] _channelDims;
     private readonly int _decoderDim;
     private readonly int[] _depths;
     private readonly double _dropRate;
-    private readonly bool _useNativeMode;
-    private readonly string? _onnxModelPath;
-    private InferenceSession? _onnxSession;
-    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
-    private bool _disposed;
-    private int _encoderLayerEnd;
     #endregion
 
     #region Properties
-    /// <summary>
-    /// Gets whether this YOLO11Seg instance supports training.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Returns <c>true</c> in native mode, <c>false</c> in ONNX mode.
-    /// </para>
-    /// </remarks>
-    public override bool SupportsTraining => _useNativeMode;
+    // SupportsTraining, NumClasses, InputHeight, InputWidth and IsOnnxMode are inherited from
+    // SegmentationModelBase and say exactly the same thing.
     internal bool UseNativeMode => _useNativeMode;
     internal YOLO11SegModelSize ModelSize => _modelSize;
-    internal int NumClasses => _numClasses;
     #endregion
 
     #region Constructors
@@ -113,15 +102,18 @@ public class YOLO11Seg<T> : NeuralNetworkBase<T>, IInstanceSegmentation<T>
         ILossFunction<T>? lossFunction = null, int numClasses = 80,
         YOLO11SegModelSize modelSize = YOLO11SegModelSize.N, double dropRate = 0,
         YOLO11SegOptions? options = null)
-        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>())
+        // The base resolves numClasses/native-mode plus the maxInstances=100, confidenceThreshold=0.5
+        // and nmsThreshold=0.5 defaults this model used to keep as private fields. `optimizer` is
+        // passed straight through INCLUDING null - the base defaults it lazily via
+        // CreateDefaultOptimizer(), which `optimizer ?? new AdamWOptimizer<...>(this)` could never do
+        // in a constructor initializer.
+        : base(architecture, optimizer, lossFunction, numClasses)
     {
         _options = options ?? new YOLO11SegOptions(); Options = _options;
+        // YOLO11Seg's own 640x640 input default, which differs from the base's 512x512.
         _height = architecture.InputHeight > 0 ? architecture.InputHeight : 640;
         _width = architecture.InputWidth > 0 ? architecture.InputWidth : 640;
-        _channels = architecture.InputDepth > 0 ? architecture.InputDepth : 3;
-        _numClasses = numClasses; _modelSize = modelSize; _dropRate = dropRate;
-        _useNativeMode = true; _onnxModelPath = null;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _modelSize = modelSize; _dropRate = dropRate;
         (_channelDims, _depths, _decoderDim) = GetModelConfig(modelSize);
         InitializeLayers();
     }
@@ -145,21 +137,15 @@ public class YOLO11Seg<T> : NeuralNetworkBase<T>, IInstanceSegmentation<T>
     public YOLO11Seg(NeuralNetworkArchitecture<T> architecture, string onnxModelPath,
         int numClasses = 80, YOLO11SegModelSize modelSize = YOLO11SegModelSize.N,
         YOLO11SegOptions? options = null)
-        : base(architecture, new CrossEntropyWithLogitsLoss<T>())
+        // The base's ONNX constructor already validates the path, sets ONNX mode, resolves the input
+        // geometry and opens the InferenceSession - the same fifteen lines this used to repeat.
+        : base(architecture, onnxModelPath, numClasses)
     {
         _options = options ?? new YOLO11SegOptions(); Options = _options;
-        if (string.IsNullOrWhiteSpace(onnxModelPath))
-            throw new ArgumentException("ONNX model path cannot be null or empty.", nameof(onnxModelPath));
-        if (!File.Exists(onnxModelPath))
-            throw new FileNotFoundException($"YOLO11Seg ONNX model not found: {onnxModelPath}");
         _height = architecture.InputHeight > 0 ? architecture.InputHeight : 640;
         _width = architecture.InputWidth > 0 ? architecture.InputWidth : 640;
-        _channels = architecture.InputDepth > 0 ? architecture.InputDepth : 3;
-        _numClasses = numClasses; _modelSize = modelSize; _dropRate = 0;
-        _useNativeMode = false; _onnxModelPath = onnxModelPath; _optimizer = null;
+        _modelSize = modelSize; _dropRate = 0;
         (_channelDims, _depths, _decoderDim) = GetModelConfig(modelSize);
-        try { _onnxSession = new InferenceSession(onnxModelPath); }
-        catch (Exception ex) { throw new InvalidOperationException($"Failed to load YOLO11Seg ONNX model: {ex.Message}", ex); }
         InitializeLayers();
     }
     #endregion
@@ -194,7 +180,7 @@ public class YOLO11Seg<T> : NeuralNetworkBase<T>, IInstanceSegmentation<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expectedOutput);
+            TrainWithTape(input, expectedOutput, Optimizer);
         }
         finally
         {
@@ -214,7 +200,7 @@ public class YOLO11Seg<T> : NeuralNetworkBase<T>, IInstanceSegmentation<T>
         _ => ([16, 32, 64, 128], [1, 2, 2, 1], 64)
     };
 
-    private Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> Forward(Tensor<T> input)
     {
         bool hasBatch = input.Rank == 4; if (!hasBatch) input = AddBatchDimension(input);
         var features = input;
@@ -223,7 +209,7 @@ public class YOLO11Seg<T> : NeuralNetworkBase<T>, IInstanceSegmentation<T>
         if (!hasBatch) features = RemoveBatchDimension(features); return features;
     }
 
-    private Tensor<T> PredictOnnx(Tensor<T> input)
+    protected override Tensor<T> PredictOnnx(Tensor<T> input)
     {
         if (_onnxSession is null) throw new InvalidOperationException("ONNX session is not initialized.");
         bool hasBatch = input.Rank == 4; if (!hasBatch) input = AddBatchDimension(input);
@@ -240,11 +226,7 @@ public class YOLO11Seg<T> : NeuralNetworkBase<T>, IInstanceSegmentation<T>
         if (!hasBatch) result = RemoveBatchDimension(result); return result;
     }
 
-    private Tensor<T> AddBatchDimension(Tensor<T> tensor)
-    { var result = new Tensor<T>([1, tensor.Shape[0], tensor.Shape[1], tensor.Shape[2]]); tensor.Data.Span.CopyTo(result.Data.Span); return result; }
-
-    private Tensor<T> RemoveBatchDimension(Tensor<T> tensor)
-    { int[] s = new int[tensor.Shape.Length - 1]; for (int i = 0; i < s.Length; i++) s[i] = tensor.Shape[i + 1]; var r = new Tensor<T>(s); tensor.Data.Span.CopyTo(r.Data.Span); return r; }
+    // AddBatchDimension and RemoveBatchDimension come from SegmentationModelBase.
     #endregion
 
     #region Abstract Implementation
@@ -272,18 +254,8 @@ public class YOLO11Seg<T> : NeuralNetworkBase<T>, IInstanceSegmentation<T>
         }
     }
 
-    /// <summary>
-    /// Updates all trainable parameters from a flat parameter vector.
-    /// </summary>
-    /// <param name="parameters">Flat vector of all model parameters.</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Replaces all model weights with new values.
-    /// </para>
-    /// </remarks>
-    public override void UpdateParameters(Vector<T> parameters)
-    { int o = 0; foreach (var l in Layers) { var p = l.GetParameters(); int c = p.Length; if (o + c <= parameters.Length) { var n = new Vector<T>(c); for (int i = 0; i < c; i++) n[i] = parameters[o + i]; l.UpdateParameters(n); o += c; } } }
-
+    // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
+    // exactly the same enumeration, so this said nothing the base does not already say.
     /// <summary>
     /// Collects metadata describing this model's configuration.
     /// </summary>
@@ -333,47 +305,21 @@ public class YOLO11Seg<T> : NeuralNetworkBase<T>, IInstanceSegmentation<T>
     /// </para>
     /// </remarks>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() => _useNativeMode
-        ? new YOLO11Seg<T>(Architecture, _optimizer, LossFunction, _numClasses, _modelSize, _dropRate, _options)
+        ? new YOLO11Seg<T>(Architecture, Optimizer, LossFunction, _numClasses, _modelSize, _dropRate, _options)
         : new YOLO11Seg<T>(Architecture, _onnxModelPath ?? throw new InvalidOperationException("ONNX model path not initialized."), _numClasses, _modelSize, _options);
 
-    /// <summary>
-    /// Releases managed resources including the ONNX inference session.
-    /// </summary>
-    /// <param name="disposing">True when called from Dispose().</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Frees memory used by the ONNX runtime.
-    /// </para>
-    /// </remarks>
-    protected override void Dispose(bool disposing)
-    { if (!_disposed) { if (disposing) { _onnxSession?.Dispose(); _onnxSession = null; } _disposed = true; } base.Dispose(disposing); }
+    // Dispose is inherited: SegmentationModelBase already disposes _onnxSession and sets _disposed,
+    // and YOLO11Seg owns no further unmanaged resources.
     #endregion
 
     #region IInstanceSegmentation Implementation
 
-    private double _confidenceThreshold = 0.5;
-    private double _nmsThreshold = 0.5;
+    // NumClasses, InputHeight, InputWidth, IsOnnxMode and Segment come from SegmentationModelBase;
+    // MaxInstances (100), ConfidenceThreshold (0.5) and NmsThreshold (0.5) come from
+    // InstanceSegmentationBase with exactly these defaults, and are settable there too.
 
-    int ISegmentationModel<T>.NumClasses => _numClasses;
-    int ISegmentationModel<T>.InputHeight => _height;
-    int ISegmentationModel<T>.InputWidth => _width;
-    bool ISegmentationModel<T>.IsOnnxMode => !_useNativeMode;
-    Tensor<T> ISegmentationModel<T>.Segment(Tensor<T> image) => Predict(image);
-    int IInstanceSegmentation<T>.MaxInstances => 100;
-
-    double IInstanceSegmentation<T>.ConfidenceThreshold
-    {
-        get => _confidenceThreshold;
-        set => _confidenceThreshold = value;
-    }
-
-    double IInstanceSegmentation<T>.NmsThreshold
-    {
-        get => _nmsThreshold;
-        set => _nmsThreshold = value;
-    }
-
-    InstanceSegmentationResult<T> IInstanceSegmentation<T>.DetectInstances(Tensor<T> image)
+    /// <inheritdoc/>
+    public override InstanceSegmentationResult<T> DetectInstances(Tensor<T> image)
     {
         var sw = System.Diagnostics.Stopwatch.StartNew();
         var logits = Predict(image);
@@ -412,7 +358,7 @@ public class YOLO11Seg<T> : NeuralNetworkBase<T>, IInstanceSegmentation<T>
 
                 if (area < 4) continue; // skip noise components
                 double confidence = sumConf / area;
-                if (confidence < _confidenceThreshold) continue;
+                if (confidence < ConfidenceThreshold) continue;
 
                 var box = new BoundingBox<T>(
                     NumOps.FromDouble(minX), NumOps.FromDouble(minY),
@@ -430,7 +376,7 @@ public class YOLO11Seg<T> : NeuralNetworkBase<T>, IInstanceSegmentation<T>
             var best = instances[0];
             kept.Add(best);
             instances.RemoveAt(0);
-            instances = instances.Where(inst => best.ComputeMaskIoU(inst, NumOps) < _nmsThreshold).ToList();
+            instances = instances.Where(inst => best.ComputeMaskIoU(inst, NumOps) < NmsThreshold).ToList();
         }
 
         sw.Stop();

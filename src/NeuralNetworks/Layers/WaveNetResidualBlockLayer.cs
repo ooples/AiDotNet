@@ -39,7 +39,27 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Convolution)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = true, ChangesShape = false, ExpectedInputRank = 3, Cost = ComputeCost.Medium, TestInputShape = "1, 8, 16", TestConstructorArgs = "8, 3, 1")]
-public partial class WaveNetResidualBlockLayer<T> : LayerBase<T>
+// Roles straight from this block's own summary - "1-D waveform/feature data [B, C, T]" - and its
+// [LayerProperty(ExpectedInputRank = 3, TestInputShape = "1, 8, 16")].
+//
+// Shape-preserving on EVERY axis, and the block enforces that itself rather than merely happening to:
+// ForwardTraced ends in Engine.TensorAdd(input, projected), a residual add that would throw if either
+// axis had moved. Channels are pinned by the same add (the class remarks: "the residual add requires
+// C_out == C_in"), and the time axis by the inner convs' "same" padding - the constructor comment
+// "'same' padding keeps T so the residual add lines up". Matching layouts are therefore the whole
+// contract; OutputAxesFor is generated as Same on all three axes.
+//
+// Not [ElementWiseShape], deliberately. That shorthand claims rank-agnostic identity, and this block is
+// neither rank-agnostic (its convs are 1-D, so [B,C,T] is the only form) nor element-wise - each output
+// position mixes a dilated window of its neighbours. The shape happens to be preserved; the values are
+// not, and the axes have real, named meanings worth declaring.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Time,
+    Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Time,
+    Direction = TensorLayoutDirection.Output,
+    Note = "Residual block: gated dilated convs with 'same' padding, then x + projection.")]
+[AutoParameters]
+public partial class WaveNetResidualBlockLayer<T> : LayerBase<T>, IShapeContract
 {
     private readonly int _channels;
     private readonly int _kernelSize;
@@ -53,7 +73,10 @@ public partial class WaveNetResidualBlockLayer<T> : LayerBase<T>
     /// <param name="channels">Residual channel width (input and output, <c>C</c>).</param>
     /// <param name="kernelSize">Dilated-conv kernel width (WaveNet uses 3). Defaults to 3.</param>
     /// <param name="dilation">Dilation factor for this block (WaveNet cycles <c>2^i</c>). Defaults to 1.</param>
-    public WaveNetResidualBlockLayer(int channels, int kernelSize = 3, int dilation = 1)
+    public WaveNetResidualBlockLayer(
+        [LayerState] int channels,
+        [LayerState] int kernelSize = 3,
+        [LayerState] int dilation = 1)
         : base(new[] { channels, -1 }, new[] { channels, -1 }, (IActivationFunction<T>)new IdentityActivation<T>())
     {
         if (channels <= 0) throw new ArgumentOutOfRangeException(nameof(channels));
@@ -91,19 +114,14 @@ public partial class WaveNetResidualBlockLayer<T> : LayerBase<T>
 
     public override bool SupportsTraining => true;
 
-    public override long ParameterCount
-    {
-        get
-        {
-            long total = 0;
-            foreach (var c in InnerConvs()) total += c.ParameterCount;
-            return total;
-        }
-    }
-
     /// <inheritdoc/>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
+        // Registers the inner convs with GetSubLayers() via the generated
+        // EnsureSubLayersRegistered(). Without it they self-initialize on their own first Forward,
+        // so outputs are correct while every structural walker sees this block as a leaf.
+        EnsureInitializedFromInput(input);
+
         // Gated activation: z = tanh(W_f * x) ⊙ sigmoid(W_g * x).
         var f = _filterConv.Forward(input);
         var g = _gateConv.Forward(input);
@@ -119,33 +137,6 @@ public partial class WaveNetResidualBlockLayer<T> : LayerBase<T>
     public override void UpdateParameters(T learningRate)
     {
         foreach (var c in InnerConvs()) c.UpdateParameters(learningRate);
-    }
-
-    /// <inheritdoc/>
-    public override Vector<T> GetParameters()
-    {
-        Vector<T> all = Vector<T>.Empty();
-        foreach (var c in InnerConvs())
-            all = Vector<T>.Concatenate(all, c.GetParameters());
-        return all;
-    }
-
-    /// <inheritdoc/>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int offset = 0;
-        foreach (var c in InnerConvs())
-        {
-            int len = (int)c.ParameterCount;
-            var slice = new Vector<T>(parameters.AsSpan().Slice(offset, len).ToArray());
-            c.SetParameters(slice);
-            offset += len;
-        }
-        if (offset != parameters.Length)
-        {
-            throw new ArgumentException(
-                $"Expected {offset} parameters for WaveNetResidualBlockLayer, but got {parameters.Length}.");
-        }
     }
 
     /// <inheritdoc/>

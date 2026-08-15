@@ -40,6 +40,7 @@ public class GPWithMCMC<T> : GaussianProcessBase<T>
     /// <summary>
     /// Training input data.
     /// </summary>
+    [Buffer]
     private Matrix<T>? _X;
     private Matrix<T> FittedX => _X ?? throw new InvalidOperationException("GP not fitted. Call Fit() first.");
 
@@ -50,6 +51,7 @@ public class GPWithMCMC<T> : GaussianProcessBase<T>
     /// the original target scale; <see cref="Predict"/> reverses both transforms before
     /// returning predictions.
     /// </summary>
+    [Buffer]
     private Vector<T>? _y;
     private Vector<T> FittedY => _y ?? throw new InvalidOperationException("GP not fitted. Call Fit() first.");
 
@@ -73,11 +75,13 @@ public class GPWithMCMC<T> : GaussianProcessBase<T>
     /// <summary>
     /// Precomputed Cholesky factors for each sample (for efficiency).
     /// </summary>
+    [Buffer]
     private List<Matrix<T>>? _choleskyFactors;
 
     /// <summary>
     /// Precomputed alpha vectors for each sample.
     /// </summary>
+    [Buffer]
     private List<Vector<T>>? _alphaVectors;
 
     /// <summary>

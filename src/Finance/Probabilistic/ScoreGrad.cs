@@ -85,7 +85,7 @@ namespace AiDotNet.Finance.Probabilistic;
 [ModelComplexity(ModelComplexity.VeryHigh)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("ScoreGrad: Multivariate Probabilistic Time Series Forecasting with Continuous Energy-based Generative Models", "https://arxiv.org/abs/2106.10121", Year = 2021, Authors = "Tijin Yan, Hongwei Zhang, Tong Zhou, Yufeng Zhan, Yuanqing Xia")]
-public class ScoreGrad<T> : ForecastingModelBase<T>
+public partial class ScoreGrad<T> : ForecastingModelBase<T>
 {
     #region Execution Mode
     private readonly bool _useNativeMode;
@@ -489,21 +489,8 @@ public class ScoreGrad<T> : ForecastingModelBase<T>
         return x;
     }
 
-    /// <summary>
-    /// Updates parameters using the provided gradients.
-    /// </summary>
-    /// <param name="gradients">Gradient vector.</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Parameters are updated through the optimizer in the base
-    /// Train() → TrainWithTape path. This method exists for interface compliance.
-    /// </para>
-    /// </remarks>
-    public override void UpdateParameters(Vector<T> gradients)
-    {
-        // Parameters are updated through the optimizer in the base Train() → TrainWithTape path.
-    }
-
+    // UpdateParameters was an empty override, silently dropping every restore. The base
+    // distributes the vector over the declared enumeration.
     /// <summary>
     /// Gets metadata about the ScoreGrad model.
     /// </summary>

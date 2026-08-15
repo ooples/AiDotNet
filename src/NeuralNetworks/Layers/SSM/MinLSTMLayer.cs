@@ -76,7 +76,14 @@ namespace AiDotNet.NeuralNetworks.Layers.SSM;
 [LayerCategory(LayerCategory.Recurrent)]
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerProperty(IsTrainable = true, IsStateful = true, Cost = ComputeCost.High, TestInputShape = "4, 256", TestConstructorArgs = "4")]
-public partial class MinLSTMLayer<T> : LayerBase<T>
+// Shape-preserving. Relations discovered by probing; roles read from the forward - this folder's
+// convention is seqLen = Shape[rank-2], modelDim = Shape[rank-1], so rank 2 is [Time, Features].
+[TensorLayout(TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
+[AutoParameters]
+public partial class MinLSTMLayer<T> : LayerBase<T>, IShapeContract
 {
     // Configuration
     private readonly int _modelDimension;
@@ -169,16 +176,6 @@ public partial class MinLSTMLayer<T> : LayerBase<T>
     /// as the input. Larger values increase model capacity at the cost of more parameters.</para>
     /// </remarks>
     public int ExpandedDimension => _expandedDimension;
-
-    /// <summary>
-    /// Gets the total number of trainable parameters.
-    /// </summary>
-    public override long ParameterCount =>
-        _inputProjectionWeights.Length + _inputProjectionBias.Length +
-        _forgetGateWeights.Length + _forgetGateBias.Length +
-        _inputGateWeights.Length + _inputGateBias.Length +
-        _cellCandidateWeights.Length + _cellCandidateBias.Length +
-        _outputProjectionWeights.Length + _outputProjectionBias.Length;
 
     /// <summary>
     /// Creates a new minLSTM layer.
@@ -275,7 +272,7 @@ public partial class MinLSTMLayer<T> : LayerBase<T>
     }
 
     /// <inheritdoc />
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         _originalInputShape = input._shape;
 
@@ -385,41 +382,25 @@ public partial class MinLSTMLayer<T> : LayerBase<T>
         Tensor<T> forgetNorm, Tensor<T> inputNorm, Tensor<T> cellCandidate,
         int batchSize, int seqLen)
     {
-        var output = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _expandedDimension });
-        // Cell state: [batch, expandedDim] -- initialized to zero
-        var cellState = new Tensor<T>(new[] { batchSize, _expandedDimension });
-        // Store all cell states for backward pass: [batch, seqLen+1, expandedDim]
-        var allCellStates = new Tensor<T>(new[] { batchSize, seqLen + 1, _expandedDimension });
-        // Initial cell state (zeros) is already at t=0
+        var cellState = Tensor<T>.CreateDefault([batchSize, _expandedDimension], NumOps.Zero);
+        var cellSteps = new List<Tensor<T>>(seqLen);
 
         for (int t = 0; t < seqLen; t++)
         {
-            for (int bi = 0; bi < batchSize; bi++)
-            {
-                for (int d = 0; d < _expandedDimension; d++)
-                {
-                    T fPrime = forgetNorm[new[] { bi, t, d }];
-                    T iPrime = inputNorm[new[] { bi, t, d }];
-                    T cTilde = cellCandidate[new[] { bi, t, d }];
-                    T cPrev = cellState[new[] { bi, d }];
-
-                    // c_t = f'_t * c_{t-1} + i'_t * c_tilde_t
-                    T cNew = NumOps.Add(
-                        NumOps.Multiply(fPrime, cPrev),
-                        NumOps.Multiply(iPrime, cTilde));
-
-                    cellState[new[] { bi, d }] = cNew;
-                    output[new[] { bi, t, d }] = cNew;
-                }
-            }
-
-            // Save cell state snapshot for backward pass
-            for (int bi = 0; bi < batchSize; bi++)
-                for (int d = 0; d < _expandedDimension; d++)
-                    allCellStates[new[] { bi, t + 1, d }] = cellState[new[] { bi, d }];
+            var fPrime = Engine.TensorSqueeze(Engine.TensorNarrow(forgetNorm, 1, t, 1), axis: 1);
+            var iPrime = Engine.TensorSqueeze(Engine.TensorNarrow(inputNorm, 1, t, 1), axis: 1);
+            var cTilde = Engine.TensorSqueeze(Engine.TensorNarrow(cellCandidate, 1, t, 1), axis: 1);
+            cellState = Engine.TensorAdd(
+                Engine.TensorMultiply(fPrime, cellState),
+                Engine.TensorMultiply(iPrime, cTilde));
+            cellSteps.Add(Engine.TensorExpandDims(cellState, axis: 1));
         }
 
-        _lastCellStates = allCellStates;
+        var output = cellSteps.Count == 1
+            ? cellSteps[0]
+            : Engine.TensorConcatenate(cellSteps.ToArray(), axis: 1);
+        var initialState = Tensor<T>.CreateDefault([batchSize, 1, _expandedDimension], NumOps.Zero);
+        _lastCellStates = Engine.TensorConcatenate([initialState, output], axis: 1);
         return output;
     }
 
@@ -465,28 +446,6 @@ public partial class MinLSTMLayer<T> : LayerBase<T>
         RegisterTrainableParameter(_outputProjectionWeights, PersistentTensorRole.Weights);
         RegisterTrainableParameter(_outputProjectionBias, PersistentTensorRole.Biases);
 
-    }
-
-    /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        var parameters = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
-        int index = 0;
-        foreach (var tensor in GetAllTensors())
-            for (int i = 0; i < tensor.Length; i++)
-                parameters[index++] = tensor[i];
-        return parameters;
-    }
-
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (parameters.Length != ParameterCount)
-            throw new ArgumentException($"Expected {ParameterCount} parameters, got {parameters.Length}");
-        int index = 0;
-        foreach (var tensor in GetAllTensors())
-            for (int i = 0; i < tensor.Length; i++)
-                tensor[i] = parameters[index++];
     }
 
     private Tensor<T>[] GetAllTensors() =>

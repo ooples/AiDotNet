@@ -84,23 +84,34 @@ public class NormalizationLayersDeepMathIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task BatchNorm_ParameterCount_IsTwiceFeatureSize()
     {
-        // ParameterCount = gamma.Length + beta.Length = 2 * numFeatures
+        await Task.Yield();
+        // Legacy test name retained for CI-history traceability. The canonical persistent-state
+        // surface is gamma + beta + running mean + running variance; the optimizer view remains
+        // gamma + beta only.
         var bn = new BatchNormalizationLayer<double>(numFeatures: 5);
-        Assert.Equal(10, (int)bn.ParameterCount);
+        Assert.Equal(20, (int)bn.ParameterCount);
+        Assert.Equal(10, bn.GetTrainableParameters().Sum(tensor => tensor.Length));
+        Assert.Equal(10, bn.GetRegisteredBuffers().Sum(buffer => buffer.Tensor.Length));
     }
 
     [Fact(Timeout = 120000)]
     public async Task BatchNorm_GetParameters_GammaThenBeta()
     {
-        // Parameters vector: [gamma_0, ..., gamma_n, beta_0, ..., beta_n]
-        var bn = new BatchNormalizationLayer<double>();
+        await Task.Yield();
+        // Full-state vector: [gamma, beta, running mean, running variance].
+        var bn = new BatchNormalizationLayer<double>(numFeatures: 3);
 
-        // Set custom gamma=[2,3,4], beta=[5,6,7]
-        var paramVec = new Vector<double>(new double[] { 2.0, 3.0, 4.0, 5.0, 6.0, 7.0 });
+        var paramVec = new Vector<double>(new double[]
+        {
+            2.0, 3.0, 4.0,
+            5.0, 6.0, 7.0,
+            8.0, 9.0, 10.0,
+            11.0, 12.0, 13.0
+        });
         bn.SetParameters(paramVec);
 
         var retrieved = bn.GetParameters();
-        Assert.Equal(6, retrieved.Length);
+        Assert.Equal(12, retrieved.Length);
         // gamma
         Assert.Equal(2.0, retrieved[0], Tol);
         Assert.Equal(3.0, retrieved[1], Tol);
@@ -109,15 +120,22 @@ public class NormalizationLayersDeepMathIntegrationTests
         Assert.Equal(5.0, retrieved[3], Tol);
         Assert.Equal(6.0, retrieved[4], Tol);
         Assert.Equal(7.0, retrieved[5], Tol);
+        // persistent, non-trainable running statistics
+        Assert.Equal(8.0, retrieved[6], Tol);
+        Assert.Equal(10.0, retrieved[8], Tol);
+        Assert.Equal(11.0, retrieved[9], Tol);
+        Assert.Equal(13.0, retrieved[11], Tol);
     }
 
     [Fact(Timeout = 120000)]
     public async Task BatchNorm_SetParameters_UpdatesGammaAndBeta()
     {
-        var bn = new BatchNormalizationLayer<double>();
+        await Task.Yield();
+        var bn = new BatchNormalizationLayer<double>(numFeatures: 2);
 
-        // Set gamma=[10, 20], beta=[-1, -2]
-        var paramVec = new Vector<double>(new double[] { 10.0, 20.0, -1.0, -2.0 });
+        // Set gamma=[10, 20], beta=[-1, -2] and preserve explicit running state.
+        var paramVec = new Vector<double>(new double[]
+            { 10.0, 20.0, -1.0, -2.0, 0.25, 0.5, 1.25, 1.5 });
         bn.SetParameters(paramVec);
 
         var gamma = bn.GetGamma();
@@ -126,13 +144,15 @@ public class NormalizationLayersDeepMathIntegrationTests
         Assert.Equal(20.0, gamma[1], Tol);
         Assert.Equal(-1.0, beta[0], Tol);
         Assert.Equal(-2.0, beta[1], Tol);
+        Assert.Equal(paramVec.ToArray(), bn.GetParameters().ToArray());
     }
 
     [Fact(Timeout = 120000)]
     public async Task BatchNorm_SetParameters_WrongLength_Throws()
     {
-        var bn = new BatchNormalizationLayer<double>();
-        var badParams = new Vector<double>(new double[] { 1.0, 2.0, 3.0 }); // should be 6
+        await Task.Yield();
+        var bn = new BatchNormalizationLayer<double>(numFeatures: 3);
+        var badParams = new Vector<double>(new double[11]); // full-state contract requires 12
         Assert.Throws<ArgumentException>(() => bn.SetParameters(badParams));
     }
 
@@ -163,14 +183,16 @@ public class NormalizationLayersDeepMathIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task BatchNorm_Inference_CustomGammaBeta_HandComputed()
     {
+        await Task.Yield();
         // numFeatures=2, gamma=[2, 3], beta=[5, -1]
         // runningMean=[0, 0], runningVar=[1, 1] (defaults)
         // scale[0] = 2 / sqrt(1 + 1e-5) ≈ 1.99999
         // shift[0] = 5 - 2*0/sqrt(1+1e-5) = 5.0
         // scale[1] = 3 / sqrt(1 + 1e-5) ≈ 2.99999
         // shift[1] = -1 - 3*0/sqrt(1+1e-5) = -1.0
-        var bn = new BatchNormalizationLayer<double>();
-        bn.SetParameters(new Vector<double>(new double[] { 2.0, 3.0, 5.0, -1.0 }));
+        var bn = new BatchNormalizationLayer<double>(numFeatures: 2);
+        bn.SetParameters(new Vector<double>(new double[]
+            { 2.0, 3.0, 5.0, -1.0, 0.0, 0.0, 1.0, 1.0 }));
         bn.SetTrainingMode(false);
 
         var input = new Tensor<double>(new[] { 2, 2 }, new Vector<double>(new double[] { 1.0, 2.0, 3.0, 4.0 }));
@@ -193,13 +215,15 @@ public class NormalizationLayersDeepMathIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task BatchNorm_Inference_HighVariance_OutputDamped()
     {
+        await Task.Yield();
         // With high runningVar, the output should be damped toward beta
         // We can't set runningVar directly but default is 1.0
         // With gamma=1 beta=0 runningMean=0 runningVar=1:
         // output ≈ input / sqrt(1 + eps) ≈ input
         // If we set gamma=0.5, output ≈ 0.5 * input / sqrt(1+eps)
-        var bn = new BatchNormalizationLayer<double>();
-        bn.SetParameters(new Vector<double>(new double[] { 0.5, 0.5, 0.0, 0.0 }));
+        var bn = new BatchNormalizationLayer<double>(numFeatures: 2);
+        bn.SetParameters(new Vector<double>(new double[]
+            { 0.5, 0.5, 0.0, 0.0, 0.0, 0.0, 1.0, 1.0 }));
         bn.SetTrainingMode(false);
 
         var input = new Tensor<double>(new[] { 1, 2 }, new Vector<double>(new double[] { 10.0, 20.0 }));
@@ -257,10 +281,12 @@ public class NormalizationLayersDeepMathIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task BatchNorm_ZeroInitGamma_InferenceOutputIsBeta()
     {
+        await Task.Yield();
         // With gamma=0, scale=0, shift = beta - 0 = beta
         // output = input * 0 + beta = beta for all inputs
-        var bn = new BatchNormalizationLayer<double>();
-        bn.SetParameters(new Vector<double>(new double[] { 1.0, 1.0, 3.0, -2.0 })); // gamma=1,1 beta=3,-2
+        var bn = new BatchNormalizationLayer<double>(numFeatures: 2);
+        bn.SetParameters(new Vector<double>(new double[]
+            { 1.0, 1.0, 3.0, -2.0, 0.0, 0.0, 1.0, 1.0 })); // gamma, beta, mean, variance
         bn.ZeroInitGamma(); // Now gamma=0,0
         bn.SetTrainingMode(false);
 
@@ -422,12 +448,13 @@ public class NormalizationLayersDeepMathIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task LayerNorm_Forward_WithCustomGammaBeta_HandComputed()
     {
+        await Task.Yield();
         // gamma=[2, 3], beta=[1, -1]
         // Input: [[4, 8]]
         // mean = 6, var = ((4-6)^2+(8-6)^2)/2 = 4, std=sqrt(4+eps)
         // normalized = [(4-6)/std, (8-6)/std] = [-2/std, 2/std]
         // output = gamma * normalized + beta = [2*(-2/std)+1, 3*(2/std)+(-1)]
-        var ln = new LayerNormalizationLayer<double>();
+        var ln = new LayerNormalizationLayer<double>(featureSize: 2);
         ln.SetParameters(new Vector<double>(new double[] { 2.0, 3.0, 1.0, -1.0 }));
 
         var input = new Tensor<double>(new[] { 1, 2 }, new Vector<double>(new double[] { 4.0, 8.0 }));
@@ -453,7 +480,8 @@ public class NormalizationLayersDeepMathIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task LayerNorm_GetSetParameters_RoundTrips()
     {
-        var ln = new LayerNormalizationLayer<double>();
+        await Task.Yield();
+        var ln = new LayerNormalizationLayer<double>(featureSize: 3);
         var paramVec = new Vector<double>(new double[] { 0.5, 1.5, 2.5, -0.5, -1.5, -2.5 });
         ln.SetParameters(paramVec);
 
@@ -660,7 +688,6 @@ public class NormalizationLayersDeepMathIntegrationTests
         // Row 1: [3.0, 4.0]
         // Row 2: [5.0, 6.0]
         var emb = new EmbeddingLayer<double>(3, 2);
-        emb.InputMode = EmbeddingInputMode.Indices;
         var paramVec = new Vector<double>(new double[] { 1.0, 2.0, 3.0, 4.0, 5.0, 6.0 });
         emb.SetParameters(paramVec);
 
@@ -678,7 +705,6 @@ public class NormalizationLayersDeepMathIntegrationTests
     {
         // vocab=4, dim=2
         var emb = new EmbeddingLayer<double>(4, 2);
-        emb.InputMode = EmbeddingInputMode.Indices;
         var paramVec = new Vector<double>(new double[] {
             10.0, 20.0,  // row 0
             30.0, 40.0,  // row 1
@@ -753,9 +779,11 @@ public class NormalizationLayersDeepMathIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task BatchNorm_Inference_LargeBatch_PerFeatureConsistency()
     {
+        await Task.Yield();
         // All samples in a batch with same feature value should get same output
-        var bn = new BatchNormalizationLayer<double>();
-        bn.SetParameters(new Vector<double>(new double[] { 2.0, 3.0, 1.0, -1.0 }));
+        var bn = new BatchNormalizationLayer<double>(numFeatures: 2);
+        bn.SetParameters(new Vector<double>(new double[]
+            { 2.0, 3.0, 1.0, -1.0, 0.0, 0.0, 1.0, 1.0 }));
         bn.SetTrainingMode(false);
 
         // 4 samples, all with same values per feature

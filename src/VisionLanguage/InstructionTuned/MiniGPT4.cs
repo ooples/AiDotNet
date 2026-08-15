@@ -57,7 +57,7 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
     Year = 2023,
     Authors = "Zhu et al."
 )]
-public class MiniGPT4<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
+public partial class MiniGPT4<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
 {
     private readonly MiniGPT4Options _options;
 
@@ -106,7 +106,13 @@ public class MiniGPT4<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
         _options.ValidateVisualSizing();
         SyncImageSizeWithArchitecture();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate,
+                WeightDecay = _options.WeightDecay,
+            });
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.DecoderDim;
@@ -293,32 +299,8 @@ public class MiniGPT4<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
         }
     }
 
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        if (!_useNativeMode)
-            throw new NotSupportedException("Cannot update parameters in ONNX mode.");
-        int idx = 0;
-        foreach (var l in Layers)
-        {
-            int c = (int)l.ParameterCount;
-            l.UpdateParameters(parameters.Slice(idx, c));
-            idx += c;
-        }
-        // Sync the auxiliary streams (Q-Former, decoder) too — see
-        // OpenFlamingo.UpdateParameters for the same dual-stream rationale.
-        foreach (var l in EnumerateAuxiliaryStreamTrainableLayers())
-        {
-            if (l is null)
-                continue;
-            int c = (int)l.ParameterCount;
-            l.UpdateParameters(parameters.Slice(idx, c));
-            idx += c;
-        }
-    }
-
-    /// <inheritdoc />
-    protected override IEnumerable<LayerBase<T>?> GetExtraTrainableLayers() =>
-        EnumerateAuxiliaryStreamTrainableLayers();
+    // This forwarded to a helper the base now calls from its own
+    // GetExtraTrainableLayers, so the override restated it. Removed under AIDN082.
 
     protected override Tensor<T> PreprocessImage(Tensor<T> image) =>
         NormalizeImage(image, _options.ImageMean, _options.ImageStd);
@@ -379,8 +361,8 @@ public class MiniGPT4<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
         if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new MiniGPT4<T>(Architecture, mp, _options);
-        return new MiniGPT4<T>(Architecture, _options);
+            return new MiniGPT4<T>(Architecture, mp, new MiniGPT4Options(_options));
+        return new MiniGPT4<T>(Architecture, new MiniGPT4Options(_options));
     }
 
     private void ThrowIfDisposed()

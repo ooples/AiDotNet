@@ -79,29 +79,47 @@ public class VARLiNGAMAlgorithm<T> : FunctionalBase<T>
             new CausalDiscoveryOptions { EdgeThreshold = _threshold });
         var B0Graph = directLiNGAM.DiscoverStructure(residuals);
 
-        // Step 3: Merge lagged effects into the adjacency matrix
+        // The (I - B_0) M_tau product below uses the UNTHRESHOLDED coefficients. DirectLiNGAM zeroes
+        // anything under its edge threshold in the graph it returns, and doing matrix algebra with
+        // that treats every small-but-real coefficient as an exact zero, which biases B_tau. The
+        // reported graph stays thresholded; only the algebra sees the raw values.
+        var b0Coefficients = directLiNGAM.RawCoefficients ?? B0Graph.AdjacencyMatrix;
+
+        // Step 3: Start the framework's 2-D summary with the instantaneous effects.
         var result = new Matrix<T>(d, d);
         for (int i = 0; i < d; i++)
             for (int j = 0; j < d; j++)
                 result[i, j] = B0Graph.AdjacencyMatrix[i, j];
 
-        // Aggregate lagged coefficients: take max absolute cross-variable lagged effect
-        for (int target = 0; target < d; target++)
+        // Step 4 of Hyvarinen et al. (2010), Eq. (11): OLS estimates the reduced-form VAR
+        // matrices M_tau, not the structural causal matrices. Recover each causal lag matrix as
+        // B_tau = (I - B_0) M_tau before aggregating it. Matrices exposed by this framework use
+        // adjacency orientation [source, target], the transpose of the paper's [target, source].
+        for (int lag = 0; lag < _maxLag; lag++)
         {
-            for (int lag = 0; lag < _maxLag; lag++)
+            for (int source = 0; source < d; source++)
             {
-                for (int source = 0; source < d; source++)
+                for (int target = 0; target < d; target++)
                 {
                     // Skip self-loops: autoregressive coefficients (X on its own lag)
                     // are not causal edges in the summary adjacency matrix
                     if (source == target) continue;
 
-                    T lagWeight = NumOps.Abs(laggedCoefs[target][lag * d + source]);
-                    double lagWeightD = NumOps.ToDouble(lagWeight);
+                    T structuralWeight = laggedCoefs[target][lag * d + source];
+                    for (int intermediary = 0; intermediary < d; intermediary++)
+                    {
+                        structuralWeight = NumOps.Subtract(
+                            structuralWeight,
+                            NumOps.Multiply(
+                                b0Coefficients[intermediary, target],
+                                laggedCoefs[intermediary][lag * d + source]));
+                    }
+
+                    double lagWeightD = Math.Abs(NumOps.ToDouble(structuralWeight));
                     double currentD = Math.Abs(NumOps.ToDouble(result[source, target]));
                     if (lagWeightD >= _threshold && lagWeightD > currentD)
                     {
-                        result[source, target] = laggedCoefs[target][lag * d + source];
+                        result[source, target] = structuralWeight;
                     }
                 }
             }
@@ -134,7 +152,69 @@ public class VARLiNGAMAlgorithm<T> : FunctionalBase<T>
             }
         }
 
-        return result;
+        // A time-unrolled VAR graph may legitimately contain X_i(t-1)->X_j(t) and
+        // X_j(t-1)->X_i(t) simultaneously without a directed cycle. ICausalDiscoveryAlgorithm,
+        // however, returns one lag-collapsed CausalGraph whose contract is a DAG. Preserve the
+        // strongest estimated effects while greedily omitting only edges that would introduce a
+        // cycle in that lossy 2-D summary.
+        return ProjectSummaryToDag(result, d);
+    }
+
+    private Matrix<T> ProjectSummaryToDag(Matrix<T> candidate, int dimension)
+    {
+        var edges = new List<(int Source, int Target, T Weight, double Magnitude)>();
+        for (int source = 0; source < dimension; source++)
+        {
+            for (int target = 0; target < dimension; target++)
+            {
+                if (source == target) continue;
+                T weight = candidate[source, target];
+                double magnitude = Math.Abs(NumOps.ToDouble(weight));
+                if (magnitude >= _threshold)
+                    edges.Add((source, target, weight, magnitude));
+            }
+        }
+
+        edges.Sort((left, right) =>
+        {
+            int magnitudeOrder = right.Magnitude.CompareTo(left.Magnitude);
+            if (magnitudeOrder != 0) return magnitudeOrder;
+            int sourceOrder = left.Source.CompareTo(right.Source);
+            return sourceOrder != 0 ? sourceOrder : left.Target.CompareTo(right.Target);
+        });
+
+        var dag = new Matrix<T>(dimension, dimension);
+        foreach (var edge in edges)
+        {
+            if (!WouldCreateCycle(dag, edge.Source, edge.Target, dimension))
+                dag[edge.Source, edge.Target] = edge.Weight;
+        }
+
+        return dag;
+    }
+
+    private bool WouldCreateCycle(Matrix<T> adjacency, int source, int target, int dimension)
+    {
+        // Adding source -> target closes a cycle exactly when target already reaches source.
+        var visited = new bool[dimension];
+        var pending = new Stack<int>();
+        pending.Push(target);
+
+        while (pending.Count > 0)
+        {
+            int current = pending.Pop();
+            if (current == source) return true;
+            if (visited[current]) continue;
+            visited[current] = true;
+
+            for (int next = 0; next < dimension; next++)
+            {
+                if (next != current && Math.Abs(NumOps.ToDouble(adjacency[current, next])) >= _threshold)
+                    pending.Push(next);
+            }
+        }
+
+        return false;
     }
 
     private (Matrix<T> Residuals, Vector<T>[] LaggedCoefs) FitVARAndGetResiduals(

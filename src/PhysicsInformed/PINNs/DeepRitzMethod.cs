@@ -76,6 +76,10 @@ namespace AiDotNet.PhysicsInformed.PINNs
     [ModelComplexity(ModelComplexity.High)]
     [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     [ResearchPaper("The Deep Ritz Method: A Deep Learning-Based Numerical Method for Solving Variational Problems", "https://doi.org/10.1007/s40304-018-0127-z", Year = 2018, Authors = "Weinan E, Bing Yu")]
+    [TensorLayout(TensorAxis.Batch, TensorAxis.Features,
+        Direction = TensorLayoutDirection.Input, BatchOptional = true)]
+    [TensorLayout(TensorAxis.Batch, TensorAxis.Features,
+        Direction = TensorLayoutDirection.Output, BatchOptional = true)]
     public class DeepRitzMethod<T> : NeuralNetworkBase<T>
     {
         private readonly DeepRitzMethodOptions _options;
@@ -445,25 +449,8 @@ namespace AiDotNet.PhysicsInformed.PINNs
             }
         }
 
-        /// <summary>
-        /// Updates the network parameters from a flattened vector.
-        /// </summary>
-        /// <param name="parameters">Parameter vector.</param>
-        public override void UpdateParameters(Vector<T> parameters)
-        {
-            int index = 0;
-            foreach (var layer in Layers)
-            {
-                int layerParameterCount = checked((int)layer.ParameterCount);
-                if (layerParameterCount > 0)
-                {
-                    Vector<T> layerParameters = parameters.GetSubVector(index, layerParameterCount);
-                    layer.UpdateParameters(layerParameters);
-                    index += layerParameterCount;
-                }
-            }
-        }
-
+    // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
+    // exactly the same enumeration, so this said nothing the base does not already say.
         /// <summary>
         /// Performs a basic supervised training step using MSE loss.
         /// </summary>

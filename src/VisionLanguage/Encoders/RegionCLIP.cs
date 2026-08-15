@@ -1,4 +1,5 @@
 using AiDotNet.Attributes;
+using AiDotNet.ActivationFunctions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
@@ -53,7 +54,7 @@ namespace AiDotNet.VisionLanguage.Encoders;
     Year = 2022,
     Authors = "Zhong et al."
 )]
-public class RegionCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageModel<T>
+public partial class RegionCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageModel<T>
 {
     private readonly RegionCLIPOptions _options;
 
@@ -109,7 +110,13 @@ public class RegionCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLangu
         _options = options ?? new RegionCLIPOptions();
         SyncImageSizeWithArchitecture();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? new StochasticGradientDescentOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new StochasticGradientDescentOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate,
+                UseAdaptiveLearningRate = false,
+            });
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.VisionEmbeddingDim;
@@ -206,7 +213,50 @@ public class RegionCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLangu
             return;
         }
 
-        int patchSize = Math.Max(1, _options.ImageSize / 16);
+        if (_options.UseResNet50Backbone)
+        {
+            if (_options.ResNetStageWidths is null || _options.ResNetStageWidths.Length != 4
+                || _options.ResNetStageDepths is null || _options.ResNetStageDepths.Length != 4)
+                throw new ArgumentException("RegionCLIP ResNet-50 requires four stage widths and four stage depths.");
+            if (_options.ResNetStageWidths.Any(value => value <= 0 || value % 4 != 0)
+                || _options.ResNetStageDepths.Any(value => value <= 0))
+                throw new ArgumentException("ResNet stage widths must be positive multiples of four and depths must be positive.");
+
+            Layers.AddRange(LayerHelper<T>.CreateResNetBottleneckEncoderLayers(
+                3, _options.ImageSize, _options.ImageSize,
+                _options.ResNetStageWidths, _options.ResNetStageDepths));
+            Layers.Add(AdaptiveAveragePoolingLayer<T>.GlobalPool());
+            Layers.Add(new FlattenLayer<T>());
+            Layers.Add(new DenseLayer<T>(
+                _options.ProjectionDim,
+                (IActivationFunction<T>)new IdentityActivation<T>()));
+
+            // RegionCLIP freezes/reuses CLIP's text tower while training the
+            // region-aware ResNet visual encoder. Reuse the same configurable
+            // text stream emitted for the ViT compatibility path.
+            int textSplit = 2 + _options.NumVisionLayers * (_options.DropoutRate > 0 ? 6 : 5);
+            TextEncoderLayers.AddRange(
+                LayerHelper<T>.CreateDefaultOpenCLIPLayers(
+                    _options.VisionEmbeddingDim,
+                    _options.TextEmbeddingDim,
+                    _options.ProjectionDim,
+                    _options.NumVisionLayers,
+                    _options.NumTextLayers,
+                    _options.NumVisionHeads,
+                    _options.NumTextHeads,
+                    _options.DropoutRate)
+                .Skip(textSplit));
+            return;
+        }
+
+        // PatchSize is a public architecture option for the optional ViT path.
+        // Deriving it from ImageSize silently ignored customization and produced
+        // a fixed 16x16 token grid, inflating attention work.
+        int patchSize = _options.PatchSize;
+        if (patchSize <= 0 || patchSize > _options.ImageSize || _options.ImageSize % patchSize != 0)
+            throw new ArgumentOutOfRangeException(
+                nameof(_options.PatchSize),
+                "PatchSize must be positive, no larger than ImageSize, and evenly divide ImageSize.");
         Layers.Add(
             new PatchEmbeddingLayer<T>(
                 patchSize,
@@ -262,33 +312,8 @@ public class RegionCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLangu
         }
     }
 
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        if (!_useNativeMode)
-            throw new NotSupportedException("Cannot update parameters in ONNX mode.");
-        int idx = 0;
-        foreach (var l in Layers)
-        {
-            int c = (int)l.ParameterCount;
-            l.UpdateParameters(parameters.Slice(idx, c));
-            idx += c;
-        }
-        // Sync the text-encoder stream too — see CLIPA.UpdateParameters
-        // for full rationale (dual-stream split, GetExtraTrainableLayers
-        // widens ParameterCount to include TextEncoderLayers, so a
-        // flat-vector writeback that only walks Layers leaves the text
-        // encoder on stale weights and the streams de-sync).
-        foreach (var l in TextEncoderLayers)
-        {
-            int c = (int)l.ParameterCount;
-            l.UpdateParameters(parameters.Slice(idx, c));
-            idx += c;
-        }
-    }
-
-    /// <inheritdoc />
-    protected override IEnumerable<LayerBase<T>?> GetExtraTrainableLayers() =>
-        EnumerateTextEncoderTrainableLayers();
+    // This forwarded to a helper the base now calls from its own
+    // GetExtraTrainableLayers, so the override restated it. Removed under AIDN082.
 
     protected override Tensor<T> PreprocessImage(Tensor<T> image) =>
         NormalizeImage(image, _options.ImageMean, _options.ImageStd);
@@ -347,13 +372,14 @@ public class RegionCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLangu
 
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
+        var options = new RegionCLIPOptions(_options);
         if (
             !_useNativeMode
             && _options.ImageEncoderModelPath is { } mp
             && !string.IsNullOrEmpty(mp)
         )
-            return new RegionCLIP<T>(Architecture, mp, _options);
-        return new RegionCLIP<T>(Architecture, _options);
+            return new RegionCLIP<T>(Architecture, mp, options);
+        return new RegionCLIP<T>(Architecture, options);
     }
 
     private Tensor<T> TokenizeText(string text)

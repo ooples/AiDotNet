@@ -106,7 +106,7 @@ public sealed class NeuralNetworkCausalLanguageModel<T> : ICausalLanguageModel<T
 
     private Vector<T> ExtractLastPositionLogits(Tensor<T> output)
     {
-        var shape = output.Shape.ToArray();
+        var shape = output._shape;
         var vocab = shape[shape.Length - 1];
         if (vocab != VocabularySize)
         {

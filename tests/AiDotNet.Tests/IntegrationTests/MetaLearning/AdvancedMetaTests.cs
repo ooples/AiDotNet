@@ -155,22 +155,22 @@ public class AdvancedMetaTests
     // ── Phase 7b: Transductive ──
 
     [Fact(Timeout = 120000)]
-    public async Task GCDPLNet_FiniteLossAndParamChange()
+    public async Task LFT_FiniteLossAndParamChange()
     {
         var model = new LinearVectorModel(3);
-        var options = new GCDPLNetOptions<double, Matrix<double>, Vector<double>>(model)
-        { InnerLearningRate = 0.01, OuterLearningRate = 0.01 };
-        var algorithm = new GCDPLNetAlgorithm<double, Matrix<double>, Vector<double>>(options);
+        var options = new LFTOptions<double, Matrix<double>, Vector<double>>(model)
+        { InnerLearningRate = 0.01, OuterLearningRate = 0.01, FeatureDimension = 1 };
+        var algorithm = new LFTAlgorithm<double, Matrix<double>, Vector<double>>(options);
         var paramsBefore = model.GetParameters();
 
         var task = CreateTask(9004);
         var batch = new TaskBatch<double, Matrix<double>, Vector<double>>(new[] { task });
 
         var loss = algorithm.MetaTrain(batch);
-        Assert.False(double.IsNaN(loss), "GCDPLNet loss is NaN");
-        Assert.False(double.IsInfinity(loss), "GCDPLNet loss is infinite");
-        Assert.True(ParamsChanged(paramsBefore, model.GetParameters()), "GCDPLNet params unchanged");
-        Assert.Equal(MetaLearningAlgorithmType.GCDPLNet, algorithm.AlgorithmType);
+        Assert.False(double.IsNaN(loss), "LFT loss is NaN");
+        Assert.False(double.IsInfinity(loss), "LFT loss is infinite");
+        Assert.True(ParamsChanged(paramsBefore, model.GetParameters()), "LFT params unchanged");
+        Assert.Equal(MetaLearningAlgorithmType.LFT, algorithm.AlgorithmType);
         Assert.NotNull(algorithm.Adapt(task).Predict(task.QuerySetX));
     }
 
@@ -339,12 +339,12 @@ public class AdvancedMetaTests
     // ── Multi-step stability tests ──
 
     [Fact(Timeout = 120000)]
-    public async Task GCDPLNet_MultiStep_StableLoss()
+    public async Task LFT_MultiStep_StableLoss()
     {
         var model = new LinearVectorModel(3);
-        var options = new GCDPLNetOptions<double, Matrix<double>, Vector<double>>(model)
-        { InnerLearningRate = 0.01, OuterLearningRate = 0.001 };
-        var algorithm = new GCDPLNetAlgorithm<double, Matrix<double>, Vector<double>>(options);
+        var options = new LFTOptions<double, Matrix<double>, Vector<double>>(model)
+        { InnerLearningRate = 0.01, OuterLearningRate = 0.001, FeatureDimension = 1 };
+        var algorithm = new LFTAlgorithm<double, Matrix<double>, Vector<double>>(options);
 
         var task = CreateTask(42);
         var batch = new TaskBatch<double, Matrix<double>, Vector<double>>(new[] { task });
@@ -355,7 +355,7 @@ public class AdvancedMetaTests
             var loss = algorithm.MetaTrain(batch);
             if (!double.IsNaN(loss) && !double.IsInfinity(loss)) finiteCount++;
         }
-        Assert.True(finiteCount >= 4, $"Only {finiteCount}/5 GCDPLNet steps produced finite loss");
+        Assert.True(finiteCount >= 4, $"Only {finiteCount}/5 LFT steps produced finite loss");
     }
 
     [Fact(Timeout = 120000)]

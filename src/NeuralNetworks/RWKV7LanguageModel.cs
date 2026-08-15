@@ -36,7 +36,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("RWKV: Reinventing RNNs for the Transformer Era", "https://arxiv.org/abs/2305.13048", Year = 2023, Authors = "Bo Peng, Eric Alcaide, Quentin Anthony, Alon Albalak, Samuel Arcadinho, Stella Biderman, Huanqi Cao, Xin Cheng, Michael Chung, Matteo Grella, Kranthi Kiran GV, Xuzheng He, Haowen Hou, Przemyslaw Kazienko, Jan Kocon, Jiaming Kong, Bartlomiej Koptyra, Hayden Lau, Krishna Sri Ipsit Mantri, Ferdinand Mom, Atsushi Saito, Xiangru Tang, Bolun Wang, Johan S. Wind, Stanislaw Wozniak, Ruichong Zhang, Zhenyuan Zhang, Qihang Zhao, Peng Zhou, Jian Zhu, Rui-Jie Zhu")]
-public class RWKV7LanguageModel<T> : NeuralNetworkBase<T>
+public class RWKV7LanguageModel<T> : TokenLanguageModelLayoutBase<T>
 {
     private readonly RWKV7Options _options;
     private readonly int _vocabSize;
@@ -80,7 +80,18 @@ public class RWKV7LanguageModel<T> : NeuralNetworkBase<T>
         ILossFunction<T>? lossFunction = null,
         RWKV7Options? options = null)
         : base(architecture,
-            lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(NeuralNetworkTaskType.TextGeneration))
+            // RWKV-7's LM head emits RAW LOGITS (DenseLayer with no activation, see
+            // LayerHelper.CreateRWKV7Layers), so the loss must be cross-entropy-with-logits (fused
+            // log-softmax + NLL, == PyTorch nn.CrossEntropyLoss / RWKV-LM's F.cross_entropy) — the same
+            // pairing RWKV4LanguageModel already uses. The TextGeneration DEFAULT is
+            // CategoricalCrossEntropy, which expects softmax PROBABILITIES and takes log(predicted):
+            // fed un-normalized logits it clamps every non-positive logit to its 1e-7 floor, and
+            // TensorClamp has ZERO gradient outside [1e-7, 1], so training receives no signal at all.
+            // Measured on the Generated Q-S shard before this fix: loss frozen at exactly
+            // 2048*-ln(1e-7) = 33005.70 from step 1 to step 100 with ALL 5,787,136 parameters NaN,
+            // under both a dense and a one-hot target. With this pairing the same probe trains
+            // normally, matching healthy sibling RWKV4.
+            lossFunction ?? new AiDotNet.LossFunctions.CrossEntropyWithLogitsLoss<T>())
     {
         if (vocabSize <= 0) throw new ArgumentException($"Vocabulary size ({vocabSize}) must be positive.", nameof(vocabSize));
         if (modelDimension <= 0) throw new ArgumentException($"Model dimension ({modelDimension}) must be positive.", nameof(modelDimension));
@@ -134,21 +145,7 @@ public class RWKV7LanguageModel<T> : NeuralNetworkBase<T>
         });
     }
 
-    public override void UpdateParameters(Vector<T> gradients)
-    {
-        if (gradients.Length != ParameterCount)
-        {
-            throw new ArgumentException(
-                $"Expected {ParameterCount} gradients, but got {gradients.Length}",
-                nameof(gradients));
-        }
-
-        var currentParams = GetParameters();
-        T learningRate = NumOps.FromDouble(0.001);
-        currentParams = Engine.Subtract(currentParams, Engine.Multiply(gradients, learningRate));
-        SetParameters(currentParams);
-    }
-
+    // UpdateParameters applied a GRADIENT STEP, but its one-argument form is the value setter and every caller passes values -- the override corrupted the model. Removed under AIDN082.
     public override ModelMetadata<T> GetModelMetadata()
     {
         return new ModelMetadata<T>

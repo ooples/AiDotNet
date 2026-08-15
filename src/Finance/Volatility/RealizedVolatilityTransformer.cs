@@ -47,7 +47,11 @@ namespace AiDotNet.Finance.Volatility;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Attention Is All You Need", "https://arxiv.org/abs/1706.03762", Year = 2017, Authors = "Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N. Gomez, Lukasz Kaiser, Illia Polosukhin")]
-public class RealizedVolatilityTransformer<T> : FinancialModelBase<T>, IVolatilityModel<T>
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Input, BatchOptional = true)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Output, BatchOptional = true)]
+public partial class RealizedVolatilityTransformer<T> : FinancialModelBase<T>, IVolatilityModel<T>
 {
     #region Native Mode Fields
 
@@ -254,7 +258,7 @@ public class RealizedVolatilityTransformer<T> : FinancialModelBase<T>, IVolatili
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, target);
+            TrainWithTape(input, target, _optimizer);
         }
         finally
         {
@@ -262,23 +266,8 @@ public class RealizedVolatilityTransformer<T> : FinancialModelBase<T>, IVolatili
         }
     }
 
-    /// <summary>
-    /// Updates model parameters from a flat vector.
-    /// </summary>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> This lets optimizers update all weights at once.</para>
-    /// </remarks>
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        int offset = 0;
-        foreach (var layer in Layers)
-        {
-            var layerParams = layer.GetParameters();
-            layer.SetParameters(parameters.Slice(offset, layerParams.Length));
-            offset += layerParams.Length;
-        }
-    }
-
+    // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
+    // exactly the same enumeration, so this said nothing the base does not already say.
     /// <summary>
     /// Returns metadata describing the model.
     /// </summary>

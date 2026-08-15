@@ -109,8 +109,17 @@ namespace AiDotNet.Diffusion.TextToImage;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("High-Resolution Image Synthesis with Latent Diffusion Models", "https://arxiv.org/abs/2112.10752", Year = 2022, Authors = "Rombach et al.")]
-public class StableDiffusion15Model<T> : LatentDiffusionModelBase<T>
+public partial class StableDiffusion15Model<T> : LatentDiffusionModelBase<T>
 {
+    /// <inheritdoc />
+    /// <remarks>Registration order is serialization order, and matches the
+    /// concatenation the previous hand-written GetParameters performed.</remarks>
+    protected override void RegisterComponents()
+    {
+        RegisterParameterComponent(_unet);
+        RegisterParameterComponent(_vae);
+    }
+
     #region Constants
 
     /// <summary>
@@ -213,7 +222,6 @@ public class StableDiffusion15Model<T> : LatentDiffusionModelBase<T>
     public override int LatentChannels => SD15_LATENT_CHANNELS;
 
     /// <inheritdoc />
-    public override long ParameterCount => _unet.ParameterCount + _vae.ParameterCount;
 
     /// <summary>
     /// Gets the cross-attention dimension (768 for SD 1.5, matching CLIP ViT-L/14).
@@ -536,62 +544,7 @@ public class StableDiffusion15Model<T> : LatentDiffusionModelBase<T>
 
     #region IParameterizable Implementation
 
-    /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        EnsureParameterShapesResolved();
 
-        var unetParams = _unet.GetParameters();
-        var vaeParams = _vae.GetParameters();
-
-        var totalLength = unetParams.Length + vaeParams.Length;
-        var combined = new Vector<T>(totalLength);
-
-        for (int i = 0; i < unetParams.Length; i++)
-        {
-            combined[i] = unetParams[i];
-        }
-
-        for (int i = 0; i < vaeParams.Length; i++)
-        {
-            combined[unetParams.Length + i] = vaeParams[i];
-        }
-
-        return combined;
-    }
-
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        EnsureParameterShapesResolved();
-
-        // Use actual parameter counts from GetParameters to match what was returned
-        var unetCount = checked((int)_unet.ParameterCount);
-        var vaeCount = checked((int)_vae.ParameterCount);
-
-        if (parameters.Length != unetCount + vaeCount)
-        {
-            throw new ArgumentException(
-                $"Expected {unetCount + vaeCount} parameters, got {parameters.Length}.",
-                nameof(parameters));
-        }
-
-        var unetParams = new Vector<T>(unetCount);
-        var vaeParams = new Vector<T>(vaeCount);
-
-        for (int i = 0; i < unetCount; i++)
-        {
-            unetParams[i] = parameters[i];
-        }
-
-        for (int i = 0; i < vaeCount; i++)
-        {
-            vaeParams[i] = parameters[unetCount + i];
-        }
-
-        _unet.SetParameters(unetParams);
-        _vae.SetParameters(vaeParams);
-    }
 
     #endregion
 

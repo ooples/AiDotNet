@@ -92,11 +92,12 @@ namespace AiDotNet.NeuralNetworks.Tasks.Graph;
     "https://arxiv.org/abs/1609.02907",
     Year = 2017,
     Authors = "Thomas N. Kipf, Max Welling")]
-public class GraphClassificationModel<T> : NeuralNetworkBase<T>
+public class GraphClassificationModel<T> : GraphModelLayoutBase<T>
 {
     private readonly ILossFunction<T> _lossFunction;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private readonly GraphPooling _poolingType;
+    [Scratch]
     private Tensor<T>? _cachedAdjacencyMatrix;
     // Opt-in (EnableImplicitIdentityAdjacency): mirrors the GraphConvolutionalLayer
     // implicitIdentityWhenUnset ctor flag at the model level. Default is strict (throw on a
@@ -108,7 +109,9 @@ public class GraphClassificationModel<T> : NeuralNetworkBase<T>
     // regenerated whenever the input node count changes so a later Predict /
     // Train on a different-sized graph doesn't run against a stale identity.
     private bool _usesFallbackAdjacency;
+    [Scratch]
     private Tensor<T>? _nodeEmbeddings;
+    [Scratch]
     private Tensor<T>? _graphEmbedding;
     private int[]? _maxPoolingIndices; // Cached indices for max pooling backward pass
 
@@ -387,25 +390,8 @@ public class GraphClassificationModel<T> : NeuralNetworkBase<T>
         }
     }
 
-    /// <summary>
-    /// Updates the parameters of all layers in the network.
-    /// </summary>
-    /// <param name="parameters">A vector containing all parameters for the network.</param>
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        int index = 0;
-        foreach (var layer in Layers)
-        {
-            int layerParamCount = checked((int)layer.ParameterCount);
-            if (layerParamCount > 0)
-            {
-                var layerParams = parameters.SubVector(index, layerParamCount);
-                layer.SetParameters(layerParams);
-                index += layerParamCount;
-            }
-        }
-    }
-
+    // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
+    // exactly the same enumeration, so this said nothing the base does not already say.
     /// <summary>
     /// Trains the model on a graph classification task.
     /// </summary>
@@ -600,23 +586,6 @@ public class GraphClassificationModel<T> : NeuralNetworkBase<T>
         return Engine.TensorBroadcastDivide<T>(expValues, sumExp);
     }
 
-    /// <summary>
-    /// Gets all parameters as a vector.
-    /// </summary>
-    public override Vector<T> GetParameters()
-    {
-        var allParams = new List<T>();
-        foreach (var layer in Layers)
-        {
-            var layerParams = layer.GetParameters();
-            for (int i = 0; i < layerParams.Length; i++)
-            {
-                allParams.Add(layerParams[i]);
-            }
-        }
-        return new Vector<T>([.. allParams]);
-    }
-
     #region Abstract Method Implementations
 
     /// <summary>
@@ -766,7 +735,7 @@ public class GraphClassificationModel<T> : NeuralNetworkBase<T>
             var trainableParameters = Training.TapeTrainingStep<T>.CollectParameters(Layers, LayerStructureVersion);
             if (trainableParameters.Count > 0)
             {
-                var gradients = tape.ComputeGradients(lossTensor, trainableParameters);
+                var gradients = ComputeAndPublishParameterGradients(tape, lossTensor, trainableParameters);
                 var context = new TapeStepContext<T>(trainableParameters, gradients, lossValue);
                 _optimizer.Step(context);
             }

@@ -39,7 +39,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     [ResearchPaper("Learning Internal Representations by Error Propagation", "https://doi.org/10.21236/ADA164453")]
-public class FeedForwardNeuralNetwork<T> : NeuralNetworkBase<T>
+public class FeedForwardNeuralNetwork<T> : VectorModelLayoutBase<T>
 {
     private readonly FeedForwardNeuralNetworkOptions _options;
 
@@ -440,37 +440,8 @@ public class FeedForwardNeuralNetwork<T> : NeuralNetworkBase<T>
         return output;
     }
 
-    /// <summary>
-    /// Updates the parameters of all layers in the network.
-    /// </summary>
-    /// <param name="parameters">A vector containing all parameters for the network.</param>
-    /// <remarks>
-    /// <para>
-    /// This method distributes the parameters to each layer based on their parameter count.
-    /// It's typically called during training after calculating parameter updates.
-    /// </para>
-    /// <para>
-    /// <b>For Beginners:</b> After the backward pass calculates how to improve the network,
-    /// this method actually applies those improvements. It takes a list of updated settings
-    /// (parameters) and distributes them to each layer in the network. This method is
-    /// called repeatedly during training to gradually improve the network's accuracy.
-    /// </para>
-    /// </remarks>
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        int index = 0;
-        foreach (var layer in Layers)
-        {
-            int layerParameterCount = checked((int)layer.ParameterCount);
-            if (layerParameterCount > 0)
-            {
-                var layerParameters = parameters.Slice(index, layerParameterCount);
-                layer.UpdateParameters(layerParameters);
-                index += layerParameterCount;
-            }
-        }
-    }
-
+    // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
+    // exactly the same enumeration, so this said nothing the base does not already say.
     /// <summary>
     /// Trains the feed-forward neural network using the provided input and expected output.
     /// </summary>

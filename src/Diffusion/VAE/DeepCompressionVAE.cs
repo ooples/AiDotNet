@@ -45,8 +45,17 @@ namespace AiDotNet.Diffusion.VAE;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Deep Compression Autoencoder for Efficient High-Resolution Diffusion Models", "https://arxiv.org/abs/2410.10733", Year = 2024, Authors = "Chen et al.")]
-public class DeepCompressionVAE<T> : VAEModelBase<T>
+public partial class DeepCompressionVAE<T> : VAEModelBase<T>
 {
+    /// <inheritdoc />
+    /// <remarks>Encoder layers then decoder layers -- the order the previous hand-written
+    /// GetParameters concatenated, which is the serialization order.</remarks>
+    protected override void RegisterComponents()
+    {
+        foreach (var layer in _encoderLayers) RegisterParameterComponent(layer);
+        foreach (var layer in _decoderLayers) RegisterParameterComponent(layer);
+    }
+
     private const double DCAE_LATENT_SCALE = 0.3611;
     private const int DEFAULT_DOWNSAMPLE = 32;
 
@@ -72,8 +81,6 @@ public class DeepCompressionVAE<T> : VAEModelBase<T>
     public override double LatentScaleFactor => _latentScaleFactor;
 
     /// <inheritdoc />
-    public override long ParameterCount => CalculateParameterCount();
-
     /// <inheritdoc />
     public override bool SupportsTiling => true;
 
@@ -232,54 +239,6 @@ public class DeepCompressionVAE<T> : VAEModelBase<T>
         return x;
     }
 
-    private int CalculateParameterCount()
-    {
-        long count = 0;
-        foreach (var layer in _encoderLayers)
-            count += layer.GetParameters().Length;
-        foreach (var layer in _decoderLayers)
-            count += layer.GetParameters().Length;
-        return (int)Math.Min(count, int.MaxValue);
-    }
-
-    /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        var parameters = new List<T>();
-        foreach (var layer in _encoderLayers)
-        {
-            var p = layer.GetParameters();
-            for (int i = 0; i < p.Length; i++) parameters.Add(p[i]);
-        }
-        foreach (var layer in _decoderLayers)
-        {
-            var p = layer.GetParameters();
-            for (int i = 0; i < p.Length; i++) parameters.Add(p[i]);
-        }
-        return new Vector<T>(parameters.ToArray());
-    }
-
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int index = 0;
-        foreach (var layer in _encoderLayers)
-        {
-            var p = layer.GetParameters();
-            var np = new Vector<T>(p.Length);
-            for (int i = 0; i < p.Length && index < parameters.Length; i++)
-                np[i] = parameters[index++];
-            layer.SetParameters(np);
-        }
-        foreach (var layer in _decoderLayers)
-        {
-            var p = layer.GetParameters();
-            var np = new Vector<T>(p.Length);
-            for (int i = 0; i < p.Length && index < parameters.Length; i++)
-                np[i] = parameters[index++];
-            layer.SetParameters(np);
-        }
-    }
 
     /// <inheritdoc />
     public override IVAEModel<T> Clone()

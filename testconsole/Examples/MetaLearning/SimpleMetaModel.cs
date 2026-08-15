@@ -70,7 +70,7 @@ internal class SimpleMetaModel : IFullModel<double, Matrix<double>, Vector<doubl
         _parameters = parameters.Clone();
     }
 
-    public int ParameterCount => _parameters.Length;
+    public long ParameterCount => _parameters.Length;
     public bool SupportsParameterInitialization => ParameterCount > 0;
 
     public IFullModel<double, Matrix<double>, Vector<double>> WithParameters(Vector<double> parameters)

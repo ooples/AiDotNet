@@ -53,13 +53,18 @@ public class DAGMANonlinear<T> : ContinuousOptimizationBase<T>
     private const double INNER_CONVERGENCE_TOL = 1e-6;
     private const int CHECKPOINT_INTERVAL = 500;
     private const int DEFAULT_HIDDEN_SIZE = 10;
+    private const double EDGE_TOLERANCE = 1e-12;
 
     #endregion
 
     #region Fields
 
     private readonly double[] _sValues;
-    private int _hiddenSize = DEFAULT_HIDDEN_SIZE;
+    private readonly int _hiddenSize;
+    private readonly double _learningRate;
+    // Preserve the paper defaults when unset, while allowing callers (and the
+    // generated CI fixture) to bound the expensive inner optimization explicitly.
+    private int? _configuredMaxIterations;
     private int _lastIterations;
     private double _lastH;
     private double _lastLoss;
@@ -99,6 +104,18 @@ public class DAGMANonlinear<T> : ContinuousOptimizationBase<T>
     {
         Lambda1 = DAGMA_DEFAULT_LAMBDA1;
         ApplyOptions(options);
+
+        _hiddenSize = options?.HiddenUnits ?? DEFAULT_HIDDEN_SIZE;
+        if (_hiddenSize <= 0)
+            throw new ArgumentOutOfRangeException(
+                nameof(options), $"HiddenUnits must be > 0; got {_hiddenSize}.");
+
+        _learningRate = options?.LearningRate ?? DEFAULT_LEARNING_RATE;
+        if (double.IsNaN(_learningRate) || double.IsInfinity(_learningRate) || _learningRate <= 0)
+            throw new ArgumentOutOfRangeException(
+                nameof(options), $"LearningRate must be a positive finite value; got {_learningRate}.");
+
+        _configuredMaxIterations = options?.MaxIterations;
         if (options?.Seed.HasValue == true) _seed = options.Seed.Value;
         _sValues = [1.0, 0.9, 0.8, 0.7, 0.6];
     }
@@ -126,7 +143,10 @@ public class DAGMANonlinear<T> : ContinuousOptimizationBase<T>
         for (int t = 0; t < T; t++)
         {
             double s = _sValues[t];
-            int maxInner = (t < T - 1) ? DEFAULT_WARM_ITER : DEFAULT_MAX_ITER;
+                int defaultInner = (t < T - 1) ? DEFAULT_WARM_ITER : DEFAULT_MAX_ITER;
+                int maxInner = _configuredMaxIterations.HasValue
+                    ? Math.Min(defaultInner, _configuredMaxIterations.Value)
+                    : defaultInner;
             double prevObj = double.MaxValue;
 
             for (int inner = 1; inner <= maxInner; inner++)
@@ -158,7 +178,14 @@ public class DAGMANonlinear<T> : ContinuousOptimizationBase<T>
         _lastLoss = finalLoss;
         _lastH = ComputeLogDetConstraintFromA(A, _sValues[^1], d).H;
 
-        return ThresholdAndClean(A, WThreshold);
+        // The shared base projection, not a local copy. The copy that used to live here sorted
+        // edges by magnitude with no tiebreak, and List<T>.Sort is introsort, which is not stable --
+        // two edges of equal magnitude were ordered arbitrarily, so the projected DAG could differ
+        // between runs on identical input. EnforceAcyclic breaks ties by (From, To) for exactly that
+        // reason, asks the cheaper "does `to` already reach `from`" question instead of rescanning
+        // the whole graph after every insertion, and traverses iteratively rather than recursing to
+        // depth d. NOTEARSNonlinear and NOTEARSSobolev already use it.
+        return EnforceAcyclic(ThresholdAndClean(A, WThreshold));
     }
 
     #endregion
@@ -358,7 +385,7 @@ public class DAGMANonlinear<T> : ContinuousOptimizationBase<T>
                     _mW1[j][i, k] = NumOps.FromDouble(mVal);
                     _vW1[j][i, k] = NumOps.FromDouble(vVal);
                     double wVal = NumOps.ToDouble(_W1[j][i, k]);
-                    wVal -= DEFAULT_LEARNING_RATE * (mVal / bc1) / (Math.Sqrt(vVal / bc2) + 1e-8);
+                    wVal -= _learningRate * (mVal / bc1) / (Math.Sqrt(vVal / bc2) + 1e-8);
                     _W1[j][i, k] = NumOps.FromDouble(wVal);
                 }
 
@@ -366,19 +393,19 @@ public class DAGMANonlinear<T> : ContinuousOptimizationBase<T>
             {
                 _mb1[j][k] = ADAM_BETA1 * _mb1[j][k] + (1 - ADAM_BETA1) * gB1[j][k];
                 _vb1[j][k] = ADAM_BETA2 * _vb1[j][k] + (1 - ADAM_BETA2) * gB1[j][k] * gB1[j][k];
-                _b1[j][k] -= DEFAULT_LEARNING_RATE * (_mb1[j][k] / bc1) / (Math.Sqrt(_vb1[j][k] / bc2) + 1e-8);
+                _b1[j][k] -= _learningRate * (_mb1[j][k] / bc1) / (Math.Sqrt(_vb1[j][k] / bc2) + 1e-8);
             }
 
             for (int k = 0; k < h; k++)
             {
                 _mW2[j][k] = ADAM_BETA1 * _mW2[j][k] + (1 - ADAM_BETA1) * gW2[j][k];
                 _vW2[j][k] = ADAM_BETA2 * _vW2[j][k] + (1 - ADAM_BETA2) * gW2[j][k] * gW2[j][k];
-                _W2[j][k] -= DEFAULT_LEARNING_RATE * (_mW2[j][k] / bc1) / (Math.Sqrt(_vW2[j][k] / bc2) + 1e-8);
+                _W2[j][k] -= _learningRate * (_mW2[j][k] / bc1) / (Math.Sqrt(_vW2[j][k] / bc2) + 1e-8);
             }
 
             _mb2[j] = ADAM_BETA1 * _mb2[j] + (1 - ADAM_BETA1) * gB2[j];
             _vb2[j] = ADAM_BETA2 * _vb2[j] + (1 - ADAM_BETA2) * gB2[j] * gB2[j];
-            _b2[j] -= DEFAULT_LEARNING_RATE * (_mb2[j] / bc1) / (Math.Sqrt(_vb2[j] / bc2) + 1e-8);
+            _b2[j] -= _learningRate * (_mb2[j] / bc1) / (Math.Sqrt(_vb2[j] / bc2) + 1e-8);
         }
     }
 

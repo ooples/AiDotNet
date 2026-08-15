@@ -112,8 +112,17 @@ namespace AiDotNet.Diffusion.Video;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Structure and Content-Guided Video Synthesis with Diffusion Models", "https://arxiv.org/abs/2302.03011", Year = 2023, Authors = "Esser et al.")]
-public class RunwayGenModel<T> : VideoDiffusionModelBase<T>
+public partial class RunwayGenModel<T> : VideoDiffusionModelBase<T>
 {
+    /// <inheritdoc />
+    /// <remarks>Registration order is serialization order, and matches the
+    /// concatenation the previous hand-written GetParameters performed.</remarks>
+    protected override void RegisterComponents()
+    {
+        RegisterParameterComponent(_videoUNet);
+        RegisterParameterComponent(_temporalVAE);
+    }
+
     #region Constants
 
     /// <summary>
@@ -204,8 +213,6 @@ public class RunwayGenModel<T> : VideoDiffusionModelBase<T>
     public override bool SupportsVideoToVideo => true;
 
     /// <inheritdoc />
-    public override long ParameterCount =>
-        _videoUNet.GetParameters().Length + _temporalVAE.GetParameters().Length;
 
     /// <summary>
     /// Gets whether this is a Gen-3 variant with enhanced architecture.
@@ -353,56 +360,7 @@ public class RunwayGenModel<T> : VideoDiffusionModelBase<T>
 
     #region IParameterizable Implementation
 
-    /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        var unetParams = _videoUNet.GetParameters();
-        var vaeParams = _temporalVAE.GetParameters();
 
-        var combined = new Vector<T>(unetParams.Length + vaeParams.Length);
-
-        for (int i = 0; i < unetParams.Length; i++)
-        {
-            combined[i] = unetParams[i];
-        }
-
-        for (int i = 0; i < vaeParams.Length; i++)
-        {
-            combined[unetParams.Length + i] = vaeParams[i];
-        }
-
-        return combined;
-    }
-
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        var unetCount = _videoUNet.GetParameters().Length;
-        var vaeCount = _temporalVAE.GetParameters().Length;
-
-        if (parameters.Length != unetCount + vaeCount)
-        {
-            throw new ArgumentException(
-                $"Expected {unetCount + vaeCount} parameters, got {parameters.Length}.",
-                nameof(parameters));
-        }
-
-        var unetParams = new Vector<T>(unetCount);
-        var vaeParams = new Vector<T>(vaeCount);
-
-        for (int i = 0; i < unetCount; i++)
-        {
-            unetParams[i] = parameters[i];
-        }
-
-        for (int i = 0; i < vaeCount; i++)
-        {
-            vaeParams[i] = parameters[unetCount + i];
-        }
-
-        _videoUNet.SetParameters(unetParams);
-        _temporalVAE.SetParameters(vaeParams);
-    }
 
     #endregion
 

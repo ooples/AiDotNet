@@ -162,30 +162,52 @@ public class SymmetricProjector<T> : IProjectorHead<T>
     public int? HiddenDimension => _hiddenDim;
 
     /// <inheritdoc />
-    public long ParameterCount => ComputeParameterCountLong();
-
-    private long ComputeParameterCountLong()
+    /// <inheritdoc />
+    /// <remarks>
+    /// Sums the lengths of the same arrays <see cref="GetParameters"/> concatenates, so the two
+    /// cannot disagree. It previously recomputed the shapes arithmetically from _inputDim,
+    /// _hiddenDim, _projectionDim and _predictorHiddenDim -- a second, independent answer that
+    /// also sizes the GRADIENT buffers (see GetParameterGradients), so a drift there would have
+    /// mis-sized gradients rather than merely misreporting a total. Summing Length touches no
+    /// data and allocates nothing.
+    /// </remarks>
+    public long ParameterCount
     {
-        // Compute in long to avoid wrap on large hidden / projection dims —
-        // SimCLR-style projectors with 4096-d hidden over 1024-d input land
-        // around 4M params per linear, well inside int range, but 8B-token
-        // self-supervised setups push hidden dims into the tens of thousands
-        // and the int sum used to wrap on the multiplication of the linear-1
-        // weight tensor (input * hidden).
-        long projCount = ((long)_inputDim * _hiddenDim + _hiddenDim) +
-                         ((long)_hiddenDim * 2) +
-                         ((long)_hiddenDim * _projectionDim + _projectionDim) +
-                         ((long)_projectionDim * 2);
-
-        if (!_hasPredictor)
-            return projCount;
-
-        long predCount = ((long)_projectionDim * _predictorHiddenDim + _predictorHiddenDim) +
-                         ((long)_predictorHiddenDim * 2) +
-                         ((long)_predictorHiddenDim * _projectionDim + _projectionDim);
-
-        return projCount + predCount;
+        get
+        {
+            long total = 0;
+            foreach (var block in ParameterArrays()) total += block.Length;
+            return total;
+        }
     }
+
+    /// <summary>
+    /// Every parameter array this projector owns, in the canonical order used by
+    /// <see cref="GetParameters"/> and <see cref="SetParameters"/>.
+    /// </summary>
+    /// <remarks>The predictor head is conditional, so it is absent here exactly when it is
+    /// absent from the vector.</remarks>
+    private IEnumerable<T[]> ParameterArrays()
+    {
+        yield return _projWeight1;
+        yield return _projBias1;
+        yield return _projBn1Gamma;
+        yield return _projBn1Beta;
+        yield return _projWeight2;
+        yield return _projBias2;
+        yield return _projBn2Gamma;
+        yield return _projBn2Beta;
+
+        if (!_hasPredictor) yield break;
+
+        yield return PredWeight1;
+        yield return PredBias1;
+        yield return PredBn1Gamma;
+        yield return PredBn1Beta;
+        yield return PredWeight2;
+        yield return PredBias2;
+    }
+
 
     private bool _isTraining = true;
 
@@ -747,24 +769,6 @@ public class SymmetricProjector<T> : IProjectorHead<T>
         _gradients = null;
     }
 
-    private int ComputeParameterCount()
-    {
-        // Projector: 2 linear layers with bias + 2 BN layers
-        int projCount = (_inputDim * _hiddenDim + _hiddenDim) +     // Linear1 + bias
-                       (_hiddenDim * 2) +                            // BN1 gamma + beta
-                       (_hiddenDim * _projectionDim + _projectionDim) + // Linear2 + bias
-                       (_projectionDim * 2);                         // BN2 gamma + beta
-
-        if (!_hasPredictor)
-            return projCount;
-
-        // Predictor: 2 linear layers with bias + 1 BN layer
-        int predCount = (_projectionDim * _predictorHiddenDim + _predictorHiddenDim) + // Linear1 + bias
-                       (_predictorHiddenDim * 2) +                   // BN1 gamma + beta
-                       (_predictorHiddenDim * _projectionDim + _projectionDim); // Linear2 + bias
-
-        return projCount + predCount;
-    }
 
     private T[] InitializeWeight(int fanIn, int fanOut, Random rng)
     {

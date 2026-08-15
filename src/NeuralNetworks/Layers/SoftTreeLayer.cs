@@ -1,6 +1,5 @@
 using AiDotNet.Helpers;
 using AiDotNet.Attributes;
-using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
@@ -29,8 +28,60 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Other)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, TestInputShape = "1, 4", TestConstructorArgs = "4, 8, 2")]
-public partial class SoftTreeLayer<T> : LayerBase<T>
+// FEATURE-LAST, like a dense projection: ForwardTraced flattens everything ahead of the trailing axis
+// into a batch ("input.Length / features, features"), runs the tree, then restores the caller's leading
+// dimensions with only the last axis replaced by outputDim. Its own <returns> says so: "[outputDim] for
+// rank-1 input, [batchSize, outputDim] for rank-2, and [d0, ..., outputDim] for higher rank". The tree
+// structure - depth, internal nodes, leaves - is entirely interior; it never reaches the output shape.
+[TensorLayout(TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Input,
+    Note = "Per-position tree evaluation: leading axes are flattened into the batch and restored.")]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Output)]
+[AutoParameters]
+public partial class SoftTreeLayer<T> : LayerBase<T>, IShapeContract
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// Rank-polymorphic for the same reason <c>DenseLayer</c> is: the layer fixes the TRAILING axis and
+    /// carries every leading axis through untouched. <c>ForwardTraced</c> reshapes to
+    /// <c>[input.Length / features, features]</c>, matmuls, and then rebuilds <c>outShape</c> by copying
+    /// <c>input.Shape[i]</c> for every leading axis and setting only the last to <c>outputDim</c>.
+    /// </para>
+    /// <para>
+    /// <c>Fixed(_outputDim)</c> is the constructor argument, not an observed number - it is the width of
+    /// <c>_leafValues</c> (<c>[numLeaves, outputDim]</c>), the right operand of the final matmul, so it
+    /// is a size the layer's parameters genuinely impose rather than one inherited from the input.
+    /// </para>
+    /// <para>
+    /// <c>_numLeaves</c> and <c>_numInternalNodes</c> are deliberately absent. They size the path
+    /// probabilities, an intermediate that the leaf matmul contracts away; naming a tree of depth 4 as a
+    /// 16-wide axis would describe a tensor the caller never receives.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        if (_outputDim <= 0 || inputRank < 1) return null;
+
+        var features = new OutputAxisContract(TensorAxis.Features, AxisRelation.Fixed(_outputDim));
+        OutputAxisContract Pass(TensorAxis a) => new(a, AxisRelation.Same(a));
+
+        // Enumerated rather than looped: each leading axis needs a DISTINCT role, since a relation
+        // refers to its input by role and two anonymous placeholders could not be told apart.
+        return inputRank switch
+        {
+            1 => new[] { features },
+            2 => new[] { Pass(TensorAxis.Batch), features },
+            3 => new[] { Pass(TensorAxis.Batch), Pass(TensorAxis.Time), features },
+            _ => null,
+        };
+    }
+
     private readonly int _inputDim;
     private readonly int _depth;
     private readonly int _outputDim;
@@ -71,11 +122,7 @@ public partial class SoftTreeLayer<T> : LayerBase<T>
 
     /// <inheritdoc/>
     private Tensor<T>? _cachedRightProbs;
-    private Tensor<T>? _cachedNodeProbs;
     private Tensor<T>? _cachedSplitLogits;
-
-    public override long ParameterCount =>
-        _splitWeights.Length + _splitBiases.Length + _leafValues.Length;
 
     /// <summary>
     /// Initializes a new soft tree layer.
@@ -156,7 +203,7 @@ public partial class SoftTreeLayer<T> : LayerBase<T>
     /// <c>outputDim</c>: <c>[outputDim]</c> for rank-1 input, <c>[batchSize, outputDim]</c> for
     /// rank-2, and <c>[d0, ..., outputDim]</c> for higher rank.
     /// </returns>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // The split-logit and leaf-value steps are matmuls and require a rank-2 [batch, features]
         // input. Flatten a rank-1 ([features]) or higher-rank input to 2D so an unbatched single
@@ -176,16 +223,12 @@ public partial class SoftTreeLayer<T> : LayerBase<T>
         var splitLogits = Engine.TensorMatMul(x, splitWeightsT);
 
         // Add biases (broadcast)
-        var biasesBroadcast = new Tensor<T>([1, _numInternalNodes]);
-        for (int i = 0; i < _numInternalNodes; i++)
-        {
-            biasesBroadcast[i] = _splitBiases[i];
-        }
+        var biasesBroadcast = Engine.Reshape(_splitBiases, [1, _numInternalNodes]);
         splitLogits = Engine.TensorBroadcastAdd(splitLogits, biasesBroadcast);
 
         // Apply temperature scaling
         var tempScale = NumOps.FromDouble(1.0 / _temperature);
-        splitLogits = splitLogits.Multiply(tempScale);
+        splitLogits = Engine.TensorMultiplyScalar(splitLogits, tempScale);
 
         // Cache split logits for backward
         _cachedSplitLogits = splitLogits;
@@ -223,77 +266,40 @@ public partial class SoftTreeLayer<T> : LayerBase<T>
     /// </summary>
     private Tensor<T> ComputePathProbabilities(Tensor<T> rightProbs, int batchSize)
     {
-        var pathProbs = TensorAllocator.Rent<T>([batchSize, _numLeaves]);
-
-        // Initialize all paths with probability 1 at root
-        var nodeProbs = TensorAllocator.Rent<T>([batchSize, _numInternalNodes + _numLeaves]);
-        for (int b = 0; b < batchSize; b++)
+        // Preserve the heap ordering used by the original scalar implementation, but express every
+        // probability transition as an IEngine operation. Filling rented tensors element by element
+        // copied values out of rightProbs and severed the tape at the tree itself.
+        var currentLevel = new List<Tensor<T>>
         {
-            nodeProbs[b * (nodeProbs.Shape[1])] = NumOps.One;  // Root node
-        }
+            Tensor<T>.CreateDefault([batchSize, 1], NumOps.One)
+        };
 
-        // Propagate probabilities through tree (level by level)
-        for (int node = 0; node < _numInternalNodes; node++)
+        for (int level = 0; level < _depth; level++)
         {
-            int leftChild = 2 * node + 1;
-            int rightChild = 2 * node + 2;
+            int firstNodeAtLevel = (1 << level) - 1;
+            var nextLevel = new List<Tensor<T>>(currentLevel.Count * 2);
 
-            for (int b = 0; b < batchSize; b++)
+            for (int nodeAtLevel = 0; nodeAtLevel < currentLevel.Count; nodeAtLevel++)
             {
-                var nodeProb = nodeProbs[b * (nodeProbs.Shape[1]) + node];
-                var rightP = rightProbs[b * _numInternalNodes + node];
-                var leftP = NumOps.Subtract(NumOps.One, rightP);
+                var rightProbability = Engine.TensorNarrow(
+                    rightProbs,
+                    dim: 1,
+                    start: firstNodeAtLevel + nodeAtLevel,
+                    length: 1);
+                var leftProbability = Engine.TensorNegate(
+                    Engine.TensorSubtractScalar(rightProbability, NumOps.One));
+                var parentProbability = currentLevel[nodeAtLevel];
 
-                if (leftChild < _numInternalNodes + _numLeaves)
-                {
-                    nodeProbs[b * (nodeProbs.Shape[1]) + leftChild] = NumOps.Multiply(nodeProb, leftP);
-                }
-                if (rightChild < _numInternalNodes + _numLeaves)
-                {
-                    nodeProbs[b * (nodeProbs.Shape[1]) + rightChild] = NumOps.Multiply(nodeProb, rightP);
-                }
+                nextLevel.Add(Engine.TensorMultiply(parentProbability, leftProbability));
+                nextLevel.Add(Engine.TensorMultiply(parentProbability, rightProbability));
             }
+
+            currentLevel = nextLevel;
         }
 
-        // Extract leaf probabilities
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int leaf = 0; leaf < _numLeaves; leaf++)
-            {
-                pathProbs[b * _numLeaves + leaf] = nodeProbs[b * (nodeProbs.Shape[1]) + _numInternalNodes + leaf];
-            }
-        }
-
-        _cachedNodeProbs = nodeProbs;
-        return pathProbs;
-    }
-
-    /// <inheritdoc/>
-    public override Vector<T> GetParameters()
-    {
-        int totalParams = ParameterCountHelper.ToFlatVectorSize(ParameterCount);
-        var parameters = new Vector<T>(totalParams);
-        int idx = 0;
-
-        // Copy split weights
-        for (int i = 0; i < _splitWeights.Length; i++)
-        {
-            parameters[idx++] = _splitWeights[i];
-        }
-
-        // Copy split biases
-        for (int i = 0; i < _splitBiases.Length; i++)
-        {
-            parameters[idx++] = _splitBiases[i];
-        }
-
-        // Copy leaf values
-        for (int i = 0; i < _leafValues.Length; i++)
-        {
-            parameters[idx++] = _leafValues[i];
-        }
-
-        return parameters;
+        return currentLevel.Count == 1
+            ? currentLevel[0]
+            : Engine.TensorConcatenate(currentLevel.ToArray(), axis: 1);
     }
 
     /// <inheritdoc/>
@@ -371,19 +377,6 @@ public partial class SoftTreeLayer<T> : LayerBase<T>
     {
         base.ClearGradients();
         _splitWeightsGrad = null; _splitBiasesGrad = null; _leafValuesGrad = null;
-    }
-
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (parameters.Length != ParameterCount)
-            throw new ArgumentException($"Expected {ParameterCount} parameters, got {parameters.Length}");
-        int idx = 0;
-        var swSpan = _splitWeights.Data.Span;
-        for (int i = 0; i < _splitWeights.Length; i++) swSpan[i] = parameters[idx++];
-        var sbSpan = _splitBiases.Data.Span;
-        for (int i = 0; i < _splitBiases.Length; i++) sbSpan[i] = parameters[idx++];
-        var lvSpan = _leafValues.Data.Span;
-        for (int i = 0; i < _leafValues.Length; i++) lvSpan[i] = parameters[idx++];
     }
 
     /// <inheritdoc/>

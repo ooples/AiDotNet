@@ -3,6 +3,7 @@ using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.LossFunctions;
+using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Optimizers;
@@ -55,37 +56,27 @@ namespace AiDotNet.ComputerVision.Segmentation.Efficient;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("SlimSAM: 0.1% Data Frees Slim Segment Anything Model", "https://arxiv.org/abs/2312.05284", Year = 2023, Authors = "Zigeng Chen, Gongfan Fang, Xinyin Ma, Xinchao Wang")]
-public class SlimSAM<T> : NeuralNetworkBase<T>, IPromptableSegmentation<T>
+public class SlimSAM<T> : Common.PromptableSegmentationBase<T>
 {
     private readonly SlimSAMOptions _options;
     public override ModelOptions GetOptions() => _options;
 
     #region Fields
-    private int _height, _width, _channels, _numClasses;
+    // Only SlimSAM's OWN configuration lives here. _height, _width, _channels, _numClasses,
+    // _useNativeMode, _onnxModelPath, _onnxSession, _optimizer, _disposed, _encoderLayerEnd and
+    // _imageEmbedding all come from PromptableSegmentationBase -> SegmentationModelBase, which
+    // declares them protected and settable so DeserializeNetworkSpecificData still restores them.
     private int[] _channelDims;
     private int _decoderDim;
     private int[] _depths;
     private double _dropRate;
-    private bool _useNativeMode;
-    private string? _onnxModelPath;
-    private InferenceSession? _onnxSession;
-    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
-    private bool _disposed;
-    private int _encoderLayerEnd;
     #endregion
 
     #region Properties
     /// <summary>
-    /// Gets whether this SlimSAM instance supports training.
+    /// Gets whether using native mode (trainable) or ONNX mode (inference only).
     /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Returns <c>true</c> in native mode, <c>false</c> in ONNX mode.
-    /// </para>
-    /// </remarks>
-    public override bool SupportsTraining => _useNativeMode;
     internal bool UseNativeMode => _useNativeMode;
-    internal int NumClasses => _numClasses;
     #endregion
 
     #region Constructors
@@ -108,18 +99,18 @@ public class SlimSAM<T> : NeuralNetworkBase<T>, IPromptableSegmentation<T>
         ILossFunction<T>? lossFunction = null, int numClasses = 1,
         double dropRate = 0,
         SlimSAMOptions? options = null)
-        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>())
+        : base(architecture, optimizer, lossFunction, numClasses)
     {
         _options = options ?? new SlimSAMOptions(); Options = _options;
-        _height = architecture.InputHeight > 0 ? architecture.InputHeight : 1024;
-        _width = architecture.InputWidth > 0 ? architecture.InputWidth : 1024;
-        _channels = architecture.InputDepth > 0 ? architecture.InputDepth : 3;
-        _numClasses = numClasses; _dropRate = dropRate;
-        _useNativeMode = true; _onnxModelPath = null;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
-        _channelDims = [64, 128, 320, 768];
-        _depths = [2, 2, 4, 12];
-        _decoderDim = 256;
+        ApplySamDefaultGeometry(architecture);
+        _dropRate = options is null ? dropRate : _options.DropoutRate;
+        _channelDims = _options.ChannelDimensions.ToArray();
+        _depths = _options.StageDepths.ToArray();
+        _decoderDim = _options.DecoderDimension;
+        if (_channelDims.Length != 4 || _depths.Length != 4)
+            throw new ArgumentException("SlimSAM requires four channel dimensions and four stage depths.", nameof(options));
+        if (_channelDims.Any(d => d <= 0) || _depths.Any(d => d <= 0) || _decoderDim <= 0)
+            throw new ArgumentOutOfRangeException(nameof(options), "SlimSAM dimensions and depths must be positive.");
         InitializeLayers();
     }
 
@@ -141,39 +132,50 @@ public class SlimSAM<T> : NeuralNetworkBase<T>, IPromptableSegmentation<T>
     public SlimSAM(NeuralNetworkArchitecture<T> architecture, string onnxModelPath,
         int numClasses = 1,
         SlimSAMOptions? options = null)
-        : base(architecture, new CrossEntropyWithLogitsLoss<T>())
+        : base(architecture, onnxModelPath, numClasses)
     {
         _options = options ?? new SlimSAMOptions(); Options = _options;
-        if (string.IsNullOrWhiteSpace(onnxModelPath))
-            throw new ArgumentException("ONNX model path cannot be null or empty.", nameof(onnxModelPath));
-        if (!File.Exists(onnxModelPath))
-            throw new FileNotFoundException($"SlimSAM ONNX model not found: {onnxModelPath}");
-        _height = architecture.InputHeight > 0 ? architecture.InputHeight : 1024;
-        _width = architecture.InputWidth > 0 ? architecture.InputWidth : 1024;
-        _channels = architecture.InputDepth > 0 ? architecture.InputDepth : 3;
-        _numClasses = numClasses; _dropRate = 0;
-        _useNativeMode = false; _onnxModelPath = onnxModelPath; _optimizer = null;
-        _channelDims = [64, 128, 320, 768];
-        _depths = [2, 2, 4, 12];
-        _decoderDim = 256;
-        try { _onnxSession = new InferenceSession(onnxModelPath); }
-        catch (Exception ex) { throw new InvalidOperationException($"Failed to load SlimSAM ONNX model: {ex.Message}", ex); }
+        ApplySamDefaultGeometry(architecture);
+        _dropRate = 0;
+        _channelDims = _options.ChannelDimensions.ToArray();
+        _depths = _options.StageDepths.ToArray();
+        _decoderDim = _options.DecoderDimension;
         InitializeLayers();
     }
+
+    /// <summary>
+    /// Restores SlimSAM's own 1024x1024 fallback for unspecified input geometry.
+    /// </summary>
+    /// <remarks>
+    /// SegmentationModelBase falls back to 512x512 when the architecture leaves the input size
+    /// unset; every SAM variant has always fallen back to SAM's native 1024x1024 instead, so that
+    /// stays the model's own rule rather than becoming the shared default.
+    /// </remarks>
+    private void ApplySamDefaultGeometry(NeuralNetworkArchitecture<T> architecture)
+    {
+        if (architecture.InputHeight <= 0) _height = 1024;
+        if (architecture.InputWidth <= 0) _width = 1024;
+    }
+
+    /// <summary>
+    /// SlimSAM tunes its own AdamW defaults from <see cref="SlimSAMOptions"/>, so it overrides the
+    /// base's default-optimizer factory instead of building one in the constructor - a constructor
+    /// cannot pass <c>this</c> to a base initializer, which is exactly why the base resolves the
+    /// default lazily.
+    /// </summary>
+    protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreateDefaultOptimizer()
+        => new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate,
+                WeightDecay = _options.WeightDecay,
+            });
     #endregion
 
     #region Public Methods
-    /// <summary>
-    /// Runs a forward pass to produce segmentation logits.
-    /// </summary>
-    /// <param name="input">The input tensor [C, H, W] or [B, C, H, W].</param>
-    /// <returns>Segmentation logits tensor.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Pass an image to get a per-pixel class prediction map.
-    /// </para>
-    /// </remarks>
-    protected override Tensor<T> PredictCore(Tensor<T> input) => _useNativeMode ? Forward(input) : PredictOnnx(input);
+    // PredictCore's mode dispatch (ONNX -> PredictOnnx, native -> Forward) is inherited from
+    // SegmentationModelBase; both branches are overridden below.
 
     /// <summary>
     /// Performs one training step.
@@ -196,7 +198,7 @@ public class SlimSAM<T> : NeuralNetworkBase<T>, IPromptableSegmentation<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expectedOutput);
+            TrainWithTape(input, expectedOutput, Optimizer);
         }
         finally
         {
@@ -206,7 +208,8 @@ public class SlimSAM<T> : NeuralNetworkBase<T>, IPromptableSegmentation<T>
     #endregion
 
     #region Private Methods
-    private Tensor<T> Forward(Tensor<T> input)
+    /// <inheritdoc />
+    protected override Tensor<T> Forward(Tensor<T> input)
     {
         bool hasBatch = input.Rank == 4; if (!hasBatch) input = AddBatchDimension(input);
         var features = input;
@@ -215,7 +218,8 @@ public class SlimSAM<T> : NeuralNetworkBase<T>, IPromptableSegmentation<T>
         if (!hasBatch) features = RemoveBatchDimension(features); return features;
     }
 
-    private Tensor<T> PredictOnnx(Tensor<T> input)
+    /// <inheritdoc />
+    protected override Tensor<T> PredictOnnx(Tensor<T> input)
     {
         if (_onnxSession is null) throw new InvalidOperationException("ONNX session is not initialized.");
         bool hasBatch = input.Rank == 4; if (!hasBatch) input = AddBatchDimension(input);
@@ -232,11 +236,7 @@ public class SlimSAM<T> : NeuralNetworkBase<T>, IPromptableSegmentation<T>
         if (!hasBatch) result = RemoveBatchDimension(result); return result;
     }
 
-    private Tensor<T> AddBatchDimension(Tensor<T> tensor)
-    { var result = new Tensor<T>([1, tensor.Shape[0], tensor.Shape[1], tensor.Shape[2]]); tensor.Data.Span.CopyTo(result.Data.Span); return result; }
-
-    private Tensor<T> RemoveBatchDimension(Tensor<T> tensor)
-    { int[] s = new int[tensor.Shape.Length - 1]; for (int i = 0; i < s.Length; i++) s[i] = tensor.Shape[i + 1]; var r = new Tensor<T>(s); tensor.Data.Span.CopyTo(r.Data.Span); return r; }
+    // AddBatchDimension / RemoveBatchDimension are inherited from SegmentationModelBase.
     #endregion
 
     #region Abstract Implementation
@@ -267,18 +267,8 @@ public class SlimSAM<T> : NeuralNetworkBase<T>, IPromptableSegmentation<T>
         }
     }
 
-    /// <summary>
-    /// Updates all trainable parameters from a flat parameter vector.
-    /// </summary>
-    /// <param name="parameters">Flat vector of all model parameters.</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Replaces all model weights with new values.
-    /// </para>
-    /// </remarks>
-    public override void UpdateParameters(Vector<T> parameters)
-    { int o = 0; foreach (var l in Layers) { var p = l.GetParameters(); int c = p.Length; if (o + c <= parameters.Length) { var n = new Vector<T>(c); for (int i = 0; i < c; i++) n[i] = parameters[o + i]; l.UpdateParameters(n); o += c; } } }
-
+    // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
+    // exactly the same enumeration, so this said nothing the base does not already say.
     /// <summary>
     /// Collects metadata describing this model's configuration.
     /// </summary>
@@ -343,9 +333,14 @@ public class SlimSAM<T> : NeuralNetworkBase<T>, IPromptableSegmentation<T>
     /// <b>For Beginners:</b> Creates a copy for cross-validation or ensemble training.
     /// </para>
     /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() => _useNativeMode
-        ? new SlimSAM<T>(Architecture, _optimizer, LossFunction, _numClasses, _dropRate, _options)
-        : new SlimSAM<T>(Architecture, _onnxModelPath ?? throw new InvalidOperationException("ONNX model path not initialized."), _numClasses, _options);
+    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
+    {
+        var options = new SlimSAMOptions(_options);
+        return _useNativeMode
+            ? new SlimSAM<T>(architecture: Architecture, optimizer: null, lossFunction: LossFunction,
+                numClasses: _numClasses, dropRate: _dropRate, options: options)
+            : new SlimSAM<T>(Architecture, _onnxModelPath ?? throw new InvalidOperationException("ONNX model path not initialized."), _numClasses, options);
+    }
 
     /// <summary>
     /// Releases managed resources including the ONNX inference session.
@@ -356,24 +351,17 @@ public class SlimSAM<T> : NeuralNetworkBase<T>, IPromptableSegmentation<T>
     /// <b>For Beginners:</b> Frees memory used by the ONNX runtime.
     /// </para>
     /// </remarks>
-    protected override void Dispose(bool disposing)
-    { if (!_disposed) { if (disposing) { _onnxSession?.Dispose(); _onnxSession = null; } _disposed = true; } base.Dispose(disposing); }
+    // Dispose of the ONNX session and the _disposed latch are handled by SegmentationModelBase.
     #endregion
 
     #region IPromptableSegmentation Implementation
-    private Tensor<T>? _imageEmbedding;
+    // NumClasses / InputHeight / InputWidth / IsOnnxMode / Segment and the four Supports*Prompts
+    // flags all arrive from PromptableSegmentationBase with identical values.
+    [Scratch]
     private Tensor<T>? _imageProbabilities;
-    int ISegmentationModel<T>.NumClasses => _numClasses;
-    int ISegmentationModel<T>.InputHeight => _height;
-    int ISegmentationModel<T>.InputWidth => _width;
-    bool ISegmentationModel<T>.IsOnnxMode => !_useNativeMode;
-    Tensor<T> ISegmentationModel<T>.Segment(Tensor<T> image) => Predict(image);
-    bool IPromptableSegmentation<T>.SupportsPointPrompts => true;
-    bool IPromptableSegmentation<T>.SupportsBoxPrompts => true;
-    bool IPromptableSegmentation<T>.SupportsMaskPrompts => true;
-    bool IPromptableSegmentation<T>.SupportsTextPrompts => false;
 
-    void IPromptableSegmentation<T>.SetImage(Tensor<T> image)
+    /// <inheritdoc />
+    protected override Tensor<T> EncodeImage(Tensor<T> image)
     {
         // Run only encoder layers to get image features (not full decode)
         var features = image;
@@ -381,13 +369,21 @@ public class SlimSAM<T> : NeuralNetworkBase<T>, IPromptableSegmentation<T>
         {
             for (int i = 0; i < _encoderLayerEnd && i < Layers.Count; i++)
                 features = Layers[i].Forward(features);
-            _imageEmbedding = features;
+            return features;
         }
-        else
+
+        return Predict(image);
+    }
+
+    /// <inheritdoc />
+    public override void SetImage(Tensor<T> image)
+    {
+        base.SetImage(image);
+        var embedding = _imageEmbedding;
+        if (embedding is not null)
         {
-            _imageEmbedding = Predict(image);
+            _imageProbabilities = Common.SegmentationTensorOps.SoftmaxAlongClassDim(embedding);
         }
-        _imageProbabilities = Common.SegmentationTensorOps.SoftmaxAlongClassDim(_imageEmbedding);
     }
 
     private Tensor<T> DecodeFromFeatures(Tensor<T> features)
@@ -399,7 +395,8 @@ public class SlimSAM<T> : NeuralNetworkBase<T>, IPromptableSegmentation<T>
         return output;
     }
 
-    PromptedSegmentationResult<T> IPromptableSegmentation<T>.SegmentFromPoints(Tensor<T> points, Tensor<T> labels)
+    /// <inheritdoc />
+    public override PromptedSegmentationResult<T> SegmentFromPoints(Tensor<T> points, Tensor<T> labels)
     {
         var encoderFeatures = _imageEmbedding ?? throw new InvalidOperationException("Call SetImage before SegmentFromPoints.");
         int numC = encoderFeatures.Shape[0], h = encoderFeatures.Shape[1], w = encoderFeatures.Shape[2];
@@ -420,7 +417,8 @@ public class SlimSAM<T> : NeuralNetworkBase<T>, IPromptableSegmentation<T>
         return BuildPromptMaskResult(ReduceChannelsToScoreMap(decoded), decoded.Shape[^2], decoded.Shape[^1]);
     }
 
-    PromptedSegmentationResult<T> IPromptableSegmentation<T>.SegmentFromBox(Tensor<T> box)
+    /// <inheritdoc />
+    public override PromptedSegmentationResult<T> SegmentFromBox(Tensor<T> box)
     {
         var encoderFeatures = _imageEmbedding ?? throw new InvalidOperationException("Call SetImage before SegmentFromBox.");
         int numC = encoderFeatures.Shape[0], h = encoderFeatures.Shape[1], w = encoderFeatures.Shape[2];
@@ -432,7 +430,8 @@ public class SlimSAM<T> : NeuralNetworkBase<T>, IPromptableSegmentation<T>
         return BuildPromptMaskResult(ReduceChannelsToScoreMap(decoded), decoded.Shape[^2], decoded.Shape[^1]);
     }
 
-    PromptedSegmentationResult<T> IPromptableSegmentation<T>.SegmentFromMask(Tensor<T> mask)
+    /// <inheritdoc />
+    public override PromptedSegmentationResult<T> SegmentFromMask(Tensor<T> mask)
     {
         var encoderFeatures = _imageEmbedding ?? throw new InvalidOperationException("Call SetImage before SegmentFromMask.");
         int numC = encoderFeatures.Shape[0], h = encoderFeatures.Shape[1], w = encoderFeatures.Shape[2];
@@ -442,7 +441,8 @@ public class SlimSAM<T> : NeuralNetworkBase<T>, IPromptableSegmentation<T>
         return BuildPromptMaskResult(ReduceChannelsToScoreMap(decoded), decoded.Shape[^2], decoded.Shape[^1]);
     }
 
-    List<PromptedSegmentationResult<T>> IPromptableSegmentation<T>.SegmentEverything()
+    /// <inheritdoc />
+    public override List<PromptedSegmentationResult<T>> SegmentEverything()
     {
         var features = _imageEmbedding ?? Predict(new Tensor<T>([_channels, _height, _width]));
         var probs = _imageProbabilities ?? Common.SegmentationTensorOps.SoftmaxAlongClassDim(features);

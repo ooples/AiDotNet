@@ -989,7 +989,7 @@ public class BEATs<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
     /// <param name="input">Preprocessed input features. In ONNX mode, this should match the
     /// ONNX model's expected input format. In native mode, this is a flattened mel spectrogram
     /// that flows through the BEATs layer stack (patch projection -> Transformer -> classification).</param>
-    /// <returns>Model output tensor containing per-class logits (before sigmoid activation).
+    /// <returns>Model output tensor containing per-class probabilities after sigmoid activation.
     /// The length equals the number of class labels.</returns>
     /// <remarks>
     /// <para>
@@ -1017,16 +1017,10 @@ public class BEATs<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
 
         if (IsOnnxMode && OnnxEncoder is not null)
         {
-            return OnnxEncoder.Run(input);
+            return PostprocessOutput(OnnxEncoder.Run(input));
         }
 
-        // Native mode: run through the BEATs layer stack
-        var current = input;
-        foreach (var layer in Layers)
-        {
-            current = layer.Forward(current);
-        }
-        return current;
+        return PostprocessOutput(base.PredictCore(input));
     }
 
     /// <summary>
@@ -1086,7 +1080,7 @@ public class BEATs<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expected);
+            TrainWithTape(input, expected, _optimizer);
         }
         finally
         {
@@ -1094,43 +1088,10 @@ public class BEATs<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
         }
     }
 
-    /// <summary>
-    /// Updates all network parameters from a flattened parameter vector.
-    /// </summary>
-    /// <param name="parameters">A flat vector containing all model parameters concatenated.
-    /// The order matches the layer stack: patch projection weights first, then each Transformer
-    /// layer's attention and FFN weights, then the classification head weights.</param>
-    /// <exception cref="NotSupportedException">Thrown in ONNX mode since parameters are stored
-    /// in the ONNX runtime and cannot be modified through this interface.</exception>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> A neural network's "knowledge" is stored as millions of numbers
-    /// (parameters/weights). This method replaces all those numbers at once from a single flat
-    /// list. It's used by advanced optimizers that operate on the full parameter vector rather
-    /// than individual layers, and for restoring model state from a checkpoint.
-    /// </para>
-    /// </remarks>
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        if (!_useNativeMode)
-            throw new NotSupportedException("UpdateParameters is not supported in ONNX mode.");
-
-        // The cumulative offset must fit in int because Vector<T>.Slice
-        // takes int arguments; checked() here turns a silent wrap into
-        // a fail-fast OverflowException if the sum of layer counts
-        // crosses int.MaxValue (which would also mean the input
-        // Vector<T> couldn't possibly hold them all). Per-layer counts
-        // come from `checked((int)layer.ParameterCount)` already.
-        int index = 0;
-        foreach (var layer in Layers)
-        {
-            int count = checked((int)layer.ParameterCount);
-            var layerParams = parameters.Slice(index, count);
-            layer.UpdateParameters(layerParams);
-            index = checked(index + count);
-        }
-    }
-
+    /// <inheritdoc />
+    /// <remarks>The weights belong to the loaded graph in this mode. The base refuses
+    /// the write on every parameter surface, so the guard is stated once, here.</remarks>
+    protected override bool SupportsParameterMutation => _useNativeMode;
     /// <summary>
     /// Preprocesses raw audio into a log-mel spectrogram suitable for BEATs input.
     /// </summary>
@@ -1388,9 +1349,10 @@ public class BEATs<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
     /// </remarks>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
+        var options = new BEATsOptions(_options);
         if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new BEATs<T>(Architecture, mp, _options);
-        return new BEATs<T>(Architecture, _options);
+            return new BEATs<T>(Architecture, mp, options);
+        return new BEATs<T>(Architecture, options);
     }
 
     #endregion
@@ -1438,7 +1400,7 @@ public class BEATs<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
                     input[0, 0, t, f] = melSpec[t, f];
                 }
             }
-            output = OnnxEncoder.Run(input);
+            output = Predict(input);
         }
         else if (_useNativeMode)
         {
@@ -1460,13 +1422,13 @@ public class BEATs<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
                 "No model available for classification. Provide an ONNX model path or use native training mode.");
         }
 
-        // Apply sigmoid activation for multi-label classification.
-        // Each class gets an independent probability in [0, 1].
+        // Predict applies BEATs' multi-label sigmoid exactly once for both
+        // native and ONNX inference. Training remains on raw logits through
+        // ForwardNativeForTraining / TrainWithTape.
         var scores = new T[ClassLabels.Count];
         for (int i = 0; i < Math.Min(output.Length, scores.Length); i++)
         {
-            double logit = NumOps.ToDouble(output[i]);
-            scores[i] = NumOps.FromDouble(1.0 / (1.0 + Math.Exp(-logit)));
+            scores[i] = output[i];
         }
 
         return scores;

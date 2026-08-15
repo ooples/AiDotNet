@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Document.Interfaces;
 using AiDotNet.Document.Options;
 using AiDotNet.Enums;
@@ -53,7 +53,7 @@ namespace AiDotNet.Document.PixelToSequence;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Pix2Struct: Screenshot Parsing as Pretraining for Visual Language Understanding", "https://doi.org/10.48550/arXiv.2210.03347", Year = 2023, Authors = "Kenton Lee, Mandar Joshi, Iulia Turc, Hexiang Hu, Fangyu Liu, Julian Eisenschlos, Urvashi Khandelwal, Peter Shaw, Ming-Wei Chang, Kristina Toutanova")]
-public class Pix2Struct<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
+public partial class Pix2Struct<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
 {
     private readonly Pix2StructOptions _options;
 
@@ -65,7 +65,7 @@ public class Pix2Struct<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
     private readonly bool _useNativeMode;
     private readonly InferenceSession? _onnxSession;
     private readonly ITokenizer _tokenizer;
-    private readonly IOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private readonly int _hiddenDim;
     private readonly int _numEncoderLayers;
     private readonly int _numDecoderLayers;
@@ -74,9 +74,6 @@ public class Pix2Struct<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
     private readonly int _patchSize;
     private readonly int _maxPatches;
 
-    // Native mode layers
-    private readonly List<ILayer<T>> _encoderLayers = [];
-    private readonly List<ILayer<T>> _decoderLayers = [];
     private bool _nativeLayersInitialized;
 
     #endregion
@@ -126,7 +123,7 @@ public class Pix2Struct<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
         int numDecoderLayers = 18,
         int numHeads = 16,
         int vocabSize = 50000,
-        IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         Pix2StructOptions? options = null)
         : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
@@ -197,7 +194,7 @@ public class Pix2Struct<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
         int numDecoderLayers = 18,
         int numHeads = 16,
         int vocabSize = 50000,
-        IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         Pix2StructOptions? options = null)
         : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
@@ -247,7 +244,7 @@ public class Pix2Struct<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
             return;
         }
 
-        var (encoderLayers, decoderLayers) = LayerHelper<T>.CreateDefaultPix2StructLayers(
+        Layers.AddRange(LayerHelper<T>.CreateDefaultPix2StructLayers(
             hiddenDim: _hiddenDim,
             numEncoderLayers: _numEncoderLayers,
             numDecoderLayers: _numDecoderLayers,
@@ -255,13 +252,7 @@ public class Pix2Struct<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
             vocabSize: _vocabSize,
             patchSize: _patchSize,
             maxPatches: _maxPatches,
-            maxSequenceLength: MaxSequenceLength);
-
-        _encoderLayers.AddRange(encoderLayers);
-        _decoderLayers.AddRange(decoderLayers);
-
-        Layers.AddRange(_encoderLayers);
-        Layers.AddRange(_decoderLayers);
+            maxSequenceLength: MaxSequenceLength));
     }
 
     private void EnsureNativeInitialized()
@@ -274,6 +265,17 @@ public class Pix2Struct<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
         InitializeLayers();
         _nativeLayersInitialized = true;
         InvalidateParameterCountCache();
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Native Pix2Struct layers are lazy so metadata-only construction stays cheap. Parameter
+    /// inspection must nevertheless observe the same materialized graph as prediction/training.
+    /// </remarks>
+    protected override void EnsureParametersReady()
+    {
+        if (_useNativeMode)
+            EnsureNativeInitialized();
     }
 
     #endregion
@@ -579,6 +581,25 @@ public class Pix2Struct<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
     }
 
     /// <inheritdoc/>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input)
+    {
+        EnsureNativeInitialized();
+        return base.ForwardForTraining(PreprocessDocument(input));
+    }
+
+    /// <inheritdoc/>
+    public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input)
+    {
+        if (_useNativeMode)
+        {
+            EnsureNativeInitialized();
+            input = PreprocessDocument(input);
+        }
+
+        return base.GetNamedLayerActivations(input);
+    }
+
+    /// <inheritdoc/>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
         if (!_useNativeMode)
@@ -586,34 +607,26 @@ public class Pix2Struct<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
 
         EnsureNativeInitialized();
         SetTrainingMode(true);
-        TrainWithTape(input, expectedOutput);
-
-        UpdateParameters(CollectGradients());
-        SetTrainingMode(false);
+        try
+        {
+            TrainWithTape(input, expectedOutput, _optimizer);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
     }
 
-    /// <inheritdoc/>
-    public override void UpdateParameters(Vector<T> gradients)
-    {
-        if (!_useNativeMode)
-            throw new NotSupportedException("Parameter updates not supported in ONNX mode.");
-
-        EnsureNativeInitialized();
-        var currentParams = GetParameters();
-        T lr = NumOps.FromDouble(0.0001);
-        
-        currentParams = Engine.Subtract(currentParams, Engine.Multiply(gradients, lr));
-        SetParameters(currentParams);
-    }
-
-    private Vector<T> CollectGradients()
-    {
-        var grads = new List<T>();
-        EnsureNativeInitialized();
-        foreach (var layer in Layers)
-            grads.AddRange(layer.GetParameterGradients());
-        return new Vector<T>([.. grads]);
-    }
+    /// <summary>
+    /// Parameters cannot be written while the model is backed by a loaded ONNX graph: the weights
+    /// belong to that graph, not to this instance.
+    /// </summary>
+    /// <remarks>
+    /// Replaces a hand-written throw that used to sit inside UpdateParameters. The base checks this
+    /// on every mutating entry point rather than the one member the throw happened to guard, and
+    /// reading -- ParameterCount and GetParameters -- stays available either way.
+    /// </remarks>
+    protected override bool SupportsParameterMutation => _useNativeMode;
 
     #endregion
 

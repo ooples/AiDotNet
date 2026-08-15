@@ -48,19 +48,8 @@ namespace AiDotNet.Finance.NLP;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("FinBERT: Financial Sentiment Analysis with Pre-trained Language Models", "https://arxiv.org/abs/1908.10063", Year = 2019, Authors = "Dogu Araci")]
-public class FinBERTTone<T> : FinancialNLPModelBase<T>
+public partial class FinBERTTone<T> : FinancialNLPModelBase<T>
 {
-    #region Native Mode Fields
-
-    private ILayer<T>? _wordEmbedding;
-    private ILayer<T>? _positionEmbedding;
-    private ILayer<T>? _typeEmbedding;
-    private readonly List<ILayer<T>> _transformerLayers = [];
-    private ILayer<T>? _pooler;
-    private ILayer<T>? _sentimentHead;
-
-    #endregion
-
     #region Shared Fields
 
     private readonly ModelOptions.FinBERTToneOptions<T> _options;
@@ -163,39 +152,17 @@ public class FinBERTTone<T> : FinancialNLPModelBase<T>
         else if (UseNativeMode)
         {
             Layers.AddRange(LayerHelper<T>.CreateDefaultFinBERTToneLayers(
-                Architecture, MaxSequenceLength, VocabularySize, NumSentimentClasses, 
-                HiddenDimension, 12, 12, _dropout));
+                Architecture,
+                vocabularySize: _options.VocabularySize,
+                maxSequenceLength: _options.MaxSequenceLength,
+                hiddenDimension: _options.HiddenDimension,
+                numAttentionHeads: _options.NumAttentionHeads,
+                intermediateDimension: _options.IntermediateDimension,
+                numLayers: _options.NumLayers,
+                numToneClasses: _options.NumToneClasses,
+                dropoutRate: _dropout));
 
-            ExtractLayerReferences();
         }
-    }
-
-    /// <summary>
-    /// Executes ExtractLayerReferences for the FinBERTTone.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the FinBERTTone model, ExtractLayerReferences performs a supporting step in the workflow. It keeps the FinBERTTone architecture pipeline consistent.
-    /// </para>
-    /// </remarks>
-    private void ExtractLayerReferences()
-    {
-        int idx = 0;
-        if (Layers.Count > idx) _wordEmbedding = Layers[idx++];
-        if (Layers.Count > idx) _positionEmbedding = Layers[idx++];
-        if (Layers.Count > idx) _typeEmbedding = Layers[idx++];
-        idx += 2; // skip norm/dropout
-
-        _transformerLayers.Clear();
-        // One composite TransformerEncoderBlock per layer now (residual attention + residual FFN
-        // internally) — a single Layers entry per block, not six flat sublayers.
-        for (int i = 0; i < 12; i++)
-        {
-            if (idx < Layers.Count) _transformerLayers.Add(Layers[idx++]);
-        }
-
-        if (idx < Layers.Count) _pooler = Layers[idx++];
-        if (idx < Layers.Count) _sentimentHead = Layers[idx];
     }
 
     #endregion
@@ -217,25 +184,8 @@ public class FinBERTTone<T> : FinancialNLPModelBase<T>
         SetTrainingMode(false);
     }
 
-    /// <summary>
-    /// Executes UpdateParameters for the FinBERTTone.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the FinBERTTone model, UpdateParameters updates internal parameters or state. This keeps the FinBERTTone architecture aligned with the latest values.
-    /// </para>
-    /// </remarks>
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        int offset = 0;
-        foreach (var layer in Layers)
-        {
-            var layerParams = layer.GetParameters();
-            layer.SetParameters(parameters.Slice(offset, layerParams.Length));
-            offset += layerParams.Length;
-        }
-    }
-
+    // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
+    // exactly the same enumeration, so this said nothing the base does not already say.
     /// <summary>
     /// Executes CreateNewInstance for the FinBERTTone.
     /// </summary>
@@ -246,14 +196,8 @@ public class FinBERTTone<T> : FinancialNLPModelBase<T>
     /// </remarks>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
-        var options = new ModelOptions.FinBERTToneOptions<T>
-        {
-            MaxSequenceLength = MaxSequenceLength,
-            VocabularySize = VocabularySize,
-            HiddenDimension = HiddenDimension,
-            NumToneClasses = NumSentimentClasses
-        };
-        return new FinBERTTone<T>(Architecture, options, _optimizer, LossFunction);
+        return new FinBERTTone<T>(
+            Architecture, new ModelOptions.FinBERTToneOptions<T>(_options), _optimizer, LossFunction);
     }
 
     /// <summary>

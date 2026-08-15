@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Runtime.CompilerServices;
 using System.Threading;
@@ -32,7 +32,7 @@ namespace AiDotNet.NeuralNetworks.Graph;
 /// exist, rather than silently replacing it.
 /// </para>
 /// </remarks>
-public sealed class LayerForwardObserver<T> : IDisposable
+internal sealed class LayerForwardObserver<T> : IDisposable
 {
     private static readonly AsyncLocal<LayerForwardObserver<T>?> s_current = new();
 
@@ -76,6 +76,25 @@ public sealed class LayerForwardObserver<T> : IDisposable
 
     /// <summary>Every layer call seen, in execution order.</summary>
     public IReadOnlyList<(ILayer<T> Layer, Tensor<T> Input, Tensor<T> Output)> Calls => _calls;
+
+    /// <summary>
+    /// Validates the actual producer-consumer edge before the consumer kernel executes.
+    /// Tensor identity makes this branch-safe: unrelated neighbors in a flattened layer registry
+    /// are never compared.
+    /// </summary>
+    public void ValidateInput(ILayer<T> layer, Tensor<T> input, string? portName)
+    {
+        if (_disposed || layer is null || input is null) return;
+
+        for (int i = _calls.Count - 1; i >= 0; i--)
+        {
+            if (!ReferenceEquals(_calls[i].Output, input)) continue;
+            LayerContractValidator.EnsureValueDomainCompatible(_calls[i].Layer, layer, portName);
+            return;
+        }
+
+        _previous?.ValidateInput(layer, input, portName);
+    }
 
     /// <summary>Records one layer call. Called by <c>LayerBase.Forward</c>; not for direct use.</summary>
     /// <remarks>

@@ -95,6 +95,10 @@ public class GLM4Voice<T> : TtsModelBase<T>, ICodecTts<T>, IStreamingTts<T>
     public int MaxTextLength => _options.MaxTextLength;
     public int NumCodebooks => _options.NumCodebooks;
     public int CodebookSize => _options.CodebookSize;
+
+    /// <inheritdoc />
+    /// <remarks>Traced: InitializeLayers passes NumCodebooks * CodebookSize as the codec vocabulary.</remarks>
+    protected override int OutputFeatureWidth => _options.NumCodebooks * _options.CodebookSize;
     public int CodecFrameRate => _options.CodecFrameRate;
     private readonly object _streamLock = new object();
     private int _streamPosition;
@@ -201,7 +205,8 @@ public class GLM4Voice<T> : TtsModelBase<T>, ICodecTts<T>, IStreamingTts<T>
                     _options.NumEncoderLayers,
                     _options.NumLLMLayers,
                     _options.NumHeads,
-                    _options.DropoutRate
+                    _options.DropoutRate,
+                    _options.VocabSize
                 )
             );
     }
@@ -225,7 +230,7 @@ public class GLM4Voice<T> : TtsModelBase<T>, ICodecTts<T>, IStreamingTts<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expected);
+            TrainWithTape(input, expected, _optimizer);
         }
         finally
         {
@@ -233,19 +238,15 @@ public class GLM4Voice<T> : TtsModelBase<T>, ICodecTts<T>, IStreamingTts<T>
         }
     }
 
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        if (!_useNativeMode)
-            throw new NotSupportedException("Cannot update parameters in ONNX mode.");
-        int idx = 0;
-        foreach (var l in Layers)
-        {
-            int c = (int)l.ParameterCount;
-            l.UpdateParameters(parameters.Slice(idx, c));
-            idx += c;
-        }
-    }
+    /// <inheritdoc />
+    protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> GetOrCreateBaseOptimizer()
+        => _optimizer ?? base.GetOrCreateBaseOptimizer();
 
+    /// <inheritdoc />
+    /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
+    /// write on every parameter surface, so the guard is stated once here instead of being
+    /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
+    protected override bool SupportsParameterMutation => _useNativeMode;
     public override ModelMetadata<T> GetModelMetadata()
     {
         var m = new ModelMetadata<T>
@@ -312,8 +313,8 @@ public class GLM4Voice<T> : TtsModelBase<T>, ICodecTts<T>, IStreamingTts<T>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
         if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new GLM4Voice<T>(Architecture, mp, _options);
-        return new GLM4Voice<T>(Architecture, _options);
+            return new GLM4Voice<T>(Architecture, mp, new GLM4VoiceOptions(_options));
+        return new GLM4Voice<T>(Architecture, new GLM4VoiceOptions(_options));
     }
 
     private void ThrowIfDisposed()

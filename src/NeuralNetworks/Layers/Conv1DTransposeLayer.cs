@@ -1,4 +1,4 @@
-using AiDotNet.Helpers;
+﻿using AiDotNet.Helpers;
 using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
@@ -45,7 +45,15 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerTask(LayerTask.SpatialProcessing)]
 [LayerProperty(NormalizesInput = true, IsTrainable = true, ChangesShape = true, ExpectedInputRank = 3, Cost = ComputeCost.Medium, TestInputShape = "1, 4, 8", TestConstructorArgs = "4, 2, 4, 2, 0, 1, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
-public partial class Conv1DTransposeLayer<T> : LayerBase<T>
+// Roles come from this layer's own guard in OnFirstForward - "requires rank-3 [B, C, T] input" - so
+// rank 3 is the ONLY declared form and Batch is NOT optional: a rank-2 input is rejected outright,
+// and BatchOptional would advertise a form the layer throws on.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Time,
+    Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Time,
+    Direction = TensorLayoutDirection.Output)]
+[AutoParameters]
+public partial class Conv1DTransposeLayer<T> : LayerBase<T>, IShapeContract
 {
     private int _inputChannels;
     private readonly int _outputChannels;
@@ -59,19 +67,15 @@ public partial class Conv1DTransposeLayer<T> : LayerBase<T>
     private Tensor<T> _biases;
     private int[]? _originalInputShape;
 
-    /// <summary>
-    /// Live parameter count: <c>(C_in·C_out·K) + C_out</c> once input channels are
-    /// resolved; before that, falls back to a 1-input-channel estimate so a
-    /// freshly-constructed model still reports a non-zero <c>ParameterCount</c>.
-    /// </summary>
-    public override long ParameterCount
-    {
-        get
-        {
-            int effectiveInputChannels = _inputChannels > 0 ? _inputChannels : 1;
-            return ((long)effectiveInputChannels * _outputChannels * _kernelSize) + _outputChannels;
-        }
-    }
+    /// <inheritdoc />
+    /// <remarks>
+    /// Paired with <see cref="ParameterCount"/> and <see cref="GetParameters"/>, which both report
+    /// nothing until the input channel count arrives. Without this the layer said "I have no
+    /// parameters" AND "nothing is pending" at once -- both false, since it certainly gains weights
+    /// on the first forward. The model-family non-empty invariant accepts either a positive count
+    /// or a pending flag, so MusicSourceSeparator failed it the moment the count became honest.
+    /// </remarks>
+    public override bool HasUninitializedParameters => !IsShapeResolved;
 
     public override bool SupportsTraining => true;
 
@@ -136,13 +140,13 @@ public partial class Conv1DTransposeLayer<T> : LayerBase<T>
     /// <see cref="GetParameters"/> agree before the first Forward (Clone round-trip).
     /// </summary>
     public Conv1DTransposeLayer(
-        int inputChannels,
-        int outputChannels,
-        int kernelSize,
-        int stride = 1,
-        int? padding = null,
-        int outputPadding = 0,
-        int dilation = 1,
+        [LayerState] int inputChannels,
+        [LayerState] int outputChannels,
+        [LayerState] int kernelSize,
+        [LayerState] int stride = 1,
+        [LayerState] int? padding = null,
+        [LayerState] int outputPadding = 0,
+        [LayerState] int dilation = 1,
         IActivationFunction<T>? activation = null,
         IInitializationStrategy<T>? initializationStrategy = null)
         : base(new[] { inputChannels, -1 }, new[] { outputChannels, -1 },
@@ -177,14 +181,84 @@ public partial class Conv1DTransposeLayer<T> : LayerBase<T>
         RegisterTrainableParameter(_kernels, PersistentTensorRole.Weights);
         RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);
 
-        int minTime = 1;
-        int outTime = ComputeOutputLength(minTime);
-        ResolveShapes(new[] { inputChannels, minTime }, new[] { outputChannels, outTime });
+        // The time axis is a function of the input length, so it is not known here. Declaring
+        // ComputeOutputLength(MinValidInputLength()) -- the shortest input this configuration
+        // accepts -- published that placeholder as the layer's contract: the layer advertised
+        // [outputChannels, 8] and then produced [outputChannels, 128] for real audio. Only the
+        // channel count is fixed at construction; the length stays dynamic until a forward runs.
+        int minTime = MinValidInputLength();
+        ResolveShapes(new[] { inputChannels, minTime }, new[] { outputChannels, LayerShape.Dynamic });
     }
 
     /// <summary>PyTorch <c>nn.ConvTranspose1d</c> output-length formula.</summary>
     private int ComputeOutputLength(int tIn)
         => (tIn - 1) * _stride - 2 * _padding + _dilation * (_kernelSize - 1) + _outputPadding + 1;
+
+    /// <summary>
+    /// Smallest input length whose transposed-convolution output is still at least one frame.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Placeholder shapes must not be built from a hard-coded <c>tIn = 1</c>. Transposed convolution
+    /// SUBTRACTS <c>2·padding</c>, so whenever the padding exceeds the kernel's reach the length
+    /// formula goes non-positive: with this layer's own test configuration (kernelSize 2, stride 4,
+    /// padding 2) <c>ComputeOutputLength(1)</c> is -2, which resolved an invalid output shape and
+    /// surfaced as "Resolved output shape still contains a -1 placeholder". Solve
+    /// <c>(tIn-1)·stride ≥ 2·padding - dilation·(K-1) - outputPadding</c> for the smallest valid
+    /// <c>tIn</c> instead.
+    /// </para>
+    /// </remarks>
+    private int MinValidInputLength()
+    {
+        int deficit = 2 * _padding - _dilation * (_kernelSize - 1) - _outputPadding;
+        if (deficit <= 0) return 1;
+        return 1 + (deficit + _stride - 1) / _stride;
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// Hand-written because the time axis follows <see cref="ComputeOutputLength"/>, which is the
+    /// INVERSE of a sliding window: <c>T_out = (T-1)*stride - 2*padding + dilation*(K-1) +
+    /// outputPadding + 1</c>. <c>Window</c> models the forward direction only, so it cannot express
+    /// this - a transposed convolution GROWS its axis by roughly <c>stride</c>, and reading the
+    /// window formula backwards would understate the output by that whole factor.
+    /// </para>
+    /// <para>
+    /// Rewriting the formula as <c>T_out = T*stride + C</c> with
+    /// <c>C = dilation*(K-1) + outputPadding + 1 - stride - 2*padding</c> shows the one case that IS
+    /// in the vocabulary: when <c>C</c> is zero the layer is exactly <c>Scaled(Time, stride)</c>.
+    /// That is not an edge case - it is the configuration HiFi-GAN uses
+    /// (<c>kernel = 2*rate, stride = rate, padding = rate/2</c>), so the vocoder stacks this
+    /// annotation is written for resolve their lengths precisely rather than stopping at Unknown.
+    /// When <c>C</c> is non-zero the length is a genuine affine offset and no relation carries it,
+    /// so it is declared Unknown WITH the offset in the reason rather than approximated.
+    /// </para>
+    /// <para>
+    /// The channel count is <c>Fixed</c> from <c>_outputChannels</c> - that is the one output axis
+    /// <c>OnFirstForward</c> pins: <c>ResolveShapes(new[] { cIn, tIn }, new[] { _outputChannels,
+    /// LayerShape.Dynamic })</c>. The <c>Dynamic</c> on the second axis there is the same statement
+    /// this contract makes, expressed as a relation instead of a placeholder.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        if (inputRank != 3) return null;
+
+        int offset = _dilation * (_kernelSize - 1) + _outputPadding + 1 - _stride - 2 * _padding;
+        var time = offset == 0
+            ? AxisRelation.Scaled(TensorAxis.Time, _stride)
+            : AxisRelation.Unknown(
+                $"Transposed-convolution length is T*{_stride} + {offset}; an affine offset on a "
+                + "scaled axis is not in the relation vocabulary.");
+
+        return new[]
+        {
+            new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+            new OutputAxisContract(TensorAxis.Channels, AxisRelation.Fixed(_outputChannels)),
+            new OutputAxisContract(TensorAxis.Time, time),
+        };
+    }
 
     /// <inheritdoc/>
     protected override void OnFirstForward(Tensor<T> input)
@@ -213,11 +287,15 @@ public partial class Conv1DTransposeLayer<T> : LayerBase<T>
             RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);
         }
 
-        ResolveShapes(new[] { cIn, tIn }, new[] { _outputChannels, tOut });
+        // tOut describes THIS input, not the layer. Publishing it means the value is saved and
+        // restored, and the restored layer then disagrees with the next input of a different
+        // length. The channel count is the only output axis this layer fixes.
+        _ = tOut;
+        ResolveShapes(new[] { cIn, tIn }, new[] { _outputChannels, LayerShape.Dynamic });
     }
 
     /// <inheritdoc/>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         EnsureInitializedFromInput(input);
         _originalInputShape = input._shape;
@@ -240,64 +318,6 @@ public partial class Conv1DTransposeLayer<T> : LayerBase<T>
         // [B, C_out, 1, T_out] -> [B, C_out, T_out]
         return Engine.Reshape(activated,
             new[] { activated.Shape[0], activated.Shape[1], activated.Shape[3] });
-    }
-
-    /// <inheritdoc/>
-    public override void UpdateParameters(T learningRate)
-    {
-        // Tape autodiff drives updates through the registered trainable parameters;
-        // this manual hook is a no-op (parity with Conv1DLayer / DeconvolutionalLayer).
-    }
-
-    /// <inheritdoc/>
-    public override Vector<T> GetParameters()
-    {
-        if (!IsShapeResolved)
-        {
-            return new Vector<T>(0);
-        }
-        return Vector<T>.Concatenate(
-            new Vector<T>(_kernels.ToArray()),
-            new Vector<T>(_biases.ToArray()));
-    }
-
-    /// <inheritdoc/>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (!IsShapeResolved)
-        {
-            // Layout: kernels [C_in, C_out, 1, K] + biases [C_out]. Solve for C_in.
-            int candidateInputChannels = (parameters.Length - _outputChannels) /
-                                         (_outputChannels * _kernelSize);
-            if (candidateInputChannels <= 0
-                || candidateInputChannels * _outputChannels * _kernelSize + _outputChannels != parameters.Length)
-            {
-                throw new ArgumentException(
-                    $"Cannot infer inputChannels for Conv1DTransposeLayer from {parameters.Length} parameters " +
-                    $"(outputChannels={_outputChannels}, kernelSize={_kernelSize}).");
-            }
-            _inputChannels = candidateInputChannels;
-            ResolveFromShape(new[] { candidateInputChannels, 1 });
-            _kernels = AllocateLazyWeight([candidateInputChannels, _outputChannels, 1, _kernelSize]);
-            _biases = AllocateLazyWeight([_outputChannels]);
-            RegisterTrainableParameter(_kernels, PersistentTensorRole.Weights);
-            RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);
-        }
-
-        int expectedLength = _kernels.Length + _biases.Length;
-        if (parameters.Length != expectedLength)
-        {
-            throw new ArgumentException(
-                $"Expected {expectedLength} parameters, but got {parameters.Length}");
-        }
-
-        // In-place copy preserves the persistent-tensor identities registered above
-        // (same pattern as Conv1DLayer.SetParameters).
-        parameters.AsSpan().Slice(0, _kernels.Length).CopyTo(_kernels.Data.Span);
-        parameters.AsSpan().Slice(_kernels.Length, _biases.Length).CopyTo(_biases.Data.Span);
-
-        Engine.InvalidatePersistentTensor(_kernels);
-        Engine.InvalidatePersistentTensor(_biases);
     }
 
     /// <inheritdoc/>

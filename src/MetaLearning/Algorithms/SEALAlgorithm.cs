@@ -73,12 +73,13 @@ namespace AiDotNet.MetaLearning.Algorithms;
     Authors = "Antoniou, A., Edwards, H., & Storkey, A.")]
 [ComponentType(ComponentType.MetaLearner)]
 [PipelineStage(PipelineStage.Training)]
-public class SEALAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
+public partial class SEALAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
     private IParameterizable<T, TInput, TOutput>? _cachedParamModel;
     private IParameterizable<T, TInput, TOutput> ParamModel => _cachedParamModel ??= InterfaceGuard.Parameterizable(MetaModel);
 
     private readonly SEALOptions<T, TInput, TOutput> _sealOptions;
+    [Buffer]
     private readonly Dictionary<string, Vector<T>>? _adaptiveLearningRateState;
 
     /// <summary>

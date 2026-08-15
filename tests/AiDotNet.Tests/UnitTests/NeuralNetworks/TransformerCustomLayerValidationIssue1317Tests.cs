@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
@@ -45,12 +46,13 @@ public class TransformerCustomLayerValidationIssue1317Tests
         Assert.Same(layers[0], transformer.Layers[0]);
     }
 
+    [ElementWiseShape]
     private sealed class ShapeCompatibleCustomLayer(int[] inputShape, int[] outputShape)
         : LayerBase<float>(inputShape, outputShape)
     {
         public override bool SupportsTraining => false;
 
-        public override Tensor<float> Forward(Tensor<float> input)
+        protected override Tensor<float> ForwardTraced(Tensor<float> input)
         {
             return input;
         }

@@ -50,12 +50,6 @@ public abstract class GaussianProcessBase<T> : ModelBase<T, Matrix<T>, Vector<T>
     public override ILossFunction<T> DefaultLossFunction => new MeanSquaredErrorLoss<T>();
 
     /// <inheritdoc/>
-    public override Vector<T> GetParameters() => new Vector<T>(0);
-
-    /// <inheritdoc/>
-    public override void SetParameters(Vector<T> parameters) { }
-
-    /// <inheritdoc/>
     public override IFullModel<T, Matrix<T>, Vector<T>> DeepCopy()
     {
         return (GaussianProcessBase<T>)MemberwiseClone();

@@ -1,4 +1,6 @@
 using AiDotNet.Models.Options;
+using AiDotNet.Models.Parameters;
+using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks.Layers;
 
 namespace AiDotNet.NeuralNetworks.Tabular;
@@ -34,7 +36,7 @@ namespace AiDotNet.NeuralNetworks.Tabular;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-public abstract class TabRBase<T>
+public abstract class TabRBase<T> : IParameterSource<T>
 {
     /// <summary>
     /// Provides access to the hardware-accelerated tensor engine.
@@ -103,29 +105,72 @@ public abstract class TabRBase<T>
     public int NumIndexedSamples => _numIndexedSamples;
 
     /// <summary>
+    /// Trainable layers a subclass adds on top of the backbone, walked after it by every
+    /// parameter surface below.
+    /// </summary>
+    /// <remarks>
+    /// The task head. A classifier and a regressor share this whole backbone and differ only by a
+    /// final projection, and each re-implemented the surfaces just to append that one layer. The
+    /// subclass now states WHAT it adds and the folds below decide where it goes, so the count and
+    /// the vector cannot place it differently. Mirrors NeuralNetworkBase.GetExtraTrainableLayers,
+    /// which solves the same problem for models that derive from it -- this base has no base at
+    /// all, so it cannot inherit that one.
+    /// </remarks>
+    protected virtual IEnumerable<ILayer<T>> GetExtraTrainableLayers()
+        => System.Linq.Enumerable.Empty<ILayer<T>>();
+
+    /// <summary>
     /// Gets the total number of trainable parameters.
     /// </summary>
-    public virtual long ParameterCount
+    /// <summary>Built once on first parameter access, then reused.</summary>
+    private ParameterComponentRegistry<T>? _parameterRegistry;
+
+    /// <summary>
+    /// The single ordered traversal of this model's parameter-bearing components.
+    /// </summary>
+    /// <remarks>
+    /// Count, read and restore all derive from THIS. Before, the count and the read were two
+    /// separate walks restating the same component order, and there was no restore at all -- so the
+    /// vector this model produced could be saved and never loaded back. Two walks agree until
+    /// someone adds a component to one of them, and nothing reports the disagreement because the
+    /// lengths still look plausible; one enumeration makes that unrepresentable.
+    /// </remarks>
+    private ParameterComponentRegistry<T> ParameterRegistry
     {
         get
         {
-            int count = 0;
-            foreach (var layer in _encoderLayers)
-                count += (int)layer.ParameterCount;
-            if (_encoderNorm != null) count += (int)_encoderNorm.ParameterCount;
+            if (_parameterRegistry is not null) return _parameterRegistry;
 
-            foreach (var layer in _contextLayers)
-                count += (int)layer.ParameterCount;
-            if (_contextNorm != null) count += (int)_contextNorm.ParameterCount;
+            var registry = new ParameterComponentRegistry<T>();
 
-            count += (int)_queryProjection.ParameterCount;
-            count += (int)_keyProjection.ParameterCount;
-            count += (int)_valueProjection.ParameterCount;
-            count += (int)_outputProjection.ParameterCount;
+            for (int i = 0; i < _encoderLayers.Count; i++)
+                registry.Register($"00000000/{i:D8}", _encoderLayers[i]);
 
-            return count;
+            registry.Register("00000001/encoderNorm", _encoderNorm);
+
+            for (int i = 0; i < _contextLayers.Count; i++)
+                registry.Register($"00000002/{i:D8}", _contextLayers[i]);
+
+            registry.Register("00000003/contextNorm", _contextNorm);
+
+            registry.Register("00000004/query", _queryProjection);
+            registry.Register("00000005/key", _keyProjection);
+            registry.Register("00000006/value", _valueProjection);
+            registry.Register("00000007/output", _outputProjection);
+
+            int extraIndex = 0;
+            foreach (var extra in GetExtraTrainableLayers())
+            {
+                if (extra is not null) registry.Register($"00009000/{extraIndex++:D8}", extra);
+            }
+
+            _parameterRegistry = registry;
+            return registry;
         }
     }
+
+    /// <inheritdoc cref="GetParameters"/>
+    public virtual long ParameterCount => ParameterRegistry.ParameterCount;
 
     /// <summary>
     /// Initializes a new instance of the TabRBase class.
@@ -151,16 +196,23 @@ public abstract class TabRBase<T>
 
         for (int i = 0; i < Options.NumLayers; i++)
         {
-            var layer = new FullyConnectedLayer<T>(
-                Options.EmbeddingDimension,
-                new ReLUActivation<T>() as IActivationFunction<T>);
+            // prevDim was already being threaded here and then discarded, so every encoder layer
+            // was built deferred and the model reported no parameters at all until a forward pass.
+            var layer = prevDim > 0
+                ? new FullyConnectedLayer<T>(
+                    prevDim,
+                    Options.EmbeddingDimension,
+                    new ReLUActivation<T>() as IActivationFunction<T>)
+                : new FullyConnectedLayer<T>(
+                    Options.EmbeddingDimension,
+                    new ReLUActivation<T>() as IActivationFunction<T>);
             _encoderLayers.Add(layer);
             prevDim = Options.EmbeddingDimension;
         }
 
         if (Options.UseLayerNorm)
         {
-            _encoderNorm = new LayerNormalizationLayer<T>();
+            _encoderNorm = new LayerNormalizationLayer<T>(Options.EmbeddingDimension);
         }
 
         // Initialize context encoder
@@ -171,6 +223,7 @@ public abstract class TabRBase<T>
         {
             int inputDim = i == 0 ? contextInputDim : Options.EmbeddingDimension;
             var layer = new FullyConnectedLayer<T>(
+                inputDim,
                 Options.EmbeddingDimension,
                 new ReLUActivation<T>() as IActivationFunction<T>);
             _contextLayers.Add(layer);
@@ -178,15 +231,17 @@ public abstract class TabRBase<T>
 
         if (Options.UseLayerNorm)
         {
-            _contextNorm = new LayerNormalizationLayer<T>();
+            _contextNorm = new LayerNormalizationLayer<T>(Options.EmbeddingDimension);
         }
 
         // Initialize attention projections
         int headDim = Options.EmbeddingDimension / Options.NumAttentionHeads;
-        _queryProjection = new FullyConnectedLayer<T>(Options.EmbeddingDimension, (IActivationFunction<T>?)null);
-        _keyProjection = new FullyConnectedLayer<T>(Options.EmbeddingDimension, (IActivationFunction<T>?)null);
-        _valueProjection = new FullyConnectedLayer<T>(Options.EmbeddingDimension, (IActivationFunction<T>?)null);
-        _outputProjection = new FullyConnectedLayer<T>(Options.EmbeddingDimension, (IActivationFunction<T>?)null);
+        // Square projections over the embedding, so both dimensions are fixed here.
+        int embDim = Options.EmbeddingDimension;
+        _queryProjection = new FullyConnectedLayer<T>(embDim, embDim, (IActivationFunction<T>?)null);
+        _keyProjection = new FullyConnectedLayer<T>(embDim, embDim, (IActivationFunction<T>?)null);
+        _valueProjection = new FullyConnectedLayer<T>(embDim, embDim, (IActivationFunction<T>?)null);
+        _outputProjection = new FullyConnectedLayer<T>(embDim, embDim, (IActivationFunction<T>?)null);
     }
 
     /// <summary>
@@ -510,43 +565,15 @@ public abstract class TabRBase<T>
     /// <summary>
     /// Gets all trainable parameters as a single vector.
     /// </summary>
-    public virtual Vector<T> GetParameters()
-    {
-        var allParams = new List<T>();
+    public virtual Vector<T> GetParameters() => ParameterRegistry.GetParameters();
 
-        foreach (var layer in _encoderLayers)
-        {
-            var p = layer.GetParameters();
-            for (int i = 0; i < p.Length; i++) allParams.Add(p[i]);
-        }
-        if (_encoderNorm != null)
-        {
-            var p = _encoderNorm.GetParameters();
-            for (int i = 0; i < p.Length; i++) allParams.Add(p[i]);
-        }
-
-        foreach (var layer in _contextLayers)
-        {
-            var p = layer.GetParameters();
-            for (int i = 0; i < p.Length; i++) allParams.Add(p[i]);
-        }
-        if (_contextNorm != null)
-        {
-            var p = _contextNorm.GetParameters();
-            for (int i = 0; i < p.Length; i++) allParams.Add(p[i]);
-        }
-
-        var qp = _queryProjection.GetParameters();
-        for (int i = 0; i < qp.Length; i++) allParams.Add(qp[i]);
-        var kp = _keyProjection.GetParameters();
-        for (int i = 0; i < kp.Length; i++) allParams.Add(kp[i]);
-        var vp = _valueProjection.GetParameters();
-        for (int i = 0; i < vp.Length; i++) allParams.Add(vp[i]);
-        var op = _outputProjection.GetParameters();
-        for (int i = 0; i < op.Length; i++) allParams.Add(op[i]);
-
-        return new Vector<T>([.. allParams]);
-    }
+    /// <summary>Restores every parameter, in the order <see cref="GetParameters"/> emitted them.</summary>
+    /// <remarks>
+    /// This model had no restore path at all. Its vector could be produced and saved, and there was
+    /// no way to load it back -- so a checkpoint of a TabR model was write-only.
+    /// </remarks>
+    public virtual void SetParameters(Vector<T> parameters)
+        => ParameterRegistry.SetParameters(parameters);
 
     /// <summary>
     /// Resets internal state.

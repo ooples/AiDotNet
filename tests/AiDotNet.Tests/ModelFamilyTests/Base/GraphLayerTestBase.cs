@@ -12,15 +12,20 @@ namespace AiDotNet.Tests.ModelFamilyTests.Base;
 /// (adjacency matrices, Laplacians, eigenbases, spiral indices, etc.).
 /// Subclasses override SetupLayer() to provide domain-specific initialization.
 /// </summary>
-public abstract class GraphLayerTestBase
+public abstract class GraphLayerTestBase<T>
 {
-    protected abstract ILayer<double> CreateLayer();
+    protected static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+    protected static T ToT(double value) => NumOps.FromDouble(value);
+    protected static double ToD(T value) => Convert.ToDouble(value);
+    protected virtual double Tolerance => typeof(T) == typeof(float) ? 1e-6 : 1e-12;
+
+    protected abstract ILayer<T> CreateLayer();
 
     /// <summary>
     /// Perform domain-specific setup on the layer (set adjacency matrix, Laplacian, etc.).
     /// Called before every test's Forward pass.
     /// </summary>
-    protected abstract void SetupLayer(ILayer<double> layer);
+    protected abstract void SetupLayer(ILayer<T> layer);
 
     /// <summary>Shape of the input tensor. Default: [4, 8] (4 nodes, 8 features).</summary>
     protected virtual int[] InputShape => [4, 8];
@@ -28,16 +33,16 @@ public abstract class GraphLayerTestBase
     /// <summary>Whether the layer has trainable parameters. Default: true.</summary>
     protected virtual bool ExpectsTrainableParameters => true;
 
-    protected static Tensor<double> CreateRandomTensor(int[] shape, int seed = 42)
+    protected static Tensor<T> CreateRandomTensor(int[] shape, int seed = 42)
     {
         var rng = new Random(seed);
-        var tensor = new Tensor<double>(shape);
+        var tensor = new Tensor<T>(shape);
         for (int i = 0; i < tensor.Length; i++)
-            tensor[i] = rng.NextDouble() * 4.0 + 1.0; // [1.0, 5.0] — large positive to survive ReLU after matmul
+            tensor[i] = ToT(rng.NextDouble() * 4.0 + 1.0); // [1.0, 5.0] — large positive to survive ReLU after matmul
         return tensor;
     }
 
-    private ILayer<double> CreateAndSetup()
+    private ILayer<T> CreateAndSetup()
     {
         var layer = CreateLayer();
         SetupLayer(layer);
@@ -61,8 +66,8 @@ public abstract class GraphLayerTestBase
         Assert.True(output.Length > 0, "Output should not be empty.");
         for (int i = 0; i < output.Length; i++)
         {
-            Assert.False(double.IsNaN(output[i]), $"Output[{i}] is NaN.");
-            Assert.False(double.IsInfinity(output[i]), $"Output[{i}] is Infinity.");
+            Assert.False(double.IsNaN(ToD(output[i])), $"Output[{i}] is NaN.");
+            Assert.False(double.IsInfinity(ToD(output[i])), $"Output[{i}] is Infinity.");
         }
     }
 
@@ -112,7 +117,7 @@ public abstract class GraphLayerTestBase
         int minLen = Math.Min(output1.Length, output2.Length);
         for (int i = 0; i < minLen; i++)
         {
-            if (Math.Abs(output1[i] - output2[i]) > 1e-12)
+            if (Math.Abs(ToD(output1[i]) - ToD(output2[i])) > Tolerance)
             {
                 anyDifferent = true;
                 break;
@@ -183,6 +188,9 @@ public abstract class GraphLayerTestBase
         var output = layer.Forward(input);
         Assert.True(output.Length > 0);
         for (int i = 0; i < output.Length; i++)
-            Assert.False(double.IsNaN(output[i]), $"Output[{i}] is NaN after ResetState.");
+            Assert.False(double.IsNaN(ToD(output[i])), $"Output[{i}] is NaN after ResetState.");
     }
 }
+
+/// <summary>Default-precision alias for existing hand-written fixtures.</summary>
+public abstract class GraphLayerTestBase : GraphLayerTestBase<double> { }

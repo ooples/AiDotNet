@@ -15,6 +15,13 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Attention)]
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerProperty(IsTrainable = false, HasTrainingMode = false, TestInputShape = "1, 4, 8", TestConstructorArgs = "")]
+// Shape-preserving at any rank, and structurally so rather than incidentally: ForwardTraced is two
+// residual adds, `Engine.TensorAdd(input, attnNormed)` and `Engine.TensorAdd(afterAttn, ffnNormed)`,
+// and a residual can only add a tensor of its own shape. The FFN widens to ffnDim internally but the
+// down projection returns to hiddenSize and is reshaped straight back with
+// `Engine.Reshape(down, afterAttn._shape)` - so the widening never reaches the block's boundary.
+[ElementWiseShape(Note = "Residual decoder block: the FFN widens to ffnDim internally and comes back to hiddenSize before the residual add, so the block's own shape is unchanged.")]
+[AutoParameters]
 public partial class Gemma2DecoderBlock<T> : LayerBase<T>
 {
     private readonly RMSNormalizationLayer<T> _normInput;
@@ -81,7 +88,7 @@ public partial class Gemma2DecoderBlock<T> : LayerBase<T>
     }
 
     /// <inheritdoc/>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // Attention sub-block: x = x + postAttnNorm(Attn(inputNorm(x))).
         var normed = _normInput.Forward(input);
@@ -118,36 +125,6 @@ public partial class Gemma2DecoderBlock<T> : LayerBase<T>
         yield return _ffnUp;
         yield return _ffnDown;
         yield return _normPostFfn;
-    }
-
-    /// <inheritdoc/>
-    public override long ParameterCount
-    {
-        get { long total = 0; foreach (var l in SubLayers()) total += l.ParameterCount; return total; }
-    }
-
-    /// <inheritdoc/>
-    public override Vector<T> GetParameters()
-    {
-        Vector<T> acc = new Vector<T>(0);
-        foreach (var l in SubLayers()) acc = Vector<T>.Concatenate(acc, l.GetParameters());
-        return acc;
-    }
-
-    /// <inheritdoc/>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        long expected = ParameterCount;
-        if (parameters.Length != expected)
-            throw new System.ArgumentException($"Expected {expected} parameters, got {parameters.Length}.");
-        int offset = 0;
-        foreach (var l in SubLayers())
-        {
-            int count = (int)l.ParameterCount;
-            if (count == 0) continue;
-            l.SetParameters(parameters.Slice(offset, count));
-            offset += count;
-        }
     }
 
     /// <inheritdoc/>

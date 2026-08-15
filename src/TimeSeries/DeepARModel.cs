@@ -62,10 +62,11 @@ namespace AiDotNet.TimeSeries;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("DeepAR: Probabilistic Forecasting with Autoregressive Recurrent Networks", "https://arxiv.org/abs/1704.04110", Year = 2020, Authors = "David Salinas, Valentin Flunkert, Jan Gasthaus, Tim Januschowski")]
-public class DeepARModel<T> : TimeSeriesModelBase<T>
+public partial class DeepARModel<T> : TimeSeriesModelBase<T>
 {
     private readonly DeepAROptions<T> _options;
     private readonly Random _random;
+    [Buffer]
     private Vector<T> _trainingSeries = Vector<T>.Empty();
 
     // Tape-trainable LSTM cells (one per layer) and the pluggable predictive-distribution head
@@ -879,18 +880,8 @@ public class DeepARModel<T> : TimeSeriesModelBase<T>
 
     public override IFullModel<T, Matrix<T>, Vector<T>> DeepCopy() => Clone();
 
-    public override long ParameterCount
-    {
-        get
-        {
-            int count = 0;
-            foreach (var lstm in _lstmLayers)
-                count += (int)lstm.ParameterCount;
-            count += (int)_head.ParameterCount;
-            return count;
-        }
-    }
-
+    // ParameterCount restated a fold the base now derives from generated component registration.
+    // Removed under AIDN082.
     /// <summary>
     /// Mean training loss recorded at the end of each epoch of the most recent
     /// <see cref="TrainCore"/> call (the objective being minimized by Adam). Exposed so callers
@@ -906,32 +897,63 @@ public class DeepARModel<T> : TimeSeriesModelBase<T>
 /// through it (BPTT) and the Adam optimizer updates the registered weights from tape
 /// gradients. Activations are column-major <c>[hiddenSize, batch]</c>.
 /// </summary>
-internal class DeepARLstmCellTape<T> : NeuralNetworks.Layers.LayerBase<T>
+// Rank 2 and COLUMN-MAJOR, which the class summary states outright ("Activations are column-major
+// [hiddenSize, batch]") and Step's ops confirm: TensorMatMul(_wx [4H, inputSize], xt) puts the
+// feature axis first and the batch axis second. Rank 2 only - ForwardTraced tolerates a rank-1
+// argument when reading the batch size, but it then adds a rank-1 x-contribution to a rank-2
+// h-contribution, so nothing here defines a rank-1 result.
+[TensorLayout(TensorAxis.Features, TensorAxis.Batch, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Features, TensorAxis.Batch, Direction = TensorLayoutDirection.Output)]
+[AutoParameters]
+internal partial class DeepARLstmCellTape<T> : NeuralNetworks.Layers.LayerBase<T>, IShapeContract
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// HAND-WRITTEN because a recurrent cell replaces the feature axis rather than carrying it
+    /// through: ForwardTraced returns the <c>h</c> of <c>Step</c>, and <c>Step</c> builds it as
+    /// <c>oGate * tanh(cNew)</c> out of gates narrowed to <c>_hiddenSize</c> rows each - so the
+    /// width is the hidden size, whatever the input width was. Only the batch column count survives,
+    /// which is why the second axis is Same. The constructor states the same pair:
+    /// <c>base(new[] { inputSize }, new[] { hiddenSize })</c>.
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        if (inputRank != 2 || _hiddenSize <= 0) return null;
+
+        return new[]
+        {
+            new OutputAxisContract(TensorAxis.Features, AxisRelation.Fixed(_hiddenSize)),
+            new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+        };
+    }
+
     private readonly int _inputSize;
     private readonly int _hiddenSize;
 
     // Input-to-gate and hidden-to-gate weights, stacked over the 4 gates in the order
     // (input, forget, cell, output): _wx is [4H, inputSize], _wh is [4H, H], _bias is [4H].
-    private readonly Tensor<T> _wx;
-    private readonly Tensor<T> _wh;
-    private readonly Tensor<T> _bias;
+    //
+    // NOT readonly: these are registered trainable parameters, and TrainableParameterGenerator emits a
+    // SetTrainableParameters that REPLACES them with ParameterBuffer views. readonly forbade that
+    // assignment (CS0191), so the buffer-backed path could never have worked for this cell. The
+    // conflict stayed invisible only because the generator skips non-partial types and this class was
+    // not partial until it declared a shape contract.
+    private Tensor<T> _wx;
+    private Tensor<T> _wh;
+    private Tensor<T> _bias;
 
     public int InputSize => _inputSize;
     public int HiddenSize => _hiddenSize;
 
-    public override long ParameterCount => _wx.Length + _wh.Length + _bias.Length;
     public override bool SupportsTraining => true;
     public override void ResetState() { }
-    public override void UpdateParameters(T learningRate) { /* tape-based optimizer updates registered params */ }
-
     /// <summary>
     /// Single-step forward from a zero initial state (satisfies the <c>ILayer</c> contract).
     /// The model drives the recurrence via <see cref="Step"/>; this convenience overload runs
     /// one timestep on <paramref name="input"/> <c>[inputSize, B]</c> and returns the hidden
     /// state <c>[H, B]</c>.
     /// </summary>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         int batch = input.Shape.Length > 1 ? input.Shape[1] : 1;
         var h0 = new Tensor<T>(new[] { _hiddenSize, batch });
@@ -1007,24 +1029,6 @@ internal class DeepARLstmCellTape<T> : NeuralNetworks.Layers.LayerBase<T>
         var hNew = Engine.TensorMultiply(oGate, Engine.Tanh(cNew));
 
         return (hNew, cNew);
-    }
-
-    public override Vector<T> GetParameters()
-    {
-        var p = new T[_wx.Length + _wh.Length + _bias.Length];
-        int idx = 0;
-        for (int i = 0; i < _wx.Length; i++) p[idx++] = _wx[i];
-        for (int i = 0; i < _wh.Length; i++) p[idx++] = _wh[i];
-        for (int i = 0; i < _bias.Length; i++) p[idx++] = _bias[i];
-        return new Vector<T>(p);
-    }
-
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int idx = 0;
-        for (int i = 0; i < _wx.Length; i++) _wx[i] = parameters[idx++];
-        for (int i = 0; i < _wh.Length; i++) _wh[i] = parameters[idx++];
-        for (int i = 0; i < _bias.Length; i++) _bias[i] = parameters[idx++];
     }
 
     public override void Serialize(BinaryWriter writer)

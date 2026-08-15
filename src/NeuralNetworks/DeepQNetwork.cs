@@ -46,7 +46,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Playing Atari with Deep Reinforcement Learning", "https://arxiv.org/abs/1312.5602", Year = 2013, Authors = "Volodymyr Mnih, Koray Kavukcuoglu, David Silver, Alex Graves, Ioannis Antonoglou, Daan Wierstra, Martin Riedmiller")]
-public class DeepQNetwork<T> : NeuralNetworkBase<T>
+public partial class DeepQNetwork<T> : VectorModelLayoutBase<T>
 {
     private readonly DeepQNetworkOptions _options;
 
@@ -440,44 +440,8 @@ public class DeepQNetwork<T> : NeuralNetworkBase<T>
         }
     }
 
-    /// <summary>
-    /// Updates the parameters of all layers in the Deep Q-Network.
-    /// </summary>
-    /// <param name="parameters">A vector containing the parameters to update all layers with.</param>
-    /// <remarks>
-    /// <para>
-    /// This method distributes the provided parameter vector among all the layers in the network.
-    /// Each layer receives a portion of the parameter vector corresponding to its number of parameters.
-    /// The method keeps track of the starting index for each layer's parameters in the input vector.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method updates all the internal values of the neural network at once.
-    /// 
-    /// When updating parameters:
-    /// - The input is a long list of numbers representing all values in the entire network
-    /// - The method divides this list into smaller chunks
-    /// - Each layer gets its own chunk of values
-    /// - The layers use these values to adjust their internal settings
-    /// 
-    /// This method is less commonly used in DQN than the standard training process,
-    /// but it provides a way to directly set all parameters at once, which can be
-    /// useful in certain scenarios like loading pretrained weights or implementing advanced optimization algorithms.
-    /// </para>
-    /// </remarks>
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        int startIndex = 0;
-        foreach (var layer in Layers)
-        {
-            int layerParameterCount = checked((int)layer.ParameterCount);
-            if (layerParameterCount > 0)
-            {
-                Vector<T> layerParameters = parameters.SubVector(startIndex, layerParameterCount);
-                layer.UpdateParameters(layerParameters);
-                startIndex += layerParameterCount;
-            }
-        }
-    }
-
+    // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
+    // exactly the same enumeration, so this said nothing the base does not already say.
     /// <summary>
     /// Performs a forward pass with a tensor input.
     /// </summary>

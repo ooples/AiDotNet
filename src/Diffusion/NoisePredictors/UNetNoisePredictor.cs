@@ -57,6 +57,23 @@ namespace AiDotNet.Diffusion.NoisePredictors;
     [ResearchPaper("Denoising Diffusion Probabilistic Models", "https://arxiv.org/abs/2006.11239")]
 public class UNetNoisePredictor<T> : NoisePredictorBase<T>
 {
+
+    /// <inheritdoc />
+    /// <remarks>The SAME resolution the write path uses. Reading through the shape-only
+    /// ResolveShapesViaForward instead left seven lazy layers reporting zero, so restoring the
+    /// model grew it from 3,146,496 to 5,006,595.</remarks>
+    protected override void EnsureParametersReady()
+    {
+        TriggerLazyShapeResolution();
+    }
+
+    /// <inheritdoc />
+    protected override void EnsureParameterStructureReady()
+    {
+        // Run the real topology in shape-inference mode. This resolves decoder-concat and
+        // attention dimensions without allocating the paper-scale U-Net's weight tensors.
+        ResolveShapesViaForward();
+    }
     /// <summary>
     /// Channel multipliers for each resolution level.
     /// </summary>
@@ -185,9 +202,6 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
 
     /// <inheritdoc />
     public override int TimeEmbeddingDim => _timeEmbeddingDim;
-
-    /// <inheritdoc />
-    public override long ParameterCount => CalculateParameterCount();
 
     /// <inheritdoc />
     public override bool SupportsCFG => true;
@@ -404,7 +418,8 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
                 {
                     ResBlock = CreateResBlock(inChannels, outChannels, spatialSize),
                     AttentionBlock = useAttention ? CreateAttentionBlock(outChannels, spatialSize) : null,
-                    CrossAttentionBlock = useAttention && _contextDim > 0 ? CreateCrossAttentionBlock(outChannels, spatialSize) : null
+                    CrossAttentionBlock = useAttention && _contextDim > 0 ? CreateCrossAttentionBlock(outChannels, spatialSize) : null,
+                    AttentionChannels = outChannels
                 });
                 inChannels = outChannels;
             }
@@ -434,7 +449,8 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
         {
             ResBlock = CreateResBlock(channels, channels, bottleneckSpatial),
             AttentionBlock = CreateAttentionBlock(channels, bottleneckSpatial),
-            CrossAttentionBlock = _contextDim > 0 ? CreateCrossAttentionBlock(channels, bottleneckSpatial) : null
+            CrossAttentionBlock = _contextDim > 0 ? CreateCrossAttentionBlock(channels, bottleneckSpatial) : null,
+            AttentionChannels = channels
         });
         _middleBlocks.Add(new UNetBlock
         {
@@ -466,7 +482,8 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
                 {
                     ResBlock = CreateResBlock(inChannels + skipChannels, outChannels, spatialSize),
                     AttentionBlock = useAttention ? CreateAttentionBlock(outChannels, spatialSize) : null,
-                    CrossAttentionBlock = useAttention && _contextDim > 0 ? CreateCrossAttentionBlock(outChannels, spatialSize) : null
+                    CrossAttentionBlock = useAttention && _contextDim > 0 ? CreateCrossAttentionBlock(outChannels, spatialSize) : null,
+                    AttentionChannels = outChannels
                 });
                 inChannels = outChannels;
             }
@@ -499,8 +516,9 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
     public override Tensor<T> PredictNoise(Tensor<T> noisySample, int timestep, Tensor<T>? conditioning = null)
     {
         EnsureLayersInitialized();
-        using var streaming = BeginWeightStreamingForward();
-        _preserveMaterializedParameters = true;
+        using var streaming = LayerBase<T>.IsInferringShapes ? null : BeginWeightStreamingForward();
+        if (!LayerBase<T>.IsInferringShapes)
+            _preserveMaterializedParameters = true;
         _lastInput = noisySample;
 
         // #638/#1650: genuine inference runs in eval mode so every Conv / Dense layer takes
@@ -512,9 +530,9 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
         // numerically identical to training mode here. Skipped when a gradient tape is
         // active (training-time sampling) so eager backward state is retained. Restored in
         // the finally so the model's steady-state (training) is preserved for the next step.
-        bool evalForInference =
-            AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>.Current is null
-            || AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>.IsSuppressed;
+        bool evalForInference = !LayerBase<T>.IsInferringShapes
+            && (AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>.Current is null
+                || AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>.IsSuppressed);
         if (evalForInference) SetAllLayersTrainingMode(false);
         try
         {
@@ -550,7 +568,7 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
         }
 
         _lastOutput = output;
-        return streaming.Complete(output);
+        return streaming is null ? output : streaming.Complete(output);
 
         }
         finally
@@ -586,6 +604,75 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
     {
         foreach (var layer in EnumerateAllLayers())
             layer?.SetTrainingMode(isTraining);
+    }
+
+    /// <summary>
+    /// Replaces every self- and cross-attention block with the result of <paramref name="decorator"/>,
+    /// so an adapter (LoRA and friends) can be injected without this class knowing about it.
+    /// </summary>
+    /// <param name="decorator">
+    /// Receives each attention block and a flag that is <c>true</c> for cross-attention, and returns
+    /// the layer to use in its place. Returning the block unchanged is allowed and is a no-op.
+    /// </param>
+    /// <returns>The number of blocks replaced.</returns>
+    /// <remarks>
+    /// <para>
+    /// This exists so parameter-efficient fine-tuning methods that target attention — T-LoRA
+    /// (arXiv:2507.05964) is the first caller — do not have to modify
+    /// <see cref="AiDotNet.Diffusion.Attention.DiffusionAttention{T}"/>, <c>MultiHeadAttentionLayer</c>
+    /// or <c>FlashAttentionLayer</c>, all of which are shared by every other diffusion model in the
+    /// library. Putting one model's mechanism in those would place it on everyone's hot path.
+    /// </para>
+    /// <para>
+    /// Replacements land in the same block slots, so <c>EnumerateAllLayers</c> continues to see them
+    /// in the same order and the index-identical <c>GetParameters</c>/<c>SetParameters</c> contract
+    /// still holds — provided the decorator's own parameter vector concatenates the wrapped block's
+    /// parameters ahead of its own, which is the contract a decorator must honour.
+    /// </para>
+    /// <para>
+    /// Call this BEFORE any forward pass. It changes the network's shape-resolved graph, so a plan
+    /// compiled by <see cref="CompileForward"/> beforehand would replay the undecorated network.
+    /// </para>
+    /// </remarks>
+    public int DecorateAttentionBlocks(Func<ILayer<T>, int, bool, ILayer<T>> decorator)
+    {
+        if (decorator is null) throw new ArgumentNullException(nameof(decorator));
+
+        // The block lists are built LAZILY. Without this the encoder/middle/decoder lists are still
+        // empty when a model decorates from its own constructor, so nothing gets wrapped and the model
+        // ends up undecorated while a clone — built from a predictor whose layers were realized by an
+        // earlier forward pass — gets wrapped for real. That asymmetry is invisible until parameter
+        // chunks are exchanged between the two, where it surfaced as "chunk length 16448 does not match
+        // layer parameter length 24704" with the difference being exactly one adapter.
+        EnsureLayersInitialized();
+
+        int replaced = 0;
+        foreach (var block in _encoderBlocks.Concat(_middleBlocks).Concat(_decoderBlocks))
+        {
+            // AttentionChannels is the width recorded when the block was BUILT. It is handed to the
+            // decorator so an adapter never has to infer it from GetOutputShape(), which answers
+            // differently before and after lazy shape resolution and so would decorate a different
+            // set of blocks in a fresh predictor than in one cloned from a resolved one.
+            int channels = block.AttentionChannels;
+
+            if (block.AttentionBlock is not null)
+            {
+                block.AttentionBlock = decorator(block.AttentionBlock, channels, false)
+                    ?? throw new InvalidOperationException(
+                        "The attention-block decorator returned null; return the original block to skip it.");
+                replaced++;
+            }
+
+            if (block.CrossAttentionBlock is not null)
+            {
+                block.CrossAttentionBlock = decorator(block.CrossAttentionBlock, channels, true)
+                    ?? throw new InvalidOperationException(
+                        "The cross-attention-block decorator returned null; return the original block to skip it.");
+                replaced++;
+            }
+        }
+
+        return replaced;
     }
 
     /// <summary>
@@ -664,8 +751,9 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
     public override Tensor<T> PredictNoiseWithEmbedding(Tensor<T> noisySample, Tensor<T> timeEmbedding, Tensor<T>? conditioning = null)
     {
         EnsureLayersInitialized();
-        using var streaming = BeginWeightStreamingForward();
-        _preserveMaterializedParameters = true;
+        using var streaming = LayerBase<T>.IsInferringShapes ? null : BeginWeightStreamingForward();
+        if (!LayerBase<T>.IsInferringShapes)
+            _preserveMaterializedParameters = true;
         _lastInput = noisySample;
 
         // Project time embedding
@@ -676,7 +764,7 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
         SaveForwardState(skips, timeEmbed);
 
         _lastOutput = output;
-        return streaming.Complete(output);
+        return streaming is null ? output : streaming.Complete(output);
     }
 
     /// <summary>
@@ -926,6 +1014,16 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
         // - Key/Value: text embeddings from conditioning
         // - Output: attended features with same shape as x
 
+        // A decorated block must be unwrapped FIRST, so the inner block still gets the conditioning
+        // through its own dispatch below. Without this a wrapper matches none of the type tests and
+        // falls through to the single-argument Forward, which drops the conditioning silently: the
+        // model keeps running, computing cross-attention with no text embedding at all. Recursive, so
+        // stacked decorators all get their turn.
+        if (crossAttn is IAttentionBlockDecorator<T> decorator)
+        {
+            return decorator.PostProcess(ApplyCrossAttention(decorator.Inner, x, conditioning));
+        }
+
         // DiffusionCrossAttention uses ForwardWithContext for conditioning
         if (crossAttn is DiffusionCrossAttention<T> diffusionCrossAttn)
         {
@@ -1118,30 +1216,6 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
 
     #region Parameter Management
 
-    private int CalculateParameterCount()
-    {
-        EnsureLayersInitialized();
-        // Resolve every lazy layer's TRUE shape via a shape-only forward (single source
-        // of truth) — NO weight materialisation, so this stays cheap on a foundation-scale
-        // U-Net (the Unit-03b construction OOM was the old materialising dummy forward).
-        // Using the forward topology (not a per-construction estimate) guarantees this
-        // count equals GetParameters().Length and the real forward's resolution, including
-        // decoder skip concatenation.
-        ResolveShapesViaForward();
-
-        // Walk the same layers GetParameters walks and sum their actual ParameterCount.
-        // Must match GetParameters().Length exactly — the previous "approximate" formula
-        // diverged from the real count and broke contract tests asserting equality.
-        long count = 0;
-        AddLayerCount(ref count, _inputConv);
-        AddLayerCount(ref count, _timeEmbedMlp1);
-        AddLayerCount(ref count, _timeEmbedMlp2);
-        for (int i = 0; i < _encoderBlocks.Count; i++) AddBlockCount(ref count, _encoderBlocks[i]);
-        for (int i = 0; i < _middleBlocks.Count; i++) AddBlockCount(ref count, _middleBlocks[i]);
-        for (int i = 0; i < _decoderBlocks.Count; i++) AddBlockCount(ref count, _decoderBlocks[i]);
-        AddLayerCount(ref count, _outputConv);
-        return (int)Math.Min(count, int.MaxValue);
-    }
 
     private static void AddLayerCount(ref long count, ILayer<T>? layer)
     {
@@ -1155,46 +1229,6 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
         AddLayerCount(ref count, block.CrossAttentionBlock);
         AddLayerCount(ref count, block.Downsample);
         AddLayerCount(ref count, block.Upsample);
-    }
-
-    /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        EnsureLayersInitialized();
-        // Resolve all layer shapes via the shape-only forward (single source of truth,
-        // no materialisation) so the returned vector's length matches ParameterCount
-        // exactly. Each layer.GetParameters() below then materialises just that layer's
-        // weights on demand.
-        ResolveShapesViaForward();
-
-        // Collect all sublayer parameter vectors first (each layer allocates its own)
-        var layerParams = new List<Vector<T>>();
-        int totalCount = 0;
-
-        CollectLayerParams(layerParams, ref totalCount, _inputConv);
-        CollectLayerParams(layerParams, ref totalCount, _timeEmbedMlp1);
-        CollectLayerParams(layerParams, ref totalCount, _timeEmbedMlp2);
-
-        for (int i = 0; i < _encoderBlocks.Count; i++)
-            CollectBlockParams(layerParams, ref totalCount, _encoderBlocks[i]);
-        for (int i = 0; i < _middleBlocks.Count; i++)
-            CollectBlockParams(layerParams, ref totalCount, _middleBlocks[i]);
-        for (int i = 0; i < _decoderBlocks.Count; i++)
-            CollectBlockParams(layerParams, ref totalCount, _decoderBlocks[i]);
-
-        CollectLayerParams(layerParams, ref totalCount, _outputConv);
-
-        // Single allocation at exact size, then copy from cached sublayer vectors
-        var parameters = new Vector<T>(totalCount);
-        int idx = 0;
-        for (int v = 0; v < layerParams.Count; v++)
-        {
-            var p = layerParams[v];
-            for (int i = 0; i < p.Length; i++)
-                parameters[idx++] = p[i];
-        }
-
-        return parameters;
     }
 
     private static void CollectLayerParams(List<Vector<T>> dest, ref int totalCount, ILayer<T>? layer)
@@ -1212,71 +1246,6 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
         CollectLayerParams(dest, ref totalCount, block.CrossAttentionBlock);
         CollectLayerParams(dest, ref totalCount, block.Downsample);
         CollectLayerParams(dest, ref totalCount, block.Upsample);
-    }
-
-    /// <inheritdoc />
-    /// <remarks>
-    /// Emits one chunk per layer in the SAME canonical order as <see cref="GetParameters"/> /
-    /// <see cref="SetParameters"/> (EnumerateAllLayers), so the flat concatenation of the chunks is
-    /// index-identical to GetParameters() — the load-bearing per-index streaming contract (#1624) — without
-    /// ever materializing the full aggregate. The earlier per-tensor walk (GetTrainableParameters +
-    /// sub-layer recursion) produced a DIFFERENT intra-layer order than GetParameters, so a chunked clone
-    /// mis-mapped weights (#1758); this mirrors the per-layer pattern the DiT/U-ViT predictors already use.
-    /// </remarks>
-    public override IEnumerable<Tensor<T>> GetParameterChunks()
-    {
-        EnsureLayersInitialized();
-        // Resolve shapes exactly as GetParameters does (shape-only, no weight materialization) so each
-        // layer's chunk is sized identically to its slice of the flat vector.
-        ResolveShapesViaForward();
-        foreach (var (_, p) in EnumerateParameterizedLayers())
-            yield return new Tensor<T>(new[] { p.Length }, p);
-    }
-
-    /// <inheritdoc />
-    /// <remarks>
-    /// Consumes one chunk per parameterized layer in the SAME canonical order <see cref="GetParameterChunks"/>
-    /// emits them and <see cref="SetParameters"/> applies them, so a chunked round-trip restores each layer
-    /// exactly. The base <see cref="NoisePredictorBase{T}"/> SetParameterChunks walks a REFLECTION order
-    /// (ReflectInstanceLayers) that differs from this predictor's explicit layer order, which mis-mapped UNet
-    /// tensors when a clone restored from chunks (this predictor's Clone, and FluxSchnellModel's, which
-    /// round-trips the predictor's chunks directly). One chunk in flight at a time — never a flat aggregate.
-    /// </remarks>
-    public override void SetParameterChunks(IEnumerable<Tensor<T>> chunks)
-    {
-        ThrowIfDisposed();
-        if (chunks is null) throw new ArgumentNullException(nameof(chunks));
-        EnsureLayersInitialized();
-        // Size lazy layers to their real ParameterCount first (mirrors SetParameters) so each layer's slice
-        // lands instead of being dropped into a still-zero-sized layer.
-        TriggerLazyShapeResolution();
-        // Foundation-scale (#1715): engage streaming before touching weights — see GetParameterChunks.
-        MaybeEngageWeightStreaming();
-        _preserveMaterializedParameters = true;
-
-        using var e = chunks.GetEnumerator();
-        foreach (var (layer, p) in EnumerateParameterizedLayers())
-        {
-            if (!e.MoveNext())
-                throw new ArgumentException(
-                    "SetParameterChunks received fewer chunks than the predictor has parameterized layers.",
-                    nameof(chunks));
-            var incoming = e.Current.ToVector();
-            // The participation gate is shared with GetParameterChunks (same materialized
-            // GetParameters().Length source), so a well-formed round-trip lines up 1:1; verify the per-layer
-            // length as well so any future ILayer whose ParameterCount disagrees with GetParameters().Length
-            // fails loudly here instead of silently shifting every subsequent layer's restored weights.
-            if (incoming.Length != p.Length)
-                throw new ArgumentException(
-                    $"SetParameterChunks chunk length {incoming.Length} does not match layer parameter length {p.Length}.",
-                    nameof(chunks));
-            layer.SetParameters(incoming);
-        }
-        if (e.MoveNext())
-            throw new ArgumentException(
-                "SetParameterChunks received more chunks than the predictor has parameterized layers.",
-                nameof(chunks));
-        InvalidateCompiledPlans();
     }
 
     /// <summary>
@@ -1354,40 +1323,6 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
         }
     }
 
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        EnsureLayersInitialized();
-        // Resolve lazy layer shapes first so each layer's slice is sized to its
-        // real ParameterCount; otherwise lazy layers size to 0 and the incoming
-        // values are silently dropped (the SetParameters/GetParameters round-trip bug).
-        TriggerLazyShapeResolution();
-        _preserveMaterializedParameters = true;
-
-        var index = 0;
-
-        SetLayerParameters(_inputConv, parameters, ref index);
-        SetLayerParameters(_timeEmbedMlp1, parameters, ref index);
-        SetLayerParameters(_timeEmbedMlp2, parameters, ref index);
-
-        foreach (var block in _encoderBlocks)
-        {
-            SetBlockParameters(block, parameters, ref index);
-        }
-
-        foreach (var block in _middleBlocks)
-        {
-            SetBlockParameters(block, parameters, ref index);
-        }
-
-        foreach (var block in _decoderBlocks)
-        {
-            SetBlockParameters(block, parameters, ref index);
-        }
-
-        SetLayerParameters(_outputConv, parameters, ref index);
-    }
-
     private void SetLayerParameters(ILayer<T>? layer, Vector<T> parameters, ref int index)
     {
         if (layer == null) return;
@@ -1436,7 +1371,16 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
         if (_preserveMaterializedParameters)
         {
             clone.TriggerLazyShapeResolution();
-            if (!clone.TryShareParametersFrom(this)) clone.SetParameterChunks(GetParameterChunks());
+            // Preserve the complete trainable tensor graph. A per-layer
+            // GetParameters/SetParameters round-trip is not equivalent here:
+            // composite U-Net layers expose nested tensors through
+            // ITrainableLayer, and flattening only the parent layer can leave
+            // inference-visible child state at the clone's initialization.
+            // COW also avoids allocating a second foundation-scale parameter
+            // vector; the chunk fallback remains the safe eager path when the
+            // materialized source/clone graphs do not line up exactly.
+            if (!clone.TryShareParametersFrom(this))
+                clone.SetParameterChunks(GetParameterChunks());
         }
         else
         {
@@ -1451,28 +1395,24 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
     }
 
     private void CopyMaterializedParametersTo(UNetNoisePredictor<T> clone)
+        => CopyMaterializedParametersTo(clone, this);
+
+    private static void CopyMaterializedParametersTo(
+        UNetNoisePredictor<T> clone, UNetNoisePredictor<T> sourceModel)
     {
-        using var source = EnumerateMaterializedModelParameters().GetEnumerator();
-        using var target = clone.EnumerateMaterializedModelParameters().GetEnumerator();
-
-        while (source.MoveNext())
+        using var source = sourceModel.EnumerateAllLayers().GetEnumerator();
+        using var target = clone.EnumerateAllLayers().GetEnumerator();
+        while (true)
         {
-            if (!target.MoveNext())
-            {
+            bool hasSource = source.MoveNext();
+            bool hasTarget = target.MoveNext();
+            if (hasSource != hasTarget)
                 throw new InvalidOperationException(
-                    "Clone has fewer materialized tensors than the source U-Net. " +
-                    "Architectures may differ or a lazy tensor was materialized without " +
-                    "marking runtime state.");
-            }
-
-            CopyTensorData(source.Current, target.Current);
-        }
-
-        if (target.MoveNext())
-        {
-            throw new InvalidOperationException(
-                "Clone has more materialized tensors than the source U-Net. " +
-                "Architectures may differ.");
+                    "Clone and source U-Net layer structures do not match.");
+            if (!hasSource) break;
+            if (source.Current is null || target.Current is null)
+                continue;
+            target.Current.SetParameters(source.Current.GetParameters());
         }
     }
 
@@ -1745,5 +1685,18 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
         public ILayer<T>? CrossAttentionBlock { get; set; }
         public ILayer<T>? Downsample { get; set; }
         public ILayer<T>? Upsample { get; set; }
+
+        /// <summary>
+        /// The channel width the attention blocks in this block were BUILT with.
+        /// </summary>
+        /// <remarks>
+        /// Recorded at construction because it is the only place the value is known unconditionally.
+        /// Deriving it later from <c>GetOutputShape()</c> is unsound: a freshly built predictor has
+        /// lazily-unresolved shapes while one that has run a forward pass (or was cloned from one)
+        /// does not, so the same UNet answers differently depending on its history. An adapter that
+        /// sizes itself from that shape therefore decorates a different set of blocks in a fresh model
+        /// than in its clone, which shifts every subsequent parameter chunk.
+        /// </remarks>
+        public int AttentionChannels { get; set; }
     }
 }

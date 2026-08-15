@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Optimizers;
@@ -17,7 +17,21 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Memory)]
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerProperty(IsTrainable = true, IsStateful = true, Cost = ComputeCost.High, TestInputShape = "1, 4", TestConstructorArgs = "new[] { 4 }, 4, 2")]
-public class ContinuumMemorySystemLayer<T> : LayerBase<T>
+// FEATURE-LAST, inherited wholesale from the DenseLayer blocks this layer is a chain of: each block
+// fixes the TRAILING axis and carries every leading axis through untouched, so the chain does too.
+// Batch is optional because the leading axis is absent in the shape the constructor declares
+// (base(inputShape, ...) with the rank-1 [4] of TestConstructorArgs) and present in the shape the layer
+// is exercised at ([LayerProperty(TestInputShape = "1, 4")]); both run the same chain.
+//
+// Ranks above 2 are left undeclared rather than assumed. DenseLayer accepts them, so the chain very
+// likely does as well — but "likely" is not a contract, and this layer's own declared and tested shapes
+// only evidence the two ranks below.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features,
+    BatchOptional = true, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features,
+    BatchOptional = true, Direction = TensorLayoutDirection.Output)]
+[AutoParameters]
+public partial class ContinuumMemorySystemLayer<T> : LayerBase<T>, IShapeContract
 {
     private readonly DenseLayer<T>[] _mlpBlocks;
     private readonly int[] _updateFrequencies;
@@ -31,10 +45,6 @@ public class ContinuumMemorySystemLayer<T> : LayerBase<T>
     private Tensor<T>? LastOutput;
     private static readonly INumericOperations<T> _numOps = MathHelper.GetNumericOperations<T>();
 
-    /// <summary>
-    /// Indicates whether this layer supports training. CMS always supports training.
-    /// </summary>
-    public override long ParameterCount => GetParameters().Length;
     public override bool SupportsTraining => true;
 
     /// <summary>
@@ -175,7 +185,43 @@ public class ContinuumMemorySystemLayer<T> : LayerBase<T>
         return rates;
     }
 
-    public override Tensor<T> Forward(Tensor<T> input)
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// The chain is <c>yt = MLP^(fk)(...MLP^(f1)(xt))</c> and every block is built as
+    /// <c>new DenseLayer&lt;T&gt;(hiddenDim, ...)</c>, so the LAST block's width is the layer's width no
+    /// matter how many levels precede it. The frequency levels differ in how OFTEN each block updates,
+    /// not in what shape it produces — which is why the count of levels does not enter this contract at
+    /// all.
+    /// </para>
+    /// <para>
+    /// <c>hiddenDim</c> is not retained as a field, so it is read back off <c>GetOutputShape()</c> — the
+    /// constructor passes it there directly (<c>base(inputShape, new[] { hiddenDim })</c>). That is a
+    /// genuine read of the layer's own construction state, not a constant observed from a sample run.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        if (inputRank is not (1 or 2)) return null;
+
+        var declaredOutput = GetOutputShape();
+        if (declaredOutput is null || declaredOutput.Length == 0) return null;
+
+        int hiddenDim = declaredOutput[declaredOutput.Length - 1];
+        if (hiddenDim <= 0) return null;
+
+        var features = new OutputAxisContract(TensorAxis.Features, AxisRelation.Fixed(hiddenDim));
+
+        return inputRank == 1
+            ? new[] { features }
+            : new[]
+            {
+                new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+                features,
+            };
+    }
+
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         if (input == null)
             throw new ArgumentNullException(nameof(input));
@@ -402,95 +448,6 @@ public class ContinuumMemorySystemLayer<T> : LayerBase<T>
     /// Gets the chunk sizes for gradient accumulation.
     /// </summary>
     public int[] ChunkSizes => _chunkSizes;
-
-    /// <summary>
-    /// Updates parameters using the specified learning rate.
-    /// This is a no-op for CMS because parameters are updated exclusively via UpdateLevelParameters
-    /// when chunk counters trigger (i ≡ 0 mod C(ℓ)). Updating here would double-apply gradients.
-    /// </summary>
-    /// <param name="learningRate">Learning rate (unused - each level has its own rate)</param>
-    public override void UpdateParameters(T learningRate)
-    {
-        // No-op: Parameters are updated via UpdateLevelParameters during Backward pass
-        // when chunk counters reach their thresholds. Updating here would cause
-        // double application of gradients since MLP blocks are already updated
-        // in UpdateLevelParameters using Modified Gradient Descent (Equations 27-29).
-    }
-
-    /// <summary>
-    /// Gets all parameters from all MLP blocks in the chain.
-    /// Returns a concatenated vector of all parameters from all levels.
-    /// </summary>
-    /// <returns>Concatenated parameter vector</returns>
-    public override Vector<T> GetParameters()
-    {
-        if (_mlpBlocks == null || _mlpBlocks.Length == 0)
-            throw new InvalidOperationException("MLP blocks are not initialized");
-
-        // Use Vector<T>.Concatenate for efficient parameter collection
-        Vector<T> result = Vector<T>.Empty();
-
-        foreach (var mlp in _mlpBlocks)
-        {
-            if (mlp == null)
-                throw new InvalidOperationException("MLP block is null");
-
-            var mlpParams = mlp.GetParameters();
-            result = Vector<T>.Concatenate(result, mlpParams);
-        }
-
-        return result;
-    }
-
-    /// <summary>
-    /// Sets all parameters for all MLP blocks in the chain.
-    /// Distributes the parameter vector across all levels.
-    /// </summary>
-    /// <param name="parameters">Concatenated parameter vector</param>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (parameters == null)
-            throw new ArgumentNullException(nameof(parameters));
-
-        if (_mlpBlocks == null || _mlpBlocks.Length == 0)
-            throw new InvalidOperationException("MLP blocks are not initialized");
-
-        // Calculate total expected parameter count
-        int totalParams = 0;
-        foreach (var mlp in _mlpBlocks)
-        {
-            if (mlp == null)
-                throw new InvalidOperationException("MLP block is null");
-
-            totalParams += (int)mlp.ParameterCount;
-        }
-
-        if (parameters.Length != totalParams)
-        {
-            throw new ArgumentException(
-                $"Parameter vector length ({parameters.Length}) does not match total parameters ({totalParams})",
-                nameof(parameters));
-        }
-
-        // Distribute parameters to each MLP block
-        int offset = 0;
-        foreach (var mlp in _mlpBlocks)
-        {
-            int mlpParamCount = checked((int)mlp.ParameterCount);
-            var mlpParams = new Vector<T>(mlpParamCount);
-
-            for (int i = 0; i < mlpParamCount; i++)
-            {
-                mlpParams[i] = parameters[offset + i];
-            }
-
-            mlp.SetParameters(mlpParams);
-            offset += mlpParamCount;
-        }
-
-        // Update the base class Parameters property
-        Parameters = parameters;
-    }
 
     /// <summary>
     /// Resets the state of the layer (required by LayerBase).

@@ -21,8 +21,10 @@ namespace AiDotNet.ComputerVision.Segmentation.Common;
 /// </remarks>
 public abstract class OpenVocabSegmentationBase<T> : SegmentationModelBase<T>, IOpenVocabSegmentation<T>
 {
-    private readonly int _maxCategories;
-    private readonly int _maxPromptLength;
+    // protected and mutable so a derived model can read them and restore them on deserialization -
+    // see PanopticSegmentationBase._numStuffClasses for why private/readonly makes a base unadoptable.
+    protected int _maxCategories;
+    protected int _maxPromptLength;
 
     /// <inheritdoc/>
     public int MaxCategories => _maxCategories;

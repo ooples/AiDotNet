@@ -48,7 +48,7 @@ namespace AiDotNet.Audio.Speaker;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     [ResearchPaper("X-Vectors: Robust DNN Embeddings for Speaker Recognition", "https://doi.org/10.1109/ICASSP.2018.8461375")]
-public class SpeakerVerifier<T> : SpeakerRecognitionBase<T>, ISpeakerVerifier<T>
+public partial class SpeakerVerifier<T> : SpeakerRecognitionBase<T>, ISpeakerVerifier<T>
 {
     #region Execution Mode
 
@@ -265,6 +265,7 @@ public class SpeakerVerifier<T> : SpeakerRecognitionBase<T>, ISpeakerVerifier<T>
         // Initialize optimizer and loss function
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
         _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        SetBaseTrainOptimizer(_optimizer);
 
         // Initialize layers
         InitializeLayers();
@@ -281,22 +282,19 @@ public class SpeakerVerifier<T> : SpeakerRecognitionBase<T>, ISpeakerVerifier<T>
     {
         if (!_useNativeMode) return;
 
-        if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
-        {
-            Layers.AddRange(Architecture.Layers);
-        }
-        else
-        {
-            // Speaker verifier uses the embedding extractor layers
-            // Add a simple verification head on top
-            Layers.AddRange(LayerHelper<T>.CreateDefaultSpeakerEmbeddingLayers(
-                numMels: 80,
-                hiddenDim: _hiddenDim,
-                embeddingDim: EmbeddingDimension,
-                numLayers: _numEncoderLayers,
-                maxFrames: 1000,
-                dropoutRate: 0.0));
-        }
+        // The verifier and its public extractor must be two views over the SAME trainable
+        // X-Vector layers. Previously each built an independent random stack: Predict used
+        // the extractor while Train/GetParameters used the verifier stack, so training could
+        // never affect verification. Sharing the layer instances preserves custom layers too.
+        Layers.AddRange(_embeddingExtractor.Layers);
+    }
+
+    /// <inheritdoc/>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input)
+    {
+        // Delegate to the extractor's paper-required temporal pooling path. A raw traversal
+        // leaves [batch, frames, embedding] and cannot be trained against one embedding target.
+        return _embeddingExtractor.ForwardForTraining(input);
     }
 
     #endregion
@@ -483,26 +481,11 @@ public class SpeakerVerifier<T> : SpeakerRecognitionBase<T>, ISpeakerVerifier<T>
         return _embeddingExtractor.ExtractEmbedding(input);
     }
 
-    /// <summary>
-    /// Updates model parameters.
-    /// </summary>
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        if (!_useNativeMode)
-        {
-            throw new NotSupportedException("Cannot update parameters in ONNX inference mode.");
-        }
-
-        int index = 0;
-        foreach (var layer in Layers)
-        {
-            int count = checked((int)layer.ParameterCount);
-            var layerParams = parameters.Slice(index, count);
-            layer.UpdateParameters(layerParams);
-            index += count;
-        }
-    }
-
+    /// <inheritdoc />
+    /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
+    /// write on every parameter surface, so the guard is stated once here instead of being
+    /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
+    protected override bool SupportsParameterMutation => _useNativeMode;
     /// <summary>
     /// Trains the model on input data.
     /// </summary>
@@ -516,7 +499,7 @@ public class SpeakerVerifier<T> : SpeakerRecognitionBase<T>, ISpeakerVerifier<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expectedOutput);
+            TrainWithTape(input, expectedOutput, _optimizer);
         }
         finally
         {
@@ -568,6 +551,11 @@ public class SpeakerVerifier<T> : SpeakerRecognitionBase<T>, ISpeakerVerifier<T>
         _ = reader.ReadInt32(); // hiddenDim
         _ = reader.ReadInt32(); // numEncoderLayers
         _ = reader.ReadInt32(); // numHeads
+
+        // Base deserialization replaces this instance's layer objects. Re-point the extractor
+        // at those restored (possibly trained) layers so Predict and Train remain one model.
+        _embeddingExtractor.Layers.Clear();
+        _embeddingExtractor.Layers.AddRange(Layers);
     }
 
     /// <summary>

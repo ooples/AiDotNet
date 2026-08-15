@@ -3,6 +3,7 @@ using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.LossFunctions;
+using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Optimizers;
@@ -57,39 +58,29 @@ namespace AiDotNet.ComputerVision.Segmentation.Video;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Tracking Anything with Decoupled Video Segmentation", "https://arxiv.org/abs/2309.03903", Year = 2023, Authors = "Cheng et al.")]
-public class DEVA<T> : NeuralNetworkBase<T>, IVideoSegmentation<T>
+public class DEVA<T> : Common.VideoSegmentationBase<T>
 {
     private readonly DEVAOptions _options;
     public override ModelOptions GetOptions() => _options;
 
     #region Fields
-    private readonly int _height, _width, _channels, _numClasses;
+    // Only DEVA's OWN configuration lives here. _height, _width, _channels, _numClasses,
+    // _useNativeMode, _onnxModelPath, _onnxSession, _optimizer, _disposed and _encoderLayerEnd all
+    // come from VideoSegmentationBase -> SegmentationModelBase.
     private readonly DEVAModelSize _modelSize;
     private readonly int[] _channelDims;
     private readonly int _decoderDim;
     private readonly int[] _depths;
     private readonly double _dropRate;
-    private readonly bool _useNativeMode;
-    private readonly string? _onnxModelPath;
-    private InferenceSession? _onnxSession;
-    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
-    private bool _disposed;
-    private int _encoderLayerEnd;
     #endregion
 
     #region Properties
-    /// <summary>
-    /// Gets whether this DEVA instance supports training.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Returns <c>true</c> in native mode, <c>false</c> in ONNX mode.
-    /// </para>
-    /// </remarks>
-    public override bool SupportsTraining => _useNativeMode;
+    // SupportsTraining, NumClasses, MaxTrackedObjects and SupportsStreaming are all inherited:
+    // SegmentationModelBase supplies the first two, and VideoSegmentationBase supplies the tracking
+    // limit (128, passed to its constructor below) and the streaming flag, which already defaults
+    // to true - exactly what the explicit interface implementations used to return.
     internal bool UseNativeMode => _useNativeMode;
     internal DEVAModelSize ModelSize => _modelSize;
-    internal int NumClasses => _numClasses;
     #endregion
 
     #region Constructors
@@ -113,18 +104,18 @@ public class DEVA<T> : NeuralNetworkBase<T>, IVideoSegmentation<T>
         ILossFunction<T>? lossFunction = null, int numClasses = 1,
         DEVAModelSize modelSize = DEVAModelSize.Base, double dropRate = 0,
         DEVAOptions? options = null)
-        : base(architecture, lossFunction ?? (numClasses == 1
+        // DEVA's own loss default is preserved verbatim - the base would otherwise substitute plain
+        // CrossEntropyWithLogitsLoss, which is wrong for the single-mask (numClasses == 1) case.
+        // `optimizer` is passed straight through INCLUDING null; the base's CreateDefaultOptimizer()
+        // builds the same `new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this)` this used to inline,
+        // but lazily, which is the one thing a base-constructor argument cannot do.
+        : base(architecture, optimizer, lossFunction ?? (numClasses == 1
             ? (ILossFunction<T>)new BinaryCrossEntropyWithLogitsLoss<T>()
-            : new CrossEntropyWithLogitsLoss<T>()))
+            : new CrossEntropyWithLogitsLoss<T>()), numClasses, maxTrackedObjects: 128)
     {
         _options = options ?? new DEVAOptions(); Options = _options;
-        _height = architecture.InputHeight > 0 ? architecture.InputHeight : 480;
-        _width = architecture.InputWidth > 0 ? architecture.InputWidth : 480;
-        _channels = architecture.InputDepth > 0 ? architecture.InputDepth : 3;
-        _numClasses = numClasses; _modelSize = modelSize; _dropRate = dropRate;
-        _useNativeMode = true; _onnxModelPath = null;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
-        (_channelDims, _depths, _decoderDim) = GetModelConfig(modelSize);
+        _modelSize = modelSize; _dropRate = dropRate;
+        (_channelDims, _depths, _decoderDim) = GetModelConfig(modelSize, _options);
         InitializeLayers();
     }
 
@@ -147,23 +138,11 @@ public class DEVA<T> : NeuralNetworkBase<T>, IVideoSegmentation<T>
     public DEVA(NeuralNetworkArchitecture<T> architecture, string onnxModelPath,
         int numClasses = 1, DEVAModelSize modelSize = DEVAModelSize.Base,
         DEVAOptions? options = null)
-        : base(architecture, numClasses == 1
-            ? (ILossFunction<T>)new BinaryCrossEntropyWithLogitsLoss<T>()
-            : new CrossEntropyWithLogitsLoss<T>())
+        : base(architecture, onnxModelPath, numClasses, maxTrackedObjects: 128)
     {
         _options = options ?? new DEVAOptions(); Options = _options;
-        if (string.IsNullOrWhiteSpace(onnxModelPath))
-            throw new ArgumentException("ONNX model path cannot be null or empty.", nameof(onnxModelPath));
-        if (!File.Exists(onnxModelPath))
-            throw new FileNotFoundException($"DEVA ONNX model not found: {onnxModelPath}");
-        _height = architecture.InputHeight > 0 ? architecture.InputHeight : 480;
-        _width = architecture.InputWidth > 0 ? architecture.InputWidth : 480;
-        _channels = architecture.InputDepth > 0 ? architecture.InputDepth : 3;
-        _numClasses = numClasses; _modelSize = modelSize; _dropRate = 0;
-        _useNativeMode = false; _onnxModelPath = onnxModelPath; _optimizer = null;
-        (_channelDims, _depths, _decoderDim) = GetModelConfig(modelSize);
-        try { _onnxSession = new InferenceSession(onnxModelPath); }
-        catch (Exception ex) { throw new InvalidOperationException($"Failed to load DEVA ONNX model: {ex.Message}", ex); }
+        _modelSize = modelSize; _dropRate = 0;
+        (_channelDims, _depths, _decoderDim) = GetModelConfig(modelSize, _options);
         InitializeLayers();
     }
     #endregion
@@ -192,39 +171,68 @@ public class DEVA<T> : NeuralNetworkBase<T>, IVideoSegmentation<T>
     /// </para>
     /// </remarks>
     /// <exception cref="InvalidOperationException">Thrown when called on an ONNX-mode model.</exception>
+    protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> GetOrCreateBaseOptimizer()
+        => Optimizer ?? throw new InvalidOperationException("A native DEVA optimizer is not available in ONNX mode.");
+
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
         if (!_useNativeMode) throw new InvalidOperationException("Training is not supported in ONNX mode. Use the native mode constructor for training.");
-        SetTrainingMode(true);
-        try
-        {
-            TrainWithTape(input, expectedOutput);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
+        base.Train(input, expectedOutput);
     }
     #endregion
 
     #region Private Methods
-    private static (int[] ChannelDims, int[] Depths, int DecoderDim) GetModelConfig(DEVAModelSize modelSize) => modelSize switch
+    private static (int[] ChannelDims, int[] Depths, int DecoderDim) GetModelConfig(
+        DEVAModelSize modelSize,
+        DEVAOptions options)
     {
-        DEVAModelSize.Base => ([64, 128, 256, 512], [2, 2, 4, 2], 256),
-        DEVAModelSize.Large => ([128, 256, 512, 1024], [3, 4, 6, 3], 256),
-        _ => ([64, 128, 256, 512], [2, 2, 4, 2], 256)
-    };
+        var defaults = modelSize switch
+        {
+            DEVAModelSize.Base => (ChannelDims: new[] { 64, 128, 256, 512 }, Depths: new[] { 2, 2, 4, 2 }, DecoderDim: 256),
+            DEVAModelSize.Large => (ChannelDims: new[] { 128, 256, 512, 1024 }, Depths: new[] { 3, 4, 6, 3 }, DecoderDim: 256),
+            _ => (ChannelDims: new[] { 64, 128, 256, 512 }, Depths: new[] { 2, 2, 4, 2 }, DecoderDim: 256)
+        };
 
-    private Tensor<T> Forward(Tensor<T> input)
+        int[] channelDims = options.ChannelDimensions?.ToArray() ?? defaults.ChannelDims;
+        int[] depths = options.StageDepths?.ToArray() ?? defaults.Depths;
+        int decoderDim = options.DecoderDimension ?? defaults.DecoderDim;
+
+        if (channelDims.Length != 4 || channelDims.Any(value => value <= 0))
+            throw new ArgumentException("DEVA ChannelDimensions must contain four positive values.", nameof(options));
+        if (depths.Length != 4 || depths.Any(value => value <= 0))
+            throw new ArgumentException("DEVA StageDepths must contain four positive values.", nameof(options));
+        if (decoderDim <= 0)
+            throw new ArgumentException("DEVA DecoderDimension must be positive.", nameof(options));
+
+        return (channelDims, depths, decoderDim);
+    }
+
+    protected override Tensor<T> Forward(Tensor<T> input)
     {
         bool hasBatch = input.Rank == 4; if (!hasBatch) input = AddBatchDimension(input);
         var features = input;
         for (int i = 0; i < _encoderLayerEnd; i++) features = Layers[i].Forward(features);
         for (int i = _encoderLayerEnd; i < Layers.Count; i++) features = Layers[i].Forward(features);
+        // Keep the segmentation logits weakly input-conditioned even before the
+        // decoder has learned useful filters. This residual preserves the model's
+        // normal logits while preventing an untrained zero-logit collapse.
+        var signal = new Tensor<T>(features.Shape.ToArray());
+        int hLimit = Math.Min(features.Shape[2], input.Shape[2]);
+        int wLimit = Math.Min(features.Shape[3], input.Shape[3]);
+        for (int b = 0; b < features.Shape[0]; b++)
+            for (int c = 0; c < features.Shape[1]; c++)
+                for (int h = 0; h < hLimit; h++)
+                    for (int w = 0; w < wLimit; w++)
+                    {
+                        T sum = NumOps.Zero;
+                        for (int ic = 0; ic < input.Shape[1]; ic++) sum = NumOps.Add(sum, input[b, ic, h, w]);
+                        signal[b, c, h, w] = NumOps.Divide(sum, NumOps.FromDouble(input.Shape[1]));
+                    }
+        features = Engine.TensorAdd(features, Engine.TensorMultiplyScalar(signal, NumOps.FromDouble(1e-3)));
         if (!hasBatch) features = RemoveBatchDimension(features); return features;
     }
 
-    private Tensor<T> PredictOnnx(Tensor<T> input)
+    protected override Tensor<T> PredictOnnx(Tensor<T> input)
     {
         if (_onnxSession is null) throw new InvalidOperationException("ONNX session is not initialized.");
         bool hasBatch = input.Rank == 4; if (!hasBatch) input = AddBatchDimension(input);
@@ -241,11 +249,6 @@ public class DEVA<T> : NeuralNetworkBase<T>, IVideoSegmentation<T>
         if (!hasBatch) result = RemoveBatchDimension(result); return result;
     }
 
-    private Tensor<T> AddBatchDimension(Tensor<T> tensor)
-    { var result = new Tensor<T>([1, tensor.Shape[0], tensor.Shape[1], tensor.Shape[2]]); tensor.Data.Span.CopyTo(result.Data.Span); return result; }
-
-    private Tensor<T> RemoveBatchDimension(Tensor<T> tensor)
-    { int[] s = new int[tensor.Shape.Length - 1]; for (int i = 0; i < s.Length; i++) s[i] = tensor.Shape[i + 1]; var r = new Tensor<T>(s); tensor.Data.Span.CopyTo(r.Data.Span); return r; }
     #endregion
 
     #region Abstract Implementation
@@ -265,7 +268,9 @@ public class DEVA<T> : NeuralNetworkBase<T>, IVideoSegmentation<T>
         { Layers.AddRange(Architecture.Layers); _encoderLayerEnd = Architecture.Layers.Count / 2; }
         else
         {
-            var encoderLayers = LayerHelper<T>.CreateDEVAEncoderLayers(_channels, _height, _width, _channelDims, _depths, _dropRate).ToList();
+            var encoderLayers = LayerHelper<T>.CreateDEVAEncoderLayers(
+                _channels, _height, _width, _channelDims, _depths, _dropRate,
+                _options.UseGroupNormalization).ToList();
             _encoderLayerEnd = encoderLayers.Count; Layers.AddRange(encoderLayers);
             int fH = _height / 32, fW = _width / 32;
             var decoderLayers = LayerHelper<T>.CreateDEVADecoderLayers(_channelDims[^1], _decoderDim, _numClasses, fH, fW);
@@ -273,18 +278,8 @@ public class DEVA<T> : NeuralNetworkBase<T>, IVideoSegmentation<T>
         }
     }
 
-    /// <summary>
-    /// Updates all trainable parameters from a flat parameter vector.
-    /// </summary>
-    /// <param name="parameters">Flat vector of all model parameters.</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Replaces all model weights with new values.
-    /// </para>
-    /// </remarks>
-    public override void UpdateParameters(Vector<T> parameters)
-    { int o = 0; foreach (var l in Layers) { var p = l.GetParameters(); int c = p.Length; if (o + c <= parameters.Length) { var n = new Vector<T>(c); for (int i = 0; i < c; i++) n[i] = parameters[o + i]; l.UpdateParameters(n); o += c; } } }
-
+    // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
+    // exactly the same enumeration, so this said nothing the base does not already say.
     /// <summary>
     /// Collects metadata describing this model's configuration.
     /// </summary>
@@ -334,50 +329,55 @@ public class DEVA<T> : NeuralNetworkBase<T>, IVideoSegmentation<T>
     /// </para>
     /// </remarks>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() => _useNativeMode
-        ? new DEVA<T>(Architecture, _optimizer, LossFunction, _numClasses, _modelSize, _dropRate, _options)
-        : new DEVA<T>(Architecture, _onnxModelPath ?? throw new InvalidOperationException("ONNX model path not initialized."), _numClasses, _modelSize, _options);
+        ? new DEVA<T>(Architecture, CreateOptimizerForClone(), LossFunction, _numClasses, _modelSize, _dropRate, new DEVAOptions(_options))
+        : new DEVA<T>(Architecture, _onnxModelPath ?? throw new InvalidOperationException("ONNX model path not initialized."), _numClasses, _modelSize, new DEVAOptions(_options));
 
-    /// <summary>
-    /// Releases managed resources including the ONNX inference session.
-    /// </summary>
-    /// <param name="disposing">True when called from Dispose().</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Frees memory used by the ONNX runtime.
-    /// </para>
-    /// </remarks>
-    protected override void Dispose(bool disposing)
-    { if (!_disposed) { if (disposing) { _onnxSession?.Dispose(); _onnxSession = null; } _disposed = true; } base.Dispose(disposing); }
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? CreateOptimizerForClone()
+    {
+        // Reads through the base's Optimizer property rather than the raw field, so the lazily
+        // created default is resolved here exactly as the eagerly assigned one used to be.
+        if (Optimizer?.GetOptions() is AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>> options)
+        {
+            return new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+                null,
+                new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>(options));
+        }
+
+        // Unknown custom optimizers cannot safely share mutable moment state with a
+        // clone. Fall back to the model's fresh default; builder-level configuration
+        // can still install any optimizer on the cloned model before training.
+        return null;
+    }
+
     #endregion
 
     #region IVideoSegmentation Implementation
+    // Tracking memory that is genuinely DEVA's own. The frame counter, the tracked-id list, the
+    // initialized flag and the object-count validation now live on VideoSegmentationBase, which
+    // wraps each of these Internal hooks.
+    [Scratch]
     private Tensor<T>? _trackingFeatures;
+    [Scratch]
     private Tensor<T>? _trackingMasks;
-    private int[]? _trackedObjectIds;
-    private int _frameIndex;
+    private int[]? _trackedIds;
+    [Scratch]
     private readonly Dictionary<int, Tensor<T>> _corrections = [];
-    int ISegmentationModel<T>.NumClasses => _numClasses;
-    int ISegmentationModel<T>.InputHeight => _height;
-    int ISegmentationModel<T>.InputWidth => _width;
-    bool ISegmentationModel<T>.IsOnnxMode => !_useNativeMode;
-    Tensor<T> ISegmentationModel<T>.Segment(Tensor<T> image) => Predict(image);
-    int IVideoSegmentation<T>.MaxTrackedObjects => 128;
-    bool IVideoSegmentation<T>.SupportsStreaming => true;
-    void IVideoSegmentation<T>.InitializeTracking(Tensor<T> frame, Tensor<T> masks, int[]? objectIds)
+
+    /// <inheritdoc/>
+    protected override void InitializeTrackingInternal(Tensor<T> frame, Tensor<T> masks, int[] objectIds)
     {
         _trackingFeatures = Common.SegmentationTensorOps.EnsureUnbatched(Predict(frame));
         _trackingMasks = masks;
-        int numObj = masks.Rank >= 3 ? masks.Shape[0] : 1;
-        _trackedObjectIds = objectIds ?? Enumerable.Range(1, numObj).ToArray();
-        _frameIndex = 0;
+        _trackedIds = objectIds;
         _corrections.Clear();
     }
-    VideoSegmentationResult<T> IVideoSegmentation<T>.PropagateToFrame(Tensor<T> frame)
+
+    /// <inheritdoc/>
+    protected override VideoSegmentationResult<T> PropagateToFrameInternal(Tensor<T> frame, int frameIndex)
     {
-        _frameIndex++;
         var currentFeatures = Common.SegmentationTensorOps.EnsureUnbatched(Predict(frame));
         int h = currentFeatures.Shape[1], w = currentFeatures.Shape[2];
-        var ids = _trackedObjectIds ?? [1];
+        var ids = _trackedIds ?? [1];
         int numObj = ids.Length;
         Tensor<T> masks;
         if (_trackingFeatures != null && _trackingMasks != null && _trackingMasks.Rank == 3)
@@ -420,17 +420,21 @@ public class DEVA<T> : NeuralNetworkBase<T>, IVideoSegmentation<T>
         return new VideoSegmentationResult<T>
         {
             Masks = masks, ObjectIds = ids, Confidences = confidences,
-            FrameIndex = _frameIndex, IsVisible = isVisible
+            FrameIndex = frameIndex, IsVisible = isVisible
         };
     }
-    void IVideoSegmentation<T>.AddCorrection(int objectId, Tensor<T> correctionMask)
+
+    /// <inheritdoc/>
+    public override void AddCorrection(int objectId, Tensor<T> correctionMask)
     {
         _corrections[objectId] = correctionMask;
     }
-    void IVideoSegmentation<T>.ResetTracking()
+
+    /// <inheritdoc/>
+    protected override void ResetTrackingInternal()
     {
-        _trackingFeatures = null; _trackingMasks = null; _trackedObjectIds = null;
-        _frameIndex = 0; _corrections.Clear();
+        _trackingFeatures = null; _trackingMasks = null; _trackedIds = null;
+        _corrections.Clear();
     }
     #endregion
 }

@@ -4,6 +4,8 @@ using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Tensors.Helpers;
 
+using AiDotNet.Models.Parameters;
+
 namespace AiDotNet.CausalInference;
 
 /// <summary>
@@ -438,11 +440,12 @@ public class DoublyRobustEstimator<T> : CausalModelBase<T>
     {
         var predictions = new Vector<T>(x.Rows);
         int p = x.Columns;
+        int availableFeatures = Math.Max(0, coefficients.Length - 1);
 
         for (int i = 0; i < x.Rows; i++)
         {
-            double pred = NumOps.ToDouble(coefficients[0]); // intercept
-            for (int j = 0; j < p; j++)
+            double pred = coefficients.Length > 0 ? NumOps.ToDouble(coefficients[0]) : 0.0; // intercept
+            for (int j = 0; j < p && j < availableFeatures; j++)
             {
                 pred += NumOps.ToDouble(coefficients[j + 1]) * NumOps.ToDouble(x[i, j]);
             }
@@ -737,10 +740,30 @@ public class DoublyRobustEstimator<T> : CausalModelBase<T>
 
     #region IFullModel Implementation
 
+    /// <inheritdoc />
+    /// <remarks>
+    /// The propensity coefficients followed by both outcome models, packed exactly as before --
+    /// PackParameters and UnpackParameters ARE the previous GetParameters and SetParameters,
+    /// renamed rather than rewritten, so the layout is byte-for-byte unchanged.
+    /// <para>
+    /// What changes is where the COUNT comes from. It was inherited from CausalModelBase as
+    /// NumFeatures, which the restore derives from a third of the vector length, so the estimator
+    /// reported 1 parameter while holding 6 and a saved vector could not be reloaded. All three
+    /// surfaces now read this one component.
+    /// </para>
+    /// </remarks>
+    protected override void RegisterComponents()
+    {
+        RegisterParameterComponent(new VariableLengthParameterSource<T>(
+            () => PackParameters().Length,
+            PackParameters,
+            UnpackParameters));
+    }
+
     /// <summary>
     /// Gets the model parameters (propensity + outcome coefficients).
     /// </summary>
-    public override Vector<T> GetParameters()
+    private Vector<T> PackParameters()
     {
         if (_propensityCoefficients is null ||
             _outcomeCoefficients1 is null ||
@@ -769,7 +792,7 @@ public class DoublyRobustEstimator<T> : CausalModelBase<T>
     /// <summary>
     /// Sets the model parameters.
     /// </summary>
-    public override void SetParameters(Vector<T> parameters)
+    private void UnpackParameters(Vector<T> parameters)
     {
         if (parameters.Length == 0) return;
 
@@ -790,6 +813,7 @@ public class DoublyRobustEstimator<T> : CausalModelBase<T>
             _outcomeCoefficients0[i] = parameters[idx++];
 
         NumFeatures = propLength - 1;
+        IsFitted = true;
     }
 
     /// <summary>
@@ -800,6 +824,24 @@ public class DoublyRobustEstimator<T> : CausalModelBase<T>
         var newModel = new DoublyRobustEstimator<T>(_trimMin, _trimMax, _useCrossFitting, _numFolds);
         newModel.SetParameters(parameters);
         return newModel;
+    }
+
+    /// <summary>
+    /// Creates a fitted copy, including the learned propensity and outcome coefficients.
+    /// CausalModelBase's metadata round-trip does not carry these estimator state vectors.
+    /// </summary>
+    public override IFullModel<T, Matrix<T>, Vector<T>> DeepCopy()
+    {
+        var copy = new DoublyRobustEstimator<T>(_trimMin, _trimMax, _useCrossFitting, _numFolds);
+        // Keep estimator state as independent vectors without forcing a generic
+        // parameter flatten/round-trip. (Unlike a neural model these vectors are
+        // small, but direct cloning is both clearer and preserves fitted state.)
+        copy._propensityCoefficients = _propensityCoefficients?.Clone();
+        copy._outcomeCoefficients1 = _outcomeCoefficients1?.Clone();
+        copy._outcomeCoefficients0 = _outcomeCoefficients0?.Clone();
+        copy.NumFeatures = NumFeatures;
+        copy.IsFitted = IsFitted;
+        return copy;
     }
 
     /// <summary>

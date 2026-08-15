@@ -71,8 +71,17 @@ namespace AiDotNet.Diffusion.VAE;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Auto-Encoding Variational Bayes", "https://arxiv.org/abs/1312.6114", Year = 2013, Authors = "Kingma & Welling")]
-public class AutoencoderKL<T> : VAEModelBase<T>
+public partial class AutoencoderKL<T> : VAEModelBase<T>
 {
+    /// <inheritdoc />
+    /// <remarks>Registration order is serialization order, and matches the
+    /// concatenation the previous hand-written GetParameters performed.</remarks>
+    protected override void RegisterComponents()
+    {
+        RegisterParameterComponent(_encoder);
+        RegisterParameterComponent(_decoder);
+    }
+
     /// <summary>
     /// Standard Stable Diffusion latent scale factor.
     /// This normalizes the latent distribution for better diffusion performance.
@@ -165,7 +174,6 @@ public class AutoencoderKL<T> : VAEModelBase<T>
     public override double LatentScaleFactor => _latentScaleFactor;
 
     /// <inheritdoc />
-    public override long ParameterCount => _encoder.GetParameters().Length + _decoder.GetParameters().Length;
 
     /// <inheritdoc />
     public override bool SupportsTiling => true;
@@ -404,45 +412,7 @@ public class AutoencoderKL<T> : VAEModelBase<T>
 
     #region Parameter Management
 
-    /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        var encoderParams = _encoder.GetParameters();
-        var decoderParams = _decoder.GetParameters();
 
-        var combined = new T[encoderParams.Length + decoderParams.Length];
-        for (int i = 0; i < encoderParams.Length; i++)
-        {
-            combined[i] = encoderParams[i];
-        }
-        for (int i = 0; i < decoderParams.Length; i++)
-        {
-            combined[encoderParams.Length + i] = decoderParams[i];
-        }
-
-        return new Vector<T>(combined);
-    }
-
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        var encoderParams = _encoder.GetParameters();
-        var decoderParams = _decoder.GetParameters();
-
-        var newEncoderParams = new Vector<T>(encoderParams.Length);
-        for (int i = 0; i < encoderParams.Length && i < parameters.Length; i++)
-        {
-            newEncoderParams[i] = parameters[i];
-        }
-        _encoder.SetParameters(newEncoderParams);
-
-        var newDecoderParams = new Vector<T>(decoderParams.Length);
-        for (int i = 0; i < decoderParams.Length && encoderParams.Length + i < parameters.Length; i++)
-        {
-            newDecoderParams[i] = parameters[encoderParams.Length + i];
-        }
-        _decoder.SetParameters(newDecoderParams);
-    }
 
     #endregion
 

@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Extensions;
 using AiDotNet.Interfaces;
@@ -106,7 +107,8 @@ namespace AiDotNet.LoRA.Adapters;
 /// learning to reason about medical cases using existing knowledge.
 /// </para>
 /// </remarks>
-public class MoRAAdapter<T> : LoRAAdapterBase<T>
+[AutoParameters]
+public partial class MoRAAdapter<T> : LoRAAdapterBase<T>
 {
     /// <summary>
     /// Square matrix M for high-rank adaptation (r×r dimensions).
@@ -115,7 +117,8 @@ public class MoRAAdapter<T> : LoRAAdapterBase<T>
     /// This is the core trainable component of MoRA. Unlike LoRA's rectangular matrices,
     /// M is square with dimensions (r×r), enabling higher-rank updates.
     /// </remarks>
-    private Matrix<T> _matrixM;
+    [TrainableParameter]
+    private Tensor<T> _matrixM;
 
     /// <summary>
     /// Compression matrix that reduces input dimension from d to r (non-trainable).
@@ -124,6 +127,7 @@ public class MoRAAdapter<T> : LoRAAdapterBase<T>
     /// This is a non-trainable orthogonal matrix that compresses the input.
     /// It's generated once during initialization using Gram-Schmidt orthogonalization and remains fixed.
     /// </remarks>
+    [Buffer]
     private readonly Matrix<T> _compressionMatrix;
 
     /// <summary>
@@ -133,6 +137,7 @@ public class MoRAAdapter<T> : LoRAAdapterBase<T>
     /// This is a non-trainable orthogonal matrix that decompresses the output.
     /// In this implementation, it's the transpose of the compression matrix.
     /// </remarks>
+    [Buffer]
     private readonly Matrix<T> _decompressionMatrix;
 
     /// <summary>
@@ -148,16 +153,19 @@ public class MoRAAdapter<T> : LoRAAdapterBase<T>
     /// <summary>
     /// Gradients for matrix M computed during backpropagation.
     /// </summary>
+    [Scratch]
     private Matrix<T>? _matrixMGradient;
 
     /// <summary>
     /// Stored input from the forward pass, needed for gradient computation.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastInput;
 
     /// <summary>
     /// Cached compressed input from forward pass.
     /// </summary>
+    [Scratch]
     private Matrix<T>? _lastCompressed;
 
     /// <summary>
@@ -175,7 +183,7 @@ public class MoRAAdapter<T> : LoRAAdapterBase<T>
         : base(baseLayer, rank, alpha, freezeBaseLayer)
     {
         int inputSize = GetInputShape()[0];
-        int outputSize = GetOutputShape()[0];
+        int outputSize = GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0];
 
         if (inputSize != outputSize)
         {
@@ -197,81 +205,26 @@ public class MoRAAdapter<T> : LoRAAdapterBase<T>
             _squareRank = dimension;
         }
 
-        _matrixM = new Matrix<T>(_squareRank, _squareRank);
+        _matrixM = new Tensor<T>([_squareRank, _squareRank]);
         InitializeMatrixM();
 
         _compressionMatrix = GenerateOrthogonalMatrix(dimension, _squareRank);
         _decompressionMatrix = _compressionMatrix.Transpose();
 
-        // CRITICAL: Reallocate Parameters and ParameterGradients now that _squareRank is set
-        // The base constructor allocated them when _squareRank was 0, creating zero-length buffers
-        RebuildParameterSnapshot();
+        // MoRA uses its square factor and fixed projection buffers instead of the standard LoRA
+        // child. The generator exposes all three without a flat shadow snapshot.
+        FreezeSubLayerParameters(_loraLayer);
     }
 
     private void InitializeMatrixM()
     {
         T stddev = NumOps.Sqrt(NumOps.Divide(NumOps.One, NumOps.FromDouble(_squareRank)));
 
-        for (int i = 0; i < _matrixM.Rows; i++)
+        for (int i = 0; i < _matrixM.Shape[0]; i++)
         {
-            for (int j = 0; j < _matrixM.Columns; j++)
+            for (int j = 0; j < _matrixM.Shape[1]; j++)
             {
                 _matrixM[i, j] = NumOps.Multiply(NumOps.FromDouble(Random.NextGaussian()), stddev);
-            }
-        }
-    }
-
-    /// <summary>
-    /// Reallocates and repopulates the Parameters and ParameterGradients vectors.
-    /// </summary>
-    /// <remarks>
-    /// Called after _squareRank and _matrixM are initialized to fix the zero-length
-    /// buffers allocated by the base constructor when _squareRank was still 0.
-    /// This ensures ParameterCount matches the actual Parameters buffer length.
-    /// </remarks>
-    private void RebuildParameterSnapshot()
-    {
-        int paramCount = ParameterCountHelper.ToFlatVectorSize(ParameterCount);
-        Parameters = new Vector<T>(paramCount);
-        ParameterGradients = new Vector<T>(paramCount);
-
-        UpdateParametersFromLayers();
-    }
-
-    /// <summary>
-    /// Overrides the base parameter packing to use the MoRA matrix M instead of the placeholder LoRA layer.
-    /// This ensures that the public parameter surface is consistent with ParameterCount.
-    /// </summary>
-    protected override void UpdateParametersFromLayers()
-    {
-        int idx = 0;
-
-        // Pack base layer parameters if not frozen
-        if (!_freezeBaseLayer)
-        {
-            Vector<T> baseParams = _baseLayer.GetParameters();
-            for (int i = 0; i < baseParams.Length; i++)
-            {
-                Parameters[idx++] = baseParams[i];
-            }
-        }
-
-        // If _matrixM is not initialized, do nothing.
-        // RebuildParameterSnapshot will be called later to correctly pack the parameters.
-        if (_matrixM == null)
-        {
-            return;
-        }
-
-        // Pack _matrixM parameters
-        for (int row = 0; row < _matrixM.Rows; row++)
-        {
-            for (int col = 0; col < _matrixM.Columns; col++)
-            {
-                if (idx < Parameters.Length)
-                {
-                    Parameters[idx++] = _matrixM[row, col];
-                }
             }
         }
     }
@@ -359,12 +312,12 @@ public class MoRAAdapter<T> : LoRAAdapterBase<T>
     protected override LoRALayer<T> CreateLoRALayer(int rank, double alpha)
     {
         int inputSize = GetInputShape()[0];
-        int outputSize = GetOutputShape()[0];
+        int outputSize = GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0];
         // Minimal rank=1 to minimize memory overhead of unused layer
         return new LoRALayer<T>(inputSize, outputSize, 1, alpha);
     }
 
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         _lastInput = input.Clone();
         Tensor<T> baseOutput = _baseLayer.Forward(input);
@@ -384,7 +337,7 @@ public class MoRAAdapter<T> : LoRAAdapterBase<T>
         Matrix<T> compressed = inputMatrix.Multiply(_compressionMatrix);
         _lastCompressed = compressed;
 
-        Matrix<T> transformed = compressed.Multiply(_matrixM);
+        Matrix<T> transformed = compressed.Multiply(_matrixM.ToMatrix());
         Matrix<T> decompressed = transformed.Multiply(_decompressionMatrix);
 
         T scalingFactor = NumOps.FromDouble(Alpha);
@@ -417,9 +370,9 @@ public class MoRAAdapter<T> : LoRAAdapterBase<T>
             return;
         }
 
-        for (int i = 0; i < _matrixM.Rows; i++)
+        for (int i = 0; i < _matrixM.Shape[0]; i++)
         {
-            for (int j = 0; j < _matrixM.Columns; j++)
+            for (int j = 0; j < _matrixM.Shape[1]; j++)
             {
                 T update = NumOps.Multiply(_matrixMGradient[i, j], learningRate);
                 _matrixM[i, j] = NumOps.Subtract(_matrixM[i, j], update);
@@ -431,111 +384,19 @@ public class MoRAAdapter<T> : LoRAAdapterBase<T>
             _baseLayer.UpdateParameters(learningRate);
         }
 
-        // Rebuild Parameters buffer to reflect updated _matrixM and _baseLayer
-        RebuildParameterSnapshot();
-    }
-
-    /// <summary>
-    /// Gets the current parameter values (base layer + MoRA matrix M).
-    /// </summary>
-    /// <returns>A cloned vector containing all parameters.</returns>
-    /// <remarks>
-    /// <para>
-    /// Since MoRA does not use the standard LoRA layer architecture, this method overrides
-    /// the base implementation to pack parameters from the base layer (if not frozen) and
-    /// the square matrix M directly.
-    /// </para>
-    /// </remarks>
-    public override Vector<T> GetParameters()
-    {
-        return Parameters.Clone();
-    }
-
-    /// <summary>
-    /// Sets the parameter values (base layer + MoRA matrix M).
-    /// </summary>
-    /// <param name="parameters">Parameter vector to set.</param>
-    /// <exception cref="ArgumentException">Thrown if parameter count doesn't match ParameterCount.</exception>
-    /// <remarks>
-    /// <para>
-    /// This method unpacks the parameter vector into the base layer (if not frozen) and
-    /// the square matrix M. The parameter layout is:
-    /// - Base layer parameters (if !_freezeBaseLayer): [0 .. baseLayerParamCount)
-    /// - Matrix M parameters (row-major): [baseLayerParamCount .. ParameterCount)
-    /// </para>
-    /// </remarks>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (parameters.Length != ParameterCount)
-        {
-            throw new ArgumentException($"Expected {ParameterCount} parameters, but got {parameters.Length}", nameof(parameters));
-        }
-
-        // Clone into Parameters buffer
-        Parameters = parameters.Clone();
-
-        int idx = 0;
-
-        // Unpack base layer parameters if not frozen
-        if (!_freezeBaseLayer)
-        {
-            int baseParamCount = checked((int)_baseLayer.ParameterCount);
-            Vector<T> baseParams = new Vector<T>(baseParamCount);
-            for (int i = 0; i < baseParamCount; i++)
-            {
-                baseParams[i] = parameters[idx++];
-            }
-            _baseLayer.SetParameters(baseParams);
-        }
-
-        // Unpack matrix M parameters (row-major order)
-        for (int i = 0; i < _matrixM.Rows; i++)
-        {
-            for (int j = 0; j < _matrixM.Columns; j++)
-            {
-                _matrixM[i, j] = parameters[idx++];
-            }
-        }
-    }
-
-    public override long ParameterCount
-    {
-        get
-        {
-            // During base class construction, _squareRank is not yet initialized (it's 0).
-            // In this phase, we need to return a parameter count that satisfies the base class,
-            // which includes the base layer's parameters and the placeholder LoRA layer's parameters.
-            if (_squareRank == 0)
-            {
-                int baseLayerParams = _baseLayer != null && !_freezeBaseLayer ? (int)(_baseLayer.ParameterCount) : 0;
-                // The _loraLayer is created in CreateLoRALayer, so it should be available.
-                // Its parameter count is needed for the base class's internal parameter management.
-                // CreateLoRALayer uses rank=1 for the placeholder LoRA layer.
-                int loraLayerParams = (int)(_loraLayer?.ParameterCount ?? (GetInputShape()[0] * 1 + GetOutputShape()[0] * 1));
-                return baseLayerParams + loraLayerParams;
-            }
-            else
-            {
-                // After MoRAAdapter's constructor has run and _squareRank is initialized,
-                // the actual trainable parameters are from _matrixM and the base layer (if not frozen).
-                int moraParams = _squareRank * _squareRank;
-                int baseParams = _baseLayer != null && !_freezeBaseLayer ? (int)(_baseLayer.ParameterCount) : 0;
-                return baseParams + moraParams;
-            }
-        }
     }
 
     public override ILayer<T> MergeToOriginalLayer()
     {
         // Compute full MoRA adaptation: R_d * M * R_c^T
-        Matrix<T> temp = _matrixM.Multiply(_compressionMatrix.Transpose());
+        Matrix<T> temp = _matrixM.ToMatrix().Multiply(_compressionMatrix.Transpose());
         Matrix<T> fullAdaptation = _decompressionMatrix.Multiply(temp);
 
         T scalingFactor = NumOps.FromDouble(Alpha);
         fullAdaptation = fullAdaptation.Multiply(scalingFactor);
 
         int inputSize = GetInputShape()[0];
-        int outputSize = GetOutputShape()[0];
+        int outputSize = GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0];
 
         // Get the original base layer weights
         DenseLayer<T>? denseBase = _baseLayer as DenseLayer<T>;

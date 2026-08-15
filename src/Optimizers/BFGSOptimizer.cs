@@ -309,12 +309,22 @@ public class BFGSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
     /// </remarks>
     public override Vector<T> UpdateParameters(Vector<T> parameters, Vector<T> gradient)
     {
+        if (parameters.Length != gradient.Length)
+        {
+            throw new ArgumentException(
+                $"Parameter vector length ({parameters.Length}) must match gradient vector length ({gradient.Length}).",
+                nameof(gradient));
+        }
+
         _iteration++;
 
         // Initialize inverse Hessian as identity on first call
         if (_inverseHessian is null || _inverseHessian.Rows != parameters.Length)
         {
             _inverseHessian = Matrix<T>.CreateIdentity(parameters.Length);
+            _previousGradient = null;
+            _previousParameters = null;
+            _iteration = 0;
         }
 
         // Compute gradient norm for adaptive scaling
@@ -368,7 +378,11 @@ public class BFGSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
 
         // Compute search direction: d = -H * g
         var direction = _inverseHessian.Multiply(clippedGradient);
-        direction = (Vector<T>)Engine.Multiply(direction, NumOps.Negate(NumOps.One));
+        var directionSpan = direction.AsWritableSpan();
+        for (int i = 0; i < directionSpan.Length; i++)
+        {
+            directionSpan[i] = NumOps.Negate(directionSpan[i]);
+        }
 
         // Limit step size to prevent overshooting
         // The maximum step should be proportional to parameter magnitudes
@@ -379,23 +393,38 @@ public class BFGSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
             : NumOps.FromDouble(1.0);
 
         // Compute the proposed step
-        var scaledDirection = (Vector<T>)Engine.Multiply(direction, CurrentLearningRate);
-        var scaledNorm = scaledDirection.Norm();
+        for (int i = 0; i < directionSpan.Length; i++)
+        {
+            directionSpan[i] = NumOps.Multiply(directionSpan[i], CurrentLearningRate);
+        }
+        var scaledNorm = direction.Norm();
 
         // If step is too large, scale it down
         if (NumOps.GreaterThan(scaledNorm, maxStepNorm))
         {
             var stepScale = NumOps.Divide(maxStepNorm, scaledNorm);
-            scaledDirection = (Vector<T>)Engine.Multiply(scaledDirection, stepScale);
+            for (int i = 0; i < directionSpan.Length; i++)
+            {
+                directionSpan[i] = NumOps.Multiply(directionSpan[i], stepScale);
+            }
         }
 
-        var newParameters = (Vector<T>)Engine.Add(parameters, scaledDirection);
+        var parameterSpan = parameters.AsSpan();
+        for (int i = 0; i < directionSpan.Length; i++)
+        {
+            directionSpan[i] = NumOps.Add(parameterSpan[i], directionSpan[i]);
+        }
 
         // Store state for next iteration
-        _previousParameters = new Vector<T>(parameters);
-        _previousGradient = new Vector<T>(clippedGradient);
+        if (_previousParameters is null || _previousParameters.Length != parameters.Length)
+        {
+            _previousParameters = new Vector<T>(parameters.Length, skipZeroInit: true);
+            _previousGradient = new Vector<T>(parameters.Length, skipZeroInit: true);
+        }
+        parameterSpan.CopyTo(_previousParameters.AsWritableSpan());
+        clippedGradient.AsSpan().CopyTo(_previousGradient!.AsWritableSpan());
 
-        return newParameters;
+        return direction;
     }
 
     /// <summary>

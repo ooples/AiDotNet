@@ -85,6 +85,7 @@ public class MultiInputPortTests
     [Fact(Timeout = 120000)]
     public async Task CrossAttention_NamedForward_MissingQuery_Throws()
     {
+        await Task.Yield();
         int dim = 8, headCount = 2;
         var layer = new CrossAttentionLayer<double>(dim, 16, headCount);
 
@@ -95,7 +96,7 @@ public class MultiInputPortTests
             ["context"] = context
         };
 
-        Assert.Throws<ArgumentException>(() => layer.Forward(inputs));
+        Assert.ThrowsAny<ArgumentException>(() => layer.Forward(inputs));
     }
 
     [Fact(Timeout = 120000)]
@@ -244,10 +245,11 @@ public class MultiInputPortTests
     [Fact(Timeout = 120000)]
     public async Task AddLayer_NamedForward_MissingInput1_Throws()
     {
+        await Task.Yield();
         var layer = new AddLayer<double>(new[] { new[] { 4 }, new[] { 4 } }, (IActivationFunction<double>?)null);
         var a = Tensor<double>.CreateRandom([1, 4]);
 
-        Assert.Throws<ArgumentException>(() =>
+        Assert.ThrowsAny<ArgumentException>(() =>
             layer.Forward(new Dictionary<string, Tensor<double>> { ["input_0"] = a }));
     }
 

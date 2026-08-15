@@ -105,9 +105,18 @@ namespace AiDotNet.Diffusion.ThreeD;
 [ModelTask(ModelTask.ThreeDGeneration)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("DreamGaussian: Generative Gaussian Splatting for Efficient 3D Content Creation", "https://arxiv.org/abs/2310.08529", Year = 2024, Authors = "Tang et al.")]
-public class DreamGaussianModel<T> : ThreeDDiffusionModelBase<T>
+[ResearchPaper("DreamGaussian: Generative Gaussian Splatting for Efficient 3D Content Creation", "https://arxiv.org/abs/2309.16653", Year = 2024, Authors = "Tang et al.")]
+public partial class DreamGaussianModel<T> : ThreeDDiffusionModelBase<T>
 {
+    /// <inheritdoc />
+    /// <remarks>Registration order is serialization order, and matches the
+    /// concatenation the previous hand-written GetParameters performed.</remarks>
+    protected override void RegisterComponents()
+    {
+        RegisterParameterComponent(_unet);
+        RegisterParameterComponent(_vae);
+    }
+
     #region Constants
 
     /// <summary>
@@ -181,8 +190,7 @@ public class DreamGaussianModel<T> : ThreeDDiffusionModelBase<T>
     /// <inheritdoc />
     public override bool SupportsScoreDistillation => true;
 
-    /// <inheritdoc />
-    public override long ParameterCount { get { EnsureInitialized(); return _unet.ParameterCount + _vae.ParameterCount; } }
+
 
     #endregion
 
@@ -306,58 +314,7 @@ public class DreamGaussianModel<T> : ThreeDDiffusionModelBase<T>
 
     #region IParameterizable Implementation
 
-    /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        EnsureInitialized();
-        var unetParams = _unet.GetParameters();
-        var vaeParams = _vae.GetParameters();
 
-        var combined = new Vector<T>(unetParams.Length + vaeParams.Length);
-
-        for (int i = 0; i < unetParams.Length; i++)
-        {
-            combined[i] = unetParams[i];
-        }
-
-        for (int i = 0; i < vaeParams.Length; i++)
-        {
-            combined[unetParams.Length + i] = vaeParams[i];
-        }
-
-        return combined;
-    }
-
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        EnsureInitialized();
-        var unetCount = checked((int)_unet.ParameterCount);
-        var vaeCount = checked((int)_vae.ParameterCount);
-
-        if (parameters.Length != unetCount + vaeCount)
-        {
-            throw new ArgumentException(
-                $"Expected {unetCount + vaeCount} parameters, got {parameters.Length}.",
-                nameof(parameters));
-        }
-
-        var unetParams = new Vector<T>(unetCount);
-        var vaeParams = new Vector<T>(vaeCount);
-
-        for (int i = 0; i < unetCount; i++)
-        {
-            unetParams[i] = parameters[i];
-        }
-
-        for (int i = 0; i < vaeCount; i++)
-        {
-            vaeParams[i] = parameters[unetCount + i];
-        }
-
-        _unet.SetParameters(unetParams);
-        _vae.SetParameters(vaeParams);
-    }
 
     #endregion
 

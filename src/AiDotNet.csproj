@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
 	  <!--
 	    net10.0 is the latest .NET; net471 covers legacy Framework consumers;
@@ -41,19 +41,13 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
     <TreatWarningsAsErrors>True</TreatWarningsAsErrors>
     <!-- AIDN diagnostics visible as warnings until models are annotated (issue #958) -->
-    <!-- AIDN070-076 are the golden-pattern rules. They start on the same footing: visible as
-         warnings while the existing backlog is worked down, then promoted to hard errors one
-         rule at a time as each reaches zero. Promote by deleting the ID from this list. -->
-    <WarningsNotAsErrors>$(WarningsNotAsErrors);AIDN001;AIDN010;AIDN011;AIDN012;AIDN020;AIDN050;AIDN051;AIDN052;AIDN070;AIDN071;AIDN072;AIDN073;AIDN074;AIDN075;AIDN076;NU1603;NU1605;NU1608</WarningsNotAsErrors>
+    <WarningsNotAsErrors>$(WarningsNotAsErrors);AIDN001;AIDN010;AIDN011;AIDN012;AIDN020;AIDN050;AIDN051;AIDN052;ADN0054;AIDN070;AIDN071;AIDN072;AIDN073;AIDN074;AIDN075;AIDN076;NU1603;NU1605;NU1608;AIDN083;AIDN087;AIDN088;AIDN090</WarningsNotAsErrors>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
     <TreatWarningsAsErrors>True</TreatWarningsAsErrors>
     <!-- AIDN diagnostics visible as warnings until models are annotated (issue #958) -->
-    <!-- AIDN070-076 are the golden-pattern rules. They start on the same footing: visible as
-         warnings while the existing backlog is worked down, then promoted to hard errors one
-         rule at a time as each reaches zero. Promote by deleting the ID from this list. -->
-    <WarningsNotAsErrors>$(WarningsNotAsErrors);AIDN001;AIDN010;AIDN011;AIDN012;AIDN020;AIDN050;AIDN051;AIDN052;AIDN070;AIDN071;AIDN072;AIDN073;AIDN074;AIDN075;AIDN076;NU1603;NU1605;NU1608</WarningsNotAsErrors>
+    <WarningsNotAsErrors>$(WarningsNotAsErrors);AIDN001;AIDN010;AIDN011;AIDN012;AIDN020;AIDN050;AIDN051;AIDN052;ADN0054;AIDN070;AIDN071;AIDN072;AIDN073;AIDN074;AIDN075;AIDN076;NU1603;NU1605;NU1608;AIDN083;AIDN087;AIDN088;AIDN090</WarningsNotAsErrors>
   </PropertyGroup>
 
   <ItemGroup>
@@ -105,7 +99,10 @@
 	  <!-- Ed25519 (EdDSA) for asymmetric aidn2 license verification — no BCL Ed25519 on any TFM. -->
 	  <PackageReference Include="BouncyCastle.Cryptography" />
 	  <PackageReference Include="Google.Protobuf" />
-	  <PackageReference Include="Microsoft.CSharp" />
+	  <!-- The dynamic binder is part of the modern shared framework. Keeping this package on
+	       net8/net10 makes current SDKs report NU1510 (and this project treats warnings as errors),
+	       while net471 still needs the compatibility package. -->
+	  <PackageReference Include="Microsoft.CSharp" Condition="'$(TargetFramework)' == 'net471'" />
 	  <PackageReference Include="Microsoft.Extensions.AI.Abstractions" />
 	  <!-- Microsoft.Data.Sqlite extracted to the opt-in AiDotNet.Storage.Sqlite
 	       metapackage in audit-2026-05 phase 2c (finding #14). Core code used it

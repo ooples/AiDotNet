@@ -40,9 +40,25 @@ namespace AiDotNet.SpeechRecognition.LLMIntegrated;
 [ModelTask(ModelTask.SpeechRecognition)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("FireRedASR: Open-Source Industrial-Grade Mandarin Speech Recognition", "https://arxiv.org/abs/2501.07755", Year = 2025, Authors = "FireRed Team")]
+// Citation URL corrected: the arXiv id is 2501.14350, not 2501.07755. Title completed to the published
+// form, which names the encoder-decoder-to-LLM progression that distinguishes the paper's two variants
+// (FireRedASR-LLM and FireRedASR-AED).
+[ResearchPaper("FireRedASR: Open-Source Industrial-Grade Mandarin Speech Recognition Models from Encoder-Decoder to LLM Integration",
+    "https://arxiv.org/abs/2501.14350",
+    Year = 2025,
+    Authors = "Kai-Tuo Xu, Feng-Long Xie, Xu Tang, Yao Hu")]
 public class FireRedASR<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// Measured from this model's own output head. <c>InitializeLayers</c> builds
+    /// <c>LayerHelper&lt;T&gt;.CreateDefaultConformerLayers(..., vocabSize: _options.VocabSize, ...)</c>
+    /// (the encoder-decoder AED variant reuses the Conformer factory), whose LAST emitted layer is
+    /// <c>new DenseLayer&lt;T&gt;(vocabSize, identity)</c>. <c>PredictCore</c> folds the layer stack and
+    /// <c>PostprocessOutput</c> is the identity.
+    /// </remarks>
+    protected override int OutputFeatureWidth => _options.VocabSize;
+
     private readonly FireRedASROptions _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private bool _useNativeMode;
@@ -194,7 +210,7 @@ public class FireRedASR<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expected);
+            TrainWithTape(input, expected, _optimizer);
         }
         finally
         {
@@ -202,13 +218,11 @@ public class FireRedASR<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
         }
     }
 
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        if (!_useNativeMode) throw new NotSupportedException("ONNX mode.");
-        int idx = 0;
-        foreach (var l in Layers) { int c = (int)l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; }
-    }
-
+    /// <inheritdoc />
+    /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
+    /// write on every parameter surface, so the guard is stated once here instead of being
+    /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
+    protected override bool SupportsParameterMutation => _useNativeMode;
     protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio)
     {
         if (MelSpec is not null) return MelSpec.Forward(rawAudio);
@@ -264,8 +278,8 @@ public class FireRedASR<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
         if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new FireRedASR<T>(Architecture, mp, _options);
-        return new FireRedASR<T>(Architecture, _options);
+            return new FireRedASR<T>(Architecture, mp, new FireRedASROptions(_options));
+        return new FireRedASR<T>(Architecture, new FireRedASROptions(_options));
     }
 
     /// <summary>

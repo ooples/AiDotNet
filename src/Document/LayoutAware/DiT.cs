@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Document.Interfaces;
 using AiDotNet.Document.Options;
 using AiDotNet.Enums;
@@ -54,7 +54,7 @@ namespace AiDotNet.Document.LayoutAware;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("DiT: Self-supervised Pre-training for Document Image Transformer", "https://doi.org/10.48550/arXiv.2203.02378", Year = 2022, Authors = "Junlong Li, Yiheng Xu, Tengchao Lv, Lei Cui, Cha Zhang, Furu Wei")]
-public class DiT<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, IDocumentClassifier<T>
+public partial class DiT<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, IDocumentClassifier<T>
 {
     private readonly DiTOptions _options;
 
@@ -65,7 +65,7 @@ public class DiT<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, IDocumen
 
     private readonly bool _useNativeMode;
     private readonly InferenceSession? _onnxSession;
-    private readonly IOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private readonly int _hiddenDim;
     private readonly int _numLayers;
     private readonly int _numHeads;
@@ -78,9 +78,9 @@ public class DiT<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, IDocumen
     private readonly List<ILayer<T>> _transformerLayers = [];
     private readonly List<ILayer<T>> _classificationHead = [];
 
-    // Learnable embeddings
-    private Tensor<T>? _positionEmbeddings;
-    private Tensor<T>? _clsToken;
+    // The CLS token and the learned position table used to be model fields here. They are now the
+    // PrependCLSTokenLayer and LearnedPositionalEmbeddingLayer in the stack, where the forward pass
+    // reads them -- see LayerHelper.CreateDefaultDiTLayers.
 
     #endregion
 
@@ -144,7 +144,7 @@ public class DiT<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, IDocumen
         int numLayers = 12,
         int numHeads = 12,
         string modelSize = "base",
-        IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         DiTOptions? options = null)
         : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
@@ -196,7 +196,7 @@ public class DiT<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, IDocumen
         int numLayers = 12,
         int numHeads = 12,
         string modelSize = "base",
-        IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         DiTOptions? options = null)
         : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
@@ -216,7 +216,6 @@ public class DiT<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, IDocumen
         ImageSize = imageSize;
 
         InitializeLayers();
-        InitializeEmbeddings();
     }
 
     #endregion
@@ -245,29 +244,6 @@ public class DiT<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, IDocumen
             patchSize: _patchSize,
             imageSize: ImageSize,
             numClasses: _numClasses));
-    }
-
-    private void InitializeEmbeddings()
-    {
-        var random = RandomHelper.CreateSeededRandom(42);
-        int numPatches = (ImageSize / _patchSize) * (ImageSize / _patchSize);
-
-        _positionEmbeddings = Tensor<T>.CreateDefault([numPatches + 1, _hiddenDim], NumOps.Zero);
-        _clsToken = Tensor<T>.CreateDefault([1, _hiddenDim], NumOps.Zero);
-
-        InitializeWithSmallRandomValues(_positionEmbeddings, random, 0.02);
-        InitializeWithSmallRandomValues(_clsToken, random, 0.02);
-    }
-
-    private void InitializeWithSmallRandomValues(Tensor<T> tensor, Random random, double stdDev)
-    {
-        for (int i = 0; i < tensor.Data.Length; i++)
-        {
-            double u1 = 1.0 - random.NextDouble();
-            double u2 = 1.0 - random.NextDouble();
-            double randStdNormal = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Sin(2.0 * Math.PI * u2);
-            tensor.Data.Span[i] = NumOps.FromDouble(randStdNormal * stdDev);
-        }
     }
 
     #endregion
@@ -563,32 +539,28 @@ public class DiT<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, IDocumen
             throw new NotSupportedException("Training not supported in ONNX mode.");
 
         SetTrainingMode(true);
-        TrainWithTape(input, expectedOutput);
-
-        UpdateParameters(CollectGradients());
-        SetTrainingMode(false);
+        try
+        {
+            // TrainWithTape performs the backward pass and optimizer update. Applying the
+            // hand-collected gradients again treated gradients as replacement parameter values.
+            TrainWithTape(input, expectedOutput, _optimizer);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
     }
 
-    /// <inheritdoc/>
-    public override void UpdateParameters(Vector<T> gradients)
-    {
-        if (!_useNativeMode)
-            throw new NotSupportedException("Parameter updates not supported in ONNX mode.");
-
-        var currentParams = GetParameters();
-        T lr = NumOps.FromDouble(0.00005);
-        
-        currentParams = Engine.Subtract(currentParams, Engine.Multiply(gradients, lr));
-        SetParameters(currentParams);
-    }
-
-    private Vector<T> CollectGradients()
-    {
-        var grads = new List<T>();
-        foreach (var layer in Layers)
-            grads.AddRange(layer.GetParameterGradients());
-        return new Vector<T>([.. grads]);
-    }
+    /// <summary>
+    /// Parameters cannot be written while the model is backed by a loaded ONNX graph: the weights
+    /// belong to that graph, not to this instance.
+    /// </summary>
+    /// <remarks>
+    /// Replaces a hand-written throw that used to sit inside UpdateParameters. The base checks this
+    /// on every mutating entry point rather than the one member the throw happened to guard, and
+    /// reading -- ParameterCount and GetParameters -- stays available either way.
+    /// </remarks>
+    protected override bool SupportsParameterMutation => _useNativeMode;
 
     #endregion
 

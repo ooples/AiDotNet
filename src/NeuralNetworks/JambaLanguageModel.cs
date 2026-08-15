@@ -37,7 +37,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Jamba: A Hybrid Transformer-Mamba Language Model", "https://arxiv.org/abs/2403.19887", Year = 2024, Authors = "Opher Lieber, Barak Lenz, Hofit Bata, Gal Cohen, Jhonathan Osin, Itay Dalmedigos, Erez Safahi, Shaked Meirom, Yonatan Belinkov, Shai Shalev-Shwartz, Omri Abend, Raz Alon, Tomer Asida, Amir Bergman, Roman Glozman, Michael Gokhman, Avashalom Manevich, Nir Ratner, Noam Rozen, Erez Shwartz, Mor Zusman, Yoav Shoham")]
-public class JambaLanguageModel<T> : NeuralNetworkBase<T>
+public class JambaLanguageModel<T> : TokenLanguageModelLayoutBase<T>
 {
     private readonly JambaOptions _options;
     private readonly int _vocabSize;
@@ -126,21 +126,7 @@ public class JambaLanguageModel<T> : NeuralNetworkBase<T>
         });
     }
 
-    public override void UpdateParameters(Vector<T> gradients)
-    {
-        if (gradients.Length != ParameterCount)
-        {
-            throw new ArgumentException(
-                $"Expected {ParameterCount} gradients, but got {gradients.Length}",
-                nameof(gradients));
-        }
-
-        var currentParams = GetParameters();
-        T learningRate = NumOps.FromDouble(0.001);
-        currentParams = Engine.Subtract(currentParams, Engine.Multiply(gradients, learningRate));
-        SetParameters(currentParams);
-    }
-
+    // UpdateParameters applied a GRADIENT STEP, but its one-argument form is the value setter and every caller passes values -- the override corrupted the model. Removed under AIDN082.
     public override ModelMetadata<T> GetModelMetadata()
     {
         return new ModelMetadata<T>

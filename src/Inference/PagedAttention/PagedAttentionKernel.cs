@@ -26,7 +26,7 @@ namespace AiDotNet.Inference.PagedAttention;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for tensor computations.</typeparam>
-internal class PagedAttentionKernel<T>
+public class PagedAttentionKernel<T>
 {
     private readonly PagedKVCache<T> _kvCache;
     private readonly PagedAttentionConfig _config;
@@ -720,7 +720,7 @@ internal class PagedAttentionKernel<T>
 /// <summary>
 /// Configuration for paged attention kernel.
 /// </summary>
-internal class PagedAttentionConfig
+public class PagedAttentionConfig
 {
     /// <summary>
     /// Number of KEY/VALUE attention heads. This is the head count the paged KV cache physically stores, so

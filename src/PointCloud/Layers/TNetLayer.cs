@@ -1,4 +1,7 @@
-using AiDotNet.Helpers;
+﻿using AiDotNet.Helpers;
+// File-level, deliberately: two Tensors namespaces in the project's global usings also define a
+// TensorLayout, so [TensorLayout(...)] only binds when this import shadows them from a nearer scope.
+using AiDotNet.Attributes;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
@@ -39,7 +42,24 @@ namespace AiDotNet.PointCloud.Layers;
 /// - T-Net learns: "Rotate this cloud 45 degrees to align it"
 /// - Output: Aligned point cloud in standard orientation
 /// </remarks>
-public class TNetLayer<T> : LayerBase<T>
+// Rank 2 [points, features] - the form the constructor declares, base([0, numFeatures],
+// [0, numFeatures]), and the only rank ApplyTransformation can read: it indexes Shape[0] and Shape[1]
+// and walks the buffer as `n * numFeatures + f`.
+//
+// The point axis is Length rather than Time: the ordering of points in a cloud carries no temporal
+// meaning, and nothing here masks or recurs over it.
+//
+// SHAPE-PRESERVING despite the name "transformation network". The predicted matrix is
+// _transformDim x _transformDim and is applied to the LEADING _transformDim features only; the loop
+// that follows copies "remaining features if numFeatures > transformDim" straight across. So
+// ApplyTransformation returns `new Tensor<T>(output, [numPoints, numFeatures])` - the input's own
+// dimensions. _transformDim sizes an internal matrix, not the output, which is why it does not appear
+// in this contract. Matching layouts let the generator derive Same(role) for both axes.
+[TensorLayout(TensorAxis.Length, TensorAxis.Features, Direction = TensorLayoutDirection.Input,
+    Note = "Point cloud as [numPoints, numFeatures]; the first _transformDim features are the transformed coordinates.")]
+[TensorLayout(TensorAxis.Length, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
+[AutoParameters]
+public partial class TNetLayer<T> : LayerBase<T>, IShapeContract
 {
     private readonly int _transformDim; // Dimension of transformation (e.g., 3 for XYZ, 64 for features)
     private readonly int _numFeatures;
@@ -121,8 +141,21 @@ public class TNetLayer<T> : LayerBase<T>
         Parameters = GetParameters();
     }
 
-    public override Tensor<T> Forward(Tensor<T> input)
+    // Sub-layer registration was hand-written here because this class was not partial, so
+    // TrainableParameterGenerator emitted no EnsureSubLayersRegistered() for it. It is partial now
+    // and the generator supplies that method, which collided with this copy (CS0102). The
+    // generated version registers the same children -- the _mlpLayers and _fcLayers collections and
+    // _maxPooling -- from EnsureInitialized, exactly as this did.
+    //
+    // The timing note this comment carried is preserved and still respected: registration must NOT
+    // happen in the constructor, because that puts the children in front of the pre-step
+    // buffer-view save/restore walk alongside the parent that already handles them, which silently
+    // breaks training. The generator registers lazily, never from a constructor.
+
+
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
+        EnsureInitializedFromInput(input);
         _lastInput = input;
 
         Tensor<T> features = input;
@@ -229,38 +262,6 @@ public class TNetLayer<T> : LayerBase<T>
         }
     }
 
-    public override Vector<T> GetParameters()
-    {
-        int totalParams = ParameterCountHelper.ToFlatVectorSize(ParameterCount);
-        var parameters = new Vector<T>(totalParams);
-        int offset = 0;
-
-        foreach (var layer in _mlpLayers)
-        {
-            var layerParameters = layer.GetParameters();
-            for (int i = 0; i < layerParameters.Length; i++)
-            {
-                parameters[offset + i] = layerParameters[i];
-            }
-
-            offset += layerParameters.Length;
-        }
-
-        foreach (var layer in _fcLayers)
-        {
-            var layerParameters = layer.GetParameters();
-            for (int i = 0; i < layerParameters.Length; i++)
-            {
-                parameters[offset + i] = layerParameters[i];
-            }
-
-            offset += layerParameters.Length;
-        }
-
-        Parameters = parameters;
-        return parameters;
-    }
-
     public override void UpdateParameters(Vector<T> parameters)
     {
         int offset = 0;
@@ -288,7 +289,6 @@ public class TNetLayer<T> : LayerBase<T>
 
         Parameters = parameters;
     }
-
     public override void ResetState()
     {
         _lastInput = null;
@@ -305,23 +305,6 @@ public class TNetLayer<T> : LayerBase<T>
         }
 
         _maxPooling.ResetState();
-    }
-
-    public override long ParameterCount
-    {
-        get
-        {
-            int total = 0;
-            foreach (var layer in _mlpLayers)
-            {
-                total += (int)layer.ParameterCount;
-            }
-            foreach (var layer in _fcLayers)
-            {
-                total += (int)layer.ParameterCount;
-            }
-            return total;
-        }
     }
 
     public override bool SupportsTraining => true;

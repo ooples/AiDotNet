@@ -170,16 +170,27 @@ public class ElasticNetLoss<T> : LossFunctionBase<T>
     /// <inheritdoc />
     public override Tensor<T> ComputeTapeLoss(Tensor<T> predicted, Tensor<T> target)
     {
-        // ElasticNet = l1Ratio * MAE + (1 - l1Ratio) * MSE
+        // Keep the tape expression identical to CalculateLoss:
+        //   mean((prediction - target)^2)
+        //   + alpha*l1Ratio*sum(abs(prediction))
+        //   + 0.5*alpha*(1-l1Ratio)*sum(prediction^2).
+        // The previous implementation differentiated a different objective (a convex blend of MAE
+        // and MSE on the residual, with alpha ignored), so its analytical gradient could not match
+        // the public scalar loss even in principle.
         var diff = Engine.TensorSubtract(predicted, target);
-        var absDiff = Engine.TensorAbs(diff);
-        var squared = Engine.TensorMultiply(diff, diff);
         var allAxes = Enumerable.Range(0, diff.Shape.Length).ToArray();
-        var mae = Engine.ReduceMean(absDiff, allAxes, keepDims: false);
-        var mse = Engine.ReduceMean(squared, allAxes, keepDims: false);
-        var scaledL1 = Engine.TensorMultiplyScalar(mae, _l1Ratio);
-        var oneMinusRatio = NumOps.Subtract(NumOps.One, _l1Ratio);
-        var scaledL2 = Engine.TensorMultiplyScalar(mse, oneMinusRatio);
-        return Engine.TensorAdd(scaledL1, scaledL2);
+        var mse = Engine.ReduceMean(Engine.TensorMultiply(diff, diff), allAxes, keepDims: false);
+
+        var predictionL1 = Engine.ReduceSum(Engine.TensorAbs(predicted), allAxes, keepDims: false);
+        var predictionL2Squared = Engine.ReduceSum(
+            Engine.TensorMultiply(predicted, predicted), allAxes, keepDims: false);
+
+        var l1Weight = NumOps.Multiply(_alpha, _l1Ratio);
+        var l2Weight = NumOps.Multiply(
+            NumOps.Multiply(_alpha, NumOps.Subtract(NumOps.One, _l1Ratio)),
+            NumOps.FromDouble(0.5));
+        var l1Term = Engine.TensorMultiplyScalar(predictionL1, l1Weight);
+        var l2Term = Engine.TensorMultiplyScalar(predictionL2Squared, l2Weight);
+        return Engine.TensorAdd(Engine.TensorAdd(mse, l1Term), l2Term);
     }
 }

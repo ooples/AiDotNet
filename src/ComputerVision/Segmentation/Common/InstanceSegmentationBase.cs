@@ -21,9 +21,12 @@ namespace AiDotNet.ComputerVision.Segmentation.Common;
 /// </remarks>
 public abstract class InstanceSegmentationBase<T> : SegmentationModelBase<T>, IInstanceSegmentation<T>
 {
-    private readonly int _maxInstances;
-    private double _confidenceThreshold;
-    private double _nmsThreshold;
+    // protected and mutable so a derived model can read them and restore them on deserialization -
+    // see the note on PanopticSegmentationBase._numStuffClasses for why private/readonly here is what
+    // makes a base unadoptable.
+    protected int _maxInstances;
+    protected double _confidenceThreshold;
+    protected double _nmsThreshold;
 
     /// <inheritdoc/>
     public int MaxInstances => _maxInstances;

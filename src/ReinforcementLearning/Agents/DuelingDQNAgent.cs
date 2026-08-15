@@ -1,4 +1,4 @@
-using AiDotNet.ActivationFunctions;
+﻿using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
@@ -64,8 +64,15 @@ namespace AiDotNet.ReinforcementLearning.Agents.DuelingDQN;
     "https://arxiv.org/abs/1511.06581",
     Year = 2016,
     Authors = "Wang, Z., Schaul, T., Hessel, M., van Hasselt, H., Lanctot, M., & de Freitas, N.")]
-public class DuelingDQNAgent<T> : DeepReinforcementLearningAgentBase<T>, IActionValueProvider<T>
+public partial class DuelingDQNAgent<T> : DeepReinforcementLearningAgentBase<T>, IActionValueProvider<T>
 {
+
+    /// <inheritdoc />
+    /// <remarks>The online dueling Q-network only. Its target network is a periodically-synced copy, and the hand-written surface excluded it -- including it now would change the vector length and invalidate every existing checkpoint. The flatten/unflatten plumbing that used to live here moved onto DuelingNetwork itself, which implements IParameterSource over the SAME shared -> value -> advantage layer order its GetFlattenedParameters always used.</remarks>
+    protected override void RegisterComponents()
+    {
+        RegisterParameterComponent(_qNetwork);
+    }
     private DuelingDQNOptions<T> _options;
 
     /// <inheritdoc/>
@@ -73,6 +80,7 @@ public class DuelingDQNAgent<T> : DeepReinforcementLearningAgentBase<T>, IAction
     private readonly UniformReplayBuffer<T, Vector<T>, Vector<T>> _replayBuffer;
 
     private DuelingNetwork<T> _qNetwork;
+    [Buffer]
     private DuelingNetwork<T> _targetNetwork;
     private double _epsilon;
     private int _steps;
@@ -298,26 +306,6 @@ public class DuelingDQNAgent<T> : DeepReinforcementLearningAgentBase<T>, IAction
     }
 
     /// <inheritdoc/>
-    public override Vector<T> GetParameters()
-    {
-        var flatParams = _qNetwork.GetFlattenedParameters();
-        var vector = new Vector<T>(flatParams.Rows);
-        for (int i = 0; i < flatParams.Rows; i++)
-            vector[i] = flatParams[i, 0];
-        return vector;
-    }
-
-    /// <inheritdoc/>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        _qNetwork.EnsureInitialized();
-        var matrix = new Matrix<T>(parameters.Length, 1);
-        for (int i = 0; i < parameters.Length; i++)
-            matrix[i, 0] = parameters[i];
-        _qNetwork.SetFlattenedParameters(matrix);
-    }
-
-    /// <inheritdoc/>
     public override IFullModel<T, Vector<T>, Vector<T>> Clone()
     {
         var clonedOptions = new DuelingDQNOptions<T>
@@ -344,6 +332,8 @@ public class DuelingDQNAgent<T> : DeepReinforcementLearningAgentBase<T>, IAction
         clone.SetParameters(GetParameters());
         return clone;
     }
+
+
 
     // Helper methods
     private void CopyNetworkWeights(DuelingNetwork<T> source, DuelingNetwork<T> target)
@@ -396,7 +386,7 @@ public class DuelingDQNAgent<T> : DeepReinforcementLearningAgentBase<T>, IAction
 /// <summary>
 /// Custom dueling network architecture that separates value and advantage streams.
 /// </summary>
-public class DuelingNetwork<T>
+internal class DuelingNetwork<T> : IParameterSource<T>
 {
     private readonly INumericOperations<T> _numOps;
     private readonly List<DenseLayer<T>> _sharedLayers;
@@ -701,6 +691,50 @@ public class DuelingNetwork<T>
         return result;
     }
 
+    /// <inheritdoc />
+    /// <remarks>
+    /// Sized from the layers rather than from <see cref="GetFlattenedParameters"/>, which would
+    /// have to build the whole flattened matrix just to report its height.
+    /// </remarks>
+    public long ParameterCount
+    {
+        get
+        {
+            EnsureInitialized();
+            long total = 0;
+            foreach (var layer in _sharedLayers) total += layer.ParameterCount;
+            foreach (var layer in _valueLayers) total += layer.ParameterCount;
+            foreach (var layer in _advantageLayers) total += layer.ParameterCount;
+            return total;
+        }
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Delegates to <see cref="GetFlattenedParameters"/> so the shared -> value -> advantage order
+    /// this network has always serialized is preserved exactly. This is the plumbing DuelingDQNAgent
+    /// used to hand-write; it belongs on the network that owns the layers, which is what lets the
+    /// agent simply register this component and inherit all three surfaces.
+    /// </remarks>
+    public Vector<T> GetParameters()
+    {
+        EnsureInitialized();
+        var flat = GetFlattenedParameters();
+        var result = new Vector<T>(flat.Rows);
+        for (int i = 0; i < flat.Rows; i++) result[i] = flat[i, 0];
+        return result;
+    }
+
+    /// <inheritdoc />
+    public void SetParameters(Vector<T> parameters)
+    {
+        if (parameters is null) throw new ArgumentNullException(nameof(parameters));
+        EnsureInitialized();
+        var matrix = new Matrix<T>(parameters.Length, 1);
+        for (int i = 0; i < parameters.Length; i++) matrix[i, 0] = parameters[i];
+        SetFlattenedParameters(matrix);
+    }
+
     public Matrix<T> GetFlattenedParameters()
     {
         var paramsList = new List<T>();
@@ -810,21 +844,21 @@ public class DuelingNetwork<T>
         foreach (var layer in _sharedLayers)
         {
             writer.Write(layer.GetInputShape()[0]);
-            writer.Write(layer.GetOutputShape()[0]);
+            writer.Write(layer.GetOutputLayerShape().RequireConcrete("Recording concrete layer geometry")[0]);
         }
 
         // Write layer sizes for value layers
         foreach (var layer in _valueLayers)
         {
             writer.Write(layer.GetInputShape()[0]);
-            writer.Write(layer.GetOutputShape()[0]);
+            writer.Write(layer.GetOutputLayerShape().RequireConcrete("Recording concrete layer geometry")[0]);
         }
 
         // Write layer sizes for advantage layers
         foreach (var layer in _advantageLayers)
         {
             writer.Write(layer.GetInputShape()[0]);
-            writer.Write(layer.GetOutputShape()[0]);
+            writer.Write(layer.GetOutputLayerShape().RequireConcrete("Recording concrete layer geometry")[0]);
         }
 
         // Serialize parameters

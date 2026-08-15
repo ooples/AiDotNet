@@ -94,6 +94,10 @@ public class Amphion<T> : TtsModelBase<T>, ICodecTts<T>
     public int MaxTextLength => _options.MaxTextLength;
     public int NumCodebooks => _options.NumCodebooks;
     public int CodebookSize => _options.CodebookSize;
+
+    /// <inheritdoc />
+    /// <remarks>Traced: InitializeLayers passes NumCodebooks * CodebookSize as the codec vocabulary.</remarks>
+    protected override int OutputFeatureWidth => _options.NumCodebooks * _options.CodebookSize;
     public int CodecFrameRate => _options.CodecFrameRate;
 
     /// <summary>Synthesizes speech. Amphion TTS: text -> encoder -> LM/flow-matching -> codec/mel -> vocoder -> waveform.</summary>
@@ -196,7 +200,8 @@ public class Amphion<T> : TtsModelBase<T>, ICodecTts<T>
                     _options.NumEncoderLayers,
                     _options.NumLLMLayers,
                     _options.NumHeads,
-                    _options.DropoutRate
+                    _options.DropoutRate,
+                    _options.VocabSize
                 )
             );
         ComputeEncoderDecoderBoundary();
@@ -228,23 +233,15 @@ public class Amphion<T> : TtsModelBase<T>, ICodecTts<T>
         if (IsOnnxMode)
             throw new NotSupportedException("Training not supported in ONNX mode.");
         SetTrainingMode(true);
-        TrainWithTape(input, expected);
+        TrainWithTape(input, expected, _optimizer);
         SetTrainingMode(false);
     }
 
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        if (!_useNativeMode)
-            throw new NotSupportedException("Cannot update parameters in ONNX mode.");
-        int idx = 0;
-        foreach (var l in Layers)
-        {
-            int c = (int)l.ParameterCount;
-            l.UpdateParameters(parameters.Slice(idx, c));
-            idx += c;
-        }
-    }
-
+    /// <inheritdoc />
+    /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
+    /// write on every parameter surface, so the guard is stated once here instead of being
+    /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
+    protected override bool SupportsParameterMutation => _useNativeMode;
     public override ModelMetadata<T> GetModelMetadata()
     {
         var m = new ModelMetadata<T>

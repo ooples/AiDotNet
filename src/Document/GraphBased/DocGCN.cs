@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Document.Interfaces;
 using AiDotNet.Document.Options;
 using AiDotNet.Enums;
@@ -6,6 +6,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
+using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Optimizers;
@@ -55,7 +56,7 @@ namespace AiDotNet.Document.GraphBased;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("DocGCN: Heterogeneous Graph Convolutional Networks for Document Layout Analysis", "https://doi.org/10.48550/arXiv.2208.10970", Year = 2022, Authors = "Siwen Luo, Josiah Poon, Soyeon Caren Han")]
-public class DocGCN<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>
+public partial class DocGCN<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>
 {
     private readonly DocGCNOptions _options;
 
@@ -66,7 +67,7 @@ public class DocGCN<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>
 
     private readonly bool _useNativeMode;
     private readonly InferenceSession? _onnxSession;
-    private readonly IOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private int _nodeDim;
     private int _edgeDim;
     private int _gcnLayers;
@@ -79,7 +80,6 @@ public class DocGCN<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>
     private readonly List<ILayer<T>> _classifierLayers = [];
 
     // Node embeddings
-    private Tensor<T>? _nodeEmbeddings;
 
     #endregion
 
@@ -150,7 +150,7 @@ public class DocGCN<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>
         int gcnLayers = 3,
         int numClasses = 9,
         int maxNodes = 512,
-        IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         DocGCNOptions? options = null)
         : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
@@ -169,7 +169,7 @@ public class DocGCN<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>
         _gcnLayers = gcnLayers;
         _numClasses = numClasses;
         _maxNodes = maxNodes;
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = ResolveOptimizer(optimizer);
 
         _onnxSession = new InferenceSession(onnxModelPath);
 
@@ -195,7 +195,7 @@ public class DocGCN<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>
         int gcnLayers = 3,
         int numClasses = 9,
         int maxNodes = 512,
-        IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         DocGCNOptions? options = null)
         : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
@@ -209,7 +209,7 @@ public class DocGCN<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>
         _gcnLayers = gcnLayers;
         _numClasses = numClasses;
         _maxNodes = maxNodes;
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = ResolveOptimizer(optimizer);
 
         InitializeLayers();
         InitializeEmbeddings();
@@ -244,8 +244,6 @@ public class DocGCN<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>
     private void InitializeEmbeddings()
     {
         var random = RandomHelper.CreateSeededRandom(42);
-        _nodeEmbeddings = Tensor<T>.CreateDefault([_maxNodes, _nodeDim], NumOps.Zero);
-        InitializeWithSmallRandomValues(_nodeEmbeddings, random, 0.02);
     }
 
     private void InitializeWithSmallRandomValues(Tensor<T> tensor, Random random, double stdDev)
@@ -257,6 +255,44 @@ public class DocGCN<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>
             double randStdNormal = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Sin(2.0 * Math.PI * u2);
             tensor.Data.Span[i] = NumOps.FromDouble(randStdNormal * stdDev);
         }
+    }
+
+    /// <summary>
+    /// Resolves Doc-GCN's trainable optimizer while preserving the public constructor's
+    /// general <see cref="IOptimizer{T, TInput, TOutput}"/> contract.
+    /// </summary>
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> ResolveOptimizer(
+        IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer)
+    {
+        if (optimizer is not null)
+        {
+            return optimizer as IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>
+                ?? throw new ArgumentException(
+                    "DocGCN training requires a gradient-based optimizer.", nameof(optimizer));
+        }
+
+        // Doc-GCN (Luo et al., COLING 2022) §4.3 specifies THREE Adam rates, not one:
+        // 1e-4 for the Semantic/Syntactic GCNs, 0.001 for "others", and 2e-5 for the classifier.
+        // The previous value took the 1e-4 branch rate and applied it to the whole model -- but the
+        // default native stack has no semantic/syntactic GCN in it at all (see CreateDefaultDocGCNLayers:
+        // it emits DenseLayer + Dropout, with the adjacency implicitly identity). This stack IS the
+        // paper's "others" path, so 0.001 is its rate, and picking the smallest of the three left
+        // the model training an order of magnitude below both the paper and the framework default.
+        //
+        // That is measurable rather than theoretical. Adam's per-parameter step is about lr on a
+        // repeated single pair, so across the memorization probe's 15 steps the 316 parameters moved
+        // ~1.0e-3 in total and the loss fell 1.3276 -> 1.3155: a 0.912% decrease against a 1.000%
+        // threshold, missing by 9% of the threshold. It was not that gradients were failing to reach
+        // the parameters -- a detached graph gives a flat loss, and a last-layer-only gradient would
+        // have given roughly a tenth of that movement. The whole model was descending, just slowly.
+        return new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = 1e-3,
+                EnableGradientClipping = true,
+                MaxGradientNorm = 1.0
+            });
     }
 
     #endregion
@@ -527,7 +563,7 @@ public class DocGCN<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expectedOutput);
+            TrainWithTape(input, expectedOutput, _optimizer);
         }
         finally
         {
@@ -535,20 +571,18 @@ public class DocGCN<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>
         }
     }
 
-    /// <inheritdoc/>
-    public override void UpdateParameters(Vector<T> gradients)
-    {
-        if (!_useNativeMode)
-            throw new NotSupportedException("Parameter updates not supported in ONNX mode.");
+    // UpdateParameters applied a GRADIENT STEP, but its one-argument form is the value setter and every caller passes values -- the override corrupted the model. Removed under AIDN082.
 
-        var currentParams = GetParameters();
-        T lr = NumOps.FromDouble(0.001);
-        
-        currentParams = Engine.Subtract(currentParams, Engine.Multiply(gradients, lr));
-        SetParameters(currentParams);
-    }
-
-
+    /// <summary>
+    /// Parameters cannot be written while the model is backed by a loaded ONNX graph: the weights
+    /// belong to that graph, not to this instance.
+    /// </summary>
+    /// <remarks>
+    /// Replaces a hand-written throw that used to sit inside UpdateParameters. The base checks this
+    /// on every mutating entry point rather than the one member the throw happened to guard, and
+    /// reading -- ParameterCount and GetParameters -- stays available either way.
+    /// </remarks>
+    protected override bool SupportsParameterMutation => _useNativeMode;
     #endregion
 
     #region Disposal
@@ -559,6 +593,120 @@ public class DocGCN<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>
         if (disposing)
             _onnxSession?.Dispose();
         base.Dispose(disposing);
+    }
+
+    #endregion
+
+    #region Graph convolution
+
+    /// <summary>
+    /// Learned per-node position over reading order, and the graph-convolution stack that consumes
+    /// it. Both are held OUTSIDE <c>Layers</c> and surfaced through
+    /// <see cref="GetExtraTrainableLayers"/>, the base's hook for trainable layers the sequential
+    /// chain does not walk -- putting them in the chain would hand an index lookup a hidden state,
+    /// which is exactly how the equivalent change broke LayoutGraph before it was moved off-chain.
+    /// </summary>
+    private EmbeddingLayer<T>? _nodeOrderEmbedding;
+
+    private readonly List<GraphConvolutionalLayer<T>> _graphConvolutions = [];
+
+    /// <inheritdoc/>
+    protected override IEnumerable<LayerBase<T>?> GetExtraTrainableLayers()
+    {
+        EnsureGraphPathBuilt();
+        yield return _nodeOrderEmbedding;
+        foreach (var conv in _graphConvolutions) yield return conv;
+    }
+
+    /// <summary>Builds the graph path once. Cheap no-op afterwards.</summary>
+    private void EnsureGraphPathBuilt()
+    {
+        if (_nodeOrderEmbedding is not null) return;
+
+        _nodeOrderEmbedding = new EmbeddingLayer<T>(Math.Max(1, _maxNodes), _edgeDim);
+
+        // A * X * W per Kipf and Welling, which is what Doc-GCN's semantic and syntactic branches
+        // are built on. implicitIdentityWhenUnset stays false: a GCN with no adjacency is a Dense
+        // layer wearing a different name, and silently becoming one is the confusion this whole
+        // change exists to remove.
+        int inFeatures = _nodeDim;
+        for (int i = 0; i < Math.Max(1, _gcnLayers); i++)
+        {
+            _graphConvolutions.Add(new GraphConvolutionalLayer<T>(
+                inFeatures, _edgeDim, (IActivationFunction<T>?)null));
+            inFeatures = _edgeDim;
+        }
+    }
+
+    /// <inheritdoc/>
+    protected override Tensor<T> Forward(Tensor<T> input) => RunGraphOrDefault(input, training: false);
+
+    /// <inheritdoc/>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input) => RunGraphOrDefault(input, training: true);
+
+    /// <summary>
+    /// Runs real graph convolution when the caller supplies an adjacency matrix, and the documented
+    /// per-node path when they do not.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The default path is left BYTE-IDENTICAL on purpose. This model documents its no-GCN stack as
+    /// the paper's "others" branch and its 1e-3 Adam rate was chosen against that, with measurements
+    /// recorded in this file; diverting unconditionally would falsify both. It also matters
+    /// mechanically -- routing the default through a hand-written walk instead of the base one made
+    /// analytic and finite-difference gradients disagree on every sampled parameter in LayoutGraph,
+    /// because the base path owns dropout, seed wiring and checkpointing.
+    /// </para>
+    /// <para>
+    /// The adjacency arrives as <c>[numNodes, numNodes]</c> through the base auxiliary input, so it
+    /// reaches Train as well as Predict.
+    /// </para>
+    /// </remarks>
+    private Tensor<T> RunGraphOrDefault(Tensor<T> input, bool training)
+    {
+        var adjacency = AuxiliaryInput;
+        bool usable = adjacency is not null
+            && adjacency.Rank == 2
+            && adjacency.Shape[0] == adjacency.Shape[1]
+            && input.Rank == 2
+            && input.Shape[0] == adjacency.Shape[0];
+
+        if (!usable)
+        {
+            return training ? base.ForwardForTraining(input) : base.Forward(input);
+        }
+
+        EnsureGraphPathBuilt();
+        if (training) EnsureLayerRandomSeedsWired();
+
+        var hidden = input;
+        foreach (var conv in _graphConvolutions)
+        {
+            conv.SetAdjacencyMatrix(adjacency!);
+            hidden = conv.Forward(hidden);
+        }
+
+        // Node order, added in the graph hidden space once the convolutions have produced it.
+        var positions = new Tensor<T>([hidden.Shape[0]]);
+        for (int i = 0; i < positions.Length; i++)
+        {
+            positions[i] = NumOps.FromDouble(Math.Min(i, Math.Max(1, _maxNodes) - 1));
+        }
+
+        var order = _nodeOrderEmbedding!.Forward(positions);
+        if (order.Rank == hidden.Rank && order.Length == hidden.Length)
+        {
+            hidden = Engine.TensorAdd(hidden, order);
+        }
+
+        // Classifier head: the tail of the declared stack, reused so the graph path and the default
+        // path end in the same trained classifier rather than two that drift apart.
+        for (int i = Layers.Count - 2; i < Layers.Count; i++)
+        {
+            if (i >= 0) hidden = Layers[i].Forward(hidden);
+        }
+
+        return hidden;
     }
 
     #endregion

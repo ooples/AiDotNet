@@ -55,7 +55,7 @@ namespace AiDotNet.AnomalyDetection.TimeSeries;
     "https://openreview.net/forum?id=LzQQ89U1qm_",
     Year = 2022,
     Authors = "Jiehui Xu, Haixu Wu, Jianmin Wang, Mingsheng Long")]
-public class AnomalyTransformerDetector<T> : AnomalyDetectorBase<T>
+public partial class AnomalyTransformerDetector<T> : AnomalyDetectorBase<T>
 {
     private readonly int _modelDim;
     private readonly int _numHeads;
@@ -84,7 +84,9 @@ public class AnomalyTransformerDetector<T> : AnomalyDetectorBase<T>
     private int _inputDim;
 
     // Normalization parameters
+    [Buffer]
     private Vector<T>? _dataMeans;
+    [Buffer]
     private Vector<T>? _dataStds;
 
     /// <summary>

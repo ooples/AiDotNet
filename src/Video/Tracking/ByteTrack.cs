@@ -57,6 +57,10 @@ namespace AiDotNet.Video.Tracking;
     "https://arxiv.org/abs/2110.06864",
     Year = 2022,
     Authors = "Yifu Zhang, Peize Sun, Yi Jiang, Dongdong Yu, Fucheng Weng, Zehuan Yuan, Ping Luo, Wenyu Liu, Xinggang Wang")]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Frames, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Input, BatchOptional = true)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Frames, TensorAxis.Length, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Output, BatchOptional = true)]
 public class ByteTrack<T> : NeuralNetworkBase<T>
 {
     private readonly ByteTrackOptions _options;
@@ -356,7 +360,7 @@ public class ByteTrack<T> : NeuralNetworkBase<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expectedOutput);
+            TrainWithTape(input, expectedOutput, _optimizer);
         }
         finally
         {
@@ -381,23 +385,11 @@ public class ByteTrack<T> : NeuralNetworkBase<T>
         }
     }
 
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        if (!_useNativeMode) throw new InvalidOperationException("Parameter updates are not supported in ONNX mode.");
-        int offset = 0;
-        foreach (var layer in Layers)
-        {
-            var p = layer.GetParameters();
-            if (p.Length > 0 && offset + p.Length <= parameters.Length)
-            {
-                var slice = new Vector<T>(p.Length);
-                for (int i = 0; i < p.Length; i++) slice[i] = parameters[offset + i];
-                layer.SetParameters(slice);
-                offset += p.Length;
-            }
-        }
-    }
-
+    /// <inheritdoc />
+    /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
+    /// write on every parameter surface, so the guard is stated once here instead of being
+    /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
+    protected override bool SupportsParameterMutation => _useNativeMode;
     public override ModelMetadata<T> GetModelMetadata() => new()
     {
         AdditionalInfo = new Dictionary<string, object>

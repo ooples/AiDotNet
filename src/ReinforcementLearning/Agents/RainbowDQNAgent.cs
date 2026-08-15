@@ -60,15 +60,35 @@ namespace AiDotNet.ReinforcementLearning.Agents.Rainbow;
     "https://arxiv.org/abs/1710.02298",
     Year = 2018,
     Authors = "Hessel, M., Modayil, J., van Hasselt, H., Schaul, T., Ostrovski, G., Dabney, W., Horgan, D., Piot, B., Azar, M., & Silver, D.")]
-public class RainbowDQNAgent<T> : DeepReinforcementLearningAgentBase<T>, IActionValueProvider<T>, IGradientComputable<T, Vector<T>, Vector<T>>
+public partial class RainbowDQNAgent<T> : DeepReinforcementLearningAgentBase<T>, IActionValueProvider<T>, IGradientComputable<T, Vector<T>, Vector<T>>
 {
+
+    /// <inheritdoc />
+    /// <remarks>The online network is trainable state. The target is a derived periodic copy and
+    /// exposing it to the optimizer both doubles the vector and lets its lazy topology drift from
+    /// the online path after the first real observation.</remarks>
+    protected override void RegisterComponents()
+    {
+        RegisterParameterComponent("rainbow/online-network", _onlineNetwork);
+    }
+
+    /// <inheritdoc />
+    /// <remarks>The target network is a periodically refreshed copy of the online network, not an
+    /// independent trainable component. A restore must refresh it immediately so training never
+    /// resumes against stale target weights.</remarks>
+    protected override void OnParametersRestored()
+    {
+        CopyNetworkWeights(_onlineNetwork, _targetNetwork);
+    }
     private RainbowDQNOptions<T> _options;
 
     /// <inheritdoc/>
     public override ModelOptions GetOptions() => _options;
     private IOptimizer<T, Vector<T>, Vector<T>> _optimizer;
 
+    [ParameterAlias("rainbow/online-network")]
     private INeuralNetwork<T> _onlineNetwork;
+    [Buffer]
     private INeuralNetwork<T> _targetNetwork;
     private PrioritizedReplayBuffer<T> _replayBuffer;
 
@@ -569,12 +589,6 @@ public class RainbowDQNAgent<T> : DeepReinforcementLearningAgentBase<T>, IAction
         return output;
     }
 
-    private void CopyNetworkWeights(INeuralNetwork<T> source, INeuralNetwork<T> target)
-    {
-        var sourceParams = source.GetParameters();
-        target.UpdateParameters(sourceParams);
-    }
-
     private int ArgMax(Vector<T> values)
     {
         int maxIndex = 0;
@@ -682,43 +696,6 @@ public class RainbowDQNAgent<T> : DeepReinforcementLearningAgentBase<T>, IAction
         var targetNetworkLength = reader.ReadInt32();
         var targetNetworkBytes = reader.ReadBytes(targetNetworkLength);
         _targetNetwork.Deserialize(targetNetworkBytes);
-    }
-
-    public override Vector<T> GetParameters()
-    {
-        var onlineParams = _onlineNetwork.GetParameters();
-        var targetParams = _targetNetwork.GetParameters();
-
-        var combinedParams = new Vector<T>(onlineParams.Length + targetParams.Length);
-        for (int i = 0; i < onlineParams.Length; i++)
-        {
-            combinedParams[i] = onlineParams[i];
-        }
-        for (int i = 0; i < targetParams.Length; i++)
-        {
-            combinedParams[onlineParams.Length + i] = targetParams[i];
-        }
-
-        return combinedParams;
-    }
-
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int onlineParamCount = checked((int)_onlineNetwork.ParameterCount);
-        var onlineParams = new Vector<T>(onlineParamCount);
-        var targetParams = new Vector<T>(parameters.Length - onlineParamCount);
-
-        for (int i = 0; i < onlineParamCount; i++)
-        {
-            onlineParams[i] = parameters[i];
-        }
-        for (int i = 0; i < targetParams.Length; i++)
-        {
-            targetParams[i] = parameters[onlineParamCount + i];
-        }
-
-        _onlineNetwork.UpdateParameters(onlineParams);
-        _targetNetwork.UpdateParameters(targetParams);
     }
 
     public override int FeatureCount => _options.StateSize;

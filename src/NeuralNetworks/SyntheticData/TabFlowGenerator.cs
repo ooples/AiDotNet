@@ -79,7 +79,7 @@ namespace AiDotNet.NeuralNetworks.SyntheticData;
     "https://arxiv.org/abs/2210.02747",
     Year = 2023,
     Authors = "Yaron Lipman, Ricky T. Q. Chen, Heli Ben-Hamu, Maximilian Nickel, Matt Le")]
-public class TabFlowGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerator<T>
+public partial class TabFlowGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>, ISyntheticTabularGenerator<T>
 {
     private readonly TabFlowOptions<T> _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
@@ -154,7 +154,11 @@ public class TabFlowGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenera
     {
         _options = options ?? new TabFlowOptions<T>();
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
+            new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate
+            });
         _random = _options.Seed.HasValue
             ? RandomHelper.CreateSeededRandom(_options.Seed.Value)
             : RandomHelper.CreateSecureRandom();
@@ -316,31 +320,8 @@ public class TabFlowGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenera
         _optimizer.UpdateParameters(Layers);
     }
 
-    /// <summary>
-    /// Updates the parameters of all layers in the network.
-    /// </summary>
-    /// <param name="parameters">A vector containing all parameters for the network.</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> This distributes updated parameter values to each layer
-    /// based on their parameter count. Called during training to apply improvements.
-    /// </para>
-    /// </remarks>
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        int startIndex = 0;
-        foreach (var layer in Layers)
-        {
-            int layerParameterCount = checked((int)layer.ParameterCount);
-            if (layerParameterCount > 0)
-            {
-                Vector<T> layerParameters = parameters.SubVector(startIndex, layerParameterCount);
-                layer.UpdateParameters(layerParameters);
-                startIndex += layerParameterCount;
-            }
-        }
-    }
-
+    // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
+    // exactly the same enumeration, so this said nothing the base does not already say.
     #endregion
 
     #region ISyntheticTabularGenerator<T> Implementation

@@ -57,7 +57,7 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 [ModelCategory(ModelCategory.FoundationModel)]
 [ModelTask(ModelTask.Forecasting)]
 [ModelComplexity(ModelComplexity.High)]
-[ResearchPaper("YingLong: A Foundation Model for Weather Forecasting", "https://arxiv.org/abs/2312.11575")]
+[ResearchPaper("Output Scaling: YingLong-Delayed Chain of Thought in a Large Pretrained Time Series Forecasting Model", "https://arxiv.org/abs/2506.11029")]
     [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 public class YingLong<T> : TimeSeriesFoundationModelBase<T>
 {
@@ -135,7 +135,7 @@ public class YingLong<T> : TimeSeriesFoundationModelBase<T>
         OnnxModelPath = onnxModelPath;
         OnnxSession = new InferenceSession(onnxModelPath);
 
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? CreatePaperOptimizer(options);
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
 
         CopyOptionsToFields(options);
@@ -159,11 +159,46 @@ public class YingLong<T> : TimeSeriesFoundationModelBase<T>
         OnnxSession = null;
         OnnxModelPath = null;
 
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? CreatePaperOptimizer(options);
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
+        // Wire it into the base slot. Without this _optimizer was assigned and never read: as a
+        // Finance model, Train routes through FinancialModelBase -> TrainWithTape(.., TrainingOptimizer),
+        // TrainingOptimizer defaults to null, and the framework default optimizer won instead.
+        // Identical dead-dependency shape to LLMTime; MOIRAI wires it exactly this way.
+        SetBaseTrainOptimizer(_optimizer);
 
         CopyOptionsToFields(options);
         InitializeLayers();
+    }
+
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreatePaperOptimizer(YingLongOptions<T> options)
+    {
+        // YingLong section 6.2: AdamW, lr=1e-4, weight decay=0.1,
+        // beta1=0.9 and beta2=0.95. Keep these configurable while making
+        // the paper recipe the native model's default.
+        return new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = options.LearningRate,
+                WeightDecay = options.WeightDecay,
+                Beta1 = options.Beta1,
+                Beta2 = options.Beta2,
+                UseAMSGrad = false,
+                LearningRateScheduler = new AiDotNet.LearningRateSchedulers.LinearWarmupScheduler(
+                    baseLearningRate: options.LearningRate,
+                    warmupSteps: options.WarmupSteps,
+                    totalSteps: options.TotalTrainingSteps,
+                    // The first optimizer update is warmup step 1, not a
+                    // zero-rate no-op: lr / warmupSteps matches the paper's
+                    // linear ramp while preserving Train()'s update contract.
+                    warmupInitLr: options.WarmupSteps > 0
+                        ? options.LearningRate / options.WarmupSteps
+                        : options.LearningRate,
+                    decayMode: AiDotNet.LearningRateSchedulers.LinearWarmupScheduler.DecayMode.Cosine,
+                    endLr: 0.0),
+                SchedulerStepMode = AiDotNet.LearningRateSchedulers.SchedulerStepMode.StepPerBatch
+            });
     }
 
     private void CopyOptionsToFields(YingLongOptions<T> options)
@@ -236,12 +271,8 @@ public class YingLong<T> : TimeSeriesFoundationModelBase<T>
         base.Train(input, target);
     }
 
-    /// <inheritdoc/>
-    public override void UpdateParameters(Vector<T> gradients)
-    {
-        // Parameters are updated through the optimizer in Train()
-    }
-
+    // UpdateParameters was an empty override, silently dropping every restore. The base
+    // distributes the vector over the declared enumeration.
     /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()
     {
@@ -267,7 +298,7 @@ public class YingLong<T> : TimeSeriesFoundationModelBase<T>
     /// <inheritdoc/>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
-        return new YingLong<T>(Architecture, new YingLongOptions<T>
+        var clonedOptions = new YingLongOptions<T>(_options)
         {
             ContextLength = _contextLength,
             ForecastHorizon = _forecastHorizon,
@@ -278,7 +309,9 @@ public class YingLong<T> : TimeSeriesFoundationModelBase<T>
             IntermediateSize = _intermediateSize,
             DropoutRate = _dropout,
             ModelSize = _modelSize
-        });
+        };
+
+        return new YingLong<T>(Architecture, clonedOptions);
     }
 
     /// <inheritdoc/>
@@ -373,48 +406,12 @@ public class YingLong<T> : TimeSeriesFoundationModelBase<T>
 
     /// <inheritdoc/>
     public override Tensor<T> ApplyInstanceNormalization(Tensor<T> input)
-    {
-        int batchSize = input.Rank > 1 ? input.Shape[0] : 1;
-        int seqLen = input.Rank > 1 ? input.Shape[1] : input.Length;
-        if (input.Length == 0 || seqLen == 0)
-            return new Tensor<T>(input._shape);
-
-        var result = new Tensor<T>(input._shape);
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            T mean = NumOps.Zero;
-            for (int t = 0; t < seqLen; t++)
-            {
-                int idx = b * seqLen + t;
-                if (idx < input.Length)
-                    mean = NumOps.Add(mean, input[idx]);
-            }
-            mean = NumOps.Divide(mean, NumOps.FromDouble(seqLen));
-
-            T variance = NumOps.Zero;
-            for (int t = 0; t < seqLen; t++)
-            {
-                int idx = b * seqLen + t;
-                if (idx < input.Length)
-                {
-                    var diff = NumOps.Subtract(input[idx], mean);
-                    variance = NumOps.Add(variance, NumOps.Multiply(diff, diff));
-                }
-            }
-            variance = NumOps.Divide(variance, NumOps.FromDouble(seqLen));
-            T std = NumOps.Sqrt(NumOps.Add(variance, NumOps.FromDouble(1e-5)));
-
-            for (int t = 0; t < seqLen; t++)
-            {
-                int idx = b * seqLen + t;
-                if (idx < input.Length && idx < result.Length)
-                    result.Data.Span[idx] = NumOps.Divide(NumOps.Subtract(input[idx], mean), std);
-            }
-        }
-
-        return result;
-    }
+        // RevIN forward (Kim et al. 2022), delegated to the shared tape-tracked helper. The previous
+        // hand-rolled version accumulated mean/variance with scalar NumOps arithmetic and wrote the
+        // output through result.Data.Span[...], which the autodiff tape cannot observe: the normalised
+        // tensor came back as a LEAF, so no gradient could flow through the normalisation. RevIN is a
+        // differentiable layer in the paper, not a preprocessing step.
+        => NormalizeInstanceOnTape(input, DefaultRevInEpsilon, out _, out _);
 
     /// <inheritdoc/>
     public override Dictionary<string, T> GetFinancialMetrics()
@@ -434,6 +431,40 @@ public class YingLong<T> : TimeSeriesFoundationModelBase<T>
     #endregion
 
     #region Forward/Backward Pass
+
+    /// <summary>
+    /// Captures per-layer activations of the native forward pass. Mirrors
+    /// <see cref="ForwardNative"/>'s instance-normalization + rank-1 -> [1, N] promotion so the
+    /// first ReshapeLayer (which expects <c>contextLength</c> elements per sample) receives a
+    /// batched tensor, rather than the base walk feeding the raw rank-1 input straight in.
+    /// </summary>
+    /// <remarks>
+    /// Without this override NamedLayerActivations_ShouldBeNonEmpty threw
+    /// "ReshapeLayer per-sample input element count (1) does not match output element count (1024)":
+    /// the base implementation walks Layers directly, skipping the normalization and shape promotion
+    /// that ForwardNative performs, so the very first layer saw a rank-1 tensor it cannot consume.
+    /// MOMENT carries the identical override in this same folder for the identical reason.
+    /// </remarks>
+    public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input)
+    {
+        if (input is null) throw new ArgumentNullException(nameof(input));
+
+        var activations = new Dictionary<string, Tensor<T>>();
+        if (!_useNativeMode || Layers.Count == 0)
+            return activations;
+
+        var current = ApplyInstanceNormalization(input);
+        if (current.Rank == 1)
+            current = current.Reshape(new[] { 1, current.Length });
+
+        for (int i = 0; i < Layers.Count; i++)
+        {
+            current = Layers[i].Forward(current);
+            activations[$"Layer_{i}_{Layers[i].GetType().Name}"] = current.Clone();
+        }
+
+        return activations;
+    }
 
     private Tensor<T> ForwardNative(Tensor<T> input)
     {

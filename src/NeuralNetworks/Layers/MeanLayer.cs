@@ -37,7 +37,13 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Structural)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = false, ChangesShape = true, TestInputShape = "2, 4", TestConstructorArgs = "0")]
-public class MeanLayer<T> : LayerBase<T>
+// Rank 2 [Batch, Features] per this layer's own [LayerProperty(TestInputShape = "2, 4")]. The OUTPUT is
+// rank 1 - one axis is reduced away - so its layout has a single axis whose role depends on Axis;
+// OutputAxesFor below computes it. Both output layouts are declared because either can occur.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
+[AutoParameters]
+public partial class MeanLayer<T> : LayerBase<T>, IShapeContract
 {
     /// <summary>
     /// Gets the axis along which the mean is calculated.
@@ -67,6 +73,33 @@ public class MeanLayer<T> : LayerBase<T>
     /// </para>
     /// </remarks>
     public int Axis { get; private set; }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// Computed from <see cref="Axis"/>, not generated. The forward is
+    /// <c>Engine.ReduceMean(input, [Axis], keepDims: false)</c>, so the reduced axis DISAPPEARS and the
+    /// output has one fewer dimension - <c>[Batch, Features]</c> reduced on axis 0 becomes
+    /// <c>[Features]</c>, on axis 1 becomes <c>[Batch]</c>. Which axis survives is therefore a
+    /// constructor decision, and only an instance contract can state it.
+    /// </para>
+    /// <para>
+    /// The discovery sweep flagged this PARAMETERISED once the profiles varied the reduction axis -
+    /// "size=4 gives 'in.Channels' but axis=1 gives 'in.Batch'" - correctly refusing to publish either
+    /// as fixed. That refusal was right; this method is the answer to it.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        // Rank 2 [Batch, Features] is what this layer declares in its own
+        // [LayerProperty(TestInputShape = "2, 4")]. Higher ranks are not claimed.
+        if (inputRank != 2 || Axis < 0 || Axis >= 2) return null;
+
+        // The surviving axis keeps its role and its size; the reduced one is gone entirely.
+        var survivor = Axis == 0 ? TensorAxis.Features : TensorAxis.Batch;
+
+        return new[] { new OutputAxisContract(survivor, AxisRelation.Same(survivor)) };
+    }
 
     /// <summary>
     /// Gets a value indicating whether this layer supports training.
@@ -144,7 +177,8 @@ public class MeanLayer<T> : LayerBase<T>
     /// For example, with inputShape=[32, 10, 128] and axis=1, the output shape would be [32, 128].
     /// </para>
     /// </remarks>
-    public MeanLayer(int axis)
+    public MeanLayer(
+        [LayerState] int axis)
         : base(new[] { -1 }, new[] { -1 })
     {
         Axis = axis;
@@ -234,7 +268,7 @@ public class MeanLayer<T> : LayerBase<T>
     /// the result would be [2.5, 3.5, 4.5] (average of each column).
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         EnsureInitializedFromInput(input);
         _lastInput = ShouldCacheForBackward ? input : null; // #1668: skip in inference (arena safety)
@@ -321,29 +355,6 @@ public class MeanLayer<T> : LayerBase<T>
     }
 
     /// <summary>
-    /// Updates the parameters of the mean layer using the calculated gradients.
-    /// </summary>
-    /// <param name="learningRate">The learning rate to use for the parameter updates.</param>
-    /// <remarks>
-    /// <para>
-    /// This method is part of the training process, but since MeanLayer has no trainable parameters,
-    /// this method does nothing.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method would normally update a layer's internal values during training.
-    /// 
-    /// However, since MeanLayer just performs a fixed mathematical operation (averaging) and doesn't
-    /// have any internal values that can be learned or adjusted, this method is empty.
-    /// 
-    /// This is unlike layers such as Dense or Convolutional layers, which have weights and biases
-    /// that get updated during training.
-    /// </para>
-    /// </remarks>
-    public override void UpdateParameters(T learningRate)
-    {
-        // MeanLayer has no learnable parameters, so this method is empty
-    }
-
-    /// <summary>
     /// Gets all trainable parameters from the mean layer as a single vector.
     /// </summary>
     /// <returns>An empty vector since MeanLayer has no trainable parameters.</returns>
@@ -367,12 +378,6 @@ public class MeanLayer<T> : LayerBase<T>
         var metadata = base.GetMetadata();
         metadata["Axis"] = Axis.ToString();
         return metadata;
-    }
-
-    public override Vector<T> GetParameters()
-    {
-        // MeanLayer has no trainable parameters
-        return Vector<T>.Empty();
     }
 
     /// <summary>

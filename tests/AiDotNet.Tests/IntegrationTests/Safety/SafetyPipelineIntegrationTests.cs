@@ -375,7 +375,7 @@ public class SafetyPipelineIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task FrameSamplingVideoModerator_SamplesAndClassifies()
     {
-        var moderator = new FrameSamplingVideoModerator<double>(samplingRate: 1.0);
+        var moderator = new FrameSamplingVideoModerator<double>(segmentCount: 3);
         var frames = GenerateTestFrames(30, 8, 8);
         var findings = moderator.EvaluateVideo(frames, 30.0);
 

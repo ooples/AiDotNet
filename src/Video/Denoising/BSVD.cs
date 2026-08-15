@@ -3,6 +3,7 @@ using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Onnx;
 using AiDotNet.Optimizers;
@@ -46,10 +47,10 @@ namespace AiDotNet.Video.Denoising;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("Blind Spot Video Denoising: Bidirectional Streaming for Real-Time Video Denoising",
-    "https://arxiv.org/abs/2206.03428",
+[ResearchPaper("Real-time Streaming Video Denoising with Bidirectional Buffers",
+    "https://arxiv.org/abs/2207.06937",
     Year = 2022,
-    Authors = "Zhenyue Qi, Yiran Zhong, Dongwei Ren, Wangmeng Zuo")]
+    Authors = "Chenyang Qi, Junming Chen, Xin Yang, Qifeng Chen")]
 public class BSVD<T> : VideoDenoisingBase<T>
 {
     private readonly BSVDOptions _options;
@@ -89,7 +90,24 @@ public class BSVD<T> : VideoDenoisingBase<T>
     {
         _options = options ?? new BSVDOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate,
+                // Optimizer settings taken from the reference implementation's training config
+                // (ChenyangQiQi/BSVD, options/train/bsvd_c64_unblind.yml), not guessed:
+                //   optim_g: Adam, lr 1e-3, betas [0.9, 0.99], weight_decay 0
+                //   use_grad_clip: 5
+                // beta2 = 0.99 rather than the 0.999 default adapts the second moment about ten
+                // times faster, which materially shortens Adam's early-step overshoot; combined
+                // with the grad-norm bound it is what keeps the first iterations well-behaved.
+                Beta1 = _options.AdamBeta1,
+                Beta2 = _options.AdamBeta2,
+                WeightDecay = 0.0,
+                EnableGradientClipping = true,
+                MaxGradientNorm = _options.GradientClipNorm
+            });
         IsBlindDenoising = true;
         InitializeLayers();
     }
@@ -124,9 +142,11 @@ public class BSVD<T> : VideoDenoisingBase<T>
             // depth dimension is just `channels`, but the conv was built for
             // `channels * 5` (the helper's default temporalFrames=5).
             int temporalFrames = Architecture.InputFrames > 0 ? Architecture.InputFrames : 5;
-            Layers.AddRange(LayerHelper<T>.CreateDefaultVideoDenoisingLayers(
+            Layers.AddRange(LayerHelper<T>.CreateDefaultBSVDLayers(
                 inputChannels: ch, inputHeight: h, inputWidth: w,
-                numFeatures: _options.NumFeatures, temporalFrames: temporalFrames));
+                numFeatures: _options.NumFeatures, temporalFrames: temporalFrames,
+                numUNetStages: _options.NumUNetStages,
+                shiftedChannelRatio: _options.ShiftedChannelRatio));
         }
     }
 
@@ -155,7 +175,14 @@ public class BSVD<T> : VideoDenoisingBase<T>
     public override Tensor<T> ForwardForTraining(Tensor<T> input)
     {
         var preprocessed = PreprocessFrames(input);
-        return base.ForwardForTraining(preprocessed);
+        var modelOutput = base.ForwardForTraining(preprocessed);
+
+        // Keep the public output contract during tape-based training as well
+        // as inference. Engine.Interpolate participates in the active
+        // computation tape, unlike a manually populated output tensor, so
+        // gradients still flow through the decoder when its native output is
+        // a few pixels short of the requested frame size.
+        return RestoreSpatialResolution(modelOutput);
     }
 
     /// <inheritdoc/>
@@ -183,7 +210,35 @@ public class BSVD<T> : VideoDenoisingBase<T>
     }
 
     /// <inheritdoc/>
-    protected override Tensor<T> PostprocessOutput(Tensor<T> modelOutput) => DenormalizeFrames(modelOutput);
+    protected override Tensor<T> PostprocessOutput(Tensor<T> modelOutput)
+    {
+        var denormalized = DenormalizeFrames(modelOutput);
+        return RestoreSpatialResolution(denormalized);
+    }
+
+    private Tensor<T> RestoreSpatialResolution(Tensor<T> output)
+    {
+        int targetHeight = Architecture.InputHeight;
+        int targetWidth = Architecture.InputWidth;
+
+        // The shared native video-denoising decoder can be a few pixels short
+        // after its stride-2 convolution/deconvolution path (for example,
+        // 32x32 becomes 29x29). BSVD's public contract returns a denoised
+        // frame at the source resolution, so restore that resolution here.
+        if (output.Shape.Length != 4
+            || targetHeight <= 0
+            || targetWidth <= 0
+            || (output.Shape[2] == targetHeight && output.Shape[3] == targetWidth))
+        {
+            return output;
+        }
+
+        return Engine.Interpolate(
+            output,
+            [targetHeight, targetWidth],
+            InterpolateMode.Bilinear,
+            alignCorners: false);
+    }
 
     /// <inheritdoc/>
     public override void Train(Tensor<T> input, Tensor<T> expected)
@@ -192,7 +247,12 @@ public class BSVD<T> : VideoDenoisingBase<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expected);
+            // ForwardForTraining operates in the normalized model domain,
+            // while Predict/Denoise returns denormalized public-space pixels.
+            // Normalize the supervision target as well so the tape optimizes
+            // the same objective that callers measure after postprocessing.
+            var normalizedExpected = NormalizeFrames(expected);
+            TrainWithTape(input, normalizedExpected, _optimizer);
         }
         finally
         {
@@ -200,21 +260,8 @@ public class BSVD<T> : VideoDenoisingBase<T>
         }
     }
 
-    /// <inheritdoc/>
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        int offset = 0;
-        foreach (var layer in Layers)
-        {
-            var p = layer.GetParameters();
-            if (offset + p.Length > parameters.Length) break;
-            var sub = new Vector<T>(p.Length);
-            for (int i = 0; i < p.Length; i++) sub[i] = parameters[offset + i];
-            layer.SetParameters(sub);
-            offset += p.Length;
-        }
-    }
-
+    // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
+    // exactly the same enumeration, so this said nothing the base does not already say.
     /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()
     {

@@ -45,6 +45,7 @@ namespace AiDotNet.AnomalyDetection.Probabilistic;
 [ResearchPaper("COPOD: Copula-Based Outlier Detection", "https://doi.org/10.1109/ICDM50108.2020.00135", Year = 2020, Authors = "Zheng Li, Yue Zhao, Nicola Botta, Cezar Ionescu, Xiyang Hu")]
 public class COPODDetector<T> : AnomalyDetectorBase<T>
 {
+    [Buffer]
     private Vector<T>[]? _sortedFeatureValues;
     private int _nFeatures;
     private int _nSamples;

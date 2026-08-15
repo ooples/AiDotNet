@@ -49,8 +49,17 @@ namespace AiDotNet.Diffusion.FastGeneration;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("One Step Diffusion via Shortcut Models", "https://arxiv.org/abs/2410.12557", Year = 2024, Authors = "Frans et al.")]
-public class OSDSModel<T> : LatentDiffusionModelBase<T>
+public partial class OSDSModel<T> : LatentDiffusionModelBase<T>
 {
+    /// <inheritdoc />
+    /// <remarks>Registration order is serialization order, and matches the
+    /// concatenation the previous hand-written GetParameters performed.</remarks>
+    protected override void RegisterComponents()
+    {
+        RegisterParameterComponent(_predictor);
+        RegisterParameterComponent(_vae);
+    }
+
     private const int LATENT_CHANNELS = 4;
     private const double DEFAULT_GUIDANCE = 0.0;
 
@@ -67,7 +76,6 @@ public class OSDSModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override int LatentChannels => LATENT_CHANNELS;
     /// <inheritdoc />
-    public override long ParameterCount => _predictor.ParameterCount + _vae.ParameterCount;
 
     /// <summary>
     /// Initializes a new OSDS model with optional configuration.
@@ -101,32 +109,8 @@ public class OSDSModel<T> : LatentDiffusionModelBase<T>
             baseChannels: 128, channelMultipliers: new[] { 1, 2, 4, 4 }, numResBlocksPerLevel: 2, seed: seed);
     }
 
-    /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        var pp = _predictor.GetParameters();
-        var vp = _vae.GetParameters();
-        var combined = new Vector<T>(pp.Length + vp.Length);
-        for (int i = 0; i < pp.Length; i++) combined[i] = pp[i];
-        for (int i = 0; i < vp.Length; i++) combined[pp.Length + i] = vp[i];
-        return combined;
-    }
 
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int pc = checked((int)_predictor.ParameterCount);
-        int vc = checked((int)_vae.ParameterCount);
-        long expectedTotal = (long)pc + vc;
-        if (parameters.Length != expectedTotal)
-            throw new ArgumentException($"Expected {expectedTotal} parameters, got {parameters.Length}.", nameof(parameters));
-        var pp = new Vector<T>(pc);
-        var vp = new Vector<T>(vc);
-        for (int i = 0; i < pc; i++) pp[i] = parameters[i];
-        for (int i = 0; i < vc; i++) vp[i] = parameters[pc + i];
-        _predictor.SetParameters(pp);
-        _vae.SetParameters(vp);
-    }
+
     /// <inheritdoc />
     public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy() => Clone();
 

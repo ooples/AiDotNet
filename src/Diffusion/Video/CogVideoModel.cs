@@ -83,8 +83,17 @@ namespace AiDotNet.Diffusion.Video;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("CogVideo: Large-scale Pretraining for Text-to-Video Generation via Transformers", "https://arxiv.org/abs/2205.15868", Year = 2023, Authors = "Hong et al.")]
-public class CogVideoModel<T> : VideoDiffusionModelBase<T>
+public partial class CogVideoModel<T> : VideoDiffusionModelBase<T>
 {
+    /// <inheritdoc />
+    /// <remarks>Registration order is serialization order, and matches the
+    /// concatenation the previous hand-written GetParameters performed.</remarks>
+    protected override void RegisterComponents()
+    {
+        RegisterParameterComponent(_videoUnet);
+        RegisterParameterComponent(_temporalVae);
+    }
+
     #region Constants
 
     public const int DefaultWidth = 720;
@@ -132,7 +141,6 @@ public class CogVideoModel<T> : VideoDiffusionModelBase<T>
     public override bool SupportsVideoToVideo => _conditioner != null;
 
     /// <inheritdoc />
-    public override long ParameterCount => _videoUnet.ParameterCount + _temporalVae.ParameterCount;
 
     /// <summary>
     /// Gets the model variant ("2B" or "5B").
@@ -233,47 +241,7 @@ public class CogVideoModel<T> : VideoDiffusionModelBase<T>
 
     #region IParameterizable Implementation
 
-    /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        var unetParams = _videoUnet.GetParameters();
-        var vaeParams = _temporalVae.GetParameters();
 
-        var totalLength = unetParams.Length + vaeParams.Length;
-        var combined = new Vector<T>(totalLength);
-
-        for (int i = 0; i < unetParams.Length; i++)
-            combined[i] = unetParams[i];
-        for (int i = 0; i < vaeParams.Length; i++)
-            combined[unetParams.Length + i] = vaeParams[i];
-
-        return combined;
-    }
-
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int unetCount = checked((int)_videoUnet.ParameterCount);
-        int vaeCount = checked((int)_temporalVae.ParameterCount);
-
-        if (parameters.Length != unetCount + vaeCount)
-        {
-            throw new ArgumentException(
-                $"Expected {unetCount + vaeCount} parameters, got {parameters.Length}.",
-                nameof(parameters));
-        }
-
-        var unetParams = new Vector<T>(unetCount);
-        var vaeParams = new Vector<T>(vaeCount);
-
-        for (int i = 0; i < unetCount; i++)
-            unetParams[i] = parameters[i];
-        for (int i = 0; i < vaeCount; i++)
-            vaeParams[i] = parameters[unetCount + i];
-
-        _videoUnet.SetParameters(unetParams);
-        _temporalVae.SetParameters(vaeParams);
-    }
 
     #endregion
 

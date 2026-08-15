@@ -4,6 +4,8 @@ using AiDotNet.Helpers;
 using AiDotNet.LossFunctions;
 using AiDotNet.Models;
 
+using AiDotNet.Models.Parameters;
+
 namespace AiDotNet.SelfSupervisedLearning;
 
 /// <summary>
@@ -39,6 +41,22 @@ namespace AiDotNet.SelfSupervisedLearning;
 [ResearchPaper("Emerging Properties in Self-Supervised Vision Transformers", "https://arxiv.org/abs/2104.14294", Year = 2021, Authors = "Mathilde Caron, Hugo Touvron, Ishan Misra, Hervé Jégou, Julien Mairal, Piotr Bojanowski, Armand Joulin")]
 public class CenteringMechanism<T> : ModelBase<T, Tensor<T>, Tensor<T>>
 {
+
+    /// <inheritdoc />
+    /// <remarks>The running centre this mechanism maintains, which is a genuine learned buffer: DINO-style centering subtracts it from teacher logits, so a checkpoint that dropped it would restore a differently-behaved model.</remarks>
+    protected override void RegisterComponents()
+    {
+        RegisterParameterComponent(new DelegatingParameterSource<T>(
+            () => _dimension,
+            () => new Vector<T>(_center),
+            value =>
+            {
+                // The hand-written restore copied min(length, _dimension) so a short vector was
+                // tolerated. The base fold now rejects a wrong length outright, and this stays
+                // defensive for the equal-length case it is handed.
+                for (int i = 0; i < Math.Min(value.Length, _dimension); i++) _center[i] = value[i];
+            }));
+    }
     // NumOps inherited from ModelBase
 
     private readonly int _dimension;
@@ -276,16 +294,6 @@ public class CenteringMechanism<T> : ModelBase<T, Tensor<T>, Tensor<T>>
 
     /// <inheritdoc />
     public override ILossFunction<T> DefaultLossFunction => new MeanSquaredErrorLoss<T>();
-
-    /// <inheritdoc />
-    public override Vector<T> GetParameters() => new Vector<T>(_center);
-
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        for (int i = 0; i < Math.Min(parameters.Length, _dimension); i++)
-            _center[i] = parameters[i];
-    }
 
     /// <inheritdoc />
     public override IFullModel<T, Tensor<T>, Tensor<T>> WithParameters(Vector<T> parameters)

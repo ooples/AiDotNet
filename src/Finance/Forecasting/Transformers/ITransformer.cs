@@ -61,7 +61,7 @@ namespace AiDotNet.Finance.Forecasting.Transformers;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("iTransformer: Inverted Transformers Are Effective for Time Series Forecasting", "https://arxiv.org/abs/2310.06625", Year = 2024, Authors = "Yong Liu, Tengge Hu, Haoran Zhang, Haixu Wu, Shiyu Wang, Lintao Ma, Mingsheng Long")]
-public class ITransformer<T> : ForecastingModelBase<T>
+public partial class ITransformer<T> : ForecastingModelBase<T>
 {
     #region Execution Mode
 
@@ -112,11 +112,13 @@ public class ITransformer<T> : ForecastingModelBase<T>
     /// <summary>
     /// Instance normalization mean (for RevIN).
     /// </summary>
+    [Scratch]
     private Tensor<T>? _instanceMean;
 
     /// <summary>
     /// Instance normalization standard deviation (for RevIN).
     /// </summary>
+    [Scratch]
     private Tensor<T>? _instanceStd;
 
     #endregion
@@ -613,32 +615,8 @@ public class ITransformer<T> : ForecastingModelBase<T>
         return Forward(input);
     }
 
-    /// <summary>
-    /// Updates the model's parameters from a flat parameter vector.
-    /// </summary>
-    /// <param name="parameters">A vector containing all parameters for all layers.</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Neural networks have many parameters (weights and biases).
-    /// This method allows setting all parameters at once from a flattened vector,
-    /// useful for loading saved models or applying external optimization results.
-    /// </para>
-    /// </remarks>
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        if (parameters is null)
-            throw new ArgumentNullException(nameof(parameters));
-
-        int offset = 0;
-        foreach (var layer in Layers)
-        {
-            var layerParams = layer.GetParameters();
-            var newParams = parameters.Slice(offset, layerParams.Length);
-            layer.SetParameters(newParams);
-            offset += layerParams.Length;
-        }
-    }
-
+    // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
+    // exactly the same enumeration, so this said nothing the base does not already say.
     /// <summary>
     /// Gets metadata about the model for serialization and inspection.
     /// </summary>

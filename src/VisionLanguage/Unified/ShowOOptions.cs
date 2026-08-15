@@ -4,7 +4,12 @@ namespace AiDotNet.VisionLanguage.Unified;
 /// Configuration options for Show-o: single transformer for unified understanding and generation.
 /// </summary>
 /// <remarks>
-/// <para><b>For Beginners:</b> These options configure the ShowO model. Default values follow the original paper settings.</para>
+/// <para>
+/// Defaults follow the released 256px Show-o checkpoint: Phi-1.5 at 2048 hidden dimensions,
+/// 24 layers and 32 heads, an 8192-entry MAGVIT-v2 codebook, 256 image tokens, and the
+/// published AdamW 1e-4/0.01 training recipe.
+/// </para>
+/// <para><b>For Beginners:</b> These options configure the released Show-o architecture and can be changed for other checkpoints.</para>
 /// </remarks>
 public class ShowOOptions : UnifiedVisionOptions
 {
@@ -12,44 +17,37 @@ public class ShowOOptions : UnifiedVisionOptions
     /// <param name="other">The options instance to copy from.</param>
     /// <exception cref="ArgumentNullException">Thrown when other is null.</exception>
     public ShowOOptions(ShowOOptions other)
+        : base(other)
     {
         if (other == null)
             throw new ArgumentNullException(nameof(other));
 
-        Seed = other.Seed;
-        ImageSize = other.ImageSize;
-        VisionDim = other.VisionDim;
-        DecoderDim = other.DecoderDim;
-        NumVisionLayers = other.NumVisionLayers;
-        NumDecoderLayers = other.NumDecoderLayers;
-        NumHeads = other.NumHeads;
-        VocabSize = other.VocabSize;
-        MaxSequenceLength = other.MaxSequenceLength;
-        MaxGenerationLength = other.MaxGenerationLength;
-        DropoutRate = other.DropoutRate;
-        ArchitectureType = other.ArchitectureType;
-        ImageMean = other.ImageMean;
-        ImageStd = other.ImageStd;
-        ModelPath = other.ModelPath;
-        OnnxOptions = other.OnnxOptions;
-        LearningRate = other.LearningRate;
-        WeightDecay = other.WeightDecay;
-        LanguageModelName = other.LanguageModelName;
-        SupportsGeneration = other.SupportsGeneration;
-        OutputImageSize = other.OutputImageSize;
-        NumVisualTokens = other.NumVisualTokens;
+        OnnxOptions = new AiDotNet.Onnx.OnnxModelOptions(other.OnnxOptions);
+        ImageTokenCount = other.ImageTokenCount;
+        DiffusionSteps = other.DiffusionSteps;
     }
 
     public ShowOOptions()
     {
-        VisionDim = 1024;
+        VisionDim = 2048;
         DecoderDim = 2048;
-        NumVisionLayers = 24;
+        NumVisionLayers = 0;
         NumDecoderLayers = 24;
-        NumHeads = 16;
+        NumHeads = 32;
         ImageSize = 256;
-        VocabSize = 32000;
+        VocabSize = 58498;
+        MaxSequenceLength = 128;
+        DropoutRate = 0.0;
+        LearningRate = 1e-4;
+        WeightDecay = 0.01;
         LanguageModelName = "Phi-1.5";
         NumVisualTokens = 8192;
+        OutputImageSize = 256;
     }
+
+    /// <summary>Gets or sets the number of MAGVIT-v2 image-token positions.</summary>
+    public int ImageTokenCount { get; set; } = 256;
+
+    /// <summary>Gets or sets the number of discrete mask-prediction diffusion steps.</summary>
+    public int DiffusionSteps { get; set; } = 16;
 }

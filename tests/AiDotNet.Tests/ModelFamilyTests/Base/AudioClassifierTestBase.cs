@@ -11,7 +11,14 @@ namespace AiDotNet.Tests.ModelFamilyTests.Base;
 /// Inherits audio NN invariants and adds classification-specific: valid class outputs
 /// and silence classification behavior.
 /// </summary>
-public abstract class AudioClassifierTestBase : AudioNNModelTestBase
+/// <remarks>
+/// Generic over <typeparamref name="T"/> so heavy paper-scale audio classifiers (e.g. PANNs
+/// CNN14) can run their generated scaffold in <c>&lt;float&gt;</c> — half the activation/tape
+/// footprint and ~2x the throughput, which the double-precision variant needs to fit the
+/// per-test timeout. The non-generic <see cref="AudioClassifierTestBase"/> alias below preserves
+/// the default <c>&lt;double&gt;</c> behavior for every model not selected for a float scaffold.
+/// </remarks>
+public abstract class AudioClassifierTestBase<T> : AudioNNModelTestBase<T>
 {
     [Fact(Timeout = 60000)]
     public async Task ClassOutput_ShouldBeNonNegative()
@@ -25,8 +32,9 @@ public abstract class AudioClassifierTestBase : AudioNNModelTestBase
 
         for (int i = 0; i < output.Length; i++)
         {
-            Assert.True(output[i] >= -1e-10,
-                $"Audio class output[{i}] = {output[i]:F4} is negative — invalid class score.");
+            double v = ConvertToDouble(output[i]);
+            Assert.True(v >= -1e-10,
+                $"Audio class output[{i}] = {v:F4} is negative — invalid class score.");
         }
     }
 
@@ -40,6 +48,9 @@ public abstract class AudioClassifierTestBase : AudioNNModelTestBase
         var output = network.Predict(silence);
         Assert.True(output.Length > 0, "Audio classifier produced empty output for silence.");
         for (int i = 0; i < output.Length; i++)
-            Assert.False(double.IsNaN(output[i]), $"Audio class output[{i}] is NaN for silence.");
+            Assert.False(double.IsNaN(ConvertToDouble(output[i])), $"Audio class output[{i}] is NaN for silence.");
     }
 }
+
+/// <summary>Double-precision default for <see cref="AudioClassifierTestBase{T}"/>.</summary>
+public abstract class AudioClassifierTestBase : AudioClassifierTestBase<double> { }

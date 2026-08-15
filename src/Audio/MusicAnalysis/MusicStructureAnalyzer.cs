@@ -43,6 +43,15 @@ namespace AiDotNet.Audio.MusicAnalysis;
     [ResearchPaper("Music Structure Analysis: A Survey", "https://doi.org/10.1007/978-3-319-25226-1_12")]
 public class MusicStructureAnalyzer<T> : AudioNeuralNetworkBase<T>
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// Traced from output construction: PredictCore folds over Layers, and the last layer
+    /// CreateDefaultMusicStructureAnalyzerLayers emits is the section-segmentation head
+    /// <c>DenseLayer&lt;T&gt;(numSections)</c>, wired from <c>_options.NumSections</c> (8). A
+    /// structural class count; the HiddenDim projection just before it is not the output width.
+    /// </remarks>
+    protected override int OutputFeatureWidth => _options.NumSections;
+
     #region Fields
 
     private readonly MusicStructureAnalyzerOptions _options;
@@ -73,15 +82,39 @@ public class MusicStructureAnalyzer<T> : AudioNeuralNetworkBase<T>
     /// Creates a Music Structure Analyzer in native training mode.
     /// </summary>
     public MusicStructureAnalyzer(NeuralNetworkArchitecture<T> architecture, MusicStructureAnalyzerOptions? options = null,
-        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        ILossFunction<T>? lossFunction = null)
         : base(architecture)
     {
         _options = options ?? new MusicStructureAnalyzerOptions();
+        // Music-structure segmentation is a per-frame MULTI-CLASS classifier over the NumSections section
+        // labels (intro/verse/chorus/bridge/outro). The NeuralNetworkBase default MSE loss is unstable on raw
+        // classification logits, so LossStrictlyDecreases / Training_ShouldReduceLoss do not hold. The
+        // paper-faithful DEFAULT is softmax cross-entropy (bounded gradient) so training converges — but the
+        // caller can override it via the lossFunction parameter for full user customization (never hardcoded).
+        // Mirrors the HuBERTSER audio-classifier fix; AudioGenModel is the customizable-loss template. (#1789)
+        LossFunction = lossFunction ?? new AiDotNet.LossFunctions.CrossEntropyWithLogitsLoss<T>();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        // Default optimizer honors the model's configured LearningRate (previously the bare AdamWOptimizer(this)
+        // ignored it and ran at Adam's 0.001) and enables gradient clipping (MaxGradientNorm 1.0) so the
+        // cross-entropy gradients can't overshoot the first step into a high-loss region. Fully user-overridable
+        // via the optimizer parameter and MusicStructureAnalyzerOptions.LearningRate. Mirrors HuBERTSER. (#1789)
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
+            new AiDotNet.Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            { InitialLearningRate = _options.LearningRate, EnableGradientClipping = true, MaxGradientNorm = 1.0 });
         base.SampleRate = _options.SampleRate;
         InitializeLayers();
     }
+
+    /// <summary>
+    /// Routes tape training through the configured optimizer. Without this override the base trainer only
+    /// consults <see cref="NeuralNetworkBase{T}.GetOrCreateBaseOptimizer"/>, so the <c>_optimizer</c> field above
+    /// was stored but never used and training silently ran at the base Adam 1e-3 default instead of the
+    /// model's 1e-4 — Training_ShouldReduceLoss saw loss rise 8.86 -> 10.95 on the CI envelope. Same defect
+    /// already fixed in litedvdnet, the madmom beat tracker and mog. (#1789)
+    /// </summary>
+    protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> GetOrCreateBaseOptimizer()
+        => _optimizer ?? base.GetOrCreateBaseOptimizer();
 
     internal static async Task<MusicStructureAnalyzer<T>> CreateAsync(MusicStructureAnalyzerOptions? options = null, IProgress<double>? progress = null, CancellationToken cancellationToken = default)
     {
@@ -200,7 +233,7 @@ public class MusicStructureAnalyzer<T> : AudioNeuralNetworkBase<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expected);
+            TrainWithTape(input, expected, _optimizer);
         }
         finally
         {
@@ -208,12 +241,11 @@ public class MusicStructureAnalyzer<T> : AudioNeuralNetworkBase<T>
         }
     }
 
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        if (!_useNativeMode) throw new NotSupportedException("ONNX mode.");
-        int idx = 0; foreach (var l in Layers) { int c = (int)l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; }
-    }
-
+    /// <inheritdoc />
+    /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
+    /// write on every parameter surface, so the guard is stated once here instead of being
+    /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
+    protected override bool SupportsParameterMutation => _useNativeMode;
     protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio)
     {
         if (MelSpec is not null) return MelSpec.Forward(rawAudio);

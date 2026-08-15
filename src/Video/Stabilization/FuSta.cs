@@ -46,10 +46,10 @@ namespace AiDotNet.Video.Stabilization;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("FuSta: Hybrid Approach for Video Stabilization",
-    "https://arxiv.org/abs/2202.06897",
-    Year = 2022,
-    Authors = "Zhiming Wang, Feng Xu, Jiangyu Liu")]
+[ResearchPaper("Hybrid Neural Fusion for Full-frame Video Stabilization",
+    "https://arxiv.org/abs/2102.06205",
+    Year = 2021,
+    Authors = "Yu-Lun Liu, Wei-Sheng Lai, Ming-Hsuan Yang, Yung-Yu Chuang, Jia-Bin Huang")]
 public class FuSta<T> : VideoStabilizationBase<T>
 {
     private readonly FuStaOptions _options;
@@ -90,7 +90,11 @@ public class FuSta<T> : VideoStabilizationBase<T>
     {
         _options = options ?? new FuStaOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
+            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate
+            });
         SupportsFullFrame = true;
         CropRatio = 0.0;
         InitializeLayers();
@@ -138,7 +142,7 @@ public class FuSta<T> : VideoStabilizationBase<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expected);
+            TrainWithTape(input, expected, _optimizer);
         }
         finally
         {
@@ -146,21 +150,8 @@ public class FuSta<T> : VideoStabilizationBase<T>
         }
     }
 
-    /// <inheritdoc/>
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        int offset = 0;
-        foreach (var layer in Layers)
-        {
-            var p = layer.GetParameters();
-            if (offset + p.Length > parameters.Length) break;
-            var sub = new Vector<T>(p.Length);
-            for (int i = 0; i < p.Length; i++) sub[i] = parameters[offset + i];
-            layer.SetParameters(sub);
-            offset += p.Length;
-        }
-    }
-
+    // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
+    // exactly the same enumeration, so this said nothing the base does not already say.
     /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()
     {

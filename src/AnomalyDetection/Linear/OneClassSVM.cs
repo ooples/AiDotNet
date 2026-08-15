@@ -47,13 +47,14 @@ namespace AiDotNet.AnomalyDetection.Linear;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("Estimating the Support of a High-Dimensional Distribution", "https://doi.org/10.1162/089976601750264965", Year = 2001, Authors = "Bernhard Scholkopf, John C. Platt, John Shawe-Taylor, Alex J. Smola, Robert C. Williamson")]
-public class OneClassSVM<T> : AnomalyDetectorBase<T>
+public partial class OneClassSVM<T> : AnomalyDetectorBase<T>
 {
     private readonly double _nu;
     private readonly double _gamma;
     private readonly int _maxIterations;
     private readonly double _tolerance;
 
+    [Buffer]
     private Matrix<T>? _supportVectors;
     private Vector<T>? _alphas;
     private T _rho;

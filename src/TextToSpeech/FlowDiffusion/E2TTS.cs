@@ -35,7 +35,8 @@ namespace AiDotNet.TextToSpeech.FlowDiffusion;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper(
-    "Embarrassingly Easy Text-to-Speech (E2 TTS)",
+    // Title corrected to the published form; the arXiv id was already right.
+    "E2 TTS: Embarrassingly Easy Fully Non-Autoregressive Zero-Shot TTS",
     "https://arxiv.org/abs/2406.18009",
     Year = 2024,
     Authors = "Eskimez et al."
@@ -83,7 +84,7 @@ public class E2TTS<T> : TtsModelBase<T>, ICodecTts<T>
         _options = options ?? new E2TTSOptions();
         ValidateOptions(_options);
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? CreateDefaultOptimizer();
         base.SampleRate = _options.SampleRate;
         base.MelChannels = _options.MelChannels;
         base.HopSize = _options.HopSize;
@@ -150,7 +151,7 @@ public class E2TTS<T> : TtsModelBase<T>, ICodecTts<T>
                 LayerHelper<T>.CreateDefaultCodecLMLayers(
                     _options.TextEncoderDim,
                     _options.LLMDim,
-                    _options.NumCodebooks * _options.CodebookSize,
+                    _options.MelChannels,
                     _options.NumEncoderLayers,
                     _options.NumLLMLayers,
                     _options.NumHeads,
@@ -194,7 +195,7 @@ public class E2TTS<T> : TtsModelBase<T>, ICodecTts<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expected);
+            TrainWithTape(input, expected, _optimizer);
         }
         finally
         {
@@ -202,20 +203,22 @@ public class E2TTS<T> : TtsModelBase<T>, ICodecTts<T>
         }
     }
 
-    public override void UpdateParameters(Vector<T> parameters)
+    /// <summary>
+    /// Refuses parameter work on a disposed model, on every entry point rather than one.
+    /// </summary>
+    /// <remarks>
+    /// This check used to live inside UpdateParameters, which meant ParameterCount, GetParameters
+    /// and SetParameters reached a disposed model unguarded. The base calls this hook from all of
+    /// them, so moving it here widens the guard and lets the hand-written UpdateParameters -- whose
+    /// only other content was a walk the base already performs -- be deleted.
+    /// </remarks>
+    protected override void EnsureParametersReady()
     {
         ThrowIfDisposed();
-        if (IsOnnxMode)
-            throw new NotSupportedException("Cannot update parameters in ONNX mode.");
-        int idx = 0;
-        foreach (var l in Layers)
-        {
-            int c = (int)l.ParameterCount;
-            l.UpdateParameters(parameters.Slice(idx, c));
-            idx += c;
-        }
+        base.EnsureParametersReady();
     }
 
+    // UpdateParameters folded one enumeration the base already folds. Removed under AIDN082.
     public override ModelMetadata<T> GetModelMetadata()
     {
         var m = new ModelMetadata<T>
@@ -283,9 +286,18 @@ public class E2TTS<T> : TtsModelBase<T>, ICodecTts<T>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
         if (IsOnnxMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new E2TTS<T>(Architecture, mp, _options);
-        return new E2TTS<T>(Architecture, _options, _optimizer);
+            return new E2TTS<T>(Architecture, mp, new E2TTSOptions(_options));
+        return new E2TTS<T>(Architecture, new E2TTSOptions(_options));
     }
+
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreateDefaultOptimizer()
+        => new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate,
+                WeightDecay = _options.WeightDecay
+            });
 
     private static void ValidateOptions(E2TTSOptions opts)
     {

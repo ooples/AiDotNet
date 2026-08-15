@@ -324,48 +324,13 @@ public class RAkELClassifier<T> : MultiLabelClassifierBase<T>
     }
 
     /// <inheritdoc />
-    public override Vector<T> GetParameters()
+    protected override void RegisterComponents()
     {
-        if (_labelsetWeights.Count == 0)
-            return new Vector<T>(0);
-
-        // Flatten all labelset weights into single vector
-        int totalParams = 0;
-        foreach (var weights in _labelsetWeights)
-            totalParams += weights.Rows * weights.Columns;
-
-        var parameters = new Vector<T>(totalParams);
-        int idx = 0;
-        foreach (var weights in _labelsetWeights)
-        {
-            for (int i = 0; i < weights.Rows; i++)
-            {
-                for (int j = 0; j < weights.Columns; j++)
-                {
-                    parameters[idx++] = weights[i, j];
-                }
-            }
-        }
-
-        return parameters;
-    }
-
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        // Restore parameters to labelset weights
-        int idx = 0;
-        foreach (var weights in _labelsetWeights)
-        {
-            for (int i = 0; i < weights.Rows; i++)
-            {
-                for (int j = 0; j < weights.Columns; j++)
-                {
-                    if (idx < parameters.Length)
-                        weights[i, j] = parameters[idx++];
-                }
-            }
-        }
+        base.RegisterComponents();
+        RegisterParameterComponent(
+            "labelset-weights",
+            new AiDotNet.Models.Parameters.MatrixCollectionParameterSource<T>(
+                () => _labelsetWeights));
     }
 
     /// <inheritdoc/>

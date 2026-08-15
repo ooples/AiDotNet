@@ -54,6 +54,11 @@ namespace AiDotNet.NeuralNetworks.Tabular;
     Authors = "Yury Gorishniy, Akim Kotelnikov, Artem Babenko")]
 public class TabMClassifier<T> : TabMBase<T>
 {
+
+    /// <inheritdoc />
+    /// <remarks>The task head. Everything else is the shared backbone, which the base folds ahead of it in every parameter surface.</remarks>
+    protected override IEnumerable<ILayer<T>> GetExtraTrainableLayers()
+        => new ILayer<T>[] { _classificationHead };
     private readonly int _numClasses;
     private readonly BatchEnsembleLayer<T> _classificationHead;
 
@@ -66,11 +71,6 @@ public class TabMClassifier<T> : TabMBase<T>
     /// Gets the number of output classes.
     /// </summary>
     public int NumClasses => _numClasses;
-
-    /// <summary>
-    /// Gets the total number of trainable parameters.
-    /// </summary>
-    public override long ParameterCount => base.ParameterCount + _classificationHead.ParameterCount;
 
     /// <summary>
     /// Initializes a new instance of the TabMClassifier class with default configuration.
@@ -330,27 +330,6 @@ public class TabMClassifier<T> : TabMBase<T>
     {
         base.UpdateParameters(learningRate);
         _classificationHead.UpdateParameters(learningRate);
-    }
-
-    /// <summary>
-    /// Gets all parameters including the classification head.
-    /// </summary>
-    public override Vector<T> GetParameters()
-    {
-        var baseParams = base.GetParameters();
-        var headParams = _classificationHead.GetParameters();
-
-        var allParams = new T[baseParams.Length + headParams.Length];
-        for (int i = 0; i < baseParams.Length; i++)
-        {
-            allParams[i] = baseParams[i];
-        }
-        for (int i = 0; i < headParams.Length; i++)
-        {
-            allParams[baseParams.Length + i] = headParams[i];
-        }
-
-        return new Vector<T>(allParams);
     }
 
     /// <summary>

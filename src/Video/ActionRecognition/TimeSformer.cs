@@ -74,6 +74,10 @@ namespace AiDotNet.Video.ActionRecognition;
     "https://arxiv.org/abs/2102.05095",
     Year = 2021,
     Authors = "Gedas Bertasius, Heng Wang, Lorenzo Torresani")]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Frames, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Input, BatchOptional = true)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Classes,
+    Direction = TensorLayoutDirection.Output, BatchOptional = true)]
 public class TimeSformer<T> : NeuralNetworkBase<T>
 {
     private readonly TimeSformerOptions _options;
@@ -451,7 +455,7 @@ public class TimeSformer<T> : NeuralNetworkBase<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expectedOutput);
+            TrainWithTape(input, expectedOutput, _optimizer);
         }
         finally
         {
@@ -609,30 +613,7 @@ public class TimeSformer<T> : NeuralNetworkBase<T>
 
     #region Serialization
 
-    /// <inheritdoc/>
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        if (!_useNativeMode)
-            throw new InvalidOperationException("Parameter updates are not supported in ONNX mode.");
-
-        int offset = 0;
-        foreach (var layer in Layers)
-        {
-            var layerParams = layer.GetParameters();
-            int paramCount = layerParams.Length;
-            if (paramCount > 0 && offset + paramCount <= parameters.Length)
-            {
-                var slice = new Vector<T>(paramCount);
-                for (int i = 0; i < paramCount; i++)
-                {
-                    slice[i] = parameters[offset + i];
-                }
-                layer.SetParameters(slice);
-                offset += paramCount;
-            }
-        }
-    }
-
+    // UpdateParameters restated the base verbatim; ModelBase routes it to SetParameters.
     /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()
     {

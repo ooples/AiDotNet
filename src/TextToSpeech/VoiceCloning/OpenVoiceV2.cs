@@ -203,15 +203,14 @@ public class OpenVoiceV2<T> : TtsModelBase<T>, IEndToEndTts<T>, IVoiceCloner<T>
         if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
             Layers.AddRange(Architecture.Layers);
         else
+            // OpenVoice V2 is VITS-based: a 1-D conv encoder + invertible normalizing flow + HiFi-GAN
+            // decoder (Qin et al. 2023, §Approach), NOT a transformer stack. See
+            // LayerHelper.CreateDefaultOpenVoiceV2Layers. specChannels matches the model's MelChannels.
             Layers.AddRange(
-                LayerHelper<T>.CreateDefaultVoiceCloningLayers(
-                    _options.SpeakerEmbeddingDim,
-                    _options.EncoderDim,
-                    _options.DecoderDim,
-                    _options.NumEncoderLayers,
-                    _options.NumDecoderLayers,
-                    _options.NumHeads,
-                    _options.DropoutRate
+                LayerHelper<T>.CreateDefaultOpenVoiceV2Layers(
+                    specChannels: base.MelChannels,
+                    hiddenDim: _options.DecoderDim,
+                    numFlowBlocks: _options.NumEncoderLayers
                 )
             );
     }
@@ -233,23 +232,25 @@ public class OpenVoiceV2<T> : TtsModelBase<T>, IEndToEndTts<T>, IVoiceCloner<T>
         if (IsOnnxMode)
             throw new NotSupportedException("Training not supported in ONNX mode.");
         SetTrainingMode(true);
-        TrainWithTape(input, expected);
-        SetTrainingMode(false);
-    }
-
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        if (!_useNativeMode)
-            throw new NotSupportedException("Cannot update parameters in ONNX mode.");
-        int idx = 0;
-        foreach (var l in Layers)
+        try
         {
-            int c = (int)l.ParameterCount;
-            l.UpdateParameters(parameters.Slice(idx, c));
-            idx += c;
+            TrainWithTape(input, expected, _optimizer);
+        }
+        finally
+        {
+            SetTrainingMode(false);
         }
     }
 
+    /// <inheritdoc />
+    protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> GetOrCreateBaseOptimizer()
+        => _optimizer ?? base.GetOrCreateBaseOptimizer();
+
+    /// <inheritdoc />
+    /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
+    /// write on every parameter surface, so the guard is stated once here instead of being
+    /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
+    protected override bool SupportsParameterMutation => _useNativeMode;
     public override ModelMetadata<T> GetModelMetadata()
     {
         var m = new ModelMetadata<T>
@@ -310,8 +311,8 @@ public class OpenVoiceV2<T> : TtsModelBase<T>, IEndToEndTts<T>, IVoiceCloner<T>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
         if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new OpenVoiceV2<T>(Architecture, mp, _options);
-        return new OpenVoiceV2<T>(Architecture, _options);
+            return new OpenVoiceV2<T>(Architecture, mp, new OpenVoiceV2Options(_options));
+        return new OpenVoiceV2<T>(Architecture, new OpenVoiceV2Options(_options));
     }
 
     private void ThrowIfDisposed()

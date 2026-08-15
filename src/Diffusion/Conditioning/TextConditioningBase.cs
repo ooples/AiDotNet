@@ -1,4 +1,5 @@
 using System.IO;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -33,8 +34,31 @@ namespace AiDotNet.Diffusion.Conditioning;
 /// fabricates token IDs from characters.
 /// </para>
 /// </remarks>
-public abstract class TextConditioningBase<T> : NeuralNetworkBase<T>, IConditioningModule<T>
+[TensorLayout(TensorAxis.Time, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Output)]
+public abstract class TextConditioningBase<T> : NeuralNetworkBase<T>, IConditioningModule<T>, IShapeContract
 {
+    /// <inheritdoc />
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+        => inputRank switch
+        {
+            1 =>
+            [
+                new OutputAxisContract(TensorAxis.Time, AxisRelation.Same(TensorAxis.Time)),
+                new OutputAxisContract(TensorAxis.Features, AxisRelation.Fixed(EmbeddingDimension)),
+            ],
+            2 =>
+            [
+                new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+                new OutputAxisContract(TensorAxis.Time, AxisRelation.Same(TensorAxis.Time)),
+                new OutputAxisContract(TensorAxis.Features, AxisRelation.Fixed(EmbeddingDimension)),
+            ],
+            _ => null,
+        };
+
     /// <summary>The injected tokenizer for this conditioner's text input.</summary>
     protected ITokenizer Tokenizer { get; }
 
@@ -242,19 +266,8 @@ public abstract class TextConditioningBase<T> : NeuralNetworkBase<T>, ICondition
 
     // === NeuralNetworkBase abstract surface ===
 
-    /// <inheritdoc/>
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        int idx = 0;
-        foreach (var layer in Layers)
-        {
-            int count = (int)layer.ParameterCount;
-            if (count == 0) continue;
-            layer.UpdateParameters(parameters.Slice(idx, count));
-            idx += count;
-        }
-    }
-
+    // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
+    // exactly the same enumeration, so this said nothing the base does not already say.
     /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata() => new ModelMetadata<T>
     {

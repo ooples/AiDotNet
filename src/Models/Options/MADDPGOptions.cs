@@ -1,4 +1,4 @@
-using AiDotNet.Interfaces;
+﻿using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.ReinforcementLearning.Agents;
 
@@ -100,6 +100,10 @@ public class MADDPGOptions<T> : ReinforcementLearningOptions<T>
         if (other is null) throw new ArgumentNullException(nameof(other));
 
         // Copy base class properties
+        // Seed included: it is declared on the base rather than in this file, so a copy constructor
+        // written from the local declarations alone misses it, and a clone then initializes from a
+        // different random stream than the instance it was cloned from.
+        Seed = other.Seed;
         LearningRate = other.LearningRate;
         DiscountFactor = other.DiscountFactor;
         LossFunction = other.LossFunction;
@@ -118,8 +122,28 @@ public class MADDPGOptions<T> : ReinforcementLearningOptions<T>
         CriticLearningRate = other.CriticLearningRate;
         TargetUpdateTau = other.TargetUpdateTau;
         ExplorationNoise = other.ExplorationNoise;
-        ActorHiddenLayers = other.ActorHiddenLayers;
-        CriticHiddenLayers = other.CriticHiddenLayers;
+        // Cloned, not shared: a bare assignment leaves the clone and the original writing
+        // through the SAME buffer, so mutating one silently reconfigures the other.
+        // A null here would be stored as a non-nullable property holding null, so the failure
+        // surfaces much later as a null reference in model code with nothing pointing back at the
+        // clone that produced it. Reject it at the boundary instead.
+        if (other.ActorHiddenLayers is null)
+        {
+            throw new ArgumentException(
+                $"{nameof(other.ActorHiddenLayers)} must not be null.", nameof(other));
+        }
+        ActorHiddenLayers = new List<int>(other.ActorHiddenLayers);
+        // Cloned, not shared: a bare assignment leaves the clone and the original writing
+        // through the SAME buffer, so mutating one silently reconfigures the other.
+        // A null here would be stored as a non-nullable property holding null, so the failure
+        // surfaces much later as a null reference in model code with nothing pointing back at the
+        // clone that produced it. Reject it at the boundary instead.
+        if (other.CriticHiddenLayers is null)
+        {
+            throw new ArgumentException(
+                $"{nameof(other.CriticHiddenLayers)} must not be null.", nameof(other));
+        }
+        CriticHiddenLayers = new List<int>(other.CriticHiddenLayers);
         Optimizer = other.Optimizer;
     }
 

@@ -38,8 +38,87 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.Routing)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, Cost = ComputeCost.High)]
-public class ExpertLayer<T> : LayerBase<T>
+// A CONTAINER decorator: ForwardTraced runs "foreach (var layer in _layers) output = layer.Forward(output)"
+// and then ApplyActivation, which is element-wise. So this layer's output shape is the LAST sub-layer's
+// output shape - which is exactly what OnFirstForward publishes too, walking the chain and taking the
+// final "runningShape = layer.GetOutputShape()" as the outer output shape.
+//
+// The layouts name this layer's INPUT axes. The declared form is the one every construction site builds:
+// MixtureOfExpertsBuilder, TimeMoEBlockLayer and the class's own example all fill _layers with dense
+// projections over a feature vector, so the input is [Batch, Features] - or the unbatched [Features],
+// hence BatchOptional, which OnFirstForward's "stripBatch = inputRank > 1" also allows for.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features,
+    BatchOptional = true, Direction = TensorLayoutDirection.Input,
+    Note = "Feature vector in; the chain of sub-layers projects the trailing axis.")]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features,
+    BatchOptional = true, Direction = TensorLayoutDirection.Output)]
+[AutoParameters]
+public partial class ExpertLayer<T> : LayerBase<T>, IShapeContract
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// Delegated to the LAST sub-layer, because that is what produces this layer's result:
+    /// <c>ForwardTraced</c> threads the input through <c>_layers</c> in order and returns the final
+    /// output (the expert's own activation is element-wise and moves nothing).
+    /// </para>
+    /// <para>
+    /// GUARDED, though, and the guard is the whole subtlety. The relations the last sub-layer hands back
+    /// are resolved against THIS layer's input - the START of the chain - while that sub-layer actually
+    /// sees the chain's intermediate result. The two agree only when the chain did not change what
+    /// those relations read, so a delegated contract is accepted in exactly two situations:
+    /// </para>
+    /// <list type="bullet">
+    /// <item>every relation reads nothing but <c>Batch</c> (or is <c>Fixed</c>, reading nothing at all) -
+    /// the canonical dense expert, whose last layer reports <c>[Same(Batch), Fixed(outputDim)]</c>. Batch
+    /// is not part of the per-sample shape the chain rewrites, so it arrives untouched; and</item>
+    /// <item>the chain is provably extent-preserving up to the last layer, i.e. this layer's resolved
+    /// input shape and the last sub-layer's resolved input shape are equal element by element. Then
+    /// every axis reaches the last layer unchanged and any relation it returns is safe.</item>
+    /// </list>
+    /// <para>
+    /// Anything else declines. An expert whose last layer reports <c>Same(Time)</c> would have that Time
+    /// resolved against the ORIGINAL input, and if a layer in between resized it the answer is
+    /// confidently wrong - worse than no answer at all.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        if (_layers.Count == 0) return null;
+
+        var last = _layers[_layers.Count - 1];
+        var axes = (last as IShapeContract)?.OutputAxesFor(inputRank);
+        if (axes is null || axes.Count == 0) return null;
+
+        var expertInput = GetInputShape();
+        var lastInput = last.GetInputShape();
+        if (expertInput is null || expertInput.Length == 0) return null;
+        if (lastInput is null || lastInput.Length != expertInput.Length) return null;
+
+        bool chainPreservesEveryExtent = true;
+        for (int i = 0; i < expertInput.Length; i++)
+        {
+            if (expertInput[i] != lastInput[i]) { chainPreservesEveryExtent = false; break; }
+        }
+
+        if (!chainPreservesEveryExtent)
+        {
+            foreach (var axis in axes)
+            {
+                foreach (var source in axis.Relation.Sources)
+                {
+                    // Batch survives the chain by construction - it is not in the per-sample shape the
+                    // sub-layers were resolved against. Every other role may have been resized upstream,
+                    // and resolving it against the original extent would be a wrong shape stated with
+                    // confidence.
+                    if (source != TensorAxis.Batch) return null;
+                }
+            }
+        }
+
+        return axes;
+    }
+
     /// <summary>
     /// The sequence of layers that make up this expert.
     /// </summary>
@@ -97,30 +176,6 @@ public class ExpertLayer<T> : LayerBase<T>
     /// </summary>
     protected override bool SupportsGpuExecution =>
         _layers.All(l => l is LayerBase<T> lb && lb.CanExecuteOnGpu);
-
-    /// <summary>
-    /// Gets the total number of trainable parameters across all layers in this expert.
-    /// </summary>
-    /// <value>
-    /// The sum of parameter counts from all contained layers.
-    /// </value>
-    /// <remarks>
-    /// <para>
-    /// This property calculates the total number of trainable parameters by summing the
-    /// parameter counts of all layers in the expert's sequence.
-    /// </para>
-    /// <para><b>For Beginners:</b> This counts all the numbers that can be adjusted during training.
-    ///
-    /// The total includes:
-    /// - Weights from all dense layers
-    /// - Biases from all layers that use them
-    /// - Any other learnable parameters in the layers
-    ///
-    /// A higher parameter count means the expert can represent more complex patterns,
-    /// but also requires more memory and computation.
-    /// </para>
-    /// </remarks>
-    public override long ParameterCount => (int)_layers.Sum(l => l.ParameterCount);
 
     /// <summary>
     /// Initializes a new instance of the <see cref="ExpertLayer{T}"/> class with the specified layers.
@@ -212,7 +267,7 @@ public class ExpertLayer<T> : LayerBase<T>
     /// as the data flows through the expert.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // Lazy-shape support: if construction-time inputShape contained
         // sentinel -1 dims, the chain-resolve in the ctor was skipped
@@ -467,43 +522,6 @@ public class ExpertLayer<T> : LayerBase<T>
     }
 
     /// <summary>
-    /// Gets all trainable parameters from all layers as a single vector.
-    /// </summary>
-    /// <returns>A vector containing all parameters from all layers, concatenated in layer order.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method extracts all trainable parameters from all layers and concatenates them into
-    /// a single vector. The parameters are ordered by layer (first layer's parameters, then second layer's, etc.).
-    /// This is useful for optimization algorithms that operate on all parameters at once.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method collects all the learned values from every layer into one list.
-    ///
-    /// The returned vector contains:
-    /// - All parameters from the first layer
-    /// - Then all parameters from the second layer
-    /// - And so on for all layers
-    ///
-    /// This is useful for:
-    /// - Saving the expert's knowledge to disk
-    /// - Transferring learned parameters to another expert
-    /// - Advanced optimization techniques
-    /// - Analyzing what the expert has learned
-    ///
-    /// You can think of it as packaging up everything the expert knows into one container.
-    /// </para>
-    /// </remarks>
-    public override Vector<T> GetParameters()
-    {
-        // Use Vector<T>.Concatenate for production-grade parameter collection
-        var layerParams = _layers
-            .Where(l => l.ParameterCount > 0)
-            .Select(l => l.GetParameters())
-            .ToArray();
-
-        return layerParams.Length > 0 ? Vector<T>.Concatenate(layerParams) : new Vector<T>(0);
-    }
-
-    /// <summary>
     /// Sets all trainable parameters in all layers from a single vector.
     /// </summary>
     /// <param name="parameters">A vector containing all parameters for all layers, concatenated in layer order.</param>
@@ -545,26 +563,6 @@ public class ExpertLayer<T> : LayerBase<T>
     {
         foreach (var layer in _layers)
             layer.ClearGradients();
-    }
-
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (parameters.Length != ParameterCount)
-        {
-            throw new ArgumentException(
-                $"Expected {ParameterCount} parameters, but got {parameters.Length}.",
-                nameof(parameters));
-        }
-
-        // === Vectorized Parameter Distribution (Phase B: US-GPU-015) ===
-        int offset = 0;
-        foreach (var layer in _layers.Where(l => l.ParameterCount > 0))
-        {
-            int layerParamCount = checked((int)layer.ParameterCount);
-            var layerParamsVec = parameters.Slice(offset, layerParamCount);
-            layer.SetParameters(layerParamsVec);
-            offset += layerParamCount;
-        }
     }
 
     /// <summary>

@@ -76,11 +76,12 @@ namespace AiDotNet.TimeSeries;
 [ModelComplexity(ModelComplexity.VeryHigh)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("Chronos: Learning the Language of Time Series", "https://arxiv.org/abs/2403.07815", Year = 2024, Authors = "Abdul Fatir Ansari, Lorenzo Stella, Caner Turkmen, Xiyuan Zhang, Pedro Mercado, Huibin Shen, Oleksandr Shchur, Syama Sundar Rangapuram, Sebastian Pineda Arango, Shubham Kapoor, Jasper Zschiegner, Danielle C. Maddix, Hao Wang, Michael W. Mahoney, Kari Torkkola, Andrew Gordon Wilson, Michael Bohlke-Schneider, Yuyang Wang")]
-public class ChronosFoundationModel<T> : TimeSeriesModelBase<T>
+public partial class ChronosFoundationModel<T> : TimeSeriesModelBase<T>
 {
     private readonly ChronosOptions<T> _options;
     private readonly INumericOperations<T> _numOps;
     private readonly Random _random;
+    [Buffer]
     private Vector<T> _trainingSeries = Vector<T>.Empty();
 
     // Tokenization parameters
@@ -91,6 +92,7 @@ public class ChronosFoundationModel<T> : TimeSeriesModelBase<T>
 
     // Transformer components - now using Tensor<T>
     private Tensor<T> _tokenEmbeddings;      // [vocabularySize, embeddingDim]
+    [Buffer]
     private Tensor<T> _positionalEncoding;   // [maxLen, embeddingDim]
     private List<ChronosTransformerLayerTensor<T>> _transformerLayers;
     private Tensor<T> _outputProjection;     // [vocabularySize, embeddingDim]
@@ -102,11 +104,14 @@ public class ChronosFoundationModel<T> : TimeSeriesModelBase<T>
 
     // Pre-allocated gradient computation buffers (reused across gradient steps)
     // Reused per-sample gradient buffers (eliminate the ~1 MB LOH allocations that OOM-crashed corpus-scale training).
+    [Scratch]
     private Tensor<T>? _dOutputProjBuf;       // [vocabularySize, embeddingDim] — output-projection gradient
+    [Scratch]
     private Tensor<T>? _dTokenEmbBuf;         // [vocabularySize, embeddingDim] — sparse token-embedding gradient
     private int[]? _prevTokenRows;            // token rows written last sample (so we zero only those, not the whole tensor)
 
     // Gradient accumulators for batch training
+    [Scratch]
     private readonly Dictionary<string, Tensor<T>> _gradientAccumulators;
     private int _gradientCount;
 
@@ -1054,19 +1059,8 @@ public class ChronosFoundationModel<T> : TimeSeriesModelBase<T>
         return new ChronosFoundationModel<T>(new ChronosOptions<T>(_options));
     }
 
-    public override long ParameterCount
-    {
-        get
-        {
-            int count = _tokenEmbeddings.Length;
-            count += _outputProjection.Length + _outputBias.Length;
-            count += _finalLayerNormGamma.Length + _finalLayerNormBeta.Length;
-            foreach (var layer in _transformerLayers)
-                count += (int)layer.ParameterCount;
-            return count;
-        }
-    }
-
+    // ParameterCount restated a fold the base now derives from generated component registration.
+    // Removed under AIDN082.
     private class LayerNormCache
     {
         public Tensor<T> Input { get; set; } = new Tensor<T>(new[] { 1 });
@@ -1119,7 +1113,20 @@ public class ChronosOptions<T> : TimeSeriesRegressionOptions<T>
 /// Chronos transformer layer with causal multi-head self-attention and feed-forward network.
 /// Now uses Tensor<T> and proper backpropagation.
 /// </summary>
-internal class ChronosTransformerLayerTensor<T> : NeuralNetworks.Layers.LayerBase<T>
+// Rank 1, in equals out - a pre-norm transformer block is shape-preserving by construction, and the
+// code says so twice. Both constructors declare the same width on each side
+// (`base(new[] { embeddingDim }, new[] { embeddingDim })`), and Forward ends on
+// `AddResidual(_cachedResidual1, ffnOutput)`: a residual add can only return the shape it was added
+// to, so attention and the 4x FFN expansion both come back to _embeddingDim before the layer exits.
+// The single-tensor ForwardTraced wraps its argument as a one-position sequence and returns that
+// sequence's last element, so the same relation holds on the traced path.
+//
+// No hand-written OutputAxesFor: with matching layouts the generator derives Same(Features), which
+// is exactly the relation above.
+[TensorLayout(TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
+[AutoParameters]
+internal partial class ChronosTransformerLayerTensor<T> : NeuralNetworks.Layers.LayerBase<T>, IShapeContract
 {
     private int _embeddingDim;
     private int _numHeads;
@@ -1151,11 +1158,6 @@ internal class ChronosTransformerLayerTensor<T> : NeuralNetworks.Layers.LayerBas
     private List<Tensor<T>>? _cachedNorm2;
     private List<Tensor<T>>? _cachedFfnHidden;
 
-    public override long ParameterCount =>
-        _queryProj.Length + _keyProj.Length + _valueProj.Length + _outputProj.Length +
-        _ffn1.Length + _ffn1Bias.Length + _ffn2.Length + _ffn2Bias.Length +
-        _layerNorm1Gamma.Length * 2 + _layerNorm2Gamma.Length * 2;
-
     public override bool SupportsTraining => true;
 
     public override void ResetState()
@@ -1168,26 +1170,12 @@ internal class ChronosTransformerLayerTensor<T> : NeuralNetworks.Layers.LayerBas
         _cachedFfnHidden = null;
     }
 
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // Single-tensor interface: treat as single-position sequence
         var seqInput = new List<Tensor<T>> { input };
         var seqOutput = Forward(seqInput);
         return seqOutput.Count > 0 ? seqOutput[seqOutput.Count - 1] : input;
-    }
-
-    public override void UpdateParameters(T learningRate)
-    {
-        // Apply gradient descent to all weight tensors
-        // Gradients are computed and applied by the model's ApplyGradients method
-    }
-
-    public override Vector<T> GetParameters()
-    {
-        var allParams = new List<T>();
-        foreach (var tensor in new[] { _queryProj, _keyProj, _valueProj, _outputProj, _ffn1, _ffn1Bias, _ffn2, _ffn2Bias, _layerNorm1Gamma, _layerNorm1Beta, _layerNorm2Gamma, _layerNorm2Beta })
-            for (int i = 0; i < tensor.Length; i++) allParams.Add(tensor[i]);
-        return new Vector<T>(allParams.ToArray());
     }
 
     public ChronosTransformerLayerTensor(int embeddingDim, int numHeads, int seed = 42)

@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Document.Interfaces;
 using AiDotNet.Document.Options;
 using AiDotNet.Enums;
@@ -56,8 +56,9 @@ namespace AiDotNet.Document.LayoutAware;
 [ModelTask(ModelTask.Detection)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[RankRoutedInputDomain(2, 5)]
 [ResearchPaper("LayoutXLM: Multimodal Pre-training for Multilingual Visually-rich Document Understanding", "https://doi.org/10.48550/arXiv.2104.08836", Year = 2022, Authors = "Yiheng Xu, Tengchao Lv, Lei Cui, Guoxin Wang, Yijuan Lu, Dinei Florencio, Cha Zhang, Furu Wei")]
-public class LayoutXLM<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, IDocumentQA<T>
+public partial class LayoutXLM<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, IDocumentQA<T>
 {
     private readonly LayoutXLMOptions _options;
 
@@ -69,7 +70,7 @@ public class LayoutXLM<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, ID
     private readonly bool _useNativeMode;
     private readonly InferenceSession? _onnxSession;
     private readonly ITokenizer _tokenizer;
-    private readonly IOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private readonly int _hiddenDim;
     private readonly int _numLayers;
     private readonly int _numHeads;
@@ -85,10 +86,6 @@ public class LayoutXLM<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, ID
     private readonly List<ILayer<T>> _outputLayers = [];
 
     // Learnable embeddings
-    private Tensor<T>? _positionEmbeddings;
-    private Tensor<T>? _spatialPositionEmbeddings;
-    private Tensor<T>? _visualPositionEmbeddings;
-    private Tensor<T>? _languageEmbeddings;
 
     #endregion
 
@@ -142,7 +139,7 @@ public class LayoutXLM<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, ID
         int vocabSize = 250002,
         int visualBackboneChannels = 256,
         int numLanguages = 53,
-        IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         LayoutXLMOptions? options = null)
         : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
@@ -201,7 +198,7 @@ public class LayoutXLM<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, ID
         int vocabSize = 250002,
         int visualBackboneChannels = 256,
         int numLanguages = 53,
-        IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         LayoutXLMOptions? options = null)
         : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
@@ -272,15 +269,7 @@ public class LayoutXLM<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, ID
     {
         var random = RandomHelper.CreateSeededRandom(42);
 
-        _positionEmbeddings = Tensor<T>.CreateDefault([MaxSequenceLength, _hiddenDim], NumOps.Zero);
-        _spatialPositionEmbeddings = Tensor<T>.CreateDefault([1024, _hiddenDim], NumOps.Zero);
-        _visualPositionEmbeddings = Tensor<T>.CreateDefault([(ImageSize / 16) * (ImageSize / 16), _hiddenDim], NumOps.Zero);
-        _languageEmbeddings = Tensor<T>.CreateDefault([_numLanguages, _hiddenDim], NumOps.Zero);
 
-        InitializeWithSmallRandomValues(_positionEmbeddings, random, 0.02);
-        InitializeWithSmallRandomValues(_spatialPositionEmbeddings, random, 0.02);
-        InitializeWithSmallRandomValues(_visualPositionEmbeddings, random, 0.02);
-        InitializeWithSmallRandomValues(_languageEmbeddings, random, 0.02);
     }
 
     private void InitializeWithSmallRandomValues(Tensor<T> tensor, Random random, double stdDev)
@@ -739,7 +728,10 @@ public class LayoutXLM<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, ID
     // Layer roles in CreateDefaultLayoutXLMLayers order: [0..VisualBackbonePrefixLength) = visual
     // backbone (conv/BN/pool + a final C->hidden projection Dense), then 4 text-embedding layers, then
     // the multimodal transformer + head. TextEmbeddingLayerCount mirrors LayoutLMv2's split.
-    private const int TextEmbeddingLayerCount = 4;
+    // Three, not four: the token EmbeddingLayer and the sinusoidal PositionalEncodingLayer that
+    // used to open this section are now a single LayoutEmbeddingLayer, which also carries the 2D
+    // layout terms. The LayerNorm and Dropout after them are unchanged.
+    private const int TextEmbeddingLayerCount = 3;
 
     /// <summary>
     /// Full text+image fusion entry (industry-standard LayoutXLM): encodes BOTH a token-ID sequence and
@@ -922,33 +914,22 @@ public class LayoutXLM<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, ID
             throw new NotSupportedException("Training not supported in ONNX mode.");
 
         SetTrainingMode(true);
-        TrainWithTape(input, expectedOutput);
+        TrainWithTape(input, expectedOutput, _optimizer);
         SetTrainingMode(false);
     }
 
-    /// <inheritdoc/>
+    // UpdateParameters applied a GRADIENT STEP, but its one-argument form is the value setter and every caller passes values -- the override corrupted the model. Removed under AIDN082.
+
+    /// <summary>
+    /// Parameters cannot be written while the model is backed by a loaded ONNX graph: the weights
+    /// belong to that graph, not to this instance.
+    /// </summary>
     /// <remarks>
-    /// Explicit-gradient parameter update kept for the
-    /// <see cref="IFullModel{T, TInput, TOutput}.UpdateParameters"/> contract (some
-    /// AiDotNet builders apply gradients out-of-band). Paper-default lr is 2e-5 with
-    /// linear warmup + decay (Xu et al. ACL 2022 §3.3); when this method is invoked
-    /// outside the AdamW tape path the simplest paper-defensible behavior is a single
-    /// vanilla SGD step at the same base lr — callers who want the full schedule should
-    /// drive <see cref="Train"/> instead and let the AdamW state machine handle it.
+    /// Replaces a hand-written throw that used to sit inside UpdateParameters. The base checks this
+    /// on every mutating entry point rather than the one member the throw happened to guard, and
+    /// reading -- ParameterCount and GetParameters -- stays available either way.
     /// </remarks>
-    public override void UpdateParameters(Vector<T> gradients)
-    {
-        if (!_useNativeMode)
-            throw new NotSupportedException("Parameter updates not supported in ONNX mode.");
-
-        var currentParams = GetParameters();
-        // Paper §3.3 base lr 2e-5.
-        T lr = NumOps.FromDouble(2e-5);
-
-        currentParams = Engine.Subtract(currentParams, Engine.Multiply(gradients, lr));
-        SetParameters(currentParams);
-    }
-
+    protected override bool SupportsParameterMutation => _useNativeMode;
     #endregion
 
     #region Disposal

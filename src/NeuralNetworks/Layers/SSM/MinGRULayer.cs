@@ -75,7 +75,14 @@ namespace AiDotNet.NeuralNetworks.Layers.SSM;
 [LayerCategory(LayerCategory.Recurrent)]
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerProperty(IsTrainable = true, IsStateful = true, Cost = ComputeCost.High, TestInputShape = "4, 256", TestConstructorArgs = "4")]
-public partial class MinGRULayer<T> : LayerBase<T>
+// Shape-preserving. Relations discovered by probing; roles read from the forward - this folder's
+// convention is seqLen = Shape[rank-2], modelDim = Shape[rank-1], so rank 2 is [Time, Features].
+[TensorLayout(TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
+[AutoParameters]
+public partial class MinGRULayer<T> : LayerBase<T>, IShapeContract
 {
     private readonly int _modelDimension;
     private readonly int _expandedDimension;
@@ -151,15 +158,6 @@ public partial class MinGRULayer<T> : LayerBase<T>
     /// Gets the expansion factor applied to the model dimension for the internal recurrence.
     /// </summary>
     public int ExpansionFactor => _expansionFactor;
-
-    /// <summary>
-    /// Gets the total number of trainable parameters.
-    /// </summary>
-    public override long ParameterCount =>
-        _inputProjectionWeights.Length + _inputProjectionBias.Length +
-        _gateWeights.Length + _gateBias.Length +
-        _candidateWeights.Length + _candidateBias.Length +
-        _outputProjectionWeights.Length + _outputProjectionBias.Length;
 
     /// <summary>
     /// Creates a new minGRU layer.
@@ -250,7 +248,7 @@ public partial class MinGRULayer<T> : LayerBase<T>
     }
 
     /// <inheritdoc />
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         _originalInputShape = input._shape;
 
@@ -331,35 +329,25 @@ public partial class MinGRULayer<T> : LayerBase<T>
         Tensor<T> gate, Tensor<T> candidate,
         int batchSize, int seqLen)
     {
-        var output = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _expandedDimension });
-
-        // Store all hidden states including h_0 for backward pass: [batch, seqLen+1, expandedDim]
-        var allHidden = TensorAllocator.Rent<T>(new[] { batchSize, seqLen + 1, _expandedDimension });
-        // h_0 is initialized to zero (already default)
+        var hidden = Tensor<T>.CreateDefault([batchSize, _expandedDimension], NumOps.Zero);
+        var hiddenSteps = new List<Tensor<T>>(seqLen);
 
         for (int t = 0; t < seqLen; t++)
         {
-            for (int bi = 0; bi < batchSize; bi++)
-            {
-                for (int d = 0; d < _expandedDimension; d++)
-                {
-                    T z = gate[new[] { bi, t, d }];
-                    T hTilde = candidate[new[] { bi, t, d }];
-                    T hPrev = allHidden[new[] { bi, t, d }];
-
-                    // h_t = (1 - z_t) * h_{t-1} + z_t * h_tilde_t
-                    T oneMinusZ = NumOps.Subtract(NumOps.One, z);
-                    T hNew = NumOps.Add(
-                        NumOps.Multiply(oneMinusZ, hPrev),
-                        NumOps.Multiply(z, hTilde));
-
-                    allHidden[new[] { bi, t + 1, d }] = hNew;
-                    output[new[] { bi, t, d }] = hNew;
-                }
-            }
+            var z = Engine.TensorSqueeze(Engine.TensorNarrow(gate, 1, t, 1), axis: 1);
+            var hTilde = Engine.TensorSqueeze(Engine.TensorNarrow(candidate, 1, t, 1), axis: 1);
+            var oneMinusZ = Engine.ScalarMinusTensor(NumOps.One, z);
+            hidden = Engine.TensorAdd(
+                Engine.TensorMultiply(oneMinusZ, hidden),
+                Engine.TensorMultiply(z, hTilde));
+            hiddenSteps.Add(Engine.TensorExpandDims(hidden, axis: 1));
         }
 
-        _lastHiddenStates = allHidden;
+        var output = hiddenSteps.Count == 1
+            ? hiddenSteps[0]
+            : Engine.TensorConcatenate(hiddenSteps.ToArray(), axis: 1);
+        var initialState = Tensor<T>.CreateDefault([batchSize, 1, _expandedDimension], NumOps.Zero);
+        _lastHiddenStates = Engine.TensorConcatenate([initialState, output], axis: 1);
         return output;
     }
 
@@ -406,28 +394,6 @@ public partial class MinGRULayer<T> : LayerBase<T>
         RegisterTrainableParameter(_outputProjectionWeights, PersistentTensorRole.Weights);
         RegisterTrainableParameter(_outputProjectionBias, PersistentTensorRole.Biases);
 
-    }
-
-    /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        var parameters = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
-        int index = 0;
-        foreach (var tensor in GetAllTensors())
-            for (int i = 0; i < tensor.Length; i++)
-                parameters[index++] = tensor[i];
-        return parameters;
-    }
-
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (parameters.Length != ParameterCount)
-            throw new ArgumentException($"Expected {ParameterCount} parameters, got {parameters.Length}");
-        int index = 0;
-        foreach (var tensor in GetAllTensors())
-            for (int i = 0; i < tensor.Length; i++)
-                tensor[i] = parameters[index++];
     }
 
     private Tensor<T>[] GetAllTensors() =>

@@ -133,7 +133,7 @@ namespace AiDotNet.NeuralRadianceFields.Models;
 [ModelComplexity(ModelComplexity.VeryHigh)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("NeRF: Representing Scenes as Neural Radiance Fields for View Synthesis", "https://doi.org/10.1007/978-3-030-58452-8_24", Year = 2020, Authors = "Ben Mildenhall, Pratul P. Srinivasan, Matthew Tancik, Jonathan T. Barron, Ravi Ramamoorthi, Ren Ng")]
-public class NeRF<T> : NeuralNetworkBase<T>, IRadianceField<T>, NeuralRadianceFields.Interfaces.IImageTrainable<T>
+public partial class NeRF<T> : AiDotNet.NeuralNetworks.VectorModelLayoutBase<T>, IRadianceField<T>, NeuralRadianceFields.Interfaces.IImageTrainable<T>
 {
     private readonly NeRFOptions _options;
 
@@ -243,31 +243,37 @@ public class NeRF<T> : NeuralNetworkBase<T>, IRadianceField<T>, NeuralRadianceFi
     /// <summary>
     /// Cached positions from last forward pass (for backpropagation).
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastPositions;
 
     /// <summary>
     /// Cached directions from last forward pass (for backpropagation).
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastDirections;
 
     /// <summary>
     /// Cached position encoding from last forward pass.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastPositionEncoding;
 
     /// <summary>
     /// Cached direction encoding from last forward pass.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastDirectionEncoding;
 
     /// <summary>
     /// Cached raw density output from last forward pass.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastDensityRaw;
 
     /// <summary>
     /// Cached raw RGB output from last forward pass.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastRgbRaw;
 
     /// <summary>
@@ -1304,23 +1310,7 @@ public class NeRF<T> : NeuralNetworkBase<T>, IRadianceField<T>, NeuralRadianceFi
         }
     }
 
-    /// <summary>
-    /// Updates model parameters using gradient descent.
-    /// </summary>
-    public override void UpdateParameters(Vector<T> gradients)
-    {
-        if (gradients == null)
-        {
-            throw new ArgumentNullException(nameof(gradients));
-        }
-
-        // Apply gradient descent: params = params - learning_rate * gradients
-        var currentParams = GetParameters();
-        currentParams = Engine.Subtract(currentParams, Engine.Multiply(gradients, _learningRate));
-
-        SetParameters(currentParams);
-    }
-
+    // UpdateParameters restated the base verbatim; ModelBase routes it to SetParameters.
     /// <summary>
     /// Makes a prediction using the model.
     /// </summary>

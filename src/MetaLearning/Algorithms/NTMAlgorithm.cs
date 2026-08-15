@@ -122,6 +122,7 @@ public class NTMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutp
     private readonly NTMMemory<T> _memory;
     private readonly List<NTMReadHead<T>> _readHeads;
     private readonly NTMWriteHead<T> _writeHead;
+    [Scratch]
     private List<Tensor<T>> _previousReadContents;
 
     // Cached inputs/outputs for gradient computation

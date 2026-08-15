@@ -34,7 +34,14 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.Routing)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, Cost = ComputeCost.High, UsesSurrogateGradient = true, TestInputShape = "4, 8", TestConstructorArgs = "4, 8, 10, 4, 3")]
-public partial class DigitCapsuleLayer<T> : LayerBase<T>
+// Rank 1 [Features] or rank 2 [Batch, Features]. The output is the FLATTENED capsule vector, which is
+// what ForwardTraced returns and what ResolveShapes now declares.
+[TensorLayout(TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
+[AutoParameters]
+public partial class DigitCapsuleLayer<T> : LayerBase<T>, IShapeContract
 {
     /// <summary>
     /// The weight tensor connecting input capsules to output capsules.
@@ -233,26 +240,6 @@ public partial class DigitCapsuleLayer<T> : LayerBase<T>
     /// </remarks>
     private readonly int _routingIterations;
 
-    /// <summary>
-    /// Gets a value indicating whether this layer supports training.
-    /// </summary>
-    /// <value>
-    /// Always <c>true</c> because this layer has trainable parameters (weights).
-    /// </value>
-    /// <remarks>
-    /// <para>
-    /// This property indicates that the digit capsule layer supports training through backpropagation.
-    /// The layer has trainable weights that are updated during the training process.
-    /// </para>
-    /// <para><b>For Beginners:</b> This property tells you that this layer can learn from data.
-    /// 
-    /// A value of true means:
-    /// - The layer can adjust its internal values during training
-    /// - It will improve its performance as it sees more data
-    /// - It has weights that are updated to make better predictions over time
-    /// </para>
-    /// </remarks>
-    public override long ParameterCount => _weights.Length;
     public override bool SupportsTraining => true;
 
     /// <inheritdoc/>
@@ -289,8 +276,17 @@ public partial class DigitCapsuleLayer<T> : LayerBase<T>
     /// with a moderate number of routing iterations (3-5) for good performance.
     /// </para>
     /// </remarks>
-    public DigitCapsuleLayer(int inputCapsules, int inputCapsuleDimension, int numClasses, int outputCapsuleDimension, int routingIterations)
-        : base([inputCapsules, inputCapsuleDimension], [numClasses, outputCapsuleDimension], (IVectorActivationFunction<T>)new SquashActivation<T>())
+    public DigitCapsuleLayer(
+        [LayerState] int inputCapsules,
+        [LayerState] int inputCapsuleDimension,
+        [LayerState] int numClasses,
+        [LayerState] int outputCapsuleDimension,
+        [LayerState] int routingIterations)
+        // FLATTENED output, matching ForwardTraced and OnFirstForward's ResolveShapes. This declared
+        // the pre-flatten [numClasses, outputCapsuleDimension] while the forward has always returned
+        // [batch, numClasses * outputCapsuleDimension] - so an EAGERLY constructed layer carried a
+        // declaration its own forward contradicts, which the lazy path no longer does.
+        : base([inputCapsules, inputCapsuleDimension], [numClasses * outputCapsuleDimension], (IVectorActivationFunction<T>)new SquashActivation<T>())
     {
         _inputCapsules = inputCapsules;
         _inputCapsuleDimension = inputCapsuleDimension;
@@ -314,7 +310,8 @@ public partial class DigitCapsuleLayer<T> : LayerBase<T>
     /// <param name="outputCapsuleDimension">Dimension of each output capsule's vector.</param>
     /// <param name="routingIterations">Number of dynamic-routing iterations.</param>
     public DigitCapsuleLayer(int numClasses, int outputCapsuleDimension, int routingIterations)
-        : base([-1, -1], [numClasses, outputCapsuleDimension], (IVectorActivationFunction<T>)new SquashActivation<T>())
+        // FLATTENED, for the same reason as the eager constructor above.
+        : base([-1, -1], [numClasses * outputCapsuleDimension], (IVectorActivationFunction<T>)new SquashActivation<T>())
     {
         if (numClasses <= 0)
             throw new ArgumentOutOfRangeException(nameof(numClasses), "numClasses must be positive.");
@@ -353,6 +350,49 @@ public partial class DigitCapsuleLayer<T> : LayerBase<T>
     /// <c>_inputCapsules = C</c> and trip the reshape on Line 513
     /// (see DigitCapsuleLayer Forward, rank&gt;3 branch).
     /// </remarks>
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// The output is the flattened capsule vector, <c>_numClasses * _outputCapsuleDimension</c> wide,
+    /// which is what <c>ForwardTraced</c> returns and what <c>OnFirstForward</c> now registers.
+    /// </para>
+    /// <para>
+    /// THE BATCH RELATION NEEDS NO CONVENTION, which is what makes rank 2 declarable at all.
+    /// <c>ForwardTraced</c> reads a rank-2 input two different ways - as <c>[I, D_in]</c> with batch 1
+    /// when the sizes coincide with the configured capsule structure, or as <c>[B, I*D_in]</c>
+    /// otherwise - and picking one would have been a guess. Both readings satisfy the same arithmetic:
+    /// the batch is the total element count divided by <c>_inputCapsules * _inputCapsuleDimension</c>.
+    /// So <see cref="AxisRelation.ScaledBy"/> over <see cref="AxisRelation.Product"/> is exactly right
+    /// for both, and the ambiguity never reaches the contract.
+    /// </para>
+    /// <para>
+    /// Ranks above 2 are handled by the forward but not declared: it folds every leading axis into the
+    /// batch, and those axes have no distinct roles to name.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        if (_numClasses <= 0 || _outputCapsuleDimension <= 0) return null;
+        int width = _numClasses * _outputCapsuleDimension;
+
+        if (inputRank == 1)
+        {
+            return new[] { new OutputAxisContract(TensorAxis.Features, AxisRelation.Fixed(width)) };
+        }
+
+        if (inputRank != 2 || _inputCapsules <= 0 || _inputCapsuleDimension <= 0) return null;
+
+        // RANK 2 IS PER-SAMPLE [inputCapsules, inputCapsuleDimension] - the capsule grid, NOT
+        // [Batch, Features]. Chain resolution passes per-sample shapes, so [1152, 8] carries no batch
+        // axis and the flattened capsule vector comes back rank 1. This previously emitted a leading
+        // Batch axis computed as totalElements / (inputCapsules * inputCapsuleDimension), which is 1
+        // for exactly that input - so it answered [1, 160] where the layer concludes [160].
+        return new[]
+        {
+            new OutputAxisContract(TensorAxis.Features, AxisRelation.Fixed(width)),
+        };
+    }
+
     protected override void OnFirstForward(Tensor<T> input)
     {
         int rank = input.Shape.Length;
@@ -407,7 +447,15 @@ public partial class DigitCapsuleLayer<T> : LayerBase<T>
 
         _inputCapsules = inputCapsules;
         _inputCapsuleDimension = inputCapsuleDimension;
-        ResolveShapes(new[] { inputCapsules, inputCapsuleDimension }, new[] { _numClasses, _outputCapsuleDimension });
+        // FLATTENED, matching what ForwardTraced actually returns. This declared
+        // [_numClasses, _outputCapsuleDimension] - the pre-flatten routing shape - while the forward
+        // has always ended on Reshape(..., [batch, _numClasses * _outputCapsuleDimension]). The layer's
+        // registered output shape and its real output disagreed, so anything trusting the declaration
+        // (chain validation, the shape contract, a downstream layer sizing itself) was working from a
+        // shape this layer never produces.
+        ResolveShapes(
+            new[] { inputCapsules, inputCapsuleDimension },
+            new[] { _numClasses * _outputCapsuleDimension });
     }
 
     /// <inheritdoc />
@@ -498,7 +546,7 @@ public partial class DigitCapsuleLayer<T> : LayerBase<T>
     /// then gradually giving more weight to experts who agree with the consensus for each outcome.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // Lazy-ctor instances start with _inputCapsules =
         // _inputCapsuleDimension = -1; resolve from input.Shape on first
@@ -625,10 +673,22 @@ public partial class DigitCapsuleLayer<T> : LayerBase<T>
         // The output is flattened from [batch, numClasses, outputCapsuleDimension] to [batch, numClasses * outputCapsuleDimension]
         var flattenedOutput = Engine.Reshape(output, [batchSize, _numClasses * _outputCapsuleDimension]);
 
-        // For single-sample with low-rank input, return appropriate shape
-        if (batchSize == 1 && _originalInputShape != null && _originalInputShape.Length < 3)
+        // The output RANK follows the input RANK and nothing else. Only a rank-1 input - which carries
+        // no batch axis at all - comes back rank 1.
+        //
+        // This used to collapse a RANK-2 input to rank 1 too, whenever batchSize resolved to 1, and
+        // batchSize resolves to 1 for a rank-2 input exactly when its sizes happen to coincide with the
+        // configured capsule structure (Shape[0] == _inputCapsules && Shape[1] == _inputCapsuleDimension).
+        // Two inputs of the SAME rank therefore produced outputs of DIFFERENT rank, decided by a
+        // coincidence with constructor arguments. No shape contract, chain validation or graph
+        // resolution can express that, and downstream layers silently received a different rank.
+        //
+        // The batch arithmetic itself needs no new convention and is unchanged: total elements divided
+        // by (_inputCapsules * _inputCapsuleDimension) yields the correct batch under BOTH rank-2
+        // readings, which is exactly what the shape contract declares.
+        if (_originalInputShape != null && _originalInputShape.Length < 2)
         {
-            // Single sample with low-rank input: return 1D [numClasses * outputCapsuleDimension]
+            // Rank-1 input [I*D_in]: no batch axis in, none out.
             return Engine.Reshape(flattenedOutput, [_numClasses * _outputCapsuleDimension]);
         }
 
@@ -810,35 +870,6 @@ public partial class DigitCapsuleLayer<T> : LayerBase<T>
     }
 
     /// <summary>
-    /// Gets all trainable parameters of the layer as a single vector.
-    /// </summary>
-    /// <returns>A vector containing all trainable parameters.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method retrieves all trainable parameters (weights) of the layer as a single vector.
-    /// This is useful for optimization algorithms that operate on all parameters at once, or for saving
-    /// and loading model weights.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method collects all the layer's learnable values into a single list.
-    /// 
-    /// The parameters:
-    /// - Are all the weight values that the network learns
-    /// - Are flattened into a single long list (vector)
-    /// - Can be saved to disk or loaded from a previous training session
-    /// 
-    /// This allows you to:
-    /// - Save a trained model for later use
-    /// - Transfer a model's knowledge to another identical model
-    /// - Share trained models with others
-    /// </para>
-    /// </remarks>
-    public override Vector<T> GetParameters()
-    {
-        // Use ToArray() for production-grade parameter extraction
-        return new Vector<T>(_weights.ToArray());
-    }
-
-    /// <summary>
     /// Sets the trainable parameters of the layer from a single vector.
     /// </summary>
     /// <param name="parameters">A vector containing all parameters to set.</param>
@@ -885,19 +916,6 @@ public partial class DigitCapsuleLayer<T> : LayerBase<T>
     public override void ClearGradients()
     {
         _weightsGradient = null;
-    }
-
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (parameters.Length != _weights.Length)
-        {
-            throw new ArgumentException($"Expected {_weights.Length} parameters, but got {parameters.Length}");
-        }
-
-        // Write parameters directly into a new mutable tensor
-        _weights = new Tensor<T>(_weights._shape);
-        for (int i = 0; i < parameters.Length; i++)
-            _weights[i] = parameters[i];
     }
 
     /// <summary>

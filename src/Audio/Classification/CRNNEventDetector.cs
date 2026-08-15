@@ -59,7 +59,9 @@ namespace AiDotNet.Audio.Classification;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("Convolutional Recurrent Neural Network for Polyphonic Sound Event Detection", "https://arxiv.org/abs/1702.06286", Year = 2017, Authors = "Emre Cakir, Giambattista Parascandolo, Toni Heittola, Heikki Huttunen, Tuomas Virtanen")]
+// Title corrected to the published plural form ("Networks"). The arXiv id was already correct — this
+// entry surfaced in the citation audit only because the recorded title did not match arXiv's exactly.
+[ResearchPaper("Convolutional Recurrent Neural Networks for Polyphonic Sound Event Detection", "https://arxiv.org/abs/1702.06286", Year = 2017, Authors = "Emre Cakir, Giambattista Parascandolo, Toni Heittola, Heikki Huttunen, Tuomas Virtanen")]
 public class CRNNEventDetector<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
 {
     #region Fields
@@ -274,7 +276,7 @@ public class CRNNEventDetector<T> : AudioClassifierBase<T>, IAudioEventDetector<
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expected);
+            TrainWithTape(input, expected, _optimizer);
         }
         finally
         {
@@ -282,12 +284,11 @@ public class CRNNEventDetector<T> : AudioClassifierBase<T>, IAudioEventDetector<
         }
     }
 
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        if (!_useNativeMode) throw new NotSupportedException("UpdateParameters is not supported in ONNX mode.");
-        int idx = 0; foreach (var l in Layers) { int c = (int)l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; }
-    }
-
+    /// <inheritdoc />
+    /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
+    /// write on every parameter surface, so the guard is stated once here instead of being
+    /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
+    protected override bool SupportsParameterMutation => _useNativeMode;
     protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio)
     {
         if (_melSpectrogram is null) throw new InvalidOperationException("MelSpectrogram not initialized.");

@@ -56,9 +56,11 @@ public class IARTOptions : NeuralNetworkOptions
         ImplicitDim = other.ImplicitDim;
         NumResBlocks = other.NumResBlocks;
         ModelPath = other.ModelPath;
-        OnnxOptions = other.OnnxOptions;
+        OnnxOptions = new OnnxModelOptions(other.OnnxOptions);
         LearningRate = other.LearningRate;
         DropoutRate = other.DropoutRate;
+        Seed = other.Seed;
+        EncoderLayerCount = other.EncoderLayerCount;
     }
 
     #region Architecture

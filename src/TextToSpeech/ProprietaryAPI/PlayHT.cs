@@ -150,7 +150,7 @@ public class PlayHT<T> : TtsModelBase<T>, IEndToEndTts<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expected);
+            TrainWithTape(input, expected, _optimizer);
         }
         finally
         {
@@ -158,20 +158,22 @@ public class PlayHT<T> : TtsModelBase<T>, IEndToEndTts<T>
         }
     }
 
-    public override void UpdateParameters(Vector<T> parameters)
+    /// <summary>
+    /// Refuses parameter work on a disposed model, on every entry point rather than one.
+    /// </summary>
+    /// <remarks>
+    /// This check used to live inside UpdateParameters, which meant ParameterCount, GetParameters
+    /// and SetParameters reached a disposed model unguarded. The base calls this hook from all of
+    /// them, so moving it here widens the guard and lets the hand-written UpdateParameters -- whose
+    /// only other content was a walk the base already performs -- be deleted.
+    /// </remarks>
+    protected override void EnsureParametersReady()
     {
         ThrowIfDisposed();
-        if (IsOnnxMode)
-            throw new NotSupportedException("Cannot update parameters in ONNX mode.");
-        int idx = 0;
-        foreach (var l in Layers)
-        {
-            int c = (int)l.ParameterCount;
-            l.UpdateParameters(parameters.Slice(idx, c));
-            idx += c;
-        }
+        base.EnsureParametersReady();
     }
 
+    // UpdateParameters folded one enumeration the base already folds. Removed under AIDN082.
     public override ModelMetadata<T> GetModelMetadata()
     {
         var m = new ModelMetadata<T>

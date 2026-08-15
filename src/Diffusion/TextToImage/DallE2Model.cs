@@ -87,8 +87,18 @@ namespace AiDotNet.Diffusion.TextToImage;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Hierarchical Text-Conditional Image Generation with CLIP Latents", "https://arxiv.org/abs/2204.06125", Year = 2022, Authors = "Ramesh et al.")]
-public class DallE2Model<T> : LatentDiffusionModelBase<T>
+public partial class DallE2Model<T> : LatentDiffusionModelBase<T>
 {
+    /// <inheritdoc />
+    /// <remarks>Registration order is serialization order, and matches the
+    /// concatenation the previous hand-written GetParameters performed.</remarks>
+    protected override void RegisterComponents()
+    {
+        RegisterParameterComponent(_priorUnet);
+        RegisterParameterComponent(_decoderUnet);
+        RegisterParameterComponent(_vae);
+    }
+
     #region Constants
 
     /// <summary>
@@ -139,7 +149,6 @@ public class DallE2Model<T> : LatentDiffusionModelBase<T>
     public override int LatentChannels => DALLE2_PIXEL_CHANNELS;
 
     /// <inheritdoc />
-    public override long ParameterCount => _priorUnet.ParameterCount + _decoderUnet.ParameterCount + _vae.ParameterCount;
 
     /// <summary>
     /// Gets the diffusion prior that maps text embeddings to CLIP image embeddings.
@@ -309,77 +318,7 @@ public class DallE2Model<T> : LatentDiffusionModelBase<T>
 
     #region IParameterizable Implementation
 
-    /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        var priorParams = _priorUnet.GetParameters();
-        var decoderParams = _decoderUnet.GetParameters();
-        var vaeParams = _vae.GetParameters();
 
-        var totalLength = priorParams.Length + decoderParams.Length + vaeParams.Length;
-        var combined = new Vector<T>(totalLength);
-
-        var offset = 0;
-        for (int i = 0; i < priorParams.Length; i++)
-        {
-            combined[offset + i] = priorParams[i];
-        }
-        offset += priorParams.Length;
-
-        for (int i = 0; i < decoderParams.Length; i++)
-        {
-            combined[offset + i] = decoderParams[i];
-        }
-        offset += decoderParams.Length;
-
-        for (int i = 0; i < vaeParams.Length; i++)
-        {
-            combined[offset + i] = vaeParams[i];
-        }
-
-        return combined;
-    }
-
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int priorCount = checked((int)_priorUnet.ParameterCount);
-        int decoderCount = checked((int)_decoderUnet.ParameterCount);
-        var vaeCount = checked((int)_vae.ParameterCount);
-
-        if (parameters.Length != priorCount + decoderCount + vaeCount)
-        {
-            throw new ArgumentException(
-                $"Expected {priorCount + decoderCount + vaeCount} parameters, got {parameters.Length}.",
-                nameof(parameters));
-        }
-
-        var priorParams = new Vector<T>(priorCount);
-        var decoderParams = new Vector<T>(decoderCount);
-        var vaeParams = new Vector<T>(vaeCount);
-
-        var offset = 0;
-        for (int i = 0; i < priorCount; i++)
-        {
-            priorParams[i] = parameters[offset + i];
-        }
-        offset += priorCount;
-
-        for (int i = 0; i < decoderCount; i++)
-        {
-            decoderParams[i] = parameters[offset + i];
-        }
-        offset += decoderCount;
-
-        for (int i = 0; i < vaeCount; i++)
-        {
-            vaeParams[i] = parameters[offset + i];
-        }
-
-        _priorUnet.SetParameters(priorParams);
-        _decoderUnet.SetParameters(decoderParams);
-        _vae.SetParameters(vaeParams);
-    }
 
     #endregion
 

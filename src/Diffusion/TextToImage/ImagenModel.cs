@@ -90,8 +90,18 @@ namespace AiDotNet.Diffusion.TextToImage;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Photorealistic Text-to-Image Diffusion Models with Deep Language Understanding", "https://arxiv.org/abs/2205.11487", Year = 2022, Authors = "Saharia et al.")]
-public class ImagenModel<T> : LatentDiffusionModelBase<T>
+public partial class ImagenModel<T> : LatentDiffusionModelBase<T>
 {
+    /// <inheritdoc />
+    /// <remarks>Registration order is serialization order, and matches the
+    /// concatenation the previous hand-written GetParameters performed.</remarks>
+    protected override void RegisterComponents()
+    {
+        RegisterParameterComponent(_baseUnet);
+        RegisterParameterComponent(_superRes1Unet);
+        RegisterParameterComponent(_vae);
+    }
+
     #region Constants
 
     /// <summary>
@@ -148,7 +158,6 @@ public class ImagenModel<T> : LatentDiffusionModelBase<T>
     public override int LatentChannels => IMAGEN_PIXEL_CHANNELS;
 
     /// <inheritdoc />
-    public override long ParameterCount => _baseUnet.ParameterCount + _superRes1Unet.ParameterCount + _vae.ParameterCount;
 
     /// <summary>
     /// Gets the super-resolution Stage 1 noise predictor (64→256).
@@ -328,77 +337,7 @@ public class ImagenModel<T> : LatentDiffusionModelBase<T>
 
     #region IParameterizable Implementation
 
-    /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        var baseParams = _baseUnet.GetParameters();
-        var sr1Params = _superRes1Unet.GetParameters();
-        var vaeParams = _vae.GetParameters();
 
-        var totalLength = baseParams.Length + sr1Params.Length + vaeParams.Length;
-        var combined = new Vector<T>(totalLength);
-
-        var offset = 0;
-        for (int i = 0; i < baseParams.Length; i++)
-        {
-            combined[offset + i] = baseParams[i];
-        }
-        offset += baseParams.Length;
-
-        for (int i = 0; i < sr1Params.Length; i++)
-        {
-            combined[offset + i] = sr1Params[i];
-        }
-        offset += sr1Params.Length;
-
-        for (int i = 0; i < vaeParams.Length; i++)
-        {
-            combined[offset + i] = vaeParams[i];
-        }
-
-        return combined;
-    }
-
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int baseCount = checked((int)_baseUnet.ParameterCount);
-        int sr1Count = checked((int)_superRes1Unet.ParameterCount);
-        var vaeCount = checked((int)_vae.ParameterCount);
-
-        if (parameters.Length != baseCount + sr1Count + vaeCount)
-        {
-            throw new ArgumentException(
-                $"Expected {baseCount + sr1Count + vaeCount} parameters, got {parameters.Length}.",
-                nameof(parameters));
-        }
-
-        var baseParams = new Vector<T>(baseCount);
-        var sr1Params = new Vector<T>(sr1Count);
-        var vaeParams = new Vector<T>(vaeCount);
-
-        var offset = 0;
-        for (int i = 0; i < baseCount; i++)
-        {
-            baseParams[i] = parameters[offset + i];
-        }
-        offset += baseCount;
-
-        for (int i = 0; i < sr1Count; i++)
-        {
-            sr1Params[i] = parameters[offset + i];
-        }
-        offset += sr1Count;
-
-        for (int i = 0; i < vaeCount; i++)
-        {
-            vaeParams[i] = parameters[offset + i];
-        }
-
-        _baseUnet.SetParameters(baseParams);
-        _superRes1Unet.SetParameters(sr1Params);
-        _vae.SetParameters(vaeParams);
-    }
 
     #endregion
 

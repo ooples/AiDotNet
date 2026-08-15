@@ -54,7 +54,7 @@ namespace AiDotNet.MetaLearning.Algorithms;
     Authors = "Spyros Gidaris, Andrei Bursuc, Oriane Simeoni, Antonin Vobecky, et al.")]
 [ComponentType(ComponentType.MetaLearner)]
 [PipelineStage(PipelineStage.Training)]
-public class MOCAAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
+public partial class MOCAAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
     private IParameterizable<T, TInput, TOutput>? _cachedParamModel;
     private IParameterizable<T, TInput, TOutput> ParamModel => _cachedParamModel ??= InterfaceGuard.Parameterizable(MetaModel);
@@ -63,9 +63,11 @@ public class MOCAAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
     private readonly int _paramDim;
 
     /// <summary>Running mean of gradients across tasks (EMA).</summary>
+    [Buffer]
     private Vector<T> _gradMean;
 
     /// <summary>Running variance of gradients across tasks (EMA).</summary>
+    [Buffer]
     private Vector<T> _gradVar;
 
     /// <inheritdoc/>

@@ -46,11 +46,9 @@ public class LayerShapeResolutionTests
     {
         // Per the lazy contract, the FIRST forward resolves the shape; subsequent
         // forwards with the same channel count + same kernel/stride/padding still
-        // produce correct outputs (just the spatial dims change). A model that
-        // legitimately needs to handle multiple input sizes constructs the layer
-        // once and lets the first forward pin the shape — variable spatial dims
-        // are handled by the convolution arithmetic itself, not by re-resolving
-        // weight shapes.
+        // produce correct outputs (just the spatial dims change). Spatial extents
+        // do not resize convolution weights, but the reported contract must follow
+        // the most recent real tensor so downstream shape consumers stay correct.
         var conv = new ConvolutionalLayer<double>(outputDepth: 4, kernelSize: 3, stride: 1, padding: 1);
         var input1 = new Tensor<double>(new[] { 1, 3, 32, 32 });
         var input2 = new Tensor<double>(new[] { 1, 3, 64, 64 });
@@ -62,7 +60,25 @@ public class LayerShapeResolutionTests
         Assert.Equal(32, out1.Shape[2]);
         Assert.Equal(4, out2.Shape[1]);
         Assert.Equal(64, out2.Shape[2]);
+        Assert.Equal(new[] { 4, 64, 64 }, conv.GetOutputShape());
         Assert.True(conv.IsShapeResolved);
+    }
+
+    [Fact]
+    public void Conv_ParameterMaterializationShape_DoesNotFreezeSpatialContract()
+    {
+        using var conv = new ConvolutionalLayer<double>(
+            outputDepth: 3, kernelSize: 3, stride: 1, padding: 1);
+
+        // Residual heads commonly materialize parameters from a minimal shape because only the
+        // channel width determines their kernels. That probe must not claim the eventual runtime
+        // image is permanently 1x1.
+        conv.ResolveFromShape([16, 1, 1]);
+        var output = conv.Forward(new Tensor<double>([4, 16, 32, 32]));
+
+        Assert.Equal(new[] { 4, 3, 32, 32 }, output.Shape.ToArray());
+        Assert.Equal(new[] { 16, 32, 32 }, conv.GetInputShape());
+        Assert.Equal(new[] { 3, 32, 32 }, conv.GetOutputShape());
     }
 
     [Fact]
@@ -103,6 +119,56 @@ public class LayerShapeResolutionTests
         var conv = new ConvolutionalLayer<double>(outputDepth: 8, kernelSize: 3);
         var rank2 = new Tensor<double>(new[] { 16, 16 });
         Assert.Throws<ArgumentException>(() => conv.Forward(rank2));
+    }
+
+    [Fact]
+    public void LayerNorm_ShapeOnlyGuess_ReconcilesWithFirstRealFeatureWidth()
+    {
+        using var layer = new LayerNormalizationLayer<double>();
+
+        // A network topology walker sees only an approximate sequential width. Custom and
+        // branched forwards may route a different tensor to this layer at execution time.
+        layer.ResolveShapesOnly([32]);
+        // Speculative shape propagation is allocation-free and cannot claim a durable parameter
+        // width. The first real activation below is the materialization boundary.
+        Assert.Equal(0, layer.ParameterCount);
+
+        var actualInput = new Tensor<double>([2, 7, 192]);
+        var output = layer.Forward(actualInput);
+
+        Assert.Equal(actualInput.Shape, output.Shape);
+        Assert.Equal(192, layer.GetGammaTensor().Length);
+        Assert.Equal(192, layer.GetBetaTensor().Length);
+        Assert.Equal(384, layer.ParameterCount);
+        Assert.Equal(384, layer.GetParameters().Length);
+    }
+
+    [Fact]
+    public void LayerNorm_EagerFeatureWidth_RemainsBinding()
+    {
+        using var layer = new LayerNormalizationLayer<double>(featureSize: 32);
+        var incompatibleInput = new Tensor<double>([2, 192]);
+
+        Assert.ThrowsAny<ArgumentException>(() => layer.Forward(incompatibleInput));
+        Assert.Equal(32, layer.GetGammaTensor().Length);
+        Assert.Equal(32, layer.GetBetaTensor().Length);
+    }
+
+    [Fact]
+    public void Dense_ShapeOnlyGuess_AllocatesOnceAtFirstRealFeatureWidth()
+    {
+        using var layer = new DenseLayer<double>(outputSize: 8);
+
+        layer.ResolveShapesOnly([32]);
+        Assert.False(layer.IsInitialized);
+        Assert.Equal((32 * 8) + 8, layer.ParameterCount);
+
+        var output = layer.Forward(new Tensor<double>([2, 7, 192]));
+
+        Assert.Equal(new[] { 2, 7, 8 }, output.Shape.ToArray());
+        Assert.Equal(192, layer.GetInputShape()[0]);
+        Assert.Equal((192 * 8) + 8, layer.ParameterCount);
+        Assert.Equal(layer.ParameterCount, layer.GetParameters().Length);
     }
 
     [Fact]

@@ -39,6 +39,7 @@ namespace AiDotNet.Interfaces;
 /// - Used in knowledge distillation as teacher or student models
 /// </remarks>
 public interface IFullModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetadata<T>>,
+    IParameterizable<T, TInput, TOutput>,
     IModelSerializer, ICheckpointableModel, IFeatureImportance<T>,
     ICloneable<IFullModel<T, TInput, TOutput>>,
     System.IDisposable

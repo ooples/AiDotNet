@@ -84,7 +84,7 @@ namespace AiDotNet.Finance.Probabilistic;
 [ModelComplexity(ModelComplexity.VeryHigh)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Autoregressive Denoising Diffusion Models for Multivariate Probabilistic Time Series Forecasting", "https://arxiv.org/abs/2101.12072", Year = 2021, Authors = "Kashif Rasul, Calvin Seward, Ingmar Schuster, Roland Vollgraf")]
-public class TimeGrad<T> : ForecastingModelBase<T>
+public partial class TimeGrad<T> : ForecastingModelBase<T>
 {
     #region Execution Mode
     private bool _useNativeMode;
@@ -530,21 +530,8 @@ public class TimeGrad<T> : ForecastingModelBase<T>
         return x;
     }
 
-    /// <summary>
-    /// Updates the model parameters using the optimizer (required override).
-    /// </summary>
-    /// <param name="gradients">Gradient vector.</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Parameters are updated through the optimizer in the base
-    /// Train() → TrainWithTape path. This method exists for interface compliance.
-    /// </para>
-    /// </remarks>
-    public override void UpdateParameters(Vector<T> gradients)
-    {
-        // Parameters are updated through the optimizer in the base Train() → TrainWithTape path.
-    }
-
+    // UpdateParameters was an empty override, silently dropping every restore. The base
+    // distributes the vector over the declared enumeration.
     /// <summary>
     /// Gets metadata about the TimeGrad model.
     /// </summary>

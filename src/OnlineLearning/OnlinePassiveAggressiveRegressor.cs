@@ -5,6 +5,8 @@ using AiDotNet.LinearAlgebra;
 using AiDotNet.Attributes;
 using AiDotNet.Tensors.LinearAlgebra;
 
+using AiDotNet.Models.Parameters;
+
 namespace AiDotNet.OnlineLearning;
 
 /// <summary>
@@ -64,6 +66,31 @@ namespace AiDotNet.OnlineLearning;
 [ResearchPaper("Online Passive-Aggressive Algorithms", "https://doi.org/10.1162/jmlr.2006.7.19.551", Year = 2006, Authors = "Koby Crammer, Ofer Dekel, Joseph Keshet, Shai Shalev-Shwartz, Yoram Singer")]
 public class OnlinePassiveAggressiveRegressor<T> : OnlineLearningModelBase<T>
 {
+
+    /// <inheritdoc />
+    /// <remarks>The learned weights followed by the bias, the layout the hand-written pair used. Kept as ONE component because the variable-length part comes first and only a LAST component can take the remainder. This also fixes a measured mismatch: the inherited ParameterCount was NumFeatures, which the restore sets to length - 1 to leave room for the bias, so the count reported 5 against a 6-element vector and a saved vector could not be reloaded.</remarks>
+    protected override void RegisterComponents()
+    {
+        RegisterParameterComponent(new VariableLengthParameterSource<T>(
+            () => _weights is null ? 0 : _weights.Length + 1,
+            () =>
+            {
+                if (_weights is null) return new Vector<T>(0);
+                var parameters = new Vector<T>(_weights.Length + 1);
+                for (int i = 0; i < _weights.Length; i++) parameters[i] = _weights[i];
+                parameters[_weights.Length] = _bias;
+                return parameters;
+            },
+            value =>
+            {
+                if (value.Length == 0) return;
+                NumFeatures = value.Length - 1;
+                _weights = new Vector<T>(NumFeatures);
+                for (int i = 0; i < NumFeatures; i++) _weights[i] = value[i];
+                _bias = value[NumFeatures];
+                IsInitialized = true;
+            }));
+    }
     /// <summary>
     /// The weight vector (coefficients).
     /// </summary>
@@ -95,6 +122,11 @@ public class OnlinePassiveAggressiveRegressor<T> : OnlineLearningModelBase<T>
     private readonly bool _fitIntercept;
 
     /// <summary>
+    /// Number of passes used by the offline <see cref="Train(Matrix{T}, Vector{T})"/> wrapper.
+    /// </summary>
+    private readonly int _batchEpochs;
+
+    /// <summary>
     /// Gets the model type.
     /// </summary>
 
@@ -105,6 +137,7 @@ public class OnlinePassiveAggressiveRegressor<T> : OnlineLearningModelBase<T>
     /// <param name="epsilon">Epsilon for insensitivity zone. Default is 0.1.</param>
     /// <param name="type">PA variant type. Default is PA-I.</param>
     /// <param name="fitIntercept">Whether to fit an intercept (bias) term. Default is true.</param>
+    /// <param name="batchEpochs">Number of passes made by the offline Train wrapper. The online PartialFit API always performs one update per sample.</param>
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> Parameters:
@@ -131,13 +164,18 @@ public class OnlinePassiveAggressiveRegressor<T> : OnlineLearningModelBase<T>
         double c = 1.0,
         double epsilon = 0.1,
         PAType type = PAType.PA_I,
-        bool fitIntercept = true)
+        bool fitIntercept = true,
+        int batchEpochs = 1)
         : base(1.0, LearningRateSchedule.Constant)  // PA doesn't use learning rate
     {
+        if (batchEpochs < 1)
+            throw new ArgumentOutOfRangeException(nameof(batchEpochs), "Batch epochs must be at least one.");
+
         _c = c;
         _epsilon = epsilon;
         _paType = type;
         _fitIntercept = fitIntercept;
+        _batchEpochs = batchEpochs;
         _bias = NumOps.Zero;
     }
 
@@ -158,6 +196,9 @@ public class OnlinePassiveAggressiveRegressor<T> : OnlineLearningModelBase<T>
     /// </para>
     /// </remarks>
     public override void PartialFit(Vector<T> x, T y)
+        => PartialFitCore(x, y, _fitIntercept);
+
+    private void PartialFitCore(Vector<T> x, T y, bool updateIntercept)
     {
         EnsureInitialized(x);
 
@@ -190,7 +231,7 @@ public class OnlinePassiveAggressiveRegressor<T> : OnlineLearningModelBase<T>
                 double xi = NumOps.ToDouble(x[i]);
                 normSq += xi * xi;
             }
-            if (_fitIntercept)
+            if (updateIntercept)
             {
                 normSq += 1.0;  // intercept contributes 1 to norm squared
             }
@@ -211,7 +252,7 @@ public class OnlinePassiveAggressiveRegressor<T> : OnlineLearningModelBase<T>
             }
 
             // Update bias
-            if (_fitIntercept)
+            if (updateIntercept)
             {
                 double b = NumOps.ToDouble(_bias);
                 b += tau * sign;
@@ -220,6 +261,71 @@ public class OnlinePassiveAggressiveRegressor<T> : OnlineLearningModelBase<T>
         }
 
         SampleCount++;
+    }
+
+    /// <inheritdoc />
+    public override void PartialFit(Matrix<T> x, Vector<T> y)
+    {
+        if (!_fitIntercept || x.Rows == 0)
+        {
+            base.PartialFit(x, y);
+            return;
+        }
+
+        if (x.Rows != y.Length)
+            throw new ArgumentException("X and y must have the same number of samples.");
+
+        // Center both features and targets before applying the paper PA updates.
+        // This isolates slope learning from the intercept, preserves translation
+        // equivariance, and avoids biasing the slopes when feature means are nonzero.
+        double targetMean = 0.0;
+        for (int row = 0; row < y.Length; row++)
+            targetMean += NumOps.ToDouble(y[row]);
+        targetMean /= y.Length;
+
+        var featureMeans = new double[x.Columns];
+        for (int col = 0; col < x.Columns; col++)
+        {
+            for (int row = 0; row < x.Rows; row++)
+                featureMeans[col] += NumOps.ToDouble(x[row, col]);
+            featureMeans[col] /= x.Rows;
+        }
+
+        var centeredTargets = new Vector<T>(y.Length);
+        for (int row = 0; row < y.Length; row++)
+            centeredTargets[row] = NumOps.FromDouble(NumOps.ToDouble(y[row]) - targetMean);
+
+        _bias = NumOps.Zero;
+        for (int row = 0; row < x.Rows; row++)
+        {
+            var centeredInput = new Vector<T>(x.Columns);
+            for (int col = 0; col < x.Columns; col++)
+                centeredInput[col] = NumOps.FromDouble(NumOps.ToDouble(x[row, col]) - featureMeans[col]);
+            PartialFitCore(centeredInput, centeredTargets[row], updateIntercept: false);
+        }
+
+        if (_weights is null)
+            return;
+
+        // For the learned centered weights, the least-squares-optimal intercept
+        // is the mean uncentered residual. Assign it after the slope-only updates.
+        double residualSum = 0.0;
+        for (int row = 0; row < x.Rows; row++)
+        {
+            double prediction = 0.0;
+            for (int col = 0; col < NumFeatures; col++)
+                prediction += NumOps.ToDouble(_weights[col]) * NumOps.ToDouble(x[row, col]);
+            residualSum += NumOps.ToDouble(y[row]) - prediction;
+        }
+
+        _bias = NumOps.FromDouble(residualSum / x.Rows);
+    }
+
+    /// <inheritdoc />
+    public override void Train(Matrix<T> x, Vector<T> y)
+    {
+        for (int epoch = 0; epoch < _batchEpochs; epoch++)
+            PartialFit(x, y);
     }
 
     /// <summary>
@@ -299,48 +405,11 @@ public class OnlinePassiveAggressiveRegressor<T> : OnlineLearningModelBase<T>
     #region IFullModel Implementation
 
     /// <summary>
-    /// Gets the model parameters (weights + bias).
-    /// </summary>
-    public override Vector<T> GetParameters()
-    {
-        if (_weights is null)
-        {
-            return new Vector<T>(0);
-        }
-
-        var parameters = new Vector<T>(_weights.Length + 1);
-        for (int i = 0; i < _weights.Length; i++)
-        {
-            parameters[i] = _weights[i];
-        }
-        parameters[_weights.Length] = _bias;
-
-        return parameters;
-    }
-
-    /// <summary>
-    /// Sets the model parameters.
-    /// </summary>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (parameters.Length == 0) return;
-
-        NumFeatures = parameters.Length - 1;
-        _weights = new Vector<T>(NumFeatures);
-        for (int i = 0; i < NumFeatures; i++)
-        {
-            _weights[i] = parameters[i];
-        }
-        _bias = parameters[NumFeatures];
-        IsInitialized = true;
-    }
-
-    /// <summary>
     /// Creates a new instance with specified parameters.
     /// </summary>
     public override IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
     {
-        var newModel = new OnlinePassiveAggressiveRegressor<T>(_c, _epsilon, _paType, _fitIntercept);
+        var newModel = new OnlinePassiveAggressiveRegressor<T>(_c, _epsilon, _paType, _fitIntercept, _batchEpochs);
         newModel.SetParameters(parameters);
         return newModel;
     }
@@ -350,7 +419,7 @@ public class OnlinePassiveAggressiveRegressor<T> : OnlineLearningModelBase<T>
     /// </summary>
     protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
     {
-        return new OnlinePassiveAggressiveRegressor<T>(_c, _epsilon, _paType, _fitIntercept);
+        return new OnlinePassiveAggressiveRegressor<T>(_c, _epsilon, _paType, _fitIntercept, _batchEpochs);
     }
 
     /// <summary>
@@ -392,6 +461,9 @@ public class OnlinePassiveAggressiveRegressor<T> : OnlineLearningModelBase<T>
     /// Gets the epsilon parameter (insensitivity zone).
     /// </summary>
     public double Epsilon => _epsilon;
+
+    /// <summary>Gets the number of passes used by the offline Train wrapper.</summary>
+    public int BatchEpochs => _batchEpochs;
 
     /// <summary>
     /// Computes the epsilon-insensitive loss on the provided data.
