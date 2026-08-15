@@ -106,7 +106,7 @@ public class OCRTextRecognitionTests
     public async Task SVTR_NativeConstruction_Succeeds()
     {
         var arch = CreateArchitecture();
-        var model = new SVTR<double>(arch, imageWidth: 128, imageHeight: 32);
+        var model = new SVTR<double>(arch, imageWidth: 100, imageHeight: 32);
         Assert.NotNull(model);
     }
 
@@ -114,7 +114,7 @@ public class OCRTextRecognitionTests
     public async Task SVTR_Predict_ReturnsOutput()
     {
         var arch = CreateArchitecture();
-        var model = new SVTR<double>(arch, imageWidth: 128, imageHeight: 32);
+        var model = new SVTR<double>(arch, imageWidth: 100, imageHeight: 32);
         var input = CreateSmallImage();
         var output = model.Predict(input);
         Assert.NotNull(output);
@@ -126,7 +126,7 @@ public class OCRTextRecognitionTests
     public async Task SVTR_GetModelMetadata_ReturnsValidData()
     {
         var arch = CreateArchitecture();
-        var model = new SVTR<double>(arch, imageWidth: 128, imageHeight: 32);
+        var model = new SVTR<double>(arch, imageWidth: 100, imageHeight: 32);
         var meta = model.GetModelMetadata();
         Assert.Equal("SVTR", meta.Name);
     }
@@ -176,7 +176,7 @@ public class OCRTextRecognitionTests
         {
             new CRNN<double>(arch, imageWidth: 128),
             new TrOCR<double>(arch, imageHeight: 32, imageWidth: 128),
-            new SVTR<double>(arch, imageWidth: 128, imageHeight: 32),
+            new SVTR<double>(arch, imageWidth: 100, imageHeight: 32),
             new ABINet<double>(arch, imageWidth: 128, imageHeight: 32),
         };
 

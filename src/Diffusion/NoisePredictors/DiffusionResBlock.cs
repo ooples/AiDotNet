@@ -33,6 +33,7 @@ public class DiffusionResBlock<T> : LayerBase<T>
     private readonly int _outChannels;
     private readonly int _spatialSize;
     private readonly int _timeEmbedDim;
+    private readonly double _epsilon;
 
     // First conv block: GroupNorm → SiLU → Conv3x3
     private readonly GroupNormalizationLayer<T> _norm1;
@@ -82,6 +83,15 @@ public class DiffusionResBlock<T> : LayerBase<T>
         _norm2.ParameterCount + _conv2.ParameterCount +
         (_skipConv?.ParameterCount ?? 0);
 
+    /// <summary>Gets the input channel count.</summary>
+    public int InputChannels => _inChannels;
+
+    /// <summary>Gets the output channel count.</summary>
+    public int OutputChannels => _outChannels;
+
+    /// <summary>Gets the timestep-embedding width.</summary>
+    public int TimeEmbeddingDimension => _timeEmbedDim;
+
     /// <summary>
     /// Creates a new diffusion residual block per the DDPM/Stable Diffusion paper.
     /// </summary>
@@ -95,7 +105,8 @@ public class DiffusionResBlock<T> : LayerBase<T>
         int outChannels,
         int spatialSize,
         int timeEmbedDim = 0,
-        int numGroups = 32)
+        int numGroups = 32,
+        double epsilon = 1e-5)
         : base(
             [1, inChannels, spatialSize, spatialSize],
             [1, outChannels, spatialSize, spatialSize])
@@ -104,6 +115,7 @@ public class DiffusionResBlock<T> : LayerBase<T>
         _outChannels = outChannels;
         _spatialSize = spatialSize;
         _timeEmbedDim = timeEmbedDim;
+        _epsilon = epsilon;
 
         // Compute actual group count: SD uses 32, but fall back to largest divisor if needed
         int groups1 = ComputeNumGroups(inChannels, numGroups);
@@ -112,7 +124,7 @@ public class DiffusionResBlock<T> : LayerBase<T>
         // First block: GroupNorm(in) → SiLU → Conv3x3(in→out). Pass the Lazy strategy
         // so kernel tensors stay unallocated until the first Forward() call — diffusion
         // U-Nets contain dozens of these blocks and eager allocation OOMs CI.
-        _norm1 = new GroupNormalizationLayer<T>(groups1, inChannels);
+        _norm1 = new GroupNormalizationLayer<T>(groups1, inChannels, epsilon);
         _conv1 = new ConvolutionalLayer<T>(
             outputDepth: outChannels,
             kernelSize: 3,
@@ -122,13 +134,17 @@ public class DiffusionResBlock<T> : LayerBase<T>
             initializationStrategy: InitializationStrategies<T>.Lazy);
 
         // Time embedding projection: projects time embed to outChannels for additive conditioning
+        // The released DDPM/Stable-Diffusion ResNet applies SiLU BEFORE the
+        // timestep projection: Linear(SiLU(temb)). Keeping the Dense activation
+        // itself as identity preserves that order (Dense(SiLU(temb)) would apply
+        // the non-linearity after the projection instead).
         _timeMlp = new DenseLayer<T>(
             outChannels,
-            (IActivationFunction<T>)new SiLUActivation<T>(),
+            (IActivationFunction<T>)new IdentityActivation<T>(),
             InitializationStrategies<T>.Lazy);
 
         // Second block: GroupNorm(out) → SiLU → Conv3x3(out→out)
-        _norm2 = new GroupNormalizationLayer<T>(groups2, outChannels);
+        _norm2 = new GroupNormalizationLayer<T>(groups2, outChannels, epsilon);
         _conv2 = new ConvolutionalLayer<T>(
             outputDepth: outChannels,
             kernelSize: 3,
@@ -148,6 +164,21 @@ public class DiffusionResBlock<T> : LayerBase<T>
                 activationFunction: new IdentityActivation<T>(),
                 initializationStrategy: InitializationStrategies<T>.Lazy);
         }
+
+        // Resolve every lazy child's declared parameter shape without allocating
+        // its storage. This gives ParameterCount / SetParameters an exact manifest
+        // before the first forward while retaining foundation-scale lazy memory use.
+        _conv1.ResolveShapesOnly([inChannels, spatialSize, spatialSize]);
+        if (timeEmbedDim > 0) _timeMlp.ResolveShapesOnly([timeEmbedDim]);
+        _conv2.ResolveShapesOnly([outChannels, spatialSize, spatialSize]);
+        _skipConv?.ResolveShapesOnly([inChannels, spatialSize, spatialSize]);
+
+        RegisterSubLayer(_norm1);
+        RegisterSubLayer(_conv1);
+        RegisterSubLayer(_timeMlp);
+        RegisterSubLayer(_norm2);
+        RegisterSubLayer(_conv2);
+        if (_skipConv is not null) RegisterSubLayer(_skipConv);
 
         // Eagerly materialize all sublayer lazy weights so they participate
         // in GetParameters / SetParameters. With pure-lazy init, two freshly-
@@ -386,7 +417,7 @@ public class DiffusionResBlock<T> : LayerBase<T>
                     $"Got rank {timeEmbed.Shape.Length}, last dim {timeEmbed.Shape[timeEmbed.Shape.Length - 1]}.",
                     nameof(timeEmbed));
             }
-            var timeProj = _timeMlp.Forward(timeEmbed);
+            var timeProj = _timeMlp.Forward(Engine.TensorSiLU(timeEmbed));
             // Reshape from [B, outChannels] to [B, outChannels, 1, 1] for broadcasting
             if (timeProj.Shape.Length == 1)
             {
@@ -508,6 +539,18 @@ public class DiffusionResBlock<T> : LayerBase<T>
     }
 
     /// <inheritdoc />
+    internal override Dictionary<string, string> GetMetadata()
+    {
+        var metadata = base.GetMetadata();
+        metadata["InChannels"] = _inChannels.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        metadata["OutChannels"] = _outChannels.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        metadata["SpatialSize"] = _spatialSize.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        metadata["TimeEmbedDim"] = _timeEmbedDim.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        metadata["Epsilon"] = _epsilon.ToString("R", System.Globalization.CultureInfo.InvariantCulture);
+        return metadata;
+    }
+
+    /// <inheritdoc />
     public override Vector<T> GetParameters()
     {
         var parameters = new List<T>();
@@ -524,6 +567,9 @@ public class DiffusionResBlock<T> : LayerBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
+        long expected = ParameterCount;
+        if (parameters.Length != expected)
+            throw new ArgumentException($"Expected {expected} parameters, but got {parameters.Length}.", nameof(parameters));
         int idx = 0;
         SetParams(_norm1, parameters, ref idx);
         SetParams(_conv1, parameters, ref idx);

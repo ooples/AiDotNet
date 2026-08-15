@@ -20,15 +20,15 @@ namespace AiDotNet.Diffusion.SuperResolution;
 /// <remarks>
 /// <para>
 /// Upscale-A-Video extends image super-resolution to video with temporal consistency,
-/// using temporal attention layers and flow-guided recurrent propagation to achieve
+/// using convolutional temporal modules and flow-guided recurrent propagation to achieve
 /// flicker-free 4x upscaling of video content.
 /// </para>
 /// <para>
 /// Architecture components:
 /// <list type="bullet">
-/// <item><description>Video U-Net with temporal attention and temporal convolutions</description></item>
-/// <item><description>8 input channels (4 latent + 4 downscaled low-res conditioning)</description></item>
-/// <item><description>2 temporal attention layers per block for inter-frame consistency</description></item>
+/// <item><description>Video U-Net with released temporal 3D/spatial ResNet modules</description></item>
+/// <item><description>7 input channels (4 latent + 3-channel noised low-resolution conditioning)</description></item>
+/// <item><description>9 stage-level convolutional temporal modules plus zero-initialized Transformer3D temporal attention</description></item>
 /// <item><description>Temporal VAE for temporally coherent encoding/decoding</description></item>
 /// <item><description>Flow-guided recurrent propagation for long-range temporal consistency</description></item>
 /// <item><description>DDIM scheduler for efficient inference</description></item>
@@ -39,7 +39,7 @@ namespace AiDotNet.Diffusion.SuperResolution;
 ///
 /// How Upscale-A-Video works:
 /// 1. Each frame is encoded with a temporal VAE that considers neighboring frames
-/// 2. The low-resolution video is concatenated with latent noise (8 input channels)
+/// 2. The noised RGB low-resolution video is concatenated with the four-channel latent (7 input channels)
 /// 3. Temporal attention ensures frames are consistent with each other
 /// 4. Flow-guided propagation maintains consistency across long sequences
 /// 5. The temporal VAE decodes the result to high-resolution flicker-free video
@@ -65,10 +65,10 @@ namespace AiDotNet.Diffusion.SuperResolution;
 /// </para>
 /// <para>
 /// Technical specifications:
-/// - Architecture: Video U-Net with temporal attention + temporal VAE
-/// - Input channels: 8 (4 latent noise + 4 downscaled low-res)
+/// - Architecture: Video U-Net with temporal 3D CNN modules + temporal VAE
+/// - Input channels: 7 (4 latent noise + 3-channel noised low-resolution video)
 /// - Output channels: 4 (latent space)
-/// - Base channels: 320, multipliers [1, 2, 4, 4]
+/// - Base channels: 256, multipliers [1, 2, 2, 4]
 /// - Cross-attention dimension: 1024
 /// - Temporal attention layers: 2 per block
 /// - Temporal VAE: 3-frame kernel, 1 temporal layer
@@ -88,7 +88,7 @@ namespace AiDotNet.Diffusion.SuperResolution;
 /// // Upscale a video (video-to-video super-resolution)
 /// var upscaledVideo = upscaler.VideoToVideo(
 ///     inputVideo: lowResVideo,
-///     prompt: "high resolution, sharp, detailed video",
+///     prompt: "best quality, extremely detailed",
 ///     strength: 0.7,
 ///     numInferenceSteps: 50,
 ///     guidanceScale: 7.5);
@@ -134,25 +134,24 @@ public class UpscaleAVideoModel<T> : VideoDiffusionModelBase<T>
     private const int CROSS_ATTENTION_DIM = 1024;
 
     /// <summary>
-    /// Input channels for the Video U-Net input convolution (4 = latent channels).
+    /// Input channels for the noisy target latent stream (4).
     /// </summary>
     /// <remarks>
-    /// The reference implementation describes this model as using 8 input channels
-    /// (4 latent + 4 downscaled low-res conditioning), but that design expects the
-    /// conditioning to be concatenated with the latents before the first conv.
-    /// Our VideoUNetPredictor.ForwardVideoUNet adds the image condition via
-    /// _imageCondProjection *after* the input conv instead — so the input conv
-    /// sees only the latent channels. Pinning INPUT_CHANNELS to LATENT_CHANNELS
-    /// keeps the conv weight shape consistent with what ForwardVideoUNet actually
-    /// feeds it, fixing the "Expected input depth 8, but got 4" crash in the
-    /// UpscaleAVideoModel tests.
+    /// The predictor concatenates the distinct three-channel low-resolution video,
+    /// producing the official seven-channel U-Net input (4 latent + 3 low resolution).
     /// </remarks>
     private const int INPUT_CHANNELS = LATENT_CHANNELS;
 
     /// <summary>
-    /// Base channel count for the Video U-Net (320).
+    /// Base channel count for the Video U-Net (256).
     /// </summary>
-    private const int BASE_CHANNELS = 320;
+    private const int BASE_CHANNELS = 256;
+
+    /// <summary>Channels in the low-resolution conditioning video.</summary>
+    private const int CONDITION_CHANNELS = 3;
+
+    /// <summary>Number of learned degradation/noise-level embeddings.</summary>
+    private const int NUM_NOISE_LEVEL_EMBEDDINGS = 1000;
 
     /// <summary>
     /// Number of attention heads in the Video U-Net (8).
@@ -160,35 +159,38 @@ public class UpscaleAVideoModel<T> : VideoDiffusionModelBase<T>
     private const int NUM_HEADS = 8;
 
     /// <summary>
-    /// Number of temporal attention layers per block (2).
-    /// </summary>
-    /// <remarks>
-    /// Two temporal layers per block provide stronger inter-frame consistency
-    /// compared to single-layer temporal attention in simpler video models.
-    /// </remarks>
-    private const int NUM_TEMPORAL_LAYERS = 2;
-
-    /// <summary>
     /// Upscale factor (4x).
     /// </summary>
     private const int UPSCALE_FACTOR = 4;
 
     /// <summary>
-    /// Default number of frames per batch (16).
+    /// Default temporal window from the released inference pipeline (8 frames).
     /// </summary>
-    private const int DEFAULT_NUM_FRAMES = 16;
+    private const int DEFAULT_NUM_FRAMES = 8;
 
     /// <summary>
     /// Default frames per second (24).
     /// </summary>
     private const int DEFAULT_FPS = 24;
 
+    /// <summary>Temporal denoising window used by the reference implementation.</summary>
+    public const int ReferenceWindowSize = 8;
+
+    /// <summary>Overlap between adjacent temporal denoising windows.</summary>
+    public const int ReferenceWindowOverlap = 2;
+
+    /// <summary>Stable Diffusion x4-upscaler VAE scaling factor.</summary>
+    public const double ReferenceLatentScaleFactor = 0.08333;
+
+    /// <summary>Maximum low-resolution noise level used by the reference pipeline.</summary>
+    public const int ReferenceMaximumNoiseLevel = 350;
+
     #endregion
 
     #region Fields
 
     /// <summary>
-    /// The Video U-Net noise predictor with temporal attention layers.
+    /// The Video U-Net noise predictor with released convolutional temporal modules.
     /// </summary>
     private VideoUNetPredictor<T>? _videoUNet;
 
@@ -236,7 +238,14 @@ public class UpscaleAVideoModel<T> : VideoDiffusionModelBase<T>
     public override bool SupportsVideoToVideo => true;
 
     /// <inheritdoc />
-    public override long ParameterCount { get { EnsureInitialized(); return _videoUNet.GetParameters().Length + _temporalVAE.GetParameters().Length; } }
+    public override long ParameterCount
+    {
+        get
+        {
+            EnsureInitialized();
+            return checked(_videoUNet.ParameterCount + _temporalVAE.ParameterCount);
+        }
+    }
 
     /// <summary>
     /// Gets the video upscale factor (4x).
@@ -275,13 +284,15 @@ public class UpscaleAVideoModel<T> : VideoDiffusionModelBase<T>
         int defaultFPS = DEFAULT_FPS,
         int? seed = null)
         : base(
-            options ?? new DiffusionModelOptions<T>
-            {
-                TrainTimesteps = 1000,
-                BetaStart = 0.00085,
-                BetaEnd = 0.012,
-                BetaSchedule = BetaSchedule.ScaledLinear
-            },
+            options is null
+                ? new DiffusionModelOptions<T>
+                {
+                    TrainTimesteps = 1000,
+                    BetaStart = 0.00085,
+                    BetaEnd = 0.012,
+                    BetaSchedule = BetaSchedule.ScaledLinear
+                }
+                : new DiffusionModelOptions<T>(options),
             scheduler ?? new DDIMScheduler<T>(SchedulerConfig<T>.CreateStableDiffusion()),
             defaultNumFrames,
             defaultFPS,
@@ -315,15 +326,15 @@ public class UpscaleAVideoModel<T> : VideoDiffusionModelBase<T>
     /// <remarks>
     /// <para>
     /// Default Video U-Net:
-    /// - Input: 8 channels (4 latent + 4 low-res conditioning)
-    /// - Base channels: 320, multipliers [1, 2, 4, 4]
-    /// - 2 temporal attention layers per block
+    /// - Input: 7 channels (4 latent + 3-channel noised low-resolution conditioning)
+    /// - Base channels: 256, multipliers [1, 2, 2, 4]
+    /// - 9 stage-level convolutional temporal modules plus Transformer3D temporal attention
     /// - Supports image conditioning for low-res input
     ///
     /// Default Temporal VAE:
     /// - 3-frame temporal kernel for inter-frame coherence
     /// - Non-causal mode for bidirectional temporal processing
-    /// - 0.18215 latent scale factor
+    /// - 0.08333 Stable Diffusion x4-upscaler latent scale factor
     /// </para>
     /// </remarks>
     [MemberNotNull(nameof(_videoUNet), nameof(_temporalVAE))]
@@ -336,30 +347,400 @@ public class UpscaleAVideoModel<T> : VideoDiffusionModelBase<T>
             inputChannels: INPUT_CHANNELS,
             outputChannels: LATENT_CHANNELS,
             baseChannels: BASE_CHANNELS,
-            channelMultipliers: new[] { 1, 2, 4, 4 },
+            channelMultipliers: new[] { 1, 2, 2, 4 },
             numResBlocks: 2,
-            attentionResolutions: new[] { 4, 2, 1 },
+            attentionResolutions: new[] { 1, 2, 3 },
             contextDim: CROSS_ATTENTION_DIM,
             numHeads: NUM_HEADS,
-            numTemporalLayers: NUM_TEMPORAL_LAYERS,
+            numTemporalLayers: 1,
             supportsImageConditioning: true,
-            seed: seed);
+            inputHeight: 128,
+            inputWidth: 128,
+            numFrames: ReferenceWindowSize,
+            seed: seed,
+            imageConditionChannels: CONDITION_CHANNELS,
+            concatenateImageCondition: true,
+            numClassEmbeddings: NUM_NOISE_LEVEL_EMBEDDINGS,
+            architectureProfile: VideoUNetArchitectureProfile.UpscaleAVideo);
 
         _temporalVAE = temporalVAE ?? new TemporalVAE<T>(
             inputChannels: 3,
             latentChannels: LATENT_CHANNELS,
             baseChannels: 128,
-            channelMultipliers: new[] { 1, 2, 4, 4 },
+            channelMultipliers: new[] { 1, 2, 4 },
             numTemporalLayers: 1,
             temporalKernelSize: 3,
             causalMode: false,
-            latentScaleFactor: 0.18215,
+            latentScaleFactor: ReferenceLatentScaleFactor,
             seed: seed);
     }
 
     #endregion
 
     #region Generation Methods
+
+    /// <summary>
+    /// Runs the Upscale-A-Video super-resolution path with a distinct low-resolution
+    /// conditioning latent for every frame.
+    /// </summary>
+    /// <param name="lowResolutionVideo">Input video in [B,F,C,H,W] layout.</param>
+    /// <param name="prompt">Optional text guidance prompt.</param>
+    /// <param name="numInferenceSteps">DDIM denoising steps.</param>
+    /// <param name="guidanceScale">Classifier-free guidance scale.</param>
+    /// <param name="seed">Optional deterministic inference seed.</param>
+    /// <returns>Four-times-upscaled video in [B,F,C,4H,4W] layout.</returns>
+    public Tensor<T> Upscale(
+        Tensor<T> lowResolutionVideo,
+        string prompt = "best quality, extremely detailed",
+        int numInferenceSteps = 75,
+        double guidanceScale = 9.0,
+        int? seed = null,
+        int noiseLevel = 20,
+        int temporalWindowSize = ReferenceWindowSize,
+        int temporalWindowOverlap = ReferenceWindowOverlap,
+        Tensor<T>? forwardFlows = null,
+        Tensor<T>? backwardFlows = null,
+        IReadOnlyCollection<int>? propagationSteps = null,
+        string negativePrompt = "blur, worst quality")
+    {
+        EnsureInitialized();
+        int originalRank = lowResolutionVideo.Rank;
+        if (originalRank == 3)
+            lowResolutionVideo = Engine.Reshape(lowResolutionVideo,
+                [1, 1, lowResolutionVideo.Shape[0], lowResolutionVideo.Shape[1], lowResolutionVideo.Shape[2]]);
+        else if (originalRank == 4)
+            lowResolutionVideo = Engine.Reshape(lowResolutionVideo,
+                [1, lowResolutionVideo.Shape[0], lowResolutionVideo.Shape[1], lowResolutionVideo.Shape[2], lowResolutionVideo.Shape[3]]);
+        else if (originalRank != 5)
+            throw new ArgumentException("Upscale-A-Video expects [C,H,W], [F,C,H,W], or [B,F,C,H,W] input.", nameof(lowResolutionVideo));
+        if (numInferenceSteps <= 0)
+            throw new ArgumentOutOfRangeException(nameof(numInferenceSteps));
+        if ((uint)noiseLevel > ReferenceMaximumNoiseLevel)
+            throw new ArgumentOutOfRangeException(nameof(noiseLevel), noiseLevel,
+                $"Noise level must be in [0, {ReferenceMaximumNoiseLevel}].");
+        if (temporalWindowSize <= 0)
+            throw new ArgumentOutOfRangeException(nameof(temporalWindowSize));
+        if (temporalWindowOverlap < 0 || temporalWindowOverlap >= temporalWindowSize)
+            throw new ArgumentOutOfRangeException(nameof(temporalWindowOverlap));
+        if ((forwardFlows is null) != (backwardFlows is null))
+            throw new ArgumentException("Forward and backward optical flows must be supplied together.");
+
+        int batch = lowResolutionVideo.Shape[0];
+        int frames = lowResolutionVideo.Shape[1];
+        int channels = lowResolutionVideo.Shape[2];
+        int height = lowResolutionVideo.Shape[3];
+        int width = lowResolutionVideo.Shape[4];
+
+        if (channels != CONDITION_CHANNELS)
+            throw new ArgumentException(
+                $"Upscale-A-Video expects {CONDITION_CHANNELS}-channel RGB input, got {channels}.",
+                nameof(lowResolutionVideo));
+
+        // The official SD-x4 contract does not VAE-encode the low-resolution input.
+        // It adds scheduler noise at the selected degradation level to RGB directly,
+        // then concatenates those 3 channels with the 4-channel target latent.
+        var cleanCondition = Engine.TensorPermute(lowResolutionVideo, [0, 2, 1, 3, 4]);
+
+        Tensor<T>? textConditioning = null;
+        Tensor<T>? unconditional = null;
+        if (_conditioner is null)
+            throw new InvalidOperationException(
+                "Upscale-A-Video requires the Stable Diffusion x4 Upscaler CLIP text " +
+                "encoder (1024-dimensional, 23-layer) for its Transformer3D cross-attention. " +
+                "Pass that released conditioner; reducing guidance does not remove the model's " +
+                "text-conditioning layers.");
+        if (_conditioner is not null && _conditioner.EmbeddingDimension != CROSS_ATTENTION_DIM)
+            throw new InvalidOperationException(
+                $"Upscale-A-Video requires {CROSS_ATTENTION_DIM}-dimensional text conditioning, " +
+                $"but the supplied conditioner produces {_conditioner.EmbeddingDimension} dimensions.");
+        bool useGuidance = guidanceScale > 1.0 && _conditioner is not null && _videoUNet.SupportsCFG;
+        if (_conditioner is not null)
+        {
+            textConditioning = _conditioner.EncodeText(_conditioner.Tokenize(prompt));
+            if (useGuidance)
+                unconditional = _conditioner.EncodeText(_conditioner.Tokenize(negativePrompt));
+        }
+
+        Scheduler.SetTimesteps(numInferenceSteps);
+        var rng = CreateInferenceRng(seed);
+        var conditionNoise = DiffusionNoiseHelper<T>.SampleGaussian(cleanCondition.Shape.ToArray(), rng);
+        var noisedCondition = new Tensor<T>(cleanCondition._shape,
+            Scheduler.AddNoise(cleanCondition.ToVector(), conditionNoise.ToVector(), noiseLevel));
+        var latents = DiffusionNoiseHelper<T>.SampleGaussian(
+            [batch, LATENT_CHANNELS, frames, height, width], rng);
+        var propagationSet = propagationSteps is null
+            ? null
+            : new HashSet<int>(propagationSteps);
+
+        for (int stepIndex = 0; stepIndex < Scheduler.Timesteps.Length; stepIndex++)
+        {
+            int timestep = Scheduler.Timesteps[stepIndex];
+            var conditionalPrediction = PredictWindowedNoise(
+                latents, timestep, noisedCondition, textConditioning, noiseLevel,
+                temporalWindowSize, temporalWindowOverlap);
+            Tensor<T> prediction = conditionalPrediction;
+            if (useGuidance && unconditional is not null)
+            {
+                var unconditionalPrediction = PredictWindowedNoise(
+                    latents, timestep, noisedCondition, unconditional, noiseLevel,
+                    temporalWindowSize, temporalWindowOverlap);
+                prediction = ApplyGuidanceVideo(
+                    unconditionalPrediction, conditionalPrediction, guidanceScale);
+            }
+
+            bool propagate = forwardFlows is not null && backwardFlows is not null &&
+                propagationSet?.Contains(stepIndex) == true;
+            if (propagate)
+            {
+                var x0 = PredictOriginalSample(latents, prediction, timestep);
+                x0 = PropagateBidirectionally(x0, forwardFlows!, backwardFlows!);
+                latents = StepFromOriginalSample(x0, prediction, stepIndex);
+            }
+            else
+            {
+                latents = SchedulerStepVideo(latents, prediction, timestep);
+            }
+        }
+
+        var decodedNCFHW = _temporalVAE.DecodeVideoFromDiffusion(latents);
+        var decoded = Engine.TensorPermute(decodedNCFHW, [0, 2, 1, 3, 4]);
+        return originalRank switch
+        {
+            3 => Engine.Reshape(decoded, [decoded.Shape[2], decoded.Shape[3], decoded.Shape[4]]),
+            4 => Engine.Reshape(decoded, [decoded.Shape[1], decoded.Shape[2], decoded.Shape[3], decoded.Shape[4]]),
+            _ => decoded
+        };
+    }
+
+    /// <summary>
+    /// Runs the temporal U-Net in the reference eight-frame windows and blends every
+    /// repeated frame 50/50 in encounter order, matching the released pipeline.
+    /// </summary>
+    private Tensor<T> PredictWindowedNoise(
+        Tensor<T> latents,
+        int timestep,
+        Tensor<T> condition,
+        Tensor<T>? textConditioning,
+        int noiseLevel,
+        int windowSize,
+        int overlap)
+    {
+        var predictor = _videoUNet ?? throw new InvalidOperationException("Video U-Net is not initialized.");
+        int frames = latents.Shape[2];
+        if (frames <= windowSize)
+            return predictor.PredictNoiseWithVideoCondition(
+                latents, timestep, condition, textConditioning, noiseLevel);
+
+        int batch = latents.Shape[0];
+        int latentChannels = latents.Shape[1];
+        int conditionChannels = condition.Shape[1];
+        int height = latents.Shape[3];
+        int width = latents.Shape[4];
+        int stride = windowSize - overlap;
+        var predictions = new Tensor<T>?[frames];
+        int previousStart = -1;
+
+        for (int candidate = 0; candidate < frames; candidate += stride)
+        {
+            int end = System.Math.Min(frames, candidate + windowSize);
+            int start = end - candidate < windowSize ? end - windowSize : candidate;
+            if (start == previousStart)
+                continue;
+            previousStart = start;
+
+            var latentWindow = Engine.TensorSlice(latents,
+                [0, 0, start, 0, 0], [batch, latentChannels, windowSize, height, width]);
+            var conditionWindow = Engine.TensorSlice(condition,
+                [0, 0, start, 0, 0], [batch, conditionChannels, windowSize, height, width]);
+            var windowPrediction = predictor.PredictNoiseWithVideoCondition(
+                latentWindow, timestep, conditionWindow, textConditioning, noiseLevel);
+
+            for (int offset = 0; offset < windowSize; offset++)
+            {
+                int frame = start + offset;
+                var framePrediction = Engine.TensorSlice(windowPrediction,
+                    [0, 0, offset, 0, 0], [batch, latentChannels, 1, height, width]);
+                predictions[frame] = predictions[frame] is null
+                    ? framePrediction
+                    : Engine.TensorMultiplyScalar(
+                        Engine.TensorAdd(predictions[frame]!, framePrediction),
+                        NumOps.FromDouble(0.5));
+            }
+        }
+
+        if (predictions.Any(static p => p is null))
+            throw new InvalidOperationException("Temporal window schedule did not cover every frame.");
+        return Engine.TensorConcatenate(predictions.Select(static p => p!).ToArray(), axis: 2);
+    }
+
+    private Tensor<T> PredictOriginalSample(
+        Tensor<T> latents,
+        Tensor<T> noisePrediction,
+        int timestep)
+    {
+        double alpha = NumOps.ToDouble(Scheduler.GetAlphaCumulativeProduct(timestep));
+        T sqrtAlpha = NumOps.FromDouble(System.Math.Sqrt(alpha));
+        T sqrtOneMinusAlpha = NumOps.FromDouble(System.Math.Sqrt(System.Math.Max(0.0, 1.0 - alpha)));
+        return Engine.TensorDivideScalar(
+            Engine.TensorSubtract(
+                latents,
+                Engine.TensorMultiplyScalar(noisePrediction, sqrtOneMinusAlpha)),
+            sqrtAlpha);
+    }
+
+    /// <summary>
+    /// Reconstructs x(t-1) from a possibly propagated x0 and the original epsilon,
+    /// which is the released scheduler's split step_v0 / step_vt contract at eta=0.
+    /// </summary>
+    private Tensor<T> StepFromOriginalSample(
+        Tensor<T> originalSample,
+        Tensor<T> noisePrediction,
+        int stepIndex)
+    {
+        int previousTimestep = stepIndex + 1 < Scheduler.Timesteps.Length
+            ? Scheduler.Timesteps[stepIndex + 1]
+            : 0;
+        double alphaPrevious = NumOps.ToDouble(
+            Scheduler.GetAlphaCumulativeProduct(previousTimestep));
+        return Engine.TensorAdd(
+            Engine.TensorMultiplyScalar(originalSample,
+                NumOps.FromDouble(System.Math.Sqrt(alphaPrevious))),
+            Engine.TensorMultiplyScalar(noisePrediction,
+                NumOps.FromDouble(System.Math.Sqrt(System.Math.Max(0.0, 1.0 - alphaPrevious)))));
+    }
+
+    /// <summary>
+    /// Applies the released non-learned propagation module: backward pass followed by
+    /// forward pass, nearest flow warping, 50/50 fusion, and forward/backward consistency
+    /// rejection with alpha1=0.001 and alpha2=0.05.
+    /// </summary>
+    private Tensor<T> PropagateBidirectionally(
+        Tensor<T> features,
+        Tensor<T> forwardFlows,
+        Tensor<T> backwardFlows)
+    {
+        ValidatePropagationFlows(features, forwardFlows, backwardFlows);
+        var backward = PropagateDirection(
+            features, forwardFlows, backwardFlows, reverse: true);
+        return PropagateDirection(
+            backward, backwardFlows, forwardFlows, reverse: false);
+    }
+
+    private static void ValidatePropagationFlows(
+        Tensor<T> features,
+        Tensor<T> forwardFlows,
+        Tensor<T> backwardFlows)
+    {
+        if (forwardFlows.Rank != 5 || backwardFlows.Rank != 5)
+            throw new ArgumentException("Optical flows must use [B,2,F-1,H,W] layout.");
+        int expectedFrames = features.Shape[2] - 1;
+        int[] expected = [features.Shape[0], 2, expectedFrames, features.Shape[3], features.Shape[4]];
+        if (!forwardFlows.Shape.ToArray().SequenceEqual(expected) ||
+            !backwardFlows.Shape.ToArray().SequenceEqual(expected))
+            throw new ArgumentException(
+                $"Optical flow shape must be [{string.Join(',', expected)}] for these latents.");
+    }
+
+    private Tensor<T> PropagateDirection(
+        Tensor<T> input,
+        Tensor<T> propagationFlows,
+        Tensor<T> consistencyFlows,
+        bool reverse)
+    {
+        int batch = input.Shape[0];
+        int channels = input.Shape[1];
+        int frames = input.Shape[2];
+        int height = input.Shape[3];
+        int width = input.Shape[4];
+        var output = new Tensor<T>?[frames];
+        Tensor<T>? propagated = null;
+
+        for (int iteration = 0; iteration < frames; iteration++)
+        {
+            int frameIndex = reverse ? frames - 1 - iteration : iteration;
+            var current5D = Engine.TensorSlice(input,
+                [0, 0, frameIndex, 0, 0], [batch, channels, 1, height, width]);
+            var current = Engine.Reshape(current5D, [batch, channels, height, width]);
+            if (propagated is null)
+            {
+                propagated = current;
+            }
+            else
+            {
+                int flowIndex = reverse ? frameIndex : frameIndex - 1;
+                var flow = ExtractFlowFrame(propagationFlows, flowIndex);
+                var reverseFlow = ExtractFlowFrame(consistencyFlows, flowIndex);
+                var warped = WarpNearest(propagated, flow);
+                var mask = CreateConsistencyMask(flow, reverseFlow, channels);
+                var fused = Engine.TensorMultiplyScalar(
+                    Engine.TensorAdd(warped, current), NumOps.FromDouble(0.5));
+                var inverseMask = Engine.TensorSubtract(
+                    Engine.TensorAddScalar(
+                        Engine.TensorMultiplyScalar(mask, NumOps.Zero), NumOps.One),
+                    mask);
+                propagated = Engine.TensorAdd(
+                    Engine.TensorMultiply(mask, fused),
+                    Engine.TensorMultiply(inverseMask, current));
+            }
+
+            output[frameIndex] = Engine.Reshape(propagated,
+                [batch, channels, 1, height, width]);
+        }
+
+        return Engine.TensorConcatenate(output.Select(static x => x!).ToArray(), axis: 2);
+    }
+
+    private Tensor<T> ExtractFlowFrame(Tensor<T> flows, int frameIndex)
+    {
+        var sliced = Engine.TensorSlice(flows,
+            [0, 0, frameIndex, 0, 0],
+            [flows.Shape[0], 2, 1, flows.Shape[3], flows.Shape[4]]);
+        return Engine.Reshape(sliced, [flows.Shape[0], 2, flows.Shape[3], flows.Shape[4]]);
+    }
+
+    private Tensor<T> WarpNearest(Tensor<T> input, Tensor<T> flow)
+    {
+        int batch = input.Shape[0];
+        int height = input.Shape[2];
+        int width = input.Shape[3];
+        var identity = new Tensor<T>([batch, 2, 3]);
+        for (int b = 0; b < batch; b++)
+        {
+            identity[b, 0, 0] = NumOps.One;
+            identity[b, 1, 1] = NumOps.One;
+        }
+
+        var baseGrid = Engine.AffineGrid(identity, height, width);
+        var scale = new Tensor<T>([1, 1, 1, 2]);
+        scale[0, 0, 0, 0] = NumOps.FromDouble(width <= 1 ? 0.0 : 2.0 / (width - 1));
+        scale[0, 0, 0, 1] = NumOps.FromDouble(height <= 1 ? 0.0 : 2.0 / (height - 1));
+        var normalizedFlow = Engine.TensorBroadcastMultiply(
+            Engine.TensorPermute(flow, [0, 2, 3, 1]), scale);
+        var grid = Engine.TensorAdd(baseGrid, normalizedFlow);
+        return Engine.GridSample(
+            input, grid, GridSampleMode.Nearest, GridSamplePadding.Zeros, alignCorners: true);
+    }
+
+    private Tensor<T> CreateConsistencyMask(
+        Tensor<T> flow,
+        Tensor<T> reverseFlow,
+        int outputChannels)
+    {
+        int height = flow.Shape[2];
+        int width = flow.Shape[3];
+        var warpedReverse = WarpNearest(reverseFlow, flow);
+        var consistencyError = Engine.ReduceSum(
+            Engine.TensorSquare(Engine.TensorAdd(flow, warpedReverse)), [1], keepDims: true);
+        var flowEnergy = Engine.ReduceSum(
+            Engine.TensorAdd(Engine.TensorSquare(flow), Engine.TensorSquare(warpedReverse)),
+            [1], keepDims: true);
+        var threshold = Engine.TensorAddScalar(
+            Engine.TensorMultiplyScalar(flowEnergy, NumOps.FromDouble(0.001)),
+            NumOps.FromDouble(0.05));
+        var singleChannelMask = Engine.TensorLessThan(consistencyError, threshold);
+        return Engine.TensorBroadcastTo(
+            singleChannelMask, [flow.Shape[0], outputChannels, height, width]);
+    }
 
     /// <inheritdoc />
     protected override Tensor<T> PredictVideoNoise(
@@ -376,6 +757,30 @@ public class UpscaleAVideoModel<T> : VideoDiffusionModelBase<T>
     #endregion
 
     #region IParameterizable Implementation
+
+    /// <inheritdoc />
+    public override IEnumerable<Tensor<T>> GetParameterChunks()
+    {
+        EnsureInitialized();
+        foreach (var chunk in _videoUNet.GetParameterChunks()) yield return chunk;
+        foreach (var chunk in _temporalVAE.GetParameterChunks()) yield return chunk;
+    }
+
+    /// <inheritdoc />
+    public override void SetParameterChunks(IEnumerable<Tensor<T>> chunks)
+    {
+        ArgumentNullException.ThrowIfNull(chunks);
+        EnsureInitialized();
+        var supplied = chunks.ToList();
+        int predictorCount = _videoUNet.GetParameterChunks().Count();
+        int vaeCount = _temporalVAE.GetParameterChunks().Count();
+        if (supplied.Count != predictorCount + vaeCount)
+            throw new ArgumentException(
+                $"Expected {predictorCount + vaeCount} parameter chunks, got {supplied.Count}.",
+                nameof(chunks));
+        _videoUNet.SetParameterChunks(supplied.Take(predictorCount));
+        _temporalVAE.SetParameterChunks(supplied.Skip(predictorCount));
+    }
 
     /// <inheritdoc />
     public override Vector<T> GetParameters()
@@ -445,11 +850,29 @@ public class UpscaleAVideoModel<T> : VideoDiffusionModelBase<T>
     {
         EnsureInitialized();
         return new UpscaleAVideoModel<T>(
+            architecture: Architecture,
+            options: new DiffusionModelOptions<T>((DiffusionModelOptions<T>)GetOptions()),
+            scheduler: CloneScheduler(Scheduler),
             videoUNet: (VideoUNetPredictor<T>)_videoUNet.Clone(),
             temporalVAE: (TemporalVAE<T>)_temporalVAE.Clone(),
             conditioner: _conditioner,
             defaultNumFrames: DefaultNumFrames,
-            defaultFPS: DefaultFPS);
+            defaultFPS: DefaultFPS,
+            seed: _seed);
+    }
+
+    private static INoiseScheduler<T> CloneScheduler(INoiseScheduler<T> scheduler)
+    {
+        object? created = Activator.CreateInstance(scheduler.GetType(), scheduler.Config);
+        if (created is not INoiseScheduler<T> clone)
+            throw new InvalidOperationException(
+                $"Scheduler {scheduler.GetType().Name} must expose a constructor accepting SchedulerConfig<{typeof(T).Name}> to support model cloning.");
+
+        var state = scheduler.GetState().ToDictionary(
+            pair => pair.Key,
+            pair => pair.Value is int[] values ? (object)values.ToArray() : pair.Value);
+        clone.LoadState(state);
+        return clone;
     }
 
     #endregion
@@ -469,12 +892,16 @@ public class UpscaleAVideoModel<T> : VideoDiffusionModelBase<T>
         };
 
         metadata.SetProperty("architecture", "temporal-sr-diffusion");
-        metadata.SetProperty("backbone", "Video-UNet-320B");
+        metadata.SetProperty("backbone", "Video-UNet-256 [1,2,2,4]");
         metadata.SetProperty("upscale_factor", UPSCALE_FACTOR);
         metadata.SetProperty("input_channels", INPUT_CHANNELS);
         metadata.SetProperty("latent_channels", LATENT_CHANNELS);
         metadata.SetProperty("cross_attention_dim", CROSS_ATTENTION_DIM);
-        metadata.SetProperty("temporal_layers", NUM_TEMPORAL_LAYERS);
+        metadata.SetProperty("temporal_modules", _videoUNet.TemporalModuleCount);
+        metadata.SetProperty("condition_channels", CONDITION_CHANNELS);
+        metadata.SetProperty("noise_level_embeddings", NUM_NOISE_LEVEL_EMBEDDINGS);
+        metadata.SetProperty("temporal_window", ReferenceWindowSize);
+        metadata.SetProperty("temporal_window_overlap", ReferenceWindowOverlap);
         metadata.SetProperty("temporal_consistency", true);
         metadata.SetProperty("scheduler", "DDIM");
         metadata.SetProperty("default_frames", DEFAULT_NUM_FRAMES);

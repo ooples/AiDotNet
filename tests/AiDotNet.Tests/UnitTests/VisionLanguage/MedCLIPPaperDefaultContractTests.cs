@@ -4,13 +4,8 @@ using Xunit;
 namespace AiDotNet.Tests.UnitTests.VisionLanguage;
 
 /// <summary>
-/// Guards the production option defaults independently from bounded generated fixtures.
+/// Guards the production paper defaults independently from bounded generated fixtures.
 /// </summary>
-/// <remarks>
-/// This is intentionally an options contract, not a paper-fidelity claim. Matching scalar defaults
-/// cannot prove that the constructed vision encoder, clinical text encoder, projections, loss and
-/// inference paths implement the reference MedCLIP system.
-/// </remarks>
 public sealed class MedCLIPDefaultOptionsContractTests
 {
     [Fact]
@@ -19,10 +14,17 @@ public sealed class MedCLIPDefaultOptionsContractTests
         var options = new MedCLIPOptions();
 
         Assert.Equal(224, options.ImageSize);
-        Assert.Equal("Swin-Tiny", options.VisionBackbone);
-        Assert.Equal(768, options.VisionEmbeddingDim);
+        Assert.Equal("ResNet50", options.VisionBackbone);
+        Assert.Equal("torchvision/resnet50", options.VisionModelId);
+        Assert.Equal(2048, options.VisionEmbeddingDim);
         Assert.Equal(TextEncoderVariant.BERT, options.TextEncoderVariant);
         Assert.Equal(768, options.TextEmbeddingDim);
+        Assert.Equal("emilyalsentzer/Bio_ClinicalBERT", options.TextModelId);
+        Assert.Equal(12, options.NumTextLayers);
+        Assert.Equal(12, options.NumTextHeads);
+        Assert.Equal(0.1, options.DropoutRate, precision: 10);
+        Assert.Equal(28996, options.VocabSize);
+        Assert.Equal(512, options.MaxSequenceLength);
         Assert.Equal(512, options.ProjectionDim);
         Assert.Equal(DomainSpecialization.Medical, options.Domain);
         Assert.True(options.UseEntityExtraction);

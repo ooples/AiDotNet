@@ -138,7 +138,7 @@ public sealed class GeneratedVisionFixtureContractTests
     {
         var fixture = new ModelFamilyTests.Generated.SVTRTests();
 
-        Assert.Equal(new[] { 3, 32, 256 }, ReadInputShape(fixture));
+        Assert.Equal(new[] { 3, 32, 100 }, ReadInputShape(fixture));
     }
 
     [Fact]

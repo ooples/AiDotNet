@@ -37,6 +37,7 @@ public partial class CrossAttentionLayer<T> : LayerBase<T>
     private readonly int _contextDim;
     private readonly int _headCount;
     private readonly int _headDim;
+    private readonly bool _zeroOutputProjection;
 
     // Query projection: queryDim -> queryDim
     [TrainableParameter(Role = PersistentTensorRole.Weights)]
@@ -106,12 +107,27 @@ public partial class CrossAttentionLayer<T> : LayerBase<T>
     /// <param name="headCount">Number of attention heads.</param>
     /// <param name="sequenceLength">Maximum sequence length for queries.</param>
     public CrossAttentionLayer(int queryDim, int contextDim, int headCount, int sequenceLength = 64)
+        : this(queryDim, contextDim, headCount, sequenceLength, zeroOutputProjection: false)
+    {
+    }
+
+    /// <summary>
+    /// Creates cross attention with optional zero initialization of its output
+    /// projection, as used by residual temporal-attention adapters.
+    /// </summary>
+    public CrossAttentionLayer(
+        int queryDim,
+        int contextDim,
+        int headCount,
+        int sequenceLength,
+        bool zeroOutputProjection)
         : base(new[] { sequenceLength, queryDim }, new[] { sequenceLength, queryDim }, (IActivationFunction<T>)new IdentityActivation<T>())
     {
         _queryDim = queryDim;
         _contextDim = contextDim;
         _headCount = headCount;
         _headDim = queryDim / headCount;
+        _zeroOutputProjection = zeroOutputProjection;
 
         if (queryDim % headCount != 0)
         {
@@ -131,6 +147,12 @@ public partial class CrossAttentionLayer<T> : LayerBase<T>
         _outputBias = new Tensor<T>(new[] { queryDim });
 
         InitializeParameters();
+
+        if (_zeroOutputProjection)
+        {
+            _outputWeights.Fill(NumOps.Zero);
+            _outputBias.Fill(NumOps.Zero);
+        }
 
         // Register trainable parameters for GPU memory optimization
         RegisterTrainableParameter(_queryWeights, PersistentTensorRole.Weights);
@@ -156,6 +178,7 @@ public partial class CrossAttentionLayer<T> : LayerBase<T>
         var metadata = base.GetMetadata();
         metadata["ContextDim"] = _contextDim.ToString();
         metadata["HeadCount"] = _headCount.ToString();
+        metadata["ZeroOutputProjection"] = _zeroOutputProjection.ToString();
         return metadata;
     }
 

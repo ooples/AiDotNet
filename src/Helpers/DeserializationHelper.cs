@@ -142,7 +142,40 @@ public static class DeserializationHelper
         object? instance;
         InvalidOperationException? branchFailure = null;
         try {
-        if (genericDef == typeof(DenseLayer<>))
+        if (genericDef == typeof(NeuralNetworks.Layers.SVTRThinPlateSplineLayer<>))
+        {
+            instance = Activator.CreateInstance(type,
+                TryGetInt(additionalParams, "InputChannels") ?? 3,
+                TryGetInt(additionalParams, "LocalizationHeight") ?? 32,
+                TryGetInt(additionalParams, "LocalizationWidth") ?? 64,
+                TryGetInt(additionalParams, "OutputHeight") ?? 32,
+                TryGetInt(additionalParams, "OutputWidth") ?? 100,
+                TryGetInt(additionalParams, "ControlPointCount") ?? 20,
+                TryGetDouble(additionalParams, "MarginX") ?? 0.05,
+                TryGetDouble(additionalParams, "MarginY") ?? 0.05)
+                ?? throw new MissingLayerCtorException("Cannot construct SVTRThinPlateSplineLayer.");
+        }
+        else if (genericDef == typeof(NeuralNetworks.Layers.SVTRMixingBlockLayer<>))
+        {
+            instance = Activator.CreateInstance(type,
+                TryGetInt(additionalParams, "HiddenSize") ?? outputShape[^1],
+                TryGetInt(additionalParams, "NumHeads") ?? 1,
+                TryGetInt(additionalParams, "Height") ?? 1,
+                TryGetInt(additionalParams, "Width") ?? inputShape[0],
+                TryGetInt(additionalParams, "WindowHeight") ?? 7,
+                TryGetInt(additionalParams, "WindowWidth") ?? 11,
+                TryGetBool(additionalParams, "Local") ?? true,
+                TryGetDouble(additionalParams, "DropPathRate") ?? 0.0)
+                ?? throw new MissingLayerCtorException("Cannot construct SVTRMixingBlockLayer.");
+        }
+        else if (genericDef == typeof(NeuralNetworks.Layers.BiasFreeLinearLayer<>))
+        {
+            int inputSize = TryGetInt(additionalParams, "InputSize") ?? inputShape[^1];
+            int outputSize = TryGetInt(additionalParams, "OutputSize") ?? outputShape[^1];
+            instance = Activator.CreateInstance(type, inputSize, outputSize)
+                ?? throw new MissingLayerCtorException("Cannot construct BiasFreeLinearLayer.");
+        }
+        else if (genericDef == typeof(DenseLayer<>))
         {
             instance = CreateDenseLayer<T>(type, inputShape, outputShape, additionalParams);
         }
@@ -1495,6 +1528,130 @@ public static class DeserializationHelper
             if (ctor is null)
                 throw new MissingLayerCtorException("Cannot find MaxPool3DLayer constructor with (int, int).");
             instance = ctor.Invoke(new object[] { poolSize, stride });
+        }
+        else if (genericDef == typeof(LearnedTokenTypeEmbeddingLayer<>))
+        {
+            int tokenTypeCount = TryGetInt(additionalParams, "TokenTypeCount") ?? 2;
+            int embeddingSize = TryGetInt(additionalParams, "EmbeddingSize")
+                ?? outputShape[^1];
+            var ctor = type.GetConstructor(new Type[] { typeof(int), typeof(int) });
+            if (ctor is null)
+                throw new MissingLayerCtorException(
+                    "Cannot find LearnedTokenTypeEmbeddingLayer constructor with (int, int).");
+            instance = ctor.Invoke(new object[] { tokenTypeCount, embeddingSize });
+        }
+        else if (genericDef == typeof(PReLULayer<>))
+        {
+            // PReLU supports either one shared slope or one slope per channel. The
+            // parameterization cannot be reconstructed from the tensor shape alone:
+            // both forms have the same input/output shapes. Preserve the constructor
+            // contract explicitly so a per-channel layer is not silently restored as
+            // the legacy scalar default.
+            int numParameters = TryGetInt(additionalParams, "NumParameters") ?? 1;
+            int channelAxis = TryGetInt(additionalParams, "ChannelAxis") ?? 1;
+            var ctor = type.GetConstructor(new Type[] { typeof(int), typeof(int), typeof(double) });
+            if (ctor is null)
+                throw new MissingLayerCtorException(
+                    "Cannot find PReLULayer constructor with (int, int, double).");
+            instance = ctor.Invoke(new object[] { numParameters, channelAxis, 0.25 });
+        }
+        else if (genericDef == typeof(TemporalConv3DLayer<>))
+        {
+            int inputChannels = TryGetInt(additionalParams, "InputChannels")
+                ?? inputShape[0];
+            int outputChannels = TryGetInt(additionalParams, "OutputChannels")
+                ?? outputShape[0];
+            int kernelDepth = TryGetInt(additionalParams, "KernelDepth") ?? 3;
+            int kernelHeight = TryGetInt(additionalParams, "KernelHeight") ?? 1;
+            int kernelWidth = TryGetInt(additionalParams, "KernelWidth") ?? 1;
+            int paddingDepth = TryGetInt(additionalParams, "PaddingDepth") ?? ((kernelDepth - 1) / 2);
+            int paddingHeight = TryGetInt(additionalParams, "PaddingHeight") ?? ((kernelHeight - 1) / 2);
+            int paddingWidth = TryGetInt(additionalParams, "PaddingWidth") ?? ((kernelWidth - 1) / 2);
+            bool zeroInitialize = TryGetBool(additionalParams, "ZeroInitialize") ?? false;
+            var ctor = type.GetConstructor(new Type[]
+            {
+                typeof(int), typeof(int), typeof(int), typeof(int), typeof(int),
+                typeof(int?), typeof(int?), typeof(int?), typeof(bool)
+            });
+            if (ctor is null)
+                throw new MissingLayerCtorException("Cannot find TemporalConv3DLayer constructor.");
+            instance = ctor.Invoke(new object?[]
+            {
+                inputChannels, outputChannels, kernelDepth, kernelHeight, kernelWidth,
+                paddingDepth, paddingHeight, paddingWidth, zeroInitialize
+            });
+        }
+        else if (genericDef == typeof(AiDotNet.Diffusion.NoisePredictors.TemporalModule3DLayer<>))
+        {
+            int channels = TryGetInt(additionalParams, "Channels")
+                ?? inputShape[0];
+            int timeEmbeddingDim = TryGetInt(additionalParams, "TimeEmbeddingDim") ?? channels * 4;
+            int spatialSize = TryGetInt(additionalParams, "SpatialSize")
+                ?? (inputShape.Length > 3 ? inputShape[^1] : 1);
+            var ctor = type.GetConstructor(new Type[] { typeof(int), typeof(int), typeof(int) });
+            if (ctor is null)
+                throw new MissingLayerCtorException("Cannot find TemporalModule3DLayer constructor.");
+            instance = ctor.Invoke(new object[] { channels, timeEmbeddingDim, spatialSize });
+        }
+        else if (genericDef == typeof(AiDotNet.Diffusion.NoisePredictors.DiffusionAttentionLayer<>))
+        {
+            int queryDimension = TryGetInt(additionalParams, "QueryDimension")
+                ?? inputShape[^1];
+            int contextDimension = TryGetInt(additionalParams, "ContextDimension")
+                ?? queryDimension;
+            int headCount = TryGetInt(additionalParams, "HeadCount")
+                ?? ResolveDefaultHeadCount(queryDimension);
+            bool zeroOutputProjection = TryGetBool(additionalParams, "ZeroOutputProjection") ?? false;
+            var ctor = type.GetConstructor(new Type[]
+            {
+                typeof(int), typeof(int), typeof(int), typeof(bool)
+            });
+            if (ctor is null)
+                throw new MissingLayerCtorException("Cannot find DiffusionAttentionLayer constructor.");
+            instance = ctor.Invoke(new object[]
+            {
+                queryDimension, contextDimension, headCount, zeroOutputProjection
+            });
+        }
+        else if (genericDef == typeof(AiDotNet.Diffusion.NoisePredictors.VideoTransformer3DLayer<>))
+        {
+            int channels = TryGetInt(additionalParams, "Channels") ?? inputShape[0];
+            int contextDimension = TryGetInt(additionalParams, "ContextDimension") ?? 1024;
+            int headCount = TryGetInt(additionalParams, "HeadCount") ?? 8;
+            int spatialSize = TryGetInt(additionalParams, "SpatialSize")
+                ?? (inputShape.Length > 3 ? inputShape[^1] : 1);
+            bool onlyCrossAttention = TryGetBool(additionalParams, "OnlyCrossAttention") ?? false;
+            var ctor = type.GetConstructor(new Type[]
+            {
+                typeof(int), typeof(int), typeof(int), typeof(int), typeof(bool)
+            });
+            if (ctor is null)
+                throw new MissingLayerCtorException("Cannot find VideoTransformer3DLayer constructor.");
+            instance = ctor.Invoke(new object[]
+            {
+                channels, contextDimension, headCount, spatialSize, onlyCrossAttention
+            });
+        }
+        else if (genericDef == typeof(AiDotNet.Diffusion.NoisePredictors.DiffusionResBlock<>))
+        {
+            int inChannels = TryGetInt(additionalParams, "InChannels")
+                ?? (inputShape.Length > 1 ? inputShape[1] : inputShape[0]);
+            int outChannels = TryGetInt(additionalParams, "OutChannels")
+                ?? (outputShape.Length > 1 ? outputShape[1] : outputShape[0]);
+            int spatialSize = TryGetInt(additionalParams, "SpatialSize")
+                ?? (inputShape.Length > 2 ? inputShape[^1] : 1);
+            int timeEmbedDim = TryGetInt(additionalParams, "TimeEmbedDim") ?? 0;
+            double epsilon = TryGetDouble(additionalParams, "Epsilon") ?? 1e-5;
+            var ctor = type.GetConstructor(new Type[]
+            {
+                typeof(int), typeof(int), typeof(int), typeof(int), typeof(int), typeof(double)
+            });
+            if (ctor is null)
+                throw new MissingLayerCtorException("Cannot find DiffusionResBlock constructor.");
+            instance = ctor.Invoke(new object[]
+            {
+                inChannels, outChannels, spatialSize, timeEmbedDim, 32, epsilon
+            });
         }
         else if (genericDef == typeof(PoolingLayer<>))
         {
@@ -2984,19 +3141,27 @@ public static class DeserializationHelper
         int sequenceLength = inputShape[0];
         int contextDim = TryGetInt(additionalParams, "ContextDim") ?? queryDim;
         int headCount = TryGetInt(additionalParams, "HeadCount") ?? ResolveDefaultHeadCount(queryDim);
+        bool zeroOutputProjection = TryGetBool(additionalParams, "ZeroOutputProjection") ?? false;
         if (headCount <= 0 || queryDim % headCount != 0)
         {
             throw new InvalidOperationException(
                 $"CrossAttentionLayer deserialization: queryDim {queryDim} is not divisible by headCount {headCount}.");
         }
 
-        var ctor = type.GetConstructor(new Type[] { typeof(int), typeof(int), typeof(int), typeof(int) });
+        var ctor = type.GetConstructor(new Type[]
+        {
+            typeof(int), typeof(int), typeof(int), typeof(int), typeof(bool)
+        });
         if (ctor is null)
         {
-            throw new MissingLayerCtorException("Cannot find CrossAttentionLayer constructor with (int, int, int, int).");
+            throw new MissingLayerCtorException(
+                "Cannot find CrossAttentionLayer constructor with (int, int, int, int, bool).");
         }
 
-        return ctor.Invoke(new object?[] { queryDim, contextDim, headCount, sequenceLength });
+        return ctor.Invoke(new object?[]
+        {
+            queryDim, contextDim, headCount, sequenceLength, zeroOutputProjection
+        });
     }
 
     private static object CreateFlashAttentionLayer<T>(Type type, int[] inputShape, Dictionary<string, object>? additionalParams)

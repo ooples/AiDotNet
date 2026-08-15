@@ -44,8 +44,8 @@ public class MedCLIPOptions : ContrastiveEncoderOptions
         ProjectionDim = other.ProjectionDim;
         Temperature = other.Temperature;
         DropoutRate = other.DropoutRate;
-        ImageMean = other.ImageMean;
-        ImageStd = other.ImageStd;
+        ImageMean = (double[])other.ImageMean.Clone();
+        ImageStd = (double[])other.ImageStd.Clone();
         ImageEncoderModelPath = other.ImageEncoderModelPath;
         TextEncoderModelPath = other.TextEncoderModelPath;
         OnnxOptions = other.OnnxOptions;
@@ -59,6 +59,9 @@ public class MedCLIPOptions : ContrastiveEncoderOptions
         UseEntityExtraction = other.UseEntityExtraction;
         EntitySimilarityThreshold = other.EntitySimilarityThreshold;
         VisionBackbone = other.VisionBackbone;
+        VisionModelId = other.VisionModelId;
+        TextModelId = other.TextModelId;
+        TokenizerDirectory = other.TokenizerDirectory;
     }
 
     /// <summary>
@@ -93,7 +96,19 @@ public class MedCLIPOptions : ContrastiveEncoderOptions
     /// <summary>
     /// Gets or sets the vision backbone used by MedCLIP.
     /// </summary>
-    public string VisionBackbone { get; set; } = "Swin-Tiny";
+    public string VisionBackbone { get; set; } = "ResNet50";
+
+    /// <summary>Gets or sets the reference pretrained vision checkpoint identifier.</summary>
+    public string VisionModelId { get; set; } = "torchvision/resnet50";
+
+    /// <summary>Gets or sets the reference pretrained clinical text checkpoint identifier.</summary>
+    public string TextModelId { get; set; } = "emilyalsentzer/Bio_ClinicalBERT";
+
+    /// <summary>
+    /// Gets or sets an optional local Hugging Face tokenizer directory. When supplied, native
+    /// MedCLIP loads the checkpoint's WordPiece vocabulary.
+    /// </summary>
+    public string? TokenizerDirectory { get; set; }
 
     /// <summary>
     /// Initializes default MedCLIP options.
@@ -102,9 +117,16 @@ public class MedCLIPOptions : ContrastiveEncoderOptions
     {
         TextEncoderVariant = TextEncoderVariant.BERT;
         ImageSize = 224;
-        VisionEmbeddingDim = 768;
+        VisionEmbeddingDim = 2048;
         TextEmbeddingDim = 768;
         ProjectionDim = 512;
+        VocabSize = 28996;
+        MaxSequenceLength = 512;
+        NumTextLayers = 12;
+        NumTextHeads = 12;
+        DropoutRate = 0.1;
+        ImageMean = [0.5862785803043838, 0.5862785803043838, 0.5862785803043838];
+        ImageStd = [0.27950088968644304, 0.27950088968644304, 0.27950088968644304];
         Temperature = 0.07;
     }
 }

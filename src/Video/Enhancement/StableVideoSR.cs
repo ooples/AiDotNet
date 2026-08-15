@@ -1,4 +1,5 @@
 using AiDotNet.Attributes;
+using AiDotNet.Diffusion.SuperResolution;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -19,8 +20,8 @@ namespace AiDotNet.Video.Enhancement;
 /// StableVideoSR (2024) adapts the Stable Diffusion architecture for video SR:
 /// - Temporal conditioning modules: cross-attention layers inserted between spatial attention
 ///   in the U-Net attend to features from adjacent frames, maintaining temporal coherence
-/// - ControlNet adapter: a trainable copy of the U-Net encoder provides fine-grained spatial
-///   conditioning from the low-resolution input during the denoising process
+/// - Direct low-resolution conditioning: noised RGB frames are concatenated with the latent
+///   input, matching the released seven-channel U-Net contract
 /// - Classifier-free guidance: balances between faithful reconstruction and generative
 ///   enhancement during inference
 /// - Noise schedule: adapted from image diffusion to preserve temporal structure
@@ -62,6 +63,8 @@ public class StableVideoSR<T> : VideoSuperResolutionBase<T>
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private bool _useNativeMode;
     private bool _disposed;
+    private UpscaleAVideoModel<T>? _diffusionCore;
+    private readonly IConditioningModule<T>? _conditioner;
 
     #endregion
 
@@ -73,7 +76,7 @@ public class StableVideoSR<T> : VideoSuperResolutionBase<T>
     {
         if (string.IsNullOrEmpty(modelPath))
             throw new ArgumentException("Model path cannot be null or empty.", nameof(modelPath));
-        _options = options ?? new StableVideoSROptions();
+        _options = options is null ? new StableVideoSROptions() : new StableVideoSROptions(options);
         _useNativeMode = false;
         ScaleFactor = _options.ScaleFactor;
         _options.ModelPath = modelPath;
@@ -83,11 +86,14 @@ public class StableVideoSR<T> : VideoSuperResolutionBase<T>
 
     /// <summary>Creates a StableVideoSR model in native training mode.</summary>
     public StableVideoSR(NeuralNetworkArchitecture<T> architecture, StableVideoSROptions? options = null,
-        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        IConditioningModule<T>? conditioner = null)
         : base(architecture)
     {
-        _options = options ?? new StableVideoSROptions();
+        _options = options is null ? new StableVideoSROptions() : new StableVideoSROptions(options);
+        _options.ValidateNativePaperContract();
         _useNativeMode = true;
+        _conditioner = conditioner;
         _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         ScaleFactor = _options.ScaleFactor;
         InitializeLayers();
@@ -102,8 +108,53 @@ public class StableVideoSR<T> : VideoSuperResolutionBase<T>
     {
         ThrowIfDisposed();
         var preprocessed = PreprocessFrames(lowResFrames);
-        var output = IsOnnxMode ? RunOnnxInference(preprocessed) : Forward(preprocessed);
+        if (!IsOnnxMode) EnsureFlowContract();
+        var output = IsOnnxMode
+            ? RunOnnxInference(preprocessed)
+            : _diffusionCore is not null
+                ? UpscaleNative(preprocessed, null, null)
+                : Forward(preprocessed);
         return PostprocessOutput(output);
+    }
+
+    /// <summary>
+    /// Upscales with externally estimated RAFT-compatible bidirectional flows in
+    /// [B,2,F-1,H,W] layout, enabling the paper's selected-step x0 propagation.
+    /// </summary>
+    public Tensor<T> UpscaleWithFlows(
+        Tensor<T> lowResFrames,
+        Tensor<T> forwardFlows,
+        Tensor<T> backwardFlows)
+    {
+        ThrowIfDisposed();
+        if (IsOnnxMode)
+            throw new NotSupportedException("Flow-guided native propagation is unavailable in ONNX mode.");
+        return PostprocessOutput(UpscaleNative(
+            PreprocessFrames(lowResFrames), forwardFlows, backwardFlows));
+    }
+
+    private Tensor<T> UpscaleNative(
+        Tensor<T> input,
+        Tensor<T>? forwardFlows,
+        Tensor<T>? backwardFlows)
+    {
+        if (_diffusionCore is null)
+            return Forward(input);
+        return _diffusionCore.Upscale(
+            input,
+            _options.Prompt,
+            _options.NumDenoisingSteps,
+            _options.GuidanceScale,
+            seed: Architecture.RandomSeed,
+            noiseLevel: _options.NoiseLevel,
+            temporalWindowSize: _options.TemporalWindowSize,
+            temporalWindowOverlap: _options.TemporalWindowOverlap,
+            forwardFlows: forwardFlows,
+            backwardFlows: backwardFlows,
+            propagationSteps: _options.EnableFlowGuidedPropagation
+                ? _options.PropagationSteps
+                : null,
+            negativePrompt: _options.NegativePrompt);
     }
 
     #endregion
@@ -119,14 +170,8 @@ public class StableVideoSR<T> : VideoSuperResolutionBase<T>
         }
         else
         {
-            int ch = Architecture.InputDepth > 0 ? Architecture.InputDepth : 3;
-            int h = Architecture.InputHeight > 0 ? Architecture.InputHeight : 128;
-            int w = Architecture.InputWidth > 0 ? Architecture.InputWidth : 128;
-            Layers.AddRange(LayerHelper<T>.CreateDefaultVideoSuperResolutionLayers(
-                inputChannels: ch, inputHeight: h, inputWidth: w,
-                numFeatures: _options.NumFeatures,
-                numResBlocks: _options.NumTemporalLayers,
-                scaleFactor: _options.ScaleFactor));
+            _diffusionCore = new UpscaleAVideoModel<T>(
+                conditioner: _conditioner, seed: Architecture.RandomSeed);
         }
     }
 
@@ -134,7 +179,18 @@ public class StableVideoSR<T> : VideoSuperResolutionBase<T>
     {
         ThrowIfDisposed();
         if (IsOnnxMode) return RunOnnxInference(input);
-        return Forward(input);
+        EnsureFlowContract();
+        return _diffusionCore is not null
+            ? UpscaleNative(input, null, null)
+            : Forward(input);
+    }
+
+    private void EnsureFlowContract()
+    {
+        if (_options.EnableFlowGuidedPropagation && _options.PropagationSteps.Length > 0)
+            throw new InvalidOperationException(
+                "Configured propagation steps require bidirectional optical flow. " +
+                "Call UpscaleWithFlows or clear PropagationSteps.");
     }
 
     public override void Train(Tensor<T> input, Tensor<T> expected)
@@ -143,7 +199,8 @@ public class StableVideoSR<T> : VideoSuperResolutionBase<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expected);
+            if (_diffusionCore is not null) _diffusionCore.Train(input, expected);
+            else TrainWithTape(input, expected);
         }
         finally
         {
@@ -154,18 +211,20 @@ public class StableVideoSR<T> : VideoSuperResolutionBase<T>
     public override void UpdateParameters(Vector<T> parameters)
     {
         if (!_useNativeMode) throw new NotSupportedException("Parameter updates are not supported in ONNX mode.");
-        int required = 0;
-        foreach (var layer in Layers) required += (int)layer.ParameterCount;
-        if (parameters.Length < required)
-            throw new ArgumentException($"Parameter vector length {parameters.Length} is less than required {required}.", nameof(parameters));
-        int idx = 0;
-        foreach (var layer in Layers)
+        if (_diffusionCore is not null)
         {
-            int count = checked((int)layer.ParameterCount);
-            layer.UpdateParameters(parameters.Slice(idx, count));
-            idx += count;
+            _diffusionCore.SetParameters(parameters);
+            return;
         }
+        base.SetParameters(parameters);
     }
+
+    /// <inheritdoc />
+    public override Vector<T> GetParameters() =>
+        _diffusionCore?.GetParameters() ?? base.GetParameters();
+
+    /// <inheritdoc />
+    public override long ParameterCount => _diffusionCore?.ParameterCount ?? base.ParameterCount;
 
     protected override Tensor<T> PreprocessFrames(Tensor<T> rawFrames) => NormalizeFrames(rawFrames);
 
@@ -177,14 +236,23 @@ public class StableVideoSR<T> : VideoSuperResolutionBase<T>
         {
             Name = _useNativeMode ? "StableVideoSR-Native" : "StableVideoSR-ONNX",
             Description = $"StableVideoSR {_options.Variant} temporal diffusion VSR (2024)",
-            Complexity = _options.NumTemporalLayers
+            Complexity = _options.NumTemporalModules
         };
         m.AdditionalInfo["Variant"] = _options.Variant.ToString();
         m.AdditionalInfo["NumFeatures"] = _options.NumFeatures.ToString();
         m.AdditionalInfo["NumDenoisingSteps"] = _options.NumDenoisingSteps.ToString();
-        m.AdditionalInfo["NumTemporalLayers"] = _options.NumTemporalLayers.ToString();
+        m.AdditionalInfo["NumTemporalModules"] = _options.NumTemporalModules.ToString();
         m.AdditionalInfo["GuidanceScale"] = _options.GuidanceScale.ToString();
         m.AdditionalInfo["ScaleFactor"] = _options.ScaleFactor.ToString();
+        m.AdditionalInfo["LatentScaleFactor"] = _options.LatentScaleFactor.ToString();
+        m.AdditionalInfo["MaximumNoiseLevel"] = _options.MaximumNoiseLevel.ToString();
+        m.AdditionalInfo["TemporalWindow"] = $"{_options.TemporalWindowSize} (overlap {_options.TemporalWindowOverlap})";
+        m.AdditionalInfo["FlowGuidedPropagation"] = _options.EnableFlowGuidedPropagation.ToString();
+        m.AdditionalInfo["NoiseLevel"] = _options.NoiseLevel.ToString();
+        m.AdditionalInfo["PropagationSteps"] = string.Join(',', _options.PropagationSteps);
+        m.AdditionalInfo["TextConditioner"] = _conditioner is null
+            ? "required for guidance > 1"
+            : $"{_conditioner.GetType().Name} ({_conditioner.EmbeddingDimension}D)";
         return m;
     }
 
@@ -195,12 +263,32 @@ public class StableVideoSR<T> : VideoSuperResolutionBase<T>
         w.Write((int)_options.Variant);
         w.Write(_options.NumFeatures);
         w.Write(_options.NumDenoisingSteps);
-        w.Write(_options.NumTemporalLayers);
+        w.Write(_options.NumTemporalModules);
         w.Write(_options.ScaleFactor);
         w.Write(_options.LatentDim);
         w.Write(_options.GuidanceScale);
-        w.Write(_options.ControlNetScale);
         w.Write(_options.DropoutRate);
+        w.Write(_options.LatentScaleFactor);
+        w.Write(_options.MaximumNoiseLevel);
+        w.Write(_options.TemporalWindowSize);
+        w.Write(_options.TemporalWindowOverlap);
+        w.Write(_options.EnableFlowGuidedPropagation);
+        w.Write(_options.NoiseLevel);
+        w.Write(_options.Prompt ?? string.Empty);
+        w.Write(_options.PropagationSteps.Length);
+        foreach (int step in _options.PropagationSteps) w.Write(step);
+
+        w.Write(_diffusionCore is not null);
+        if (_diffusionCore is not null)
+        {
+            var chunks = _diffusionCore.GetParameterChunks().ToList();
+            w.Write(chunks.Count);
+            foreach (var chunk in chunks)
+                SerializationHelper<T>.SerializeTensor(w, chunk);
+        }
+        // Appended for backward compatibility: older payloads end immediately
+        // after the optional diffusion-core chunks.
+        w.Write(_options.NegativePrompt ?? string.Empty);
     }
 
     protected override void DeserializeNetworkSpecificData(BinaryReader r)
@@ -211,12 +299,37 @@ public class StableVideoSR<T> : VideoSuperResolutionBase<T>
         _options.Variant = (VideoModelVariant)r.ReadInt32();
         _options.NumFeatures = r.ReadInt32();
         _options.NumDenoisingSteps = r.ReadInt32();
-        _options.NumTemporalLayers = r.ReadInt32();
+        _options.NumTemporalModules = r.ReadInt32();
         _options.ScaleFactor = r.ReadInt32();
         _options.LatentDim = r.ReadInt32();
         _options.GuidanceScale = r.ReadDouble();
-        _options.ControlNetScale = r.ReadDouble();
         _options.DropoutRate = r.ReadDouble();
+        _options.LatentScaleFactor = r.ReadDouble();
+        _options.MaximumNoiseLevel = r.ReadInt32();
+        _options.TemporalWindowSize = r.ReadInt32();
+        _options.TemporalWindowOverlap = r.ReadInt32();
+        _options.EnableFlowGuidedPropagation = r.ReadBoolean();
+        _options.NoiseLevel = r.ReadInt32();
+        _options.Prompt = r.ReadString();
+        int propagationCount = r.ReadInt32();
+        _options.PropagationSteps = new int[propagationCount];
+        for (int i = 0; i < propagationCount; i++)
+            _options.PropagationSteps[i] = r.ReadInt32();
+        if (_useNativeMode) _options.ValidateNativePaperContract();
+
+        bool hasDiffusionCore = r.ReadBoolean();
+        if (hasDiffusionCore)
+        {
+            _diffusionCore ??= new UpscaleAVideoModel<T>(
+                conditioner: _conditioner, seed: Architecture.RandomSeed);
+            int chunkCount = r.ReadInt32();
+            var chunks = new Tensor<T>[chunkCount];
+            for (int i = 0; i < chunkCount; i++)
+                chunks[i] = SerializationHelper<T>.DeserializeTensor(r);
+            _diffusionCore.SetParameterChunks(chunks);
+        }
+        if (r.BaseStream.Position < r.BaseStream.Length)
+            _options.NegativePrompt = r.ReadString();
         ScaleFactor = _options.ScaleFactor;
         if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
         {
@@ -231,8 +344,8 @@ public class StableVideoSR<T> : VideoSuperResolutionBase<T>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
         if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
-            return new StableVideoSR<T>(Architecture, p, _options);
-        return new StableVideoSR<T>(Architecture, _options);
+            return new StableVideoSR<T>(Architecture, p, new StableVideoSROptions(_options));
+        return new StableVideoSR<T>(Architecture, new StableVideoSROptions(_options), conditioner: _conditioner);
     }
 
     #endregion
@@ -248,7 +361,11 @@ public class StableVideoSR<T> : VideoSuperResolutionBase<T>
     {
         if (_disposed) return;
         _disposed = true;
-        if (disposing) OnnxModel?.Dispose();
+        if (disposing)
+        {
+            OnnxModel?.Dispose();
+            _diffusionCore?.Dispose();
+        }
         base.Dispose(disposing);
     }
 
