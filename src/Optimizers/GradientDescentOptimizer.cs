@@ -34,10 +34,15 @@ public class GradientDescentOptimizer<T, TInput, TOutput> : GradientBasedOptimiz
     /// <inheritdoc/>
     /// <remarks>
     /// <para>
-    /// The optimize loop calls <c>ApplyMomentum</c> before updating, and <c>InitialMomentum</c>
-    /// defaults to 0.9, so this is SGD WITH MOMENTUM unless momentum is explicitly zero. It maps to
-    /// the <c>SGDMomentum</c> kernel accordingly, and to plain <c>SGD</c> only when momentum is 0 —
-    /// reporting plain SGD in both cases would drop the momentum on the fused path.
+    /// Maps to plain <see cref="Tensors.Engines.Compilation.OptimizerType.SGD"/>, matching what
+    /// <see cref="Step"/> does: <c>param -= lr * grad</c>, with the sparse path passing an explicit
+    /// <c>momentum: 0.0</c>.
+    /// </para>
+    /// <para>
+    /// <c>Optimize</c> calls <c>ApplyMomentum</c> and <c>InitialMomentum</c> defaults to 0.9, which suggests
+    /// SGDMomentum — but that is the wrong loop to match. <c>Optimize</c>'s flat-vector path serves non-neural
+    /// models and never reaches the compiled plan; <c>Step</c> is the tape path the fused kernel replaces.
+    /// Mapping to SGDMomentum would add momentum on the fused path that the eager tape path does not apply.
     /// </para>
     /// <para>
     /// Declines when the learning rate adapts during training, since the fused plan bakes it in when
@@ -50,17 +55,10 @@ public class GradientDescentOptimizer<T, TInput, TOutput> : GradientBasedOptimiz
         if (GradientOptions.UseAdaptiveLearningRate) return false;
         if (!TryGetFusedLrSchedule(out var schedule)) return false;
 
-        float momentum = (float)GradientOptions.InitialMomentum;
-        config = momentum == 0f
-            ? new Fused.FusedOptimizerConfig(
-                Tensors.Engines.Compilation.OptimizerType.SGD,
-                (float)GetCurrentLearningRate(),
-                0f, 0f, 0f, 0f, schedule)
-            : new Fused.FusedOptimizerConfig(
-                Tensors.Engines.Compilation.OptimizerType.SGDMomentum,
-                (float)GetCurrentLearningRate(),
-                momentum,           // Beta1 carries the momentum coefficient
-                0f, 0f, 0f, schedule);
+        config = new Fused.FusedOptimizerConfig(
+            Tensors.Engines.Compilation.OptimizerType.SGD,
+            (float)GetCurrentLearningRate(),
+            0f, 0f, 0f, 0f, schedule);
         return true;
     }
 
