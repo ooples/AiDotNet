@@ -389,6 +389,43 @@ public partial class WanVideoModel<T> : VideoDiffusionModelBase<T>
 
     #region ICloneable Implementation
 
+    // Kept deliberately. ADN0058 sees a single `return new WanVideoModel<T>(...)` and judges it
+    // reproducible, but the base rebuild is not equivalent HERE.
+    //
+    // DiffusionModelBase.DeepCopy is Serialize() -> CopyConfiguration -> Deserialize(state). That
+    // requires the freshly constructed copy to be able to report its parameters, and a fresh
+    // TemporalVAE cannot: its layers are lazy, so 'decoder/output' declares 435 values in the
+    // captured manifest while the accessor supplies 0, and the rebuild dies with
+    // ParameterContractViolationException rather than producing a wrong answer quietly.
+    //
+    // Cloning the sub-models directly materialises them -- that is what DiTNoisePredictor.Clone and
+    // TemporalVAE.Clone do -- so this override is the path that works until lazy components can
+    // materialise on demand inside ParameterComponentRegistry. That fix belongs to the parameter
+    // package, not to this PR; when it lands, delete this override and the pragma with it.
+#pragma warning disable ADN0058
+    /// <inheritdoc />
+    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
+    {
+        return Clone();
+    }
+
+    /// <inheritdoc />
+    public override IDiffusionModel<T> Clone()
+    {
+        // _dit.Clone() reconstructs from the predictor's own config fields and (with the
+        // lazy-layer-materializing DiTNoisePredictor.Clone) preserves its weights — so it is
+        // correct for both a caller-injected predictor and the default variant build, with no
+        // need to re-derive the variant config or round-trip a flat foundation-scale vector.
+        return new WanVideoModel<T>(
+            dit: (DiTNoisePredictor<T>)_dit.Clone(),
+            temporalVAE: (TemporalVAE<T>)_temporalVAE.Clone(),
+            conditioner: _conditioner,
+            variant: _variant,
+            defaultNumFrames: DefaultNumFrames,
+            defaultFPS: DefaultFPS);
+    }
+#pragma warning restore ADN0058
+
     #endregion
 
     #region Metadata
