@@ -1,4 +1,5 @@
 using AiDotNet.Generators;
+using System.Reflection;
 using Xunit;
 
 namespace AiDotNet.Tests.Generators;
@@ -84,5 +85,78 @@ public sealed class GeneratedVisionFixtureContractTests
             out _);
 
         Assert.False(found);
+    }
+
+    [Fact]
+    public void TwoDimensionalDeclaration_PreservesFixtureChannelAxis()
+    {
+        int[] conformed = GeneratedVisionFixtureContract.ConformToDeclaredShape(
+            new[] { 3, 128, 128 },
+            new[] { 32, 256 });
+
+        Assert.Equal(new[] { 3, 32, 256 }, conformed);
+    }
+
+    [Fact]
+    public void ThreeDimensionalDeclaration_PreservesFixtureBatchAxis()
+    {
+        int[] conformed = GeneratedVisionFixtureContract.ConformToDeclaredShape(
+            new[] { 1, 3, 256, 256 },
+            new[] { 3, 224, 224 });
+
+        Assert.Equal(new[] { 1, 3, 224, 224 }, conformed);
+    }
+
+    [Fact]
+    public void LargerDeclaration_DoesNotExpandBoundedFixture()
+    {
+        int[] conformed = GeneratedVisionFixtureContract.ConformToDeclaredShape(
+            new[] { 3, 128, 128 },
+            new[] { 3, 640, 640 });
+
+        Assert.Equal(new[] { 3, 128, 128 }, conformed);
+    }
+
+    [Theory]
+    [InlineData(new[] { 0, 32 })]
+    [InlineData(new[] { 3, 32, 32, 2 })]
+    public void InvalidOrHigherRankDeclaration_UsesIndependentFallback(int[] declared)
+    {
+        int[] fallback = { 3, 128, 128 };
+
+        int[] conformed = GeneratedVisionFixtureContract.ConformToDeclaredShape(fallback, declared);
+        Assert.Equal(fallback, conformed);
+        Assert.NotSame(fallback, conformed);
+
+        conformed[0] = 99;
+
+        Assert.Equal(new[] { 3, 128, 128 }, fallback);
+    }
+
+    [Fact]
+    public void ParameterlessVisionModel_UsesItsRuntimeDeclaredGeometry()
+    {
+        var fixture = new ModelFamilyTests.Generated.SVTRTests();
+
+        Assert.Equal(new[] { 3, 32, 256 }, ReadInputShape(fixture));
+    }
+
+    [Fact]
+    public void ParameterlessSquareVisionModels_RemainBounded()
+    {
+        Assert.Equal(
+            new[] { 3, 128, 128 },
+            ReadInputShape(new ModelFamilyTests.Generated.PSENetTests()));
+    }
+
+    private static int[] ReadInputShape(object fixture)
+    {
+        PropertyInfo? property = fixture.GetType().GetProperty(
+            "InputShape",
+            BindingFlags.Instance | BindingFlags.NonPublic);
+
+        Assert.NotNull(property);
+        object? value = property.GetValue(fixture);
+        return Assert.IsType<int[]>(value);
     }
 }

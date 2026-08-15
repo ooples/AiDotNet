@@ -57,6 +57,55 @@ internal static class GeneratedVisionFixtureContract
         return false;
     }
 
+    /// <summary>
+    /// Applies the model-declared per-sample shape to a generated fixture while preserving any
+    /// leading fixture-only axes, such as an explicit batch axis or an RGB channel axis omitted by
+    /// a two-dimensional architecture declaration.
+    /// </summary>
+    internal static int[] ConformToDeclaredShape(int[] fallback, int[] declared)
+    {
+        if (fallback is null || fallback.Length == 0)
+            return System.Array.Empty<int>();
+
+        int[] result = (int[])fallback.Clone();
+        if (declared is null || declared.Length == 0 || declared.Length > fallback.Length
+            || declared.Any(axis => axis <= 0))
+        {
+            return result;
+        }
+
+        int leadingAxes = fallback.Length - declared.Length;
+        if (leadingAxes > 2)
+            return result;
+
+        long fallbackElements = 1;
+        long declaredElements = 1;
+        for (int i = 0; i < declared.Length; i++)
+        {
+            int fallbackAxis = fallback[leadingAxes + i];
+            if (fallbackAxis <= 0
+                || fallbackElements > long.MaxValue / fallbackAxis
+                || declaredElements > long.MaxValue / declared[i])
+            {
+                return result;
+            }
+
+            fallbackElements *= fallbackAxis;
+            declaredElements *= declared[i];
+        }
+
+        // The runtime declaration may correct aspect ratio/rank semantics, but it must not turn a
+        // bounded smoke fixture back into a production-resolution benchmark. Exact architecture
+        // literals remain authoritative in the generator's compile-time path.
+        if (declaredElements > fallbackElements)
+            return result;
+
+        for (int i = 0; i < declared.Length; i++)
+            result[leadingAxes + i] = declared[i];
+
+        return result;
+    }
+
     private static int? FindPositiveIntegerArgument(ArgumentListSyntax arguments, string name)
     {
         ArgumentSyntax? argument = arguments.Arguments.FirstOrDefault(candidate =>

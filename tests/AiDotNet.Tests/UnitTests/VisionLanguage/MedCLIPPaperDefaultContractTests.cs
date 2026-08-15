@@ -4,12 +4,17 @@ using Xunit;
 namespace AiDotNet.Tests.UnitTests.VisionLanguage;
 
 /// <summary>
-/// Guards the paper-facing production preset independently from bounded generated fixtures.
+/// Guards the production option defaults independently from bounded generated fixtures.
 /// </summary>
-public sealed class MedCLIPPaperDefaultContractTests
+/// <remarks>
+/// This is intentionally an options contract, not a paper-fidelity claim. Matching scalar defaults
+/// cannot prove that the constructed vision encoder, clinical text encoder, projections, loss and
+/// inference paths implement the reference MedCLIP system.
+/// </remarks>
+public sealed class MedCLIPDefaultOptionsContractTests
 {
     [Fact]
-    public void DefaultOptions_RetainOfficialMedClipEncoderPreset()
+    public void DefaultOptions_AreNotChangedByBoundedGeneratedFixtures()
     {
         var options = new MedCLIPOptions();
 

@@ -123,6 +123,50 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
 
     protected virtual int[] InputShape => [1, 4];
 
+    private static readonly int[] s_missingDeclaredInputShape = [];
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<Type, int[]>
+        s_declaredInputShapeCache = new();
+
+    /// <summary>
+    /// Replaces a generated fixture's guessed trailing axes with the architecture declared by the
+    /// exact model instance that the fixture constructs.
+    /// </summary>
+    /// <remarks>
+    /// Parameterless model constructors do not expose their architecture literal to the source
+    /// generator. Asking the constructed model closes that gap without a model-name override. The
+    /// fallback is retained when a model cannot describe itself, and the result is cached once per
+    /// generated fixture type so repeated invariants do not repeatedly construct a network.
+    /// </remarks>
+    protected int[] ResolveModelDeclaredInputShape(int[] fallback)
+    {
+        int[] declared = s_declaredInputShapeCache.GetOrAdd(GetType(), _ =>
+        {
+            try
+            {
+                using var arena = TensorArena.Create();
+                using var network = CreateNetwork();
+                int[]? shape = network.GetArchitecture()?.GetInputShape();
+                if (shape is null || shape.Length == 0 || shape.Any(axis => axis <= 0))
+                    return s_missingDeclaredInputShape;
+
+                return (int[])shape.Clone();
+            }
+            catch (Exception ex) when (
+                ex is ArgumentException or InvalidOperationException
+                or NotSupportedException or NotImplementedException
+                or AiDotNet.Exceptions.TensorShapeMismatchException)
+            {
+                return s_missingDeclaredInputShape;
+            }
+        });
+
+        return ReferenceEquals(declared, s_missingDeclaredInputShape)
+            ? (int[])fallback.Clone()
+            : AiDotNet.Generators.GeneratedVisionFixtureContract.ConformToDeclaredShape(
+                fallback,
+                declared);
+    }
+
     /// <summary>
     /// Caller-declared output shape. Subclasses can override this for paper-
     /// faithful intent (e.g. when a model has a deterministic output dim

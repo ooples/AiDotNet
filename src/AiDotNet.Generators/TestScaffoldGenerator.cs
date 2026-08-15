@@ -1605,9 +1605,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
     /// instantiates. The class-family size remains the fallback for constructors without explicit
     /// literal image dimensions.
     /// </summary>
-    private static void GetVisionFixtureSpatialSize(
+    private static bool TryGetVisionFixtureSpatialSize(
         string constructorExpression,
-        string className,
         out int height,
         out int width)
     {
@@ -1616,11 +1615,10 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 out height,
                 out width))
         {
-            return;
+            return true;
         }
 
-        height = GetVisionSpatialSize(className);
-        width = height;
+        return false;
     }
 
     /// <summary>
@@ -3387,8 +3385,15 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // backbone's strided 3x3 conv → max-pool stem sees the shape it
             // expects per the standard CV literature
             // (He et al. 2016 ResNet, Tan & Le 2019 EfficientNet, etc.).
-            GetVisionFixtureSpatialSize(constructorExpr, model.ClassName, out int height, out int width);
-            sb.AppendLine($"    protected override int[] InputShape => new[] {{ 1, 3, {height}, {width} }};");
+            if (TryGetVisionFixtureSpatialSize(constructorExpr, out int height, out int width))
+            {
+                sb.AppendLine($"    protected override int[] InputShape => new[] {{ 1, 3, {height}, {width} }};");
+            }
+            else
+            {
+                int spatial = GetVisionSpatialSize(model.ClassName);
+                sb.AppendLine($"    protected override int[] InputShape => ResolveModelDeclaredInputShape(new[] {{ 1, 3, {spatial}, {spatial} }});");
+            }
             sb.AppendLine("    protected override int[] OutputShape => new[] { 4 };");
         }
         else if (isVisionModel)
@@ -3396,8 +3401,15 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // The emitted constructor is authoritative. Selecting a second size from the class
             // name can feed a bounded patch model thousands of extra tokens and manufacture a
             // quadratic attention outlier unrelated to either the smoke topology or paper default.
-            GetVisionFixtureSpatialSize(constructorExpr, model.ClassName, out int height, out int width);
-            sb.AppendLine($"    protected override int[] InputShape => new[] {{ 3, {height}, {width} }};");
+            if (TryGetVisionFixtureSpatialSize(constructorExpr, out int height, out int width))
+            {
+                sb.AppendLine($"    protected override int[] InputShape => new[] {{ 3, {height}, {width} }};");
+            }
+            else
+            {
+                int spatial = GetVisionSpatialSize(model.ClassName);
+                sb.AppendLine($"    protected override int[] InputShape => ResolveModelDeclaredInputShape(new[] {{ 3, {spatial}, {spatial} }});");
+            }
             sb.AppendLine("    protected override int[] OutputShape => new[] { 4 };");
 
             // Paper-scale vision / vision-language encoders use the original
