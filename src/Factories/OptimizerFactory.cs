@@ -68,17 +68,29 @@ public static class OptimizerFactory<T, TInput, TOutput>
         Register(OptimizerType.ASGD, typeof(ASGDOptimizer<T, TInput, TOutput>));
         Register(OptimizerType.Rprop, typeof(RpropOptimizer<T, TInput, TOutput>));
 
+        // Layer-wise adaptive (large-batch) methods.
+        Register(OptimizerType.LAMB, typeof(LAMBOptimizer<T, TInput, TOutput>));
+        Register(OptimizerType.LARS, typeof(LARSOptimizer<T, TInput, TOutput>));
+        Register(OptimizerType.Adam8Bit, typeof(Adam8BitOptimizer<T, TInput, TOutput>));
+
         // First-order descent.
         Register(OptimizerType.GradientDescent, typeof(GradientDescentOptimizer<T, TInput, TOutput>));
         Register(OptimizerType.StochasticGradientDescent, typeof(StochasticGradientDescentOptimizer<T, TInput, TOutput>));
+        Register(OptimizerType.MiniBatchGradientDescent, typeof(MiniBatchGradientDescentOptimizer<T, TInput, TOutput>));
         Register(OptimizerType.Momentum, typeof(MomentumOptimizer<T, TInput, TOutput>));
         Register(OptimizerType.NesterovAcceleratedGradient, typeof(NesterovAcceleratedGradientOptimizer<T, TInput, TOutput>));
+        Register(OptimizerType.ProximalGradientDescent, typeof(ProximalGradientDescentOptimizer<T, TInput, TOutput>));
 
-        // Second-order and line-search methods.
+        // Second-order, quasi-Newton and line-search methods.
         Register(OptimizerType.LBFGS, typeof(LBFGSOptimizer<T, TInput, TOutput>));
+        Register(OptimizerType.BFGS, typeof(BFGSOptimizer<T, TInput, TOutput>));
+        Register(OptimizerType.DFP, typeof(DFPOptimizer<T, TInput, TOutput>));
+        Register(OptimizerType.NewtonMethod, typeof(NewtonMethodOptimizer<T, TInput, TOutput>));
+        Register(OptimizerType.LevenbergMarquardt, typeof(LevenbergMarquardtOptimizer<T, TInput, TOutput>));
         Register(OptimizerType.ConjugateGradient, typeof(ConjugateGradientOptimizer<T, TInput, TOutput>));
         Register(OptimizerType.CoordinateDescent, typeof(CoordinateDescentOptimizer<T, TInput, TOutput>));
         Register(OptimizerType.TrustRegion, typeof(TrustRegionOptimizer<T, TInput, TOutput>));
+        Register(OptimizerType.ADMM, typeof(ADMMOptimizer<T, TInput, TOutput>));
 
         // Derivative-free and population methods.
         Register(OptimizerType.NelderMead, typeof(NelderMeadOptimizer<T, TInput, TOutput>));
@@ -89,6 +101,8 @@ public static class OptimizerFactory<T, TInput, TOutput>
         Register(OptimizerType.AntColony, typeof(AntColonyOptimizer<T, TInput, TOutput>));
         Register(OptimizerType.ParticleSwarm, typeof(ParticleSwarmOptimizer<T, TInput, TOutput>));
         Register(OptimizerType.SimulatedAnnealing, typeof(SimulatedAnnealingOptimizer<T, TInput, TOutput>));
+        Register(OptimizerType.CMAES, typeof(CMAESOptimizer<T, TInput, TOutput>));
+        Register(OptimizerType.TabuSearch, typeof(TabuSearchOptimizer<T, TInput, TOutput>));
 
         Register(OptimizerType.Normal, typeof(NormalOptimizer<T, TInput, TOutput>), OptimizerType.NormalOptimizer);
     }
