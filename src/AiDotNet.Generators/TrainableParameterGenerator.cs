@@ -4,6 +4,7 @@ using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
 using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 
 namespace AiDotNet.Generators;
@@ -44,6 +45,17 @@ public class TrainableParameterGenerator : IIncrementalGenerator
         DiagnosticSeverity.Error,
         isEnabledByDefault: true,
         description: "A stable buffer identity maps to exactly one tensor and one semantic role within a layer.");
+
+    private static readonly DiagnosticDescriptor DeclaredShapesSuppressed = new(
+        "AIDN095",
+        "Declared parameter shapes suppressed by a dynamic registration",
+        "'{0}' registers a trainable parameter the generator cannot map to a field, so its runtime registry becomes the only source of truth and the [TrainableParameter(Shape = ...)] declarations on {1} are NOT emitted. Restore and copy-on-write clone cannot validate shapes for this layer. Register the field itself, or assign the local to its field in the same method.",
+        "AiDotNet.ParameterAutomation",
+        DiagnosticSeverity.Warning,
+        isEnabledByDefault: true,
+        description: "A layer that declares parameter shapes but also registers an unmappable tensor silently loses DeclaredParameterShapes(). "
+            + "Restore then has nothing to validate against and a clone can keep freshly initialized weights instead of trained ones, "
+            + "which is invisible at compile time and shows up only as a weight-drift failure much later.");
 
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
@@ -280,6 +292,24 @@ public class TrainableParameterGenerator : IIncrementalGenerator
                     classSymbol.Name,
                     string.Join(", ", duplicate.Select(item => item.Field)),
                     duplicate.Key));
+            }
+
+            // Falling back to the runtime registry is legitimate -- a layer really can register
+            // tensors the generator cannot name. Doing it SILENTLY to a layer that also declares
+            // shapes is not: those declarations simply vanish from the generated surface, and the
+            // first symptom is a clone quietly keeping untrained weights. Say so at compile time.
+            var suppressedShapeFields = paramFields
+                .Where(p => p.CollectionKind == ParameterCollectionKind.Direct
+                            && !string.IsNullOrWhiteSpace(p.Shape))
+                .Select(p => p.Name)
+                .ToList();
+            if (useRuntimeParameterRegistry && suppressedShapeFields.Count > 0)
+            {
+                context.ReportDiagnostic(Diagnostic.Create(
+                    DeclaredShapesSuppressed,
+                    classSymbol.Locations.FirstOrDefault(),
+                    classSymbol.Name,
+                    string.Join(", ", suppressedShapeFields)));
             }
 
             // Merge trainable parameters declared by attribute with the compatibility
@@ -1655,8 +1685,54 @@ public class TrainableParameterGenerator : IIncrementalGenerator
             if (symbol is IFieldSymbol f
                 && SymbolEqualityComparer.Default.Equals(f.ContainingType, classSymbol))
                 continue;
+
+            // A local that this method then STORES INTO one of the class's own fields is fully
+            // mappable -- the field is the tensor's home, the local is just the expression that
+            // built it. Allocate-then-register-then-assign is the ordinary way to swap a lazily
+            // sized weight (BatchNorm and LayerNorm both resize gamma/beta this way), and treating
+            // it as dynamic made the generator fall back to the runtime registry, which SILENTLY
+            // drops DeclaredParameterShapes and the whole declared-shape surface with it -- 180
+            // generated lines down to 21 for LayerNormalizationLayer. Restore then has no declared
+            // shape to validate against, so a clone quietly keeps its freshly initialized weights
+            // instead of the trained ones.
+            if (symbol is ILocalSymbol local && LocalIsStoredIntoOwnField(invocation, model, classSymbol, local))
+                continue;
+
             return true;
         }
+        return false;
+    }
+
+    /// <summary>
+    /// True when <paramref name="local"/> is assigned to a field of <paramref name="classSymbol"/>
+    /// somewhere in the member that contains <paramref name="invocation"/>.
+    /// </summary>
+    /// <remarks>
+    /// Deliberately scoped to the containing member and to a direct <c>_field = local</c> store.
+    /// Anything less direct -- a collection element, a conditional store, a hand-off to another
+    /// method -- stays unmappable, because the generator could not then name a single field for
+    /// the registration and the runtime registry really is the only complete source of truth.
+    /// </remarks>
+    private static bool LocalIsStoredIntoOwnField(
+        SyntaxNode invocation, SemanticModel model, INamedTypeSymbol classSymbol, ILocalSymbol local)
+    {
+        SyntaxNode? member = invocation.FirstAncestorOrSelf<MemberDeclarationSyntax>();
+        if (member is null) return false;
+
+        foreach (var assignment in member.DescendantNodes().OfType<AssignmentExpressionSyntax>())
+        {
+            if (!assignment.IsKind(SyntaxKind.SimpleAssignmentExpression)) continue;
+            if (model.SyntaxTree != assignment.SyntaxTree) continue;
+
+            if (model.GetSymbolInfo(assignment.Right).Symbol is not ILocalSymbol assignedFrom
+                || !SymbolEqualityComparer.Default.Equals(assignedFrom, local))
+                continue;
+
+            if (model.GetSymbolInfo(assignment.Left).Symbol is IFieldSymbol target
+                && SymbolEqualityComparer.Default.Equals(target.ContainingType, classSymbol))
+                return true;
+        }
+
         return false;
     }
 

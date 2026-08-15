@@ -71,3 +71,4 @@ AIDN091 | AiDotNet.ParameterAutomation | Error | ParameterAutomationAnalyzer, Pa
 AIDN092 | AiDotNet.ParameterAutomation | Error | ParameterAutomationAnalyzer, Trainable parameter condition must name one instance Boolean field or readable property
 AIDN093 | AiDotNet.ParameterAutomation | Error | ParameterAutomationAnalyzer, Bound adaptive parameter axes must name one readable instance Int32 dimension
 AIDN094 | AiDotNet.ParameterAutomation | Error | ParameterAutomationAnalyzer, Trainable parameter low-precision backing must name one unique instance Tensor<Half> field
+AIDN095 | AiDotNet.ParameterAutomation | Warning | TrainableParameterGenerator, Declared parameter shapes suppressed by a dynamic registration
