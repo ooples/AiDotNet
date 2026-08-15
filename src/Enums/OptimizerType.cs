@@ -578,4 +578,20 @@ public enum OptimizerType
     /// </para>
     /// </remarks>
     NestedLearning,
+
+    /// <summary>
+    /// Averaged Stochastic Gradient Descent: decayed SGD that also tracks a running average of the iterates.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Plain SGD never quite settles down, because every step reacts to one noisy batch of
+    /// data, so the model keeps jittering around the right answer instead of stopping on it. ASGD does not try to
+    /// stop the jitter; it just keeps a running average of everywhere the model has been, and reads out the
+    /// average at the end. It is the same reason the average of many dart throws finds the bullseye far better
+    /// than any single dart does. Note that the averaging is deliberately started late in training (controlled by
+    /// the T0 setting), because averaging in the early steps would drag the answer back toward where training
+    /// started.
+    /// </para>
+    /// </remarks>
+    ASGD,
 }

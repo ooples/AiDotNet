@@ -45,6 +45,7 @@ public static class OptimizerFactory<T, TInput, TOutput>
         RegisterOptimizerType(OptimizerType.ParticleSwarm, typeof(ParticleSwarmOptimizer<T, TInput, TOutput>));
         RegisterOptimizerType(OptimizerType.Normal, typeof(NormalOptimizer<T, TInput, TOutput>));
         RegisterOptimizerType(OptimizerType.RAdam, typeof(RAdamOptimizer<T, TInput, TOutput>));
+        RegisterOptimizerType(OptimizerType.ASGD, typeof(ASGDOptimizer<T, TInput, TOutput>));
     }
 
     /// <summary>
