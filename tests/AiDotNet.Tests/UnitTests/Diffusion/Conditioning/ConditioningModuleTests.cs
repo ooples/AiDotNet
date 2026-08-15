@@ -44,6 +44,7 @@ public class ConditioningModuleTests
     [Theory]
     [InlineData(CLIPVariant.ViTL14, 768)]
     [InlineData(CLIPVariant.ViTH14, 1024)]
+    [InlineData(CLIPVariant.StableDiffusionX4Upscaler, 1024)]
     [InlineData(CLIPVariant.ViTBigG14, 1280)]
     public void CLIPConditioner_Variants_HaveCorrectDimensions(CLIPVariant variant, int expectedDim)
     {

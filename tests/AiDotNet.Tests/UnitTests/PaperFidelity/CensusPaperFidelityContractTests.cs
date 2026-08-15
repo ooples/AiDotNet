@@ -273,6 +273,15 @@ public sealed class CensusPaperFidelityContractTests
         Assert.Equal(3, predictor.DownsampleCount);
         Assert.Equal(3, predictor.UpsampleCount);
         Assert.True(predictor.UsesTemporalTransformerAttention);
+        Assert.Equal(105, predictor.TemporalTrainingLayers.Count);
+        Assert.All(predictor.TemporalTrainingLayers, layer =>
+            Assert.True(
+                layer is TemporalModule3DLayer<double> ||
+                layer is TemporalConv3DLayer<double> ||
+                layer is GroupNormalizationLayer<double> ||
+                layer is LayerNormalizationLayer<double> ||
+                layer is DiffusionAttentionLayer<double>,
+                $"Unexpected spatial layer {layer.GetType().Name} in temporal fine-tuning surface."));
         var vae = Assert.IsType<TemporalVAE<double>>(model.VAE);
         Assert.Equal(4, vae.DownsampleFactor);
         Assert.True(model.ParameterCount > 0);
@@ -354,8 +363,36 @@ public sealed class CensusPaperFidelityContractTests
         Assert.NotSame(model.GetOptions(), clone.GetOptions());
         Assert.NotSame(model.Scheduler, clone.Scheduler);
         Assert.Equal(model.Scheduler.GetType(), clone.Scheduler.GetType());
+        Assert.Equal(
+            model.NoisePredictor.GetParameters().AsSpan().ToArray(),
+            clone.NoisePredictor.GetParameters().AsSpan().ToArray());
+        Assert.Equal(
+            model.VAE.GetParameters().AsSpan().ToArray(),
+            clone.VAE.GetParameters().AsSpan().ToArray());
         Assert.Equal(model.ParameterCount, clone.ParameterCount);
         Assert.Equal(model.GetParameters().AsSpan().ToArray(), clone.GetParameters().AsSpan().ToArray());
+    }
+
+    [Fact]
+    public void UpscaleAVideo_ParameterEnumerationDoesNotReplayInvalidUnconditionedProbe()
+    {
+        using var model = SmallUpscaleAVideo(new DiffusionModelOptions<double>());
+        var predictor = Assert.IsType<VideoUNetPredictor<double>>(model.NoisePredictor);
+        var noisyLatent = Filled([1, 4, 2, 2, 2], 0.01, 0.0001);
+        var lowResolutionCondition = Filled([1, 3, 2, 2, 2], -0.02, 0.0002);
+        var textCondition = Filled([1, 1, 4], 0.03, 0.001);
+
+        var prediction = predictor.PredictNoiseWithVideoCondition(
+            noisyLatent,
+            timestep: 5,
+            lowResolutionCondition,
+            textCondition,
+            noiseLevel: 3);
+        var parameters = predictor.GetParameters();
+
+        Assert.Equal(noisyLatent.Shape.ToArray(), prediction.Shape.ToArray());
+        Assert.NotEmpty(parameters.AsSpan().ToArray());
+        Assert.Equal(parameters.Length, predictor.ParameterCount);
     }
 
     [Fact]

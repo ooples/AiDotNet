@@ -107,6 +107,9 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
     /// </summary>
     private readonly List<VideoBlock> _decoderBlocks;
 
+    private bool _lazyShapeResolved;
+    private IReadOnlyList<ILayer<T>>? _temporalTrainingLayers;
+
     /// <summary>
     /// Input convolution.
     /// </summary>
@@ -292,6 +295,12 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
             .Any(block => block.TemporalAttention is not null ||
                 block.SpatialAttention is VideoTransformer3DLayer<T> transformer &&
                 transformer.UsesTemporalAttention);
+
+    /// <summary>
+    /// Gets the inserted temporal layers while excluding pretrained spatial U-Net layers.
+    /// </summary>
+    public IReadOnlyList<ILayer<T>> TemporalTrainingLayers =>
+        _temporalTrainingLayers ??= BuildTemporalTrainingLayers();
 
     /// <summary>
     /// Initializes a new instance of the VideoUNetPredictor class.
@@ -1012,6 +1021,7 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
             ? ProcessVideoFrames(x, frame => _outputConv.Forward(frame))
             : _outputConv.Forward(x);
 
+        _lazyShapeResolved = true;
         return x;
     }
 
@@ -1760,6 +1770,28 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
         yield return block.Upsample;
     }
 
+    private IReadOnlyList<ILayer<T>> BuildTemporalTrainingLayers()
+    {
+        var layers = new List<ILayer<T>>();
+        var seen = new HashSet<ILayer<T>>(AiDotNet.Helpers.TensorReferenceComparer<ILayer<T>>.Instance);
+
+        foreach (var block in _encoderBlocks.Concat(_middleBlocks).Concat(_decoderBlocks))
+        {
+            Add(block.TemporalResBlock);
+            Add(block.TemporalAttention);
+            if (block.SpatialAttention is VideoTransformer3DLayer<T> transformer)
+                foreach (var temporalLayer in transformer.TemporalTrainingLayers)
+                    Add(temporalLayer);
+        }
+
+        return layers.AsReadOnly();
+
+        void Add(ILayer<T>? layer)
+        {
+            if (layer is not null && seen.Add(layer)) layers.Add(layer);
+        }
+    }
+
     /// <summary>
     /// Flat-free per-layer chunked parameter read (#1715). VideoUNetPredictor extends
     /// <see cref="NoisePredictorBase"/> directly, so without this override it would fall to the base
@@ -2026,6 +2058,8 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
     /// </summary>
     internal void TriggerLazyShapeResolution()
     {
+        if (_lazyShapeResolved) return;
+
         // Mirror the model's REAL Predict path exactly: a 4D image-mode forward
         // with no conditioning. LatentDiffusionModelBase.Predict drives the
         // denoising loop with a 4D latent [B, LatentChannels, H, W] and calls
@@ -2046,8 +2080,25 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
         int side = 1 << System.Math.Max(0, levels - 1);
         int sideH = System.Math.Min(_inputHeight, side);
         int sideW = System.Math.Min(_inputWidth, side);
-        var dummy = new Tensor<T>(new[] { 1, _inputChannels, sideH, sideW });
-        _ = PredictNoise(dummy, timestep: 0, conditioning: null);
+        if (_supportsImageConditioning && _concatenateImageCondition)
+        {
+            int frames = System.Math.Max(1, _numFrames);
+            var dummy = new Tensor<T>(new[] { 1, _inputChannels, frames, sideH, sideW });
+            var condition = new Tensor<T>(
+                new[] { 1, _imageConditionChannels, frames, sideH, sideW });
+            var textConditioning = new Tensor<T>(
+                new[] { 1, System.Math.Max(1, _clipTokenLength), _contextDim });
+            _ = PredictNoiseWithVideoCondition(
+                dummy,
+                timestep: 0,
+                condition,
+                textConditioning,
+                noiseLevel: _classEmbedding is null ? null : 0);
+            return;
+        }
+
+        var spatialDummy = new Tensor<T>(new[] { 1, _inputChannels, sideH, sideW });
+        _ = PredictNoise(spatialDummy, timestep: 0, conditioning: null);
     }
 
     /// <inheritdoc />

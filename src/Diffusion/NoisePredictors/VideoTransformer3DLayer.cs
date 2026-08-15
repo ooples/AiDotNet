@@ -48,6 +48,11 @@ public sealed class VideoTransformer3DLayer<T> : LayerBase<T>
     public bool TemporalAttentionIsZeroInitialized =>
         _temporalAttention.IsOutputProjectionZeroInitialized;
 
+    /// <summary>
+    /// Gets the temporal adapters optimized while the pretrained spatial transformer is frozen.
+    /// </summary>
+    public IReadOnlyList<ILayer<T>> TemporalTrainingLayers { get; }
+
     /// <inheritdoc />
     public override bool SupportsTraining => true;
 
@@ -97,6 +102,15 @@ public sealed class VideoTransformer3DLayer<T> : LayerBase<T>
         _feedForwardValue = Linear(channels, feedForwardDimension, new IdentityActivation<T>());
         _feedForwardDown = Linear(feedForwardDimension, channels, new IdentityActivation<T>());
         _projectionOut = Linear(channels, channels, new IdentityActivation<T>());
+
+        TemporalTrainingLayers = Array.AsReadOnly<ILayer<T>>([
+            _temporalNorm1,
+            _temporalConv1,
+            _temporalNorm2,
+            _temporalConv2,
+            _temporalAttentionNorm,
+            _temporalAttention
+        ]);
 
         foreach (var layer in ParameterLayers()) RegisterSubLayer(layer);
     }

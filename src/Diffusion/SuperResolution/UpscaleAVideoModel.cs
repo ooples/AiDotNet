@@ -10,6 +10,7 @@ using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Diffusion.Schedulers;
+using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.Diffusion.SuperResolution;
 
@@ -204,10 +205,26 @@ public class UpscaleAVideoModel<T> : VideoDiffusionModelBase<T>
     /// Optional conditioning module for guided video super-resolution.
     /// </summary>
     private readonly IConditioningModule<T>? _conditioner;
+    // The SD-x4 conditioner is frozen while Upscale-A-Video optimizes the denoiser. Keep the two
+    // classifier-free-guidance prompt embeddings in arena-pinned storage across repeated requests.
+    // Explicit positive/negative slots bound memory even when prompt text changes.
+    private readonly object _conditioningCacheLock = new();
+    private string? _cachedPrompt;
+    private Tensor<T>? _cachedPromptConditioning;
+    private string? _cachedNegativePrompt;
+    private Tensor<T>? _cachedNegativeConditioning;
     // Seed for the deferred (lazy) init path: the constructor only eager-inits when an explicit
     // predictor/VAE is passed, so without capturing the seed the lazy EnsureInitialized() built the
     // sub-models with a null seed — dropping the requested seed and making construction non-reproducible.
     private readonly int? _seed;
+
+    // Conditional training state is scoped to a single TrainConditioned call. The base diffusion
+    // trainer owns timestep sampling, target-noise construction, autodiff, and optimization; these
+    // fields provide the paper-specific low-resolution RGB and text context to its virtual hooks.
+    private readonly object _trainingContextLock = new();
+    private Tensor<T>? _trainingVideoCondition;
+    private Tensor<T>? _trainingTextConditioning;
+    private int _trainingNoiseLevel;
 
     #endregion
 
@@ -251,6 +268,20 @@ public class UpscaleAVideoModel<T> : VideoDiffusionModelBase<T>
     /// Gets the video upscale factor (4x).
     /// </summary>
     public int UpscaleFactor => UPSCALE_FACTOR;
+
+    /// <summary>
+    /// The released Stable Diffusion first-stage VAE, CLIP encoder, and pretrained spatial U-Net
+    /// layers are frozen during temporal denoiser fine-tuning. Keep them in checkpoint
+    /// serialization, but do not allocate gradients or optimizer moments for them.
+    /// </summary>
+    protected override object TrainingParameterRoot
+    {
+        get
+        {
+            EnsureInitialized();
+            return _videoUNet.TemporalTrainingLayers;
+        }
+    }
 
     #endregion
 
@@ -377,6 +408,158 @@ public class UpscaleAVideoModel<T> : VideoDiffusionModelBase<T>
 
     #endregion
 
+    #region Training
+
+    /// <summary>
+    /// Trains the Upscale-A-Video denoiser on a low/high-resolution video pair.
+    /// </summary>
+    /// <param name="lowResolutionVideo">Low-resolution conditioning video in [C,H,W], [F,C,H,W], or [B,F,C,H,W] layout.</param>
+    /// <param name="highResolutionVideo">Four-times-larger clean target in the corresponding layout.</param>
+    /// <param name="prompt">Text condition associated with the training clip.</param>
+    /// <param name="noiseLevel">SD x4 degradation-noise class label in [0,350].</param>
+    /// <remarks>
+    /// Upscale-A-Video does not train the denoiser against the low-resolution RGB tensor. The
+    /// clean target is the temporal-VAE latent of the high-resolution video. Scheduler noise is
+    /// added to that four-channel latent, while separately noised low-resolution RGB is supplied
+    /// as the three-channel condition, producing the released seven-channel U-Net input.
+    /// </remarks>
+    public void TrainConditioned(
+        Tensor<T> lowResolutionVideo,
+        Tensor<T> highResolutionVideo,
+        string prompt,
+        int noiseLevel = 20)
+    {
+        ArgumentNullException.ThrowIfNull(lowResolutionVideo);
+        ArgumentNullException.ThrowIfNull(highResolutionVideo);
+        ArgumentNullException.ThrowIfNull(prompt);
+        if ((uint)noiseLevel > ReferenceMaximumNoiseLevel)
+            throw new ArgumentOutOfRangeException(nameof(noiseLevel), noiseLevel,
+                $"Noise level must be in [0, {ReferenceMaximumNoiseLevel}].");
+
+        lock (_trainingContextLock)
+        {
+            EnsureInitialized();
+            if (_conditioner is null)
+                throw new InvalidOperationException(
+                    "Upscale-A-Video training requires the Stable Diffusion x4 text conditioner.");
+
+            var low = NormalizeVideoBatch(lowResolutionVideo, nameof(lowResolutionVideo));
+            var high = NormalizeVideoBatch(highResolutionVideo, nameof(highResolutionVideo));
+            ValidateTrainingPair(low, high);
+
+            var cleanCondition = Engine.TensorPermute(low, [0, 2, 1, 3, 4]).Contiguous();
+            var conditionNoise = DiffusionNoiseHelper<T>.SampleGaussian(
+                cleanCondition.Shape.ToArray(), RandomGenerator);
+            _trainingVideoCondition = new Tensor<T>(
+                cleanCondition._shape,
+                Scheduler.AddNoise(cleanCondition.ToVector(), conditionNoise.ToVector(), noiseLevel));
+            _trainingTextConditioning = GetCachedTextConditioning(prompt, negativeSlot: false);
+            _trainingNoiseLevel = noiseLevel;
+
+            try
+            {
+                base.Train(low, high);
+            }
+            finally
+            {
+                _trainingVideoCondition = null;
+                _trainingTextConditioning = null;
+                _trainingNoiseLevel = 0;
+            }
+        }
+    }
+
+    protected override Tensor<T> PrepareTrainingSample(
+        Tensor<T> input,
+        Tensor<T> expectedOutput)
+    {
+        EnsureInitialized();
+        var target = NormalizeVideoBatch(expectedOutput, nameof(expectedOutput));
+        // TensorPermute returns a strided view. TemporalVAE's frame extraction uses raw spans,
+        // so materialize the layout at this explicit component boundary.
+        var targetNCFHW = Engine.TensorPermute(target, [0, 2, 1, 3, 4]).Contiguous();
+        // The VAE is the frozen Stable Diffusion first stage. Sampling from its posterior is the
+        // reference latent-diffusion training contract; gradients are recorded only after this
+        // preparation hook returns, so optimization remains focused on the denoiser.
+        return _temporalVAE.EncodeVideoForDiffusion(targetNCFHW, sampleMode: true);
+    }
+
+    protected override Tensor<T> PredictTrainingNoise(
+        Tensor<T> noisySample,
+        int[] timesteps,
+        bool isBatched,
+        Tensor<T> input,
+        Tensor<T> expectedOutput)
+    {
+        EnsureInitialized();
+        var condition = _trainingVideoCondition ?? throw new InvalidOperationException(
+            $"Use {nameof(TrainConditioned)} so the low-resolution video condition is available.");
+        var textConditioning = _trainingTextConditioning ?? throw new InvalidOperationException(
+            $"Use {nameof(TrainConditioned)} so the text condition is available.");
+
+        int batchSize = noisySample.Shape[0];
+        if (!isBatched || batchSize == 1)
+            return _videoUNet.PredictNoiseWithVideoCondition(
+                noisySample, timesteps[0], condition, textConditioning, _trainingNoiseLevel);
+
+        if (timesteps.Length != batchSize)
+            throw new ArgumentException(
+                $"Expected {batchSize} training timesteps, got {timesteps.Length}.",
+                nameof(timesteps));
+
+        // A distinct timestep per batch element is the canonical DDPM training contract. The
+        // Video U-Net accepts one scalar timestep, so retain tensor rank and concatenate the
+        // independently conditioned predictions along the batch axis.
+        var predictions = new Tensor<T>[batchSize];
+        for (int b = 0; b < batchSize; b++)
+        {
+            var sample = Engine.TensorSlice(
+                noisySample,
+                [b, 0, 0, 0, 0],
+                [1, noisySample.Shape[1], noisySample.Shape[2], noisySample.Shape[3], noisySample.Shape[4]]);
+            var sampleCondition = Engine.TensorSlice(
+                condition,
+                [b, 0, 0, 0, 0],
+                [1, condition.Shape[1], condition.Shape[2], condition.Shape[3], condition.Shape[4]]);
+            predictions[b] = _videoUNet.PredictNoiseWithVideoCondition(
+                sample, timesteps[b], sampleCondition, textConditioning, _trainingNoiseLevel);
+        }
+
+        return Engine.TensorConcatenate(predictions, axis: 0);
+    }
+
+    private Tensor<T> NormalizeVideoBatch(Tensor<T> video, string parameterName)
+    {
+        return video.Rank switch
+        {
+            3 => Engine.Reshape(video,
+                [1, 1, video.Shape[0], video.Shape[1], video.Shape[2]]),
+            4 => Engine.Reshape(video,
+                [1, video.Shape[0], video.Shape[1], video.Shape[2], video.Shape[3]]),
+            5 => video,
+            _ => throw new ArgumentException(
+                "Upscale-A-Video expects [C,H,W], [F,C,H,W], or [B,F,C,H,W] video tensors.",
+                parameterName)
+        };
+    }
+
+    private static void ValidateTrainingPair(Tensor<T> low, Tensor<T> high)
+    {
+        if (low.Shape[0] != high.Shape[0] || low.Shape[1] != high.Shape[1])
+            throw new ArgumentException(
+                "Low- and high-resolution videos must have matching batch and frame counts.",
+                nameof(high));
+        if (low.Shape[2] != CONDITION_CHANNELS || high.Shape[2] != CONDITION_CHANNELS)
+            throw new ArgumentException("Upscale-A-Video training requires three-channel RGB videos.");
+        if (high.Shape[3] != low.Shape[3] * UPSCALE_FACTOR ||
+            high.Shape[4] != low.Shape[4] * UPSCALE_FACTOR)
+            throw new ArgumentException(
+                $"The high-resolution target must be {UPSCALE_FACTOR}x the low-resolution video.",
+                nameof(high));
+    }
+
+    #endregion
+
     #region Generation Methods
 
     /// <summary>
@@ -456,9 +639,9 @@ public class UpscaleAVideoModel<T> : VideoDiffusionModelBase<T>
         bool useGuidance = guidanceScale > 1.0 && _conditioner is not null && _videoUNet.SupportsCFG;
         if (_conditioner is not null)
         {
-            textConditioning = _conditioner.EncodeText(_conditioner.Tokenize(prompt));
+            textConditioning = GetCachedTextConditioning(prompt, negativeSlot: false);
             if (useGuidance)
-                unconditional = _conditioner.EncodeText(_conditioner.Tokenize(negativePrompt));
+                unconditional = GetCachedTextConditioning(negativePrompt, negativeSlot: true);
         }
 
         Scheduler.SetTimesteps(numInferenceSteps);
@@ -510,6 +693,42 @@ public class UpscaleAVideoModel<T> : VideoDiffusionModelBase<T>
             4 => Engine.Reshape(decoded, [decoded.Shape[1], decoded.Shape[2], decoded.Shape[3], decoded.Shape[4]]),
             _ => decoded
         };
+    }
+
+    private Tensor<T> GetCachedTextConditioning(string prompt, bool negativeSlot)
+    {
+        if (_conditioner is null)
+            throw new InvalidOperationException(
+                "Upscale-A-Video requires a text conditioner before encoding prompts.");
+
+        lock (_conditioningCacheLock)
+        {
+            string? cachedKey = negativeSlot ? _cachedNegativePrompt : _cachedPrompt;
+            Tensor<T>? cachedValue = negativeSlot
+                ? _cachedNegativeConditioning
+                : _cachedPromptConditioning;
+            if (cachedValue is not null && string.Equals(cachedKey, prompt, StringComparison.Ordinal))
+                return cachedValue;
+
+            var encoded = _conditioner.EncodeText(_conditioner.Tokenize(prompt));
+            var persistent = TensorAllocator.RentPinned<T>(encoded.Shape.ToArray());
+            encoded.AsSpan().CopyTo(persistent.AsWritableSpan());
+
+            if (negativeSlot)
+            {
+                _cachedNegativeConditioning?.Dispose();
+                _cachedNegativePrompt = prompt;
+                _cachedNegativeConditioning = persistent;
+            }
+            else
+            {
+                _cachedPromptConditioning?.Dispose();
+                _cachedPrompt = prompt;
+                _cachedPromptConditioning = persistent;
+            }
+
+            return persistent;
+        }
     }
 
     /// <summary>
@@ -882,6 +1101,7 @@ public class UpscaleAVideoModel<T> : VideoDiffusionModelBase<T>
     /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
+        EnsureInitialized();
         var metadata = new ModelMetadata<T>
         {
             Name = "Upscale-A-Video",

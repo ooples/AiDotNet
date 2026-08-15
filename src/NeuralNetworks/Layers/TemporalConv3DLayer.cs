@@ -199,7 +199,7 @@ public sealed class TemporalConv3DLayer<T> : LayerBase<T>
         return metadata;
     }
 
-    private void MaterializeParameters()
+    protected override void EnsureParametersMaterialized()
     {
         if (_kernels.Length > 0) return;
 

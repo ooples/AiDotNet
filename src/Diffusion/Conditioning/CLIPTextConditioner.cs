@@ -68,7 +68,7 @@ public class CLIPTextConditioner<T> : TextConditioningBase<T>
         Guard.NotNull(tokenizer);
         _variant = variant;
         _textProjection = new DenseLayer<T>(
-            outputSize: GetEmbeddingDim(variant),
+            outputSize: GetProjectionDim(variant),
             activationFunction: new IdentityActivation<T>());
     }
 
@@ -190,6 +190,7 @@ public class CLIPTextConditioner<T> : TextConditioningBase<T>
     {
         CLIPVariant.ViTL14 => 768,
         CLIPVariant.ViTH14 => 1024,
+        CLIPVariant.StableDiffusionX4Upscaler => 1024,
         CLIPVariant.ViTBigG14 => 1280,
         _ => 768,
     };
@@ -198,6 +199,7 @@ public class CLIPTextConditioner<T> : TextConditioningBase<T>
     {
         CLIPVariant.ViTL14 => 12,
         CLIPVariant.ViTH14 => 24,
+        CLIPVariant.StableDiffusionX4Upscaler => 23,
         CLIPVariant.ViTBigG14 => 32,
         _ => 12,
     };
@@ -205,7 +207,14 @@ public class CLIPTextConditioner<T> : TextConditioningBase<T>
     {
         CLIPVariant.ViTL14 => 12,
         CLIPVariant.ViTH14 => 16,
+        CLIPVariant.StableDiffusionX4Upscaler => 16,
         CLIPVariant.ViTBigG14 => 20,
         _ => 12,
+    };
+
+    private static int GetProjectionDim(CLIPVariant variant) => variant switch
+    {
+        CLIPVariant.StableDiffusionX4Upscaler => 512,
+        _ => GetEmbeddingDim(variant),
     };
 }

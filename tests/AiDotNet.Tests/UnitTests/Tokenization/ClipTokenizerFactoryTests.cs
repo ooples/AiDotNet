@@ -24,6 +24,15 @@ public class ClipTokenizerFactoryTests
         Assert.True(tokenizer.VocabularySize > 0);
     }
 
+    [Fact]
+    public void CreateShapeCompatibleForTesting_HasExactRequestedVocabularySize()
+    {
+        var tokenizer = ClipTokenizerFactory.CreateShapeCompatibleForTesting(vocabSize: 4096);
+
+        Assert.Equal(4096, tokenizer.VocabularySize);
+        Assert.NotEmpty(tokenizer.Encode("a photo of a cat").TokenIds);
+    }
+
     [Fact(Timeout = 60000)]
     public async Task CreateSimple_WithCustomCorpus_TrainsOnCorpus()
     {

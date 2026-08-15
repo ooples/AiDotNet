@@ -179,7 +179,7 @@ public sealed class DiffusionAttentionLayer<T> : LayerBase<T>
         return metadata;
     }
 
-    private void MaterializeParameters()
+    protected override void EnsureParametersMaterialized()
     {
         if (_queryWeights.Length > 0) return;
         _queryWeights = AllocateLazyWeight([_queryDimension, _queryDimension]);

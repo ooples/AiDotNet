@@ -199,7 +199,8 @@ public class StableVideoSR<T> : VideoSuperResolutionBase<T>
         SetTrainingMode(true);
         try
         {
-            if (_diffusionCore is not null) _diffusionCore.Train(input, expected);
+            if (_diffusionCore is not null)
+                _diffusionCore.TrainConditioned(input, expected, _options.Prompt, _options.NoiseLevel);
             else TrainWithTape(input, expected);
         }
         finally

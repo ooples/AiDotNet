@@ -1066,6 +1066,35 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
         // Foundation models that target int8 deployment opt in via EnableQuantizationAwareTraining().
         _qatExplicit ?? false;
 
+    /// <summary>
+    /// Prepares the clean sample that receives scheduler noise during diffusion training.
+    /// </summary>
+    /// <remarks>
+    /// Unconditional diffusion models train directly on <paramref name="input"/>. Conditional
+    /// models can override this hook to train on a transformed target while reusing the base
+    /// scheduler, gradient tape, clipping, and optimizer implementation.
+    /// </remarks>
+    protected virtual Tensor<T> PrepareTrainingSample(
+        Tensor<T> input,
+        Tensor<T> expectedOutput) => input;
+
+    /// <summary>
+    /// Predicts scheduler noise for a prepared training sample.
+    /// </summary>
+    /// <remarks>
+    /// Conditional subclasses override this hook to supply image, video, text, mask, or control
+    /// inputs without duplicating the base DDPM training and optimizer implementation.
+    /// </remarks>
+    protected virtual Tensor<T> PredictTrainingNoise(
+        Tensor<T> noisySample,
+        int[] timesteps,
+        bool isBatched,
+        Tensor<T> input,
+        Tensor<T> expectedOutput) =>
+        isBatched
+            ? PredictNoiseBatched(noisySample, timesteps)
+            : PredictNoise(noisySample, timesteps[0]);
+
     public virtual void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
         // Copy-on-write: if this model shares weight tensors with a clone/parent, give it a private
@@ -1108,6 +1137,16 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
         // tensors than GetParameters knows about, which is now the norm after
         // migrating layers like FlashAttentionLayer from Matrix<T> to Tensor<T>.
 
+        // Conditional diffusion models can use input only as conditioning and train against a
+        // transformed expected output, such as the VAE latent of an HR target.
+        var trainingSample = PrepareTrainingSample(input, expectedOutput);
+        if (trainingSample is null)
+            throw new InvalidOperationException(
+                $"{GetType().Name}.{nameof(PrepareTrainingSample)} returned null.");
+        if (trainingSample.Length == 0)
+            throw new InvalidOperationException(
+                $"{GetType().Name}.{nameof(PrepareTrainingSample)} returned an empty tensor.");
+
         // Industry-standard batched-per-element timesteps (Ho et al. 2020, HuggingFace
         // diffusers reference): sample a distinct timestep per batch element instead of
         // one timestep for the whole batch. Decorrelates the noise-schedule signal
@@ -1115,8 +1154,8 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
         //
         // Rank-1 input (unbatched, historical AiDotNet contract) still gets a single
         // timestep; rank ≥ 2 gets per-element timesteps.
-        bool isBatched = input.Rank >= 2;
-        int batchSize = isBatched ? input.Shape[0] : 1;
+        bool isBatched = trainingSample.Rank >= 2;
+        int batchSize = isBatched ? trainingSample.Shape[0] : 1;
         var timesteps = new int[batchSize];
         for (int b = 0; b < batchSize; b++)
             timesteps[b] = RandomGenerator.Next(_scheduler.Config.TrainTimesteps);
@@ -1129,7 +1168,7 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
         Vector<T> noiseVector;
         if (isBatched)
         {
-            var noiseBatch = new Tensor<T>(input._shape);
+            var noiseBatch = new Tensor<T>(trainingSample._shape);
             var noiseSpan = noiseBatch.AsWritableSpan();
             for (int i = 0; i < noiseSpan.Length; i++)
                 noiseSpan[i] = NumOps.FromDouble(RandomGenerator.NextGaussian());
@@ -1139,14 +1178,14 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
             // derive from NoiseSchedulerBase (shouldn't happen for framework schedulers).
             if (_scheduler is Schedulers.NoiseSchedulerBase<T> baseScheduler)
             {
-                noisySampleTensor = baseScheduler.AddNoiseBatched(input, noiseBatch, timesteps);
+                noisySampleTensor = baseScheduler.AddNoiseBatched(trainingSample, noiseBatch, timesteps);
             }
             else
             {
-                noisySampleTensor = new Tensor<T>(input._shape);
-                var cleanSpan = input.AsSpan();
+                noisySampleTensor = new Tensor<T>(trainingSample._shape);
+                var cleanSpan = trainingSample.AsSpan();
                 var noisedSpan = noisySampleTensor.AsWritableSpan();
-                int perElement = input.Length / batchSize;
+                int perElement = trainingSample.Length / batchSize;
                 for (int b = 0; b < batchSize; b++)
                 {
                     var cleanVec = new Vector<T>(perElement);
@@ -1165,10 +1204,10 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
         }
         else
         {
-            var inputVector = input.ToVector();
+            var inputVector = trainingSample.ToVector();
             noiseVector = SampleNoise(inputVector.Length, RandomGenerator);
             var noisySample = _scheduler.AddNoise(inputVector, noiseVector, timestep);
-            noisySampleTensor = new Tensor<T>(input._shape, noisySample);
+            noisySampleTensor = new Tensor<T>(trainingSample._shape, noisySample);
         }
 
         // Preferred fused path: MultiSlotFusedStep with (noisySample, noise,
@@ -1196,13 +1235,11 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
             };
             using var multiSlotStep = new AiDotNet.Training.MultiSlotFusedStep<T>();
             var timestepsSnapshot = timesteps;
-            var timestepSnapshotSingle = timestep;
             var isBatchedSnapshot = isBatched;
             Tensor<T> ForwardFromSlots(IReadOnlyList<Tensor<T>> s)
             {
-                return isBatchedSnapshot
-                    ? PredictNoiseBatched(s[0], timestepsSnapshot)
-                    : PredictNoise(s[0], timestepSnapshotSingle);
+                return PredictTrainingNoise(
+                    s[0], timestepsSnapshot, isBatchedSnapshot, input, expectedOutput);
             }
             Tensor<T> ComputeLossFromSlots(Tensor<T> pred, IReadOnlyList<Tensor<T>> s)
             {
@@ -1242,9 +1279,8 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
         // newly-initialized layers are visible to the walker. Batched inputs route
         // through the per-element PredictNoiseBatched (Ho et al. 2020 canonical pattern);
         // rank-1 unbatched inputs go through the scalar PredictNoise for backward compat.
-        var predicted = isBatched
-            ? PredictNoiseBatched(noisySampleTensor, timesteps)
-            : PredictNoise(noisySampleTensor, timestep);
+        var predicted = PredictTrainingNoise(
+            noisySampleTensor, timesteps, isBatched, input, expectedOutput);
         var paramTensors = CollectTrainableParameters();
         if (paramTensors.Length == 0)
         {
@@ -1349,9 +1385,7 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
         // optimizers that re-evaluate the objective (e.g. line search); Adam ignores them.
         T lossValue = loss.Length > 0 ? loss[0] : NumOps.Zero;
         Tensor<T> RecomputeForward(Tensor<T> inp, Tensor<T> _) =>
-            isBatched
-                ? PredictNoiseBatched(inp, timesteps)
-                : PredictNoise(inp, timestep);
+            PredictTrainingNoise(inp, timesteps, isBatched, input, expectedOutput);
         Tensor<T> RecomputeLoss(Tensor<T> inp, Tensor<T> target)
         {
             using var noGrad = new NoGradScope<T>();
@@ -1764,7 +1798,7 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
             return _cachedTrainableParameters;
 
         var allParams = new List<Tensor<T>>();
-        CollectLayerParameters(this, allParams, new HashSet<object>(AiDotNet.Helpers.TensorReferenceComparer<object>.Instance));
+        CollectLayerParameters(TrainingParameterRoot, allParams);
 
         // Only cache non-empty results. An empty result usually means lazy
         // initialization hasn't run yet — don't pin that empty list.
@@ -1773,6 +1807,15 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
 
         return allParams.ToArray();
     }
+
+    /// <summary>
+    /// Gets the object graph whose parameters are optimized by <see cref="Train"/>.
+    /// </summary>
+    /// <remarks>
+    /// The default preserves the complete model. Conditional latent models can return their
+    /// denoiser or adapter roots while keeping frozen encoders in checkpoint serialization.
+    /// </remarks>
+    protected virtual object TrainingParameterRoot => this;
 
     /// <summary>
     /// Invalidates the cached trainable-parameter walk. Call this from subclasses
@@ -1784,79 +1827,99 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
         _cachedTrainableParameters = null;
     }
 
-    private void CollectLayerParameters(object? obj, List<Tensor<T>> allParams, HashSet<object> visited)
+    private static void CollectLayerParameters(object root, List<Tensor<T>> allParams)
     {
-        if (obj is null || !visited.Add(obj)) return;
+        var visited = new HashSet<object>(AiDotNet.Helpers.TensorReferenceComparer<object>.Instance);
+        var parameterSet = new HashSet<Tensor<T>>(AiDotNet.Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
+        var stack = new Stack<object>();
+        stack.Push(root);
 
-        if (obj is Interfaces.ITrainableLayer<T> trainable)
+        while (stack.Count > 0)
         {
-            var parameters = trainable.GetTrainableParameters();
-            if (parameters is not null)
+            var current = stack.Pop();
+            if (!visited.Add(current)) continue;
+
+            if (current is Interfaces.ITrainableLayer<T> trainable)
             {
-                foreach (var p in parameters)
-                    if (p is not null && p.Length > 0) allParams.Add(p);
+                var parameters = trainable.GetTrainableParameters();
+                if (parameters is not null)
+                {
+                    foreach (var parameter in parameters)
+                        if (parameter is not null && parameter.Length > 0 && parameterSet.Add(parameter))
+                            allParams.Add(parameter);
+                }
             }
-        }
 
-        // #1713: a Tensor<T> is a DATA LEAF — its scalar values are model parameters (already
-        // collected via the owning ITrainableLayer above), never a container of further layers.
-        // Descending into its backing storage and recursing element-by-element is the Meissonic
-        // hang: a 304M-parameter model walked one boxed scalar at a time (each added to the
-        // visited set). Stop at the tensor boundary. Tensor<T> fields are already skipped below,
-        // but tensors reached via Tensor<T>[] / List<Tensor<T>> / object-typed fields are not, so
-        // this guard is what actually closes the walk.
-        if (obj is Tensor<T>) return;
+            // Numeric containers are leaves; never enumerate their scalar storage.
+            if (current is Tensor<T>) continue;
 
-        // Recurse into every reference-type instance field so nested composites
-        // (e.g., DiffusionModel -> UNetNoisePredictor -> List<Layer>) are fully
-        // walked even when the intermediate types don't implement ITrainableLayer.
-        // The visited set handles cycles.
-        var type = obj.GetType();
-        if (type.IsPrimitive || type == typeof(string) || type.IsEnum) return;
-
-        // Walk the FULL inheritance chain. Type.GetFields(Instance|NonPublic|Public) does NOT return
-        // PRIVATE fields declared on base classes, so when a field is typed as a subclass (e.g.
-        // SiTPredictor) whose layers actually live in a private field on its base
-        // (DiTNoisePredictor._blocks), that base-private field — and therefore the entire noise
-        // predictor — was invisible to this walk, leaving the model's denoiser untrainable
-        // ("no trainable parameters discoverable"). Enumerate DeclaredOnly fields at every level up
-        // the hierarchy so base-class privates are included; DeclaredOnly returns each field exactly
-        // once at its declaring type and the visited set guards object cycles.
-        for (var t = type; t != null && t != typeof(object); t = t.BaseType)
-        {
-            foreach (var field in t.GetFields(
-                System.Reflection.BindingFlags.Instance |
-                System.Reflection.BindingFlags.NonPublic |
-                System.Reflection.BindingFlags.Public |
-                System.Reflection.BindingFlags.DeclaredOnly))
+            if (current is System.Collections.IDictionary dictionary)
             {
-                // Skip compiler-generated backing fields for non-ref properties and
-                // fields whose declared type can't hold a trainable layer.
-                if (field.FieldType.IsPrimitive || field.FieldType.IsEnum ||
-                    field.FieldType == typeof(string) || field.FieldType == typeof(Tensor<T>))
+                foreach (System.Collections.DictionaryEntry entry in dictionary)
+                    if (entry.Value is not null && IsTrainableWalkCandidate(entry.Value))
+                        stack.Push(entry.Value);
+                continue;
+            }
+
+            if (current is System.Collections.IEnumerable enumerable && current is not string)
+            {
+                if (!EnumerableElementsAreValueTypes(current.GetType()))
+                {
+                    foreach (var item in enumerable)
+                        if (item is not null && IsTrainableWalkCandidate(item))
+                            stack.Push(item);
+                }
+
+                if ((current.GetType().Namespace ?? string.Empty).StartsWith("System", StringComparison.Ordinal))
                     continue;
+            }
 
-                var val = field.GetValue(obj);
-                if (val is null) continue;
+            var type = current.GetType();
+            if (!CanContainTrainableLayers(type)) continue;
 
-                if (val is System.Collections.IEnumerable enumerable && val is not string)
+            // An explicit stack avoids overflowing on foundation-model object graphs.
+            for (var t = type; t != null && t != typeof(object); t = t.BaseType)
+            {
+                foreach (var field in t.GetFields(
+                    System.Reflection.BindingFlags.Instance |
+                    System.Reflection.BindingFlags.NonPublic |
+                    System.Reflection.BindingFlags.Public |
+                    System.Reflection.BindingFlags.DeclaredOnly))
                 {
-                    // #1713: only descend into collections whose ELEMENTS could be layers/composites.
-                    // Skip value-type element collections (a layer's float[] weight buffer, a Tensor's
-                    // backing array, List<int> shapes, etc.) — iterating their scalar elements is
-                    // pathological on a foundation-scale model and never yields a layer.
-                    if (!EnumerableElementsAreValueTypes(val.GetType()))
+                    if (field.FieldType.IsValueType || field.FieldType == typeof(string) ||
+                        field.FieldType == typeof(Tensor<T>))
+                        continue;
+
+                    object? value;
+                    try { value = field.GetValue(current); }
+                    catch (Exception ex)
                     {
-                        foreach (var item in enumerable)
-                            CollectLayerParameters(item, allParams, visited);
+                        System.Diagnostics.Trace.TraceWarning(
+                            $"DiffusionModelBase: skipping trainable-parameter field '{field.Name}' " +
+                            $"on {t.Name}: {ex.GetType().Name}: {ex.Message}");
+                        continue;
                     }
-                }
-                else
-                {
-                    CollectLayerParameters(val, allParams, visited);
+
+                    if (value is not null && IsTrainableWalkCandidate(value))
+                        stack.Push(value);
                 }
             }
         }
+    }
+
+    private static bool IsTrainableWalkCandidate(object value) =>
+        value is Interfaces.ITrainableLayer<T> ||
+        value is System.Collections.IEnumerable ||
+        CanContainTrainableLayers(value.GetType());
+
+    private static bool CanContainTrainableLayers(Type type)
+    {
+        if (type.IsValueType || type == typeof(string)) return false;
+        var ns = type.Namespace ?? string.Empty;
+        if (ns.StartsWith("System", StringComparison.Ordinal) ||
+            ns.StartsWith("AiDotNet.Tensors", StringComparison.Ordinal))
+            return false;
+        return ns.StartsWith("AiDotNet", StringComparison.Ordinal);
     }
 
     /// <summary>
