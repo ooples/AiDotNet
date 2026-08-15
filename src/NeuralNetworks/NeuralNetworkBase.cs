@@ -4326,6 +4326,19 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
 
     protected virtual void ResolveLazyLayerShapes()
     {
+        // A real input is already in hand, so guessing from the architecture would be strictly
+        // worse than waiting for it. This walk resolves lazy layers from the ARCHITECTURE's
+        // declared shape, which is the best available answer when a caller resolves shapes ahead
+        // of time -- but not when the very next statement is a forward carrying the true input.
+        //
+        // Predict now transitions to eval mode inside the funnel, and SetTrainingMode calls this
+        // walk. For a model whose PredictCore is overridden that transition never used to happen,
+        // so shapes were resolved by the real forward. Resolving from the architecture instead
+        // LOCKED every lazy layer to the fixture width before the input arrived, and a longer
+        // input then failed the first matmul ("last dim of a is 64, first dim of b is 32") --
+        // the variable-length contract every audio model is supposed to satisfy.
+        if (_deferLazyShapeResolutionToForward) return;
+
         if (_layerShapesResolved) return;
         // An EMPTY Layers is not the same as nothing to resolve. A model may hold every weight
         // in sub-structures it declares through GetExtraTrainableLayers -- a detection backbone
@@ -5407,7 +5420,23 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // Dropout/BatchNorm behave as training, that finalized auto-streaming as mutable/lossless and
         // disabled the int8/int4 no-upcast kernels on the largest models.
         bool wasTraining = IsTrainingMode;
-        if (wasTraining) SetTrainingMode(false);
+
+        // Suppress ONLY the architecture-driven lazy-shape walk for the duration of the mode
+        // transitions, not for the forward between them. Everything else SetTrainingMode does --
+        // eval propagation to Dropout/BatchNorm, streaming dtype policy, the inference gate --
+        // is exactly what this funnel exists to apply, and virtual dispatch is preserved so the
+        // models that override SetTrainingMode still run their own.
+        bool priorDefer = _deferLazyShapeResolutionToForward;
+        _deferLazyShapeResolutionToForward = true;
+        try
+        {
+            if (wasTraining) SetTrainingMode(false);
+        }
+        finally
+        {
+            _deferLazyShapeResolutionToForward = priorDefer;
+        }
+
         using var noGrad = new NoGradScope<T>();
         try
         {
@@ -5415,9 +5444,28 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         }
         finally
         {
-            if (wasTraining) SetTrainingMode(true);
+            _deferLazyShapeResolutionToForward = true;
+            try
+            {
+                if (wasTraining) SetTrainingMode(true);
+            }
+            finally
+            {
+                _deferLazyShapeResolutionToForward = priorDefer;
+            }
         }
     }
+
+    /// <summary>
+    /// While set, <see cref="ResolveLazyLayerShapes"/> defers to the forward pass instead of
+    /// resolving lazy shapes from the architecture's declared shape.
+    /// </summary>
+    /// <remarks>
+    /// Scoped to the eval/training transitions inside <see cref="Predict"/>, where a concrete
+    /// input is already available and is a strictly better source of truth than the fixture
+    /// dimensions the architecture declares.
+    /// </remarks>
+    private bool _deferLazyShapeResolutionToForward;
 
     private Tensor<T> PredictInInferenceMode(Tensor<T> input)
     {

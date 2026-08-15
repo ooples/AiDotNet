@@ -2237,7 +2237,19 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
 
         if (!double.IsNaN(trainMSE) && !double.IsNaN(testMSE))
         {
-            Assert.True(trainMSE <= testMSE * TrainingErrorMultiplier + 1e-6,
+            // Express the allowance as SLACK ADDED to the test loss, not as a multiple of it.
+            // Multiplying only bounds a loss that cannot go below zero. Objectives that legally
+            // go negative -- log-likelihood, contrastive, energy-style heads -- invert it:
+            // CodeBERT scored train -7.457 against test -3.008, which is training fitting BETTER,
+            // yet -3.008 * 3 = -9.024 demanded the training loss be more negative still, so a
+            // healthy model failed. The multiplier described the intent ("training may be up to
+            // 3x worse") but only implemented it on the non-negative half of the number line.
+            //
+            // Scaling |testMSE| reproduces the old bound EXACTLY when the loss is non-negative
+            // (0.1 * 3 == 0.1 + 0.1 * 2), so no currently-passing model changes verdict, and it
+            // keeps the same proportional generosity when the loss is negative.
+            double allowedSlack = Math.Abs(testMSE) * (TrainingErrorMultiplier - 1.0) + 1e-6;
+            Assert.True(trainMSE <= testMSE + allowedSlack,
                 $"Training MSE ({trainMSE:F6}) vastly exceeds test MSE ({testMSE:F6}). " +
                 "Model is not fitting training data.");
         }
