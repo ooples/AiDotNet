@@ -594,4 +594,20 @@ public enum OptimizerType
     /// </para>
     /// </remarks>
     ASGD,
+
+    /// <summary>
+    /// Resilient backpropagation: adapts a per-weight step size from the sign of the gradient, ignoring its size.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Every other optimizer here decides how far to move partly from how big the gradient
+    /// is. Rprop deliberately throws that magnitude away and uses only the direction (the sign). Each weight
+    /// keeps its own step size: if the direction stays the same two steps running, the step grows; if the
+    /// direction flips, it overshot, so the step shrinks. This makes it immune to gradients that are tiny or
+    /// enormous, which is very useful for networks whose gradients vanish. The catch is that it needs the true
+    /// gradient over the whole dataset, so it is for full-batch training only -- on mini-batches the sign flips
+    /// for reasons that are just noise, and the step sizes collapse.
+    /// </para>
+    /// </remarks>
+    Rprop,
 }
