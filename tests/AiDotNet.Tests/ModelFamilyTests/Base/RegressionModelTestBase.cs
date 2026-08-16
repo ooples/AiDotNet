@@ -72,6 +72,25 @@ public abstract class RegressionModelTestBase : System.IDisposable
     /// </remarks>
     protected virtual bool PredictiveQualityInvariantsApplicable => true;
 
+    /// <summary>
+    /// True when this model is an additive, identity-link estimator over an unrestricted continuous
+    /// response — the assumption behind the equivariance and generic-quality invariants below.
+    /// </summary>
+    /// <remarks>
+    /// A generalized linear model with a non-identity link is <b>multiplicative</b>, not additive:
+    /// under a log link, adding a constant to every target does not add that constant to the
+    /// predictions, it rescales them. Such models also restrict their response domain — Gamma and
+    /// Inverse Gaussian require strictly positive targets, Negative Binomial requires counts — while
+    /// this harness generates unrestricted linear data that can be negative. Asserting translation
+    /// equivariance, residual-mean-zero on the response scale, or R-squared against that data
+    /// measures the mismatch rather than the estimator.
+    ///
+    /// These models are exercised on domain-appropriate data by
+    /// <c>GLMFamilyRegressionIntegrationTests</c> instead, which is where their correctness is
+    /// actually established. Override to <c>false</c> for any non-identity-link GLM.
+    /// </remarks>
+    protected virtual bool IdentityLinkInvariantsApplicable => true;
+
     protected virtual int TrainSamples => 100;
     protected virtual int TestSamples => 30;
     protected virtual int Features => 3;
@@ -86,6 +105,7 @@ public abstract class RegressionModelTestBase : System.IDisposable
     public async Task TranslationEquivariance_ShiftingTargets_ShiftsPredictions()
     {
         await Task.Yield();
+        if (!IdentityLinkInvariantsApplicable) return;
         using var _arena = TensorArena.Create();
         var rng1 = ModelTestHelpers.CreateSeededRandom(42);
         var rng2 = ModelTestHelpers.CreateSeededRandom(42);
@@ -128,6 +148,7 @@ public abstract class RegressionModelTestBase : System.IDisposable
     public async Task ScalingEquivariance_ScalingTargets_ScalesPredictions()
     {
         await Task.Yield();
+        if (!IdentityLinkInvariantsApplicable) return;
         using var _arena = TensorArena.Create();
         var rng1 = ModelTestHelpers.CreateSeededRandom(42);
         var rng2 = ModelTestHelpers.CreateSeededRandom(42);
@@ -351,6 +372,7 @@ public abstract class RegressionModelTestBase : System.IDisposable
     public async Task ResidualMean_ShouldBeNearZero()
     {
         await Task.Yield();
+        if (!IdentityLinkInvariantsApplicable) return;
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
         using var model = CreateModel();
@@ -390,6 +412,7 @@ public abstract class RegressionModelTestBase : System.IDisposable
     public async Task CoefficientSigns_ShouldMatchDataGeneratingProcess()
     {
         await Task.Yield();
+        if (!IdentityLinkInvariantsApplicable) return;
         if (!PredictiveQualityInvariantsApplicable) return;
 
         using var _arena = TensorArena.Create();
@@ -443,6 +466,7 @@ public abstract class RegressionModelTestBase : System.IDisposable
     public async Task FeaturePermutation_ShouldGiveConsistentPredictions()
     {
         await Task.Yield();
+        if (!IdentityLinkInvariantsApplicable) return;
         using var _arena = TensorArena.Create();
         if (Features < 2)
         {
@@ -503,6 +527,7 @@ public abstract class RegressionModelTestBase : System.IDisposable
     public async Task R2_ShouldBePositive_OnLinearData()
     {
         await Task.Yield();
+        if (!IdentityLinkInvariantsApplicable) return;
         if (!PredictiveQualityInvariantsApplicable) return;
 
         using var _arena = TensorArena.Create();
@@ -702,6 +727,7 @@ public abstract class RegressionModelTestBase : System.IDisposable
     public async Task InterceptRecovery_ConstantTarget_ShouldPredictConstant()
     {
         await Task.Yield();
+        if (!IdentityLinkInvariantsApplicable) return;
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
         using var model = CreateModel();
@@ -828,6 +854,7 @@ public abstract class RegressionModelTestBase : System.IDisposable
     public async Task Builder_R2ShouldBePositive()
     {
         await Task.Yield();
+        if (!IdentityLinkInvariantsApplicable) return;
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var (trainX, trainY) = ModelTestHelpers.GenerateLinearData(TrainSamples, Features, rng);

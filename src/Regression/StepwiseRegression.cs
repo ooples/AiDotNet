@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Enums;
 
 namespace AiDotNet.Regression;
@@ -230,25 +230,11 @@ public class StepwiseRegression<T> : RegressionBase<T>
         ValidationHelper<T>.ValidateInputData(x, y);
         TrainingFeatureCount = x.Columns;
 
-        // Use OLS for reliable fast predictions
-        if (Options.UseIntercept)
-        {
-            var xWithInt = x.AddConstantColumn(NumOps.One);
-            var xTx = xWithInt.Transpose().Multiply(xWithInt);
-            var xTy = xWithInt.Transpose().Multiply(y);
-            for (int i = 0; i < xTx.Rows; i++)
-                xTx[i, i] = NumOps.Add(xTx[i, i], NumOps.FromDouble(1e-10));
-            var solution = MatrixSolutionHelper.SolveLinearSystem(xTx, xTy, MatrixDecompositionType.Cholesky);
-            Intercept = solution[0];
-            Coefficients = solution.Slice(1, x.Columns);
-            return;
-        }
-        var xTx2 = x.Transpose().Multiply(x);
-        var xTy2 = x.Transpose().Multiply(y);
-        for (int i = 0; i < xTx2.Rows; i++)
-            xTx2[i, i] = NumOps.Add(xTx2[i, i], NumOps.FromDouble(1e-10));
-        Coefficients = SolveSystem(xTx2, xTy2);
-        if (Coefficients.Length > 0) return;
+        // This method previously fitted ORDINARY LEAST SQUARES and returned immediately. The
+        // guard that followed it was written as a condition but is always true for any real
+        // problem, so it acted as an unconditional return and left the real estimation below
+        // unreachable: callers received a plain linear least-squares fit from a model named for a
+        // different algorithm. The real estimation now runs.
 
         if (_options.Method == StepwiseMethod.Forward)
         {

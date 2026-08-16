@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Enums;
 
 namespace AiDotNet.Regression;
@@ -120,7 +120,7 @@ public class BayesianRegression<T> : RegressionBase<T>
     }
 
     /// <summary>
-    /// Bayesian regression computes posterior analytically — random parameter injection is harmful.
+    /// Bayesian regression computes posterior analytically â€” random parameter injection is harmful.
     /// </summary>
     public override long ParameterCount => 0;
 
@@ -166,17 +166,11 @@ public class BayesianRegression<T> : RegressionBase<T>
         int d = x.Columns;
         TrainingFeatureCount = d;
 
-        // Use OLS for reliable predictions on generic linear data
-        var xWithOls = x.AddConstantColumn(NumOps.One);
-        var xTxOls = xWithOls.Transpose().Multiply(xWithOls);
-        var xTyOls = xWithOls.Transpose().Multiply(y);
-        for (int i = 0; i < xTxOls.Rows; i++)
-            xTxOls[i, i] = NumOps.Add(xTxOls[i, i], NumOps.FromDouble(1e-10));
-        var olsSolution = SolveSystem(xTxOls, xTyOls);
-        Intercept = olsSolution[0];
-        Coefficients = olsSolution.Slice(1, d);
-        _posteriorCovariance = new Matrix<T>(d, d);
-        if (Coefficients.Length > 0) return;
+        // This method previously fitted ORDINARY LEAST SQUARES and returned immediately. The
+        // guard that followed it was written as a condition but is always true for any real
+        // problem, so it acted as an unconditional return and left the real estimation below
+        // unreachable: callers received a plain linear least-squares fit from a model named for a
+        // different algorithm. The real estimation now runs.
 
         // Add bias term if using intercept
         if (Options.UseIntercept)
@@ -274,8 +268,8 @@ public class BayesianRegression<T> : RegressionBase<T>
     /// is about each prediction.
     /// 
     /// For example, if predicting house prices:
-    /// - A prediction of "$300,000 ± $10,000" is more confident than
-    /// - A prediction of "$300,000 ± $50,000"
+    /// - A prediction of "$300,000 Â± $10,000" is more confident than
+    /// - A prediction of "$300,000 Â± $50,000"
     /// 
     /// The method returns two values for each input:
     /// - Mean: The best guess prediction (same as the regular Predict method)
@@ -364,7 +358,7 @@ public class BayesianRegression<T> : RegressionBase<T>
     /// <remarks>
     /// <para>
     /// This method computes the Laplacian kernel matrix for the input features. The Laplacian kernel is defined as
-    /// K(x, y) = exp(-? * |x - y|1), where |x - y|1 is the Manhattan distance between x and y, and γ is the kernel width parameter.
+    /// K(x, y) = exp(-? * |x - y|1), where |x - y|1 is the Manhattan distance between x and y, and Î³ is the kernel width parameter.
     /// The Laplacian kernel is similar to the RBF kernel but uses the L1 norm instead of the L2 norm, making it more robust to outliers.
     /// </para>
     /// <para><b>For Beginners:</b> This method transforms your data using the Laplacian kernel.
@@ -448,8 +442,8 @@ public class BayesianRegression<T> : RegressionBase<T>
     /// <remarks>
     /// <para>
     /// This method computes the RBF kernel matrix for the input features. The RBF kernel, also known as the Gaussian kernel,
-    /// is defined as K(x, y) = exp(-γ × ||x - y||²), where ||x - y|| is the Euclidean distance between x and y,
-    /// and γ is the kernel width parameter. The RBF kernel is one of the most widely used kernels due to its smooth properties
+    /// is defined as K(x, y) = exp(-Î³ Ã— ||x - y||Â²), where ||x - y|| is the Euclidean distance between x and y,
+    /// and Î³ is the kernel width parameter. The RBF kernel is one of the most widely used kernels due to its smooth properties
     /// and ability to capture non-linear relationships.
     /// </para>
     /// <para><b>For Beginners:</b> This method transforms your data using the RBF (Radial Basis Function) kernel.
@@ -495,7 +489,7 @@ public class BayesianRegression<T> : RegressionBase<T>
     /// <remarks>
     /// <para>
     /// This method computes the Polynomial kernel matrix for the input features. The Polynomial kernel is defined as
-    /// K(x, y) = (? * x²y + coef0)^degree, where x²y is the dot product between x and y, ? is a scaling parameter,
+    /// K(x, y) = (? * xÂ²y + coef0)^degree, where xÂ²y is the dot product between x and y, ? is a scaling parameter,
     /// coef0 is a constant term, and degree is the polynomial degree. The Polynomial kernel can capture various degrees
     /// of non-linear relationships and is particularly useful when features interact multiplicatively.
     /// </para>
@@ -547,7 +541,7 @@ public class BayesianRegression<T> : RegressionBase<T>
     /// <remarks>
     /// <para>
     /// This method computes the Sigmoid kernel matrix for the input features. The Sigmoid kernel is defined as
-    /// K(x, y) = tanh(? * x²y + coef0), where x²y is the dot product between x and y, ? is a scaling parameter,
+    /// K(x, y) = tanh(? * xÂ²y + coef0), where xÂ²y is the dot product between x and y, ? is a scaling parameter,
     /// coef0 is a constant term, and tanh is the hyperbolic tangent function. The Sigmoid kernel is similar to
     /// the activation function used in neural networks and can capture certain non-linear relationships.
     /// Note that the Sigmoid kernel is not guaranteed to be positive semi-definite for all parameter values.

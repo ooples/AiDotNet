@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Enums;
 
 namespace AiDotNet.Regression;
@@ -165,29 +165,11 @@ public class PrincipalComponentRegression<T> : RegressionBase<T>
         ValidateInputs(x, y);
         TrainingFeatureCount = x.Columns;
 
-        // Use OLS for reliable predictions (PCR PCA back-transformation has scaling issues)
-        if (Options.UseIntercept)
-        {
-            var xWithInt = x.AddConstantColumn(NumOps.One);
-            var xTx = xWithInt.Transpose().Multiply(xWithInt);
-            var xTy = xWithInt.Transpose().Multiply(y);
-            for (int i = 0; i < xTx.Rows; i++)
-                xTx[i, i] = NumOps.Add(xTx[i, i], NumOps.FromDouble(1e-10));
-            var solution = SolveSystem(xTx, xTy);
-            Intercept = solution[0];
-            Coefficients = solution.Slice(1, x.Columns);
-        }
-        else
-        {
-            var xTx = x.Transpose().Multiply(x);
-            var xTy = x.Transpose().Multiply(y);
-            for (int i = 0; i < xTx.Rows; i++)
-                xTx[i, i] = NumOps.Add(xTx[i, i], NumOps.FromDouble(1e-10));
-            Coefficients = SolveSystem(xTx, xTy);
-        }
-
-        // OLS path complete — skip PCA when using OLS
-        if (Options.UseIntercept || Coefficients.Length > 0) return;
+        // This method previously fitted ORDINARY LEAST SQUARES and returned immediately. The
+        // guard that followed it was written as a condition but is always true for any real
+        // problem, so it acted as an unconditional return and left the real estimation below
+        // unreachable: callers received a plain linear least-squares fit from a model named for a
+        // different algorithm. The real estimation now runs.
 
         // PCA path (not used in standard regression mode)
         // Center and scale the data
