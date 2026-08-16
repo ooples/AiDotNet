@@ -165,35 +165,45 @@ public sealed class SequentialMinimalOptimizationSolver<T>
 
         while (iterations < _options.MaxIterations)
         {
-            // Maximal violating pair. A multiplier can decrease its objective by moving "up" the
-            // constraint line if it is not already at the relevant bound for its label, and "down"
-            // symmetrically; the violation magnitude is −y_i·G_i.
-            int i = -1, j = -1;
-            T maxUp = NumOps.Zero, minDown = NumOps.Zero;
+            int i, j;
+            T gap;
 
-            for (int k = 0; k < n; k++)
+            if (_options.RestrictPairsToSameLabel)
             {
-                T violation = NumOps.Negate(NumOps.Multiply(labels[k], gradient[k]));
+                // nu-parameterized problems carry a second equality (Σ αᵢ = ν·n) that only a
+                // same-class step preserves, so the violating pair is sought within each class
+                // separately and the worse of the two is taken — LIBSVM's Solver_NU.
+                var positive = SelectViolatingPair(
+                    alphas, labels, gradient, upperBounds, n, restrictToLabel: true, NumOps.One);
+                var negative = SelectViolatingPair(
+                    alphas, labels, gradient, upperBounds, n, restrictToLabel: true,
+                    NumOps.Negate(NumOps.One));
 
-                if (CanIncreaseAlongConstraint(labels[k], alphas[k], upperBounds[k])
-                    && (i < 0 || NumOps.GreaterThan(violation, maxUp)))
-                {
-                    i = k;
-                    maxUp = violation;
-                }
+                if (!positive.Found && !negative.Found) break;
 
-                if (CanDecreaseAlongConstraint(labels[k], alphas[k], upperBounds[k])
-                    && (j < 0 || NumOps.LessThan(violation, minDown)))
-                {
-                    j = k;
-                    minDown = violation;
-                }
+                bool takePositive = !negative.Found
+                    || (positive.Found && NumOps.GreaterThan(positive.Gap, negative.Gap));
+
+                var chosen = takePositive ? positive : negative;
+
+                i = chosen.Up;
+                j = chosen.Down;
+                gap = chosen.Gap;
+            }
+            else
+            {
+                var pair = SelectViolatingPair(
+                    alphas, labels, gradient, upperBounds, n, restrictToLabel: false, NumOps.Zero);
+                if (!pair.Found) break;
+
+                i = pair.Up;
+                j = pair.Down;
+                gap = pair.Gap;
             }
 
             // Duality gap: when the best possible increase no longer exceeds the worst required
             // decrease, no pair can improve the objective and the KKT conditions hold.
-            if (i < 0 || j < 0
-                || !NumOps.GreaterThan(NumOps.Subtract(maxUp, minDown), tolerance))
+            if (!NumOps.GreaterThan(gap, tolerance))
             {
                 break;
             }
@@ -210,6 +220,51 @@ public sealed class SequentialMinimalOptimizationSolver<T>
         for (int k = 0; k < n; k++) result[k] = alphas[k];
 
         return (result, ComputeBias(alphas, labels, gradient, upperBounds, n), iterations);
+    }
+
+    /// <summary>
+    /// Finds the maximal violating pair, optionally restricted to multipliers carrying one label.
+    /// </summary>
+    /// <param name="restrictToLabel">
+    /// When true, only multipliers carrying <paramref name="label"/> are considered, which keeps a
+    /// step from disturbing the second equality constraint of the nu-parameterized formulations.
+    /// </param>
+    /// <param name="label">The label to restrict to; ignored unless <paramref name="restrictToLabel"/>.</param>
+    /// <returns>
+    /// The indices to move up and down, the size of their KKT violation, and whether an eligible
+    /// pair was found at all.
+    /// </returns>
+    private static (int Up, int Down, T Gap, bool Found) SelectViolatingPair(
+        T[] alphas, Vector<T> labels, T[] gradient, Vector<T> upperBounds, int n,
+        bool restrictToLabel, T label)
+    {
+        int up = -1, down = -1;
+        T maxUp = NumOps.Zero, minDown = NumOps.Zero;
+
+        for (int k = 0; k < n; k++)
+        {
+            if (restrictToLabel && !NumOps.Equals(labels[k], label)) continue;
+
+            T violation = NumOps.Negate(NumOps.Multiply(labels[k], gradient[k]));
+
+            if (CanIncreaseAlongConstraint(labels[k], alphas[k], upperBounds[k])
+                && (up < 0 || NumOps.GreaterThan(violation, maxUp)))
+            {
+                up = k;
+                maxUp = violation;
+            }
+
+            if (CanDecreaseAlongConstraint(labels[k], alphas[k], upperBounds[k])
+                && (down < 0 || NumOps.LessThan(violation, minDown)))
+            {
+                down = k;
+                minDown = violation;
+            }
+        }
+
+        if (up < 0 || down < 0) return (up, down, NumOps.Zero, false);
+
+        return (up, down, NumOps.Subtract(maxUp, minDown), true);
     }
 
     /// <summary>

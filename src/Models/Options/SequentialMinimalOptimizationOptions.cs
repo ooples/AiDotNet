@@ -50,4 +50,29 @@ public class SequentialMinimalOptimizationOptions
     /// </para>
     /// </remarks>
     public double StepEpsilon { get; set; } = 1e-12;
+
+    /// <summary>
+    /// Gets or sets whether the working pair must be drawn from a single class.
+    /// </summary>
+    /// <value><c>false</c> by default, which is correct for C-parameterized formulations.</value>
+    /// <remarks>
+    /// <para>
+    /// The nu-parameterized formulations (nu-SVC, nu-SVR) carry <b>two</b> equality constraints
+    /// rather than one: <c>Σ αᵢyᵢ = 0</c> and <c>Σ αᵢ = ν·n</c>. A step that moves α_i by
+    /// <c>y_i·t</c> and α_j by <c>−y_j·t</c> preserves the first for any pair, but preserves the
+    /// second only when the two labels agree — with opposite labels the total drifts by <c>2t</c>.
+    /// </para>
+    /// <para>
+    /// Restricting the pair to one class keeps both sums invariant, which is exactly how LIBSVM's
+    /// Solver_NU works: it selects the maximal violating pair within each class and takes whichever
+    /// is worse. Enable this for nu-parameterized problems and supply a feasible starting point,
+    /// since all-zeros does not satisfy <c>Σ αᵢ = ν·n</c>.
+    /// </para>
+    /// <para><b>For Beginners:</b> The nu variants pin down not just the balance between the two
+    /// classes but also the total amount of influence handed out. Swapping influence between two
+    /// examples of the same class leaves both quantities untouched; swapping across classes would
+    /// change the total. So this setting says "only trade within a class".
+    /// </para>
+    /// </remarks>
+    public bool RestrictPairsToSameLabel { get; set; } = false;
 }

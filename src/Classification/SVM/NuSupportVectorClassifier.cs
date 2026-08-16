@@ -1,4 +1,4 @@
-using System.Text;
+﻿using System.Text;
 using AiDotNet.Attributes;
 using AiDotNet.Classification;
 using AiDotNet.Enums;
@@ -209,154 +209,96 @@ public class NuSupportVectorClassifier<T> : SVMBase<T>
         }
 
         int n = _xTrain.Rows;
-        _alphas = new Vector<T>(n);
         _intercept = new Vector<T>(1);
 
-        // Initialize alphas to satisfy constraints
-        // sum_i alpha_i * y_i = 0
-        // sum_i alpha_i = nu * n
-        T nuN = NumOps.FromDouble(_nu * n);
+        // The nu-SVC dual (Scholkopf et al., 2000; Chang and Lin, 2001) is
+        //     minimize  ½·alphaᵀQ·alpha    subject to  yᵀalpha = 0,  sum(alpha) = nu·n,
+        //                                              0 <= alpha_i <= 1/n
+        // with Q_ij = y_i·y_j·K(x_i, x_j). It differs from C-SVC in carrying a SECOND equality
+        // constraint fixing the total mass, and in having no linear term.
+        //
+        // The shared solver handles this in its same-label pairing mode: moving two multipliers of
+        // the same class in opposite directions leaves both sums invariant, which is precisely
+        // LIBSVM's Solver_NU. A feasible starting point is required, since all-zeros satisfies
+        // yᵀalpha = 0 but not sum(alpha) = nu·n.
+        //
+        // This replaces an inlined loop that described itself as "simplified optimization -
+        // gradient descent on alphas", picked its partner multiplier at RANDOM, and applied a
+        // "simplified KKT check" that ignored the second constraint entirely.
+        var linear = new Vector<T>(n);            // nu-SVC has no linear term
+        var upperBounds = new Vector<T>(n);
+        T upperBound = NumOps.Divide(NumOps.One, NumOps.FromDouble(n));
+        for (int i = 0; i < n; i++) upperBounds[i] = upperBound;
 
-        // Count positive and negative samples
-        int posCount = 0;
-        int negCount = 0;
-        for (int i = 0; i < n; i++)
-        {
-            if (NumOps.Compare(_yTrain[i], NumOps.One) == 0)
+        var initialAlphas = BuildFeasibleNuStart(n, upperBound);
+
+        var solver = new AiDotNet.Solvers.QuadraticProgramming.SequentialMinimalOptimizationSolver<T>(
+            new SequentialMinimalOptimizationOptions
             {
-                posCount++;
-            }
-            else
-            {
-                negCount++;
-            }
-        }
+                MaxIterations = Options.MaxIterations < 0 ? 1000000 : Options.MaxIterations * n,
+                Tolerance = Options.Tolerance,
+                RestrictPairsToSameLabel = true,
+            });
 
-        // Initialize alphas to satisfy sum(alpha) = nu*n and sum(alpha*y) = 0
-        // For balanced initialization: alpha_pos = nu*n/(2*n_pos), alpha_neg = nu*n/(2*n_neg)
-        if (posCount > 0 && negCount > 0)
-        {
-            T alphaPos = NumOps.Divide(NumOps.Divide(nuN, NumOps.FromDouble(2.0)), NumOps.FromDouble(posCount));
-            T alphaNeg = NumOps.Divide(NumOps.Divide(nuN, NumOps.FromDouble(2.0)), NumOps.FromDouble(negCount));
+        var (alphas, bias, _) = solver.Solve(
+            (a, b) => ComputeKernel(GetRow(_xTrain, a), GetRow(_xTrain, b)),
+            _yTrain, linear, upperBounds, initialAlphas);
 
-            // Ensure alphas don't exceed 1/n (the upper bound for nu-SVC)
-            T upperBound = NumOps.Divide(NumOps.One, NumOps.FromDouble(n));
-            alphaPos = Min(alphaPos, upperBound);
-            alphaNeg = Min(alphaNeg, upperBound);
+        _alphas = alphas;
+        _intercept[0] = bias;
 
-            for (int i = 0; i < n; i++)
-            {
-                if (NumOps.Compare(_yTrain[i], NumOps.One) == 0)
-                {
-                    _alphas[i] = alphaPos;
-                }
-                else
-                {
-                    _alphas[i] = alphaNeg;
-                }
-            }
-        }
-
-        // Simplified optimization - gradient descent on alphas
-        T tolerance = NumOps.FromDouble(Options.Tolerance);
-        int maxIter = Options.MaxIterations < 0 ? 1000 : Options.MaxIterations;
-        T upperBoundAlpha = NumOps.Divide(NumOps.One, NumOps.FromDouble(n));
-
-        for (int iter = 0; iter < maxIter; iter++)
-        {
-            bool changed = false;
-
-            for (int i = 0; i < n; i++)
-            {
-                T yi = _yTrain[i];
-                T Ei = ComputeError(i);
-
-                // Check if alpha can be updated
-                T alphaI = _alphas[i];
-                bool atLower = NumOps.Compare(alphaI, NumOps.Zero) <= 0;
-                bool atUpper = NumOps.Compare(alphaI, upperBoundAlpha) >= 0;
-
-                // Simplified KKT check
-                T yiEi = NumOps.Multiply(yi, Ei);
-                if ((NumOps.Compare(yiEi, NumOps.Negate(tolerance)) < 0 && !atUpper) ||
-                    (NumOps.Compare(yiEi, tolerance) > 0 && !atLower))
-                {
-                    // Select j randomly
-                    int j = _random.Next(n - 1);
-                    if (j >= i) j++;
-
-                    T yj = _yTrain[j];
-                    T Ej = ComputeError(j);
-
-                    // Simple gradient step
-                    T Kii = ComputeKernel(GetRow(_xTrain, i), GetRow(_xTrain, i));
-                    T Kjj = ComputeKernel(GetRow(_xTrain, j), GetRow(_xTrain, j));
-                    T Kij = ComputeKernel(GetRow(_xTrain, i), GetRow(_xTrain, j));
-
-                    T eta = NumOps.Subtract(NumOps.Add(Kii, Kjj), NumOps.Multiply(NumOps.FromDouble(2.0), Kij));
-                    if (NumOps.Compare(eta, NumOps.FromDouble(1e-12)) < 0)
-                    {
-                        continue;
-                    }
-
-                    // Update alphas in pairs to maintain Nu-SVC constraint: sum(alpha_i * y_i) = 0
-                    T alphaJ = _alphas[j];
-                    T deltaAlpha = NumOps.Divide(
-                        NumOps.Multiply(yi, NumOps.Subtract(Ej, Ei)),
-                        eta);
-
-                    // Compute bounds for alpha_i considering constraint maintenance
-                    // If y_i == y_j: delta_alpha_j = -delta_alpha_i (to maintain sum constraint)
-                    // If y_i != y_j: delta_alpha_j = delta_alpha_i
-                    T deltaAlphaJ;
-                    if (NumOps.Compare(NumOps.Multiply(yi, yj), NumOps.One) == 0)
-                    {
-                        // Same class: alpha_j decreases when alpha_i increases
-                        deltaAlphaJ = NumOps.Negate(deltaAlpha);
-                    }
-                    else
-                    {
-                        // Different class: alpha_j changes same direction
-                        deltaAlphaJ = deltaAlpha;
-                    }
-
-                    // Clip alpha_i
-                    T newAlphaI = NumOps.Add(alphaI, deltaAlpha);
-                    newAlphaI = Max(NumOps.Zero, Min(upperBoundAlpha, newAlphaI));
-                    T actualDeltaI = NumOps.Subtract(newAlphaI, alphaI);
-
-                    // Compute corresponding alpha_j
-                    T newAlphaJ;
-                    if (NumOps.Compare(NumOps.Multiply(yi, yj), NumOps.One) == 0)
-                    {
-                        newAlphaJ = NumOps.Subtract(alphaJ, actualDeltaI);
-                    }
-                    else
-                    {
-                        newAlphaJ = NumOps.Add(alphaJ, actualDeltaI);
-                    }
-                    newAlphaJ = Max(NumOps.Zero, Min(upperBoundAlpha, newAlphaJ));
-
-                    if (NumOps.Compare(NumOps.Abs(actualDeltaI), tolerance) > 0)
-                    {
-                        _alphas[i] = newAlphaI;
-                        _alphas[j] = newAlphaJ;
-                        changed = true;
-                    }
-                }
-            }
-
-            if (!changed)
-            {
-                break;
-            }
-        }
-
-        // Compute rho and intercept
-        ComputeRhoAndIntercept();
-
-        // Extract support vectors
         ExtractSupportVectors();
+    }
+
+    /// <summary>
+    /// Builds a starting point satisfying both nu-SVC equality constraints.
+    /// </summary>
+    /// <remarks>
+    /// Each class receives half of the total mass nu·n, spread evenly across its members and capped
+    /// at the per-multiplier bound, so that sum(alpha) = nu·n and yᵀalpha = 0 both hold before the
+    /// first step. Any leftover mass from the cap is redistributed to members still below it.
+    /// </remarks>
+    private Vector<T> BuildFeasibleNuStart(int n, T upperBound)
+    {
+        var alphas = new Vector<T>(n);
+        double half = _nu * n / 2.0;
+
+        foreach (var label in new[] { NumOps.One, NumOps.Negate(NumOps.One) })
+        {
+            var members = new List<int>();
+            for (int i = 0; i < n; i++)
+            {
+                if (NumOps.Equals(_yTrain![i], label)) members.Add(i);
+            }
+
+            if (members.Count == 0) continue;
+
+            double remaining = half;
+            double cap = NumOps.ToDouble(upperBound);
+
+            // Fill evenly, then push any mass the cap rejected onto the members with room left.
+            while (remaining > 1e-12)
+            {
+                var open = members.Where(i => NumOps.ToDouble(alphas[i]) < cap - 1e-12).ToList();
+                if (open.Count == 0) break;
+
+                double share = remaining / open.Count;
+                double placed = 0;
+
+                foreach (int i in open)
+                {
+                    double current = NumOps.ToDouble(alphas[i]);
+                    double next = Math.Min(cap, current + share);
+                    placed += next - current;
+                    alphas[i] = NumOps.FromDouble(next);
+                }
+
+                if (placed <= 1e-12) break;
+                remaining -= placed;
+            }
+        }
+
+        return alphas;
     }
 
     /// <summary>

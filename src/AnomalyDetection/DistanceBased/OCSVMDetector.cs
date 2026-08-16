@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -36,7 +36,7 @@ namespace AiDotNet.AnomalyDetection.DistanceBased;
 /// - Contamination: 0.1 (10%)
 /// </para>
 /// <para>
-/// Reference: Schölkopf, B., et al. (2001). "Estimating the Support of a High-Dimensional Distribution."
+/// Reference: SchÃ¶lkopf, B., et al. (2001). "Estimating the Support of a High-Dimensional Distribution."
 /// </para>
 /// </remarks>
 [ModelDomain(ModelDomain.MachineLearning)]
@@ -121,17 +121,17 @@ public class OCSVMDetector<T> : AnomalyDetectorBase<T>
     {
         int n = data.Rows;
 
-        // Initialize alphas
-        var alphas = new Vector<T>(n);
-        T maxAlpha = NumOps.Divide(NumOps.One, NumOps.FromDouble(_nu * n));
-        T initAlpha = NumOps.Divide(NumOps.One, NumOps.FromDouble(n));
-
-        for (int i = 0; i < n; i++)
-        {
-            alphas[i] = initAlpha;
-        }
-
-        // Compute kernel matrix (cache for efficiency)
+        // The one-class dual (Scholkopf et al., 2001) is
+        //     minimize  ½·alphaᵀK·alpha    subject to  sum(alpha) = 1,  0 <= alpha_i <= 1/(nu·n)
+        // with no linear term. Treating every point as carrying label +1 makes this an instance of
+        // the shared SMO solver's problem: a step that moves one multiplier up and another down by
+        // the same amount leaves sum(alpha) at 1, which is the constraint this formulation needs.
+        //
+        // This replaces an inlined loop that described itself as "SMO-like", chose its partner
+        // multiplier at RANDOM, and applied a fixed fractional step of the exact update rather than
+        // the exact update itself — so it neither converged to the optimum nor respected the
+        // equality constraint, since clipping each multiplier independently after the step breaks
+        // the sum.
         var K = new Matrix<T>(n, n);
         for (int i = 0; i < n; i++)
         {
@@ -145,67 +145,34 @@ public class OCSVMDetector<T> : AnomalyDetectorBase<T>
             }
         }
 
-        T stepSize = NumOps.FromDouble(0.1);
-        T eps8 = NumOps.FromDouble(1e-8);
-        T eps10 = NumOps.FromDouble(1e-10);
+        T maxAlpha = NumOps.Divide(NumOps.One, NumOps.FromDouble(_nu * n));
 
-        // SMO-like optimization
-        for (int iter = 0; iter < _maxIterations; iter++)
+        var labels = new Vector<T>(n);
+        var linear = new Vector<T>(n);          // one-class has no linear term
+        var upperBounds = new Vector<T>(n);
+        var initialAlphas = new Vector<T>(n);
+
+        // Spread the unit mass evenly, capped at the per-multiplier bound, so the start is feasible.
+        double cap = NumOps.ToDouble(maxAlpha);
+        double even = Math.Min(cap, 1.0 / n);
+        for (int i = 0; i < n; i++)
         {
-            bool changed = false;
-
-            for (int i = 0; i < n; i++)
-            {
-                // Compute decision function value
-                T fi = NumOps.Zero;
-                for (int k = 0; k < n; k++)
-                {
-                    fi = NumOps.Add(fi, NumOps.Multiply(alphas[k], K[k, i]));
-                }
-
-                // If violates KKT, update
-                bool violates = (NumOps.LessThan(alphas[i], maxAlpha) && NumOps.LessThan(fi, NumOps.Zero))
-                    || (NumOps.GreaterThan(alphas[i], NumOps.Zero) && NumOps.GreaterThan(fi, NumOps.Zero));
-
-                if (violates)
-                {
-                    // Select random j != i
-                    int j = _random.Next(n);
-                    while (j == i) j = _random.Next(n);
-
-                    T fj = NumOps.Zero;
-                    for (int k = 0; k < n; k++)
-                    {
-                        fj = NumOps.Add(fj, NumOps.Multiply(alphas[k], K[k, j]));
-                    }
-
-                    // Compute step
-                    T eta = NumOps.Subtract(NumOps.Add(K[i, i], K[j, j]), NumOps.Multiply(NumOps.FromDouble(2), K[i, j]));
-                    if (NumOps.GreaterThan(eta, eps10))
-                    {
-                        T oldAlphaI = alphas[i];
-
-                        // Update (simplified)
-                        T delta = NumOps.Divide(NumOps.Subtract(fi, fj), eta);
-                        alphas[i] = NumOps.Subtract(alphas[i], NumOps.Multiply(delta, stepSize));
-                        alphas[j] = NumOps.Add(alphas[j], NumOps.Multiply(delta, stepSize));
-
-                        // Clip
-                        if (NumOps.LessThan(alphas[i], NumOps.Zero)) alphas[i] = NumOps.Zero;
-                        if (NumOps.GreaterThan(alphas[i], maxAlpha)) alphas[i] = maxAlpha;
-                        if (NumOps.LessThan(alphas[j], NumOps.Zero)) alphas[j] = NumOps.Zero;
-                        if (NumOps.GreaterThan(alphas[j], maxAlpha)) alphas[j] = maxAlpha;
-
-                        if (NumOps.GreaterThan(NumOps.Abs(NumOps.Subtract(alphas[i], oldAlphaI)), eps8))
-                        {
-                            changed = true;
-                        }
-                    }
-                }
-            }
-
-            if (!changed) break;
+            labels[i] = NumOps.One;
+            upperBounds[i] = maxAlpha;
+            initialAlphas[i] = NumOps.FromDouble(even);
         }
+
+        var solver = new AiDotNet.Solvers.QuadraticProgramming.SequentialMinimalOptimizationSolver<T>(
+            new AiDotNet.Models.Options.SequentialMinimalOptimizationOptions
+            {
+                MaxIterations = _maxIterations * Math.Max(1, n),
+            });
+
+        var (solved, _, _) = solver.Solve(
+            (a, b) => K[a, b], labels, linear, upperBounds, initialAlphas);
+
+        var alphas = solved;
+        T eps8 = NumOps.FromDouble(1e-8);
 
         // Extract support vectors
         var svIndices = new List<int>();
