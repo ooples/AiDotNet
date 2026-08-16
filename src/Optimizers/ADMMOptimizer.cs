@@ -486,6 +486,13 @@ public class ADMMOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
     /// </remarks>
     public override Vector<T> UpdateParameters(Vector<T> parameters, Vector<T> gradient)
     {
+        if (parameters.Length != gradient.Length)
+        {
+            throw new ArgumentException(
+                $"Parameter vector length ({parameters.Length}) must match gradient vector length ({gradient.Length}).",
+                nameof(gradient));
+        }
+
         int n = parameters.Length;
         if (_z is null || _z.Length != n) _z = Vector<T>.CreateDefault(n, NumOps.Zero);
         if (_u is null || _u.Length != n) _u = Vector<T>.CreateDefault(n, NumOps.Zero);

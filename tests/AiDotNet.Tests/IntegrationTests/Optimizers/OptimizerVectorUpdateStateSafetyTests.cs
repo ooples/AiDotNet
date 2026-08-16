@@ -205,6 +205,21 @@ public class OptimizerVectorUpdateStateSafetyTests
             null!, new ProximalGradientDescentOptimizerOptions<double, Matrix<double>, Vector<double>>
             {
                 InitialLearningRate = 0.01
+            })),
+        ("RAdam", () => new RAdamOptimizer<double, Matrix<double>, Vector<double>>(
+            null!, new RAdamOptimizerOptions<double, Matrix<double>, Vector<double>>
+            {
+                InitialLearningRate = 0.01
+            })),
+        ("ASGD", () => new ASGDOptimizer<double, Matrix<double>, Vector<double>>(
+            null!, new ASGDOptimizerOptions<double, Matrix<double>, Vector<double>>
+            {
+                InitialLearningRate = 0.01
+            })),
+        ("Rprop", () => new RpropOptimizer<double, Matrix<double>, Vector<double>>(
+            null!, new RpropOptimizerOptions<double, Matrix<double>, Vector<double>>
+            {
+                InitialStepSize = 0.01
             }))
     ];
 

@@ -282,6 +282,13 @@ public class RpropOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
     /// </remarks>
     public override Vector<T> UpdateParameters(Vector<T> parameters, Vector<T> gradient)
     {
+        if (parameters.Length != gradient.Length)
+        {
+            throw new ArgumentException(
+                $"Parameter vector length ({parameters.Length}) must match gradient vector length ({gradient.Length}).",
+                nameof(gradient));
+        }
+
         if (_prevGradient == null || _stepSize == null || _prevGradient.Length != parameters.Length)
         {
             _prevGradient = new Vector<T>(parameters.Length);
