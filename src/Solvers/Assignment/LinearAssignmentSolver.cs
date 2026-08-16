@@ -63,6 +63,19 @@ public sealed class LinearAssignmentSolver<T>
                 "The cost matrix must have at least one row and one column.", nameof(cost));
         }
 
+        for (int i = 0; i < cost.Rows; i++)
+        {
+            for (int j = 0; j < cost.Columns; j++)
+            {
+                double value = NumOps.ToDouble(cost[i, j]);
+                if (double.IsNaN(value) || double.IsInfinity(value))
+                {
+                    throw new ArgumentException(
+                        $"Cost at ({i}, {j}) must be finite, but was {value}.", nameof(cost));
+                }
+            }
+        }
+
         int rowCount = cost.Rows;
         int columnCount = cost.Columns;
 
@@ -90,7 +103,7 @@ public sealed class LinearAssignmentSolver<T>
             previousColumn[j] = -1;
         }
 
-        var infinity = NumOps.FromDouble(double.PositiveInfinity);
+        var maximumValue = NumOps.MaxValue;
 
         for (int row = 1; row <= n; row++)
         {
@@ -99,19 +112,23 @@ public sealed class LinearAssignmentSolver<T>
             int currentColumn = 0;
 
             var minimumSlack = new T[m + 1];
+            var slackInitialized = new bool[m + 1];
             var visited = new bool[m + 1];
             for (int j = 0; j <= m; j++)
             {
-                minimumSlack[j] = infinity;
+                minimumSlack[j] = maximumValue;
+                slackInitialized[j] = false;
                 visited[j] = false;
                 previousColumn[j] = -1;
             }
 
+            bool foundAugmentingPath = true;
             do
             {
                 visited[currentColumn] = true;
                 int currentRow = matchedRowOfColumn[currentColumn];
-                T delta = infinity;
+                T delta = maximumValue;
+                bool deltaInitialized = false;
                 int nextColumn = -1;
 
                 for (int j = 1; j <= m; j++)
@@ -123,15 +140,18 @@ public sealed class LinearAssignmentSolver<T>
                         NumOps.Subtract(Cost(currentRow - 1, j - 1), rowPotential[currentRow]),
                         columnPotential[j]);
 
-                    if (NumOps.LessThan(reducedCost, minimumSlack[j]))
+                    if (!slackInitialized[j] || NumOps.LessThan(reducedCost, minimumSlack[j]))
                     {
                         minimumSlack[j] = reducedCost;
+                        slackInitialized[j] = true;
                         previousColumn[j] = currentColumn;
                     }
 
-                    if (NumOps.LessThan(minimumSlack[j], delta))
+                    if (slackInitialized[j] &&
+                        (!deltaInitialized || NumOps.LessThan(minimumSlack[j], delta)))
                     {
                         delta = minimumSlack[j];
+                        deltaInitialized = true;
                         nextColumn = j;
                     }
                 }
@@ -140,6 +160,7 @@ public sealed class LinearAssignmentSolver<T>
                 {
                     // No unvisited column remains reachable. With m >= n this cannot happen for a
                     // finite cost matrix; bail out rather than loop forever on malformed input.
+                    foundAugmentingPath = false;
                     break;
                 }
 
@@ -154,7 +175,7 @@ public sealed class LinearAssignmentSolver<T>
                             NumOps.Add(rowPotential[matchedRowOfColumn[j]], delta);
                         columnPotential[j] = NumOps.Subtract(columnPotential[j], delta);
                     }
-                    else
+                    else if (slackInitialized[j])
                     {
                         minimumSlack[j] = NumOps.Subtract(minimumSlack[j], delta);
                     }
@@ -163,6 +184,11 @@ public sealed class LinearAssignmentSolver<T>
                 currentColumn = nextColumn;
             }
             while (matchedRowOfColumn[currentColumn] != 0);
+
+            if (!foundAugmentingPath)
+            {
+                continue;
+            }
 
             // Walk the augmenting path back to the start, flipping matched and unmatched edges.
             while (currentColumn != 0)

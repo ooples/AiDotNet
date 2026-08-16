@@ -96,11 +96,12 @@ public sealed class BranchAndBoundSolver<T>
         // Each node is the original problem with tightened variable bounds. Explored best-bound
         // first: the most promising relaxation is expanded next, which finds good incumbents early
         // and therefore prunes more.
-        var frontier = new List<(Vector<T> Lower, Vector<T> Upper, T Bound)>
-        {
-            (MaterializeLowerBounds(program.Relaxation), MaterializeUpperBounds(program.Relaxation),
-                NumOps.FromDouble(double.NegativeInfinity)),
-        };
+        var frontier = new PriorityQueue<(Vector<T> Lower, Vector<T> Upper), T>(
+            Comparer<T>.Create((left, right) => NumOps.Compare(left, right)));
+        frontier.Enqueue(
+            (MaterializeLowerBounds(program.Relaxation),
+                MaterializeUpperBounds(program.Relaxation)),
+            NumOps.MinValue);
 
         while (frontier.Count > 0)
         {
@@ -110,9 +111,7 @@ public sealed class BranchAndBoundSolver<T>
                 break;
             }
 
-            int nodeIndex = SelectBestBoundNode(frontier);
-            var (lower, upper, _) = frontier[nodeIndex];
-            frontier.RemoveAt(nodeIndex);
+            var (lower, upper) = frontier.Dequeue();
             nodesExplored++;
 
             var relaxation = WithBounds(program.Relaxation, lower, upper);
@@ -175,14 +174,14 @@ public sealed class BranchAndBoundSolver<T>
             lowerBranchUpper[branchVariable] = Minimum(lowerBranchUpper[branchVariable], floorValue);
             if (!NumOps.GreaterThan(lower[branchVariable], lowerBranchUpper[branchVariable]))
             {
-                frontier.Add((lower.Clone(), lowerBranchUpper, relaxed.ObjectiveValue));
+                frontier.Enqueue((lower.Clone(), lowerBranchUpper), relaxed.ObjectiveValue);
             }
 
             var upperBranchLower = lower.Clone();
             upperBranchLower[branchVariable] = Maximum(upperBranchLower[branchVariable], ceilingValue);
             if (!NumOps.GreaterThan(upperBranchLower[branchVariable], upper[branchVariable]))
             {
-                frontier.Add((upperBranchLower, upper.Clone(), relaxed.ObjectiveValue));
+                frontier.Enqueue((upperBranchLower, upper.Clone()), relaxed.ObjectiveValue);
             }
         }
 
@@ -205,20 +204,6 @@ public sealed class BranchAndBoundSolver<T>
             : LinearProgramStatus.Optimal;
 
         return new LinearProgramSolution<T>(status, incumbent, incumbentObjective, nodesExplored);
-    }
-
-    /// <summary>
-    /// Picks the open node with the most promising (lowest) relaxation bound.
-    /// </summary>
-    private static int SelectBestBoundNode(List<(Vector<T> Lower, Vector<T> Upper, T Bound)> frontier)
-    {
-        int best = 0;
-        for (int i = 1; i < frontier.Count; i++)
-        {
-            if (NumOps.LessThan(frontier[i].Bound, frontier[best].Bound)) best = i;
-        }
-
-        return best;
     }
 
     /// <summary>

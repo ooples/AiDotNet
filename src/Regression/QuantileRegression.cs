@@ -16,8 +16,7 @@ namespace AiDotNet.Regression;
 /// This makes it robust to outliers and useful for modeling heterogeneous conditional distributions.
 /// </para>
 /// <para>
-/// The algorithm uses gradient descent optimization to minimize the quantile loss function, which gives
-/// different weights to positive and negative errors based on the specified quantile.
+/// The algorithm solves the Koenker-Bassett linear-program formulation of quantile loss exactly.
 /// </para>
 /// <para>
 /// <b>For Beginners:</b> While standard regression tells you about the average relationship between variables, quantile regression
@@ -59,7 +58,7 @@ public class QuantileRegression<T> : RegressionBase<T>
     /// Configuration options for the quantile regression model.
     /// </summary>
     /// <value>
-    /// Contains settings like the quantile to estimate, learning rate, and maximum iterations.
+    /// Contains the quantile, exact-solver settings, and a dense-memory safety budget.
     /// </value>
     private readonly QuantileRegressionOptions<T> _options;
 
@@ -94,15 +93,7 @@ public class QuantileRegression<T> : RegressionBase<T>
     /// <param name="y">The target values vector corresponding to each training example.</param>
     /// <remarks>
     /// <para>
-    /// This method implements gradient descent optimization to minimize the quantile loss function.
-    /// The steps are:
-    /// 1. Initialize coefficients and intercept
-    /// 2. Apply regularization to the input matrix
-    /// 3. For each iteration:
-    ///    a. Calculate predictions and errors for all examples
-    ///    b. Compute gradients based on the quantile loss function
-    ///    c. Update coefficients and intercept using the gradients
-    ///    d. Apply regularization to the coefficients
+    /// This method builds and solves the exact linear-program formulation of quantile regression.
     /// </para>
     /// <para>
     /// <b>For Beginners:</b> Training is the process where the model learns from your data. The algorithm starts with initial guesses
@@ -141,11 +132,21 @@ public class QuantileRegression<T> : RegressionBase<T>
         // quantile, which is the one thing quantile regression exists not to do. Second, the
         // unreachable code ran gradient descent on the pinball loss, which is not differentiable at
         // zero, exactly where the optimum sits.
-        int variableCount = 1 + p + 2 * n;
+        int regressionParameterCount = p + (Options.UseIntercept ? 1 : 0);
+        int variableCount = regressionParameterCount + 2 * n;
+        long denseEntries = checked((long)n * variableCount);
+        if (denseEntries > _options.MaximumDenseLinearProgramEntries)
+        {
+            throw new InvalidOperationException(
+                $"Exact quantile regression requires {denseEntries:N0} dense matrix entries for {n:N0} rows and {p:N0} features, " +
+                $"which exceeds the configured budget of {_options.MaximumDenseLinearProgramEntries:N0}. " +
+                "Use fewer rows, raise MaximumDenseLinearProgramEntries when sufficient memory is available, " +
+                "or choose a large-scale quantile estimator.");
+        }
         int interceptColumn = 0;
-        int coefficientColumn = 1;
-        int positiveResidualColumn = 1 + p;
-        int negativeResidualColumn = 1 + p + n;
+        int coefficientColumn = Options.UseIntercept ? 1 : 0;
+        int positiveResidualColumn = regressionParameterCount;
+        int negativeResidualColumn = regressionParameterCount + n;
 
         double quantile = _options.Quantile;
         var objective = new Vector<T>(variableCount);
@@ -159,7 +160,10 @@ public class QuantileRegression<T> : RegressionBase<T>
         var equalityBounds = new Vector<T>(n);
         for (int i = 0; i < n; i++)
         {
-            equalityMatrix[i, interceptColumn] = NumOps.One;
+            if (Options.UseIntercept)
+            {
+                equalityMatrix[i, interceptColumn] = NumOps.One;
+            }
             for (int j = 0; j < p; j++) equalityMatrix[i, coefficientColumn + j] = x[i, j];
             equalityMatrix[i, positiveResidualColumn + i] = NumOps.One;
             equalityMatrix[i, negativeResidualColumn + i] = NumOps.Negate(NumOps.One);
@@ -173,7 +177,7 @@ public class QuantileRegression<T> : RegressionBase<T>
         var positiveInfinity = NumOps.FromDouble(double.PositiveInfinity);
         for (int c = 0; c < variableCount; c++)
         {
-            lowerBounds[c] = c < 1 + p ? negativeInfinity : NumOps.Zero;
+            lowerBounds[c] = c < regressionParameterCount ? negativeInfinity : NumOps.Zero;
             upperBounds[c] = positiveInfinity;
         }
 
@@ -185,18 +189,18 @@ public class QuantileRegression<T> : RegressionBase<T>
             upperBounds: upperBounds);
 
         var solver = new AiDotNet.Solvers.LinearProgramming.SimplexSolver<T>(
-            new SimplexSolverOptions { MaxIterations = Math.Max(_options.MaxIterations, 10000) });
+            new SimplexSolverOptions(_options.SolverOptions));
 
         var solution = solver.Solve(program);
 
-        if (solution.Solution is null)
+        if (solution.Status != AiDotNet.Solvers.LinearProgramming.LinearProgramStatus.Optimal || solution.Solution is null)
         {
             throw new InvalidOperationException(
                 $"The quantile regression linear program did not solve (status {solution.Status}). " +
                 "This usually means the design matrix contains non-finite values.");
         }
 
-        Intercept = solution.Solution[interceptColumn];
+        Intercept = Options.UseIntercept ? solution.Solution[interceptColumn] : NumOps.Zero;
         var coefficients = new Vector<T>(p);
         for (int j = 0; j < p; j++) coefficients[j] = solution.Solution[coefficientColumn + j];
 
@@ -281,7 +285,7 @@ public class QuantileRegression<T> : RegressionBase<T>
     /// <remarks>
     /// <para>
     /// This method serializes both the base class data and the quantile regression specific options,
-    /// including the quantile, learning rate, and maximum iterations.
+    /// including the quantile, solver configuration, and memory safety budget.
     /// </para>
     /// <para>
     /// <b>For Beginners:</b> Serialization converts the model's internal state into a format that can be saved to disk or
@@ -301,8 +305,10 @@ public class QuantileRegression<T> : RegressionBase<T>
 
         // Serialize QuantileRegression specific data
         writer.Write(_options.Quantile);
-        writer.Write(_options.LearningRate);
-        writer.Write(_options.MaxIterations);
+        writer.Write(_options.SolverOptions.MaxIterations);
+        writer.Write(_options.SolverOptions.Tolerance);
+        writer.Write(_options.SolverOptions.DegeneratePivotsBeforeBlandsRule);
+        writer.Write(_options.MaximumDenseLinearProgramEntries);
 
         return ms.ToArray();
     }
@@ -334,8 +340,10 @@ public class QuantileRegression<T> : RegressionBase<T>
 
         // Deserialize QuantileRegression specific data
         _options.Quantile = reader.ReadDouble();
-        _options.LearningRate = reader.ReadDouble();
-        _options.MaxIterations = reader.ReadInt32();
+        _options.SolverOptions.MaxIterations = reader.ReadInt32();
+        _options.SolverOptions.Tolerance = reader.ReadDouble();
+        _options.SolverOptions.DegeneratePivotsBeforeBlandsRule = reader.ReadInt32();
+        _options.MaximumDenseLinearProgramEntries = reader.ReadInt64();
     }
 
     /// <summary>
@@ -366,6 +374,6 @@ public class QuantileRegression<T> : RegressionBase<T>
     protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
     {
         // Create a new instance with the same options and regularization
-        return new QuantileRegression<T>(_options, Regularization);
+        return new QuantileRegression<T>(new QuantileRegressionOptions<T>(_options), Regularization);
     }
 }

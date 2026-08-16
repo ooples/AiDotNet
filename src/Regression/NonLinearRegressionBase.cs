@@ -321,21 +321,50 @@ public abstract class NonLinearRegressionBase<T> : INonLinearRegression<T>, ICon
     /// </remarks>
     protected virtual void ExtractModelParameters()
     {
-        // Extract support vectors and their corresponding alphas
-        int[] supportVectorIndices = Enumerable.Range(0, Alphas.Length)
-            .Where(i => NumOps.GreaterThan(NumOps.Abs(Alphas[i]), NumOps.FromDouble(1e-5)))
+        // Some non-kernel descendants reuse Alphas as their own coefficient surface and never
+        // populate SupportVectors. There is no candidate-row state for the base class to compact
+        // in that contract, so leave the derived representation untouched.
+        if (SupportVectors.Rows != Alphas.Length)
+        {
+            return;
+        }
+
+        SetSupportVectorState(SupportVectors, Alphas);
+    }
+
+    /// <summary>
+    /// Gets the magnitude below which a dual coefficient is treated as inactive.
+    /// </summary>
+    protected virtual T SupportVectorSelectionTolerance => NumOps.FromDouble(1e-5);
+
+    /// <summary>
+    /// Selects active support vectors and copies their rows into model-owned storage.
+    /// </summary>
+    /// <param name="candidates">Candidate support-vector rows.</param>
+    /// <param name="coefficients">One signed coefficient per candidate row.</param>
+    protected void SetSupportVectorState(Matrix<T> candidates, Vector<T> coefficients)
+    {
+        if (candidates.Rows != coefficients.Length)
+        {
+            throw new ArgumentException(
+                $"Support-vector candidates ({candidates.Rows}) must match coefficient count ({coefficients.Length}).",
+                nameof(coefficients));
+        }
+
+        int[] supportVectorIndices = Enumerable.Range(0, coefficients.Length)
+            .Where(i => NumOps.GreaterThan(NumOps.Abs(coefficients[i]), SupportVectorSelectionTolerance))
             .ToArray();
 
         // If all alphas are near-zero, keep the single largest-magnitude alpha as a fallback.
         // This avoids producing an empty model that cannot be exported or JIT-compiled.
-        if (supportVectorIndices.Length == 0 && Alphas.Length > 0 && SupportVectors.Rows > 0)
+        if (supportVectorIndices.Length == 0 && coefficients.Length > 0 && candidates.Rows > 0)
         {
             int bestIndex = 0;
-            T bestAbs = NumOps.Abs(Alphas[0]);
+            T bestAbs = NumOps.Abs(coefficients[0]);
 
-            for (int i = 1; i < Alphas.Length; i++)
+            for (int i = 1; i < coefficients.Length; i++)
             {
-                T abs = NumOps.Abs(Alphas[i]);
+                T abs = NumOps.Abs(coefficients[i]);
                 if (NumOps.GreaterThan(abs, bestAbs))
                 {
                     bestAbs = abs;
@@ -346,8 +375,7 @@ public abstract class NonLinearRegressionBase<T> : INonLinearRegression<T>, ICon
             supportVectorIndices = new[] { bestIndex };
         }
 
-        int featureCount = SupportVectors.Columns;
-        var oldSupportVectors = SupportVectors;
+        int featureCount = candidates.Columns;
         SupportVectors = new Matrix<T>(supportVectorIndices.Length, featureCount);
         var newAlphas = new Vector<T>(supportVectorIndices.Length);
 
@@ -356,9 +384,9 @@ public abstract class NonLinearRegressionBase<T> : INonLinearRegression<T>, ICon
             int index = supportVectorIndices[i];
             for (int j = 0; j < featureCount; j++)
             {
-                SupportVectors[i, j] = oldSupportVectors[index, j];
+                SupportVectors[i, j] = candidates[index, j];
             }
-            newAlphas[i] = Alphas[index];
+            newAlphas[i] = coefficients[index];
         }
 
         Alphas = newAlphas;

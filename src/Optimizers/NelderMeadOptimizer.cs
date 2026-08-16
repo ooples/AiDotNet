@@ -1,4 +1,4 @@
-﻿using AiDotNet.Helpers;
+using AiDotNet.Helpers;
 using Newtonsoft.Json;
 
 using AiDotNet.Attributes;
@@ -140,7 +140,7 @@ public class NelderMeadOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, 
     /// <remarks>
     /// <para>
     /// Minimizes an arbitrary scalar objective with no model, dataset, or training pipeline
-    /// involved â€” the gradient-free counterpart of SciPy's
+    /// involved — the gradient-free counterpart of SciPy's
     /// <c>scipy.optimize.minimize(method='Nelder-Mead')</c>. This runs the same simplex search
     /// that <see cref="Optimize"/> uses, so the function path and the model-training path cannot
     /// drift apart.
@@ -159,7 +159,7 @@ public class NelderMeadOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, 
     /// <paramref name="tolerance"/>, or when <paramref name="maxIterations"/> is reached.
     /// </para>
     /// <para><b>For Beginners:</b> Give this a starting guess and a function that scores any point,
-    /// and it finds the point with the lowest score. It never asks for a derivative â€” it just
+    /// and it finds the point with the lowest score. It never asks for a derivative — it just
     /// keeps a cluster of trial points, throws away the worst one each round, and moves the
     /// cluster downhill. That makes it usable on functions with kinks, noise, or no formula at
     /// all (a simulation, a backtest, a black box).
@@ -246,7 +246,7 @@ public class NelderMeadOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, 
     /// shrink the whole simplex toward the best vertex when contraction also fails.
     /// </para>
     /// <para>
-    /// The objective is always a <b>minimization</b> objective here â€” lower is better. Callers
+    /// The objective is always a <b>minimization</b> objective here — lower is better. Callers
     /// working with a fitness score where higher is better must negate before calling.
     /// </para>
     /// </remarks>
@@ -276,7 +276,29 @@ public class NelderMeadOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, 
         T tolerance,
         Func<int, Vector<T>, T, TEval, bool>? onIteration = null)
     {
+        if (simplex.Count < 2)
+        {
+            throw new ArgumentException(
+                "A Nelder-Mead simplex must contain at least two vertices.", nameof(simplex));
+        }
+
         int n = simplex.Count - 1;
+        if (simplex[0].Length != n || simplex[0].Length == 0)
+        {
+            throw new ArgumentException(
+                $"A simplex with {simplex.Count} vertices must use non-empty vectors of length {n}.",
+                nameof(simplex));
+        }
+        for (int i = 1; i < simplex.Count; i++)
+        {
+            if (simplex[i].Length != n)
+            {
+                throw new ArgumentException(
+                    $"Simplex vertex {i} has length {simplex[i].Length}; expected {n}.",
+                    nameof(simplex));
+            }
+        }
+
         var values = new List<T>(simplex.Count);
         var evaluations = new List<TEval>(simplex.Count);
         for (int i = 0; i < simplex.Count; i++)
@@ -323,7 +345,7 @@ public class NelderMeadOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, 
 
             if (NumOps.LessThan(reflectedValue, values[0]))
             {
-                // Reflection produced a new best â€” try going further in the same direction.
+                // Reflection produced a new best — try going further in the same direction.
                 // xe = centroid + gamma * (xr - centroid)
                 var expanded = Combine(centroid, Subtract(reflected, centroid), _gamma);
                 var (expandedValue, expandedEvaluation) = objective(expanded);
@@ -448,8 +470,7 @@ public class NelderMeadOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, 
             sum = (Vector<T>)Engine.Add(sum, simplex[i]);
         }
 
-        var divisor = Engine.Fill<T>(sum.Length, NumOps.FromDouble(n));
-        return (Vector<T>)Engine.Divide(sum, divisor);
+        return (Vector<T>)Engine.Multiply(sum, NumOps.Divide(NumOps.One, NumOps.FromDouble(n)));
     }
 
     /// <summary>
@@ -465,8 +486,7 @@ public class NelderMeadOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, 
     /// </summary>
     private Vector<T> Combine(Vector<T> origin, Vector<T> direction, T scale)
     {
-        var scaleVector = Engine.Fill<T>(direction.Length, scale);
-        return (Vector<T>)Engine.Add(origin, (Vector<T>)Engine.Multiply(direction, scaleVector));
+        return (Vector<T>)Engine.Add(origin, (Vector<T>)Engine.Multiply(direction, scale));
     }
 
     /// <summary>
@@ -515,17 +535,29 @@ public class NelderMeadOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, 
     public override OptimizationResult<T, TInput, TOutput> Optimize(OptimizationInputData<T, TInput, TOutput> inputData)
     {
         ValidationHelper<T>.ValidateInputData(inputData);
-        var n = InputHelper<T, TInput>.GetInputSize(inputData.XTrain);
-
         InitializeAdaptiveParameters();
 
         // The simplex lives in parameter space. A template individual supplies the model shape so
         // any vertex vector can be turned back into a model for evaluation.
         var template = InterfaceGuard.Parameterizable(SpawnIndividual(inputData.XTrain));
-        var simplex = new List<Vector<T>>(n + 1) { template.GetParameters() };
+        var templateParameters = template.GetParameters();
+        int n = templateParameters.Length;
+        if (n == 0)
+        {
+            throw new InvalidOperationException(
+                "Nelder-Mead requires a model with at least one optimizable parameter.");
+        }
+
+        var simplex = new List<Vector<T>>(n + 1) { templateParameters };
         for (int i = 0; i < n; i++)
         {
-            simplex.Add(InterfaceGuard.Parameterizable(SpawnIndividual(inputData.XTrain)).GetParameters());
+            var vertex = InterfaceGuard.Parameterizable(SpawnIndividual(inputData.XTrain)).GetParameters();
+            if (vertex.Length != n)
+            {
+                throw new InvalidOperationException(
+                    $"Spawned Nelder-Mead vertex {i + 1} has {vertex.Length} parameters; expected {n}.");
+            }
+            simplex.Add(vertex);
         }
 
         // RunSimplexSearch always minimizes, so a higher-is-better fitness score is negated on the

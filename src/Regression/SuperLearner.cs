@@ -214,6 +214,13 @@ public class SuperLearner<T> : NonLinearRegressionBase<T>
         // Train meta-learner
         TrainMetaLearner(metaFeatures, y);
 
+        // Centering base predictions removes their location. Restore it with the least-squares
+        // intercept for the fitted weights so normalization changes conditioning, not predictions.
+        if (_options.NormalizeBasePredictions && _metaWeights is not null)
+        {
+            _metaIntercept = FitMetaIntercept(metaFeatures, y, _metaWeights);
+        }
+
         // Retrain base models on full data if requested
         if (_options.RetrainOnFullData)
         {
@@ -620,7 +627,8 @@ public class SuperLearner<T> : NonLinearRegressionBase<T>
 
         var solution = solver.Solve(program);
 
-        if (solution.Solution is not null)
+        if (solution.Status == AiDotNet.Solvers.LinearProgramming.LinearProgramStatus.Optimal &&
+            solution.Solution is not null)
         {
             _metaWeights = solution.Solution;
         }
@@ -636,6 +644,26 @@ public class SuperLearner<T> : NonLinearRegressionBase<T>
         }
 
         _metaIntercept = NumOps.Zero;
+    }
+
+    /// <summary>
+    /// Fits the unpenalized intercept for fixed meta-learner weights.
+    /// </summary>
+    private T FitMetaIntercept(Matrix<T> x, Vector<T> y, Vector<T> weights)
+    {
+        T residualSum = NumOps.Zero;
+        for (int i = 0; i < x.Rows; i++)
+        {
+            T prediction = NumOps.Zero;
+            for (int j = 0; j < x.Columns; j++)
+            {
+                prediction = NumOps.Add(prediction, NumOps.Multiply(x[i, j], weights[j]));
+            }
+
+            residualSum = NumOps.Add(residualSum, NumOps.Subtract(y[i], prediction));
+        }
+
+        return NumOps.Divide(residualSum, NumOps.FromDouble(x.Rows));
     }
 
     /// <summary>

@@ -384,14 +384,13 @@ public class HyperparameterOptimizer<T>
         // objective and its gradient are negated on the way in.
         (double objective, Vector<double> gradient) ObjectiveAndGradient(Vector<double> point)
         {
+            evaluations++;
             var current = ToParameterDictionary(point);
             var gradientVector = new Vector<double>(names.Count);
 
             try
             {
                 var (lml, gradient) = evaluateWithGradient(current);
-                evaluations++;
-
                 if (lml > bestLml)
                 {
                     bestLml = lml;
@@ -472,7 +471,7 @@ public class HyperparameterOptimizer<T>
             LogMarginalLikelihood = bestLml,
             Metrics = new Dictionary<string, double>
             {
-                ["num_iterations"] = _maxIterations,
+                ["num_iterations"] = evaluations,
                 ["num_evaluations"] = evaluations
             }
         };

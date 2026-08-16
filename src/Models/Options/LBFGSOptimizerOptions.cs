@@ -32,6 +32,10 @@ namespace AiDotNet.Models.Options;
 /// </remarks>
 public class LBFGSOptimizerOptions<T, TInput, TOutput> : GradientBasedOptimizerOptions<T, TInput, TOutput>
 {
+    private double _armijoConstant = 1e-4;
+    private double _lineSearchContractionFactor = 0.5;
+    private double _powellDampingFactor = 0.2;
+
     /// <summary>
     /// Initializes a new instance of the LBFGSOptimizerOptions class with appropriate defaults.
     /// </summary>
@@ -119,7 +123,14 @@ public class LBFGSOptimizerOptions<T, TInput, TOutput> : GradientBasedOptimizerO
     /// it shrink the step more often for little gain.
     /// </para>
     /// </remarks>
-    public double ArmijoConstant { get; set; } = 1e-4;
+    public double ArmijoConstant
+    {
+        get => _armijoConstant;
+        set => _armijoConstant = value > 0 && value < 1 && !double.IsNaN(value)
+            ? value
+            : throw new ArgumentOutOfRangeException(
+                nameof(value), value, "ArmijoConstant must be strictly between 0 and 1.");
+    }
 
     /// <summary>
     /// Gets or sets the factor by which the trial step is shrunk on each line search backtrack.
@@ -135,7 +146,14 @@ public class LBFGSOptimizerOptions<T, TInput, TOutput> : GradientBasedOptimizerO
     /// gets multiplied by to produce the next attempt. The default halves it each time.
     /// </para>
     /// </remarks>
-    public double LineSearchContractionFactor { get; set; } = 0.5;
+    public double LineSearchContractionFactor
+    {
+        get => _lineSearchContractionFactor;
+        set => _lineSearchContractionFactor = value > 0 && value < 1 && !double.IsNaN(value)
+            ? value
+            : throw new ArgumentOutOfRangeException(
+                nameof(value), value, "LineSearchContractionFactor must be strictly between 0 and 1.");
+    }
 
     /// <summary>
     /// Gets or sets the step length used when the line search fails to find an acceptable step.
@@ -200,7 +218,14 @@ public class LBFGSOptimizerOptions<T, TInput, TOutput> : GradientBasedOptimizerO
     /// setting instead nudges each bad observation to the nearest sensible one and keeps it.
     /// </para>
     /// </remarks>
-    public double PowellDampingFactor { get; set; } = 0.2;
+    public double PowellDampingFactor
+    {
+        get => _powellDampingFactor;
+        set => _powellDampingFactor = value >= 0 && value <= 1 && !double.IsNaN(value)
+            ? value
+            : throw new ArgumentOutOfRangeException(
+                nameof(value), value, "PowellDampingFactor must be between 0 and 1 inclusive.");
+    }
 
     /// <summary>
     /// Gets or sets the initial learning rate for the L-BFGS algorithm, which controls the initial

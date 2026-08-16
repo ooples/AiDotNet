@@ -2528,15 +2528,24 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
 
             Engine.TensorCopy(Tensor<T>.FromVector(gradient), gradientTensor);
 
+            var stepContext = new TapeStepContext<T>(parameters, gradients, objective);
+            double objectiveValue = NumOps.ToDouble(objective);
+            if (double.IsNaN(objectiveValue) || double.IsInfinity(objectiveValue) ||
+                HasAnomalousTapeGradients(stepContext))
+            {
+                throw new ArithmeticException(
+                    $"Objective or gradient became non-finite at function-optimization iteration {iteration}.");
+            }
+
             // Convergence on the infinity norm of the gradient.
             var maxAbsoluteGradient = Engine.ReduceMax(
                 Engine.TensorAbs(gradientTensor), reductionAxes, keepDims: false);
-            if (NumOps.LessThan(maxAbsoluteGradient[0], tolerance))
+            if (!NumOps.GreaterThan(maxAbsoluteGradient[0], tolerance))
             {
                 break;
             }
 
-            Step(new TapeStepContext<T>(parameters, gradients, objective));
+            Step(stepContext);
 
             if (projection is not null)
             {

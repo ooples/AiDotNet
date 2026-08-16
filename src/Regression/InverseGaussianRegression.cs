@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
@@ -17,9 +17,9 @@ namespace AiDotNet.Regression;
 /// response times, waiting times, and first passage times.
 /// </para>
 /// <para>
-/// The Inverse Gaussian distribution has two parameters: Î¼ (mean) and Î» (shape), with:
-/// - Mean: Î¼
-/// - Variance: Î¼Â³/Î» = Ï† Ã— Î¼Â³, where Ï† = 1/Î» is the dispersion parameter
+/// The Inverse Gaussian distribution has two parameters: μ (mean) and λ (shape), with:
+/// - Mean: μ
+/// - Variance: μ³/λ = φ × μ³, where φ = 1/λ is the dispersion parameter
 /// </para>
 /// <para>
 /// The model is fitted using iteratively reweighted least squares (IRLS), a form of maximum likelihood estimation.
@@ -33,8 +33,8 @@ namespace AiDotNet.Regression;
 /// - First passage times in physics
 /// - Waiting times in queuing systems
 ///
-/// Compared to Gamma regression which has variance proportional to Î¼Â², Inverse Gaussian has variance
-/// proportional to Î¼Â³, meaning it handles even heavier tails where large values are much more variable.
+/// Compared to Gamma regression which has variance proportional to μ², Inverse Gaussian has variance
+/// proportional to μ³, meaning it handles even heavier tails where large values are much more variable.
 /// </para>
 /// </remarks>
 /// <example>
@@ -74,7 +74,7 @@ public class InverseGaussianRegression<T> : RegressionBase<T>
     private readonly InverseGaussianRegressionOptions<T> _options;
 
     /// <summary>
-    /// The estimated dispersion parameter (Ï† = 1/Î»).
+    /// The estimated dispersion parameter (φ = 1/λ).
     /// </summary>
     private T _dispersion;
 
@@ -82,8 +82,8 @@ public class InverseGaussianRegression<T> : RegressionBase<T>
     /// Gets the estimated dispersion parameter.
     /// </summary>
     /// <value>
-    /// The dispersion parameter Ï†, which controls the variance relative to the mean cubed.
-    /// For Inverse Gaussian distribution, Variance = Ï† Ã— Î¼Â³.
+    /// The dispersion parameter φ, which controls the variance relative to the mean cubed.
+    /// For Inverse Gaussian distribution, Variance = φ × μ³.
     /// </value>
     /// <remarks>
     /// <para>
@@ -260,15 +260,15 @@ public class InverseGaussianRegression<T> : RegressionBase<T>
     /// <summary>
     /// Applies the inverse link function to convert the linear predictor to the mean.
     /// </summary>
-    /// <param name="eta">The linear predictor (X Ã— Î²).</param>
-    /// <returns>The predicted mean values Î¼.</returns>
+    /// <param name="eta">The linear predictor (X × β).</param>
+    /// <returns>The predicted mean values μ.</returns>
     /// <remarks>
     /// <para>
     /// The inverse link function converts from the linear scale to the response scale:
-    /// - Log link: Î¼ = exp(Î·)
-    /// - InverseSquared link: Î¼ = 1/sqrt(-2Î·)
-    /// - Inverse link: Î¼ = 1/Î·
-    /// - Identity link: Î¼ = Î·
+    /// - Log link: μ = exp(η)
+    /// - InverseSquared link: μ = 1/sqrt(-2η)
+    /// - Inverse link: μ = 1/η
+    /// - Identity link: μ = η
     /// </para>
     /// <para>
     /// For Beginners:
@@ -283,7 +283,7 @@ public class InverseGaussianRegression<T> : RegressionBase<T>
             InverseGaussianLinkFunction.InverseSquared => eta.Transform(v =>
             {
                 double etaVal = NumOps.ToDouble(v);
-                // Î¼ = 1/sqrt(-2Î·), but need to handle sign carefully
+                // μ = 1/sqrt(-2η), but need to handle sign carefully
                 if (etaVal >= 0) return NumOps.FromDouble(1e10); // Large positive if invalid
                 return NumOps.FromDouble(1.0 / Math.Sqrt(-2.0 * etaVal));
             }),
@@ -336,13 +336,13 @@ public class InverseGaussianRegression<T> : RegressionBase<T>
     /// <remarks>
     /// <para>
     /// For Inverse Gaussian regression, the weights depend on the link function.
-    /// The weight formula is: W = 1 / (V(Î¼) Ã— (g'(Î¼))Â²)
-    /// where V(Î¼) = Î¼Â³ is the variance function for Inverse Gaussian.
+    /// The weight formula is: W = 1 / (V(μ) × (g'(μ))²)
+    /// where V(μ) = μ³ is the variance function for Inverse Gaussian.
     ///
-    /// - Log link: g'(Î¼) = 1/Î¼, so W = 1 / (Î¼Â³ Ã— (1/Î¼)Â²) = 1/Î¼
-    /// - InverseSquared link: g'(Î¼) = 1/Î¼Â³, so W = 1 / (Î¼Â³ Ã— (1/Î¼Â³)Â²) = Î¼Â³
-    /// - Inverse link: g'(Î¼) = -1/Î¼Â², so W = 1 / (Î¼Â³ Ã— (1/Î¼Â²)Â²) = Î¼
-    /// - Identity link: g'(Î¼) = 1, so W = 1/Î¼Â³
+    /// - Log link: g'(μ) = 1/μ, so W = 1 / (μ³ × (1/μ)²) = 1/μ
+    /// - InverseSquared link: g'(μ) = 1/μ³, so W = 1 / (μ³ × (1/μ³)²) = μ³
+    /// - Inverse link: g'(μ) = -1/μ², so W = 1 / (μ³ × (1/μ²)²) = μ
+    /// - Identity link: g'(μ) = 1, so W = 1/μ³
     /// </para>
     /// <para>
     /// For Beginners:
@@ -359,13 +359,13 @@ public class InverseGaussianRegression<T> : RegressionBase<T>
             T muCubed = NumOps.Multiply(muVal, NumOps.Multiply(muVal, muVal));
             T weight = _options.LinkFunction switch
             {
-                // W = 1 / (V(Î¼) Ã— (g'(Î¼))Â²) = 1 / (Î¼Â³ Ã— (1/Î¼)Â²) = 1/Î¼
+                // W = 1 / (V(μ) × (g'(μ))²) = 1 / (μ³ × (1/μ)²) = 1/μ
                 InverseGaussianLinkFunction.Log => NumOps.Divide(NumOps.One, muVal),
-                // W = 1 / (V(Î¼) Ã— (g'(Î¼))Â²) = 1 / (Î¼Â³ Ã— (1/Î¼Â³)Â²) = Î¼Â³
+                // W = 1 / (V(μ) × (g'(μ))²) = 1 / (μ³ × (1/μ³)²) = μ³
                 InverseGaussianLinkFunction.InverseSquared => muCubed,
-                // W = 1 / (V(Î¼) Ã— (g'(Î¼))Â²) = 1 / (Î¼Â³ Ã— (1/Î¼Â²)Â²) = Î¼
+                // W = 1 / (V(μ) × (g'(μ))²) = 1 / (μ³ × (1/μ²)²) = μ
                 InverseGaussianLinkFunction.Inverse => muVal,
-                // W = 1 / (V(Î¼) Ã— (g'(Î¼))Â²) = 1 / (Î¼Â³ Ã— 1) = 1/Î¼Â³
+                // W = 1 / (V(μ) × (g'(μ))²) = 1 / (μ³ × 1) = 1/μ³
                 InverseGaussianLinkFunction.Identity => NumOps.Divide(NumOps.One, muCubed),
                 _ => NumOps.Divide(NumOps.One, muVal)
             };
@@ -384,12 +384,12 @@ public class InverseGaussianRegression<T> : RegressionBase<T>
     /// <returns>The working response vector.</returns>
     /// <remarks>
     /// <para>
-    /// The working response is computed as: z = Î· + (y - Î¼) Ã— g'(Î¼)
-    /// where g'(Î¼) is the derivative of the link function.
+    /// The working response is computed as: z = η + (y - μ) × g'(μ)
+    /// where g'(μ) is the derivative of the link function.
     ///
-    /// - Log link: z = Î· + (y - Î¼)/Î¼
-    /// - InverseSquared link: z = Î· + (y - Î¼)/(Î¼Â³)
-    /// - Inverse link: z = Î· - (y - Î¼)/Î¼Â²
+    /// - Log link: z = η + (y - μ)/μ
+    /// - InverseSquared link: z = η + (y - μ)/(μ³)
+    /// - Inverse link: z = η - (y - μ)/μ²
     /// - Identity link: z = y
     /// </para>
     /// <para>
@@ -411,13 +411,13 @@ public class InverseGaussianRegression<T> : RegressionBase<T>
 
             T zVal = _options.LinkFunction switch
             {
-                // g'(Î¼) = 1/Î¼, so z = Î· + (y - Î¼)/Î¼
+                // g'(μ) = 1/μ, so z = η + (y - μ)/μ
                 InverseGaussianLinkFunction.Log => NumOps.Add(etaVal, NumOps.Divide(diff, muVal)),
-                // g'(Î¼) = 1/Î¼Â³, so z = Î· + (y - Î¼)/Î¼Â³
+                // g'(μ) = 1/μ³, so z = η + (y - μ)/μ³
                 InverseGaussianLinkFunction.InverseSquared => NumOps.Add(etaVal, NumOps.Divide(diff, muCubed)),
-                // g'(Î¼) = -1/Î¼Â², so z = Î· - (y - Î¼)/Î¼Â²
+                // g'(μ) = -1/μ², so z = η - (y - μ)/μ²
                 InverseGaussianLinkFunction.Inverse => NumOps.Subtract(etaVal, NumOps.Divide(diff, muSquared)),
-                // g'(Î¼) = 1, so z = Î· + (y - Î¼) = y
+                // g'(μ) = 1, so z = η + (y - μ) = y
                 InverseGaussianLinkFunction.Identity => y[i],
                 _ => NumOps.Add(etaVal, NumOps.Divide(diff, muVal))
             };
@@ -458,7 +458,7 @@ public class InverseGaussianRegression<T> : RegressionBase<T>
     /// <remarks>
     /// <para>
     /// The dispersion parameter is estimated as:
-    /// Ï† = (1/(n-p)) Ã— Î£((y_i - Î¼_i)Â²/Î¼_iÂ³)
+    /// φ = (1/(n-p)) × Σ((y_i - μ_i)²/μ_i³)
     /// where n is the number of samples and p is the number of parameters.
     /// </para>
     /// <para>
@@ -476,7 +476,7 @@ public class InverseGaussianRegression<T> : RegressionBase<T>
         for (int i = 0; i < n; i++)
         {
             T muVal = predictions[i];
-            // For Inverse Gaussian, variance = Î¼Â³, so Pearson residual = (y - Î¼) / sqrt(Î¼Â³)
+            // For Inverse Gaussian, variance = μ³, so Pearson residual = (y - μ) / sqrt(μ³)
             T variance = NumOps.Multiply(muVal, NumOps.Multiply(muVal, muVal));
             T diff = NumOps.Subtract(y[i], muVal);
             T pearsonResidualSq = NumOps.Divide(NumOps.Multiply(diff, diff), variance);

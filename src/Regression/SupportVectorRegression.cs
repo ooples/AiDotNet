@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 
 namespace AiDotNet.Regression;
@@ -61,6 +61,9 @@ namespace AiDotNet.Regression;
 [ResearchPaper("A Tutorial on Support Vector Regression", "https://doi.org/10.1023/B:STCO.0000035301.49549.88", Year = 2004, Authors = "Alex J. Smola, Bernhard Scholkopf")]
 public class SupportVectorRegression<T> : NonLinearRegressionBase<T>
 {
+    /// <inheritdoc/>
+    protected override T SupportVectorSelectionTolerance => NumOps.FromDouble(_options.Tolerance);
+
     /// <summary>
     /// Configuration options for the Support Vector Regression model.
     /// </summary>
@@ -126,7 +129,7 @@ public class SupportVectorRegression<T> : NonLinearRegressionBase<T>
     }
 
     /// <summary>
-    /// SVR uses SMO algorithm â€” random parameter injection is not applicable.
+    /// SVR uses SMO algorithm — random parameter injection is not applicable.
     /// </summary>
         /// <remarks>
     /// Expressed as a capability, not as a count. A zero ParameterCount also suppresses
@@ -288,7 +291,7 @@ public class SupportVectorRegression<T> : NonLinearRegressionBase<T>
             var predictions = new Vector<T>(input.Rows);
             for (int i = 0; i < input.Rows; i++)
             {
-                // Use Engine for vectorized prediction: pred = intercept + x Â· coef
+                // Use Engine for vectorized prediction: pred = intercept + x · coef
                 var row = new Vector<T>(Math.Min(input.Columns, _olsCoefficients.Length));
                 for (int j = 0; j < row.Length; j++) row[j] = input[i, j];
                 var coefVec = new Vector<T>(_olsCoefficients.Length);
@@ -410,6 +413,11 @@ public class SupportVectorRegression<T> : NonLinearRegressionBase<T>
         // updated it from prediction errors with a heuristic pair choice. That formulation cannot
         // represent the epsilon-tube's two-sided structure exactly, and the loop shared none of its
         // machinery with the classifier's copy of the same algorithm.
+        if (m > int.MaxValue / 2)
+        {
+            throw new ArgumentOutOfRangeException(nameof(x), "SVR requires two dual variables per row; the training set is too large to index safely.");
+        }
+
         int total = 2 * m;
         var labels = new Vector<T>(total);
         var linear = new Vector<T>(total);
@@ -428,10 +436,15 @@ public class SupportVectorRegression<T> : NonLinearRegressionBase<T>
             upperBounds[i + m] = c;
         }
 
+        long requestedIterations = _options.MaxIterations > 0
+            ? (long)_options.MaxIterations * total
+            : 1_000_000L;
+        int iterationBudget = (int)Math.Min(requestedIterations, int.MaxValue);
+
         var solver = new AiDotNet.Solvers.QuadraticProgramming.SequentialMinimalOptimizationSolver<T>(
             new SequentialMinimalOptimizationOptions
             {
-                MaxIterations = _options.MaxIterations > 0 ? _options.MaxIterations * total : 1000000,
+                MaxIterations = iterationBudget,
                 Tolerance = _options.Tolerance,
             });
 
@@ -440,14 +453,14 @@ public class SupportVectorRegression<T> : NonLinearRegressionBase<T>
 
         // Collapse the two-sided multipliers back into the signed form the prediction path uses:
         // f(x) = sum_i (a_i - a*_i)·K(x_i, x) + b.
-        Alphas = new Vector<T>(m);
+        var signedAlphas = new Vector<T>(m);
         for (int i = 0; i < m; i++)
         {
-            Alphas[i] = NumOps.Subtract(dual[i], dual[i + m]);
+            signedAlphas[i] = NumOps.Subtract(dual[i], dual[i + m]);
         }
 
         B = bias;
-        SupportVectors = x;
+        SetSupportVectorState(x, signedAlphas);
     }
 
     /// <summary>

@@ -168,7 +168,7 @@ public class FunctionMinimizationIntegrationTests
     [Fact]
     public void Minimize_Rosenbrock_LBFGSReachesKnownMinimum()
     {
-        var optimizer = new LBFGSOptimizer<double, Tensor<double>, Tensor<double>>();
+        var optimizer = LBFGSOptimizer<double, Tensor<double>, Tensor<double>>.CreateForFunction();
 
         var result = optimizer.Minimize(Point(-1.2, 1.0), Rosenbrock, MaxIterations, 1e-10);
 
@@ -463,7 +463,7 @@ public class FunctionMinimizationIntegrationTests
             "Lion" => new LionOptimizer<double, Tensor<double>, Tensor<double>>(
                 null, new LionOptimizerOptions<double, Tensor<double>, Tensor<double>>
                 { InitialLearningRate = 0.01 }),
-            "LBFGS" => new LBFGSOptimizer<double, Tensor<double>, Tensor<double>>(),
+            "LBFGS" => LBFGSOptimizer<double, Tensor<double>, Tensor<double>>.CreateForFunction(),
             _ => throw new ArgumentException($"Unknown optimizer '{name}'.", nameof(name)),
         };
     }

@@ -829,6 +829,13 @@ public partial class TimeSeriesRegression<T> : RegressionBase<T>
             // OLS state
             writer.Write(_useOLS);
 
+            // Recursive forecasting requires the final observed targets as its initial lag state.
+            writer.Write(_trainingTargetTail.Count);
+            foreach (T value in _trainingTargetTail)
+            {
+                writer.Write(NumOps.ToDouble(value));
+            }
+
             return ms.ToArray();
         }
     }
@@ -879,6 +886,19 @@ public partial class TimeSeriesRegression<T> : RegressionBase<T>
 
             // OLS state
             _useOLS = reader.ReadBoolean();
+
+            int targetTailCount = reader.ReadInt32();
+            if (targetTailCount < 0 || targetTailCount > Math.Max(_options.LagOrder, 1))
+            {
+                throw new InvalidDataException(
+                    $"Serialized training-target tail has invalid length {targetTailCount}.");
+            }
+
+            _trainingTargetTail = new List<T>(targetTailCount);
+            for (int i = 0; i < targetTailCount; i++)
+            {
+                _trainingTargetTail.Add(NumOps.FromDouble(reader.ReadDouble()));
+            }
         }
     }
 

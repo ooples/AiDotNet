@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
@@ -13,12 +13,12 @@ namespace AiDotNet.Regression;
 /// <remarks>
 /// <para>
 /// Tweedie regression is a powerful family of distributions where variance is proportional to a power
-/// of the mean: Var(Y) = Ï† Ã— Î¼^p. The power parameter p determines which distribution family is used:
+/// of the mean: Var(Y) = φ × μ^p. The power parameter p determines which distribution family is used:
 /// - p = 0: Normal/Gaussian (variance independent of mean)
 /// - p = 1: Poisson (variance = mean)
 /// - 1 &lt; p &lt; 2: Compound Poisson-Gamma (handles both zeros and positive continuous values)
-/// - p = 2: Gamma (variance = meanÂ²)
-/// - p = 3: Inverse Gaussian (variance = meanÂ³)
+/// - p = 2: Gamma (variance = mean²)
+/// - p = 3: Inverse Gaussian (variance = mean³)
 /// </para>
 /// <para>
 /// The compound Poisson-Gamma case (1 &lt; p &lt; 2) is particularly important for insurance modeling,
@@ -75,7 +75,7 @@ public class TweedieRegression<T> : RegressionBase<T>
     private readonly TweedieRegressionOptions<T> _options;
 
     /// <summary>
-    /// The estimated dispersion parameter Ï†.
+    /// The estimated dispersion parameter φ.
     /// </summary>
     private T _dispersion;
 
@@ -83,7 +83,7 @@ public class TweedieRegression<T> : RegressionBase<T>
     /// Gets the estimated dispersion parameter.
     /// </summary>
     /// <value>
-    /// The dispersion parameter Ï†, which scales the variance: Var(Y) = Ï† Ã— Î¼^p.
+    /// The dispersion parameter φ, which scales the variance: Var(Y) = φ × μ^p.
     /// </value>
     /// <remarks>
     /// <para>
@@ -147,7 +147,7 @@ public class TweedieRegression<T> : RegressionBase<T>
     /// <remarks>
     /// <para>
     /// This method implements the iteratively reweighted least squares (IRLS) algorithm to fit the model.
-    /// The variance function used is V(Î¼) = Î¼^p where p is the power parameter.
+    /// The variance function used is V(μ) = μ^p where p is the power parameter.
     /// </para>
     /// <para>
     /// For Beginners:
@@ -257,15 +257,15 @@ public class TweedieRegression<T> : RegressionBase<T>
     /// <exception cref="ArgumentException">Thrown when values don't match power parameter requirements.</exception>
     /// <remarks>
     /// <para>
-    /// For p > 0 and p â‰  1, values must be non-negative. For p = 2 or p = 3, values must be strictly positive.
+    /// For p > 0 and p ≠ 1, values must be non-negative. For p = 2 or p = 3, values must be strictly positive.
     /// For p = 1 (Poisson), non-negative integers are expected (though continuous values may work).
     /// </para>
     /// <para>
     /// For Beginners:
     /// The allowed values depend on the power parameter:
     /// - p = 0: Any real values are allowed (normal distribution)
-    /// - 1 â‰¤ p &lt; 2: Non-negative values (zeros allowed)
-    /// - p â‰¥ 2: Strictly positive values (no zeros)
+    /// - 1 ≤ p &lt; 2: Non-negative values (zeros allowed)
+    /// - p ≥ 2: Strictly positive values (no zeros)
     /// </para>
     /// </remarks>
     private void ValidateTweedieData(Vector<T> y)
@@ -280,7 +280,7 @@ public class TweedieRegression<T> : RegressionBase<T>
             if (p >= 2 && value <= 0)
             {
                 throw new ArgumentException(
-                    $"Tweedie regression with power parameter p â‰¥ 2 requires strictly positive target values. " +
+                    $"Tweedie regression with power parameter p ≥ 2 requires strictly positive target values. " +
                     $"Found value {value} at index {i}. Use p in range (1, 2) if you have zeros in your data.");
             }
 
@@ -288,7 +288,7 @@ public class TweedieRegression<T> : RegressionBase<T>
             if (p >= 1 && p < 2 && value < 0)
             {
                 throw new ArgumentException(
-                    $"Tweedie regression with power parameter 1 â‰¤ p < 2 requires non-negative target values. " +
+                    $"Tweedie regression with power parameter 1 ≤ p < 2 requires non-negative target values. " +
                     $"Found value {value} at index {i}.");
             }
 
@@ -303,14 +303,14 @@ public class TweedieRegression<T> : RegressionBase<T>
     }
 
     /// <summary>
-    /// Applies the power link function: Î· = Î¼^(1-p).
+    /// Applies the power link function: η = μ^(1-p).
     /// </summary>
     /// <param name="mu">The mean value.</param>
     /// <returns>The link-transformed value.</returns>
     /// <remarks>
     /// <para>
-    /// The canonical power link for Tweedie is Î¼^(1-p). For p=1, this is log(Î¼).
-    /// For p=2, this is 1/Î¼. For p=0, this is Î¼ itself.
+    /// The canonical power link for Tweedie is μ^(1-p). For p=1, this is log(μ).
+    /// For p=2, this is 1/μ. For p=0, this is μ itself.
     /// </para>
     /// <para>
     /// For Beginners:
@@ -324,7 +324,7 @@ public class TweedieRegression<T> : RegressionBase<T>
 
         if (Math.Abs(oneMinusP) < 1e-10)
         {
-            // When p â‰ˆ 1, power link becomes log
+            // When p ≈ 1, power link becomes log
             return Math.Log(Math.Max(mu, 1e-10));
         }
 
@@ -334,14 +334,14 @@ public class TweedieRegression<T> : RegressionBase<T>
     /// <summary>
     /// Applies the inverse link function to convert the linear predictor to the mean.
     /// </summary>
-    /// <param name="eta">The linear predictor (X Ã— Î²).</param>
-    /// <returns>The predicted mean values Î¼.</returns>
+    /// <param name="eta">The linear predictor (X × β).</param>
+    /// <returns>The predicted mean values μ.</returns>
     /// <remarks>
     /// <para>
     /// The inverse link function converts from the linear scale to the response scale:
-    /// - Log link: Î¼ = exp(Î·)
-    /// - Power link: Î¼ = Î·^(1/(1-p)) when p â‰  1, or exp(Î·) when p = 1
-    /// - Identity link: Î¼ = Î·
+    /// - Log link: μ = exp(η)
+    /// - Power link: μ = η^(1/(1-p)) when p ≠ 1, or exp(η) when p = 1
+    /// - Identity link: μ = η
     /// </para>
     /// <para>
     /// For Beginners:
@@ -362,11 +362,11 @@ public class TweedieRegression<T> : RegressionBase<T>
 
                 if (Math.Abs(oneMinusP) < 1e-10)
                 {
-                    // When p â‰ˆ 1, inverse is exp
+                    // When p ≈ 1, inverse is exp
                     return NumOps.FromDouble(Math.Exp(etaVal));
                 }
 
-                // Î¼ = Î·^(1/(1-p))
+                // μ = η^(1/(1-p))
                 // Need to handle sign and ensure positive result
                 double invPower = 1.0 / oneMinusP;
                 if (etaVal <= 0 && Math.Abs(invPower - Math.Round(invPower)) > 1e-10)
@@ -434,12 +434,12 @@ public class TweedieRegression<T> : RegressionBase<T>
     /// <returns>A diagonal matrix of weights.</returns>
     /// <remarks>
     /// <para>
-    /// For Tweedie regression, the variance function is V(Î¼) = Î¼^p.
-    /// The weight formula is: W = 1 / (V(Î¼) Ã— (g'(Î¼))Â²)
+    /// For Tweedie regression, the variance function is V(μ) = μ^p.
+    /// The weight formula is: W = 1 / (V(μ) × (g'(μ))²)
     ///
-    /// - Log link: g'(Î¼) = 1/Î¼, so W = 1 / (Î¼^p Ã— (1/Î¼)Â²) = Î¼^(2-p)
-    /// - Power link: g'(Î¼) = (1-p)Î¼^(-p), so W = 1 / (Î¼^p Ã— (1-p)Â²Î¼^(-2p)) = Î¼^p/(1-p)Â²
-    /// - Identity link: g'(Î¼) = 1, so W = 1/Î¼^p
+    /// - Log link: g'(μ) = 1/μ, so W = 1 / (μ^p × (1/μ)²) = μ^(2-p)
+    /// - Power link: g'(μ) = (1-p)μ^(-p), so W = 1 / (μ^p × (1-p)²μ^(-2p)) = μ^p/(1-p)²
+    /// - Identity link: g'(μ) = 1, so W = 1/μ^p
     /// </para>
     /// <para>
     /// For Beginners:
@@ -456,11 +456,11 @@ public class TweedieRegression<T> : RegressionBase<T>
             double muVal = Math.Max(NumOps.ToDouble(mu[i]), 1e-10);
             double weight = _options.LinkFunction switch
             {
-                // W = 1 / (V(Î¼) Ã— (g'(Î¼))Â²) = 1 / (Î¼^p Ã— (1/Î¼)Â²) = Î¼^(2-p)
+                // W = 1 / (V(μ) × (g'(μ))²) = 1 / (μ^p × (1/μ)²) = μ^(2-p)
                 TweedieLinkFunction.Log => Math.Pow(muVal, 2.0 - p),
-                // W = 1 / (V(Î¼) Ã— (g'(Î¼))Â²) = Î¼^p / (1-p)Â²
+                // W = 1 / (V(μ) × (g'(μ))²) = μ^p / (1-p)²
                 TweedieLinkFunction.Power => Math.Pow(muVal, p) / Math.Max((1.0 - p) * (1.0 - p), 1e-10),
-                // W = 1 / (V(Î¼) Ã— 1) = 1/Î¼^p
+                // W = 1 / (V(μ) × 1) = 1/μ^p
                 TweedieLinkFunction.Identity => 1.0 / Math.Pow(muVal, p),
                 _ => Math.Pow(muVal, 2.0 - p)
             };
@@ -482,11 +482,11 @@ public class TweedieRegression<T> : RegressionBase<T>
     /// <returns>The working response vector.</returns>
     /// <remarks>
     /// <para>
-    /// The working response is computed as: z = Î· + (y - Î¼) Ã— g'(Î¼)
-    /// where g'(Î¼) is the derivative of the link function.
+    /// The working response is computed as: z = η + (y - μ) × g'(μ)
+    /// where g'(μ) is the derivative of the link function.
     ///
-    /// - Log link: z = Î· + (y - Î¼)/Î¼
-    /// - Power link: z = Î· + (y - Î¼)(1-p)Î¼^(-p)
+    /// - Log link: z = η + (y - μ)/μ
+    /// - Power link: z = η + (y - μ)(1-p)μ^(-p)
     /// - Identity link: z = y
     /// </para>
     /// <para>
@@ -508,11 +508,11 @@ public class TweedieRegression<T> : RegressionBase<T>
 
             double zVal = _options.LinkFunction switch
             {
-                // g'(Î¼) = 1/Î¼, so z = Î· + (y - Î¼)/Î¼
+                // g'(μ) = 1/μ, so z = η + (y - μ)/μ
                 TweedieLinkFunction.Log => etaVal + diff / muVal,
-                // g'(Î¼) = (1-p)Î¼^(-p), so z = Î· + (y - Î¼)(1-p)Î¼^(-p)
+                // g'(μ) = (1-p)μ^(-p), so z = η + (y - μ)(1-p)μ^(-p)
                 TweedieLinkFunction.Power => etaVal + diff * (1.0 - p) * Math.Pow(muVal, -p),
-                // g'(Î¼) = 1, so z = Î· + (y - Î¼) = y
+                // g'(μ) = 1, so z = η + (y - μ) = y
                 TweedieLinkFunction.Identity => yVal,
                 _ => etaVal + diff / muVal
             };
@@ -552,8 +552,8 @@ public class TweedieRegression<T> : RegressionBase<T>
     /// <remarks>
     /// <para>
     /// The dispersion parameter is estimated as:
-    /// Ï† = (1/(n-p)) Ã— Î£((y_i - Î¼_i)Â²/V(Î¼_i))
-    /// where V(Î¼) = Î¼^p is the variance function.
+    /// φ = (1/(n-p)) × Σ((y_i - μ_i)²/V(μ_i))
+    /// where V(μ) = μ^p is the variance function.
     /// </para>
     /// <para>
     /// For Beginners:
@@ -572,7 +572,7 @@ public class TweedieRegression<T> : RegressionBase<T>
         {
             double yVal = NumOps.ToDouble(y[i]);
             double muVal = Math.Max(NumOps.ToDouble(predictions[i]), 1e-10);
-            // For Tweedie, variance = Î¼^p
+            // For Tweedie, variance = μ^p
             double variance = Math.Pow(muVal, power);
             double pearsonResidualSq = (yVal - muVal) * (yVal - muVal) / Math.Max(variance, 1e-10);
             sumPearsonResidualsSq += pearsonResidualSq;

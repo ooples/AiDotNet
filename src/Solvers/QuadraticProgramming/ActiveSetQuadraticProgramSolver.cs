@@ -83,11 +83,11 @@ public sealed class ActiveSetQuadraticProgramSolver<T> : IQuadraticProgramSolver
         int inequalityCount = inequalityBounds.Length;
         int equalityCount = program.EqualityBounds?.Length ?? 0;
 
-        var start = FindFeasiblePoint(program, inequalityRows, inequalityBounds);
+        var (feasibilityStatus, start) = FindFeasiblePoint(program, inequalityRows, inequalityBounds);
         if (start is null)
         {
             return new QuadraticProgramSolution<T>(
-                LinearProgramStatus.Infeasible, null, NumOps.Zero, 0);
+                feasibilityStatus, null, NumOps.Zero, 0);
         }
 
         var x = start;
@@ -113,9 +113,9 @@ public sealed class ActiveSetQuadraticProgramSolver<T> : IQuadraticProgramSolver
 
             if (kkt is null)
             {
-                // The KKT system could not be solved even after regularization; the current point is
-                // the best certified answer available.
-                break;
+                throw new InvalidOperationException(
+                    "The active-set KKT system remained singular after regularization; " +
+                    "no numerically certified quadratic-program step is available.");
             }
 
             var (step, multipliers) = kkt.Value;
@@ -235,7 +235,7 @@ public sealed class ActiveSetQuadraticProgramSolver<T> : IQuadraticProgramSolver
     /// Finds any point satisfying every constraint, by solving the feasibility problem as a linear
     /// program with a zero objective.
     /// </summary>
-    private Vector<T>? FindFeasiblePoint(
+    private (LinearProgramStatus Status, Vector<T>? Point) FindFeasiblePoint(
         QuadraticProgram<T> program, List<Vector<T>> inequalityRows, Vector<T> inequalityBounds)
     {
         int variableCount = program.VariableCount;
@@ -274,7 +274,8 @@ public sealed class ActiveSetQuadraticProgramSolver<T> : IQuadraticProgramSolver
             freeUpper);
 
         var solution = _feasibilitySolver.Solve(feasibilityProgram);
-        return solution.Status == LinearProgramStatus.Optimal ? solution.Solution : null;
+        return (solution.Status,
+            solution.Status == LinearProgramStatus.Optimal ? solution.Solution : null);
     }
 
     /// <summary>

@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.Solvers.QuadraticProgramming;
@@ -37,8 +38,8 @@ namespace AiDotNet.Solvers.QuadraticProgramming;
 /// <code>
 /// var program = new QuadraticProgram&lt;double&gt;(
 ///     quadratic: X.Transpose().Multiply(X),
-///     linear: X.Transpose().Multiply(y).Negate(),
-///     lowerBounds: Vector&lt;double&gt;.Zeros(featureCount));
+///     linear: X.Transpose().Multiply(y).Multiply(-1.0),
+///     lowerBounds: new Vector&lt;double&gt;(featureCount));
 /// </code>
 /// </example>
 /// </remarks>
@@ -138,6 +139,25 @@ public sealed class QuadraticProgram<T>
                 $"{linear.Length} variables.", nameof(quadratic));
         }
 
+        var numOps = MathHelper.GetNumericOperations<T>();
+        for (int i = 0; i < quadratic.Rows; i++)
+        {
+            for (int j = i + 1; j < quadratic.Columns; j++)
+            {
+                double left = numOps.ToDouble(quadratic[i, j]);
+                double right = numOps.ToDouble(quadratic[j, i]);
+                double scale = Math.Max(1.0, Math.Max(Math.Abs(left), Math.Abs(right)));
+                if (double.IsNaN(left) || double.IsNaN(right) ||
+                    double.IsInfinity(left) || double.IsInfinity(right) ||
+                    Math.Abs(left - right) > 1e-12 * scale)
+                {
+                    throw new ArgumentException(
+                        $"The quadratic term must be symmetric; entries ({i}, {j}) and ({j}, {i}) differ.",
+                        nameof(quadratic));
+                }
+            }
+        }
+
         ValidateConstraintBlock(
             inequalityMatrix, inequalityBounds, linear.Length,
             nameof(inequalityMatrix), nameof(inequalityBounds));
@@ -146,6 +166,18 @@ public sealed class QuadraticProgram<T>
             nameof(equalityMatrix), nameof(equalityBounds));
         ValidateBounds(lowerBounds, linear.Length, nameof(lowerBounds));
         ValidateBounds(upperBounds, linear.Length, nameof(upperBounds));
+        if (lowerBounds is not null && upperBounds is not null)
+        {
+            for (int i = 0; i < linear.Length; i++)
+            {
+                if (numOps.GreaterThan(lowerBounds[i], upperBounds[i]))
+                {
+                    throw new ArgumentException(
+                        $"Lower bound at index {i} exceeds the corresponding upper bound.",
+                        nameof(lowerBounds));
+                }
+            }
+        }
 
         Quadratic = quadratic;
         Linear = linear;

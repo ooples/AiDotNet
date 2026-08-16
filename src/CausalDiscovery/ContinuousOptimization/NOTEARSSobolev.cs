@@ -1,11 +1,11 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Models.Options;
 
 namespace AiDotNet.CausalDiscovery.ContinuousOptimization;
 
 /// <summary>
-/// NOTEARS with Sobolev regularization â€” DAG learning with smoothness constraints.
+/// NOTEARS with Sobolev regularization — DAG learning with smoothness constraints.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -16,7 +16,7 @@ namespace AiDotNet.CausalDiscovery.ContinuousOptimization;
 /// <para>
 /// <b>Algorithm:</b>
 /// <list type="number">
-/// <item>Initialize per-variable MLPs: Input(d) â†’ Hidden(h, sigmoid) â†’ Output(1)</item>
+/// <item>Initialize per-variable MLPs: Input(d) → Hidden(h, sigmoid) → Output(1)</item>
 /// <item>Compute L2 reconstruction loss plus Sobolev penalty on Jacobian norms</item>
 /// <item>Extract adjacency A[i,j] = ||W1[j][:,i]||_2 from input weights</item>
 /// <item>Apply NOTEARS acyclicity constraint h(A) = tr(e^(A*A)) - d</item>
@@ -33,7 +33,7 @@ namespace AiDotNet.CausalDiscovery.ContinuousOptimization;
 /// <para>
 /// <b>For Beginners:</b> Regular NOTEARS with neural networks might learn very wiggly functions
 /// that fit noise rather than real causal relationships. The Sobolev penalty encourages smoother
-/// functions, similar to how L2 regularization prevents large weights â€” but it penalizes the
+/// functions, similar to how L2 regularization prevents large weights — but it penalizes the
 /// derivatives (wigglyness) of the learned functions, not just their magnitude.
 /// </para>
 /// <para>
@@ -67,7 +67,7 @@ public class NOTEARSSobolev<T> : ContinuousOptimizationBase<T>
     private double _rhoMax = DEFAULT_RHO_MAX;
     private int _hiddenSize = DEFAULT_HIDDEN_SIZE;
     private double _sobolevWeight = DEFAULT_SOBOLEV_WEIGHT;
-    private readonly int? _seed;
+    private readonly int _seed;
 
     /// <summary>
     /// Seed used when the caller does not supply one, so that a run is reproducible by default.
@@ -193,9 +193,7 @@ public class NOTEARSSobolev<T> : ContinuousOptimizationBase<T>
 
     private void InitializeMLPParameters(int d, int h)
     {
-        var rng = _seed.HasValue
-            ? Tensors.Helpers.RandomHelper.CreateSeededRandom(_seed.Value)
-            : Tensors.Helpers.RandomHelper.CreateSecureRandom();
+        var rng = Tensors.Helpers.RandomHelper.CreateSeededRandom(_seed);
         double scale = Math.Sqrt(2.0 / d);
 
         _W1 = new Matrix<T>[d];

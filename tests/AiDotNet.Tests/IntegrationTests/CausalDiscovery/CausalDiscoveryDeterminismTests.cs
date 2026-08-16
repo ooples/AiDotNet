@@ -18,7 +18,7 @@ namespace AiDotNet.Tests.IntegrationTests.CausalDiscovery;
 public class CausalDiscoveryDeterminismTests
 {
     /// <summary>
-    /// Builds a small dataset with a clear chain structure x0 â†’ x1 â†’ x2.
+    /// Builds a small dataset with a clear chain structure x0 → x1 → x2.
     /// </summary>
     private static Matrix<double> BuildChainData(int rows = 60)
     {
@@ -89,25 +89,25 @@ public class CausalDiscoveryDeterminismTests
     }
 
     /// <summary>
-    /// Different seeds are allowed to give different answers â€” otherwise the seed would be doing
-    /// nothing and the reproducibility tests above would be vacuous.
+    /// Each explicit seed must reproduce its own randomized initialization exactly. Different seeds
+    /// may still converge to the same optimum, so cross-seed inequality is not a valid requirement.
     /// </summary>
     [Fact]
-    public void NOTEARSLowRank_SeedIsActuallyUsed()
+    public async Task NOTEARSLowRank_EachExplicitSeed_IsReproducible()
     {
-        // Rank above the variable count forces the random-initialization branch to be exercised,
-        // which is the only place the seed enters this algorithm.
+        await Task.Yield();
         var data = BuildChainData();
 
-        var first = new NOTEARSLowRank<double>(
-            new CausalDiscoveryOptions { Seed = 1, MaxRank = 8 }).DiscoverStructure(data).AdjacencyMatrix;
-        var second = new NOTEARSLowRank<double>(
-            new CausalDiscoveryOptions { Seed = 2, MaxRank = 8 }).DiscoverStructure(data).AdjacencyMatrix;
+        var seedOne = new CausalDiscoveryOptions { Seed = 1, MaxRank = 8, InitScale = 0.01 };
+        var seedTwo = new CausalDiscoveryOptions { Seed = 2, MaxRank = 8, InitScale = 0.01 };
 
-        // Both must at least be well-formed; the seed may or may not change the converged answer,
-        // so this asserts only that supplying a seed does not break the algorithm.
-        Assert.Equal(3, first.Rows);
-        Assert.Equal(3, second.Rows);
+        var seedOneFirst = new NOTEARSLowRank<double>(seedOne).DiscoverStructure(data).AdjacencyMatrix;
+        var seedOneSecond = new NOTEARSLowRank<double>(seedOne).DiscoverStructure(data).AdjacencyMatrix;
+        var seedTwoFirst = new NOTEARSLowRank<double>(seedTwo).DiscoverStructure(data).AdjacencyMatrix;
+        var seedTwoSecond = new NOTEARSLowRank<double>(seedTwo).DiscoverStructure(data).AdjacencyMatrix;
+
+        AssertIdentical(seedOneFirst, seedOneSecond, "NOTEARSLowRank seed 1");
+        AssertIdentical(seedTwoFirst, seedTwoSecond, "NOTEARSLowRank seed 2");
     }
 
     [Fact]

@@ -109,8 +109,7 @@ public class LBFGSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
     }
 
     /// <summary>
-    /// Initializes a new instance of the LBFGSOptimizer class for minimizing a plain function,
-    /// with no model attached.
+    /// Creates an L-BFGS optimizer for minimizing a plain function, with no model attached.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -120,11 +119,18 @@ public class LBFGSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
     /// </para>
     /// <para><b>For Beginners:</b> The other constructor asks for a model because it is set up to
     /// tune that model against training data. If all you have is a formula you want to make as
-    /// small as possible, there is no model to hand over — use this constructor instead.
+    /// small as possible, there is no model to hand over — use this factory instead.
     /// </para>
+    /// <para><b>Breaking change:</b> The former public options-only constructor was replaced by
+    /// this named factory because passing <c>null</c> to <c>new LBFGSOptimizer(...)</c> was ambiguous with the
+    /// model-based constructor.</para>
     /// </remarks>
     /// <param name="options">The L-BFGS-specific optimization options.</param>
-    public LBFGSOptimizer(LBFGSOptimizerOptions<T, TInput, TOutput>? options = null)
+    public static LBFGSOptimizer<T, TInput, TOutput> CreateForFunction(
+        LBFGSOptimizerOptions<T, TInput, TOutput>? options = null)
+        => new(options);
+
+    private LBFGSOptimizer(LBFGSOptimizerOptions<T, TInput, TOutput>? options)
         : base(null, options ?? new())
     {
         _options = options ?? new LBFGSOptimizerOptions<T, TInput, TOutput>();
@@ -292,6 +298,9 @@ public class LBFGSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
         Reset();
 
         var current = ApplyProjection(projection, initialParameters.Clone(), parameterCount);
+        var bestPoint = current.Clone();
+        T bestObjective = NumOps.Zero;
+        bool hasBestObjective = false;
 
         var armijoConstant = NumOps.FromDouble(_options.ArmijoConstant);
         var contractionFactor = NumOps.FromDouble(_options.LineSearchContractionFactor);
@@ -310,6 +319,14 @@ public class LBFGSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
                 throw new ArgumentException(
                     $"Gradient length ({gradient.Length}) must match parameter length ({parameterCount}).",
                     nameof(objectiveAndGradient));
+            }
+
+            EnsureFiniteEvaluation(objective, gradient, iteration);
+            if (!hasBestObjective || NumOps.LessThan(objective, bestObjective))
+            {
+                bestObjective = objective;
+                bestPoint = current.Clone();
+                hasBestObjective = true;
             }
 
             if (!NumOps.GreaterThan(InfinityNorm(gradient), tolerance))
@@ -348,6 +365,17 @@ public class LBFGSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
                     parameterCount);
 
                 var (trialObjective, _) = objectiveAndGradient(trial);
+                double trialObjectiveValue = NumOps.ToDouble(trialObjective);
+                if (double.IsNaN(trialObjectiveValue) || double.IsInfinity(trialObjectiveValue))
+                {
+                    step = NumOps.Multiply(step, contractionFactor);
+                    continue;
+                }
+                if (NumOps.LessThan(trialObjective, bestObjective))
+                {
+                    bestObjective = trialObjective;
+                    bestPoint = trial.Clone();
+                }
 
                 // Armijo: f(x + step·d) <= f(x) + c1·step·∇f(x)ᵀd
                 var sufficientDecrease = NumOps.Add(
@@ -365,17 +393,46 @@ public class LBFGSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
 
             // No trial step satisfied the condition: take a deliberately tiny step along the
             // descent direction instead of stalling, so the curvature memory can refresh.
-            accepted ??= ApplyProjection(
-                projection,
-                (Vector<T>)Engine.Add(current, (Vector<T>)Engine.Multiply(direction, fallbackStep)),
-                parameterCount);
+            if (accepted is null)
+            {
+                accepted = ApplyProjection(
+                    projection,
+                    (Vector<T>)Engine.Add(current, (Vector<T>)Engine.Multiply(direction, fallbackStep)),
+                    parameterCount);
+                var (fallbackObjective, fallbackGradient) = objectiveAndGradient(accepted);
+                EnsureFiniteEvaluation(fallbackObjective, fallbackGradient, iteration);
+                if (NumOps.LessThan(fallbackObjective, bestObjective))
+                {
+                    bestObjective = fallbackObjective;
+                    bestPoint = accepted.Clone();
+                }
+            }
 
             previousPoint = current;
             previousGradient = gradient;
             current = accepted;
         }
 
-        return current;
+        return bestPoint;
+    }
+
+    private void EnsureFiniteEvaluation(T objective, Vector<T> gradient, int iteration)
+    {
+        double objectiveValue = NumOps.ToDouble(objective);
+        if (double.IsNaN(objectiveValue) || double.IsInfinity(objectiveValue))
+        {
+            throw new ArithmeticException($"Objective became non-finite at L-BFGS iteration {iteration}.");
+        }
+
+        for (int i = 0; i < gradient.Length; i++)
+        {
+            double value = NumOps.ToDouble(gradient[i]);
+            if (double.IsNaN(value) || double.IsInfinity(value))
+            {
+                throw new ArithmeticException(
+                    $"Gradient component {i} became non-finite at L-BFGS iteration {iteration}.");
+            }
+        }
     }
 
     /// <summary>

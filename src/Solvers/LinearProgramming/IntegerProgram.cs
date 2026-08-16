@@ -97,6 +97,8 @@ public sealed class IntegerProgram<T>
         }
 
         Relaxation = relaxation;
-        IntegralityMask = integralityMask;
+        var ownedMask = new bool[integralityMask.Count];
+        for (int i = 0; i < integralityMask.Count; i++) ownedMask[i] = integralityMask[i];
+        IntegralityMask = ownedMask;
     }
 }

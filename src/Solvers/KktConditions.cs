@@ -154,6 +154,33 @@ public static class KktConditions
 
         var numOps = MathHelper.GetNumericOperations<T>();
         int variableCount = solution.Length;
+        if (variableCount == 0)
+        {
+            throw new ArgumentException("Solution must contain at least one variable.", nameof(solution));
+        }
+        if (linear.Length != variableCount)
+        {
+            throw new ArgumentException(
+                $"Linear objective length ({linear.Length}) must match solution length ({variableCount}).",
+                nameof(linear));
+        }
+        if (quadratic is not null &&
+            (quadratic.Rows != variableCount || quadratic.Columns != variableCount))
+        {
+            throw new ArgumentException(
+                $"Quadratic objective must be {variableCount}x{variableCount}, but was " +
+                $"{quadratic.Rows}x{quadratic.Columns}.",
+                nameof(quadratic));
+        }
+
+        ValidateConstraintBlock(
+            inequalityMatrix, inequalityBounds, inequalityMultipliers,
+            variableCount, nameof(inequalityMatrix), nameof(inequalityBounds),
+            nameof(inequalityMultipliers));
+        ValidateConstraintBlock(
+            equalityMatrix, equalityBounds, equalityMultipliers,
+            variableCount, nameof(equalityMatrix), nameof(equalityBounds),
+            nameof(equalityMultipliers));
 
         // Stationarity: gradient of the objective plus the constraint normals weighted by their
         // multipliers must vanish.
@@ -258,6 +285,47 @@ public static class KktConditions
 
         return new KktResidual<T>(
             stationarity, primalFeasibility, dualFeasibility, complementarySlackness, worst);
+    }
+
+    private static void ValidateConstraintBlock<T>(
+        Matrix<T>? matrix,
+        Vector<T>? bounds,
+        Vector<T>? multipliers,
+        int variableCount,
+        string matrixName,
+        string boundsName,
+        string multipliersName)
+    {
+        bool anySupplied = matrix is not null || bounds is not null || multipliers is not null;
+        bool allSupplied = matrix is not null && bounds is not null && multipliers is not null;
+        if (anySupplied && !allSupplied)
+        {
+            throw new ArgumentException(
+                $"Constraint block must supply {matrixName}, {boundsName}, and {multipliersName} together.");
+        }
+        if (!allSupplied)
+        {
+            return;
+        }
+
+        if (matrix!.Columns != variableCount)
+        {
+            throw new ArgumentException(
+                $"{matrixName} must have {variableCount} columns, but had {matrix.Columns}.",
+                matrixName);
+        }
+        if (bounds!.Length != matrix.Rows)
+        {
+            throw new ArgumentException(
+                $"{boundsName} length ({bounds.Length}) must match {matrixName} rows ({matrix.Rows}).",
+                boundsName);
+        }
+        if (multipliers!.Length != matrix.Rows)
+        {
+            throw new ArgumentException(
+                $"{multipliersName} length ({multipliers.Length}) must match {matrixName} rows ({matrix.Rows}).",
+                multipliersName);
+        }
     }
 
     private static T RowDot<T>(

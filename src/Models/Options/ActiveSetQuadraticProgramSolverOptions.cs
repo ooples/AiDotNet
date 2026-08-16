@@ -3,8 +3,26 @@ namespace AiDotNet.Models.Options;
 /// <summary>
 /// Configuration for the active-set quadratic-programming solver.
 /// </summary>
-public class ActiveSetQuadraticProgramSolverOptions
+/// <remarks>
+/// <para><b>Reference:</b> Nocedal and Wright, <i>Numerical Optimization</i>, 2nd ed.,
+/// Algorithm 16.3.</para>
+/// <para><b>For Beginners:</b> These settings control a solver that keeps track of which limits
+/// currently touch the answer, then solves the smaller problem formed by those active limits.</para>
+/// </remarks>
+public class ActiveSetQuadraticProgramSolverOptions : ModelOptions
 {
+    public ActiveSetQuadraticProgramSolverOptions() { }
+
+    public ActiveSetQuadraticProgramSolverOptions(ActiveSetQuadraticProgramSolverOptions other)
+    {
+        if (other is null) throw new ArgumentNullException(nameof(other));
+        Seed = other.Seed;
+        MaxIterations = other.MaxIterations;
+        Tolerance = other.Tolerance;
+        SingularityRegularization = other.SingularityRegularization;
+        FeasibilityOptions = new SimplexSolverOptions(other.FeasibilityOptions);
+    }
+
     /// <summary>
     /// Gets or sets the maximum number of active-set iterations.
     /// </summary>
@@ -31,6 +49,8 @@ public class ActiveSetQuadraticProgramSolverOptions
     /// equality-constrained subproblem), when a constraint counts as active, and when a Lagrange
     /// multiplier counts as negative.
     /// </para>
+    /// <para><b>For Beginners:</b> Values smaller than this are treated as floating-point noise
+    /// rather than meaningful violations.</para>
     /// </remarks>
     public double Tolerance { get; set; } = 1e-9;
 
@@ -56,12 +76,15 @@ public class ActiveSetQuadraticProgramSolverOptions
     /// <summary>
     /// Gets or sets the options used for the linear program that finds an initial feasible point.
     /// </summary>
+    /// <value>A separately owned copy of the feasibility solver settings.</value>
     /// <remarks>
     /// <para>
     /// An active-set method has to start from a point satisfying every constraint. Finding one is
     /// itself a linear-programming feasibility problem, solved with the simplex method before the
     /// quadratic phase begins.
     /// </para>
+    /// <para><b>For Beginners:</b> Before optimizing, the solver first needs to find any point that
+    /// obeys all limits. These settings control that preparatory search.</para>
     /// </remarks>
     public SimplexSolverOptions FeasibilityOptions { get; set; } = new();
 }

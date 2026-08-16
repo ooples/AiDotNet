@@ -39,6 +39,16 @@ public class LinearAssignmentSolverIntegrationTests
     /// </remarks>
     private static double BruteForceOptimum(double[,] cost)
     {
+        foreach (double value in cost)
+        {
+            if (value < 0)
+            {
+                throw new ArgumentException(
+                    "The branch-and-bound brute-force oracle requires non-negative costs.",
+                    nameof(cost));
+            }
+        }
+
         int rows = cost.GetLength(0);
         int columns = cost.GetLength(1);
         int required = Math.Min(rows, columns);

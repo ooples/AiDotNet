@@ -944,6 +944,9 @@ public class NeuralNetworkRegression<T> : NonLinearRegressionBase<T>
             }
         }
 
+        writer.Write(NumOps.ToDouble(_targetMean));
+        writer.Write(NumOps.ToDouble(_targetScale));
+
         // OLS state
         writer.Write(_useOLS);
         if (_useOLS && _olsCoefficients is not null)
@@ -966,14 +969,7 @@ public class NeuralNetworkRegression<T> : NonLinearRegressionBase<T>
         // to the observed feature count) — while Deserialize then reassigned LayerSizes on that
         // shared instance. The result was a clone whose weight shapes disagreed with its layer
         // sizes, which surfaced as a dimension mismatch on the first forward pass.
-        var clonedOptions = new NeuralNetworkRegressionOptions<T, Matrix<T>, Vector<T>>
-        {
-            LayerSizes = [.. _options.LayerSizes],
-            Epochs = _options.Epochs,
-            BatchSize = _options.BatchSize,
-            LearningRate = _options.LearningRate,
-            LossFunction = _options.LossFunction,
-        };
+        var clonedOptions = CopyOptions(_options);
 
         var clone = new NeuralNetworkRegression<T>(clonedOptions, Regularization);
 
@@ -1058,7 +1054,8 @@ public class NeuralNetworkRegression<T> : NonLinearRegressionBase<T>
             _biases.Add(new Vector<T>(biasData));
         }
 
-        InitializeNetwork();
+        _targetMean = NumOps.FromDouble(reader.ReadDouble());
+        _targetScale = NumOps.FromDouble(reader.ReadDouble());
 
         // OLS state
         _useOLS = reader.ReadBoolean();
@@ -1102,7 +1099,7 @@ public class NeuralNetworkRegression<T> : NonLinearRegressionBase<T>
     /// </remarks>
     protected override IFullModel<T, Matrix<T>, Vector<T>> CreateInstance()
     {
-        var newModel = new NeuralNetworkRegression<T>(_options, Regularization);
+        var newModel = new NeuralNetworkRegression<T>(CopyOptions(_options), Regularization);
 
         // Clear the auto-initialized weights and biases
         newModel._weights.Clear();
@@ -1121,5 +1118,30 @@ public class NeuralNetworkRegression<T> : NonLinearRegressionBase<T>
         }
 
         return newModel;
+    }
+
+    private static NeuralNetworkRegressionOptions<T, Matrix<T>, Vector<T>> CopyOptions(
+        NeuralNetworkRegressionOptions<T, Matrix<T>, Vector<T>> source)
+    {
+        return new NeuralNetworkRegressionOptions<T, Matrix<T>, Vector<T>>
+        {
+            Seed = source.Seed,
+            MaxIterations = source.MaxIterations,
+            Tolerance = source.Tolerance,
+            KernelType = source.KernelType,
+            Gamma = source.Gamma,
+            Coef0 = source.Coef0,
+            PolynomialDegree = source.PolynomialDegree,
+            LayerSizes = [.. source.LayerSizes],
+            Epochs = source.Epochs,
+            BatchSize = source.BatchSize,
+            LearningRate = source.LearningRate,
+            HiddenActivationFunction = source.HiddenActivationFunction,
+            OutputActivationFunction = source.OutputActivationFunction,
+            HiddenVectorActivation = source.HiddenVectorActivation,
+            OutputVectorActivation = source.OutputVectorActivation,
+            LossFunction = source.LossFunction,
+            Optimizer = source.Optimizer,
+        };
     }
 }

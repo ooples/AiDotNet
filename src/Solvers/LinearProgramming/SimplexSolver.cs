@@ -265,7 +265,17 @@ public sealed class SimplexSolver<T> : ILinearProgramSolver<T>
                     return NoPoint(LinearProgramStatus.Infeasible);
                 }
 
-                DriveArtificialsOutOfBasis();
+                if (!DriveArtificialsOutOfBasis())
+                {
+                    var limitedSolution = ExtractSolution();
+                    T limitedObjective = NumOps.Add(
+                        ComputeObjectiveValue(_phaseTwoObjective), _originalObjectiveOffset);
+                    return new LinearProgramSolution<T>(
+                        LinearProgramStatus.IterationLimit,
+                        limitedSolution,
+                        limitedObjective,
+                        _iterations);
+                }
             }
 
             _phaseOneActive = false;
@@ -279,7 +289,12 @@ public sealed class SimplexSolver<T> : ILinearProgramSolver<T>
 
             var solution = ExtractSolution();
             T objectiveValue = NumOps.Add(optimum, _originalObjectiveOffset);
-            var (inequalityDuals, equalityDuals) = ExtractDualValues(_phaseTwoObjective);
+            Vector<T>? inequalityDuals = null;
+            Vector<T>? equalityDuals = null;
+            if (status == LinearProgramStatus.Optimal)
+            {
+                (inequalityDuals, equalityDuals) = ExtractDualValues(_phaseTwoObjective);
+            }
 
             return new LinearProgramSolution<T>(
                 status, solution, objectiveValue, _iterations, inequalityDuals, equalityDuals);
@@ -467,20 +482,23 @@ public sealed class SimplexSolver<T> : ILinearProgramSolver<T>
         /// Pivots any artificial variable still sitting in the basis at value zero out of it, so
         /// phase two never has to consider artificial columns.
         /// </summary>
-        private void DriveArtificialsOutOfBasis()
+        private bool DriveArtificialsOutOfBasis()
         {
             for (int r = 0; r < _constraintCount; r++)
             {
                 if (!_artificialColumns.Contains(_basis[r])) continue;
 
                 int replacement = -1;
+                T largestMagnitude = NumOps.Zero;
                 for (int c = 0; c < _columnCount; c++)
                 {
                     if (_artificialColumns.Contains(c)) continue;
-                    if (NumOps.GreaterThan(NumOps.Abs(_tableau[r, c]), _tolerance))
+                    T magnitude = NumOps.Abs(_tableau[r, c]);
+                    if (NumOps.GreaterThan(magnitude, _tolerance) &&
+                        (replacement < 0 || NumOps.GreaterThan(magnitude, largestMagnitude)))
                     {
                         replacement = c;
-                        break;
+                        largestMagnitude = magnitude;
                     }
                 }
 
@@ -493,10 +511,14 @@ public sealed class SimplexSolver<T> : ILinearProgramSolver<T>
                     continue;
                 }
 
+                if (_iterations >= _options.MaxIterations) return false;
+
                 Pivot(r, replacement);
                 _basis[r] = replacement;
                 _iterations++;
             }
+
+            return true;
         }
 
         private Vector<T> ExtractSolution()

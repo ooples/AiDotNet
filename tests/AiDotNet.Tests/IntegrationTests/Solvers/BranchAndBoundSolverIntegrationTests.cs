@@ -180,15 +180,17 @@ public class BranchAndBoundSolverIntegrationTests
 
     /// <summary>
     /// When the root relaxation is already integral, a single node is a complete search and
-    /// claiming optimality is correct — the knapsack's ratio ordering happens to give exactly this.
+    /// claiming optimality is correct. This instance has a unique integral LP optimum, so the test
+    /// is independent of simplex pivot tie-breaking.
     /// </summary>
     [Fact]
-    public void Solve_RootRelaxationAlreadyIntegral_IsOptimalInOneNode()
+    public async Task Solve_RootRelaxationAlreadyIntegral_IsOptimalInOneNode()
     {
+        await Task.Yield();
         var relaxation = new LinearProgram<double>(
             objective: V(-10, -10, -12, -18),
-            inequalityMatrix: M(new[,] { { 2.0, 4.0, 6.0, 9.0 } }),
-            inequalityBounds: V(15),
+            inequalityMatrix: M(new[,] { { 2.0, 4.0, 6.0, 8.0 } }),
+            inequalityBounds: V(14),
             lowerBounds: V(0, 0, 0, 0),
             upperBounds: V(1, 1, 1, 1));
 

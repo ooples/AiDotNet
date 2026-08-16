@@ -21,7 +21,7 @@ public class SequentialMinimalOptimizationIntegrationTests
     private static Vector<double> V(params double[] values) => Vector<double>.FromArray(values);
 
     private static SequentialMinimalOptimizationSolver<double> Solver() =>
-        new(new SequentialMinimalOptimizationOptions(), new Random(12345));
+        new(new SequentialMinimalOptimizationOptions());
 
     /// <summary>
     /// Builds a linear-kernel evaluator over a small dataset.
@@ -176,11 +176,12 @@ public class SequentialMinimalOptimizationIntegrationTests
     }
 
     /// <summary>
-    /// Determinism: a seeded solver must give the same answer twice, so training is reproducible.
+    /// Maximal-violating-pair selection is deterministic without a random source.
     /// </summary>
     [Fact]
-    public void Solve_WithSeededRandom_IsReproducible()
+    public async Task Solve_RepeatedRuns_AreDeterministic()
     {
+        await Task.Yield();
         var points = new[]
         {
             new[] { 0.0, 1.0 }, new[] { 1.0, 0.0 }, new[] { 2.0, 2.5 }, new[] { 3.0, 2.0 },
@@ -190,11 +191,11 @@ public class SequentialMinimalOptimizationIntegrationTests
         var upperBounds = V(1, 1, 1, 1);
 
         var first = new SequentialMinimalOptimizationSolver<double>(
-            new SequentialMinimalOptimizationOptions(), new Random(7))
+            new SequentialMinimalOptimizationOptions())
             .Solve(LinearKernel(points), labels, linear, upperBounds);
 
         var second = new SequentialMinimalOptimizationSolver<double>(
-            new SequentialMinimalOptimizationOptions(), new Random(7))
+            new SequentialMinimalOptimizationOptions())
             .Solve(LinearKernel(points), labels, linear, upperBounds);
 
         for (int i = 0; i < first.Alphas.Length; i++)

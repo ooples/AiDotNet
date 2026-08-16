@@ -8,9 +8,28 @@ namespace AiDotNet.Models.Options;
 /// Every value has a documented default drawn from standard practice, and every one is settable,
 /// so no behaviour of the solver is hard-coded out of the caller's reach.
 /// </para>
+/// <para><b>Reference:</b> Dantzig, <i>Linear Programming and Extensions</i> (1963), with Bland's
+/// anti-cycling rule (1977).</para>
+/// <para><b>For Beginners:</b> These settings control how accurately and how long the simplex
+/// solver searches the corners of a linear problem before returning.</para>
 /// </remarks>
-public class SimplexSolverOptions
+public class SimplexSolverOptions : ModelOptions
 {
+    private int _maxIterations = 10000;
+    private double _tolerance = 1e-9;
+    private int _degeneratePivotsBeforeBlandsRule = 20;
+
+    public SimplexSolverOptions() { }
+
+    public SimplexSolverOptions(SimplexSolverOptions other)
+    {
+        if (other is null) throw new ArgumentNullException(nameof(other));
+        Seed = other.Seed;
+        MaxIterations = other.MaxIterations;
+        Tolerance = other.Tolerance;
+        DegeneratePivotsBeforeBlandsRule = other.DegeneratePivotsBeforeBlandsRule;
+    }
+
     /// <summary>
     /// Gets or sets the maximum number of simplex pivots across both phases.
     /// </summary>
@@ -27,7 +46,13 @@ public class SimplexSolverOptions
     /// than any real problem should need, it gives up and says so instead of running forever.
     /// </para>
     /// </remarks>
-    public int MaxIterations { get; set; } = 10000;
+    public int MaxIterations
+    {
+        get => _maxIterations;
+        set => _maxIterations = value > 0
+            ? value
+            : throw new ArgumentOutOfRangeException(nameof(value), value, "MaxIterations must be positive.");
+    }
 
     /// <summary>
     /// Gets or sets the magnitude below which a tableau entry is treated as zero.
@@ -45,7 +70,13 @@ public class SimplexSolverOptions
     /// than as a meaningful quantity.
     /// </para>
     /// </remarks>
-    public double Tolerance { get; set; } = 1e-9;
+    public double Tolerance
+    {
+        get => _tolerance;
+        set => _tolerance = value >= 0 && !double.IsNaN(value) && !double.IsInfinity(value)
+            ? value
+            : throw new ArgumentOutOfRangeException(nameof(value), value, "Tolerance must be finite and non-negative.");
+    }
 
     /// <summary>
     /// Gets or sets the number of consecutive degenerate pivots tolerated before the solver
@@ -67,5 +98,12 @@ public class SimplexSolverOptions
     /// to a slower rule that mathematically cannot loop.
     /// </para>
     /// </remarks>
-    public int DegeneratePivotsBeforeBlandsRule { get; set; } = 20;
+    public int DegeneratePivotsBeforeBlandsRule
+    {
+        get => _degeneratePivotsBeforeBlandsRule;
+        set => _degeneratePivotsBeforeBlandsRule = value > 0
+            ? value
+            : throw new ArgumentOutOfRangeException(
+                nameof(value), value, "DegeneratePivotsBeforeBlandsRule must be positive.");
+    }
 }

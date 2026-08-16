@@ -33,6 +33,9 @@ namespace AiDotNet.Models.Options;
 /// </remarks>
 public class NelderMeadOptimizerOptions<T, TInput, TOutput> : OptimizationAlgorithmOptions<T, TInput, TOutput>
 {
+    private double _initialSimplexStep = 0.05;
+    private double _zeroCoordinateSimplexStep = 0.00025;
+
     /// <summary>
     /// Gets or sets the relative offset used to place the initial simplex vertices around a single
     /// starting point.
@@ -60,7 +63,14 @@ public class NelderMeadOptimizerOptions<T, TInput, TOutput> : OptimizationAlgori
     /// search to stay close to your guess.
     /// </para>
     /// </remarks>
-    public double InitialSimplexStep { get; set; } = 0.05;
+    public double InitialSimplexStep
+    {
+        get => _initialSimplexStep;
+        set => _initialSimplexStep = value > 0 && !double.IsNaN(value) && !double.IsInfinity(value)
+            ? value
+            : throw new ArgumentOutOfRangeException(
+                nameof(value), value, "InitialSimplexStep must be positive and finite.");
+    }
 
     /// <summary>
     /// Gets or sets the absolute offset used for initial simplex vertices whose coordinate is zero.
@@ -79,7 +89,14 @@ public class NelderMeadOptimizerOptions<T, TInput, TOutput> : OptimizationAlgori
     /// coordinates.
     /// </para>
     /// </remarks>
-    public double ZeroCoordinateSimplexStep { get; set; } = 0.00025;
+    public double ZeroCoordinateSimplexStep
+    {
+        get => _zeroCoordinateSimplexStep;
+        set => _zeroCoordinateSimplexStep = value > 0 && !double.IsNaN(value) && !double.IsInfinity(value)
+            ? value
+            : throw new ArgumentOutOfRangeException(
+                nameof(value), value, "ZeroCoordinateSimplexStep must be positive and finite.");
+    }
 
     /// <summary>
     /// Gets or sets the magnitude below which a starting coordinate is treated as zero when
