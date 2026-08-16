@@ -35,7 +35,14 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Other)]
 [LayerTask(LayerTask.TemporalProcessing)]
 [LayerProperty(IsTrainable = true, SupportsBackpropagation = false, IsStateful = true, TestInputShape = "1, 4", TestConstructorArgs = "4")]
-public partial class SynapticPlasticityLayer<T> : LayerBase<T>
+// Modulates synaptic weights and returns a same-length activation vector.
+// Rank comes from this layer's OWN [LayerProperty(TestInputShape = "1, 4")] - rank 2 [Batch, Features] -
+// not from the discovery sweep, which reported rank 1 only because its [12] fallback probe happened to
+// forward. Where a layer already states its shape, that statement wins over a probe.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
+[AutoParameters]
+public partial class SynapticPlasticityLayer<T> : LayerBase<T>, IShapeContract
 {
     /// <summary>
     /// The input tensor from the last forward pass.
@@ -56,7 +63,7 @@ public partial class SynapticPlasticityLayer<T> : LayerBase<T>
     /// were detected in an image.
     /// </para>
     /// </remarks>
-    private Tensor<T> _lastInput;
+    [Scratch] private Tensor<T> _lastInput;
 
     /// <summary>
     /// The output tensor from the last forward pass.
@@ -77,7 +84,7 @@ public partial class SynapticPlasticityLayer<T> : LayerBase<T>
     /// neurons activated in response to an image.
     /// </para>
     /// </remarks>
-    private Tensor<T> _lastOutput;
+    [Scratch] private Tensor<T> _lastOutput;
 
     /// <summary>
     /// The weight matrix representing connection strengths between neurons.
@@ -319,30 +326,6 @@ public partial class SynapticPlasticityLayer<T> : LayerBase<T>
     /// </remarks>
     private readonly double _traceDecay;
 
-    /// <summary>
-    /// Gets a value indicating whether this layer supports training.
-    /// </summary>
-    /// <value>
-    /// <c>true</c> for this layer, as it implements synaptic plasticity rules for learning.
-    /// </value>
-    /// <remarks>
-    /// <para>
-    /// This property indicates whether the synaptic plasticity layer can be trained. Since this layer implements
-    /// biologically-inspired learning rules, it supports training, although the mechanism differs from the
-    /// standard backpropagation approach.
-    /// </para>
-    /// <para><b>For Beginners:</b> This property tells you if the layer can learn from data.
-    /// 
-    /// A value of true means:
-    /// - The layer has internal values (synaptic weights) that can be adjusted during training
-    /// - It will improve its performance as it sees more data
-    /// - It participates in the learning process
-    /// 
-    /// For this layer, the value is always true because its whole purpose is to implement
-    /// biologically-inspired learning rules that modify connection strengths based on experience.
-    /// </para>
-    /// </remarks>
-    public override long ParameterCount => _weights.Length;
     public override bool SupportsTraining => true;
 
     private Tensor<T>? _lastInputGpu;
@@ -597,7 +580,7 @@ public partial class SynapticPlasticityLayer<T> : LayerBase<T>
     ///   but their connections change strength afterward)
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // Flatten to 1D tensor if needed
         var inputFlat = input.Shape.Length == 1
@@ -613,55 +596,6 @@ public partial class SynapticPlasticityLayer<T> : LayerBase<T>
 
 
 
-
-    /// <summary>
-    /// Gets all trainable parameters of the layer as a single vector.
-    /// </summary>
-    /// <returns>A vector containing the weight matrix parameters.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method returns the weight matrix as a flattened vector. Although this layer primarily
-    /// uses STDP learning rules, exposing parameters allows for saving/loading state.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method returns the layer's weights for saving or inspection.
-    ///
-    /// While the layer uses spike-timing-dependent plasticity rules for learning,
-    /// it still has parameters (the weight matrix) that can be:
-    /// - Saved to disk
-    /// - Loaded from a previously trained model
-    /// - Inspected for analysis
-    /// </para>
-    /// </remarks>
-    public override Vector<T> GetParameters()
-    {
-        // Return the weight tensor as a flattened vector
-        return new Vector<T>(_weights.ToArray());
-    }
-
-    /// <summary>
-    /// Sets the trainable parameters of the layer from a single vector.
-    /// </summary>
-    /// <param name="parameters">A vector containing all parameters to set.</param>
-    /// <exception cref="ArgumentException">Thrown when the parameters vector has incorrect length.</exception>
-    /// <remarks>
-    /// <para>
-    /// This method sets the weight matrix from a flattened vector. This is useful for loading
-    /// saved model weights or for implementing optimization algorithms.
-    /// </para>
-    /// </remarks>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int size = GetInputShape()[0];
-        int expectedParams = size * size;
-
-        if (parameters.Length != expectedParams)
-        {
-            throw new ArgumentException($"Expected {expectedParams} parameters, but got {parameters.Length}");
-        }
-
-        // Restore weights without hot-path conversions
-        _weights = new Tensor<T>(new[] { size, size }, parameters);
-    }
 
     /// <summary>
     /// Resets the internal state of the layer.

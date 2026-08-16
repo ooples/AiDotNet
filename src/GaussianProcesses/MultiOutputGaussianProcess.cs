@@ -46,26 +46,31 @@ public class MultiOutputGaussianProcess<T> : GaussianProcessBase<T>
     /// <summary>
     /// The input training data matrix.
     /// </summary>
+    [Buffer]
     private Matrix<T> _X;
 
     /// <summary>
     /// The output training data matrix (multiple outputs).
     /// </summary>
+    [Buffer]
     private Matrix<T> _Y;
 
     /// <summary>
     /// The kernel matrix calculated from the training data.
     /// </summary>
+    [Buffer]
     private Matrix<T> _K;
 
     /// <summary>
     /// The Cholesky decomposition of the kernel matrix, used for efficient calculations.
     /// </summary>
+    [Buffer]
     private Matrix<T> _L;
 
     /// <summary>
     /// The alpha matrix used for making predictions.
     /// </summary>
+    [Buffer]
     private Matrix<T> _alpha;
 
     /// <summary>

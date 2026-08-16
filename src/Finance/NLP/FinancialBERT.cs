@@ -48,19 +48,8 @@ namespace AiDotNet.Finance.NLP;
 [ModelComplexity(ModelComplexity.High)]
 [ResearchPaper("FinBERT: Financial Sentiment Analysis with Pre-trained Language Models", "https://arxiv.org/abs/1908.10063")]
     [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-public class FinancialBERT<T> : FinancialNLPModelBase<T>
+public partial class FinancialBERT<T> : FinancialNLPModelBase<T>
 {
-    #region Native Mode Fields
-
-    private ILayer<T>? _wordEmbedding;
-    private ILayer<T>? _positionEmbedding;
-    private ILayer<T>? _typeEmbedding;
-    private readonly List<ILayer<T>> _transformerLayers = [];
-    private ILayer<T>? _pooler;
-    private ILayer<T>? _taskHead;
-
-    #endregion
-
     #region Shared Fields
 
     private readonly ModelOptions.FinancialBERTOptions<T> _options;
@@ -163,39 +152,9 @@ public class FinancialBERT<T> : FinancialNLPModelBase<T>
         {
             Layers.AddRange(LayerHelper<T>.CreateDefaultFinancialBERTLayers(
                 Architecture, MaxSequenceLength, VocabularySize, HiddenDimension,
-                12, 12, _dropout));
+                _options.NumAttentionHeads, _options.NumLayers, _dropout));
 
-            ExtractLayerReferences();
         }
-    }
-
-    /// <summary>
-    /// Executes ExtractLayerReferences for the FinancialBERT.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the FinancialBERT model, ExtractLayerReferences performs a supporting step in the workflow. It keeps the FinancialBERT architecture pipeline consistent.
-    /// </para>
-    /// </remarks>
-    private void ExtractLayerReferences()
-    {
-        int idx = 0;
-        if (Layers.Count > idx) _wordEmbedding = Layers[idx++];
-        if (Layers.Count > idx) _positionEmbedding = Layers[idx++];
-        if (Layers.Count > idx) _typeEmbedding = Layers[idx++];
-        idx += 2; // skip norm/dropout
-
-        // Each transformer layer is now a single composite TransformerEncoderBlock (residual
-        // attention + residual FFN internally), so one Layers entry per block — not the former
-        // six flat sublayers.
-        _transformerLayers.Clear();
-        for (int i = 0; i < 12; i++)
-        {
-            if (idx < Layers.Count) _transformerLayers.Add(Layers[idx++]);
-        }
-
-        if (idx < Layers.Count) _pooler = Layers[idx++];
-        if (idx < Layers.Count) _taskHead = Layers[idx];
     }
 
     #endregion
@@ -217,25 +176,8 @@ public class FinancialBERT<T> : FinancialNLPModelBase<T>
         SetTrainingMode(false);
     }
 
-    /// <summary>
-    /// Executes UpdateParameters for the FinancialBERT.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the FinancialBERT model, UpdateParameters updates internal parameters or state. This keeps the FinancialBERT architecture aligned with the latest values.
-    /// </para>
-    /// </remarks>
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        int offset = 0;
-        foreach (var layer in Layers)
-        {
-            var layerParams = layer.GetParameters();
-            layer.SetParameters(parameters.Slice(offset, layerParams.Length));
-            offset += layerParams.Length;
-        }
-    }
-
+    // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
+    // exactly the same enumeration, so this said nothing the base does not already say.
     /// <summary>
     /// Executes CreateNewInstance for the FinancialBERT.
     /// </summary>
@@ -246,13 +188,8 @@ public class FinancialBERT<T> : FinancialNLPModelBase<T>
     /// </remarks>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
-        var options = new ModelOptions.FinancialBERTOptions<T>
-        {
-            MaxSequenceLength = MaxSequenceLength,
-            VocabularySize = VocabularySize,
-            HiddenDimension = HiddenDimension
-        };
-        return new FinancialBERT<T>(Architecture, options, _optimizer, LossFunction);
+        return new FinancialBERT<T>(
+            Architecture, new ModelOptions.FinancialBERTOptions<T>(_options), _optimizer, LossFunction);
     }
 
     /// <summary>

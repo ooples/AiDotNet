@@ -44,10 +44,15 @@ namespace AiDotNet.AnomalyDetection.Statistical;
 public class DixonQTestDetector<T> : AnomalyDetectorBase<T>
 {
     private readonly double _alpha;
+    [Buffer]
     private Vector<T>? _minValues;
+    [Buffer]
     private Vector<T>? _maxValues;
+    [Buffer]
     private Vector<T>? _ranges;
+    [Buffer]
     private Vector<T>? _secondMin;
+    [Buffer]
     private Vector<T>? _secondMax;
     private int _nFeatures;
     private int _nSamples;

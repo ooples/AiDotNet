@@ -63,7 +63,7 @@ namespace AiDotNet.VisionLanguage.Encoders;
     Year = 2022,
     Authors = "Li et al."
 )]
-public class FLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageModel<T>
+public partial class FLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageModel<T>
 {
     private readonly FLIPOptions _options;
 
@@ -119,7 +119,13 @@ public class FLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageMod
         _options = options ?? new FLIPOptions();
         SyncImageSizeWithArchitecture();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate,
+                WeightDecay = _options.WeightDecay,
+            });
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.VisionEmbeddingDim;
@@ -234,7 +240,7 @@ public class FLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageMod
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(PreprocessImage(input), expected);
+            TrainWithTape(PreprocessImage(input), expected, _optimizer);
         }
         finally
         {
@@ -242,9 +248,8 @@ public class FLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageMod
         }
     }
 
-    /// <inheritdoc />
-    protected override IEnumerable<LayerBase<T>?> GetExtraTrainableLayers() =>
-        EnumerateTextEncoderTrainableLayers();
+    // This forwarded to a helper the base now calls from its own
+    // GetExtraTrainableLayers, so the override restated it. Removed under AIDN082.
 
     private void SyncImageSizeWithArchitecture()
     {
@@ -254,19 +259,11 @@ public class FLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageMod
             _options.ImageSize = h;
     }
 
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        if (!_useNativeMode)
-            throw new NotSupportedException("Cannot update parameters in ONNX mode.");
-        int idx = 0;
-        foreach (var l in Layers)
-        {
-            int c = (int)l.ParameterCount;
-            l.UpdateParameters(parameters.Slice(idx, c));
-            idx += c;
-        }
-    }
-
+    /// <inheritdoc />
+    /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
+    /// write on every parameter surface, so the guard is stated once here instead of being
+    /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
+    protected override bool SupportsParameterMutation => _useNativeMode;
     protected override Tensor<T> PreprocessImage(Tensor<T> image) =>
         NormalizeImage(image, _options.ImageMean, _options.ImageStd);
 
@@ -328,8 +325,8 @@ public class FLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageMod
             && _options.ImageEncoderModelPath is { } mp
             && !string.IsNullOrEmpty(mp)
         )
-            return new FLIP<T>(Architecture, mp, _options);
-        return new FLIP<T>(Architecture, _options);
+            return new FLIP<T>(Architecture, mp, new FLIPOptions(_options));
+        return new FLIP<T>(Architecture, new FLIPOptions(_options));
     }
 
     private Tensor<T> TokenizeText(string text)

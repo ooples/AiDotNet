@@ -97,8 +97,16 @@ namespace AiDotNet.Diffusion.ThreeD;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Shap-E: Generating Conditional 3D Implicit Functions", "https://arxiv.org/abs/2305.02463", Year = 2023, Authors = "Jun & Nichol")]
-public class ShapEModel<T> : ThreeDDiffusionModelBase<T>
+public partial class ShapEModel<T> : ThreeDDiffusionModelBase<T>
 {
+    /// <inheritdoc />
+    /// <remarks>Registration order is serialization order, and matches the
+    /// concatenation the previous hand-written GetParameters performed.</remarks>
+    protected override void RegisterComponents()
+    {
+        RegisterParameterComponent(_latentPredictor);
+    }
+
     #region Constants
 
     /// <summary>
@@ -860,28 +868,11 @@ public class ShapEModel<T> : ThreeDDiffusionModelBase<T>
 
     #region IParameterizable Implementation
 
-    /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        return _latentPredictor.GetParameters();
-    }
+
+
+
 
     /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (parameters.Length != _latentPredictor.ParameterCount)
-        {
-            throw new ArgumentException(
-                $"Expected {_latentPredictor.ParameterCount} parameters, got {parameters.Length}.",
-                nameof(parameters));
-        }
-
-        _latentPredictor.SetParameters(parameters);
-    }
-
-    /// <inheritdoc />
-    public override long ParameterCount => _latentPredictor.ParameterCount;
-
     #endregion
 
     #region ICloneable Implementation

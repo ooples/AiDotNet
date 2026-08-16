@@ -56,7 +56,7 @@ namespace AiDotNet.Document.GraphBased;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("PICK: Processing Key Information Extraction from Documents using Improved Graph Learning-Convolutional Networks", "https://doi.org/10.48550/arXiv.2004.07464", Year = 2020, Authors = "Wenwen Yu, Ning Lu, Xianbiao Qi, Ping Gong, Rong Xiao")]
-public class PICK<T> : DocumentNeuralNetworkBase<T>, IFormUnderstanding<T>
+public partial class PICK<T> : DocumentNeuralNetworkBase<T>, IFormUnderstanding<T>
 {
     private readonly PICKOptions _options;
 
@@ -68,7 +68,7 @@ public class PICK<T> : DocumentNeuralNetworkBase<T>, IFormUnderstanding<T>
     private readonly bool _useNativeMode;
     private readonly InferenceSession? _onnxSession;
     private readonly ITokenizer _tokenizer;
-    private readonly IOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private readonly int _hiddenDim;
     private readonly int _numGcnLayers;
     private readonly int _numHeads;
@@ -120,7 +120,7 @@ public class PICK<T> : DocumentNeuralNetworkBase<T>, IFormUnderstanding<T>
         int numGcnLayers = 2,
         int numHeads = 8,
         int vocabSize = 30522,
-        IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         PICKOptions? options = null)
         : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
@@ -175,7 +175,7 @@ public class PICK<T> : DocumentNeuralNetworkBase<T>, IFormUnderstanding<T>
         int numGcnLayers = 2,
         int numHeads = 8,
         int vocabSize = 30522,
-        IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         PICKOptions? options = null)
         : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
@@ -586,7 +586,7 @@ public class PICK<T> : DocumentNeuralNetworkBase<T>, IFormUnderstanding<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expectedOutput, _optimizer as IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>);
+            TrainWithTape(input, expectedOutput, _optimizer);
         }
         finally
         {
@@ -594,20 +594,18 @@ public class PICK<T> : DocumentNeuralNetworkBase<T>, IFormUnderstanding<T>
         }
     }
 
-    /// <inheritdoc/>
-    public override void UpdateParameters(Vector<T> gradients)
-    {
-        if (!_useNativeMode)
-            throw new NotSupportedException("Parameter updates not supported in ONNX mode.");
+    // UpdateParameters applied a GRADIENT STEP, but its one-argument form is the value setter and every caller passes values -- the override corrupted the model. Removed under AIDN082.
 
-        var currentParams = GetParameters();
-        T lr = NumOps.FromDouble(0.0001);
-        
-        currentParams = Engine.Subtract(currentParams, Engine.Multiply(gradients, lr));
-        SetParameters(currentParams);
-    }
-
-
+    /// <summary>
+    /// Parameters cannot be written while the model is backed by a loaded ONNX graph: the weights
+    /// belong to that graph, not to this instance.
+    /// </summary>
+    /// <remarks>
+    /// Replaces a hand-written throw that used to sit inside UpdateParameters. The base checks this
+    /// on every mutating entry point rather than the one member the throw happened to guard, and
+    /// reading -- ParameterCount and GetParameters -- stays available either way.
+    /// </remarks>
+    protected override bool SupportsParameterMutation => _useNativeMode;
     #endregion
 
     #region Disposal

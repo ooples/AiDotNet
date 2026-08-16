@@ -69,6 +69,14 @@ public class DiBSAlgorithm<T> : BayesianCausalBase<T>
         int d = data.Columns;
         if (n < 3 || d < 2) return new Matrix<T>(d, d);
 
+        // Standardize each column to zero mean / unit variance BEFORE scoring. Causal structure is a
+        // property of the joint DISTRIBUTION, not the measurement units, so the discovered graph must
+        // be invariant to per-variable rescaling (DiscoverStructure_IsInvariantToDataScaling). Scoring
+        // raw covariances made the data term scale with the variables' magnitudes, so a 10x rescale
+        // changed the gradient balance and the recovered edges. Standardizing turns the covariance
+        // used below into the CORRELATION matrix (diagonal == 1), which is scale-invariant.
+        data = StandardizeColumns(data);
+
         var cov = ComputeCovarianceMatrix(data);
         var rng = Tensors.Helpers.RandomHelper.CreateSeededRandom(Seed);
         T lr = NumOps.FromDouble(_learningRate);
@@ -94,7 +102,7 @@ public class DiBSAlgorithm<T> : BayesianCausalBase<T>
             // Compute gradients for each particle
             var gradients = new Matrix<T>[_numParticles];
             for (int k = 0; k < _numParticles; k++)
-                gradients[k] = ComputeLogPosteriorGradient(particles[k], cov, d, tauT);
+                gradients[k] = ComputeLogPosteriorGradient(particles[k], cov, d, tauT, n);
 
             // Compute pairwise kernel values and kernel gradients (SVGD)
             var bandwidth = ComputeMedianBandwidth(particles, d);
@@ -176,6 +184,12 @@ public class DiBSAlgorithm<T> : BayesianCausalBase<T>
                     T varI = cov[i, i];
                     if (NumOps.GreaterThan(varI, NumOps.FromDouble(1e-10)))
                     {
+                        // Edge weights are computed from the STANDARDIZED covariance (correlation)
+                        // on purpose: DiBS returns a causal ADJACENCY matrix whose edge strengths
+                        // must be scale-invariant (a property of the joint distribution, not the
+                        // measurement units) — required by DiscoverStructure_IsInvariantToDataScaling
+                        // and the relative-magnitude invariants (IndependentVariablesHaveWeakEdges,
+                        // etc.). This is NOT an OLS regression coefficient in original units.
                         T weight = NumOps.Divide(cov[i, j], varI);
                         if (NumOps.GreaterThan(NumOps.Abs(weight), weightThreshold))
                             result[i, j] = weight;
@@ -186,10 +200,18 @@ public class DiBSAlgorithm<T> : BayesianCausalBase<T>
         return result;
     }
 
-    private Matrix<T> ComputeLogPosteriorGradient(Matrix<T> Z, Matrix<T> cov, int d, T tau)
+    private Matrix<T> ComputeLogPosteriorGradient(Matrix<T> Z, Matrix<T> cov, int d, T tau, int n)
     {
         var grad = new Matrix<T>(d, d);
         T eps = NumOps.FromDouble(1e-10);
+        // The Bayesian data-fit score is a sum over the n observations, so its gradient scales with
+        // the sample count; the sparsity / acyclicity priors are O(1). Without this factor the O(1)
+        // priors overwhelm even a strong true edge's per-sample data term (correlation^2 ~ 0.4-0.6),
+        // driving EVERY edge logit negative -> 0 edges recovered (DiscoverStructure_RecoversTrueEdges).
+        // Scaling the standardized-data term by n restores the paper's likelihood-vs-prior balance:
+        // strong true edges (corr 0.6-0.8) get a data term >> the priors and survive, while
+        // near-zero correlations stay below them and are pruned.
+        T dataScale = NumOps.FromDouble(n);
 
         for (int i = 0; i < d; i++)
             for (int j = 0; j < d; j++)
@@ -205,9 +227,11 @@ public class DiBSAlgorithm<T> : BayesianCausalBase<T>
                 T varI = cov[i, i];
                 if (!NumOps.GreaterThan(varI, eps)) continue;
 
-                // Data likelihood gradient: proportional to cov[i,j]^2 / cov[i,i]
+                // Data likelihood gradient: proportional to n * cov[i,j]^2 / cov[i,i]
+                // (cov is the standardized-data correlation matrix; the n factor is the sum over
+                // observations that lets a real edge's data term dominate the O(1) priors).
                 T covIJ = cov[i, j];
-                T dataGrad = NumOps.Divide(NumOps.Multiply(covIJ, covIJ), varI);
+                T dataGrad = NumOps.Multiply(dataScale, NumOps.Divide(NumOps.Multiply(covIJ, covIJ), varI));
 
                 // Sparsity prior: -|Z| (encourage sparse graphs)
                 T sparsityGrad = NumOps.Negate(NumOps.FromDouble(Math.Sign(NumOps.ToDouble(Z[i, j]))));

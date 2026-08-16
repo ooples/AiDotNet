@@ -37,7 +37,9 @@ namespace AiDotNet.AnomalyDetection.Statistical;
 public class ZScoreDetector<T> : AnomalyDetectorBase<T>
 {
     private readonly double _zThreshold;
+    [Buffer]
     private Vector<T>? _means;
+    [Buffer]
     private Vector<T>? _stds;
 
     /// <summary>

@@ -43,7 +43,13 @@ namespace AiDotNet.Finance.Trading.Environments;
 [ModelTask(ModelTask.Forecasting)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("Deep Reinforcement Learning for Automated Stock Trading", "https://arxiv.org/abs/2011.09607")]
+// Citation corrected. arXiv 2011.09607 is the FinRL LIBRARY paper, a different work; this title is the
+// ICAIF 2020 ensemble-strategy paper (Yang, Liu, Zhong & Walid), whose arXiv posting is 2511.12120 —
+// the late id is genuine, the paper was only posted to arXiv well after publication.
+[ResearchPaper("Deep Reinforcement Learning for Automated Stock Trading: An Ensemble Strategy",
+    "https://arxiv.org/abs/2511.12120",
+    Year = 2020,
+    Authors = "Hongyang Yang, Xiao-Yang Liu, Shan Zhong, Anwar Walid")]
 public abstract class TradingEnvironment<T> : IEnvironment<T>
 {
     protected readonly INumericOperations<T> NumOps;

@@ -41,11 +41,16 @@ public class TOTEMOptions<T> : TimeSeriesRegressionOptions<T>
     public TOTEMOptions(TOTEMOptions<T> other)
     {
         if (other == null) throw new ArgumentNullException(nameof(other));
+        // Seed is declared on ModelOptions rather than in this file, so a copy constructor
+        // written from the local declarations alone misses it. Losing it on a clone silently
+        // changes deterministic initialization.
+        Seed = other.Seed;
         ContextLength = other.ContextLength; ForecastHorizon = other.ForecastHorizon;
         HiddenDimension = other.HiddenDimension; NumLayers = other.NumLayers;
         NumHeads = other.NumHeads; CodebookSize = other.CodebookSize;
         CodebookDimension = other.CodebookDimension; NumCodebooks = other.NumCodebooks;
         DropoutRate = other.DropoutRate; CommitmentWeight = other.CommitmentWeight;
+        LearningRate = other.LearningRate;
     }
 
     /// <summary>
@@ -131,6 +136,16 @@ public class TOTEMOptions<T> : TimeSeriesRegressionOptions<T>
     /// <para><b>For Beginners:</b> Prevents overfitting during training.</para>
     /// </remarks>
     public double DropoutRate { get; set; } = 0.1;
+
+    /// <summary>
+    /// Gets or sets the Adam learning rate.
+    /// </summary>
+    /// <value>Defaults to 1e-3, the rate the TOTEM paper trains with.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> How big a step the model takes each time it learns. Lower it if
+    /// training becomes unstable.</para>
+    /// </remarks>
+    public double LearningRate { get; set; } = 1e-3;
 
     /// <summary>
     /// Gets or sets the commitment loss weight for VQ training.

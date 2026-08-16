@@ -59,13 +59,24 @@ namespace AiDotNet.Audio.Enhancement;
 [ResearchPaper("FullSubNet+: Channel Attention FullSubNet with Complex Spectrograms for Speech Enhancement", "https://arxiv.org/abs/2203.12188", Year = 2022, Authors = "Jun Chen, Zilin Wang, Deyi Tuo, Zhiyong Wu, Shiyin Kang, Helen Meng")]
 public class FullSubNetPlus<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// Measured: <c>PredictCore</c> folds <c>Layers</c>, <c>PostprocessOutput</c> is the identity, and
+    /// <c>CreateDefaultFullSubNetPlusLayers</c> ends with the complex-mask head
+    /// <c>DenseLayer&lt;T&gt;(numFreqBins * 2, sigmoid)</c> - real and imaginary per frequency bin -
+    /// wired from <c>_options.NumFreqBins</c>. The full-band and sub-band hidden sizes are interior.
+    /// </remarks>
+    protected override int OutputFeatureWidth => _options.NumFreqBins * 2;
+
     #region Fields
 
     private readonly FullSubNetPlusOptions _options;
     public override ModelOptions GetOptions() => _options;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private ShortTimeFourierTransform<T> _stft;
+    [Scratch]
     private Tensor<T>? _lastPhase;
+    [Buffer]
     private Tensor<T>? _noiseProfile;
     private bool _useNativeMode;
     private bool _disposed;
@@ -271,7 +282,7 @@ public class FullSubNetPlus<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expected);
+            TrainWithTape(input, expected, _optimizer);
         }
         finally
         {
@@ -279,13 +290,11 @@ public class FullSubNetPlus<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
         }
     }
 
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        if (!_useNativeMode) throw new NotSupportedException("ONNX mode.");
-        int idx = 0;
-        foreach (var l in Layers) { int c = (int)l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; }
-    }
-
+    /// <inheritdoc />
+    /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
+    /// write on every parameter surface, so the guard is stated once here instead of being
+    /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
+    protected override bool SupportsParameterMutation => _useNativeMode;
     protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio) => ComputeSTFT(rawAudio);
 
     protected override Tensor<T> PostprocessOutput(Tensor<T> o) => o;

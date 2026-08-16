@@ -56,7 +56,7 @@ namespace AiDotNet.Regression;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
     [ResearchPaper("Adaptation in Natural and Artificial Systems", "https://doi.org/10.7551/mitpress/1090.001.0001")]
-public class GeneticAlgorithmRegression<T> : RegressionBase<T>
+public partial class GeneticAlgorithmRegression<T> : RegressionBase<T>
 {
     /// <summary>
     /// Configuration options for the genetic algorithm optimizer.
@@ -82,6 +82,7 @@ public class GeneticAlgorithmRegression<T> : RegressionBase<T>
     /// <summary>
     /// The best model found by the genetic algorithm.
     /// </summary>
+    [Scratch]
     private IFullModel<T, Matrix<T>, Vector<T>>? _bestModel;
 
     /// <summary>
@@ -173,7 +174,14 @@ public class GeneticAlgorithmRegression<T> : RegressionBase<T>
     /// </para>
     /// </remarks>
     /// <summary>GA regression doesn't benefit from optimizer parameter injection.</summary>
-    public override long ParameterCount => 0;
+        /// <remarks>
+    /// Expressed as a capability, not as a count. A zero ParameterCount also suppresses
+    /// injection -- that is why this was written that way -- but it overloads a COUNT to carry
+    /// a CAPABILITY: the model does have parameters (the base getter returns its coefficients
+    /// and intercept), so the count contradicted the vector and anything pairing the two by
+    /// length saw parameters the model claimed not to have.
+    /// </remarks>
+    public override bool SupportsParameterInitialization => false;
 
     public override void Train(Matrix<T> x, Vector<T> y)
     {

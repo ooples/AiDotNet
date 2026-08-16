@@ -45,7 +45,7 @@ namespace AiDotNet.TimeSeries;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("Spectral Analysis and Time Series", "https://doi.org/10.1016/C2013-0-03566-2", Year = 1981, Authors = "M. B. Priestley")]
-public class SpectralAnalysisModel<T> : TimeSeriesModelBase<T>
+public partial class SpectralAnalysisModel<T> : TimeSeriesModelBase<T>
 {
     /// <summary>
     /// Configuration options for the spectral analysis model.
@@ -55,6 +55,7 @@ public class SpectralAnalysisModel<T> : TimeSeriesModelBase<T>
     /// <summary>
     /// The frequency values corresponding to each point in the periodogram.
     /// </summary>
+    [Buffer]
     private Vector<T> _frequencies;
 
     /// <summary>

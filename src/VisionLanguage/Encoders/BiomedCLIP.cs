@@ -65,8 +65,20 @@ namespace AiDotNet.VisionLanguage.Encoders;
     Year = 2023,
     Authors = "Zhang et al."
 )]
-public class BiomedCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageModel<T>
+public partial class BiomedCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageModel<T>
 {
+    // NO SHAPE CONTRACT, and the reason is measured rather than assumed.
+    //
+    // This model returns per-patch tokens: [1,3,8,8] -> [1,64,512] and [1,3,12,8] -> [1,96,512].
+    // 64 = 8*8 and 96 = 12*8, so Product(Height, Width) fits both, and 512 was this model's
+    // EmbeddingDim. The conformance sweep at extent 64 refuted BOTH halves at once: the contract said
+    // [1,4096,768] and Predict returned [1,256,512]. The token count is not H*W (4096) - 256 is a
+    // 16x16 grid - and the width is not EmbeddingDim (768) either.
+    //
+    // A rule that fits 64 and 96 but not 256 is not the rule. Two extents that happen to agree can
+    // still both be special cases, which is the same way a Fixed(1) once fitted two spatial probes
+    // that were simply both flooring to 1.
+
     private readonly BiomedCLIPOptions _options;
 
     public override ModelOptions GetOptions() => _options;
@@ -316,10 +328,7 @@ public class BiomedCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLangu
         var current = PreprocessImage(input);
         if (IsOnnxMode && OnnxImageEncoder is not null)
             return OnnxImageEncoder.Run(current);
-        SetTrainingMode(false);
-        foreach (var l in Layers)
-            current = l.Forward(current);
-        return current;
+        return base.PredictCore(current);
     }
 
     public override void Train(Tensor<T> input, Tensor<T> expected)
@@ -346,34 +355,14 @@ public class BiomedCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLangu
         }
     }
 
-    /// <summary>
-    /// Surfaces the text-encoder stack to the base weight-registry walker
-    /// (streaming-offload / weight-pool hooks) without extending the flat
-    /// parameter APIs (GetParameters / ParameterCount / SetParameters) —
-    /// those keep the SCOPE CONTRACT (= Layers only, which now includes
-    /// the vision patch-embed too) so flat-vector consumers don't
-    /// accidentally double-count.
-    /// </summary>
-    protected override IEnumerable<LayerBase<T>?> GetExtraTrainableLayers()
-    {
-        foreach (var layer in _textEncoderLayers)
-            if (layer is LayerBase<T> lb)
-                yield return lb;
-    }
+    // _textEncoderLayers is discovered as a layer collection and surfaced automatically.
+    // Removed under AIDN082.
 
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        if (!_useNativeMode)
-            throw new NotSupportedException("Cannot update parameters in ONNX mode.");
-        int idx = 0;
-        foreach (var l in Layers)
-        {
-            int c = (int)l.ParameterCount;
-            l.UpdateParameters(parameters.Slice(idx, c));
-            idx += c;
-        }
-    }
-
+    /// <inheritdoc />
+    /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
+    /// write on every parameter surface, so the guard is stated once here instead of being
+    /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
+    protected override bool SupportsParameterMutation => _useNativeMode;
     protected override Tensor<T> PreprocessImage(Tensor<T> image) =>
         NormalizeImage(image, _options.ImageMean, _options.ImageStd);
 
@@ -432,13 +421,14 @@ public class BiomedCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLangu
 
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
+        var options = new BiomedCLIPOptions(_options);
         if (
             !_useNativeMode
             && _options.ImageEncoderModelPath is { } mp
             && !string.IsNullOrEmpty(mp)
         )
-            return new BiomedCLIP<T>(Architecture, mp, _options);
-        return new BiomedCLIP<T>(Architecture, _options);
+            return new BiomedCLIP<T>(Architecture, mp, options);
+        return new BiomedCLIP<T>(Architecture, options);
     }
 
     private Tensor<T> TokenizeText(string text)

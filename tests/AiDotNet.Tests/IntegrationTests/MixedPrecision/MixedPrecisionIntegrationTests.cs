@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Enums;
 using AiDotNet.LinearAlgebra;
@@ -1634,6 +1635,7 @@ public class MixedPrecisionIntegrationTests
     /// <summary>
     /// Test layer for verifying mixed precision integration.
     /// </summary>
+    [ElementWiseShape]
     private class TestLayer : AiDotNet.NeuralNetworks.Layers.LayerBase<float>
     {
         private readonly string? _customName;
@@ -1653,7 +1655,7 @@ public class MixedPrecisionIntegrationTests
         public bool TestShouldUseFP32 => ShouldUseFP32;
         public MixedPrecisionType TestCurrentPrecision => CurrentPrecision;
 
-        public override Tensor<float> Forward(Tensor<float> input)
+        protected override Tensor<float> ForwardTraced(Tensor<float> input)
         {
             // Simple pass-through for testing
             return input;

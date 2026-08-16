@@ -76,7 +76,7 @@ namespace AiDotNet.MetaLearning.Algorithms;
     Authors = "Victor Garcia, Joan Bruna")]
 [ComponentType(ComponentType.MetaLearner)]
 [PipelineStage(PipelineStage.Training)]
-public class GNNMetaAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
+public partial class GNNMetaAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
     private readonly GNNMetaOptions<T, TInput, TOutput> _gnnOptions;
 
@@ -86,7 +86,9 @@ public class GNNMetaAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, T
     private Vector<T> _edgeWeights;
 
     // Task graph state
+    [Scratch]
     private Matrix<T>? _currentAdjacencyMatrix;
+    [Scratch]
     private List<Vector<T>>? _currentNodeEmbeddings;
 
     /// <summary>

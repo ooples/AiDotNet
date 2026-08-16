@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using AiDotNet.Attributes;
 using AiDotNet.Diffusion.Audio;
 using AiDotNet.Enums;
@@ -153,6 +153,41 @@ public class WhisperModel<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
     private readonly int _maxTokens;
 
     /// <summary>
+    /// Index of the first decoder layer in <see cref="Layers"/>.
+    /// </summary>
+    /// <remarks>
+    /// Named for what it is -- an INDEX, not a count. It was called <c>_encoderLayerCount</c>, and the
+    /// two happen to coincide only because the encoder occupies a contiguous prefix. A later reader
+    /// comparing it against <c>_numEncoderLayers</c> (a genuine count, and a different number) has an
+    /// off-by-many waiting for them.
+    /// </remarks>
+    private int _decoderStartIndex;
+
+    /// <summary>
+    /// Teacher-forcing token IDs used by the current native training step.
+    /// </summary>
+    /// <remarks>
+    /// This is a channel from <c>Train</c> to <c>ForwardForTraining</c>, which cannot take an extra
+    /// argument: the framework's <c>TrainWithTape</c> is what calls it. Two consequences, both
+    /// handled rather than left implicit:
+    /// <list type="bullet">
+    /// <item>Two <c>Train</c> calls on one instance would overwrite each other's tokens, so both are
+    /// serialized on <see cref="_trainingGate"/>. <c>TrainWithTape</c> invokes
+    /// <c>ForwardForTraining</c> synchronously on the calling thread, so holding the gate across the
+    /// whole call is what makes the field safe to read there.</item>
+    /// <item><c>ForwardForTraining</c> is public and is legitimately called outside training -- the
+    /// adversarial attacks (FGSMAttack, PGDAttack) do exactly that. Those calls find this null and
+    /// take the start-token decode, which is the right forward for them but is NOT the function
+    /// training optimizes. It is announced rather than silent; see the method.</item>
+    /// </list>
+    /// </remarks>
+    [Scratch]
+    private Tensor<T>? _teacherForcingTokens;
+
+    /// <summary>Serializes native training steps, so their teacher-forcing state cannot interleave.</summary>
+    private readonly object _trainingGate = new();
+
+    /// <summary>
     /// Beam size for beam search decoding.
     /// </summary>
     private readonly int _beamSize;
@@ -296,7 +331,7 @@ public class WhisperModel<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
         double temperature = 0.0,
         OnnxModelOptions? onnxOptions = null,
         WhisperOptions? options = null)
-        : base(architecture)
+        : base(architecture, new CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new WhisperOptions();
         Options = _options;
@@ -332,7 +367,7 @@ public class WhisperModel<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
             sampleRate: sampleRate,
             nMels: numMels,
             nFft: 400,      // Whisper uses 25ms windows at 16kHz
-            hopLength: 160, // Whisper uses 10ms hop at 16kHz
+            hopLength: WhisperHopLength, // Whisper uses 10ms hop at 16kHz
             fMin: 0,
             fMax: 8000,     // Whisper limits to 8kHz
             logMel: true);
@@ -363,7 +398,7 @@ public class WhisperModel<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
         SupportedLanguages = GetSupportedLanguages();
 
         // Default loss function (cross-entropy is standard for sequence-to-sequence ASR)
-        _lossFunction = new CrossEntropyWithLogitsLoss<T>();
+        _lossFunction = LossFunction;
 
         InitializeLayers();
     }
@@ -430,7 +465,7 @@ public class WhisperModel<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         WhisperOptions? options = null)
-        : base(architecture)
+        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new WhisperOptions();
         Options = _options;
@@ -458,7 +493,7 @@ public class WhisperModel<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
             sampleRate: sampleRate,
             nMels: numMels,
             nFft: 400,
-            hopLength: 160,
+            hopLength: WhisperHopLength,
             fMin: 0,
             fMax: 8000,
             logMel: true);
@@ -470,7 +505,7 @@ public class WhisperModel<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 
         // Initialize training components
         _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
-        _lossFunction = lossFunction ?? new CrossEntropyWithLogitsLoss<T>();
+        _lossFunction = LossFunction;
 
         InitializeLayers();
     }
@@ -498,11 +533,12 @@ public class WhisperModel<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
         {
             Layers.AddRange(Architecture.Layers);
             ValidateLayerConfiguration(Layers);
+            _decoderStartIndex = FindDecoderStart(Layers);
         }
         else
         {
             // Calculate max frames from audio parameters
-            int maxFrames = (SampleRate * _maxAudioLengthSeconds) / 160;
+            int maxFrames = (SampleRate * _maxAudioLengthSeconds) / WhisperHopLength;
 
             // Use default Whisper architecture
             Layers.AddRange(LayerHelper<T>.CreateDefaultWhisperLayers(
@@ -514,9 +550,32 @@ public class WhisperModel<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
                 numMels: _numMels,
                 maxFrames: maxFrames,
                 maxTokens: _maxTokens,
-                vocabSize: 51865,
+                vocabSize: WhisperVocabSize,
                 dropoutRate: 0.0));
+
+            // FOUND FROM THE LAYERS, not recomputed from the parameters that built them. The old
+            // arithmetic (3 + _numEncoderLayers + 1) assumed one layer per encoder block; the factory
+            // actually emits five per block -- attention, norm, two dense, norm -- plus a conditional
+            // dropout. At the default six encoder layers the boundary landed inside the encoder, so
+            // the "decoder" pass replayed encoder layers and the encoder pass stopped early. Asking
+            // the built list where its token embedding is cannot drift from the factory the way a
+            // parallel formula does.
+            _decoderStartIndex = FindDecoderStart(Layers);
         }
+    }
+
+    private static int FindDecoderStart(List<ILayer<T>> layers)
+    {
+        for (int i = 0; i < layers.Count; i++)
+        {
+            if (layers[i] is EmbeddingLayer<T>)
+                return i;
+        }
+
+        // A fully custom stack may use a custom token-embedding layer. Preserve
+        // the historical custom-layer contract by treating its first half as the
+        // encoder when no standard embedding boundary can be identified.
+        return Math.Max(1, layers.Count / 2);
     }
 
     /// <summary>
@@ -706,7 +765,11 @@ public class WhisperModel<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
         // Compute mel spectrogram
         var melSpec = _melSpectrogram.Forward(paddedAudio);
 
-        return melSpec;
+        // OpenAI Whisper computes a centered 400-point STFT and removes its
+        // final time frame (`stft[..., :-1]`), leaving exactly 3000 frames for
+        // a 30-second chunk (and proportionally fewer for shorter chunks).
+        int expectedFrames = targetLength / WhisperHopLength;
+        return TrimMelFrames(melSpec, expectedFrames);
     }
 
     /// <summary>
@@ -723,7 +786,12 @@ public class WhisperModel<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
     /// </summary>
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
-        var preprocessed = PreprocessAudio(input);
+        // Whisper's layer stack consumes frame-major log-mel features [.., frames, NumMels], and
+        // Transcribe() feeds a RAW waveform and calls PreprocessAudio itself. Unconditionally
+        // re-featurizing here made Predict disagree with Train (which forwards `input` straight
+        // through Layers) and pushed an already-featurized tensor back through PadOrTruncate ->
+        // a 30 s zero-padded buffer -> the STFT. Detect features that are already mel-shaped.
+        var preprocessed = EnsureMelFeatures(input);
 
         if (!_useNativeMode)
         {
@@ -736,44 +804,59 @@ public class WhisperModel<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
     }
 
     /// <summary>
-    /// Updates model parameters by applying gradient descent.
+    /// Runs native Whisper encoder-decoder inference from preprocessed log-mel features.
+    /// A single start-of-transcript token is used so the returned tensor contains the
+    /// next-token vocabulary logits; autoregressive generation remains in Transcribe.
     /// </summary>
-    /// <param name="gradients">The gradients to apply.</param>
-    /// <remarks>
-    /// <para>
-    /// Applies the simple gradient descent update rule: params = params - learning_rate * gradients.
-    /// </para>
-    /// <para><b>For Beginners:</b> This is how the model learns!
-    ///
-    /// During training:
-    /// 1. The model transcribes audio
-    /// 2. We compare to the correct transcription (loss)
-    /// 3. We compute gradients (which direction to adjust each parameter)
-    /// 4. This method applies those adjustments to improve transcription
-    ///
-    /// The learning rate controls adjustment magnitude:
-    /// - Too big: May overshoot optimal values
-    /// - Too small: Learning is slow but precise
-    /// - Default (0.001): Good starting point
-    /// </para>
-    /// </remarks>
-    public override void UpdateParameters(Vector<T> parameters)
+    protected override Tensor<T> Forward(Tensor<T> input)
     {
-        if (!_useNativeMode)
-        {
-            throw new NotSupportedException("Cannot update parameters in ONNX inference mode. Use the native constructor for training.");
-        }
+        var encoderOutput = EncodeAudio(input);
+        int batchSize = encoderOutput.Rank >= 3 ? encoderOutput.Shape[0] : 1;
+        var initialTokens = new Tensor<T>([batchSize, 1]);
+        for (int batch = 0; batch < batchSize; batch++)
+            initialTokens[batch, 0] = NumOps.FromDouble(_tokenizer.StartOfTranscript);
 
-        int index = 0;
-        foreach (var layer in Layers)
-        {
-            int count = checked((int)layer.ParameterCount);
-            var layerParams = parameters.Slice(index, count);
-            layer.UpdateParameters(layerParams);
-            index += count;
-        }
+        return ForwardDecoder(initialTokens, encoderOutput);
     }
 
+    /// <summary>
+    /// Runs paper-correct teacher-forced native training: waveform to log-mel,
+    /// audio encoder, shifted transcript tokens, decoder vocabulary logits.
+    /// </summary>
+    /// <remarks>
+    /// <b>EnsureMelFeatures, not PreprocessAudio.</b> The tape reaches this method with a tensor that is
+    /// ALREADY log-mel: <c>Train</c> calls <c>TrainWithTape(EnsureMelFeatures(input), ...)</c>. Calling
+    /// <c>PreprocessAudio</c> here featurized it a second time -- <c>PadOrTruncate</c> accepts rank 2,
+    /// reads <c>Shape[^1]</c> as a sample count, and expands a <c>[frames, 80]</c> mel tensor into
+    /// <c>[frames, 480000]</c> before the STFT ever runs. That is the same double-featurization this PR
+    /// fixes elsewhere, reintroduced on the one path that only training takes.
+    /// </remarks>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input)
+    {
+        var melFeatures = EnsureMelFeatures(input);
+        var encoderOutput = EncodeAudio(melFeatures);
+        var tokens = _teacherForcingTokens;
+        if (tokens is null)
+        {
+            // Reached from outside a training step -- the adversarial attacks call this directly. The
+            // decoder then sees only a start token, which is a legitimate forward but a DIFFERENT
+            // function from the teacher-forced one training minimizes. Saying so is the point: the
+            // difference is otherwise invisible, since both return well-formed vocabulary logits.
+            System.Diagnostics.Trace.TraceWarning(
+                "AiDotNet.WhisperModel.ForwardForTraining: called outside Train, so there is no " +
+                "ground-truth token prefix to condition on. Decoding from the start token alone. " +
+                "This is not the teacher-forced function used during training.");
+            tokens = CreateStartTokens(batchSize: 1, sequenceLength: 1);
+        }
+
+        return ForwardDecoder(tokens, encoderOutput);
+    }
+
+    /// <inheritdoc />
+    /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
+    /// write on every parameter surface, so the guard is stated once here instead of being
+    /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
+    protected override bool SupportsParameterMutation => _useNativeMode;
     /// <summary>
     /// Trains the model on a single batch of audio and expected transcription tokens.
     /// </summary>
@@ -799,15 +882,76 @@ public class WhisperModel<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
             throw new NotSupportedException("Cannot train in ONNX inference mode. Use the native constructor for training.");
         }
 
+        // Under _trainingGate: _teacherForcingTokens is per-instance, so two concurrent Train calls
+        // would overwrite each other's prefix and each would train against the other's transcript.
+        // TrainWithTape runs ForwardForTraining synchronously on this thread, so holding the gate for
+        // the whole call is what makes that field safe to read there.
+        lock (_trainingGate)
+        {
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expectedOutput);
+            // Featurize exactly as PredictCore does. Whisper (Radford et al., 2022, S2.2) defines the
+            // model over an 80-channel log-mel spectrogram, not the raw waveform: featurization is
+            // part of the input pipeline for BOTH training and inference. Forwarding the raw waveform
+            // straight into Layers here meant Train and Predict ran two different pipelines off the
+            // same input, so the training forward emitted [1, 64, 51865] while the target -- sized
+            // from a warm-up Predict -- was [3001, 51865], and every training test in the class died
+            // on "Tensor shapes must match" before a single gradient was computed.
+            //
+            // Passing _optimizer through matters too: it is built in the constructor (honouring the
+            // configured learning rate) but the two-argument TrainWithTape overload never reads it,
+            // so training silently ran on the framework default.
+            // Teacher forcing (Radford et al., 2022, S2.3): the decoder is conditioned on the
+            // ground-truth token prefix during training rather than its own predictions.
+            _teacherForcingTokens = CreateTeacherForcingTokens(expectedOutput);
+            TrainWithTape(EnsureMelFeatures(input), expectedOutput, _optimizer);
         }
         finally
         {
+            _teacherForcingTokens = null;
             SetTrainingMode(false);
         }
+        }
+    }
+
+    /// <summary>
+    /// Converts a raw waveform to log-mel features, passing through tensors that are already
+    /// mel-shaped. Shared by <see cref="PredictCore"/> and <see cref="Train"/> so the inference and
+    /// training pipelines cannot drift apart again.
+    /// </summary>
+    /// <summary>
+    /// Whisper's STFT hop: 10 ms at 16 kHz.
+    /// </summary>
+    /// <remarks>
+    /// One constant because this number was written out four times -- twice as a constructor argument to
+    /// the mel front-end and twice as a divisor deriving a frame count from a sample count. Those two
+    /// roles must agree exactly: if a copy of the divisor drifts from the hop the front-end actually
+    /// used, <c>TrimMelFrames</c> trims to the wrong length and the encoder is handed a silently
+    /// mis-sized tensor rather than an error.
+    /// </remarks>
+    private const int WhisperHopLength = 160;
+
+    /// <summary>
+    /// Whisper's multilingual vocabulary size.
+    /// </summary>
+    /// <remarks>
+    /// Written out twice before -- once configuring the decoder in <c>InitializeLayers</c> and once as a
+    /// local <c>const</c> in <c>CreateTeacherForcingTokens</c>, where it decides whether a target tensor
+    /// is a soft distribution by testing <c>Shape[^1] == vocabSize</c>. If those two ever disagreed, the
+    /// soft-target branch would silently stop recognising its own decoder's output and fall through to
+    /// the hard-token path, reading a probability as a token id.
+    /// </remarks>
+    private const int WhisperVocabSize = 51865;
+
+    private Tensor<T> EnsureMelFeatures(Tensor<T> input)
+    {
+        // Whisper's layer stack consumes frame-major log-mel features [.., frames, NumMels], while
+        // Transcribe() feeds a RAW waveform and calls PreprocessAudio itself. Re-featurizing
+        // unconditionally would push an already-featurized tensor back through PadOrTruncate -> a
+        // 30 s zero-padded buffer -> the STFT, so detect features that are already mel-shaped.
+        bool alreadyMelFeatures = input.Rank >= 2 && input.Shape[input.Rank - 1] == _numMels;
+        return alreadyMelFeatures ? input : PreprocessAudio(input);
     }
 
     /// <summary>
@@ -909,37 +1053,145 @@ public class WhisperModel<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 
     private Tensor<T> PadOrTruncate(Tensor<T> audio, int targetLength)
     {
-        int currentLength = audio.Shape[0];
+        if (audio.Rank is not (1 or 2))
+        {
+            throw new ArgumentException(
+                $"Whisper audio must have shape [samples] or [batch, samples], got [{string.Join(", ", audio.Shape)}].",
+                nameof(audio));
+        }
+
+        int currentLength = audio.Shape[^1];
 
         if (currentLength == targetLength)
         {
             return audio;
         }
 
-        var result = new Tensor<T>([targetLength]);
-
-        if (currentLength < targetLength)
+        if (audio.Rank == 1)
         {
-            // Pad with zeros
-            for (int i = 0; i < currentLength; i++)
-            {
+            var result = new Tensor<T>([targetLength]);
+            int copyLength = Math.Min(currentLength, targetLength);
+            for (int i = 0; i < copyLength; i++)
                 result[i] = audio[i];
-            }
-            for (int i = currentLength; i < targetLength; i++)
-            {
-                result[i] = NumOps.Zero;
-            }
-        }
-        else
-        {
-            // Truncate
-            for (int i = 0; i < targetLength; i++)
-            {
-                result[i] = audio[i];
-            }
+            return result;
         }
 
-        return result;
+        int batchSize = audio.Shape[0];
+        var batchedResult = new Tensor<T>([batchSize, targetLength]);
+        int batchedCopyLength = Math.Min(currentLength, targetLength);
+        for (int batch = 0; batch < batchSize; batch++)
+        {
+            for (int i = 0; i < batchedCopyLength; i++)
+                batchedResult[batch, i] = audio[batch, i];
+        }
+
+        return batchedResult;
+    }
+
+    /// <summary>
+    /// Resizes a mel spectrogram to exactly <paramref name="frameCount"/> frames, padding as well as
+    /// trimming.
+    /// </summary>
+    /// <remarks>
+    /// <b>It only trimmed.</b> Both branches sized the output with <c>Math.Min</c>, so a long
+    /// spectrogram was cut to length and a SHORT one passed through unchanged -- the one case with no
+    /// symptom. OpenAI Whisper pads the mel spectrogram to exactly the chunk's frame count; it does not
+    /// accept fewer. A short input shifts the encoder's positional encoding relative to the audio
+    /// content, which degrades the transcription with no error and no log line. The output tensor is now
+    /// allocated at <paramref name="frameCount"/> and the copy bound is the smaller of the two, so the
+    /// tail stays zero -- which is what padding a log-mel buffer means here.
+    /// </remarks>
+    private Tensor<T> TrimMelFrames(Tensor<T> melSpec, int frameCount)
+    {
+        if (melSpec.Rank == 2)
+        {
+            int mels = melSpec.Shape[1];
+            int copyFrames = Math.Min(frameCount, melSpec.Shape[0]);
+            var trimmed = new Tensor<T>([frameCount, mels]);
+            for (int frame = 0; frame < copyFrames; frame++)
+                for (int mel = 0; mel < mels; mel++)
+                    trimmed[frame, mel] = melSpec[frame, mel];
+            return trimmed;
+        }
+
+        if (melSpec.Rank == 3)
+        {
+            int batchSize = melSpec.Shape[0];
+            int mels = melSpec.Shape[2];
+            int copyFrames = Math.Min(frameCount, melSpec.Shape[1]);
+            var trimmed = new Tensor<T>([batchSize, frameCount, mels]);
+            for (int batch = 0; batch < batchSize; batch++)
+                for (int frame = 0; frame < copyFrames; frame++)
+                    for (int mel = 0; mel < mels; mel++)
+                        trimmed[batch, frame, mel] = melSpec[batch, frame, mel];
+            return trimmed;
+        }
+
+        throw new InvalidOperationException(
+            $"Whisper mel preprocessing expected rank 2 or 3, got rank {melSpec.Rank}.");
+    }
+
+    private Tensor<T> CreateTeacherForcingTokens(Tensor<T> target)
+    {
+        const int vocabSize = WhisperVocabSize;
+        bool softTargets = target.Rank >= 2 && target.Shape[^1] == vocabSize;
+        int batchSize = target.Rank >= (softTargets ? 3 : 2) ? target.Shape[0] : 1;
+        int sequenceLength = softTargets
+            ? target.Shape[^2]
+            : target.Shape[^1];
+        var tokens = CreateStartTokens(batchSize, sequenceLength);
+
+        // Hoisted once rather than re-fetched per element inside the scan below.
+        var targetValues = target.Data.Span;
+
+        for (int batch = 0; batch < batchSize; batch++)
+        {
+            for (int position = 1; position < sequenceLength; position++)
+            {
+                int previousToken;
+                if (softTargets)
+                {
+                    // ARGMAX OVER THE FLAT BUFFER, COMPARED IN T. This scans the whole vocabulary for
+                    // every position of every batch item -- at the default 448 tokens that is roughly 23
+                    // million element reads before the forward pass even starts, on the training hot
+                    // path. Two costs were avoidable without changing the result: the tensor indexer
+                    // recomputed offsets and bounds-checked per element, and NumOps.ToDouble paid an
+                    // interface dispatch per element to produce a value used only for a comparison.
+                    // Comparing in T against the hoisted span keeps the scan exact and drops both.
+                    int distributionOffset = ((batch * sequenceLength) + position - 1) * vocabSize;
+                    previousToken = 0;
+                    T bestValue = targetValues[distributionOffset];
+                    for (int token = 1; token < vocabSize; token++)
+                    {
+                        T value = targetValues[distributionOffset + token];
+                        if (NumOps.GreaterThan(value, bestValue))
+                        {
+                            bestValue = value;
+                            previousToken = token;
+                        }
+                    }
+                }
+                else
+                {
+                    int flatIndex = batch * sequenceLength + position - 1;
+                    previousToken = (int)Math.Round(NumOps.ToDouble(target[flatIndex]));
+                    previousToken = Math.Max(0, Math.Min(previousToken, vocabSize - 1));
+                }
+
+                tokens[batch, position] = NumOps.FromDouble(previousToken);
+            }
+        }
+
+        return tokens;
+    }
+
+    private Tensor<T> CreateStartTokens(int batchSize, int sequenceLength)
+    {
+        var tokens = new Tensor<T>([batchSize, sequenceLength]);
+        T startToken = NumOps.FromDouble(_tokenizer.StartOfTranscript);
+        for (int batch = 0; batch < batchSize; batch++)
+            tokens[batch, 0] = startToken;
+        return tokens;
     }
 
     private Tensor<T> EncodeAudio(Tensor<T> melFeatures)
@@ -970,12 +1222,17 @@ public class WhisperModel<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
             // Native mode: forward through encoder layers
             // Encoder layers are approximately the first half of layers
             // (2 projection + 1 positional + numEncoderLayers * 4 layers per block + 1 final norm)
-            int encoderLayerCount = 2 + 1 + (_numEncoderLayers * 4) + 1;
-            if (encoderLayerCount > Layers.Count)
-                encoderLayerCount = Layers.Count / 2;
-
             var current = melFeatures;
-            for (int i = 0; i < encoderLayerCount && i < Layers.Count; i++)
+            if (current.Rank == 2)
+            {
+                var batched = new Tensor<T>([1, current.Shape[0], current.Shape[1]]);
+                for (int frame = 0; frame < current.Shape[0]; frame++)
+                    for (int mel = 0; mel < current.Shape[1]; mel++)
+                        batched[0, frame, mel] = current[frame, mel];
+                current = batched;
+            }
+
+            for (int i = 0; i < _decoderStartIndex && i < Layers.Count; i++)
             {
                 current = Layers[i].Forward(current);
             }
@@ -998,13 +1255,9 @@ public class WhisperModel<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
         }
 
         // Calculate where decoder layers start
-        int encoderLayerCount = 2 + 1 + (_numEncoderLayers * 4) + 1;
-        if (encoderLayerCount > Layers.Count)
-            encoderLayerCount = Layers.Count / 2;
-
         // Forward through decoder layers (starting after encoder layers)
         var current = tokens;
-        for (int i = encoderLayerCount; i < Layers.Count; i++)
+        for (int i = _decoderStartIndex; i < Layers.Count; i++)
         {
             var layer = Layers[i];
             if (layer is TransformerDecoderLayer<T> decoderLayer)

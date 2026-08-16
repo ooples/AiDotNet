@@ -52,11 +52,15 @@ namespace AiDotNet.VisionLanguage.Unified;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+// Citation corrected in title AND id. It conflated the two Show-o papers: the recorded subtitle
+// ("One Single Transformer Can Unify Multimodal Understanding and Generation") belongs to Show-o v1
+// (arXiv 2408.12528), while the id 2502.07925 matches neither paper. Show-o2 is
+// "Improved Native Unified Multimodal Models", arXiv 2506.15564 (NeurIPS 2025).
 [ResearchPaper(
-    "Show-o2: One Single Transformer Can Unify Multimodal Understanding and Generation",
-    "https://arxiv.org/abs/2502.07925",
+    "Show-o2: Improved Native Unified Multimodal Models",
+    "https://arxiv.org/abs/2506.15564",
     Year = 2025,
-    Authors = "Xie et al."
+    Authors = "Jinheng Xie, Zhenheng Yang, Mike Zheng Shou"
 )]
 public class ShowO2<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<T>
 {
@@ -405,23 +409,15 @@ public class ShowO2<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<T>
         if (IsOnnxMode)
             throw new NotSupportedException("Training is not supported in ONNX mode.");
         SetTrainingMode(true);
-        TrainWithTape(input, expected);
+        TrainWithTape(input, expected, _optimizer);
         SetTrainingMode(false);
     }
 
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        if (!_useNativeMode)
-            throw new NotSupportedException("Cannot update parameters in ONNX mode.");
-        int idx = 0;
-        foreach (var l in Layers)
-        {
-            int c = (int)l.ParameterCount;
-            l.UpdateParameters(parameters.Slice(idx, c));
-            idx += c;
-        }
-    }
-
+    /// <inheritdoc />
+    /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
+    /// write on every parameter surface, so the guard is stated once here instead of being
+    /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
+    protected override bool SupportsParameterMutation => _useNativeMode;
     protected override Tensor<T> PreprocessImage(Tensor<T> image) =>
         NormalizeImage(image, _options.ImageMean, _options.ImageStd);
 

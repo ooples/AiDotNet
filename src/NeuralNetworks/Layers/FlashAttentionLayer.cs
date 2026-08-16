@@ -1,4 +1,5 @@
 ﻿
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.NeuralNetworks.Attention;
 using AiDotNet.Tensors.Engines;
@@ -29,7 +30,14 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for computations (typically float or double).</typeparam>
-public partial class FlashAttentionLayer<T> : LayerBase<T>
+// Tiled attention with the same result as standard attention: shape-preserving at rank 2
+// [Time, Features], the rank the discovery sweep probed.
+[AiDotNet.Attributes.TensorLayout(TensorAxis.Time, TensorAxis.Features,
+    Direction = AiDotNet.Attributes.TensorLayoutDirection.Input)]
+[AiDotNet.Attributes.TensorLayout(TensorAxis.Time, TensorAxis.Features,
+    Direction = AiDotNet.Attributes.TensorLayoutDirection.Output)]
+[AutoParameters]
+public partial class FlashAttentionLayer<T> : LayerBase<T>, IShapeContract
 {
     private readonly int _headCount;
     private readonly int _headDimension;
@@ -53,11 +61,18 @@ public partial class FlashAttentionLayer<T> : LayerBase<T>
     // gradient tape. Previously stored as Matrix<T> / Vector<T>, which
     // silently excluded them from the tape graph entirely — every diffusion
     // UNet attention block was training nothing through these weights.
+    [TrainableParameter(Role = PersistentTensorRole.Weights, Shape = "_headCount * _headDimension, _headCount * _headDimension")]
     private Tensor<T> _queryWeights;
+    [TrainableParameter(Role = PersistentTensorRole.Weights, Shape = "_headCount * _headDimension, _headCount * _headDimension")]
     private Tensor<T> _keyWeights;
+    [TrainableParameter(Role = PersistentTensorRole.Weights, Shape = "_headCount * _headDimension, _headCount * _headDimension")]
     private Tensor<T> _valueWeights;
+    [TrainableParameter(Role = PersistentTensorRole.Weights, Shape = "_headCount * _headDimension, _headCount * _headDimension")]
     private Tensor<T> _outputWeights;
+    [TrainableParameter(Role = PersistentTensorRole.Biases, Shape = "_headCount * _headDimension")]
     private Tensor<T> _outputBias;
+
+    private bool _isInitialized;
 
     // Tracks the original input shape so ForwardGpu / Forward can reshape the
     // output back to the caller's rank before returning.
@@ -125,15 +140,12 @@ public partial class FlashAttentionLayer<T> : LayerBase<T>
         _headDimension = embeddingDimension / headCount;
         _config = config ?? FlashAttentionConfig.Default;
 
-        // Initialize projection weights as Tensor<T> [embedDim, embedDim].
-        _queryWeights = new Tensor<T>([embeddingDimension, embeddingDimension]);
-        _keyWeights = new Tensor<T>([embeddingDimension, embeddingDimension]);
-        _valueWeights = new Tensor<T>([embeddingDimension, embeddingDimension]);
-        _outputWeights = new Tensor<T>([embeddingDimension, embeddingDimension]);
-        _outputBias = new Tensor<T>([embeddingDimension]);
-
-        InitializeParameters();
-        RegisterAttentionParameters();
+        _queryWeights = new Tensor<T>([0, 0]);
+        _keyWeights = new Tensor<T>([0, 0]);
+        _valueWeights = new Tensor<T>([0, 0]);
+        _outputWeights = new Tensor<T>([0, 0]);
+        _outputBias = new Tensor<T>([0]);
+        _isInitialized = false;
     }
 
     /// <summary>
@@ -161,14 +173,46 @@ public partial class FlashAttentionLayer<T> : LayerBase<T>
         _headDimension = embeddingDimension / headCount;
         _config = config ?? FlashAttentionConfig.Default;
 
-        _queryWeights = new Tensor<T>([embeddingDimension, embeddingDimension]);
-        _keyWeights = new Tensor<T>([embeddingDimension, embeddingDimension]);
-        _valueWeights = new Tensor<T>([embeddingDimension, embeddingDimension]);
-        _outputWeights = new Tensor<T>([embeddingDimension, embeddingDimension]);
-        _outputBias = new Tensor<T>([embeddingDimension]);
+        _queryWeights = new Tensor<T>([0, 0]);
+        _keyWeights = new Tensor<T>([0, 0]);
+        _valueWeights = new Tensor<T>([0, 0]);
+        _outputWeights = new Tensor<T>([0, 0]);
+        _outputBias = new Tensor<T>([0]);
+        _isInitialized = false;
+    }
 
-        InitializeParameters();
-        RegisterAttentionParameters();
+    protected override bool ParametersAreConstructionSized => true;
+
+    protected override bool IsShapePreserving => true;
+
+    protected override void EnsureInitialized()
+    {
+        if (_isInitialized) return;
+
+        lock (InitializationLock)
+        {
+            if (_isInitialized) return;
+
+            int embeddingDimension = _headCount * _headDimension;
+            if (WeightsAlreadyAllocated(_queryWeights, embeddingDimension, embeddingDimension)
+                && WeightsAlreadyAllocated(_keyWeights, embeddingDimension, embeddingDimension)
+                && WeightsAlreadyAllocated(_valueWeights, embeddingDimension, embeddingDimension)
+                && WeightsAlreadyAllocated(_outputWeights, embeddingDimension, embeddingDimension)
+                && WeightsAlreadyAllocated(_outputBias, embeddingDimension))
+            {
+                _isInitialized = true;
+                return;
+            }
+
+            _queryWeights = AllocateLazyWeight([embeddingDimension, embeddingDimension]);
+            _keyWeights = AllocateLazyWeight([embeddingDimension, embeddingDimension]);
+            _valueWeights = AllocateLazyWeight([embeddingDimension, embeddingDimension]);
+            _outputWeights = AllocateLazyWeight([embeddingDimension, embeddingDimension]);
+            _outputBias = AllocateLazyWeight([embeddingDimension]);
+            InitializeParameters();
+            RegisterAttentionParameters();
+            _isInitialized = true;
+        }
     }
 
     /// <summary>
@@ -266,8 +310,13 @@ public partial class FlashAttentionLayer<T> : LayerBase<T>
     /// - Uses online softmax for numerical stability
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
+        if (IsInferringShapes)
+            return ShapeInferenceOutput(input);
+
+        EnsureInitializationSerialized();
+
         _originalInputShape = input._shape;
         var input3D = NormalizeTo3D(input, out int batchSize, out int sequenceLength, out int embeddingDimension);
 
@@ -383,86 +432,6 @@ public partial class FlashAttentionLayer<T> : LayerBase<T>
     }
 
     /// <summary>
-    /// Legacy scalar-learning-rate parameter update. Tape-based training flows through
-    /// <see cref="SetParameters"/> after <c>GradientTape&lt;T&gt;</c> computes gradients and
-    /// the optimizer applies them, so this override is a no-op. The hand-rolled SPSA /
-    /// blame-on-step fallback that used private <c>_*Gradient</c> fields was deleted along
-    /// with those fields once the Forward path moved to <c>Engine.FlashAttention</c>.
-    /// </summary>
-    public override void UpdateParameters(T learningRate)
-    {
-        // No-op: weights are updated via SetParameters(Vector<T>) after the tape
-        // computes gradients through Engine.FlashAttention + FlashAttentionBackward.
-    }
-
-    /// <inheritdoc />
-    public override long ParameterCount => _queryWeights.Length * 4 + _outputBias.Length;
-
-    /// <summary>
-    /// Gets all layer parameters as a single vector.
-    /// </summary>
-    public override Vector<T> GetParameters()
-    {
-        int weightLen = _queryWeights.Length; // embed × embed
-        int totalParams = weightLen * 4 + _outputBias.Length;
-        var parameters = new Vector<T>(totalParams);
-        int index = 0;
-
-        // Copy all weight tensors (flat span)
-        foreach (var tensor in new[] { _queryWeights, _keyWeights, _valueWeights, _outputWeights })
-        {
-            var span = tensor.AsSpan();
-            for (int i = 0; i < span.Length; i++)
-            {
-                parameters[index++] = span[i];
-            }
-        }
-
-        // Copy bias
-        var biasSpan = _outputBias.AsSpan();
-        for (int i = 0; i < biasSpan.Length; i++)
-        {
-            parameters[index++] = biasSpan[i];
-        }
-
-        return parameters;
-    }
-
-    /// <summary>
-    /// Sets all layer parameters from a single vector. Writes in place so the
-    /// registered tensor references remain stable — important for tape-based
-    /// training where the gradient graph holds direct references to these
-    /// tensors. Re-assigning the field would leave the tape pointing at stale
-    /// objects.
-    /// </summary>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int weightLen = _queryWeights.Length;
-        int expectedParams = weightLen * 4 + _outputBias.Length;
-        if (parameters.Length != expectedParams)
-        {
-            throw new ArgumentException($"Expected {expectedParams} parameters, got {parameters.Length}");
-        }
-
-        int index = 0;
-
-        foreach (var tensor in new[] { _queryWeights, _keyWeights, _valueWeights, _outputWeights })
-        {
-            var span = tensor.Data.Span;
-            for (int i = 0; i < span.Length; i++)
-            {
-                span[i] = parameters[index++];
-            }
-        }
-
-        var biasSpan = _outputBias.Data.Span;
-        for (int i = 0; i < biasSpan.Length; i++)
-        {
-            biasSpan[i] = parameters[index++];
-        }
-    }
-
-    /// <summary>
     /// Resets the layer's internal state.
     /// </summary>
     public override void ResetState()
@@ -492,20 +461,36 @@ public partial class FlashAttentionLayer<T> : LayerBase<T>
     /// <summary>
     /// Gets the query projection weights (for external access/debugging).
     /// </summary>
-    public Tensor<T> GetQueryWeights() => _queryWeights;
+    public Tensor<T> GetQueryWeights()
+    {
+        EnsureInitializationSerialized();
+        return _queryWeights;
+    }
 
     /// <summary>
     /// Gets the key projection weights.
     /// </summary>
-    public Tensor<T> GetKeyWeights() => _keyWeights;
+    public Tensor<T> GetKeyWeights()
+    {
+        EnsureInitializationSerialized();
+        return _keyWeights;
+    }
 
     /// <summary>
     /// Gets the value projection weights.
     /// </summary>
-    public Tensor<T> GetValueWeights() => _valueWeights;
+    public Tensor<T> GetValueWeights()
+    {
+        EnsureInitializationSerialized();
+        return _valueWeights;
+    }
 
     /// <summary>
     /// Gets the output projection weights.
     /// </summary>
-    public Tensor<T> GetOutputWeights() => _outputWeights;
+    public Tensor<T> GetOutputWeights()
+    {
+        EnsureInitializationSerialized();
+        return _outputWeights;
+    }
 }

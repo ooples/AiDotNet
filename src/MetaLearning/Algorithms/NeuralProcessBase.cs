@@ -9,6 +9,8 @@ using AiDotNet.Models.Results;
 using AiDotNet.Tensors;
 using AiDotNet.Data.Structures;
 
+using AiDotNet.Models.Parameters;
+
 namespace AiDotNet.MetaLearning.Algorithms;
 
 /// <summary>
@@ -335,6 +337,15 @@ public abstract class NeuralProcessBase<T, TInput, TOutput> : MetaLearnerBase<T,
 [ResearchPaper("Neural Processes", "https://arxiv.org/abs/1807.01622")]
 public class NeuralProcessModel<T, TInput, TOutput> : MetaLearningModelBase<T, TInput, TOutput>, IAdaptedMetaModel<T>
 {
+
+    /// <inheritdoc />
+    /// <remarks>The parameter vector conditioned on the context set. Predict pushes it into BaseModel on the way past, and that is unchanged.</remarks>
+    protected override void RegisterComponents()
+    {
+        RegisterParameterComponent(new VectorFieldParameterSource<T>(
+            () => _params,
+            value => _params = value));
+    }
     private Vector<T> _params;
     private readonly Vector<T>? _contextRepresentation;
 
@@ -355,13 +366,6 @@ public class NeuralProcessModel<T, TInput, TOutput> : MetaLearningModelBase<T, T
     {
         InterfaceGuard.Parameterizable(BaseModel).SetParameters(_params);
         return BaseModel.Predict(input);
-    }
-
-    public override Vector<T> GetParameters() => _params;
-
-    public override void SetParameters(Vector<T> parameters)
-    {
-        _params = parameters ?? throw new ArgumentNullException(nameof(parameters));
     }
 
     public override IFullModel<T, TInput, TOutput> WithParameters(Vector<T> parameters)

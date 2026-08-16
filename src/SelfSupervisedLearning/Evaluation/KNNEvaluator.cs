@@ -42,8 +42,15 @@ namespace AiDotNet.SelfSupervisedLearning.Evaluation;
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("A Simple Framework for Contrastive Learning of Visual Representations", "https://arxiv.org/abs/2002.05709", Year = 2020, Authors = "Ting Chen, Simon Kornblith, Mohammad Norouzi, Geoffrey Hinton")]
-public class KNNEvaluator<T> : ModelBase<T, Tensor<T>, Tensor<T>>
+public partial class KNNEvaluator<T> : ModelBase<T, Tensor<T>, Tensor<T>>
 {
+
+    /// <inheritdoc />
+    /// <remarks>The encoder being evaluated. Both hand-written surfaces forwarded straight to it.</remarks>
+    protected override void RegisterComponents()
+    {
+        RegisterParameterComponent(_encoder);
+    }
     // NumOps and Engine inherited from ModelBase
 
     private readonly INeuralNetwork<T> _encoder;
@@ -373,12 +380,6 @@ public class KNNEvaluator<T> : ModelBase<T, Tensor<T>, Tensor<T>>
 
     /// <inheritdoc />
     public override ILossFunction<T> DefaultLossFunction => new MeanSquaredErrorLoss<T>();
-
-    /// <inheritdoc />
-    public override Vector<T> GetParameters() => _encoder.GetParameters();
-
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters) => _encoder.SetParameters(parameters);
 
     /// <inheritdoc />
     public override IFullModel<T, Tensor<T>, Tensor<T>> WithParameters(Vector<T> parameters)

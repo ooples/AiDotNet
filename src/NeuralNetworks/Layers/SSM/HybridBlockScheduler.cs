@@ -1,4 +1,7 @@
 using AiDotNet.Autodiff;
+// File-level, deliberately: two Tensors namespaces in the project's global usings also define a
+// TensorLayout, so [TensorLayout(...)] only binds when this import shadows them from a nearer scope.
+using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 
@@ -81,7 +84,25 @@ public enum HybridSchedulePattern
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
-public partial class HybridBlockScheduler<T> : LayerBase<T>
+// A STACK of residual blocks, so it is shape-preserving for the same reason any pre-norm residual
+// stack is: ForwardTraced does `current = Engine.TensorAdd(current, blockOut)` per block, which forces
+// every sub-layer to return the shape it was given, and then reshapes back to the shape it came in
+// with - `return Engine.Reshape(result, _originalInputShape)`. Nothing here can resize anything.
+// Axes are named rather than left to [ElementWiseShape] because they are not anonymous: ForwardTraced
+// reads seqLen = Shape[rank-2] and modelDim = Shape[rank-1] and flattens everything before them into
+// batch, and the base constructor declares [sequenceLength, modelDimension]. Time and Features are
+// real roles here, and a hybrid SSM/attention stack chained onto anything else is worth checking
+// against them.
+// BatchOptional covers the unbatched [Time, Features] form, which ForwardTraced handles explicitly
+// (`if (rank == 2) return Engine.Reshape(result, new[] { seqLen, modelDim })`).
+// Same rank and same roles both directions, so OutputAxesFor is generated as Same on every axis.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    BatchOptional = true, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    BatchOptional = true, Direction = TensorLayoutDirection.Output,
+    Note = "Pre-norm -> sub-layer -> residual, repeated; the residual add pins every axis.")]
+[AutoParameters]
+public partial class HybridBlockScheduler<T> : LayerBase<T>, IShapeContract
 {
     private readonly int _modelDimension;
     private readonly int _sequenceLength;
@@ -136,32 +157,6 @@ public partial class HybridBlockScheduler<T> : LayerBase<T>
     public HybridSchedulePattern SchedulePattern => _schedulePattern;
 
     /// <summary>
-    /// Gets the total number of trainable parameters across all blocks and norms.
-    /// </summary>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> The total count of learnable numbers across all blocks
-    /// (both SSM and attention) plus normalization parameters. Shared attention blocks
-    /// (Zamba-style) count their parameters only once.</para>
-    /// </remarks>
-    public override long ParameterCount
-    {
-        get
-        {
-            // Accumulate in long so multi-block schedulers (e.g. 64+ Mamba/SSM
-            // blocks each with multi-billion-parameter state) don't wrap
-            // before reaching ToFlatVectorSize.
-            long count = 0;
-            foreach (var block in _blocks)
-                count += block.ParameterCount;
-            foreach (var gamma in _normGammas)
-                count += gamma.Length;
-            foreach (var beta in _normBetas)
-                count += beta.Length;
-            return count;
-        }
-    }
-
-    /// <summary>
     /// Creates a new hybrid block scheduler.
     /// </summary>
     /// <param name="sequenceLength">Maximum sequence length.</param>
@@ -209,11 +204,22 @@ public partial class HybridBlockScheduler<T> : LayerBase<T>
             _normGammas[i].Fill(NumOps.One);
             _normBetas[i] = new Tensor<T>(new[] { modelDimension });
             _normBetas[i].Fill(NumOps.Zero);
+
+            // Tape-based training (NeuralNetworkBase.TrainWithTape) discovers all
+            // trainable state by recursively walking GetSubLayers() and
+            // GetTrainableParameters(). Register each inner Mamba/attention block as a
+            // sub-layer and each pre-norm gain/shift as a trainable parameter so the
+            // optimizer actually updates them. Without this the ENTIRE hybrid stack was
+            // invisible to the gradient tape — only the embedding and LM head trained,
+            // so loss never decreased (Samba/Zamba/Jamba training-convergence failures).
+            RegisterSubLayer(blocks[i]);
+            RegisterTrainableParameter(_normGammas[i], PersistentTensorRole.NormalizationParams);
+            RegisterTrainableParameter(_normBetas[i], PersistentTensorRole.NormalizationParams);
         }
     }
 
     /// <inheritdoc />
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         _originalInputShape = input._shape;
 
@@ -266,37 +272,25 @@ public partial class HybridBlockScheduler<T> : LayerBase<T>
     private Tensor<T> ApplyRMSNorm(Tensor<T> input, Tensor<T> gamma, Tensor<T> beta,
         int batchSize, int seqLen)
     {
-        var output = TensorAllocator.Rent<T>(input._shape);
+        // Tape-aware pre-norm over the last (feature) axis, composed entirely from
+        // Engine ops so the gradient tape records the graph: gamma/beta receive
+        // gradients and the norm's Jacobian flows into the residual input. The
+        // previous per-timestep scalar-write implementation severed the tape (the
+        // rented output tensor was disconnected from `input`), so this normalization
+        // was invisible to autodiff. gamma/beta are 1-D [modelDim] and broadcast
+        // against the trailing feature axis of `input` ([batch, seq, modelDim]).
+        int rank = input.Shape.Length;
         T eps = NumOps.FromDouble(1e-6);
-        var gamma2D = gamma.Reshape(1, _modelDimension);
-        var beta2D = beta.Reshape(1, _modelDimension);
 
-        for (int t = 0; t < seqLen; t++)
-        {
-            var slice = input.GetSliceAlongDimension(t, 1);  // [batch, modelDim]
+        var squared = Engine.TensorSquare(input);
+        var sumSq = Engine.ReduceSum(squared, new[] { rank - 1 }, keepDims: true);
+        var meanSq = Engine.TensorDivideScalar(sumSq, NumOps.FromDouble(_modelDimension));
+        var rms = Engine.TensorSqrt(Engine.TensorAddScalar(meanSq, eps));
+        var invRms = Engine.TensorReciprocal(rms);
 
-            // RMS = sqrt(mean(x^2))
-            var squared = Engine.TensorMultiply(slice, slice);
-            var meanSquared = Engine.ReduceSum(squared, new int[] { 1 });  // [batch]
-            T divisor = NumOps.FromDouble(_modelDimension);
-
-            var normed = new Tensor<T>(slice._shape);
-            for (int b = 0; b < batchSize; b++)
-            {
-                T rms = NumOps.Sqrt(NumOps.Add(NumOps.Divide(meanSquared[new[] { b }], divisor), eps));
-                for (int d = 0; d < _modelDimension; d++)
-                {
-                    normed[new[] { b, d }] = NumOps.Divide(slice[new[] { b, d }], rms);
-                }
-            }
-
-            // Apply gamma and beta
-            var scaled = Engine.TensorBroadcastMultiply(normed, gamma2D);
-            scaled = Engine.TensorBroadcastAdd(scaled, beta2D);
-            output.SetSlice(1, t, scaled);
-        }
-
-        return output;
+        var normalised = Engine.TensorBroadcastMultiply(input, invRms);
+        var scaled = Engine.TensorBroadcastMultiply(normalised, gamma);
+        return Engine.TensorBroadcastAdd(scaled, beta);
     }
 
     private Tensor<T> BackwardRMSNorm(Tensor<T> dOutput, Tensor<T> input, Tensor<T> gamma,
@@ -363,53 +357,6 @@ public partial class HybridBlockScheduler<T> : LayerBase<T>
         }
 
         return dInput;
-    }
-
-    /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        int totalParams = ParameterCountHelper.ToFlatVectorSize(ParameterCount);
-        var parameters = new Vector<T>(totalParams);
-        int index = 0;
-
-        for (int i = 0; i < _blocks.Length; i++)
-        {
-            var blockParams = _blocks[i].GetParameters();
-            for (int j = 0; j < blockParams.Length; j++)
-                parameters[index++] = blockParams[j];
-
-            for (int j = 0; j < _normGammas[i].Length; j++)
-                parameters[index++] = _normGammas[i][j];
-
-            for (int j = 0; j < _normBetas[i].Length; j++)
-                parameters[index++] = _normBetas[i][j];
-        }
-
-        return parameters;
-    }
-
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int expectedParams = ParameterCountHelper.ToFlatVectorSize(ParameterCount);
-        if (parameters.Length != expectedParams)
-            throw new ArgumentException($"Expected {expectedParams} parameters, got {parameters.Length}");
-
-        int index = 0;
-        for (int i = 0; i < _blocks.Length; i++)
-        {
-            int blockParamCount = (int)_blocks[i].ParameterCount;
-            var blockParams = new Vector<T>(blockParamCount);
-            for (int j = 0; j < blockParamCount; j++)
-                blockParams[j] = parameters[index++];
-            _blocks[i].SetParameters(blockParams);
-
-            for (int j = 0; j < _normGammas[i].Length; j++)
-                _normGammas[i][j] = parameters[index++];
-
-            for (int j = 0; j < _normBetas[i].Length; j++)
-                _normBetas[i][j] = parameters[index++];
-        }
     }
 
     /// <inheritdoc />

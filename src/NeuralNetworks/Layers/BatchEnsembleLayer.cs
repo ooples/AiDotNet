@@ -40,12 +40,50 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-public partial class BatchEnsembleLayer<T> : LayerBase<T>
+// Rank 2 only: ForwardTraced reads `input.Shape[0]` as the batch and reshapes straight to
+// [batchSize, 1, _inputDim], so the feature axis must be the second and last one.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
+[AutoParameters]
+public partial class BatchEnsembleLayer<T> : LayerBase<T>, IShapeContract
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// Hand-written because THE BATCH AXIS GROWS, which is unusual enough that a generated
+    /// <c>Same(Batch)</c> would be quietly wrong for every caller downstream. <c>ForwardTraced</c> tiles
+    /// each sample once per ensemble member -
+    /// <c>expandedBatchSize = batchSize * _numMembers</c> - and returns
+    /// <c>[expandedBatchSize, _outputDim]</c>, which its own docs restate: "The output has
+    /// batchSize x numMembers rows, with consecutive numMembers rows belonging to the same input sample."
+    /// </para>
+    /// <para>
+    /// <c>Scaled</c> rather than <c>Window</c> because this is an exact multiplication with no boundary
+    /// case - every sample is tiled the same number of times - and the feature axis is
+    /// <c>Fixed(_outputDim)</c>, the width of the shared weight matrix the constructor allocates as
+    /// <c>[inputDim, outputDim]</c>.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        if (inputRank != 2 || _numMembers <= 0 || _outputDim <= 0) return null;
+
+        return new[]
+        {
+            new OutputAxisContract(TensorAxis.Batch, AxisRelation.Scaled(TensorAxis.Batch, _numMembers, 1)),
+            new OutputAxisContract(TensorAxis.Features, AxisRelation.Fixed(_outputDim)),
+        };
+    }
+
     private readonly int _inputDim;
     private readonly int _outputDim;
     private readonly int _numMembers;
     private readonly bool _useBias;
+
+    /// <summary>
+    /// Distinguishes the r-vector and s-vector initializations when a fixed <c>RandomSeed</c> is set.
+    /// </summary>
+    private long _rankInitCallCounter;
 
     // Shared base weights
     [TrainableParameter(Role = PersistentTensorRole.Weights)]
@@ -89,17 +127,6 @@ public partial class BatchEnsembleLayer<T> : LayerBase<T>
 
     /// <inheritdoc/>
     public override bool SupportsTraining => true;
-
-    /// <inheritdoc/>
-    public override long ParameterCount
-    {
-        get
-        {
-            int count = _weights.Length + _rVectors.Length + _sVectors.Length;
-            if (_bias != null) count += _bias.Length;
-            return count;
-        }
-    }
 
     /// <summary>
     /// Initializes a new instance of the BatchEnsembleLayer class.
@@ -155,28 +182,46 @@ public partial class BatchEnsembleLayer<T> : LayerBase<T>
     /// <summary>
     /// Initializes a tensor with Xavier/Glorot initialization.
     /// </summary>
+    /// <remarks>
+    /// Delegates rather than hand-rolling. The Box-Muller loop this replaced computed the RIGHT
+    /// distribution - normal scaled by <c>sqrt(2/(fanIn+fanOut))</c>, genuine Xavier, unlike
+    /// <c>CrossAttentionLayer</c>'s - but got there two wrong ways. It drew from
+    /// <c>RandomHelper.CreateSecureRandom()</c>, which is entropy-seeded per call and so ignored
+    /// <c>RandomSeed</c>, making an identically-seeded model initialize differently on every
+    /// construction. And that RNG is a <c>LockedRandom</c>, taking a lock on each of its TWO draws per
+    /// element; the base path fills the raw array with an unlocked local RNG instead.
+    /// </remarks>
     private void InitializeXavier(Tensor<T> tensor)
     {
-        var random = RandomHelper.CreateSecureRandom();
         int fanIn = tensor.Shape[0];
         int fanOut = tensor.Shape.Length > 1 ? tensor.Shape[1] : 1;
-        double stdDev = Math.Sqrt(2.0 / (fanIn + fanOut));
-
-        for (int i = 0; i < tensor.Length; i++)
-        {
-            double u1 = 1.0 - random.NextDouble();
-            double u2 = 1.0 - random.NextDouble();
-            double normal = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
-            tensor[i] = NumOps.FromDouble(normal * stdDev);
-        }
+        InitializeLayerWeights(tensor, fanIn, fanOut);
     }
 
     /// <summary>
     /// Initializes rank vectors centered around 1 with some variation.
     /// </summary>
+    /// <remarks>
+    /// KEEPS ITS OWN LOOP, DELIBERATELY. This is not Xavier and must not be routed to the base
+    /// initializer: BatchEnsemble's rank-1 fast weights are centred on 1.0 so that an untrained ensemble
+    /// member starts as a no-op multiplicative perturbation of the shared weights (Wen et al. 2020).
+    /// Replacing it with a zero-centred initializer would zero the shared weights' contribution instead
+    /// of leaving it untouched. Only the RNG changes here - to the seeded convention used across the
+    /// layer library - so an identically-seeded model reproduces its rank vectors. These tensors are
+    /// small (members x dim), so the per-call lock is not worth restructuring the loop over.
+    /// </remarks>
     private void InitializeRankVectors(Tensor<T> tensor, double scale)
     {
-        var random = RandomHelper.CreateSecureRandom();
+        // MIXED WITH A CALL COUNTER, not RandomSeed alone. This method initializes BOTH _rVectors and
+        // _sVectors, and BatchEnsemble's perturbation is their outer product r (x) s - so seeding both
+        // calls identically would make s == r elementwise, collapsing a rank-1 perturbation into a
+        // symmetric one and giving every ensemble member the same fast weights. LayerBase derives its
+        // per-tensor seeds the same way and for the same reason.
+        long call = System.Threading.Interlocked.Increment(ref _rankInitCallCounter);
+        var random = RandomSeed.HasValue
+            ? RandomHelper.CreateSeededRandom(
+                unchecked((int)((uint)RandomSeed.Value * 2654435761u ^ (uint)call)))
+            : RandomHelper.CreateSecureRandom();
 
         for (int i = 0; i < tensor.Length; i++)
         {
@@ -205,7 +250,7 @@ public partial class BatchEnsembleLayer<T> : LayerBase<T>
     /// rows belonging to the same input sample.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         int batchSize = input.Shape[0];
         int expandedBatchSize = batchSize * _numMembers;
@@ -322,52 +367,6 @@ public partial class BatchEnsembleLayer<T> : LayerBase<T>
         // batchSize × outputDim × numMembers scalar NumOps.Add dispatches.
         var reshaped = Engine.Reshape(output, [batchSize, _numMembers, _outputDim]);
         return Engine.ReduceMean(reshaped, new[] { 1 }, keepDims: false);
-    }
-
-    /// <inheritdoc/>
-    public override Vector<T> GetParameters()
-    {
-        var paramsList = new List<T>();
-
-        for (int i = 0; i < _weights.Length; i++)
-            paramsList.Add(_weights[i]);
-
-        if (_bias != null)
-        {
-            for (int i = 0; i < _bias.Length; i++)
-                paramsList.Add(_bias[i]);
-        }
-
-        for (int i = 0; i < _rVectors.Length; i++)
-            paramsList.Add(_rVectors[i]);
-
-        for (int i = 0; i < _sVectors.Length; i++)
-            paramsList.Add(_sVectors[i]);
-
-        return new Vector<T>([.. paramsList]);
-    }
-
-    /// <summary>
-    /// Sets the trainable parameters from a vector.
-    /// </summary>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int idx = 0;
-
-        for (int i = 0; i < _weights.Length; i++)
-            _weights[i] = parameters[idx++];
-
-        if (_bias != null)
-        {
-            for (int i = 0; i < _bias.Length; i++)
-                _bias[i] = parameters[idx++];
-        }
-
-        for (int i = 0; i < _rVectors.Length; i++)
-            _rVectors[i] = parameters[idx++];
-
-        for (int i = 0; i < _sVectors.Length; i++)
-            _sVectors[i] = parameters[idx++];
     }
 
     /// <summary>

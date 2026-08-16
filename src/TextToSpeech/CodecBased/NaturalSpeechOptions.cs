@@ -8,6 +8,13 @@ namespace AiDotNet.TextToSpeech.CodecBased;
 /// </remarks>
 public class NaturalSpeechOptions : EndToEndTtsOptions
 {
+    /// <summary>Initializes a new instance by copying all model options.</summary>
+    /// <param name="other">The options instance to copy.</param>
+    public NaturalSpeechOptions(NaturalSpeechOptions other)
+        : base(other)
+    {
+    }
+
     public NaturalSpeechOptions()
     {
         InterChannels = 192;

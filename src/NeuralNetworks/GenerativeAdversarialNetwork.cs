@@ -4,6 +4,8 @@ using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks.Options;
 using AiDotNet.Tensors.Engines.Autodiff;
 
+using System.Linq;
+
 namespace AiDotNet.NeuralNetworks;
 
 /// <summary>
@@ -49,8 +51,11 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Generative Adversarial Nets", "https://arxiv.org/abs/1406.2661", Year = 2014, Authors = "Ian J. Goodfellow, Jean Pouget-Abadie, Mehdi Mirza, Bing Xu, David Warde-Farley, Sherjil Ozair, Aaron Courville, Yoshua Bengio")]
-public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
+public partial class GenerativeAdversarialNetwork<T> : ImageGeneratorModelLayoutBase<T>, IAuxiliaryLossLayer<T>
 {
+
+    // Generator then Discriminator are discovered as sub-network members, in declaration order,
+    // which is the order this hook used and therefore the serialization order. Removed under AIDN082.
     private const double DefaultGanAdamLearningRate = 0.0002;
     private const double DefaultGanAdamBeta1 = 0.5;
     private const double DefaultGanAdamBeta2 = 0.999;
@@ -447,6 +452,16 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
             generatorArchitecture.InputType, lossFunction: null);
         Discriminator = CreateNetworkForInputType(discriminatorArchitecture,
             discriminatorArchitecture.InputType, lossFunction: lossFunction);
+
+        // Generator and discriminator are subgraphs of one adversarial update,
+        // not independently-trained top-level models. The GAN keeps the generator
+        // tape open across the discriminator step and freezes/reuses the
+        // discriminator for the generator objective. A standalone fused optimizer
+        // trace on either child cannot represent that parent-owned state transition;
+        // use an explicit graph break (the same contract torch.compile applies to
+        // dynamic/stateful regions) and let the eager nested tapes compose safely.
+        Generator.DisableStandaloneFusedTraining();
+        Discriminator.DisableStandaloneFusedTraining();
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(generatorArchitecture.TaskType);
 
         // Initialize optimizers (default to GAN-standard Adam if not provided). Derived GANs can
@@ -791,6 +806,39 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
         base.SetTrainingMode(isTraining);
         Generator.SetTrainingMode(isTraining);
         Discriminator.SetTrainingMode(isTraining);
+    }
+
+    /// <summary>
+    /// Resolves each sub-network's lazy layers through ITS OWN architecture instead of running the
+    /// base sequential walk from this model's <see cref="NeuralNetworkBase{T}.Architecture"/>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A GAN is not a plain sequential chain — it is two chains fed by different things. The
+    /// GAN-level architecture mirrors the IMAGE side (rank-3 for DCGAN, because that is what the
+    /// discriminator consumes), while the generator is fed a rank-1 latent vector. The base walk
+    /// starts from this model's architecture input and propagates it through every layer it can
+    /// reach, so it drove an image shape into the GENERATOR: the first transposed convolution took
+    /// its input depth from the image's channel count and allocated its kernel at that width.
+    /// </para>
+    /// <para>
+    /// That is unrecoverable rather than merely wrong, because the resolution also trips the
+    /// first-forward latch — so the real latent forward never re-resolves, and the layer throws
+    /// "Input inChannels (512) must match kernel inChannels (3)" on DCGAN (and 8 vs 1 on
+    /// ProgressiveGAN, the same numbers one channel count apart). Both models failed before a
+    /// single gradient was computed, in SetTrainingMode, which is why Predict and Train reported
+    /// identical errors.
+    /// </para>
+    /// <para>
+    /// Delegating is also what the base method's own remarks prescribe: it is virtual precisely so
+    /// a model whose topology is not a plain chain resolves through its real topology. Each
+    /// sub-network is itself idempotent, so repeating this walk is safe.
+    /// </para>
+    /// </remarks>
+    protected override void ResolveLazyLayerShapes()
+    {
+        Generator.ResolveLazyLayerShapesFromOwnArchitecture();
+        Discriminator.ResolveLazyLayerShapesFromOwnArchitecture();
     }
 
     /// <summary>
@@ -1916,39 +1964,6 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
         Discriminator.Deserialize(discriminatorData);
     }
 
-    /// <summary>
-    /// Updates the parameters of both the Generator and Discriminator networks.
-    /// </summary>
-    /// <param name="parameters">A vector containing the combined parameters for both networks.</param>
-    /// <remarks>
-    /// <para>
-    /// This method splits the incoming parameter vector between the Generator and Discriminator,
-    /// updates each network accordingly, and adjusts the learning rate based on the magnitude
-    /// of parameter changes. It also includes a mechanism to reset the optimizer state if
-    /// exceptionally large changes are detected.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method updates both parts of the GAN at once.
-    /// 
-    /// The process:
-    /// - Splits the incoming parameters between Generator and Discriminator
-    /// - Updates each network with its respective parameters
-    /// - Adjusts the learning rate based on how big the changes are
-    /// - If changes are very large, it resets some internal values to stabilize training
-    /// 
-    /// This approach allows for efficient updating of the entire GAN structure.
-    /// </para>
-    /// </remarks>
-    /// <summary>
-    /// Gets the total parameter count for both generator and discriminator.
-    /// </summary>
-    public override long ParameterCount
-    {
-        get
-        {
-            return Generator.GetParameterCount() + Discriminator.GetParameterCount();
-        }
-    }
-
     /// <inheritdoc />
     /// <remarks>
     /// Streams parameters from <c>Generator</c> followed by
@@ -2025,24 +2040,6 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
     }
 
     /// <summary>
-    /// Gets the combined parameters from both the generator and discriminator networks.
-    /// </summary>
-    public override Vector<T> GetParameters()
-    {
-        var genParams = Generator.GetParameters();
-        var discParams = Discriminator.GetParameters();
-        int totalLength = genParams.Length + discParams.Length;
-
-        var combined = new Vector<T>(totalLength);
-        for (int i = 0; i < genParams.Length; i++)
-            combined[i] = genParams[i];
-        for (int i = 0; i < discParams.Length; i++)
-            combined[genParams.Length + i] = discParams[i];
-
-        return combined;
-    }
-
-    /// <summary>
     /// Gets named layer activations from the generator network.
     /// </summary>
     public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input)
@@ -2089,37 +2086,16 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
         return activations;
     }
 
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        // Determine the split point between Generator and Discriminator parameters
-        int generatorParameterCount = (int)Generator.GetParameterCount();
-        int discriminatorParameterCount = (int)Discriminator.GetParameterCount();
-
-        if (parameters.Length != generatorParameterCount + discriminatorParameterCount)
-        {
-            throw new ArgumentException($"Invalid parameter vector length. Expected {generatorParameterCount + discriminatorParameterCount}, but got {parameters.Length}.");
-        }
-
-        // Split the parameters vector
-        var generatorParameters = new Vector<T>([.. parameters.Take(generatorParameterCount)]);
-        var discriminatorParameters = new Vector<T>([.. parameters.Skip(generatorParameterCount).Take(discriminatorParameterCount)]);
-
-        // Update Generator parameters
-        Generator.UpdateParameters(generatorParameters);
-
-        // Update Discriminator parameters
-        Discriminator.UpdateParameters(discriminatorParameters);
-
-        // Calculate the magnitude of parameter changes
-        T parameterChangeNorm = parameters.L2Norm();
-
-        // Reset optimizer state if a very large change is detected (indicates training instability)
-        if (NumOps.GreaterThan(parameterChangeNorm, NumOps.FromDouble(10.0)))
-        {
-            ResetOptimizerState();
-        }
-    }
-
+    // UpdateParameters split the vector between Generator and Discriminator. GetExtraTrainableLayers
+    // above yields those two in the SAME order, so the base reproduces the split exactly -- its own
+    // remark records that this was measured before converting.
+    //
+    // Deleting it also removes a defect. The override finished with:
+    //     if (parameters.L2Norm() > 10) ResetOptimizerState();
+    // described as "the magnitude of parameter changes". It is not a change -- nothing here holds a
+    // previous vector. It is the norm of the incoming parameter VALUES, which for any network above
+    // a handful of weights exceeds 10 permanently, so every single update reset both Adam optimizers
+    // and discarded their moment estimates. Removed under AIDN082.
     /// <summary>
     /// Resets the optimizer state to its initial values.
     /// </summary>

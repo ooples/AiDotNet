@@ -1,4 +1,4 @@
-﻿using System.IO;
+using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Finance.Interfaces;
@@ -162,8 +162,25 @@ public class LLMTime<T> : TimeSeriesFoundationModelBase<T>
         OnnxSession = null;
         OnnxModelPath = null;
 
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        // Adam's stock 1e-3 is too hot for this stack: amplified through the transformer blocks it
+        // diverged the generated Training_ShouldReduceLoss probe from 0.488 to 3.054 and collapsed
+        // DifferentInputs_AfterTraining to an L2 of 1.6e-10, even though every gradient invariant
+        // (finite-difference, gradient-flow, param-L2) passes — so this is step size, not plumbing.
+        // Use the same conservative initial rate MOIRAI settled on for its transformer stack, with
+        // headroom to ramp toward the usual 1e-3 if a scheduler is attached.
+        var llmTimeAdamOptions = new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+        {
+            InitialLearningRate = 1e-6,
+            MinLearningRate = 1e-9,
+            MaxLearningRate = 1e-3,
+        };
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this, llmTimeAdamOptions);
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
+        // Wire it into the base slot. Without this _optimizer was assigned and never read: as a
+        // Finance model, Train routes through FinancialModelBase -> TrainWithTape(.., TrainingOptimizer),
+        // TrainingOptimizer defaults to null, and the framework default optimizer won instead. Same
+        // dead-dependency shape as MegaTTS/_optimizer and LiteDVDNet; MOIRAI wires it exactly this way.
+        SetBaseTrainOptimizer(_optimizer);
 
         CopyOptionsToFields(options);
         InitializeLayers();
@@ -236,12 +253,8 @@ public class LLMTime<T> : TimeSeriesFoundationModelBase<T>
         base.Train(input, target);
     }
 
-    /// <inheritdoc/>
-    public override void UpdateParameters(Vector<T> gradients)
-    {
-        // Parameters are updated through the optimizer in Train()
-    }
-
+    // UpdateParameters was an empty override, silently dropping every restore. The base
+    // distributes the vector over the declared enumeration.
     /// <inheritdoc/>
     /// <remarks>
     /// LLMTime's real forward (<see cref="ForwardNative"/>) instance-normalizes the series and
@@ -396,45 +409,12 @@ public class LLMTime<T> : TimeSeriesFoundationModelBase<T>
 
     /// <inheritdoc/>
     public override Tensor<T> ApplyInstanceNormalization(Tensor<T> input)
-    {
-        int batchSize = input.Shape[0];
-        int seqLen = input.Shape.Length > 1 ? input.Shape[1] : input.Length;
-        var result = new Tensor<T>(input._shape);
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            T mean = NumOps.Zero;
-            for (int t = 0; t < seqLen; t++)
-            {
-                int idx = b * seqLen + t;
-                if (idx < input.Length)
-                    mean = NumOps.Add(mean, input[idx]);
-            }
-            mean = NumOps.Divide(mean, NumOps.FromDouble(seqLen));
-
-            T variance = NumOps.Zero;
-            for (int t = 0; t < seqLen; t++)
-            {
-                int idx = b * seqLen + t;
-                if (idx < input.Length)
-                {
-                    var diff = NumOps.Subtract(input[idx], mean);
-                    variance = NumOps.Add(variance, NumOps.Multiply(diff, diff));
-                }
-            }
-            variance = NumOps.Divide(variance, NumOps.FromDouble(seqLen));
-            T std = NumOps.Sqrt(NumOps.Add(variance, NumOps.FromDouble(1e-5)));
-
-            for (int t = 0; t < seqLen; t++)
-            {
-                int idx = b * seqLen + t;
-                if (idx < input.Length && idx < result.Length)
-                    result.Data.Span[idx] = NumOps.Divide(NumOps.Subtract(input[idx], mean), std);
-            }
-        }
-
-        return result;
-    }
+        // RevIN forward (Kim et al. 2022), delegated to the shared tape-tracked helper. The previous
+        // hand-rolled version accumulated mean/variance with scalar NumOps arithmetic and wrote the
+        // output through result.Data.Span[...], which the autodiff tape cannot observe: the normalised
+        // tensor came back as a LEAF, so no gradient could flow through the normalisation. RevIN is a
+        // differentiable layer in the paper, not a preprocessing step.
+        => NormalizeInstanceOnTape(input, DefaultRevInEpsilon, out _, out _);
 
     /// <inheritdoc/>
     public override Dictionary<string, T> GetFinancialMetrics()

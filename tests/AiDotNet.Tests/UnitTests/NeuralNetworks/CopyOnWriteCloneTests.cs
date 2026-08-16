@@ -1,7 +1,12 @@
 using System;
+using System.Linq;
+using AiDotNet.Diffusion.NoisePredictors;
 using AiDotNet.Enums;
+using AiDotNet.Helpers;
 using AiDotNet.NeuralNetworks;
+using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.TextToSpeech.VoiceCloning;
 using Xunit;
 
 namespace AiDotNet.Tests.UnitTests.NeuralNetworks;
@@ -28,6 +33,37 @@ public class CopyOnWriteCloneTests
 
     private static Tensor<double> Input() =>
         new(new Vector<double>(new[] { 0.1, -0.2, 0.3, -0.4 }), new[] { 1, 4 });
+
+    [Fact]
+    public void RejectedCandidate_WithBorrowedArchitectureLayers_DoesNotDisposeSource()
+    {
+        using var sharedLayer = new DenseLayer<double>(2);
+        var architecture = new NeuralNetworkArchitecture<double>(
+            inputType: InputType.OneDimensional,
+            taskType: NeuralNetworkTaskType.Regression,
+            inputSize: 4,
+            outputSize: 2,
+            layers: new System.Collections.Generic.List<AiDotNet.Interfaces.ILayer<double>>
+            {
+                sharedLayer
+            });
+        using var source = new NeuralNetwork<double>(architecture);
+        var input = Input();
+        var expected = source.Predict(input);
+
+        using var clone = (NeuralNetwork<double>)source.Clone();
+
+        // The first COW candidate is intentionally rejected because CreateNewInstance receives
+        // the architecture's same layer objects. Cleaning up that rejected candidate must observe
+        // the ownership boundary and leave the source layer executable.
+        var sourceAfterClone = source.Predict(input);
+        Assert.Equal(expected.Length, sourceAfterClone.Length);
+        for (int i = 0; i < expected.Length; i++)
+            Assert.Equal(expected[i], sourceAfterClone[i], 10);
+
+        var clonePrediction = clone.Predict(input);
+        Assert.Equal(expected.Length, clonePrediction.Length);
+    }
 
     [Fact]
     public void Clone_IsObservationallyIdentical_AndIndependentUnderMutation()
@@ -70,5 +106,258 @@ public class CopyOnWriteCloneTests
         for (int i = 0; i < clonePredAfter.Length; i++)
             cloneDelta = Math.Max(cloneDelta, Math.Abs(clonePredAfter[i] - sourcePredBefore[i]));
         Assert.True(cloneDelta > 1e-6, "Mutating the clone's parameters did not change its prediction.");
+    }
+
+    [Fact]
+    public void NestedTransformerGraph_IsIdenticalAndIndependentAfterCopyOnWriteShare()
+    {
+        var architecture = new NeuralNetworkArchitecture<float>(
+            inputType: InputType.OneDimensional,
+            taskType: NeuralNetworkTaskType.Regression,
+            inputSize: 4,
+            outputSize: 16);
+        var options = new XTTSv2CloneOptions
+        {
+            VocabSize = 32,
+            TextEncoderDim = 8,
+            LLMDim = 8,
+            NumEncoderLayers = 0,
+            NumLLMLayers = 1,
+            NumHeads = 2,
+            NumCodebooks = 1,
+            CodebookSize = 16,
+            SpeakerEmbeddingDim = 8,
+            DropoutRate = 0,
+        };
+        using var source = new XTTSv2Clone<float>(architecture, options);
+        using var destination = new XTTSv2Clone<float>(architecture, new XTTSv2CloneOptions(options));
+        var input = new Tensor<float>(
+            new Vector<float>(new[] { 1f, 2f, 3f, 4f }),
+            new[] { 4 });
+
+        _ = source.Predict(input);
+        _ = destination.Predict(input);
+        var sourceParamsBefore = source.GetParameters().Clone();
+
+        Assert.True(
+            CopyOnWriteCloneHelper.TryShareTrainableParameters<float>(source, destination),
+            "The registered XTTS transformer module graph was not eligible for copy-on-write sharing.");
+
+        var sourcePrediction = source.Predict(input);
+        var sharedPrediction = destination.Predict(input);
+        Assert.Equal(sourcePrediction.Length, sharedPrediction.Length);
+        for (int i = 0; i < sourcePrediction.Length; i++)
+            Assert.Equal(sourcePrediction[i], sharedPrediction[i], 5);
+
+        var mutated = destination.GetParameters().Clone();
+        for (int i = 0; i < mutated.Length; i++)
+            mutated[i] += 0.25f;
+        destination.SetParameters(mutated);
+
+        var sourceParamsAfter = source.GetParameters();
+        float maxSourceDrift = 0;
+        for (int i = 0; i < sourceParamsBefore.Length; i++)
+            maxSourceDrift = Math.Max(maxSourceDrift, Math.Abs(sourceParamsAfter[i] - sourceParamsBefore[i]));
+        Assert.True(maxSourceDrift < 1e-6f,
+            $"Mutating a nested-transformer destination changed the source by {maxSourceDrift:E3}.");
+
+        var mutatedPrediction = destination.Predict(input);
+        float destinationDelta = 0;
+        for (int i = 0; i < mutatedPrediction.Length; i++)
+            destinationDelta = Math.Max(
+                destinationDelta,
+                Math.Abs(mutatedPrediction[i] - sourcePrediction[i]));
+        Assert.True(destinationDelta > 1e-5f,
+            "Mutating the copy-on-write transformer graph did not change the destination prediction.");
+    }
+
+    [Fact]
+    public async Task FreshDense_PreservesReboundWeightsOnFirstForward()
+    {
+        await Task.Yield();
+
+        using var source = new DenseLayer<float>(outputSize: 3);
+        using var destination = new DenseLayer<float>(outputSize: 3);
+        var input = new Tensor<float>(
+            new Vector<float>(new[] { 0.25f, -0.5f, 0.75f, 1.25f }),
+            new[] { 1, 4 });
+
+        var expected = source.Forward(input);
+        var sourceParameters = source.GetTrainableParameters();
+        var shared = new Tensor<float>[sourceParameters.Count];
+        for (int i = 0; i < sourceParameters.Count; i++)
+            shared[i] = (Tensor<float>)sourceParameters[i].CloneShared();
+
+        // The destination has resolved no input shape yet. Rebinding trained
+        // tensors must materialize it without reinitializing those tensors.
+        destination.SetTrainableParameters(shared);
+        var actual = destination.Forward(input);
+
+        Assert.Equal(expected.Length, actual.Length);
+        for (int i = 0; i < expected.Length; i++)
+            Assert.Equal(expected[i], actual[i], 6);
+    }
+
+    [Fact]
+    public async Task MaterializedDiT_CanShareIntoShapeResolvedLazyDestination()
+    {
+        await Task.Yield();
+
+        using var source = new DiTNoisePredictor<float>(
+            inputChannels: 2,
+            hiddenSize: 8,
+            numLayers: 1,
+            numHeads: 2,
+            patchSize: 1,
+            contextDim: 8,
+            latentSpatialSize: 2,
+            seed: 17);
+        using var destination = new DiTNoisePredictor<float>(
+            inputChannels: 2,
+            hiddenSize: 8,
+            numLayers: 1,
+            numHeads: 2,
+            patchSize: 1,
+            contextDim: 8,
+            latentSpatialSize: 2,
+            seed: 91);
+        using var input = new Tensor<float>(new[] { 1, 2, 2, 2 });
+
+        var expected = source.PredictNoise(input, timestep: 3, conditioning: null);
+        long destinationCount = destination.ParameterCount; // resolves structure, not lazy weight storage
+        var countDiagnostics = string.Join("; ",
+            CopyOnWriteCloneHelper.CollectTrainableLayers<float>(destination)
+                .OfType<LayerBase<float>>()
+                .Select(layer =>
+                    $"{layer.GetType().Name}: count={layer.ParameterCount}, " +
+                    $"tensors=[{string.Join(",", layer.GetTrainableParametersWithoutMaterialization().Select(t => t.Length))}], " +
+                    $"layout=[{string.Join(",", layer.GetParameterLayout().Select(slot => $"{slot.Readiness}:{slot.ParameterCount}"))}]"));
+        Assert.True(destinationCount > 0, countDiagnostics);
+
+        bool sharedParameters = CopyOnWriteCloneHelper.TryShareTrainableParameters<float>(source, destination);
+        var sourceLayers = CopyOnWriteCloneHelper.CollectTrainableLayers<float>(source);
+        var destinationLayers = CopyOnWriteCloneHelper.CollectTrainableLayers<float>(destination);
+        var shareDiagnostics = string.Join("; ", sourceLayers.Zip(destinationLayers, (sourceLayer, destinationLayer) =>
+        {
+            var sourceValues = ((LayerBase<float>)sourceLayer).GetOwnTrainableParameterValueTensors();
+            var destinationBase = (LayerBase<float>)destinationLayer;
+            return $"{sourceLayer.GetType().Name}: source=[{string.Join(",", sourceValues.Select(t => string.Join("x", t.Shape.ToArray())))}], " +
+                   $"destination=[{string.Join(",", destinationBase.GetTrainableParametersWithoutMaterialization().Select(t => string.Join("x", t.Shape.ToArray())))}], " +
+                   $"canAdopt={destinationBase.CanAdoptTrainableParametersWithoutMaterialization(sourceValues)}";
+        }));
+        Assert.True(
+            sharedParameters,
+            $"Generated shape declarations should authorize COW binding into lazy DiT placeholders. {shareDiagnostics}");
+
+        for (int layerIndex = 0; layerIndex < sourceLayers.Count; layerIndex++)
+        {
+            var sourceValues = ((LayerBase<float>)sourceLayers[layerIndex]).GetOwnTrainableParameterValueTensors();
+            var destinationValues = ((LayerBase<float>)destinationLayers[layerIndex]).GetOwnTrainableParameterValueTensors();
+            Assert.Equal(sourceValues.Count, destinationValues.Count);
+            for (int parameterIndex = 0; parameterIndex < sourceValues.Count; parameterIndex++)
+            {
+                Assert.Equal(sourceValues[parameterIndex].Shape.ToArray(), destinationValues[parameterIndex].Shape.ToArray());
+                Assert.Equal(sourceValues[parameterIndex].AsSpan().ToArray(), destinationValues[parameterIndex].AsSpan().ToArray());
+            }
+        }
+
+        var sourceAfterShare = source.PredictNoise(input, timestep: 3, conditioning: null);
+        Assert.Equal(expected.Length, sourceAfterShare.Length);
+        for (int i = 0; i < expected.Length; i++)
+            Assert.Equal(expected[i], sourceAfterShare[i], 5);
+
+        var actual = destination.PredictNoise(input, timestep: 3, conditioning: null);
+        for (int layerIndex = 0; layerIndex < sourceLayers.Count; layerIndex++)
+        {
+            var sourceValues = ((LayerBase<float>)sourceLayers[layerIndex]).GetOwnTrainableParameterValueTensors();
+            var destinationValues = ((LayerBase<float>)destinationLayers[layerIndex]).GetOwnTrainableParameterValueTensors();
+            for (int parameterIndex = 0; parameterIndex < sourceValues.Count; parameterIndex++)
+            {
+                Assert.True(
+                    sourceValues[parameterIndex].AsSpan().SequenceEqual(destinationValues[parameterIndex].AsSpan()),
+                    $"{sourceLayers[layerIndex].GetType().Name} parameter {parameterIndex} changed during destination first-forward initialization.");
+            }
+        }
+        Assert.Equal(expected.Length, actual.Length);
+        for (int i = 0; i < expected.Length; i++)
+            Assert.Equal(expected[i], actual[i], 5);
+    }
+
+    [Fact]
+    public async Task FreshDense_RejectsIncompatibleReboundWeightsOnFirstForward()
+    {
+        await Task.Yield();
+
+        using var destination = new DenseLayer<float>(outputSize: 3);
+        using var weights = new Tensor<float>(new[] { 5, 3 });
+        using var biases = new Tensor<float>(new[] { 3 });
+        using var input = new Tensor<float>(new[] { 1, 4 });
+
+        destination.SetTrainableParameters(new[] { weights, biases });
+        var ex = Assert.Throws<InvalidOperationException>(() => destination.Forward(input));
+
+        Assert.Contains("Expected weights [4, 3]", ex.Message);
+        Assert.Contains("received weights [5, 3]", ex.Message);
+    }
+
+    [Fact]
+    public void FreshEmbedding_PreservesReboundWeightsOnFirstForward()
+    {
+        using var source = new EmbeddingLayer<float>(32, 8);
+        using var destination = new EmbeddingLayer<float>(32, 8);
+        var input = new Tensor<float>(
+            new Vector<float>(new[] { 1f, 7f, 11f, 19f }),
+            new[] { 4 });
+
+        var expected = source.Forward(input);
+        var sourceParameters = source.GetTrainableParameters();
+        var shared = new Tensor<float>[sourceParameters.Count];
+        for (int i = 0; i < sourceParameters.Count; i++)
+            shared[i] = (Tensor<float>)sourceParameters[i].CloneShared();
+
+        // The destination is intentionally still fresh. This is the state a
+        // graph-safe DeepCopy destination is in when its trained tensors are rebound.
+        destination.SetTrainableParameters(shared);
+        var actual = destination.Forward(input);
+
+        Assert.Equal(expected.Length, actual.Length);
+        for (int i = 0; i < expected.Length; i++)
+            Assert.Equal(expected[i], actual[i], 6);
+    }
+
+    [Fact]
+    public void DeferredGroupedQueryAttention_PreservesReboundWeightsOnFirstForward()
+    {
+        using var source = new GroupedQueryAttentionLayer<float>(
+            sequenceLength: 4,
+            embeddingDimension: 8,
+            numHeads: 2,
+            numKVHeads: 1,
+            deferAllocation: true);
+        using var destination = new GroupedQueryAttentionLayer<float>(
+            sequenceLength: 4,
+            embeddingDimension: 8,
+            numHeads: 2,
+            numKVHeads: 1,
+            deferAllocation: true);
+        var values = new float[32];
+        for (int i = 0; i < values.Length; i++)
+            values[i] = (i - 16) / 32f;
+        var input = new Tensor<float>(new Vector<float>(values), new[] { 4, 8 });
+
+        var expected = source.Forward(input);
+        var sourceParameters = source.GetTrainableParameters();
+        var shared = new Tensor<float>[sourceParameters.Count];
+        for (int i = 0; i < sourceParameters.Count; i++)
+            shared[i] = (Tensor<float>)sourceParameters[i].CloneShared();
+
+        // Keep the destination deferred until after rebinding, which is the
+        // exact state produced by a graph-safe clone of a decoder stack.
+        destination.SetTrainableParameters(shared);
+        var actual = destination.Forward(input);
+
+        Assert.Equal(expected.Length, actual.Length);
+        for (int i = 0; i < expected.Length; i++)
+            Assert.Equal(expected[i], actual[i], 5);
     }
 }

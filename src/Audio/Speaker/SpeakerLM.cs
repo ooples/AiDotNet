@@ -44,7 +44,7 @@ namespace AiDotNet.Audio.Speaker;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     [ResearchPaper("Probabilistic Linear Discriminant Analysis for Inferences About Identity", "https://doi.org/10.1109/ICCV.2007.4409052")]
-public class SpeakerLM<T> : SpeakerRecognitionBase<T>, ISpeakerVerifier<T>, ISpeakerEmbeddingExtractor<T>
+public partial class SpeakerLM<T> : SpeakerRecognitionBase<T>, ISpeakerVerifier<T>, ISpeakerEmbeddingExtractor<T>
 {
     #region Fields
 
@@ -248,6 +248,13 @@ public class SpeakerLM<T> : SpeakerRecognitionBase<T>, ISpeakerVerifier<T>, ISpe
     {
         ThrowIfDisposed();
         if (IsOnnxMode && OnnxEncoder is not null) return OnnxEncoder.Run(input);
+        // Force EVAL mode before the forward walk. The layer stack is built with
+        // dropoutRate: _options.DropoutRate (default 0.1), so with training mode left active the
+        // dropout masks are resampled on every inference call: ExtractEmbedding -> Predict returned a
+        // DIFFERENT embedding for identical audio (SameInput_SameEmbedding: "Values differ"), and every
+        // loss the training invariants measured was stochastic, which is why extra training read as a
+        // degradation. Inference must be deterministic; every other PredictCore here does the same.
+        SetTrainingMode(false);
         var c = input; foreach (var l in Layers) c = l.Forward(c); return c;
     }
 
@@ -257,7 +264,7 @@ public class SpeakerLM<T> : SpeakerRecognitionBase<T>, ISpeakerVerifier<T>, ISpe
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expected);
+            TrainWithTape(input, expected, _optimizer);
         }
         finally
         {
@@ -265,12 +272,11 @@ public class SpeakerLM<T> : SpeakerRecognitionBase<T>, ISpeakerVerifier<T>, ISpe
         }
     }
 
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        if (!_useNativeMode) throw new NotSupportedException("ONNX mode.");
-        int idx = 0; foreach (var l in Layers) { int c = (int)l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; }
-    }
-
+    /// <inheritdoc />
+    /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
+    /// write on every parameter surface, so the guard is stated once here instead of being
+    /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
+    protected override bool SupportsParameterMutation => _useNativeMode;
     protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio)
     {
         if (MelSpec is not null) return MelSpec.Forward(rawAudio);

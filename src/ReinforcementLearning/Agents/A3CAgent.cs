@@ -61,8 +61,17 @@ namespace AiDotNet.ReinforcementLearning.Agents.A3C;
     "https://arxiv.org/abs/1602.01783",
     Year = 2016,
     Authors = "Mnih, V., Badia, A. P., Mirza, M., Graves, A., Lillicrap, T., Harley, T., Silver, D., & Kavukcuoglu, K.")]
-public class A3CAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradientComputable<T, Vector<T>, Vector<T>>
+public partial class A3CAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradientComputable<T, Vector<T>, Vector<T>>
 {
+
+    /// <inheritdoc />
+    /// <remarks>The same components, in the same order, that the hand-written
+    /// GetParameters concatenated -- that order is the serialization order.</remarks>
+    protected override void RegisterComponents()
+    {
+        RegisterParameterComponent(_globalPolicyNetwork);
+        RegisterParameterComponent(_globalValueNetwork);
+    }
     private readonly A3COptions<T> _options;
 
     /// <inheritdoc/>
@@ -563,12 +572,6 @@ public class A3CAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradientCompu
     // UpdateNetworkParameters removed — networks trained via Train()/TrainWithCustomLoss,
     // then local parameters copied to global networks.
 
-    private void CopyNetworkWeights(INeuralNetwork<T> source, INeuralNetwork<T> target)
-    {
-        var sourceParams = source.GetParameters();
-        target.UpdateParameters(sourceParams);
-    }
-
     /// <summary>
     /// Appends one step of (s, a, r, s', done) experience to the on-policy
     /// trajectory buffer. A3C uses no replay (Mnih et al. 2016 §3.1) — the
@@ -770,39 +773,6 @@ public class A3CAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradientCompu
             FeatureCount = _options.StateSize,
             Complexity = ParameterCount,
         };
-    }
-
-    /// <inheritdoc/>
-    public override Vector<T> GetParameters()
-    {
-        var policyParams = _globalPolicyNetwork.GetParameters();
-        var valueParams = _globalValueNetwork.GetParameters();
-
-        var total = policyParams.Length + valueParams.Length;
-        var vector = new Vector<T>(total);
-
-        int idx = 0;
-        foreach (var p in policyParams) vector[idx++] = p;
-        foreach (var p in valueParams) vector[idx++] = p;
-
-        return vector;
-    }
-
-    /// <inheritdoc/>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        var policyParams = _globalPolicyNetwork.GetParameters();
-        var valueParams = _globalValueNetwork.GetParameters();
-
-        int idx = 0;
-        var policyVec = new Vector<T>(policyParams.Length);
-        var valueVec = new Vector<T>(valueParams.Length);
-
-        for (int i = 0; i < policyParams.Length; i++) policyVec[i] = parameters[idx++];
-        for (int i = 0; i < valueParams.Length; i++) valueVec[i] = parameters[idx++];
-
-        _globalPolicyNetwork.UpdateParameters(policyVec);
-        _globalValueNetwork.UpdateParameters(valueVec);
     }
 
     /// <inheritdoc/>

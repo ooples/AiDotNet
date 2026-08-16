@@ -59,7 +59,7 @@ public class FloraAdapter<T> : LoRAAdapterBase<T>
         _useAdaptiveLearningRate = useAdaptiveLearningRate;
         _random = RandomHelper.CreateSeededRandom(seed);
 
-        int outputSize = GetOutputShape()[0];
+        int outputSize = GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0];
         if (_useAdaptiveLearningRate)
         {
             _compressedSecondMoment = new Matrix<T>(rank, outputSize);
@@ -80,7 +80,7 @@ public class FloraAdapter<T> : LoRAAdapterBase<T>
 
         Vector<T> loraGradients = _loraLayer.GetParameterGradients();
         int inputSize = GetInputShape()[0];
-        int outputSize = GetOutputShape()[0];
+        int outputSize = GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0];
 
         _compressedMomentum ??= new Matrix<T>(_rank, outputSize);
 
@@ -146,7 +146,7 @@ public class FloraAdapter<T> : LoRAAdapterBase<T>
     {
         Vector<T> currentParams = _loraLayer.GetParameters();
         int inputSize = GetInputShape()[0];
-        int outputSize = GetOutputShape()[0];
+        int outputSize = GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0];
 
         Matrix<T> oldA = new Matrix<T>(inputSize, _rank);
         for (int i = 0; i < inputSize; i++)
@@ -242,7 +242,7 @@ public class FloraAdapter<T> : LoRAAdapterBase<T>
 
         // Both DenseLayer and FullyConnectedLayer store parameters as [weights..., biases...]
         int inputSize = GetInputShape()[0];
-        int outputSize = GetOutputShape()[0];
+        int outputSize = GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0];
         int weightCount = inputSize * outputSize;
 
         // Create new parameters with merged weights
@@ -270,7 +270,7 @@ public class FloraAdapter<T> : LoRAAdapterBase<T>
     {
         base.ResetState();
         _currentStep = 0;
-        int outputSize = GetOutputShape()[0];
+        int outputSize = GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0];
         _compressedMomentum = new Matrix<T>(_rank, outputSize);
 
         if (_useAdaptiveLearningRate)

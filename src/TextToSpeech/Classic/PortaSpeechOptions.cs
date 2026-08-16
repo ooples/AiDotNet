@@ -10,6 +10,7 @@ public class PortaSpeechOptions : AcousticModelOptions
     /// <param name="other">The options instance to copy from.</param>
     /// <exception cref="ArgumentNullException">Thrown when other is null.</exception>
     public PortaSpeechOptions(PortaSpeechOptions other)
+        : base(other)
     {
         if (other == null)
             throw new ArgumentNullException(nameof(other));
@@ -28,6 +29,8 @@ public class PortaSpeechOptions : AcousticModelOptions
         NumEncoderLayers = 4;
         NumDecoderLayers = 4;
         NumHeads = 2;
+        LearningRate = 2e-4;
+        WeightDecay = 0.0;
     }
 
     /// <summary>Gets or sets the number of normalizing flow layers for the post-net.</summary>

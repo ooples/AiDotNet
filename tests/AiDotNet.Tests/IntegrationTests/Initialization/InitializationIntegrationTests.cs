@@ -41,6 +41,29 @@ public class InitializationIntegrationTests
     }
 
     [Fact(Timeout = 120000)]
+    public async Task Eager_InitializeWeights_WritesPooledLiveStorage()
+    {
+        // Logical length 6 normally rents a larger ArrayPool bucket. In that
+        // layout GetDataArray() is allowed to return a detached logical copy;
+        // initialization must write through AsWritableSpan so the tensor used
+        // by forward execution, not merely that copy, receives the samples.
+        var weights = TensorAllocator.RentPinned<double>(new[] { 2, 3 });
+        try
+        {
+            var strategy = new EagerInitializationStrategy<double>(
+                RandomHelper.CreateSeededRandom(1234));
+
+            strategy.InitializeWeights(weights, 2, 3);
+
+            Assert.Contains(weights.ToArray(), value => value != 0.0);
+        }
+        finally
+        {
+            weights.Dispose();
+        }
+    }
+
+    [Fact(Timeout = 120000)]
     public async Task Eager_InitializeBiases_ProducesZeros()
     {
         var strategy = new EagerInitializationStrategy<double>();

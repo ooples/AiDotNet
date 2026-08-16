@@ -53,7 +53,7 @@ namespace AiDotNet.Audio.Effects;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Audio Super Resolution using Neural Networks", "https://arxiv.org/abs/1708.00853", Year = 2017, Authors = "Volodymyr Kuleshov, S. Zayd Enam, Stefano Ermon")]
-public class AudioSuperResolution<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
+public partial class AudioSuperResolution<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
 {
     #region Fields
 
@@ -112,7 +112,11 @@ public class AudioSuperResolution<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer
     {
         _options = options ?? new AudioSuperResolutionOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
+            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate
+            });
         base.SampleRate = _options.OutputSampleRate;
         InitializeLayers();
     }
@@ -306,7 +310,7 @@ public class AudioSuperResolution<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expected);
+            TrainWithTape(input, expected, _optimizer);
         }
         finally
         {
@@ -314,12 +318,11 @@ public class AudioSuperResolution<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer
         }
     }
 
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        if (!_useNativeMode) throw new NotSupportedException("ONNX mode.");
-        int idx = 0; foreach (var l in Layers) { int c = (int)l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; }
-    }
-
+    /// <inheritdoc />
+    /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
+    /// write on every parameter surface, so the guard is stated once here instead of being
+    /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
+    protected override bool SupportsParameterMutation => _useNativeMode;
     protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio) => rawAudio;
     protected override Tensor<T> PostprocessOutput(Tensor<T> o) => o;
 

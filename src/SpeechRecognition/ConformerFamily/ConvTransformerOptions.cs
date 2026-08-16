@@ -1,4 +1,4 @@
-using AiDotNet.Models.Options;
+﻿using AiDotNet.Models.Options;
 using AiDotNet.Onnx;
 
 namespace AiDotNet.SpeechRecognition.ConformerFamily;
@@ -20,6 +20,12 @@ public class ConvTransformerOptions : ModelOptions
         if (other == null)
             throw new ArgumentNullException(nameof(other));
 
+        // INHERITED FROM ModelOptions, AND THEREFORE EASY TO MISS. Every declared property is copied
+        // below; Seed is not declared here, so it was silently dropped and a copied configuration
+        // produced a DIFFERENT model from the one it was copied from -- the failure mode that costs
+        // the most to diagnose, because the two configurations compare equal on everything visible.
+        Seed = other.Seed;
+
         SampleRate = other.SampleRate;
         MaxAudioLengthSeconds = other.MaxAudioLengthSeconds;
         EncoderDim = other.EncoderDim;
@@ -32,7 +38,7 @@ public class ConvTransformerOptions : ModelOptions
         OnnxOptions = new OnnxModelOptions(other.OnnxOptions);
         DropoutRate = other.DropoutRate;
         Language = other.Language;
-        Vocabulary = other.Vocabulary;
+        Vocabulary = other.Vocabulary.ToArray();
     }
 
     public int SampleRate { get; set; } = 16000;

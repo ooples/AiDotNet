@@ -42,8 +42,22 @@ namespace AiDotNet.Audio.Fingerprinting;
     "https://arxiv.org/abs/2104.01778",
     Year = 2021,
     Authors = "Yuan Gong, Yu-An Chung, James Glass")]
+[PreprocessesInput("PreprocessAudio converts the caller's waveform into a rank-4 log-mel spectrogram before the AST patch embedding runs.")]
+[StackInputLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    BatchOptional = true)]
 public class ASTModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// Measured: <c>PredictCore</c> folds <c>Layers</c> over the mel input and <c>PostprocessOutput</c>
+    /// is the identity. The <c>CreateDefaultASTLayers</c> overload this model calls ends with
+    /// <c>SequenceTokenSliceLayer</c> (take the CLS token) then
+    /// <c>DenseLayer&lt;T&gt;(outputSize: numClasses)</c>, supplied from <c>_options.NumClasses</c> -
+    /// AudioSet class LOGITS, not the <c>EmbeddingDim</c> the transformer stack runs at.
+    /// <c>Classify</c> corroborates it: it reads <c>probs.Shape[^1]</c> as the class count.
+    /// </remarks>
+    protected override int OutputFeatureWidth => _options.NumClasses;
+
     private readonly ASTModelOptions _options;
     private readonly bool _useNativeMode;
 
@@ -51,6 +65,7 @@ public class ASTModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
     /// Cached Hann window for the STFT preprocessing step. Built once on the
     /// first <see cref="PreprocessAudio"/> call and reused.
     /// </summary>
+    [Buffer]
     private Tensor<T>? _hannWindow;
 
     /// <inheritdoc/>
@@ -363,24 +378,36 @@ public class ASTModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
         if (!_useNativeMode)
             throw new NotSupportedException("Cannot train in ONNX inference mode.");
         SetTrainingMode(true);
-        try { TrainWithTape(input, expected); }
+        try
+        {
+            // Training accepts the same raw-waveform contract as Predict and
+            // Fingerprint. The patch embedder consumes a rank-4 log-mel image,
+            // so bypassing the STFT frontend here fed [batch, samples]
+            // directly into a [batch, channels, height, width] layer.
+            var mel = PreprocessAudio(input);
+            TrainWithTape(mel, expected);
+        }
         finally { SetTrainingMode(false); }
     }
 
-    /// <inheritdoc/>
-    public override void UpdateParameters(Vector<T> parameters)
+    /// <summary>
+    /// Runs the same raw-waveform preprocessing used by prediction before
+    /// walking the native AST layers. The base implementation assumes that
+    /// callers already provide the layer-stack tensor, while AST's public
+    /// contract accepts raw audio samples.
+    /// </summary>
+    public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input)
     {
         if (!_useNativeMode)
-            throw new NotSupportedException("Cannot update parameters in ONNX inference mode.");
-        int idx = 0;
-        foreach (var layer in Layers)
-        {
-            int count = (int)layer.ParameterCount;
-            layer.UpdateParameters(parameters.Slice(idx, count));
-            idx += count;
-        }
+            return base.GetNamedLayerActivations(input);
+        return base.GetNamedLayerActivations(PreprocessAudio(input));
     }
 
+    /// <inheritdoc />
+    /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
+    /// write on every parameter surface, so the guard is stated once here instead of being
+    /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
+    protected override bool SupportsParameterMutation => _useNativeMode;
     #endregion
 
     #region Helpers

@@ -36,7 +36,12 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Positional)]
 [LayerTask(LayerTask.PositionalEncoding)]
 [LayerProperty(IsTrainable = false, TestInputShape = "16, 8", TestConstructorArgs = "16, 8")]
-internal partial class RotaryPositionalEncodingLayer<T> : LayerBase<T>
+// Rotates query/key pairs by position: shape-preserving at rank 2 [Time, Features]. Needs a real
+// sequence axis to rotate against, so it is not declared rank-agnostic.
+[TensorLayout(TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
+[AutoParameters]
+public partial class RotaryPositionalEncodingLayer<T> : LayerBase<T>, IShapeContract
 {
     private int _maxSequenceLength;
     private readonly int _headDimension;
@@ -46,12 +51,16 @@ internal partial class RotaryPositionalEncodingLayer<T> : LayerBase<T>
     /// Pre-computed cosine values: cos_cache[pos, i] = cos(pos * freq_i).
     /// Shape: [maxSequenceLength, headDimension / 2].
     /// </summary>
+    // Memoised cos table for a deterministic function of position; recomputed on demand, never learned.
+    [Scratch]
     private Tensor<T> _cosCache;
 
     /// <summary>
     /// Pre-computed sine values: sin_cache[pos, i] = sin(pos * freq_i).
     /// Shape: [maxSequenceLength, headDimension / 2].
     /// </summary>
+    // Memoised sin table for a deterministic function of position; recomputed on demand, never learned.
+    [Scratch]
     private Tensor<T> _sinCache;
 
     private readonly object _cacheLock = new();
@@ -209,8 +218,14 @@ internal partial class RotaryPositionalEncodingLayer<T> : LayerBase<T>
         int endPosition = startPosition + seqLen;
         EnsureCacheLength(endPosition);
 
-        var rotatedQ = RotateTensor(queries, startPosition);
-        var rotatedK = RotateTensor(keys, startPosition);
+        // Route the rotation through the engine primitive. Besides using the same optimized
+        // CPU/GPU implementation as decoder inference, ApplyRoPEInterleaved records its inverse
+        // rotation on an active gradient tape. The former scalar-copy implementation returned
+        // detached tensors and silently discarded every Q/K contribution during tape training.
+        var rotatedQ = Engine.ApplyRoPEInterleaved(
+            queries, _cosCache, _sinCache, startPosition);
+        var rotatedK = Engine.ApplyRoPEInterleaved(
+            keys, _cosCache, _sinCache, startPosition);
 
         return (rotatedQ, rotatedK);
     }
@@ -234,58 +249,6 @@ internal partial class RotaryPositionalEncodingLayer<T> : LayerBase<T>
         var unrotatedGradK = InverseRotateTensor(gradKey, startPosition);
 
         return (unrotatedGradQ, unrotatedGradK);
-    }
-
-    /// <summary>
-    /// Applies RoPE rotation to a single tensor.
-    /// </summary>
-    private Tensor<T> RotateTensor(Tensor<T> input, int startPosition)
-    {
-        var output = TensorAllocator.Rent<T>(input._shape);
-        int rank = input.Shape.Length;
-        int seqLen = input.Shape[rank - 2];
-        int headDim = input.Shape[rank - 1];
-        int halfDim = headDim / 2;
-
-        // Compute total number of elements in leading dimensions
-        int leadingSize = 1;
-        for (int d = 0; d < rank - 2; d++)
-        {
-            leadingSize *= input.Shape[d];
-        }
-
-        // Flatten to [leadingSize, seqLen, headDim] for processing
-        int seqStride = headDim;
-        int batchStride = seqLen * headDim;
-
-        for (int b = 0; b < leadingSize; b++)
-        {
-            for (int s = 0; s < seqLen; s++)
-            {
-                int pos = startPosition + s;
-                int baseIdx = b * batchStride + s * seqStride;
-
-                for (int i = 0; i < halfDim; i++)
-                {
-                    T cos_val = _cosCache[pos, i];
-                    T sin_val = _sinCache[pos, i];
-
-                    T x_even = input[baseIdx + 2 * i];
-                    T x_odd = input[baseIdx + 2 * i + 1];
-
-                    // x'[2i]   = x[2i] * cos - x[2i+1] * sin
-                    // x'[2i+1] = x[2i] * sin + x[2i+1] * cos
-                    output[baseIdx + 2 * i] = NumOps.Subtract(
-                        NumOps.Multiply(x_even, cos_val),
-                        NumOps.Multiply(x_odd, sin_val));
-                    output[baseIdx + 2 * i + 1] = NumOps.Add(
-                        NumOps.Multiply(x_even, sin_val),
-                        NumOps.Multiply(x_odd, cos_val));
-                }
-            }
-        }
-
-        return output;
     }
 
     /// <summary>
@@ -345,25 +308,28 @@ internal partial class RotaryPositionalEncodingLayer<T> : LayerBase<T>
     /// </summary>
     /// <param name="input">Input tensor with shape [..., seqLen, headDim].</param>
     /// <returns>Rotated tensor with the same shape.</returns>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         int rank = input.Shape.Length;
-        int seqLen = rank >= 2 ? input.Shape[rank - 2] : input.Shape[0];
+        if (rank < 2)
+        {
+            throw new ArgumentException(
+                $"RoPE input rank must be at least 2 ([..., sequence, head dimension]); got rank {rank}.",
+                nameof(input));
+        }
+
+        int headDim = input.Shape[rank - 1];
+        if (headDim != _headDimension)
+        {
+            throw new ArgumentException(
+                $"RoPE expected head dimension {_headDimension}, got {headDim}.",
+                nameof(input));
+        }
+
+        int seqLen = input.Shape[rank - 2];
         EnsureCacheLength(seqLen);
 
-        return RotateTensor(input, 0);
-    }
-
-    /// <inheritdoc />
-    public override void UpdateParameters(T learningRate)
-    {
-        // No trainable parameters
-    }
-
-    /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        return Vector<T>.Empty();
+        return Engine.ApplyRoPEInterleaved(input, _cosCache, _sinCache, startPosition: 0);
     }
 
     /// <inheritdoc />

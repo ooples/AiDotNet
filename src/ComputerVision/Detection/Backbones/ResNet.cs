@@ -10,6 +10,8 @@ using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors;
 using AiDotNet.Tensors.LinearAlgebra;
 
+using System.Linq;
+
 namespace AiDotNet.ComputerVision.Detection.Backbones;
 
 /// <summary>
@@ -38,8 +40,35 @@ namespace AiDotNet.ComputerVision.Detection.Backbones;
     "https://arxiv.org/abs/1512.03385",
     Year = 2016,
     Authors = "Kaiming He, Xiangyu Zhang, Shaoqing Ren, Jian Sun")]
-public class ResNet<T> : NeuralNetworkBase<T>, IDetectionBackbone<T>
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Input, BatchOptional = true)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Output, BatchOptional = true)]
+public partial class ResNet<T> : NeuralNetworkBase<T>, IDetectionBackbone<T>
 {
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// The stem convolution and every layer inside every stage. These live outside <c>Layers</c>,
+    /// held in plain block objects, which is why this backbone used to THROW from GetParameters
+    /// rather than expose a flat vector -- the base walk would have found nothing.
+    /// <para>
+    /// Refusing was never right. PyTorch has no module that declines to enumerate its parameters;
+    /// parameters_to_vector over a ResNet works. The refusal was unfinished plumbing wearing the
+    /// shape of a design decision, and it cost the model checkpointing, flat-vector optimizers and
+    /// every count-based diagnostic. Declaring the layers here gets all of that back, and the count,
+    /// the vector, the restore and the chunk walk all fold this one declaration.
+    /// </para>
+    /// </remarks>
+    protected override IEnumerable<LayerBase<T>?> GetExtraTrainableLayers()
+    {
+        yield return _conv1;
+        foreach (var stage in _stages)
+        {
+            foreach (var layer in stage.EnumerateLayers()) yield return layer;
+        }
+    }
+    // UpdateParameters delegated straight to SetParameters. The base does that now.
     private readonly ConvolutionalLayer<T> _conv1;
     private readonly List<ResNetStage<T>> _stages;
     private readonly ResNetVariant _variant;
@@ -85,8 +114,13 @@ public class ResNet<T> : NeuralNetworkBase<T>, IDetectionBackbone<T>
         int[] baseChannels = { 64, 128, 256, 512 };
         OutputChannels = baseChannels.Select(c => c * expansion).ToArray();
 
-        // Stem 7×7 conv stride=2 — input depth resolves lazily.
-        _conv1 = new ConvolutionalLayer<T>(outputDepth: 64, kernelSize: 7, stride: 2, padding: 3);
+        // Stem 7×7 conv stride=2. The input channel count is a constructor argument, so give it to
+        // the layer instead of making it re-derive the same number from the first batch — this is
+        // torchvision's nn.Conv2d(in_channels, 64, kernel_size=7, ...). Sizing it here means
+        // ParameterCount and GetParameters are exact before any data flows, and the weights are
+        // allocated once rather than materialized mid-forward.
+        _conv1 = ConvolutionalLayer<T>.WithInputDepth(
+            inputDepth: inChannels, outputDepth: 64, kernelSize: 7, stride: 2, padding: 3);
 
         int[] blockCounts = GetBlockCounts(variant);
         int currentChannels = 64;
@@ -181,22 +215,6 @@ public class ResNet<T> : NeuralNetworkBase<T>, IDetectionBackbone<T>
         return activations;
     }
 
-    /// <summary>
-    /// Sum across the stem conv plus every residual stage. Inherited
-    /// <c>NeuralNetworkBase&lt;T&gt;.GetParameterCount()</c> already delegates to
-    /// this virtual property, so the <see cref="IDetectionBackbone{T}"/>
-    /// contract is satisfied without re-declaring the method here.
-    /// </summary>
-    public override long ParameterCount
-    {
-        get
-        {
-            long count = _conv1.ParameterCount;
-            for (int i = 0; i < _stages.Count; i++)
-                count += _stages[i].GetParameterCount();
-            return count;
-        }
-    }
 
     public void WriteParameters(BinaryWriter writer)
     {
@@ -265,19 +283,8 @@ public class ResNet<T> : NeuralNetworkBase<T>, IDetectionBackbone<T>
             "(FasterRCNN, YOLOv8, DETR, …) which orchestrates the joint forward/backward pass. " +
             "Train the parent detection model instead.");
 
-    public override Vector<T> GetParameters() =>
-        throw new NotSupportedException(
-            $"{GetType().Name}: backbones do not expose a flat parameter vector. " +
-            "Use WriteParameters(BinaryWriter) / ReadParameters(BinaryReader) to round-trip weights.");
 
-    public override void SetParameters(Vector<T> parameters) =>
-        throw new NotSupportedException(
-            $"{GetType().Name}: backbones do not accept a flat parameter vector. Use ReadParameters(BinaryReader).");
 
-    public override void UpdateParameters(Vector<T> parameters) =>
-        throw new NotSupportedException(
-            $"{GetType().Name}: backbones do not accept a flat parameter update vector. " +
-            "Update happens inside the parent detector's optimizer step.");
 
     public override IFullModel<T, Tensor<T>, Tensor<T>> WithParameters(Vector<T> parameters) =>
         throw new NotSupportedException(
@@ -314,6 +321,10 @@ public class ResNet<T> : NeuralNetworkBase<T>, IDetectionBackbone<T>
 /// </summary>
 internal class ResNetStage<T>
 {
+    /// <summary>The layers of every block in this stage, in order.</summary>
+    internal IEnumerable<LayerBase<T>> EnumerateLayers()
+        => _blocks.SelectMany(b => b.EnumerateLayers());
+
     private readonly List<ResidualBlock<T>> _blocks;
 
     public ResNetStage(int inChannels, int outChannels, int numBlocks, int stride, bool useBottleneck, IActivationFunction<T> activation)
@@ -367,6 +378,15 @@ internal class ResNetStage<T>
 /// </summary>
 internal class ResidualBlock<T>
 {
+    /// <summary>The convolutional layers this block owns, in forward order.</summary>
+    internal IEnumerable<LayerBase<T>> EnumerateLayers()
+    {
+        yield return _conv1;
+        yield return _conv2;
+        if (_conv3 is not null) yield return _conv3;
+        if (_downsample is not null) yield return _downsample;
+    }
+
     private readonly ConvolutionalLayer<T> _conv1;
     private readonly ConvolutionalLayer<T> _conv2;
     private readonly ConvolutionalLayer<T>? _conv3;
@@ -380,20 +400,24 @@ internal class ResidualBlock<T>
         _activation = activation;
         int expansion = useBottleneck ? 4 : 1;
 
+        // Every fan-in here is already known from inChannels and the block's own widths, so size the
+        // convolutions up front rather than deferring to the first forward (torchvision's
+        // BasicBlock / Bottleneck pass in_channels explicitly for exactly these convs).
         if (useBottleneck)
         {
-            _conv1 = new ConvolutionalLayer<T>(outChannels, kernelSize: 1, stride: 1, padding: 0);
-            _conv2 = new ConvolutionalLayer<T>(outChannels, kernelSize: 3, stride: stride, padding: 1);
-            _conv3 = new ConvolutionalLayer<T>(outChannels * expansion, kernelSize: 1, stride: 1, padding: 0);
+            _conv1 = ConvolutionalLayer<T>.WithInputDepth(inChannels, outChannels, kernelSize: 1, stride: 1, padding: 0);
+            _conv2 = ConvolutionalLayer<T>.WithInputDepth(outChannels, outChannels, kernelSize: 3, stride: stride, padding: 1);
+            _conv3 = ConvolutionalLayer<T>.WithInputDepth(outChannels, outChannels * expansion, kernelSize: 1, stride: 1, padding: 0);
         }
         else
         {
-            _conv1 = new ConvolutionalLayer<T>(outChannels, kernelSize: 3, stride: stride, padding: 1);
-            _conv2 = new ConvolutionalLayer<T>(outChannels * expansion, kernelSize: 3, stride: 1, padding: 1);
+            _conv1 = ConvolutionalLayer<T>.WithInputDepth(inChannels, outChannels, kernelSize: 3, stride: stride, padding: 1);
+            _conv2 = ConvolutionalLayer<T>.WithInputDepth(outChannels, outChannels * expansion, kernelSize: 3, stride: 1, padding: 1);
         }
 
         if (downsample)
-            _downsample = new ConvolutionalLayer<T>(outChannels * expansion, kernelSize: 1, stride: stride, padding: 0);
+            _downsample = ConvolutionalLayer<T>.WithInputDepth(
+                inChannels, outChannels * expansion, kernelSize: 1, stride: stride, padding: 0);
     }
 
     public Tensor<T> Forward(Tensor<T> input)

@@ -17,4 +17,11 @@ public class SpiritLMOptions : CodecTtsOptions
         NumHeads = 8;
         DropoutRate = 0.1;
     }
+
+    /// <summary>Initializes a new instance by copying another Spirit-LM configuration.</summary>
+    /// <param name="other">The configuration to copy.</param>
+    public SpiritLMOptions(SpiritLMOptions other)
+        : base(other)
+    {
+    }
 }

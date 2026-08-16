@@ -78,6 +78,10 @@ namespace AiDotNet.Classification.ImbalancedEnsemble;
     Authors = "Shohei Hido, Hisashi Kashima")]
 public class BalancedBaggingClassifier<T> : ClassifierBase<T>
 {
+
+    // Returned _baseClassifiers.Count -- the NUMBER of estimators, not a parameter. No restore
+    // could rebuild an ensemble from that one value, and it pushed the count away from anything
+    // the vector could mean. The base fold now reports an empty vector and a count of zero.
     /// <summary>
     /// The ensemble of base classifiers.
     /// </summary>
@@ -548,31 +552,6 @@ public class BalancedBaggingClassifier<T> : ClassifierBase<T>
     }
 
     /// <summary>
-    /// Gets the model parameters.
-    /// </summary>
-    /// <returns>Vector with base classifier count.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Ensemble models don't fit neatly into parameter vectors.
-    /// Use serialization for full persistence.</para>
-    /// </remarks>
-    public Vector<T> GetParameters()
-    {
-        return new Vector<T>(1) { [0] = NumOps.FromDouble(_baseClassifiers.Count) };
-    }
-
-    /// <summary>
-    /// Sets the model parameters.
-    /// </summary>
-    /// <param name="parameters">Parameter vector (limited support).</param>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Use serialization to save/load ensemble models.</para>
-    /// </remarks>
-    public void SetParameters(Vector<T> parameters)
-    {
-        // Limited support for ensemble models
-    }
-
-    /// <summary>
     /// Creates a new instance with the specified parameters.
     /// </summary>
     /// <param name="parameters">Parameters (limited support).</param>
@@ -580,7 +559,7 @@ public class BalancedBaggingClassifier<T> : ClassifierBase<T>
     /// <remarks>
     /// <para><b>For Beginners:</b> Creates a new untrained model with same hyperparameters.</para>
     /// </remarks>
-    public IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
+    public override IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
     {
         return new BalancedBaggingClassifier<T>(_nEstimators, _maxDepth, _minSamplesSplit,
             _minSamplesLeaf, _samplingRatio, _bootstrapMinority);

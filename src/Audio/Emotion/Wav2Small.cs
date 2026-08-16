@@ -123,19 +123,13 @@ public class Wav2Small<T> : AudioClassifierBase<T>, IEmotionRecognizer<T>
     {
         ThrowIfDisposed();
         var features = PreprocessAudio(audio);
-        Tensor<T> logits = IsOnnxMode && OnnxEncoder is not null ? OnnxEncoder.Run(features) : Predict(features);
+        Tensor<T> probabilities = IsOnnxMode && OnnxEncoder is not null
+            ? PostprocessOutput(OnnxEncoder.Run(features))
+            : Predict(features);
 
         var probs = new Dictionary<string, T>();
-        double sumExp = 0;
-        var expValues = new double[_options.NumClasses];
-        for (int i = 0; i < _options.NumClasses && i < logits.Length; i++)
-        {
-            double val = NumOps.ToDouble(logits[i]);
-            expValues[i] = Math.Exp(val);
-            sumExp += expValues[i];
-        }
         for (int i = 0; i < _options.NumClasses && i < _options.EmotionLabels.Length; i++)
-            probs[_options.EmotionLabels[i]] = NumOps.FromDouble(sumExp > 0 ? expValues[i] / sumExp : 1.0 / _options.NumClasses);
+            probs[_options.EmotionLabels[i]] = probabilities[i];
 
         return probs;
     }
@@ -225,8 +219,22 @@ public class Wav2Small<T> : AudioClassifierBase<T>, IEmotionRecognizer<T>
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         ThrowIfDisposed();
-        if (IsOnnxMode && OnnxEncoder is not null) return OnnxEncoder.Run(input);
-        var c = input; foreach (var l in Layers) c = l.Forward(c); return c;
+        if (IsOnnxMode && OnnxEncoder is not null)
+            return PostprocessOutput(OnnxEncoder.Run(input));
+
+        bool wasTraining = IsTrainingMode;
+        if (wasTraining) SetTrainingMode(false);
+        try
+        {
+            var current = input;
+            foreach (var layer in Layers)
+                current = layer.Forward(current);
+            return PostprocessOutput(current);
+        }
+        finally
+        {
+            if (wasTraining) SetTrainingMode(true);
+        }
     }
 
     public override void Train(Tensor<T> input, Tensor<T> expected)
@@ -235,7 +243,7 @@ public class Wav2Small<T> : AudioClassifierBase<T>, IEmotionRecognizer<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expected);
+            TrainWithTape(input, expected, _optimizer);
         }
         finally
         {
@@ -243,19 +251,18 @@ public class Wav2Small<T> : AudioClassifierBase<T>, IEmotionRecognizer<T>
         }
     }
 
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        if (!_useNativeMode) throw new NotSupportedException("ONNX mode.");
-        int idx = 0; foreach (var l in Layers) { int c = (int)l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; }
-    }
-
+    /// <inheritdoc />
+    /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
+    /// write on every parameter surface, so the guard is stated once here instead of being
+    /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
+    protected override bool SupportsParameterMutation => _useNativeMode;
     protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio)
     {
         if (MelSpec is not null) return MelSpec.Forward(rawAudio);
         return rawAudio;
     }
 
-    protected override Tensor<T> PostprocessOutput(Tensor<T> o) => o;
+    protected override Tensor<T> PostprocessOutput(Tensor<T> o) => Engine.Softmax(o, axis: -1);
 
     public override ModelMetadata<T> GetModelMetadata()
     {

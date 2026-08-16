@@ -5,6 +5,8 @@ using AiDotNet.Helpers;
 using AiDotNet.NeuralNetworks.Options;
 using AiDotNet.Tensors.Helpers;
 
+using System.Linq;
+
 namespace AiDotNet.NeuralNetworks;
 
 /// <summary>
@@ -68,23 +70,36 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("A Style-Based Generator Architecture for Generative Adversarial Networks", "https://arxiv.org/abs/1812.04948", Year = 2019, Authors = "Tero Karras, Samuli Laine, Timo Aila")]
-public class StyleGAN<T> : NeuralNetworkBase<T>
+public partial class StyleGAN<T> : ImageGeneratorModelLayoutBase<T>
 {
+
+    // MappingNetwork, SynthesisNetwork and Discriminator are discovered as sub-network members, in
+    // declaration order, which is the order this hook used and therefore the serialization order.
+    // Removed under AIDN082.
     private readonly StyleGANOptions _options;
 
     /// <inheritdoc/>
     public override ModelOptions GetOptions() => _options;
 
     // MappingNetwork optimizer state
+    // Adam moment estimates, not weights. [Buffer] keeps them persistent and out of the trainable
+    // surface: registering optimizer state as a parameter both inflates ParameterCount and hands
+    // the optimizer its own moments to step on. Deleting StyleGAN's hand-written layer hook is what
+    // exposed these -- AIDN084 skips a type that declares ANY surface, so the hook had been masking
+    // them.
+    [Buffer]
     private Vector<T> _mappingMomentum;
+    [Buffer]
     private Vector<T> _mappingSecondMoment;
 
-    // SynthesisNetwork optimizer state
+    [Buffer]
     private Vector<T> _synthesisMomentum;
+    [Buffer]
     private Vector<T> _synthesisSecondMoment;
 
-    // Discriminator optimizer state
+    [Buffer]
     private Vector<T> _discMomentum;
+    [Buffer]
     private Vector<T> _discSecondMoment;
 
     private readonly double _initialLearningRate;
@@ -153,11 +168,6 @@ public class StyleGAN<T> : NeuralNetworkBase<T>
     /// Gets the discriminator network.
     /// </summary>
     public ConvolutionalNeuralNetwork<T> Discriminator { get; private set; }
-
-    /// <summary>
-    /// Gets the total number of trainable parameters in the StyleGAN.
-    /// </summary>
-    public override long ParameterCount => MappingNetwork.GetParameterCount() + SynthesisNetwork.GetParameterCount() + Discriminator.GetParameterCount();
 
     /// <summary>
     /// Enables style mixing during training.
@@ -941,51 +951,7 @@ public class StyleGAN<T> : NeuralNetworkBase<T>
             NumOps.ToDouble(_styleMixingProbability));
     }
 
-    /// <summary>
-    /// Updates the parameters of all networks in the StyleGAN.
-    /// </summary>
-    /// <param name="parameters">The new parameters vector containing parameters for all networks.</param>
-    /// <exception cref="ArgumentNullException">Thrown when parameters is null.</exception>
-    /// <exception cref="ArgumentException">Thrown when parameters length doesn't match expected total.</exception>
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        if (parameters is null)
-        {
-            throw new ArgumentNullException(nameof(parameters), "Parameters vector cannot be null.");
-        }
-
-        int mappingCount = (int)MappingNetwork.GetParameterCount();
-        int synthesisCount = (int)SynthesisNetwork.GetParameterCount();
-        int discriminatorCount = (int)Discriminator.GetParameterCount();
-        int expectedTotal = mappingCount + synthesisCount + discriminatorCount;
-
-        if (parameters.Length != expectedTotal)
-        {
-            throw new ArgumentException(
-                $"Expected {expectedTotal} parameters (mapping: {mappingCount}, synthesis: {synthesisCount}, discriminator: {discriminatorCount}), got {parameters.Length}.",
-                nameof(parameters));
-        }
-
-        int offset = 0;
-
-        // Update MappingNetwork parameters
-        var mappingParams = new Vector<T>(mappingCount);
-        for (int i = 0; i < mappingCount; i++)
-            mappingParams[i] = parameters[offset + i];
-        MappingNetwork.UpdateParameters(mappingParams);
-        offset += mappingCount;
-
-        // Update SynthesisNetwork parameters
-        var synthesisParams = new Vector<T>(synthesisCount);
-        for (int i = 0; i < synthesisCount; i++)
-            synthesisParams[i] = parameters[offset + i];
-        SynthesisNetwork.UpdateParameters(synthesisParams);
-        offset += synthesisCount;
-
-        // Update Discriminator parameters
-        var discriminatorParams = new Vector<T>(discriminatorCount);
-        for (int i = 0; i < discriminatorCount; i++)
-            discriminatorParams[i] = parameters[offset + i];
-        Discriminator.UpdateParameters(discriminatorParams);
-    }
+    // UpdateParameters split the vector between MappingNetwork, SynthesisNetwork and Discriminator;
+    // GetExtraTrainableLayers yields those three in the same order, so the base reproduces the
+    // split. Removed under AIDN082.
 }

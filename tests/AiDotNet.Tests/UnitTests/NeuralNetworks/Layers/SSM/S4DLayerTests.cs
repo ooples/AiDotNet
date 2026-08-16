@@ -174,10 +174,10 @@ public class S4DLayerTests
     }
 
     [Fact(Timeout = 120000)]
-    public async Task SupportsTraining_ReturnsFalse_UntilFullBackwardImplemented()
+    public async Task SupportsTraining_ReturnsTrue_WithFusedAnalyticBackward()
     {
         var layer = new S4DLayer<float>(4, 32, 8);
-        Assert.False(layer.SupportsTraining);
+        Assert.True(layer.SupportsTraining);
     }
 
     [Fact(Timeout = 120000)]

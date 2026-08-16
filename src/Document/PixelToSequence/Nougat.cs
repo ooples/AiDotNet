@@ -1,4 +1,4 @@
-﻿using System.Text.RegularExpressions;
+using System.Text.RegularExpressions;
 using AiDotNet.Document.Interfaces;
 using AiDotNet.Document.Options;
 using AiDotNet.Attributes;
@@ -56,7 +56,7 @@ namespace AiDotNet.Document.PixelToSequence;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Nougat: Neural Optical Understanding for Academic Documents", "https://doi.org/10.48550/arXiv.2308.13418", Year = 2023, Authors = "Lukas Blecher, Guillem Cucurull, Thomas Scialom, Robert Stojnic")]
-public class Nougat<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
+public partial class Nougat<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
 {
     private readonly NougatOptions _options;
 
@@ -68,7 +68,7 @@ public class Nougat<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
     private bool _useNativeMode;
     private readonly InferenceSession? _onnxSession;
     private readonly ITokenizer _tokenizer;
-    private readonly IOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private int _hiddenDim;
     private int _numEncoderLayers;
     private int _numDecoderLayers;
@@ -76,9 +76,6 @@ public class Nougat<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
     private int _vocabSize;
     private int _patchSize;
 
-    // Native mode layers
-    private readonly List<ILayer<T>> _encoderLayers = [];
-    private readonly List<ILayer<T>> _decoderLayers = [];
     private bool _nativeLayersInitialized;
 
     #endregion
@@ -131,7 +128,7 @@ public class Nougat<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
         int numDecoderLayers = 10,
         int numHeads = 16,
         int vocabSize = 50000,
-        IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         NougatOptions? options = null)
         : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
@@ -200,7 +197,7 @@ public class Nougat<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
         int numDecoderLayers = 10,
         int numHeads = 16,
         int vocabSize = 50000,
-        IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         NougatOptions? options = null)
         : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
@@ -249,7 +246,7 @@ public class Nougat<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
             return;
         }
 
-        var (encoderLayers, decoderLayers) = LayerHelper<T>.CreateDefaultNougatLayers(
+        Layers.AddRange(LayerHelper<T>.CreateDefaultNougatLayers(
             hiddenDim: _hiddenDim,
             numEncoderLayers: _numEncoderLayers,
             numDecoderLayers: _numDecoderLayers,
@@ -257,13 +254,7 @@ public class Nougat<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
             vocabSize: _vocabSize,
             imageSize: ImageSize,
             patchSize: _patchSize,
-            maxSequenceLength: MaxSequenceLength);
-
-        _encoderLayers.AddRange(encoderLayers);
-        _decoderLayers.AddRange(decoderLayers);
-
-        Layers.AddRange(_encoderLayers);
-        Layers.AddRange(_decoderLayers);
+            maxSequenceLength: MaxSequenceLength));
     }
 
     private void EnsureNativeInitialized()
@@ -276,6 +267,32 @@ public class Nougat<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
         InitializeLayers();
         _nativeLayersInitialized = true;
         InvalidateParameterCountCache();
+    }
+
+    // Native layers are materialized on first use to keep metadata-only construction cheap. The
+    // materialized graph contains one branch-aware encoder-decoder composite, so parameter
+    // introspection, prediction, and tape training all walk the same executable graph.
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Nougat builds its encoder and decoder lists inside EnsureNativeInitialized, so there is nothing for the base to walk until that has run.
+    /// <para>
+    /// This replaces the ParameterCount and GetParameters overrides that each ran the
+    /// initializer and then called base -- and SetParameters, which had NEITHER, so a restore
+    /// could run against an unbuilt model. The base calls this hook from all of them, so the count,
+    /// the vector, the restore and the chunks cannot observe different stages of construction.
+    /// </para>
+    /// </remarks>
+    protected override void EnsureParametersReady()
+    {
+        EnsureNativeInitialized();
+    }
+
+    /// <inheritdoc/>
+    public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input)
+    {
+        EnsureNativeInitialized();
+        return base.GetNamedLayerActivations(input);
     }
 
     #endregion
@@ -754,26 +771,26 @@ public class Nougat<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
 
         EnsureNativeInitialized();
         SetTrainingMode(true);
-        TrainWithTape(input, expectedOutput);
-
-        UpdateParameters(CollectGradients());
-        SetTrainingMode(false);
+        try
+        {
+            // TrainWithTape is the ENTIRE training step: forward, backward, global-norm gradient
+            // clipping (NeuralNetworkBase.ApplyGradientClipping) and the optimizer update. The
+            // `UpdateParameters(CollectGradients())` that followed applied a SECOND, unclipped,
+            // hardcoded-1e-4 SGD step on top of it every call -- and threw before it could, because
+            // CollectGradients produced 1,055,424 values against GetParameters' 528,592
+            // ("Vector lengths must match"), taking six of Nougat's tests with it.
+            //
+            // Same redundant-second-step defect PSENet and DBNet already had removed.
+            TrainWithTape(input, expectedOutput, _optimizer);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
     }
 
-    /// <inheritdoc/>
-    public override void UpdateParameters(Vector<T> gradients)
-    {
-        if (!_useNativeMode)
-            throw new NotSupportedException("Parameter updates not supported in ONNX mode.");
-
-        EnsureNativeInitialized();
-        var currentParams = GetParameters();
-        T lr = NumOps.FromDouble(0.0001);
-        
-        currentParams = Engine.Subtract(currentParams, Engine.Multiply(gradients, lr));
-        SetParameters(currentParams);
-    }
-
+    // UpdateParameters restated a fold the base now derives from generated component registration.
+    // Removed under AIDN082.
     private Vector<T> CollectGradients()
     {
         var grads = new List<T>();

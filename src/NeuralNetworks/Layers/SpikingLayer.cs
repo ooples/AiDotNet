@@ -39,8 +39,51 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Other)]
 [LayerTask(LayerTask.TemporalProcessing)]
 [LayerProperty(IsTrainable = true, NormalizesInput = true, IsStateful = true, ChangesShape = true, UsesSurrogateGradient = true, TestInputShape = "1, 4", TestConstructorArgs = "4, 8")]
-public partial class SpikingLayer<T> : LayerBase<T>
+// THE OUTPUT IS A RANK-1 SPIKE TRAIN AT EVERY INPUT RANK, and ForwardTraced says so in as many words:
+// after ProcessSpikes it reaches "if (_originalInputShape.Length > 1)" and deliberately does nothing -
+// "we keep output as 1D (spike train) per neural network convention. The output represents spike
+// events, not spatial features". ProcessSpikes itself ends at Reshape(withBias, [_bias.Shape[0]]),
+// a rank-1 tensor of one entry per neuron. Hence one output layout against two input ones.
+//
+// _neuronType selects the membrane dynamics (LIF, Izhikevich, Hodgkin-Huxley, ...) but every branch
+// updates the same per-neuron state vector, so the model choice never reaches the shape.
+[TensorLayout(TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Features, Direction = TensorLayoutDirection.Output,
+    Note = "One spike per neuron; any leading axis is consumed, not carried.")]
+[AutoParameters]
+public partial class SpikingLayer<T> : LayerBase<T>, IShapeContract
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// <c>Fixed(_outputSize)</c> is the constructor argument that sizes the weight matrix
+    /// (<c>[inputSize, outputSize]</c>) and the bias, and the width <c>ProcessSpikes</c> returns.
+    /// It is the layer's own parameter rather than an observed size.
+    /// </para>
+    /// <para>
+    /// NO BATCH AXIS IS CARRIED, and that is a claim about this layer rather than an oversight. For
+    /// rank-2 input <c>ForwardTraced</c> flattens to <c>[shape[0] * shape[1]]</c> and then SLICES back
+    /// to <c>inputSize</c> - it processes one sample's worth of signal and returns one spike train.
+    /// Declaring <c>Same(Batch)</c> would describe a per-sample result the layer never produces.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        if (_outputSize <= 0 || inputRank < 1 || inputRank > 2) return null;
+
+        return new[]
+        {
+            new OutputAxisContract(TensorAxis.Features, AxisRelation.Fixed(_outputSize)),
+        };
+    }
+
+
+    /// <summary>Construction state, retained so the layer can be rebuilt exactly rather than inferred from its shape.</summary>
+    private readonly int _outputSize;
+
+    /// <summary>Construction state, retained so the layer can be rebuilt exactly rather than inferred from its shape.</summary>
+    private readonly int _inputSize;
     /// <summary>
     /// The type of spiking neuron model to use.
     /// </summary>
@@ -584,28 +627,6 @@ public partial class SpikingLayer<T> : LayerBase<T>
     private Tensor<T>? _hGate;
 
     /// <summary>
-    /// Gets the total number of trainable parameters in the layer.
-    /// </summary>
-    /// <value>
-    /// The total number of weights and biases in the layer.
-    /// </value>
-    /// <remarks>
-    /// <para>
-    /// This property returns the total number of trainable parameters in the layer, which is the sum of the
-    /// number of weights and the number of biases.
-    /// </para>
-    /// <para><b>For Beginners:</b> This tells you how many adjustable numbers the layer has.
-    /// 
-    /// The parameter count is:
-    /// - Number of weights (connections between input and output)
-    /// - Plus the number of biases (one per output neuron)
-    /// 
-    /// This gives you an idea of the layer's complexity and memory requirements.
-    /// </para>
-    /// </remarks>
-    public override long ParameterCount => _weights.Shape[0] * _weights.Shape[1] + _bias.Shape[0];
-
-    /// <summary>
     /// Gets a value indicating whether this layer supports training through backpropagation.
     /// </summary>
     /// <value>
@@ -663,10 +684,16 @@ public partial class SpikingLayer<T> : LayerBase<T>
     /// </para>
     /// </remarks>
 #pragma warning disable CS8618 // T fields initialized via NumOps.FromDouble in constructor body
-    public SpikingLayer(int inputSize, int outputSize, SpikingNeuronType neuronType = SpikingNeuronType.LeakyIntegrateAndFire,
-        double tau = 10.0, double refractoryPeriod = 2.0)
+    public SpikingLayer(
+        [LayerState] int inputSize,
+        [LayerState] int outputSize,
+        SpikingNeuronType neuronType = SpikingNeuronType.LeakyIntegrateAndFire,
+        [LayerState] double tau = 10.0,
+        [LayerState] double refractoryPeriod = 2.0)
         : base([inputSize], [outputSize])
     {
+        _outputSize = outputSize;
+        _inputSize = inputSize;
 #pragma warning restore CS8618
         if (inputSize <= 0)
             throw new ArgumentOutOfRangeException(nameof(inputSize), inputSize, "Input size must be positive.");
@@ -762,7 +789,7 @@ public partial class SpikingLayer<T> : LayerBase<T>
     /// real neurons convert inputs into action potentials.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // Store original shape for any-rank tensor support
         _originalInputShape = input._shape;
@@ -1467,62 +1494,6 @@ public partial class SpikingLayer<T> : LayerBase<T>
 
         _weights = new Tensor<T>([inputSize, outputSize], parameters.Slice(0, weightCount));
         _bias = new Tensor<T>([_bias.Shape[0]], parameters.Slice(weightCount, _bias.Shape[0]));
-    }
-
-    /// <summary>
-    /// Gets all trainable parameters of the layer as a single vector.
-    /// </summary>
-    /// <returns>A vector containing all trainable parameters.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method retrieves all trainable parameters of the layer (weights and biases) and combines them
-    /// into a single vector. This is useful for optimization algorithms that operate on all parameters at once,
-    /// or for saving and loading model weights.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method collects all the learnable values from the layer into a single list.
-    /// 
-    /// The returned vector contains:
-    /// 1. All weight values (rows * columns), stored row by row
-    /// 2. All bias values (one per output neuron)
-    /// 
-    /// This method is useful for:
-    /// - Saving the model to disk
-    /// - Loading parameters from a previously trained model
-    /// - Advanced optimization techniques that need access to all parameters
-    /// </para>
-    /// </remarks>
-    public override Vector<T> GetParameters()
-    {
-        var result = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
-        int idx = 0;
-        int rows = _weights.Shape[0];
-        int cols = _weights.Shape[1];
-        for (int i = 0; i < rows; i++)
-            for (int j = 0; j < cols; j++)
-                result[idx++] = _weights[i, j];
-        for (int i = 0; i < _bias.Length; i++)
-            result[idx++] = _bias[i];
-        return result;
-    }
-
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (parameters.Length != ParameterCount)
-            throw new ArgumentException($"Expected {ParameterCount} parameters, got {parameters.Length}");
-
-        // Use 2D indexer for reliable write (Data.Span and SetFlat don't work for all tensor types)
-        int idx = 0;
-        int rows = _weights.Shape[0];
-        int cols = _weights.Shape[1];
-        for (int i = 0; i < rows; i++)
-            for (int j = 0; j < cols; j++)
-                _weights[i, j] = parameters[idx++];
-
-        for (int i = 0; i < _bias.Length; i++)
-            _bias[i] = parameters[idx++];
-
-        Engine.InvalidatePersistentTensor(_weights);
-        Engine.InvalidatePersistentTensor(_bias);
     }
 
     public override Vector<T> GetParameterGradients()

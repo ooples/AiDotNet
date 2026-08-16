@@ -11,7 +11,7 @@ namespace AiDotNet.Tests.ModelFamilyTests.Base;
 /// Inherits NER invariants and adds sequence-specific: output length matches input
 /// and deterministic labeling.
 /// </summary>
-public abstract class SequenceLabelingNERTestBase : NERModelTestBase
+public abstract class SequenceLabelingNERTestBase<T> : NERModelTestBase<T>
 {
     [Fact(Timeout = 120000)]
     public async Task SequenceLabels_ShouldMatchInputLength()
@@ -43,3 +43,6 @@ public abstract class SequenceLabelingNERTestBase : NERModelTestBase
             Assert.Equal(out1[i], out2[i]);
     }
 }
+
+/// <summary>Default-precision alias for existing hand-written fixtures.</summary>
+public abstract class SequenceLabelingNERTestBase : SequenceLabelingNERTestBase<double> { }

@@ -109,8 +109,18 @@ namespace AiDotNet.Diffusion.SuperResolution;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Upscale-A-Video: Temporal-Consistent Diffusion Model for Real-World Video Super-Resolution", "https://arxiv.org/abs/2312.06640", Year = 2024, Authors = "Zhou et al.")]
-public class UpscaleAVideoModel<T> : VideoDiffusionModelBase<T>
+public partial class UpscaleAVideoModel<T> : VideoDiffusionModelBase<T>
 {
+    /// <inheritdoc />
+    /// <remarks>Registration order is serialization order, and matches the
+    /// concatenation the previous hand-written GetParameters performed.</remarks>
+    protected override void RegisterComponents()
+    {
+        EnsureInitialized();
+        RegisterParameterComponent(_videoUNet);
+        RegisterParameterComponent(_temporalVAE);
+    }
+
     #region Constants
 
     /// <summary>
@@ -235,8 +245,7 @@ public class UpscaleAVideoModel<T> : VideoDiffusionModelBase<T>
     /// <inheritdoc />
     public override bool SupportsVideoToVideo => true;
 
-    /// <inheritdoc />
-    public override long ParameterCount { get { EnsureInitialized(); return _videoUNet.GetParameters().Length + _temporalVAE.GetParameters().Length; } }
+
 
     /// <summary>
     /// Gets the video upscale factor (4x).
@@ -377,58 +386,7 @@ public class UpscaleAVideoModel<T> : VideoDiffusionModelBase<T>
 
     #region IParameterizable Implementation
 
-    /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        EnsureInitialized();
-        var unetParams = _videoUNet.GetParameters();
-        var vaeParams = _temporalVAE.GetParameters();
 
-        var combined = new Vector<T>(unetParams.Length + vaeParams.Length);
-
-        for (int i = 0; i < unetParams.Length; i++)
-        {
-            combined[i] = unetParams[i];
-        }
-
-        for (int i = 0; i < vaeParams.Length; i++)
-        {
-            combined[unetParams.Length + i] = vaeParams[i];
-        }
-
-        return combined;
-    }
-
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        EnsureInitialized();
-        var unetCount = _videoUNet.GetParameters().Length;
-        var vaeCount = _temporalVAE.GetParameters().Length;
-
-        if (parameters.Length != unetCount + vaeCount)
-        {
-            throw new ArgumentException(
-                $"Expected {unetCount + vaeCount} parameters, got {parameters.Length}.",
-                nameof(parameters));
-        }
-
-        var unetParams = new Vector<T>(unetCount);
-        var vaeParams = new Vector<T>(vaeCount);
-
-        for (int i = 0; i < unetCount; i++)
-        {
-            unetParams[i] = parameters[i];
-        }
-
-        for (int i = 0; i < vaeCount; i++)
-        {
-            vaeParams[i] = parameters[unetCount + i];
-        }
-
-        _videoUNet.SetParameters(unetParams);
-        _temporalVAE.SetParameters(vaeParams);
-    }
 
     #endregion
 

@@ -19,7 +19,7 @@ public class VideoSafetyIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task FrameSampling_StandardFrames_ProcessesWithoutError()
     {
-        var moderator = new FrameSamplingVideoModerator<double>(samplingRate: 1.0);
+        var moderator = new FrameSamplingVideoModerator<double>(segmentCount: 3);
         var frames = GenerateTestFrames(30, 8, 8);
         var findings = moderator.EvaluateVideo(frames, 30.0);
 
@@ -29,7 +29,7 @@ public class VideoSafetyIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task FrameSampling_FewFrames_HandlesGracefully()
     {
-        var moderator = new FrameSamplingVideoModerator<double>(samplingRate: 1.0);
+        var moderator = new FrameSamplingVideoModerator<double>(segmentCount: 3);
         var frames = GenerateTestFrames(3, 8, 8);
         var findings = moderator.EvaluateVideo(frames, 30.0);
 
@@ -39,7 +39,7 @@ public class VideoSafetyIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task FrameSampling_LargerFrames_ProcessesWithoutError()
     {
-        var moderator = new FrameSamplingVideoModerator<double>(samplingRate: 0.5);
+        var moderator = new FrameSamplingVideoModerator<double>(segmentCount: 2);
         var frames = GenerateTestFrames(20, 16, 16);
         var findings = moderator.EvaluateVideo(frames, 30.0);
 
@@ -49,7 +49,7 @@ public class VideoSafetyIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task FrameSampling_SingleFrame_HandlesGracefully()
     {
-        var moderator = new FrameSamplingVideoModerator<double>(samplingRate: 1.0);
+        var moderator = new FrameSamplingVideoModerator<double>(segmentCount: 3);
         var frames = GenerateTestFrames(1, 8, 8);
         var findings = moderator.EvaluateVideo(frames, 30.0);
 
@@ -146,7 +146,7 @@ public class VideoSafetyIntegrationTests
     {
         var frames = GenerateTestFrames(10, 8, 8);
 
-        Assert.NotNull(new FrameSamplingVideoModerator<double>(samplingRate: 1.0)
+        Assert.NotNull(new FrameSamplingVideoModerator<double>(segmentCount: 3)
             .EvaluateVideo(frames, 30.0));
         Assert.NotNull(new TemporalConsistencyDetector<double>()
             .EvaluateVideo(frames, 30.0));

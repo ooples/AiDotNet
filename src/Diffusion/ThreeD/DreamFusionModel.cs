@@ -71,8 +71,18 @@ namespace AiDotNet.Diffusion.ThreeD;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("DreamFusion: Text-to-3D using 2D Diffusion", "https://arxiv.org/abs/2209.14988", Year = 2022, Authors = "Poole et al.")]
-public class DreamFusionModel<T> : LatentDiffusionModelBase<T>
+public partial class DreamFusionModel<T> : LatentDiffusionModelBase<T>
 {
+    /// <inheritdoc />
+    /// <remarks>Registration order is serialization order, and matches the
+    /// concatenation the previous hand-written GetParameters performed.</remarks>
+    protected override void RegisterComponents()
+    {
+        RegisterParameterComponent(_nerf);
+        RegisterParameterComponent(_unet);
+        RegisterParameterComponent(_vae);
+    }
+
     #region Constants
 
     /// <summary>
@@ -135,7 +145,6 @@ public class DreamFusionModel<T> : LatentDiffusionModelBase<T>
     public override int LatentChannels => DREAM_LATENT_CHANNELS;
 
     /// <inheritdoc />
-    public override long ParameterCount => _nerf.ParameterCount + _unet.ParameterCount + _vae.ParameterCount;
 
     /// <summary>
     /// Configuration for DreamFusion model.
@@ -589,70 +598,7 @@ public class DreamFusionModel<T> : LatentDiffusionModelBase<T>
         return _unet.PredictNoise(noisySample, timestep, null);
     }
 
-    /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        var nerfParams = _nerf.GetParameters();
-        var unetParams = _unet.GetParameters();
-        var vaeParams = _vae.GetParameters();
 
-        var totalLength = nerfParams.Length + unetParams.Length + vaeParams.Length;
-        var combined = new T[totalLength];
-
-        int offset = 0;
-        for (int i = 0; i < nerfParams.Length; i++)
-        {
-            combined[offset + i] = nerfParams[i];
-        }
-        offset += nerfParams.Length;
-
-        for (int i = 0; i < unetParams.Length; i++)
-        {
-            combined[offset + i] = unetParams[i];
-        }
-        offset += unetParams.Length;
-
-        for (int i = 0; i < vaeParams.Length; i++)
-        {
-            combined[offset + i] = vaeParams[i];
-        }
-
-        return new Vector<T>(combined);
-    }
-
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int nerfCount = checked((int)_nerf.ParameterCount);
-        var unetCount = checked((int)_unet.ParameterCount);
-        var vaeCount = checked((int)_vae.ParameterCount);
-
-        var nerfParams = new T[nerfCount];
-        var unetParams = new T[unetCount];
-        var vaeParams = new T[vaeCount];
-
-        int offset = 0;
-        for (int i = 0; i < nerfCount; i++)
-        {
-            nerfParams[i] = parameters[offset + i];
-        }
-        offset += nerfCount;
-
-        for (int i = 0; i < unetCount; i++)
-        {
-            unetParams[i] = parameters[offset + i];
-        }
-        offset += unetCount;
-
-        for (int i = 0; i < vaeCount; i++)
-        {
-            vaeParams[i] = parameters[offset + i];
-        }
-
-        _nerf.SetParameters(new Vector<T>(nerfParams));
-        _unet.SetParameters(new Vector<T>(unetParams));
-        _vae.SetParameters(new Vector<T>(vaeParams));
-    }
 
     /// <inheritdoc />
     public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
@@ -901,7 +847,7 @@ public class DreamMesh<T>
 /// Neural Radiance Field network for 3D representation.
 /// </summary>
 /// <typeparam name="T">The numeric type.</typeparam>
-public class NeRFNetwork<T>
+public class NeRFNetwork<T> : IParameterSource<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 

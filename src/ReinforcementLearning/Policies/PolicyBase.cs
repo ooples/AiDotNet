@@ -15,6 +15,7 @@ namespace AiDotNet.ReinforcementLearning.Policies
     /// <typeparam name="T">The numeric type used for calculations.</typeparam>
     public abstract class PolicyBase<T> : ModelBase<T, Vector<T>, Vector<T>>, IPolicy<T>
     {
+
         // NumOps inherited from ModelBase
 
         /// <summary>
@@ -118,45 +119,6 @@ namespace AiDotNet.ReinforcementLearning.Policies
 
         /// <inheritdoc />
         public override ILossFunction<T> DefaultLossFunction => new MeanSquaredErrorLoss<T>();
-
-        /// <inheritdoc />
-        public override Vector<T> GetParameters()
-        {
-            var networks = GetNetworks();
-            if (networks.Count == 0)
-                return new Vector<T>(0);
-
-            // Collect parameters from all networks
-            var allParams = new List<T>();
-            foreach (var network in networks)
-            {
-                var p = network.GetParameters();
-                for (int i = 0; i < p.Length; i++)
-                    allParams.Add(p[i]);
-            }
-
-            return new Vector<T>(allParams.ToArray());
-        }
-
-        /// <inheritdoc />
-        public override void SetParameters(Vector<T> parameters)
-        {
-            var networks = GetNetworks();
-            if (networks.Count == 0)
-                return;
-
-            int offset = 0;
-            foreach (var network in networks)
-            {
-                var currentParams = network.GetParameters();
-                int count = currentParams.Length;
-                var segment = new Vector<T>(count);
-                for (int i = 0; i < count; i++)
-                    segment[i] = parameters[offset + i];
-                network.SetParameters(segment);
-                offset += count;
-            }
-        }
 
         /// <inheritdoc />
         public override IFullModel<T, Vector<T>, Vector<T>> WithParameters(Vector<T> parameters)

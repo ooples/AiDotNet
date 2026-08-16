@@ -81,8 +81,17 @@ namespace AiDotNet.Diffusion.Audio;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("AudioLDM: Text-to-Audio Generation with Latent Diffusion Models", "https://arxiv.org/abs/2301.12503", Year = 2023, Authors = "Liu et al.")]
-public class AudioLDMModel<T> : AudioDiffusionModelBase<T>
+public partial class AudioLDMModel<T> : AudioDiffusionModelBase<T>
 {
+    /// <inheritdoc />
+    /// <remarks>Registration order is serialization order, and matches the
+    /// concatenation the previous hand-written GetParameters performed.</remarks>
+    protected override void RegisterComponents()
+    {
+        RegisterParameterComponent(_unet);
+        RegisterParameterComponent(_audioVAE);
+    }
+
     #region Constants
 
     /// <summary>
@@ -514,58 +523,11 @@ public class AudioLDMModel<T> : AudioDiffusionModelBase<T>
 
     #region IParameterizable Implementation
 
-    /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        var unetParams = _unet.GetParameters();
-        var vaeParams = _audioVAE.GetParameters();
 
-        var totalLength = unetParams.Length + vaeParams.Length;
-        var combined = new Vector<T>(totalLength);
 
-        for (int i = 0; i < unetParams.Length; i++)
-        {
-            combined[i] = unetParams[i];
-        }
 
-        for (int i = 0; i < vaeParams.Length; i++)
-        {
-            combined[unetParams.Length + i] = vaeParams[i];
-        }
-
-        return combined;
-    }
 
     /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int unetCount = checked((int)_unet.ParameterCount);
-        int vaeCount = checked((int)_audioVAE.ParameterCount);
-        long expectedTotal = (long)unetCount + vaeCount;
-
-        if (parameters.Length != expectedTotal)
-            throw new ArgumentException($"Expected {expectedTotal} parameters, got {parameters.Length}.");
-
-        var unetParams = new Vector<T>(unetCount);
-        var vaeParams = new Vector<T>(vaeCount);
-
-        for (int i = 0; i < unetCount; i++)
-        {
-            unetParams[i] = parameters[i];
-        }
-
-        for (int i = 0; i < vaeCount; i++)
-        {
-            vaeParams[i] = parameters[unetCount + i];
-        }
-
-        _unet.SetParameters(unetParams);
-        _audioVAE.SetParameters(vaeParams);
-    }
-
-    /// <inheritdoc />
-    public override long ParameterCount => _unet.ParameterCount + _audioVAE.ParameterCount;
-
     #endregion
 
     #region ICloneable Implementation

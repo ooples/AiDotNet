@@ -53,6 +53,8 @@ namespace AiDotNet.Classification.Neighbors;
     [ResearchPaper("Nearest Neighbor Pattern Classification", "https://doi.org/10.1109/TIT.1967.1053964")]
 public class KNeighborsClassifier<T> : ProbabilisticClassifierBase<T>
 {
+
+    // A lazy learner: it stores training data, not parameters, as its own comment says.
     /// <summary>
     /// Gets the KNN specific options.
     /// </summary>
@@ -61,11 +63,13 @@ public class KNeighborsClassifier<T> : ProbabilisticClassifierBase<T>
     /// <summary>
     /// Stored training features.
     /// </summary>
+    [Buffer]
     private Matrix<T>? _xTrain;
 
     /// <summary>
     /// Stored training labels.
     /// </summary>
+    [Buffer]
     private Vector<T>? _yTrain;
 
     /// <summary>
@@ -251,6 +255,7 @@ public class KNeighborsClassifier<T> : ProbabilisticClassifierBase<T>
         };
     }
 
+
     /// <summary>
     /// Computes Manhattan (L1) distance.
     /// </summary>
@@ -412,15 +417,7 @@ public class KNeighborsClassifier<T> : ProbabilisticClassifierBase<T>
     }
 
     /// <inheritdoc/>
-    public Vector<T> GetParameters()
-    {
-        // KNN is a lazy learner - it doesn't have traditional model parameters
-        // Return an empty vector for compatibility
-        return new Vector<T>(0);
-    }
-
-    /// <inheritdoc/>
-    public IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
+    public override IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
     {
         var newModel = (KNeighborsClassifier<T>)Clone();
         newModel.SetParameters(parameters);
@@ -428,9 +425,17 @@ public class KNeighborsClassifier<T> : ProbabilisticClassifierBase<T>
     }
 
     /// <inheritdoc/>
-    public void SetParameters(Vector<T> parameters)
+    public Vector<T> ComputeGradients(Matrix<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
     {
-        // KNN is a lazy learner - it doesn't have traditional model parameters
+        // KNN doesn't use gradient-based optimization
+        // Return zero gradients for compatibility
+        return new Vector<T>(NumFeatures);
+    }
+
+    /// <inheritdoc/>
+    public void ApplyGradients(Vector<T> gradients, T learningRate)
+    {
+        // KNN doesn't use gradient-based optimization
         // This is a no-op for compatibility
     }
 

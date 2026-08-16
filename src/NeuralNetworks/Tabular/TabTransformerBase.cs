@@ -1,4 +1,8 @@
 using AiDotNet.Engines;
+using System.Collections.Generic;
+using AiDotNet.Models.Parameters;
+using AiDotNet.LinearAlgebra;
+using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks.Layers;
 
@@ -36,7 +40,7 @@ namespace AiDotNet.NeuralNetworks.Tabular;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-public abstract class TabTransformerBase<T>
+public abstract class TabTransformerBase<T> : IParameterSource<T>
 {
     /// <summary>
     /// Numeric operations helper for type T.
@@ -102,38 +106,62 @@ public abstract class TabTransformerBase<T>
     /// </summary>
     public int CombinedDimension => NumCategoricalFeatures * Options.EmbeddingDimension + NumNumericalFeatures;
 
-    /// <summary>
-    /// Gets the total number of trainable parameters.
-    /// </summary>
-    public virtual long ParameterCount
+    /// <summary>Built once on first parameter access, then reused.</summary>
+    private ParameterComponentRegistry<T>? _parameterRegistry;
+
+    /// <summary>Extra trainable layers a subclass contributes after the shared backbone.</summary>
+    protected virtual IEnumerable<IParameterSource<T>> GetExtraTrainableLayers()
+        => System.Linq.Enumerable.Empty<IParameterSource<T>>();
+
+    /// <summary>The single ordered traversal of this model's parameter-bearing components.</summary>
+    private ParameterComponentRegistry<T> ParameterRegistry
     {
         get
         {
-            int count = 0;
+            if (_parameterRegistry is not null) return _parameterRegistry;
 
-            // Categorical embeddings
-            foreach (var emb in _categoricalEmbeddings)
-                count += emb.Length;
-
-            // Column embeddings
-            if (_columnEmbeddings != null)
-                count += _columnEmbeddings.Length;
-
-            // Transformer layers
+            // The encoder width is fixed by EmbeddingDimension. Resolve its nested attention,
+            // feed-forward, and normalization tensors before freezing the registry layout.
             foreach (var layer in _encoderLayers)
-                count += (int)layer.ParameterCount;
+                layer.MaterializeParameters();
 
-            // Layer norm
-            if (_finalLayerNorm != null)
-                count += (int)_finalLayerNorm.ParameterCount;
+            var registry = new ParameterComponentRegistry<T>();
+            registry.Register("00000000/categorical",
+                new TensorCollectionParameterSource<T>(() => _categoricalEmbeddings));
+            // Only when present. This is an OPTIONAL component -- the constructor allocates it just
+            // for Options.UseColumnEmbedding, and the old count said the same thing with
+            // "if (_columnEmbeddings != null)". Registering it unconditionally would hand the
+            // registry a null-valued tensor source, which reports ShapeDeferred, and the whole model
+            // would then refuse to be counted at all rather than report the size it genuinely has.
+            // Absent is not the same as not-yet-sized.
+            if (_columnEmbeddings != null)
+            {
+                registry.Register("00000001/column",
+                    new TensorFieldParameterSource<T>(() => _columnEmbeddings));
+            }
 
-            // MLP layers
-            foreach (var layer in _mlpLayers)
-                count += (int)layer.ParameterCount;
+            for (int i = 0; i < _encoderLayers.Count; i++)
+                registry.Register($"00000002/{i:D8}", _encoderLayers[i]);
 
-            return count;
+            registry.Register("00000003/finalNorm", _finalLayerNorm);
+
+            for (int i = 0; i < _mlpLayers.Count; i++)
+                registry.Register($"00000004/{i:D8}", _mlpLayers[i]);
+
+            int extraIndex = 0;
+            foreach (var extra in GetExtraTrainableLayers())
+                if (extra is not null) registry.Register($"00009000/{extraIndex++:D8}", extra);
+
+            _parameterRegistry = registry;
+            return registry;
         }
     }
+
+    public virtual long ParameterCount => ParameterRegistry.ParameterCount;
+
+    public virtual Vector<T> GetParameters() => ParameterRegistry.GetParameters();
+
+    public virtual void SetParameters(Vector<T> parameters) => ParameterRegistry.SetParameters(parameters);
 
     /// <summary>
     /// Initializes a new instance of the TabTransformerBase class.
@@ -185,14 +213,15 @@ public abstract class TabTransformerBase<T>
         {
             var encoderLayer = new TransformerEncoderLayer<T>(
                 Options.NumHeads,
-                Options.FeedForwardDimension);
+                Options.FeedForwardDimension,
+                Options.EmbeddingDimension);
             _encoderLayers.Add(encoderLayer);
         }
 
         // Final layer normalization
         if (Options.UseLayerNorm)
         {
-            _finalLayerNorm = new LayerNormalizationLayer<T>();
+            _finalLayerNorm = new LayerNormalizationLayer<T>(Options.EmbeddingDimension);
         }
 
         // Initialize MLP layers
@@ -202,6 +231,7 @@ public abstract class TabTransformerBase<T>
         foreach (int hiddenDim in Options.MLPHiddenDimensions)
         {
             var layer = new FullyConnectedLayer<T>(
+                prevDim,
                 hiddenDim,
                 new ReLUActivation<T>() as IActivationFunction<T>);
             _mlpLayers.Add(layer);

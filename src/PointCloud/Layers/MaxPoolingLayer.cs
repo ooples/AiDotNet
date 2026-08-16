@@ -1,4 +1,7 @@
 ﻿using AiDotNet.Autodiff;
+// File-level, deliberately: two Tensors namespaces in the project's global usings also define a
+// TensorLayout, so [TensorLayout(...)] only binds when this import shadows them from a nearer scope.
+using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks.Layers;
 
@@ -28,8 +31,45 @@ namespace AiDotNet.PointCloud.Layers;
 ///
 /// This is a key component in PointNet for making the network invariant to point order.
 /// </remarks>
-public class MaxPoolingLayer<T> : LayerBase<T>
+// Rank 2 only: ForwardTraced reads input.Shape[0] as the point count and reduces axis 0, so there is
+// no batch axis and no unbatched variant to be optional about. [numPoints, numFeatures] is named
+// [Length, Features] to match TNetLayer, the sibling that feeds this layer and declares the same
+// layout - Length rather than Time because a point cloud's ordering carries no meaning (that
+// permutation invariance is the whole point of pooling here).
+[TensorLayout(TensorAxis.Length, TensorAxis.Features, Direction = TensorLayoutDirection.Input,
+    Note = "Point cloud as [numPoints, numFeatures].")]
+[TensorLayout(TensorAxis.Length, TensorAxis.Features, Direction = TensorLayoutDirection.Output,
+    Note = "Global feature vector as [1, numFeatures]; the point axis survives, collapsed to one.")]
+public partial class MaxPoolingLayer<T> : LayerBase<T>, IShapeContract
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// Straight off <c>ForwardTraced</c>: <c>Engine.ReduceMax(input, [0], true, out _)</c>. The
+    /// reduction is over axis 0 with keepDims = true, so the point axis survives at extent 1 - the
+    /// <c>[1, numFeatures]</c> output shape the constructor also declares via
+    /// <c>base([0, numFeatures], [1, numFeatures])</c>. The 1 is structural to a keep-dims reduction,
+    /// not a configured size, which is why it is the one literal in this contract.
+    /// </para>
+    /// <para>
+    /// THE FEATURE AXIS IS <c>Same</c>, NOT <c>Fixed(_numFeatures)</c>. <c>ReduceMax</c> touches only
+    /// axis 0 and hands back whatever width arrived; nothing in the forward pass ever compares
+    /// <c>input.Shape[1]</c> against <c>_numFeatures</c>, which is used solely to declare the base
+    /// shapes. Declaring the field would state a constraint the layer does not enforce and would be
+    /// wrong for any caller that pools a differently-sized cloud.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        if (inputRank != 2) return null;
+
+        return new[]
+        {
+            new OutputAxisContract(TensorAxis.Length, AxisRelation.Fixed(1)),
+            new OutputAxisContract(TensorAxis.Features, AxisRelation.Same(TensorAxis.Features)),
+        };
+    }
+
     private readonly int _numFeatures;
     private int[]? _maxIndices; // Store indices of max values for backward pass
     private int _numPoints;
@@ -55,21 +95,34 @@ public class MaxPoolingLayer<T> : LayerBase<T>
         Parameters = Vector<T>.Empty(); // No trainable parameters
     }
 
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         _numPoints = input.Shape[0];
 
-        // Use vectorized ReduceMax along axis 0 (points dimension)
-        // This reduces [numPoints, numFeatures] to [1, numFeatures] taking max across all points
-        var pooledOutput = Engine.ReduceMax(input, [0], true, out int[] maxIndices);
+        // Use ReduceMax to select the discrete winning point per feature, then express the exact
+        // selected value as detached-mask * input followed by a tape-tracked sum. This preserves
+        // max-pooling forward semantics and avoids the package ReduceMax backward's incorrect
+        // routing for the point-cloud reduction shapes exercised by DGCNN finite differences.
+        _ = Engine.ReduceMax(input, [0], true, out int[] maxIndices);
         _maxIndices = maxIndices;
 
-        return pooledOutput;
-    }
+        int numFeatures = input.Shape[1];
+        var maxMask = new Tensor<T>([_numPoints, numFeatures]);
+        for (int feature = 0; feature < numFeatures; feature++)
+        {
+            // ReduceMax returns the winning element's flat index in the SOURCE
+            // [point, feature] tensor. Convert it back to a point coordinate;
+            // using it directly made every winner except the earliest features
+            // fail the bounds check and silently wrote an all-zero mask.
+            int selectedPoint = maxIndices[feature] / numFeatures;
+            if ((uint)selectedPoint < (uint)_numPoints)
+                maxMask[selectedPoint, feature] = NumOps.One;
+        }
 
-    public override void UpdateParameters(T learningRate)
-    {
-        // No parameters to update
+        var pooledOutput = Engine.ReduceSum(
+            Engine.TensorMultiply(input, maxMask), [0], keepDims: true);
+
+        return pooledOutput;
     }
 
     public override void ClearGradients()
@@ -77,18 +130,11 @@ public class MaxPoolingLayer<T> : LayerBase<T>
         // No gradients to clear
     }
 
-    public override Vector<T> GetParameters()
-    {
-        return Vector<T>.Empty();
-    }
-
     public override void ResetState()
     {
         _maxIndices = null;
         _numPoints = 0;
     }
-
-    public override long ParameterCount => 0;
 
     public override bool SupportsTraining => false; // No parameters to update; still participates in backprop
 }

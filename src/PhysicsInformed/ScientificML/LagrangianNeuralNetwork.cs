@@ -70,6 +70,10 @@ namespace AiDotNet.PhysicsInformed.ScientificML
     [ModelComplexity(ModelComplexity.High)]
     [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     [ResearchPaper("Lagrangian Neural Networks", "https://doi.org/10.48550/arXiv.2003.04630", Year = 2020, Authors = "Miles Cranmer, Sam Greydanus, Stephan Hoyer, Peter Battaglia, David Spergel, Shirley Ho")]
+    [TensorLayout(TensorAxis.Batch, TensorAxis.Features,
+        Direction = TensorLayoutDirection.Input, BatchOptional = true)]
+    [TensorLayout(TensorAxis.Batch, TensorAxis.Features,
+        Direction = TensorLayoutDirection.Output, BatchOptional = true)]
     public class LagrangianNeuralNetwork<T> : NeuralNetworkBase<T>
     {
         private readonly LagrangianNeuralNetworkOptions _options;
@@ -273,25 +277,8 @@ namespace AiDotNet.PhysicsInformed.ScientificML
             }
         }
 
-        /// <summary>
-        /// Updates the network parameters from a flattened vector.
-        /// </summary>
-        /// <param name="parameters">Parameter vector.</param>
-        public override void UpdateParameters(Vector<T> parameters)
-        {
-            int index = 0;
-            foreach (var layer in Layers)
-            {
-                int layerParameterCount = checked((int)layer.ParameterCount);
-                if (layerParameterCount > 0)
-                {
-                    Vector<T> layerParameters = parameters.GetSubVector(index, layerParameterCount);
-                    layer.UpdateParameters(layerParameters);
-                    index += layerParameterCount;
-                }
-            }
-        }
-
+    // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
+    // exactly the same enumeration, so this said nothing the base does not already say.
         /// <summary>
         /// Trains the Lagrangian neural network using the provided input and expected output.
         /// </summary>

@@ -56,37 +56,26 @@ namespace AiDotNet.ComputerVision.Segmentation.Medical;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("U-Mamba: Enhancing Long-range Dependency for Biomedical Image Segmentation", "https://arxiv.org/abs/2401.04722", Year = 2024, Authors = "Ma et al.")]
-public class UMamba<T> : NeuralNetworkBase<T>, IMedicalSegmentation<T>
+public class UMamba<T> : Common.MedicalSegmentationBase<T>
 {
     private readonly UMambaOptions _options;
     public override ModelOptions GetOptions() => _options;
 
     #region Fields
-    private readonly int _height, _width, _channels, _numClasses;
+    // Only UMamba's OWN configuration lives here. _height, _width, _channels, _numClasses,
+    // _useNativeMode, _onnxModelPath, _onnxSession, _optimizer, _disposed and _encoderLayerEnd all
+    // come from MedicalSegmentationBase -> SegmentationModelBase.
+    private static readonly string[] ModalitiesSupported = ["CT", "MRI_T1", "MRI_T2"];
     private readonly int[] _channelDims;
     private readonly int _decoderDim;
     private readonly int[] _depths;
     private readonly double _dropRate;
-    private readonly bool _useNativeMode;
-    private readonly string? _onnxModelPath;
-    private InferenceSession? _onnxSession;
-    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
-    private bool _disposed;
-    private int _encoderLayerEnd;
     #endregion
 
     #region Properties
-    /// <summary>
-    /// Gets whether this UMamba instance supports training.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Returns <c>true</c> in native mode, <c>false</c> in ONNX mode.
-    /// </para>
-    /// </remarks>
-    public override bool SupportsTraining => _useNativeMode;
+    // SupportsTraining, NumClasses, InputHeight, InputWidth, IsOnnxMode, Segment, SupportedModalities,
+    // Supports3D, Supports2D and SupportsFewShot are all supplied identically by the base.
     internal bool UseNativeMode => _useNativeMode;
-    internal int NumClasses => _numClasses;
     #endregion
 
     #region Constructors
@@ -109,15 +98,15 @@ public class UMamba<T> : NeuralNetworkBase<T>, IMedicalSegmentation<T>
         ILossFunction<T>? lossFunction = null, int numClasses = 14,
         double dropRate = 0,
         UMambaOptions? options = null)
-        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>())
+        // `optimizer` is passed straight through - INCLUDING null. The base resolves the default
+        // AdamW lazily via CreateDefaultOptimizer(), which a base-constructor argument cannot do.
+        : base(architecture, optimizer, lossFunction, numClasses, ModalitiesSupported)
     {
         _options = options ?? new UMambaOptions(); Options = _options;
+        // U-Mamba defaults to 256x256, not the base's 512x512, so the geometry fallback stays here.
         _height = architecture.InputHeight > 0 ? architecture.InputHeight : 256;
         _width = architecture.InputWidth > 0 ? architecture.InputWidth : 256;
-        _channels = architecture.InputDepth > 0 ? architecture.InputDepth : 3;
-        _numClasses = numClasses; _dropRate = dropRate;
-        _useNativeMode = true; _onnxModelPath = null;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _dropRate = dropRate;
         _channelDims = [32, 64, 128, 256];
         _depths = [2, 2, 2, 2];
         _decoderDim = 256;
@@ -142,23 +131,17 @@ public class UMamba<T> : NeuralNetworkBase<T>, IMedicalSegmentation<T>
     public UMamba(NeuralNetworkArchitecture<T> architecture, string onnxModelPath,
         int numClasses = 14,
         UMambaOptions? options = null)
-        : base(architecture, new CrossEntropyWithLogitsLoss<T>())
+        // The base validates the path, sets ONNX mode, resolves the input geometry and opens the
+        // InferenceSession - the same twenty lines this used to repeat.
+        : base(architecture, onnxModelPath, numClasses, ModalitiesSupported)
     {
         _options = options ?? new UMambaOptions(); Options = _options;
-        if (string.IsNullOrWhiteSpace(onnxModelPath))
-            throw new ArgumentException("ONNX model path cannot be null or empty.", nameof(onnxModelPath));
-        if (!File.Exists(onnxModelPath))
-            throw new FileNotFoundException($"UMamba ONNX model not found: {onnxModelPath}");
         _height = architecture.InputHeight > 0 ? architecture.InputHeight : 256;
         _width = architecture.InputWidth > 0 ? architecture.InputWidth : 256;
-        _channels = architecture.InputDepth > 0 ? architecture.InputDepth : 3;
-        _numClasses = numClasses; _dropRate = 0;
-        _useNativeMode = false; _onnxModelPath = onnxModelPath; _optimizer = null;
+        _dropRate = 0;
         _channelDims = [32, 64, 128, 256];
         _depths = [2, 2, 2, 2];
         _decoderDim = 256;
-        try { _onnxSession = new InferenceSession(onnxModelPath); }
-        catch (Exception ex) { throw new InvalidOperationException($"Failed to load UMamba ONNX model: {ex.Message}", ex); }
         InitializeLayers();
     }
     #endregion
@@ -190,11 +173,11 @@ public class UMamba<T> : NeuralNetworkBase<T>, IMedicalSegmentation<T>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
         if (!_useNativeMode) throw new InvalidOperationException("Training is not supported in ONNX mode. Use the native mode constructor for training.");
-        if (input.Shape.Length == 3) { input = AddBatchDimension(input); expectedOutput = AddBatchDimension(expectedOutput); } else if (input.Shape.Length != 4 && input.Shape.Length != 5) throw new ArgumentException($"UMamba supports 2D [C,H,W]/[B,C,H,W] and 3D [C,D,H,W]/[B,C,D,H,W]. Got rank {input.Shape.Length}.", nameof(input));
+        if (input.Shape.Length == 3) { input = AddLeadingBatchDimension(input); expectedOutput = AddLeadingBatchDimension(expectedOutput); } else if (input.Shape.Length != 4 && input.Shape.Length != 5) throw new ArgumentException($"UMamba supports 2D [C,H,W]/[B,C,H,W] and 3D [C,D,H,W]/[B,C,D,H,W]. Got rank {input.Shape.Length}.", nameof(input));
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expectedOutput);
+            TrainWithTape(input, expectedOutput, Optimizer);
         }
         finally
         {
@@ -204,19 +187,19 @@ public class UMamba<T> : NeuralNetworkBase<T>, IMedicalSegmentation<T>
     #endregion
 
     #region Private Methods
-    private Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> Forward(Tensor<T> input)
     {
-        bool hasBatch = input.Rank == 4 || input.Rank == 5; if (!hasBatch) input = AddBatchDimension(input);
+        bool hasBatch = input.Rank == 4 || input.Rank == 5; if (!hasBatch) input = AddLeadingBatchDimension(input);
         var features = input;
         for (int i = 0; i < _encoderLayerEnd; i++) features = Layers[i].Forward(features);
         for (int i = _encoderLayerEnd; i < Layers.Count; i++) features = Layers[i].Forward(features);
         if (!hasBatch) features = RemoveBatchDimension(features); return features;
     }
 
-    private Tensor<T> PredictOnnx(Tensor<T> input)
+    protected override Tensor<T> PredictOnnx(Tensor<T> input)
     {
         if (_onnxSession is null) throw new InvalidOperationException("ONNX session is not initialized.");
-        bool hasBatch = input.Rank == 4 || input.Rank == 5; if (!hasBatch) input = AddBatchDimension(input);
+        bool hasBatch = input.Rank == 4 || input.Rank == 5; if (!hasBatch) input = AddLeadingBatchDimension(input);
         var inputData = new float[input.Length];
         for (int i = 0; i < input.Length; i++) inputData[i] = Convert.ToSingle(input.Data.Span[i]);
         var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input._shape);
@@ -230,11 +213,11 @@ public class UMamba<T> : NeuralNetworkBase<T>, IMedicalSegmentation<T>
         if (!hasBatch) result = RemoveBatchDimension(result); return result;
     }
 
-    private Tensor<T> AddBatchDimension(Tensor<T> tensor)
+    // RemoveBatchDimension comes from SegmentationModelBase (identical, plus a Shape[0] == 1 guard).
+    // AddBatchDimension does NOT: the base's promotes rank-3 [C,H,W] only, while U-Mamba promotes
+    // 2D masks and 3D volumes too, so the rank-agnostic version keeps its own name.
+    private static Tensor<T> AddLeadingBatchDimension(Tensor<T> tensor)
     { var s = new int[tensor.Shape.Length + 1]; s[0] = 1; for (int i = 0; i < tensor.Shape.Length; i++) s[i + 1] = tensor.Shape[i]; var result = new Tensor<T>(s); tensor.Data.Span.CopyTo(result.Data.Span); return result; }
-
-    private Tensor<T> RemoveBatchDimension(Tensor<T> tensor)
-    { int[] s = new int[tensor.Shape.Length - 1]; for (int i = 0; i < s.Length; i++) s[i] = tensor.Shape[i + 1]; var r = new Tensor<T>(s); tensor.Data.Span.CopyTo(r.Data.Span); return r; }
     #endregion
 
     #region Abstract Implementation
@@ -262,18 +245,8 @@ public class UMamba<T> : NeuralNetworkBase<T>, IMedicalSegmentation<T>
         }
     }
 
-    /// <summary>
-    /// Updates all trainable parameters from a flat parameter vector.
-    /// </summary>
-    /// <param name="parameters">Flat vector of all model parameters.</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Replaces all model weights with new values.
-    /// </para>
-    /// </remarks>
-    public override void UpdateParameters(Vector<T> parameters)
-    { int o = 0; foreach (var l in Layers) { var p = l.GetParameters(); int c = p.Length; if (o + c <= parameters.Length) { var n = new Vector<T>(c); for (int i = 0; i < c; i++) n[i] = parameters[o + i]; l.UpdateParameters(n); o += c; } } }
-
+    // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
+    // exactly the same enumeration, so this said nothing the base does not already say.
     /// <summary>
     /// Collects metadata describing this model's configuration.
     /// </summary>
@@ -326,30 +299,13 @@ public class UMamba<T> : NeuralNetworkBase<T>, IMedicalSegmentation<T>
         ? new UMamba<T>(Architecture, _optimizer, LossFunction, _numClasses, _dropRate, _options)
         : new UMamba<T>(Architecture, _onnxModelPath ?? throw new InvalidOperationException("ONNX model path not initialized."), _numClasses, _options);
 
-    /// <summary>
-    /// Releases managed resources including the ONNX inference session.
-    /// </summary>
-    /// <param name="disposing">True when called from Dispose().</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Frees memory used by the ONNX runtime.
-    /// </para>
-    /// </remarks>
-    protected override void Dispose(bool disposing)
-    { if (!_disposed) { if (disposing) { _onnxSession?.Dispose(); _onnxSession = null; } _disposed = true; } base.Dispose(disposing); }
+    // Dispose is inherited: SegmentationModelBase already disposes _onnxSession and flips _disposed,
+    // and UMamba owns no other unmanaged resource.
     #endregion
 
     #region IMedicalSegmentation Implementation
-    int ISegmentationModel<T>.NumClasses => _numClasses;
-    int ISegmentationModel<T>.InputHeight => _height;
-    int ISegmentationModel<T>.InputWidth => _width;
-    bool ISegmentationModel<T>.IsOnnxMode => !_useNativeMode;
-    Tensor<T> ISegmentationModel<T>.Segment(Tensor<T> image) => Predict(image);
-    IReadOnlyList<string> IMedicalSegmentation<T>.SupportedModalities => ["CT", "MRI_T1", "MRI_T2"];
-    bool IMedicalSegmentation<T>.Supports3D => true;
-    bool IMedicalSegmentation<T>.Supports2D => true;
-    bool IMedicalSegmentation<T>.SupportsFewShot => false;
-    MedicalSegmentationResult<T> IMedicalSegmentation<T>.SegmentSlice(Tensor<T> slice)
+    /// <summary>Segments a single 2D medical slice.</summary>
+    public override MedicalSegmentationResult<T> SegmentSlice(Tensor<T> slice)
     {
         var output = Predict(slice);
         var labels = Common.SegmentationTensorOps.ArgmaxAlongClassDim(output);
@@ -368,10 +324,11 @@ public class UMamba<T> : NeuralNetworkBase<T>, IMedicalSegmentation<T>
         }
         return new MedicalSegmentationResult<T> { Labels = labels, Probabilities = probs, Structures = structures };
     }
-    MedicalSegmentationResult<T> IMedicalSegmentation<T>.SegmentVolume(Tensor<T> volume)
+    /// <summary>Segments a 3D volume slice-by-slice and aggregates the per-structure statistics.</summary>
+    public override MedicalSegmentationResult<T> SegmentVolume(Tensor<T> volume)
     {
         if (volume.Rank <= 3)
-            return ((IMedicalSegmentation<T>)this).SegmentSlice(volume);
+            return SegmentSlice(volume);
         int numC = volume.Shape[0], depth = volume.Shape[1], h = volume.Shape[2], w = volume.Shape[3];
         var volLabels = new Tensor<T>([depth, h, w]);
         var volProbs = new Tensor<T>([numC, depth, h, w]);
@@ -383,7 +340,7 @@ public class UMamba<T> : NeuralNetworkBase<T>, IMedicalSegmentation<T>
                 for (int y = 0; y < h; y++)
                     for (int x = 0; x < w; x++)
                         slice[c, y, x] = volume[c, d, y, x];
-            var result = ((IMedicalSegmentation<T>)this).SegmentSlice(slice);
+            var result = SegmentSlice(slice);
             for (int y = 0; y < h; y++)
                 for (int x = 0; x < w; x++)
                     volLabels[d, y, x] = result.Labels[y, x];
@@ -404,7 +361,9 @@ public class UMamba<T> : NeuralNetworkBase<T>, IMedicalSegmentation<T>
             structures.Add(new SegmentedStructure { ClassId = kvp.Key, Name = $"Class_{kvp.Key}", VolumeOrArea = kvp.Value.area, MeanConfidence = kvp.Value.confSum / kvp.Value.area });
         return new MedicalSegmentationResult<T> { Labels = volLabels, Probabilities = volProbs, Structures = structures };
     }
-    MedicalSegmentationResult<T> IMedicalSegmentation<T>.SegmentFewShot(Tensor<T> queryImage, Tensor<T> supportImages, Tensor<T> supportMasks)
-        => ((IMedicalSegmentation<T>)this).SegmentSlice(queryImage);
+    /// <inheritdoc/>
+    public override MedicalSegmentationResult<T> SegmentFewShot(
+        Tensor<T> queryImage, Tensor<T> supportImages, Tensor<T> supportMasks)
+        => SegmentSlice(queryImage);
     #endregion
 }

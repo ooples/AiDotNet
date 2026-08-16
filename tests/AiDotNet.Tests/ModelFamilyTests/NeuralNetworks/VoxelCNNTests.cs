@@ -1,9 +1,13 @@
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Tests.ModelFamilyTests.Base;
+using AiDotNet.Tensors.Engines.Optimization;
+using AiDotNet.Training;
+using Xunit;
 
 namespace AiDotNet.Tests.ModelFamilyTests.NeuralNetworks;
 
+[Collection("FusedOptimizerGlobalState")]
 public class VoxelCNNTests : NeuralNetworkModelTestBase<float>
 {
     // VoxelCNN default: 32x32x32 voxels, 1 channel
@@ -25,4 +29,52 @@ public class VoxelCNNTests : NeuralNetworkModelTestBase<float>
 
     protected override INeuralNetworkModel<float> CreateNetwork()
         => new VoxelCNN<float>();
+
+    [Fact(Timeout = 120000)]
+    public async Task FusedTraining_ShouldUpdateParametersWithoutNaN()
+    {
+        await Task.Yield();
+        var originalOptions = TensorCodecOptions.Current;
+        try
+        {
+            TensorCodecOptions.SetCurrent(new TensorCodecOptions { EnableCompilation = true });
+            CompiledTapeTrainingStep<float>.Invalidate();
+            CompiledTapeTrainingStep<float>.ResetFusedStepCount();
+
+            using var network = new TestableVoxelCNN();
+            var rng = ModelTestHelpers.CreateSeededRandom();
+            var input = CreateRandomTensor(InputShape, rng);
+            var target = CreateRandomTargetTensor(OutputShape, rng);
+            var parametersBefore = network.GetParameters().ToArray();
+
+            network.Train(input, target);
+
+            Assert.True(
+                CompiledTapeTrainingStep<float>.GetFusedStepCount() > 0,
+                "VoxelCNN training fell back instead of executing the fused compiled path.");
+            Assert.False(
+                network.FusedTrainingDisabled,
+                "VoxelCNN's fused step failed and sticky-disabled compilation before eager fallback.");
+            var parametersAfter = network.GetParameters().ToArray();
+            Assert.True(
+                parametersBefore.Where((value, index) => value != parametersAfter[index]).Any(),
+                "VoxelCNN's fused compiled step did not update any live model parameter.");
+            foreach (var parameter in network.GetParameterChunks())
+            {
+                Assert.All(
+                    parameter.ToArray(),
+                    value => Assert.True(!float.IsNaN(value) && !float.IsInfinity(value)));
+            }
+        }
+        finally
+        {
+            CompiledTapeTrainingStep<float>.Invalidate();
+            TensorCodecOptions.SetCurrent(originalOptions);
+        }
+    }
+
+    private sealed class TestableVoxelCNN : VoxelCNN<float>
+    {
+        internal bool FusedTrainingDisabled => _fusedTrainingDisabled;
+    }
 }

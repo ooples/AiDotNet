@@ -43,8 +43,58 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Graph)]
 [LayerTask(LayerTask.GraphProcessing)]
 [LayerProperty(ApiShape = LayerApiShape.GraphWithSetup, IsTrainable = true, ChangesShape = true, TestInputShape = "8, 3", TestConstructorArgs = "6, 3, (AiDotNet.Interfaces.IActivationFunction<double>?)null", TestSetupCode = "var s = new int[8, 3]; for (int i = 0; i < 8; i++) for (int j = 0; j < 3; j++) s[i, j] = (i * 2 + j + 1) % 8; ((AiDotNet.NeuralNetworks.Layers.SpiralConvLayer<double>)layer).SetSpiralIndices(s);")]
-public partial class SpiralConvLayer<T> : LayerBase<T>
+// Mesh convolution: [V, C] or [B, V, C], per OnFirstForward's own guard - "requires rank-2 [V,C] or
+// rank-3 [B,V,C] input". The vertex axis takes TensorAxis.Other, the same escape hatch
+// PrincipalNeighbourhoodAggregationLayer uses for its node axis, because a mesh vertex count is not
+// any of the spatial roles and calling it Height or Features would assert a structure it does not have.
+//
+// THE SPIRAL NEIGHBOURHOOD DOES NOT REACH THE SHAPE. SpiralLength sizes the gathered feature vector
+// (weights are [OutputChannels, c * SpiralLength]), but GatherSpiralFeatures produces one row per
+// vertex and the matmul contracts that width away - so vertices are preserved, not windowed.
+[TensorLayout(TensorAxis.Other, TensorAxis.Channels, Direction = TensorLayoutDirection.Input,
+    Note = "Unbatched mesh: leading axis is the vertex count.")]
+[TensorLayout(TensorAxis.Other, TensorAxis.Channels, Direction = TensorLayoutDirection.Output)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Other, TensorAxis.Channels,
+    Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Other, TensorAxis.Channels,
+    Direction = TensorLayoutDirection.Output)]
+[AutoParameters]
+public partial class SpiralConvLayer<T> : LayerBase<T>, IShapeContract
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// From <c>OnFirstForward</c>: <c>ResolveShapes(new[] { v, c }, new[] { v, OutputChannels })</c> -
+    /// the vertex count survives and only the channel axis is rewritten. <c>ProcessBatched</c>'s own
+    /// documented return is <c>[batch, numVertices, OutputChannels]</c>, so the batch axis is carried
+    /// through as well.
+    /// </para>
+    /// <para>
+    /// <c>Fixed(OutputChannels)</c> reads the constructor argument that sizes the weight matrix's row
+    /// count and the bias vector, so it is a width this layer's parameters impose. <c>InputChannels</c>
+    /// is by contrast DISCOVERED from the first input, which is exactly why it appears nowhere here.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        if (OutputChannels <= 0) return null;
+
+        var vertices = new OutputAxisContract(TensorAxis.Other, AxisRelation.Same(TensorAxis.Other));
+        var channels = new OutputAxisContract(TensorAxis.Channels, AxisRelation.Fixed(OutputChannels));
+
+        return inputRank switch
+        {
+            2 => new[] { vertices, channels },
+            3 => new[]
+            {
+                new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+                vertices,
+                channels,
+            },
+            _ => null,
+        };
+    }
+
     #region Properties
 
     /// <summary>
@@ -461,9 +511,9 @@ public partial class SpiralConvLayer<T> : LayerBase<T>
     /// <param name="spiralLength">Length of the spiral sequence (number of neighbors). Must be positive.</param>
     /// <param name="activationFunction">Activation applied after the spiral convolution. Defaults to ReLU.</param>
     public SpiralConvLayer(
-        int inputChannels,
-        int outputChannels,
-        int spiralLength,
+        [LayerState] int inputChannels,
+        [LayerState] int outputChannels,
+        [LayerState] int spiralLength,
         IActivationFunction<T>? activationFunction = null)
         : base(
             new[] { -1, inputChannels },
@@ -660,7 +710,7 @@ public partial class SpiralConvLayer<T> : LayerBase<T>
     /// 4. Applies activation function
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         EnsureInitializedFromInput(input);
         if (_spiralIndices == null)
@@ -730,91 +780,74 @@ public partial class SpiralConvLayer<T> : LayerBase<T>
     /// <returns>Output tensor [batch, numVertices, OutputChannels].</returns>
     private Tensor<T> ProcessBatched(Tensor<T> input, int batchSize, int numVertices, bool cacheBwd)
     {
-        var outputData = new T[batchSize * numVertices * OutputChannels];
+        // Sequential + pure Engine ops so the ENTIRE batch stays on the ambient
+        // gradient tape and TensorArena. The previous implementation fanned the
+        // per-sample Gather/MatMul across Parallel.For workers and copied results
+        // out through a raw T[] array; both are unsafe here.
+        //
+        // GradientTape<T>.Current and TensorArena are [ThreadStatic] BY DESIGN
+        // (the arena is documented "each thread gets its own arena, no locks", and
+        // an autodiff tape is inherently the recording context of the thread that
+        // runs the ops — the same model as PyTorch autograd). So Engine ops issued
+        // on a Parallel.For worker thread (a) record to NO tape, silently severing
+        // the gradient to _weights/_biases, and (b) allocate from a throwaway
+        // per-worker arena whose scratch is recycled out from under the returned
+        // tensor. That is the exact source of the training-time corruption we
+        // observed: a valid input × valid He-initialized weights produced 0 (read
+        // of a recycled/zeroed buffer) or ~1e34 (read of arena garbage), which then
+        // detonated the downstream BatchNorm variance into Inf/NaN. A single
+        // autodiff graph cannot be recorded across threads, so the batch loop MUST
+        // execute on the tape's own thread. The heavy MatMul is already SIMD /
+        // multi-threaded inside the Engine, so sequencing the outer batch loop
+        // costs no meaningful throughput.
+        var perItemOutputs = new Tensor<T>[batchSize];
+        var perItemGathered = cacheBwd ? new Tensor<T>[batchSize] : null;
+        int featureDim = SpiralLength * InputChannels;
 
-        // Thread-local storage for gathered features per batch sample
-        var localGatheredFeatures = new Tensor<T>[batchSize];
-        var transposedWeights = Engine.TensorTranspose(_weights);
-
-        Parallel.For(0, batchSize, b =>
+        for (int b = 0; b < batchSize; b++)
         {
-            var singleInput = ExtractBatchSlice(input, b, numVertices);
+            // Tape-tracked extraction of sample b: [1, V, C] -> [V, C].
+            var sliceB = Engine.TensorSlice(input, new[] { b, 0, 0 }, new[] { 1, numVertices, InputChannels });
+            var singleInput = Engine.Reshape(sliceB, new[] { numVertices, InputChannels });
 
-            // Gather spiral features (thread-safe, result stored per-batch)
-            var gathered = GatherSpiralFeatures(singleInput, numVertices);
-            localGatheredFeatures[b] = gathered;
+            var gathered = GatherSpiralFeatures(singleInput, numVertices);        // [V, S*C]
+            if (perItemGathered is not null) perItemGathered[b] = gathered;
 
-            // Compute output using pre-transposed weights
-            var singleOutput = Engine.TensorMatMul(gathered, transposedWeights);
+            // Transpose the weights AFTER the gather (mirrors ProcessSingle). The gather
+            // issues many Engine ops (per spiral position: gather/mask/tile/set-slice), and
+            // the ambient TensorArena recycles scratch by ring position — so a transpose
+            // hoisted ABOVE the gather gets its backing recycled out from under this matmul,
+            // which then reads zeroed/garbage weights (the SpiralConv-output-collapses-to-0
+            // / explodes-to-1e25 corruption that detonated the downstream BatchNorm variance).
+            // Computing it here, immediately before its only use, keeps it live.
+            var transposedWeights = Engine.TensorTranspose(_weights);
+            var singleOutput = Engine.TensorMatMul(gathered, transposedWeights);  // [V, outC]
             singleOutput = AddBiases(singleOutput, numVertices);
 
-            // Activation is applied exactly once by Forward() after ProcessBatched returns, so the
-            // per-sample output must stay PRE-activation here (matches the ProcessSingle path).
-            var singleData = singleOutput.ToArray();
-            int offset = b * numVertices * OutputChannels;
-            Array.Copy(singleData, 0, outputData, offset, singleData.Length);
-        });
+            // Stay PRE-activation (Forward() applies the activation once, after this
+            // returns — matching the ProcessSingle path). Re-add the batch axis so
+            // the per-sample results concatenate back to [B, V, outC].
+            perItemOutputs[b] = Engine.Reshape(singleOutput, new[] { 1, numVertices, OutputChannels });
+        }
 
-        // Combine gathered features for backward pass (sum across batch)
-        // For backward pass, we need the gathered features. Store the first batch's for gradient computation.
-        // A more complete solution would store all or use a different gradient strategy.
-        // #1668: _gatheredFeatures is a backward-only cache; only build+retain it when an eager
-        // Backward will read it, so inference holds no gathered arena scratch across a Reset.
-        if (cacheBwd && batchSize > 0 && localGatheredFeatures[0] != null)
+        // #1668: _gatheredFeatures is a backward-only cache; only build+retain it
+        // when an eager Backward will read it, so inference holds no gathered arena
+        // scratch across a Reset.
+        if (cacheBwd && perItemGathered is not null)
         {
-            _gatheredFeatures = CombineGatheredFeatures(localGatheredFeatures, batchSize, numVertices);
+            _gatheredFeatures = batchSize == 1
+                ? Engine.Reshape(perItemGathered[0], new[] { 1, numVertices, featureDim })
+                : Engine.Concat(
+                    Array.ConvertAll(perItemGathered,
+                        g => Engine.Reshape(g, new[] { 1, numVertices, featureDim })),
+                    0);
         }
         else
         {
             _gatheredFeatures = null;
         }
 
-        return new Tensor<T>(outputData, [batchSize, numVertices, OutputChannels]);
-    }
-
-    /// <summary>
-    /// Combines gathered features from all batch samples for backward pass.
-    /// </summary>
-    /// <param name="localGatheredFeatures">Array of gathered features per batch sample.</param>
-    /// <param name="batchSize">Number of batch samples.</param>
-    /// <param name="numVertices">Number of vertices per sample.</param>
-    /// <returns>Combined gathered features tensor.</returns>
-    private Tensor<T> CombineGatheredFeatures(Tensor<T>[] localGatheredFeatures, int batchSize, int numVertices)
-    {
-        int featureDim = SpiralLength * InputChannels;
-        var combinedData = new T[batchSize * numVertices * featureDim];
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            var batchData = localGatheredFeatures[b].ToArray();
-            int offset = b * numVertices * featureDim;
-            Array.Copy(batchData, 0, combinedData, offset, batchData.Length);
-        }
-
-        return new Tensor<T>(combinedData, [batchSize, numVertices, featureDim]);
-    }
-
-    /// <summary>
-    /// Extracts a single sample from a batched tensor.
-    /// </summary>
-    /// <param name="batched">Batched tensor [batch, vertices, channels].</param>
-    /// <param name="batchIndex">Index of the batch to extract.</param>
-    /// <param name="numVertices">Number of vertices.</param>
-    /// <returns>Single sample tensor [vertices, channels].</returns>
-    private Tensor<T> ExtractBatchSlice(Tensor<T> batched, int batchIndex, int numVertices)
-    {
-        int channels = batched.Shape[2];
-        var data = new T[numVertices * channels];
-
-        for (int v = 0; v < numVertices; v++)
-        {
-            for (int c = 0; c < channels; c++)
-            {
-                data[v * channels + c] = batched[batchIndex, v, c];
-            }
-        }
-
-        return new Tensor<T>(data, [numVertices, channels]);
+        return batchSize == 1 ? perItemOutputs[0] : Engine.Concat(perItemOutputs, 0);
     }
 
     /// <summary>
@@ -834,20 +867,22 @@ public partial class SpiralConvLayer<T> : LayerBase<T>
         if (_spiralIndices == null)
             throw new InvalidOperationException("Spiral indices not set.");
 
-        int gatheredSize = InputChannels * SpiralLength;
-
-        // Create result tensor
-        var gathered = new Tensor<T>([numVertices, gatheredSize]);
-
-        // Gather features for each spiral position using vectorized operations
+        // Build the gathered features by CONCATENATING each spiral position's masked
+        // neighbor-gather along the feature axis, rather than mutating a preallocated
+        // buffer via `gathered = TensorSetSlice(gathered, ...)` in a loop. The mutating
+        // SetSlice pattern does not compose with GraphMode/compiled-plan LAZY recording
+        // (which is active during tape/compiled training): each op records a lazy node,
+        // and the imperative reassign-a-plain-buffer loop realizes to ~0 — the SpiralNet
+        // / mesh-model training NaN where the gather output read as 0 (valid input +
+        // weights → 0 matmul → BatchNorm variance blow-up). Concat is a single graph-
+        // clean op that realizes correctly under both eager and lazy execution.
+        var positionSlices = new Tensor<T>[SpiralLength];
         for (int s = 0; s < SpiralLength; s++)
         {
-            int featureOffset = s * InputChannels;
-
-            // Create indices for this spiral position
+            // Per-vertex neighbor index at this spiral position, plus a validity mask
+            // that zeros out out-of-range (padding) neighbors.
             var spiralPositionIndices = new int[numVertices];
             var validMask = new T[numVertices];
-
             for (int v = 0; v < numVertices; v++)
             {
                 int idx = _spiralIndices[v, s];
@@ -858,25 +893,20 @@ public partial class SpiralConvLayer<T> : LayerBase<T>
                 }
                 else
                 {
-                    spiralPositionIndices[v] = 0; // Placeholder, will be masked to zero
+                    spiralPositionIndices[v] = 0; // Placeholder, masked to zero below.
                     validMask[v] = NumOps.Zero;
                 }
             }
 
             var indicesTensor = new Tensor<int>(spiralPositionIndices, [numVertices]);
-
-            // Gather neighbor features
-            var neighborFeatures = Engine.TensorGather(input, indicesTensor, axis: 0);
-
-            // Apply mask to zero out invalid neighbors
+            var neighborFeatures = Engine.TensorGather(input, indicesTensor, axis: 0); // [V, C]
             var mask = new Tensor<T>(validMask, [numVertices, 1]);
-            neighborFeatures = Engine.TensorMultiply(neighborFeatures, Engine.TensorTile(mask, [1, InputChannels]));
-
-            // Set the gathered features into the result at the appropriate offset
-            gathered = Engine.TensorSetSlice(gathered, neighborFeatures, [0, featureOffset]);
+            var tiled = Engine.TensorTile(mask, [1, InputChannels]);                   // [V, C]
+            positionSlices[s] = Engine.TensorMultiply(neighborFeatures, tiled);        // [V, C]
         }
 
-        return gathered;
+        // Concatenate the SpiralLength position-slices along the feature axis → [V, S*C].
+        return SpiralLength == 1 ? positionSlices[0] : Engine.Concat(positionSlices, 1);
     }
 
     /// <summary>
@@ -977,34 +1007,6 @@ public partial class SpiralConvLayer<T> : LayerBase<T>
     }
 
     /// <summary>
-    /// Gets all trainable parameters as a single vector.
-    /// </summary>
-    /// <returns>Vector containing all weights and biases.</returns>
-    public override Vector<T> GetParameters()
-    {
-        return Vector<T>.Concatenate(
-            new Vector<T>(_weights.ToArray()),
-            new Vector<T>(_biases.ToArray()));
-    }
-
-    /// <summary>
-    /// Sets all trainable parameters from a vector.
-    /// </summary>
-    /// <param name="parameters">Vector containing all parameters.</param>
-    /// <exception cref="ArgumentException">Thrown when parameter count is incorrect.</exception>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int expected = _weights.Length + _biases.Length;
-        if (parameters.Length != expected)
-            throw new ArgumentException($"Expected {expected} parameters, got {parameters.Length}.");
-
-        int idx = 0;
-        _weights = new Tensor<T>(_weights._shape, parameters.Slice(idx, _weights.Length));
-        idx += _weights.Length;
-        _biases = new Tensor<T>(_biases._shape, parameters.Slice(idx, _biases.Length));
-    }
-
-    /// <summary>
     /// Gets the weight tensor.
     /// </summary>
     /// <returns>Weights [OutputChannels, InputChannels * SpiralLength].</returns>
@@ -1015,11 +1017,6 @@ public partial class SpiralConvLayer<T> : LayerBase<T>
     /// </summary>
     /// <returns>Biases [OutputChannels].</returns>
     public override Tensor<T> GetBiases() => _biases;
-
-    /// <summary>
-    /// Gets the total number of trainable parameters.
-    /// </summary>
-    public override long ParameterCount => _weights.Length + _biases.Length;
 
     /// <summary>
     /// Emits the construction parameters the network's flat-parameter

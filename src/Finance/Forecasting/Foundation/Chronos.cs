@@ -100,7 +100,14 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Chronos: Learning the Language of Time Series", "https://arxiv.org/abs/2403.07815", Year = 2024, Authors = "Abdul Fatir Ansari, Lorenzo Stella, Caner Turkmen, Xiyuan Zhang, Pedro Mercado, Huibin Shen, Oleksandr Shchur, Syama Sundar Rangapuram, Sebastian Pineda Arango, Shubham Kapoor, Jasper Zschiegner, Danielle C. Maddix, Michael W. Mahoney, Kari Torkkola, Andrew Gordon Wilson, Michael Bohlke-Schneider, Yuyang Wang")]
-public class Chronos<T> : TimeSeriesFoundationModelBase<T>
+// The paper's whole idea is that a time series becomes a LANGUAGE, and this is where that happens:
+// PredictCore calls Forward(Tokenize(input)), so the EmbeddingLayer receives token indices and never the
+// series. The model's rank-3 [Batch, Time, Features] input and that layer's rank-1/2 input are therefore
+// both correct about DIFFERENT tensors, and comparing them would report a defect that is not there.
+[PreprocessesInput("Tokenize quantizes the real-valued series into token bins before the stack runs, "
+    + "so Layers[0] receives token indices - see PredictCore's Forward(Tokenize(input)).")]
+[StackInputLayout(TensorAxis.Batch, TensorAxis.Time, BatchOptional = true)]
+public partial class Chronos<T> : TimeSeriesFoundationModelBase<T>
 {
     #region Execution Mode
 
@@ -269,7 +276,7 @@ public class Chronos<T> : TimeSeriesFoundationModelBase<T>
         ChronosFinanceOptions<T>? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null)
-        : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>(), 1.0)
+        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
     {
         _lastTokenMin = NumOps.Zero;
         _lastTokenRange = NumOps.Zero;
@@ -288,7 +295,8 @@ public class Chronos<T> : TimeSeriesFoundationModelBase<T>
         OnnxModelPath = onnxModelPath;
 
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
-        _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
+        SetBaseTrainOptimizer(_optimizer);
+        _lossFunction = lossFunction ?? new CrossEntropyWithLogitsLoss<T>();
 
         _contextLength = options.ContextLength;
         _forecastHorizon = options.ForecastHorizon;
@@ -322,7 +330,7 @@ public class Chronos<T> : TimeSeriesFoundationModelBase<T>
         ChronosFinanceOptions<T>? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null)
-        : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>(), 1.0)
+        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
     {
         options ??= new ChronosFinanceOptions<T>();
         _options = options;
@@ -336,7 +344,8 @@ public class Chronos<T> : TimeSeriesFoundationModelBase<T>
         OnnxModelPath = null;
 
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
-        _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
+        SetBaseTrainOptimizer(_optimizer);
+        _lossFunction = lossFunction ?? new CrossEntropyWithLogitsLoss<T>();
 
         _contextLength = options.ContextLength;
         _forecastHorizon = options.ForecastHorizon;
@@ -479,6 +488,12 @@ public class Chronos<T> : TimeSeriesFoundationModelBase<T>
             errors.Add("DropoutRate must be between 0 and 1 (exclusive).");
         if (options.Temperature <= 0)
             errors.Add("Temperature must be positive.");
+        // The bound is the half-width of the binning domain, so a non-positive value collapses
+        // [-bound*s, +bound*s] to a point or inverts it -- every observation then falls in one bin
+        // and the forecast is constant. It was the only numeric option on the class that nothing
+        // here checked, while all ten of its siblings were checked.
+        if (options.QuantizationBound <= 0)
+            errors.Add("QuantizationBound must be positive.");
 
         if (errors.Count > 0)
             throw new ArgumentException($"Invalid options: {string.Join(", ", errors)}");
@@ -519,32 +534,61 @@ public class Chronos<T> : TimeSeriesFoundationModelBase<T>
         if (!_useNativeMode)
             throw new InvalidOperationException("Training is only supported in native mode.");
 
-        // Issue #1166: the old body computed a loss + gradient and then
-        // called _optimizer.UpdateParameters(Layers) without a backward
-        // pass, so every layer's UpdateParameters threw "Backward pass
-        // must be called before updating parameters." Delegate to
-        // FinancialModelBase.Train — it routes through the tape-based
-        // NeuralNetworkBase.TrainWithTape flow (GradientTape forward +
-        // tape.ComputeGradients + optimizer.Step) that every other
-        // NeuralNetworkBase subclass uses.
-        base.Train(input, target);
+        if (target.Length != _forecastHorizon)
+            throw new ArgumentException(
+                $"Chronos training targets must contain exactly {_forecastHorizon} future values, got {target.Length}.",
+                nameof(target));
+
+        // Chronos is trained as a token language model, not by differentiating through
+        // argmax detokenization. Quantize the future values on the context's scale and
+        // supervise the raw vocabulary logits with cross-entropy (Ansari et al., 2024).
+        CaptureTokenScale(input);
+        var tokenTargets = QuantizeUsingCapturedScale(target)
+            .Reshape(new[] { 1, _forecastHorizon });
+        base.Train(input, tokenTargets);
     }
 
-    /// <inheritdoc/>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the Chronos model, UpdateParameters updates internal parameters or state. This keeps the Chronos architecture aligned with the latest values.
-    /// </para>
-    /// </remarks>
-    public override void UpdateParameters(Vector<T> gradients)
+    /// <summary>
+    /// Tape-connected Chronos training forward: context tokens to the final horizon's
+    /// vocabulary logits. Inference still uses sampling/argmax detokenization.
+    /// </summary>
+    protected override Tensor<T> ForwardNativeForTraining(Tensor<T> input)
     {
-        // Parameters are updated through the optimizer in the base Train() → TrainWithTape path.
-        // Throwing here broke NeuralNetworkBase.WithParameters (which calls DeepCopy + UpdateParameters)
-        // — the IParameterizable contract has to succeed for smoke tests, clone flows, and parameter
-        // sweeps even on pretrained foundation checkpoints. Leave the body empty, same convention as
-        // the rest of the Finance foundation models.
+        var logits = Forward(Tokenize(input));
+
+        if (logits.Rank == 3)
+        {
+            int sequenceLength = logits.Shape[1];
+            if (sequenceLength < _forecastHorizon)
+                throw new ArgumentException(
+                    $"Chronos input produces {sequenceLength} token positions, fewer than forecast horizon {_forecastHorizon}.",
+                    nameof(input));
+            return Engine.TensorSlice(
+                logits,
+                new[] { 0, sequenceLength - _forecastHorizon, 0 },
+                new[] { logits.Shape[0], _forecastHorizon, logits.Shape[2] });
+        }
+
+        if (logits.Rank == 2)
+        {
+            int sequenceLength = logits.Shape[0];
+            if (sequenceLength < _forecastHorizon)
+                throw new ArgumentException(
+                    $"Chronos input produces {sequenceLength} token positions, fewer than forecast horizon {_forecastHorizon}.",
+                    nameof(input));
+            var sliced = Engine.TensorSlice(
+                logits,
+                new[] { sequenceLength - _forecastHorizon, 0 },
+                new[] { _forecastHorizon, logits.Shape[1] });
+            return Engine.Reshape(sliced, new[] { 1, _forecastHorizon, logits.Shape[1] });
+        }
+
+        throw new InvalidOperationException(
+            $"Chronos training expects rank-2 or rank-3 vocabulary logits, got rank {logits.Rank}.");
     }
 
+    // UpdateParameters was an empty override, silently dropping every restore. The base
+    // distributes the vector over the declared enumeration.
     /// <inheritdoc/>
     /// <remarks>
     /// <para>
@@ -657,6 +701,11 @@ public class Chronos<T> : TimeSeriesFoundationModelBase<T>
         _hasTokenScale = reader.ReadBoolean();
         _lastTokenMin = NumOps.FromDouble(reader.ReadDouble());
         _lastTokenRange = NumOps.FromDouble(reader.ReadDouble());
+
+        // Base deserialization replaces the Layers collection with newly deserialized
+        // layer instances. Refresh Chronos' typed layer references so inference uses
+        // those restored weights rather than the constructor's discarded random layers.
+        ExtractLayerReferences();
     }
 
     #endregion
@@ -938,20 +987,42 @@ public class Chronos<T> : TimeSeriesFoundationModelBase<T>
     /// </summary>
     private void CaptureTokenScale(Tensor<T> values)
     {
-        T min = NumOps.MaxValue;
-        T max = NumOps.MinValue;
+        // Chronos uses MEAN SCALING followed by uniform binning over a FIXED [-15s, +15s]
+        // domain, where s is the mean of the absolute values of the historical context
+        // (Ansari et al. 2024, arXiv:2403.07815 — "mean scaling normalizes individual entries
+        // of the time series by the mean of the absolute values in the historical context",
+        // quantized uniformly within [-15s, 15s]).
+        //
+        // This previously captured the context MIN/MAX and binned over [min, max]. That is a
+        // different scheme with a substantive behavioural consequence: when the bin domain is
+        // pinned to the observed extremes, bin 0 IS the historical minimum and the top bin IS
+        // the historical maximum, so a detokenized forecast can never exceed the range already
+        // seen in the context — the model is structurally unable to predict a new high or low.
+        // The paper's fixed +/-15 domain exists precisely to leave that headroom, and it also
+        // makes the token coordinate system comparable across series instead of depending on
+        // each context's spread.
+        //
+        // The affine map is expressed through the existing min/range fields so the quantizer's
+        // (x - min) / range and Detokenize's scaled * range + min remain exact inverses:
+        //     min   = -15s   (low edge of the bin domain, original units)
+        //     range =  30s   (full width of the bin domain, original units)
+        T absSum = NumOps.Zero;
         for (int i = 0; i < values.Length; i++)
-        {
-            if (NumOps.LessThan(values.Data.Span[i], min)) min = values.Data.Span[i];
-            if (NumOps.GreaterThan(values.Data.Span[i], max)) max = values.Data.Span[i];
-        }
+            absSum = NumOps.Add(absSum, NumOps.Abs(values.Data.Span[i]));
 
-        var range = NumOps.Subtract(max, min);
-        if (NumOps.Equals(range, NumOps.Zero))
-            range = NumOps.One;
+        T scale = values.Length > 0
+            ? NumOps.Divide(absSum, NumOps.FromDouble(values.Length))
+            : NumOps.Zero;
 
-        _lastTokenMin = min;
-        _lastTokenRange = range;
+        // An all-zero (or empty) context has no meaningful scale; fall back to unit scale so
+        // the domain stays finite and the inverse remains well defined.
+        if (NumOps.Equals(scale, NumOps.Zero))
+            scale = NumOps.One;
+
+        // Half-width of the bin domain is user-configurable; it defaults to the paper's 15.
+        double bound = _options.QuantizationBound;
+        _lastTokenMin = NumOps.Multiply(NumOps.FromDouble(-bound), scale);
+        _lastTokenRange = NumOps.Multiply(NumOps.FromDouble(2.0 * bound), scale);
         _hasTokenScale = true;
     }
 
@@ -969,6 +1040,18 @@ public class Chronos<T> : TimeSeriesFoundationModelBase<T>
     private Tensor<T> Tokenize(Tensor<T> values)
     {
         CaptureTokenScale(values);
+        return QuantizeUsingCapturedScale(values);
+    }
+
+    /// <summary>
+    /// Quantizes values using the most recently captured context scale. Targets use this
+    /// path so their bins are expressed in the same vocabulary coordinate system as input.
+    /// </summary>
+    private Tensor<T> QuantizeUsingCapturedScale(Tensor<T> values)
+    {
+        if (!_hasTokenScale)
+            throw new InvalidOperationException("Chronos token scale has not been initialized.");
+
         var min = _lastTokenMin;
         var range = _lastTokenRange;
 

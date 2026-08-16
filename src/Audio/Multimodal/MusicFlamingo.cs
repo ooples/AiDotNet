@@ -47,6 +47,16 @@ namespace AiDotNet.Audio.Multimodal;
 [ResearchPaper("MusicFlamingo: Multimodal Music Understanding and Generation with Pretrained Language Models", "https://doi.org/10.48550/arXiv.2410.01250", Year = 2024, Authors = "Zhifeng Kong, Arushi Goel, Rohan Badlani, Wei Ping, Rafael Valle, Bryan Catanzaro")]
 public class MusicFlamingo<T> : AudioNeuralNetworkBase<T>, IAudioLanguageModel<T>
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// Traced from output construction: PredictCore folds over Layers, and the last layer
+    /// CreateDefaultMusicFlamingoLayers emits is the LLM output projection
+    /// <c>DenseLayer&lt;T&gt;(llmHiddenDim)</c>, wired from <c>_options.LLMHiddenDim</c> (2048).
+    /// The stack ends in LLM embedding space, not at a vocabulary; MusicEncoderDim is the input side
+    /// and NumPerceiverTokens is a sequence length, neither is the last axis.
+    /// </remarks>
+    protected override int OutputFeatureWidth => _options.LLMHiddenDim;
+
     #region Fields
 
     private readonly MusicFlamingoOptions _options;
@@ -178,7 +188,7 @@ public class MusicFlamingo<T> : AudioNeuralNetworkBase<T>, IAudioLanguageModel<T
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expected);
+            TrainWithTape(input, expected, _optimizer);
         }
         finally
         {
@@ -186,12 +196,11 @@ public class MusicFlamingo<T> : AudioNeuralNetworkBase<T>, IAudioLanguageModel<T
         }
     }
 
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        if (!_useNativeMode) throw new NotSupportedException("ONNX mode.");
-        int idx = 0; foreach (var l in Layers) { int c = (int)l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; }
-    }
-
+    /// <inheritdoc />
+    /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
+    /// write on every parameter surface, so the guard is stated once here instead of being
+    /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
+    protected override bool SupportsParameterMutation => _useNativeMode;
     protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio)
     {
         if (MelSpec is not null) return MelSpec.Forward(rawAudio);

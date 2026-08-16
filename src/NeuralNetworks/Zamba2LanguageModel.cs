@@ -18,12 +18,14 @@ namespace AiDotNet.NeuralNetworks;
 /// </para>
 /// <para><b>For Beginners:</b> Zamba2 upgrades Zamba with Mamba2 blocks and LoRA-adapted shared
 /// attention layers for better efficiency and quality.</para>
-/// <para><b>Reference:</b> Glorioso et al., "Zamba2-7B", 2024.</para>
+/// <para><b>Reference:</b> Glorioso et al., "The Zamba2 Suite: Technical Report", 2024.</para>
 /// </remarks>
 /// <example>
 /// <code>
-/// var options = new Zamba2Options { VocabSize = 32000, ModelDim = 3712, NumLayers = 54 };
-/// var model = new Zamba2LanguageModel&lt;float&gt;(options);
+/// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
+///     InputType.OneDimensional, NeuralNetworkTaskType.TextGeneration,
+///     inputSize: 4096, outputSize: 32000);
+/// var model = new Zamba2LanguageModel&lt;float&gt;(architecture);
 /// var tokens = Tensor&lt;float&gt;.Random(new[] { 1, 128 });
 /// var logits = model.Predict(tokens);
 /// </code>
@@ -36,8 +38,8 @@ namespace AiDotNet.NeuralNetworks;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("Zamba2-7B", "https://arxiv.org/abs/2501.01725", Year = 2025, Authors = "Paolo Glorioso, Quentin Anthony, Yury Tokpanov, James Whittington, Jonathan Pilault, Adam Ibrahim, Beren Millidge")]
-public class Zamba2LanguageModel<T> : NeuralNetworkBase<T>
+[ResearchPaper("The Zamba2 Suite: Technical Report", "https://arxiv.org/abs/2411.15242", Year = 2024, Authors = "Paolo Glorioso, Quentin Anthony, Yury Tokpanov, Anna Golubeva, Vasudev Shyam, James Whittington, Jonathan Pilault, Beren Millidge")]
+public class Zamba2LanguageModel<T> : TokenLanguageModelLayoutBase<T>
 {
     private readonly Zamba2Options _options;
     private readonly int _vocabSize;
@@ -68,16 +70,23 @@ public class Zamba2LanguageModel<T> : NeuralNetworkBase<T>
     public Zamba2LanguageModel(
         NeuralNetworkArchitecture<T> architecture,
         int vocabSize = 32000,
-        int modelDimension = 256,
-        int numLayers = 12,
+        int modelDimension = 3584,
+        int numLayers = 81,
         int stateDimension = 64,
-        int numHeads = 8,
+        int numHeads = 32,
         int attentionInterval = 6,
-        int maxSeqLength = 512,
+        int maxSeqLength = 4096,
         ILossFunction<T>? lossFunction = null,
         Zamba2Options? options = null)
         : base(architecture,
-            lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(NeuralNetworkTaskType.TextGeneration))
+            // Zamba-2's LM head emits RAW LOGITS (DenseLayer with no activation, see
+            // LayerHelper.CreateZamba2Layers), so the loss must be cross-entropy-with-logits (fused
+            // log-softmax + NLL, == PyTorch nn.CrossEntropyLoss) — the same pairing
+            // RWKV4LanguageModel already uses. The TextGeneration DEFAULT is CategoricalCrossEntropy,
+            // which expects softmax PROBABILITIES and takes log(predicted): feeding it un-normalized
+            // logits makes the objective degenerate, because every non-positive logit is clamped to the
+            // 1e-7 floor where TensorClamp has ZERO gradient, so those classes never train.
+            lossFunction ?? new AiDotNet.LossFunctions.CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new Zamba2Options();
         Options = _options;
@@ -114,33 +123,15 @@ public class Zamba2LanguageModel<T> : NeuralNetworkBase<T>
 
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
-        SetTrainingMode(false);
-        return Accelerate(input, () =>
-        {
-            var output = input;
-            for (int i = 0; i < Layers.Count; i++)
-            {
-                output = Layers[i].Forward(output);
-            }
-            return output;
-        });
+        // Keep inference on the base funnel so unbatched token sequences are
+        // promoted consistently with Train, then squeezed back for the caller.
+        // Walking Layers directly made the output shape depend on whether the
+        // recurrent blocks had first been materialized by a batched training
+        // forward, which also broke trained-model clone parity.
+        return base.PredictCore(input);
     }
 
-    public override void UpdateParameters(Vector<T> gradients)
-    {
-        if (gradients.Length != ParameterCount)
-        {
-            throw new ArgumentException(
-                $"Expected {ParameterCount} gradients, but got {gradients.Length}",
-                nameof(gradients));
-        }
-
-        var currentParams = GetParameters();
-        T learningRate = NumOps.FromDouble(0.001);
-        currentParams = Engine.Subtract(currentParams, Engine.Multiply(gradients, learningRate));
-        SetParameters(currentParams);
-    }
-
+    // UpdateParameters applied a GRADIENT STEP, but its one-argument form is the value setter and every caller passes values -- the override corrupted the model. Removed under AIDN082.
     public override ModelMetadata<T> GetModelMetadata()
     {
         return new ModelMetadata<T>

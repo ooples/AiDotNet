@@ -262,12 +262,16 @@ public class LongLoRAAdapter<T> : LoRAAdapterBase<T>
     /// that works great with full attention at inference!
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
-        // If not using shifted attention or not in training mode, use standard LoRA forward
+        // If not using shifted attention or not in training mode, use standard LoRA forward.
+        // ForwardTraced, NOT Forward: LayerBase.Forward is the non-virtual recording wrapper that
+        // dispatches to ForwardTraced, so base.Forward(input) would come straight back here and
+        // recurse until the stack overflows. LoRAAdapterBase overrides ForwardTraced, so this is the
+        // base implementation that call was always meant to reach.
         if (!_useShiftedAttention || !_isTraining)
         {
-            return base.Forward(input);
+            return base.ForwardTraced(input);
         }
 
         // Apply shifted sparse attention during training
@@ -605,7 +609,7 @@ public class LongLoRAAdapter<T> : LoRAAdapterBase<T>
 
         // Calculate dimensions
         int inputSize = GetInputShape()[0];
-        int outputSize = GetOutputShape()[0];
+        int outputSize = GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0];
         int weightCount = inputSize * outputSize;
 
         // Create new parameters with merged weights
@@ -627,35 +631,6 @@ public class LongLoRAAdapter<T> : LoRAAdapterBase<T>
 
         // Use helper method to clone base layer and preserve activation function
         return CreateMergedLayerWithClone(mergedParams);
-    }
-
-    /// <summary>
-    /// Updates the parameter gradients vector from the layer gradients.
-    /// </summary>
-    /// <remarks>
-    /// This helper method synchronizes the parameter gradients after backward pass.
-    /// </remarks>
-    private void UpdateParameterGradientsFromLayers()
-    {
-        ParameterGradients = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
-        int idx = 0;
-
-        // If base layer is not frozen, pack its gradients first
-        if (!_freezeBaseLayer)
-        {
-            Vector<T> baseGrads = _baseLayer.GetParameterGradients();
-            for (int i = 0; i < baseGrads.Length; i++)
-            {
-                ParameterGradients[idx++] = baseGrads[i];
-            }
-        }
-
-        // Pack LoRA gradients
-        Vector<T> loraGrads = _loraLayer.GetParameterGradients();
-        for (int i = 0; i < loraGrads.Length; i++)
-        {
-            ParameterGradients[idx++] = loraGrads[i];
-        }
     }
 
     /// <summary>

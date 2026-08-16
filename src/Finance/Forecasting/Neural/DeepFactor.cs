@@ -84,7 +84,7 @@ namespace AiDotNet.Finance.Forecasting.Neural;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Deep Factors for Forecasting", "https://arxiv.org/abs/1905.12417", Year = 2019, Authors = "Yuyang Wang, Alex Smola, Danielle C. Maddix, Jan Gasthaus, Dean Foster, Tim Januschowski")]
-public class DeepFactor<T> : ForecastingModelBase<T>
+public partial class DeepFactor<T> : ForecastingModelBase<T>
 {
     #region Execution Mode
 
@@ -537,16 +537,8 @@ public class DeepFactor<T> : ForecastingModelBase<T>
         base.Train(input, target);
     }
 
-    /// <inheritdoc/>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the DeepFactor model, UpdateParameters updates internal parameters or state. This keeps the DeepFactor architecture aligned with the latest values.
-    /// </para>
-    /// </remarks>
-    public override void UpdateParameters(Vector<T> gradients)
-    {
-    }
-
+    // UpdateParameters was an empty override, silently dropping every restore. The base
+    // distributes the vector over the declared enumeration.
     /// <inheritdoc/>
     /// <remarks>
     /// <para>

@@ -48,6 +48,16 @@ namespace AiDotNet.Audio.Effects;
 [ResearchPaper("Real Time Speech Enhancement in the Waveform Domain", "https://doi.org/10.48550/arXiv.2006.12847", Year = 2020, Authors = "Alexandre Défossez, Gabriel Synnaeve, Yossi Adi")]
 public class DemucsNoise<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// Measured: <c>PredictCore</c> folds <c>Layers</c> in order and <c>PostprocessOutput</c> is the
+    /// identity. <c>CreateDefaultDemucsNoiseLayers</c> ends its decoder with the "output projection
+    /// back to 1 channel (mono clean audio)" layer, <c>FullyConnectedLayer&lt;T&gt;(1)</c>, so the
+    /// feature axis is 1. <c>_options.HiddenChannels</c> / <c>LSTMHiddenSize</c> size interior blocks
+    /// only.
+    /// </remarks>
+    protected override int OutputFeatureWidth => 1;
+
     #region Fields
 
     private readonly DemucsNoiseOptions _options;
@@ -167,7 +177,7 @@ public class DemucsNoise<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expected);
+            TrainWithTape(input, expected, _optimizer);
         }
         finally
         {
@@ -175,12 +185,11 @@ public class DemucsNoise<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
         }
     }
 
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        if (!_useNativeMode) throw new NotSupportedException("ONNX mode.");
-        int idx = 0; foreach (var l in Layers) { int c = (int)l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; }
-    }
-
+    /// <inheritdoc />
+    /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
+    /// write on every parameter surface, so the guard is stated once here instead of being
+    /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
+    protected override bool SupportsParameterMutation => _useNativeMode;
     protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio) => rawAudio;
     protected override Tensor<T> PostprocessOutput(Tensor<T> o) => o;
 

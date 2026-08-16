@@ -1,4 +1,4 @@
-using System.Text;
+﻿using System.Text;
 using AiDotNet.Attributes;
 using AiDotNet.Classification.Linear;
 using AiDotNet.Enums;
@@ -8,6 +8,7 @@ using AiDotNet.Tensors.Helpers;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 
+using AiDotNet.Models.Parameters;
 namespace AiDotNet.Classification.TimeSeries;
 
 /// <summary>
@@ -82,12 +83,16 @@ namespace AiDotNet.Classification.TimeSeries;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Vector<>))]
 [ResearchPaper("ROCKET: Exceptionally fast and accurate time series classification using random convolutional kernels", "https://arxiv.org/abs/1910.13051", Year = 2020, Authors = "Angus Dempster, Francois Petitjean, Geoffrey I. Webb")]
-public class RocketClassifier<T> : ClassifierBase<T>, ITimeSeriesClassifier<T>,
+public partial class RocketClassifier<T> : ClassifierBase<T>, ITimeSeriesClassifier<T>,
     IParameterizable<T, Matrix<T>, Vector<T>>{
+
     private readonly List<RocketKernel> _kernels;
     private readonly RocketOptions<T> _rocketOptions;
     private readonly Random _random;
+    [Scratch]
     private RidgeClassifier<T>? _internalClassifier;
+
+    [FittedParameter]
     private Vector<T>? _internalWeights;
 
     /// <summary>
@@ -473,19 +478,7 @@ public class RocketClassifier<T> : ClassifierBase<T>, ITimeSeriesClassifier<T>,
     }
 
     /// <inheritdoc />
-    public Vector<T> GetParameters()
-    {
-        return _internalWeights?.Clone() ?? new Vector<T>(0);
-    }
-
-    /// <inheritdoc />
-    public void SetParameters(Vector<T> parameters)
-    {
-        _internalWeights = parameters.Clone();
-    }
-
-    /// <inheritdoc />
-    public IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
+    public override IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
     {
         var copy = new RocketClassifier<T>(_rocketOptions);
         copy._internalWeights = parameters.Clone();
@@ -513,6 +506,8 @@ public class RocketClassifier<T> : ClassifierBase<T>, ITimeSeriesClassifier<T>,
     {
         return new RocketClassifier<T>(_rocketOptions);
     }
+
+
 
     /// <inheritdoc />
     public override byte[] Serialize()

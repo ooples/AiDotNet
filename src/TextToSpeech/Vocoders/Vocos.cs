@@ -40,7 +40,7 @@ namespace AiDotNet.TextToSpeech.Vocoders;
     Year = 2023,
     Authors = "Siuzdak"
 )]
-public class Vocos<T> : TtsModelBase<T>, IVocoder<T>
+public class Vocos<T> : VocoderBase<T>
 {
     private readonly VocosOptions _options;
 
@@ -80,113 +80,33 @@ public class Vocos<T> : TtsModelBase<T>, IVocoder<T>
     {
         _options = options ?? new VocosOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate,
+                WeightDecay = _options.WeightDecay,
+                UseAdaptiveLearningRate = false,
+            });
         base.SampleRate = _options.SampleRate;
         base.MelChannels = _options.MelChannels;
         base.HopSize = _options.HopSize;
         InitializeLayers();
     }
 
-    int IVocoder<T>.SampleRate => _options.SampleRate;
-    int IVocoder<T>.MelChannels => _options.MelChannels;
-    public int UpsampleFactor => _options.HopSize;
+    // SampleRate, MelChannels and UpsampleFactor now come from VocoderBase - see BigVGAN for why
+    // these three restated what the base already derives from the same _options fields.
 
     /// <summary>
     /// Converts mel to waveform using Vocos' ConvNeXt backbone predicting STFT coefficients.
-    /// Per the paper (Siuzdak, 2023): ConvNeXt V2 backbone processes mel features at mel-spectrogram resolution (no upsampling). Output heads predict STFT magnitude and instantaneous frequency (phase derivative). Waveform reconstructed via iSTFT. Achieves HiFi-GAN quality at 3x fewer parameters and faster inference.
+    /// Per the paper (Siuzdak, 2023): a ConvNeXt backbone processes mel features at mel-spectrogram resolution (no learnable upsampling). The output head predicts STFT magnitude and wrapped phase, and the waveform is reconstructed via iSTFT.
     /// </summary>
-    public Tensor<T> MelToWaveform(Tensor<T> melSpectrogram)
+    public override Tensor<T> MelToWaveform(Tensor<T> melSpectrogram)
     {
         ThrowIfDisposed();
         if (IsOnnxMode && OnnxModel is not null)
             return OnnxModel.Run(melSpectrogram);
-        // Run mel through learned vocoder layers for feature extraction
-        var layerOut = melSpectrogram;
-        foreach (var l in Layers)
-            layerOut = l.Forward(layerOut);
-        int melLen = layerOut.Length;
-        int waveLen = melLen * _options.HopSize;
-        int fftBins = _options.FftSize / 2 + 1;
-        // ConvNeXt backbone: process layer features at original resolution (no upsampling)
-        double[] features = new double[melLen * _options.ConvNeXtDim];
-        for (int t = 0; t < melLen; t++)
-        {
-            double feat = NumOps.ToDouble(layerOut[t]);
-            for (int d = 0; d < _options.ConvNeXtDim; d++)
-            {
-                double depthwise = feat * Math.Cos(d * 0.02 + t * 0.01) * 0.5;
-                double gelu =
-                    depthwise
-                    * 0.5
-                    * (
-                        1.0
-                        + Math.Tanh(
-                            Math.Sqrt(2.0 / Math.PI)
-                                * (depthwise + 0.044715 * depthwise * depthwise * depthwise)
-                        )
-                    );
-                features[t * _options.ConvNeXtDim + d] = gelu;
-            }
-        }
-        // Magnitude head: predict |STFT(f,t)|
-        double[,] magnitude = new double[melLen, fftBins];
-        for (int t = 0; t < melLen; t++)
-        {
-            double baseVal = NumOps.ToDouble(layerOut[t]);
-            for (int f = 0; f < fftBins; f++)
-            {
-                double convFeat = features[t * _options.ConvNeXtDim + f % _options.ConvNeXtDim];
-                magnitude[t, f] = Math.Exp(
-                    convFeat * 0.5 + baseVal * (1.0 - (double)f / fftBins) * 0.3
-                );
-            }
-        }
-        // Instantaneous frequency head: predict phase derivative for phase continuity
-        double[,] instFreq = new double[melLen, fftBins];
-        for (int t = 0; t < melLen; t++)
-        for (int f = 0; f < fftBins; f++)
-            instFreq[t, f] = 2.0 * Math.PI * f / _options.FftSize;
-        // Cumulative phase from instantaneous frequency
-        double[,] phase = new double[melLen, fftBins];
-        for (int f = 0; f < fftBins; f++)
-        {
-            phase[0, f] = 0;
-            for (int t = 1; t < melLen; t++)
-                phase[t, f] = phase[t - 1, f] + instFreq[t, f] * _options.HopSize;
-        }
-        // Inverse STFT reconstruction
-        var waveform = new Tensor<T>([waveLen]);
-        for (int t = 0; t < melLen; t++)
-        {
-            int center = t * _options.HopSize;
-            for (
-                int n = 0;
-                n < _options.FftSize && center + n - _options.FftSize / 2 < waveLen;
-                n++
-            )
-            {
-                int idx = center + n - _options.FftSize / 2;
-                if (idx < 0)
-                    continue;
-                double sample = 0;
-                for (int f = 0; f < Math.Min(fftBins, 32); f++)
-                    sample +=
-                        magnitude[t, f]
-                        * Math.Cos(phase[t, f] + 2.0 * Math.PI * f * n / _options.FftSize);
-                double window = 0.5 * (1.0 - Math.Cos(2.0 * Math.PI * n / _options.FftSize));
-                waveform[idx] = NumOps.FromDouble(
-                    NumOps.ToDouble(waveform[idx]) + sample * window * 0.005
-                );
-            }
-        }
-        // Normalize
-        double maxVal = 0;
-        for (int i = 0; i < waveLen; i++)
-            maxVal = Math.Max(maxVal, Math.Abs(NumOps.ToDouble(waveform[i])));
-        if (maxVal > 1e-6)
-            for (int i = 0; i < waveLen; i++)
-                waveform[i] = NumOps.FromDouble(NumOps.ToDouble(waveform[i]) / maxVal);
-        return waveform;
+        return ForwardNative(melSpectrogram);
     }
 
     protected override Tensor<T> PreprocessText(string text)
@@ -206,13 +126,14 @@ public class Vocos<T> : TtsModelBase<T>, IVocoder<T>
             Layers.AddRange(Architecture.Layers);
         else
             Layers.AddRange(
-                LayerHelper<T>.CreateDefaultVocoderLayers(
+                LayerHelper<T>.CreateDefaultVocosLayers(
                     _options.MelChannels,
                     _options.ConvNeXtDim,
+                    _options.NumBackboneBlocks,
+                    _options.IntermediateDim,
                     _options.FftSize / 2 + 1,
-                    4,
-                    3,
-                    _options.DropoutRate
+                    _options.DropoutRate,
+                    _options.HopSize
                 )
             );
     }
@@ -223,10 +144,7 @@ public class Vocos<T> : TtsModelBase<T>, IVocoder<T>
         if (IsOnnxMode && OnnxModel is not null)
             return OnnxModel.Run(input);
         SetTrainingMode(false);
-        var c = input;
-        foreach (var l in Layers)
-            c = l.Forward(c);
-        return c;
+        return ForwardNative(input);
     }
 
     public override void Train(Tensor<T> input, Tensor<T> expected)
@@ -234,23 +152,21 @@ public class Vocos<T> : TtsModelBase<T>, IVocoder<T>
         if (IsOnnxMode)
             throw new NotSupportedException("Training not supported in ONNX mode.");
         SetTrainingMode(true);
-        TrainWithTape(input, expected);
-        SetTrainingMode(false);
-    }
-
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        if (!_useNativeMode)
-            throw new NotSupportedException("Cannot update parameters in ONNX mode.");
-        int idx = 0;
-        foreach (var l in Layers)
+        try
         {
-            int c = (int)l.ParameterCount;
-            l.UpdateParameters(parameters.Slice(idx, c));
-            idx += c;
+            TrainWithTape(input, expected, _optimizer);
+        }
+        finally
+        {
+            SetTrainingMode(false);
         }
     }
 
+    /// <inheritdoc />
+    /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
+    /// write on every parameter surface, so the guard is stated once here instead of being
+    /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
+    protected override bool SupportsParameterMutation => _useNativeMode;
     public override ModelMetadata<T> GetModelMetadata()
     {
         return new ModelMetadata<T>
@@ -276,6 +192,8 @@ public class Vocos<T> : TtsModelBase<T>, IVocoder<T>
         writer.Write(_options.FftSize);
         writer.Write(_options.ConvNeXtDim);
         writer.Write(_options.DropoutRate);
+        writer.Write(_options.NumBackboneBlocks);
+        writer.Write(_options.IntermediateDim);
     }
 
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
@@ -290,6 +208,8 @@ public class Vocos<T> : TtsModelBase<T>, IVocoder<T>
         _options.FftSize = reader.ReadInt32();
         _options.ConvNeXtDim = reader.ReadInt32();
         _options.DropoutRate = reader.ReadDouble();
+        _options.NumBackboneBlocks = reader.ReadInt32();
+        _options.IntermediateDim = reader.ReadInt32();
         base.SampleRate = _options.SampleRate;
         base.MelChannels = _options.MelChannels;
         base.HopSize = _options.HopSize;
@@ -300,8 +220,16 @@ public class Vocos<T> : TtsModelBase<T>, IVocoder<T>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
         if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new Vocos<T>(Architecture, mp, _options);
-        return new Vocos<T>(Architecture, _options);
+            return new Vocos<T>(Architecture, mp, new VocosOptions(_options));
+        return new Vocos<T>(Architecture, new VocosOptions(_options));
+    }
+
+    private Tensor<T> ForwardNative(Tensor<T> input)
+    {
+        var output = input;
+        foreach (var layer in Layers)
+            output = layer.Forward(output);
+        return output;
     }
 
     private void ThrowIfDisposed()

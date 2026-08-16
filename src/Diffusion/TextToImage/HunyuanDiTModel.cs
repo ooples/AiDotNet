@@ -73,9 +73,18 @@ namespace AiDotNet.Diffusion.TextToImage;
 [ModelTask(ModelTask.TextToImage)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("Hunyuan-DiT: A Powerful Multi-Resolution Diffusion Transformer with Fine-Grained Chinese Understanding", "https://arxiv.org/abs/2405.11427", Year = 2024, Authors = "Li et al.")]
-public class HunyuanDiTModel<T> : LatentDiffusionModelBase<T>
+[ResearchPaper("Hunyuan-DiT: A Powerful Multi-Resolution Diffusion Transformer with Fine-Grained Chinese Understanding", "https://arxiv.org/abs/2405.08748", Year = 2024, Authors = "Li et al.")]
+public partial class HunyuanDiTModel<T> : LatentDiffusionModelBase<T>
 {
+    /// <inheritdoc />
+    /// <remarks>Registration order is serialization order, and matches the
+    /// concatenation the previous hand-written GetParameters performed.</remarks>
+    protected override void RegisterComponents()
+    {
+        RegisterParameterComponent(_dit);
+        RegisterParameterComponent(_vae);
+    }
+
     #region Constants
 
     public const int DefaultWidth = 1024;
@@ -112,8 +121,7 @@ public class HunyuanDiTModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override int LatentChannels => LATENT_CHANNELS;
 
-    /// <inheritdoc />
-    public override long ParameterCount { get { EnsureInitialized(); return _dit.ParameterCount + _vae.ParameterCount; } }
+
 
     #endregion
 
@@ -207,45 +215,7 @@ public class HunyuanDiTModel<T> : LatentDiffusionModelBase<T>
 
     #region IParameterizable
 
-    /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        EnsureInitialized();
-        var ditParams = _dit.GetParameters();
-        var vaeParams = _vae.GetParameters();
-        var combined = new Vector<T>(ditParams.Length + vaeParams.Length);
 
-        for (int i = 0; i < ditParams.Length; i++)
-            combined[i] = ditParams[i];
-        for (int i = 0; i < vaeParams.Length; i++)
-            combined[ditParams.Length + i] = vaeParams[i];
-
-        return combined;
-    }
-
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        EnsureInitialized();
-        int ditCount = checked((int)_dit.ParameterCount);
-        var vaeCount = checked((int)_vae.ParameterCount);
-
-        if (parameters.Length != ditCount + vaeCount)
-            throw new ArgumentException(
-                $"Expected {ditCount + vaeCount} parameters, got {parameters.Length}.",
-                nameof(parameters));
-
-        var ditParams = new Vector<T>(ditCount);
-        var vaeParams = new Vector<T>(vaeCount);
-
-        for (int i = 0; i < ditCount; i++)
-            ditParams[i] = parameters[i];
-        for (int i = 0; i < vaeCount; i++)
-            vaeParams[i] = parameters[ditCount + i];
-
-        _dit.SetParameters(ditParams);
-        _vae.SetParameters(vaeParams);
-    }
 
     #endregion
 

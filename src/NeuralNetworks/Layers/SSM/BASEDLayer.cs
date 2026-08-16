@@ -63,8 +63,23 @@ namespace AiDotNet.NeuralNetworks.Layers.SSM;
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerTask(LayerTask.TemporalProcessing)]
 [LayerProperty(IsTrainable = true, IsStateful = true, Cost = ComputeCost.High, TestInputShape = "4, 256", TestConstructorArgs = "4")]
-public partial class BASEDLayer<T> : LayerBase<T>
+// Shape-preserving at every accepted rank - relations DISCOVERED by probing
+// (LayerShapeDiscoverySweepTests), roles read from the layer's own forward: like every layer in this
+// folder it takes seqLen = Shape[rank-2] and modelDim = Shape[rank-1], so rank 2 is [Time, Features]
+// with NO batch axis. The probe's positional stand-in would have said [Batch, Channels] and been wrong.
+[TensorLayout(TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Output)]
+[AutoParameters]
+public partial class BASEDLayer<T> : LayerBase<T>, IShapeContract
 {
+    // OutputAxesFor is GENERATED from the [TensorLayout] attributes above (ShapeContractGenerator).
+    // Nothing to write here: the layouts already state that every axis is carried through, and
+    // restating that in a hand-copied method is how a contract drifts from its own declaration.
+
     private readonly int _modelDimension;
     private readonly int _numHeads;
     private readonly int _headDimension;
@@ -95,6 +110,7 @@ public partial class BASEDLayer<T> : LayerBase<T>
     private Tensor<T> _windowValueWeights;
 
     // Feature map scale parameter for Taylor expansion: [numHeads, headDim]
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
     private Tensor<T> _featureMapScale;
 
     // Mixing gate: learned alpha per head [modelDim, numHeads]
@@ -172,16 +188,6 @@ public partial class BASEDLayer<T> : LayerBase<T>
     /// Gets the feature expansion factor for the Taylor feature map.
     /// </summary>
     public int FeatureExpansion => _featureExpansion;
-
-    /// <summary>
-    /// Gets the total number of trainable parameters.
-    /// </summary>
-    public override long ParameterCount =>
-        _linearQueryWeights.Length + _linearKeyWeights.Length + _linearValueWeights.Length +
-        _windowQueryWeights.Length + _windowKeyWeights.Length + _windowValueWeights.Length +
-        _featureMapScale.Length +
-        _mixingGateWeights.Length + _mixingGateBias.Length +
-        _outputProjectionWeights.Length + _outputProjectionBias.Length;
 
     /// <summary>
     /// Creates a new BASED layer that combines linear attention with sliding window attention.
@@ -301,7 +307,7 @@ public partial class BASEDLayer<T> : LayerBase<T>
     }
 
     /// <inheritdoc />
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         _originalInputShape = input._shape;
 
@@ -347,16 +353,51 @@ public partial class BASEDLayer<T> : LayerBase<T>
         _lastMixingAlphaRaw = alphaRaw;
         _lastMixingAlpha = alpha;
 
-        // Step 3: Linear attention with Taylor feature map
-        var linearOutput = LinearAttentionForward(linQ, linK, linV, batchSize, seqLen);
+        // Step 3: Linear attention with a vectorized Taylor feature map.
+        var qHeads = Engine.Reshape(
+            linQ,
+            new[] { batchSize, seqLen, _numHeads, _headDimension });
+        var kHeads = Engine.Reshape(
+            linK,
+            new[] { batchSize, seqLen, _numHeads, _headDimension });
+        var vHeads = Engine.Reshape(
+            linV,
+            new[] { batchSize, seqLen, _numHeads, _headDimension });
+        var featureScale = Engine.TensorBroadcastTo(
+            Engine.Reshape(_featureMapScale, new[] { 1, 1, _numHeads, _headDimension }),
+            new[] { batchSize, seqLen, _numHeads, _headDimension });
+        T keyScale = NumOps.FromDouble(1.0 / Math.Sqrt(_headDimension));
+        var scaledQ = Engine.TensorMultiplyScalar(
+            Engine.TensorMultiply(qHeads, featureScale), keyScale);
+        var scaledK = Engine.TensorMultiplyScalar(
+            Engine.TensorMultiply(kHeads, featureScale), keyScale);
+        var phiQ = CreateTaylorFeatures(scaledQ);
+        var phiK = CreateTaylorFeatures(scaledK);
+        var linearOutput = Engine.Reshape(
+            CausalLinearAttention.NormalizedHeads(
+                Engine, phiQ, phiK, vHeads, NumOps.FromDouble(1e-6)),
+            new[] { batchSize, seqLen, _modelDimension });
         _lastLinearOutput = linearOutput;
 
         // Step 4: Sliding window causal attention
-        var windowOutput = SlidingWindowAttentionForward(winQ, winK, winV, batchSize, seqLen);
+        var windowOutput = CausalLinearAttention.ScaledDotProduct(
+            Engine, winQ, winK, winV, _numHeads, causal: true, windowSize: _windowSize);
         _lastWindowOutput = windowOutput;
 
         // Step 5: Combine linear and window attention using learned alpha
-        var combined = CombineAttentionOutputs(linearOutput, windowOutput, alpha, batchSize, seqLen);
+        var alphaHeads = Engine.TensorBroadcastTo(
+            Engine.TensorExpandDims(alpha, axis: 3),
+            new[] { batchSize, seqLen, _numHeads, _headDimension });
+        var alphaModel = Engine.Reshape(
+            alphaHeads,
+            new[] { batchSize, seqLen, _modelDimension });
+        var ones = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
+        ones.Fill(NumOps.One);
+        var combined = Engine.TensorAdd(
+            Engine.TensorMultiply(alphaModel, linearOutput),
+            Engine.TensorMultiply(
+                Engine.TensorSubtract(ones, alphaModel),
+                windowOutput));
         _lastCombinedOutput = combined;
 
         // Step 6: Output projection
@@ -378,6 +419,21 @@ public partial class BASEDLayer<T> : LayerBase<T>
         outputShape[rank - 2] = seqLen;
         outputShape[rank - 1] = _modelDimension;
         return Engine.Reshape(result, outputShape);
+    }
+
+    private Tensor<T> CreateTaylorFeatures(Tensor<T> scaled)
+    {
+        if (_featureExpansion == 1)
+            return scaled;
+
+        var parts = new Tensor<T>[_featureExpansion];
+        parts[0] = scaled;
+        parts[1] = Engine.TensorMultiplyScalar(
+            Engine.TensorMultiply(scaled, scaled),
+            NumOps.FromDouble(1.0 / Math.Sqrt(2.0)));
+        for (int expansion = 2; expansion < _featureExpansion; expansion++)
+            parts[expansion] = new Tensor<T>(scaled._shape);
+        return Engine.TensorConcatenate(parts, axis: 3);
     }
 
     /// <summary>
@@ -694,28 +750,6 @@ public partial class BASEDLayer<T> : LayerBase<T>
         RegisterTrainableParameter(_outputProjectionWeights, PersistentTensorRole.Weights);
         RegisterTrainableParameter(_outputProjectionBias, PersistentTensorRole.Biases);
 
-    }
-
-    /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        var parameters = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
-        int index = 0;
-        foreach (var tensor in GetAllTensors())
-            for (int i = 0; i < tensor.Length; i++)
-                parameters[index++] = tensor[i];
-        return parameters;
-    }
-
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (parameters.Length != ParameterCount)
-            throw new ArgumentException($"Expected {ParameterCount} parameters, got {parameters.Length}");
-        int index = 0;
-        foreach (var tensor in GetAllTensors())
-            for (int i = 0; i < tensor.Length; i++)
-                tensor[i] = parameters[index++];
     }
 
     private Tensor<T>[] GetAllTensors() =>

@@ -61,8 +61,25 @@ namespace AiDotNet.ReinforcementLearning.Agents.DoubleDQN;
     "https://arxiv.org/abs/1509.06461",
     Year = 2016,
     Authors = "van Hasselt, H., Guez, A., & Silver, D.")]
-public class DoubleDQNAgent<T> : DeepReinforcementLearningAgentBase<T>, IActionValueProvider<T>, IGradientComputable<T, Vector<T>, Vector<T>>
+public partial class DoubleDQNAgent<T> : DeepReinforcementLearningAgentBase<T>, IActionValueProvider<T>, IGradientComputable<T, Vector<T>, Vector<T>>
 {
+
+    /// <inheritdoc />
+    /// <remarks>The same components, in the same order, that the hand-written
+    /// GetParameters concatenated -- that order is the serialization order.</remarks>
+    protected override void RegisterComponents()
+    {
+        RegisterParameterComponent(_qNetwork);
+    }
+
+    /// <inheritdoc />
+    /// <remarks>Refreshes what derives from the parameters. This ran at the end of the
+    /// hand-written SetParameters; losing it would not fail a test, it would just leave
+    /// the agent training against a stale target.</remarks>
+    protected override void OnParametersRestored()
+    {
+        CopyNetworkWeights(_qNetwork, _targetNetwork);
+    }
     private DoubleDQNOptions<T> _options;
 
     /// <inheritdoc/>
@@ -70,6 +87,7 @@ public class DoubleDQNAgent<T> : DeepReinforcementLearningAgentBase<T>, IActionV
     private readonly UniformReplayBuffer<T, Vector<T>, Vector<T>> _replayBuffer;
 
     private INeuralNetwork<T> _qNetwork;
+    [Buffer]
     private INeuralNetwork<T> _targetNetwork;
     private double _epsilon;
     private int _steps;
@@ -325,19 +343,6 @@ public class DoubleDQNAgent<T> : DeepReinforcementLearningAgentBase<T>, IActionV
     }
 
     /// <inheritdoc/>
-    public override Vector<T> GetParameters()
-    {
-        return _qNetwork.GetParameters();
-    }
-
-    /// <inheritdoc/>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        _qNetwork.UpdateParameters(parameters);
-        CopyNetworkWeights(_qNetwork, _targetNetwork);
-    }
-
-    /// <inheritdoc/>
     public override IFullModel<T, Vector<T>, Vector<T>> Clone()
     {
         var clonedOptions = new DoubleDQNOptions<T>
@@ -404,11 +409,6 @@ public class DoubleDQNAgent<T> : DeepReinforcementLearningAgentBase<T>, IActionV
     }
 
     // Helper methods
-    private void CopyNetworkWeights(INeuralNetwork<T> source, INeuralNetwork<T> target)
-    {
-        target.UpdateParameters(source.GetParameters());
-    }
-
     private int ArgMax(Vector<T> vector)
     {
         int maxIndex = 0;

@@ -21,7 +21,9 @@ namespace AiDotNet.ComputerVision.Segmentation.Common;
 /// </remarks>
 public abstract class ReferringSegmentationBase<T> : SegmentationModelBase<T>, IReferringSegmentation<T>
 {
-    private readonly int _maxTextLength;
+    // protected and mutable so a derived model can read it and restore it on deserialization - see
+    // PanopticSegmentationBase._numStuffClasses for why private/readonly makes a base unadoptable.
+    protected int _maxTextLength;
 
     /// <inheritdoc/>
     public int MaxTextLength => _maxTextLength;

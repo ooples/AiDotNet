@@ -1,4 +1,4 @@
-﻿using System.IO;
+using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Finance.Interfaces;
@@ -84,7 +84,7 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Timer: Generative Pre-trained Transformers Are Large Time Series Models", "https://arxiv.org/abs/2402.02368", Year = 2024, Authors = "Yong Liu, Haoran Zhang, Chenyu Li, Xiangdong Huang, Jianmin Wang, Mingsheng Long")]
-public class Timer<T> : TimeSeriesFoundationModelBase<T>
+public partial class Timer<T> : TimeSeriesFoundationModelBase<T>
 {
     #region Execution Mode
 
@@ -218,7 +218,9 @@ public class Timer<T> : TimeSeriesFoundationModelBase<T>
     /// level on the output so distinct input scales produce distinct forecasts.
     /// Keyed per instance (batch row).
     /// </summary>
+    [Scratch]
     private Vector<T> _revinMean = new Vector<T>(0);
+    [Scratch]
     private Vector<T> _revinStd = new Vector<T>(0);
 
     /// <summary>
@@ -549,17 +551,8 @@ public class Timer<T> : TimeSeriesFoundationModelBase<T>
         return Forward(input);
     }
 
-    /// <inheritdoc/>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the Timer model, UpdateParameters updates internal parameters or state. This keeps the Timer architecture aligned with the latest values.
-    /// </para>
-    /// </remarks>
-    public override void UpdateParameters(Vector<T> gradients)
-    {
-        // Parameters are updated through the optimizer in Train()
-    }
-
+    // UpdateParameters was an empty override, silently dropping every restore. The base
+    // distributes the vector over the declared enumeration.
     /// <inheritdoc/>
     /// <remarks>
     /// <para>
@@ -769,50 +762,12 @@ public class Timer<T> : TimeSeriesFoundationModelBase<T>
     /// </para>
     /// </remarks>
     public override Tensor<T> ApplyInstanceNormalization(Tensor<T> input)
-    {
-        // RevIN forward (Kim et al. 2022): subtract each instance's mean and
-        // divide by its std so the decoder sees a normalized series. The
-        // transformer's LayerNorm would otherwise discard the input's level,
-        // making constant inputs of different magnitudes collapse to the same
-        // forecast. Stats are taken over every non-batch element of each row so
-        // this works for 1-D [seqLen], 2-D [batch, seqLen] and 3-D
-        // [batch, seqLen, features] inputs alike.
-        int batchSize = input.Shape.Length > 1 ? input.Shape[0] : 1;
-        int instanceSize = batchSize > 0 ? input.Length / batchSize : input.Length;
-        if (instanceSize <= 0)
-            return input;
-
-        var result = new Tensor<T>(input._shape);
-        _revinMean = new Vector<T>(batchSize);
-        _revinStd = new Vector<T>(batchSize);
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            int start = b * instanceSize;
-
-            T mean = NumOps.Zero;
-            for (int t = 0; t < instanceSize; t++)
-                mean = NumOps.Add(mean, input[start + t]);
-            mean = NumOps.Divide(mean, NumOps.FromDouble(instanceSize));
-
-            T variance = NumOps.Zero;
-            for (int t = 0; t < instanceSize; t++)
-            {
-                var diff = NumOps.Subtract(input[start + t], mean);
-                variance = NumOps.Add(variance, NumOps.Multiply(diff, diff));
-            }
-            variance = NumOps.Divide(variance, NumOps.FromDouble(instanceSize));
-            T std = NumOps.Sqrt(NumOps.Add(variance, NumOps.FromDouble(1e-5)));
-
-            _revinMean[b] = mean;
-            _revinStd[b] = std;
-
-            for (int t = 0; t < instanceSize; t++)
-                result.Data.Span[start + t] = NumOps.Divide(NumOps.Subtract(input[start + t], mean), std);
-        }
-
-        return result;
-    }
+        // RevIN forward (Kim et al. 2022), delegated to the shared tape-tracked helper. The previous
+        // hand-rolled version accumulated mean/variance with scalar NumOps arithmetic and wrote the
+        // output through result.Data.Span[...], which the autodiff tape cannot observe: the normalised
+        // tensor came back as a LEAF, so no gradient could flow through the normalisation. RevIN is a
+        // differentiable layer in the paper, not a preprocessing step.
+        => NormalizeInstanceOnTape(input, DefaultRevInEpsilon, out _revinMean, out _revinStd);
 
     /// <summary>
     /// RevIN reverse step: restores each instance's mean/std to the forecast so it

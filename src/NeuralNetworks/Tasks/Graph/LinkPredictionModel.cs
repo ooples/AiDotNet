@@ -89,11 +89,12 @@ namespace AiDotNet.NeuralNetworks.Tasks.Graph;
     "https://arxiv.org/abs/1611.07308",
     Year = 2016,
     Authors = "Thomas N. Kipf, Max Welling")]
-public class LinkPredictionModel<T> : NeuralNetworkBase<T>
+public class LinkPredictionModel<T> : GraphModelLayoutBase<T>
 {
     private readonly ILossFunction<T> _lossFunction;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private readonly LinkPredictionDecoder _decoderType;
+    [Buffer]
     private Tensor<T>? _cachedAdjacencyMatrix;
     // Opt-in (EnableImplicitIdentityAdjacency): mirrors the GraphConvolutionalLayer
     // implicitIdentityWhenUnset ctor flag at the model level. Default is strict (throw on a
@@ -105,6 +106,7 @@ public class LinkPredictionModel<T> : NeuralNetworkBase<T>
     // regenerated whenever the input node count changes (same contract as
     // GraphClassificationModel / NodeClassificationModel).
     private bool _usesFallbackAdjacency;
+    [Scratch]
     private Tensor<T>? _nodeEmbeddings;
 
     /// <summary>
@@ -418,25 +420,8 @@ public class LinkPredictionModel<T> : NeuralNetworkBase<T>
         return NumOps.Multiply(NumOps.FromDouble(-1.0), sumSquaredDiff);
     }
 
-    /// <summary>
-    /// Updates the parameters of all layers in the network.
-    /// </summary>
-    /// <param name="parameters">A vector containing all parameters for the network.</param>
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        int index = 0;
-        foreach (var layer in Layers)
-        {
-            int layerParamCount = checked((int)layer.ParameterCount);
-            if (layerParamCount > 0)
-            {
-                var layerParams = parameters.SubVector(index, layerParamCount);
-                layer.SetParameters(layerParams);
-                index += layerParamCount;
-            }
-        }
-    }
-
+    // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
+    // exactly the same enumeration, so this said nothing the base does not already say.
     /// <summary>
     /// Trains the model on a link prediction task.
     /// </summary>
@@ -649,23 +634,6 @@ public class LinkPredictionModel<T> : NeuralNetworkBase<T>
         return totalPairs > 0 ? (double)correctRankings / totalPairs : 0.5;
     }
 
-    /// <summary>
-    /// Gets all parameters as a vector.
-    /// </summary>
-    public override Vector<T> GetParameters()
-    {
-        var allParams = new List<T>();
-        foreach (var layer in Layers)
-        {
-            var layerParams = layer.GetParameters();
-            for (int i = 0; i < layerParams.Length; i++)
-            {
-                allParams.Add(layerParams[i]);
-            }
-        }
-        return new Vector<T>([.. allParams]);
-    }
-
     #region Abstract Method Implementations
 
     /// <summary>
@@ -754,7 +722,7 @@ public class LinkPredictionModel<T> : NeuralNetworkBase<T>
             var trainableParameters = Training.TapeTrainingStep<T>.CollectParameters(Layers, LayerStructureVersion);
             if (trainableParameters.Count > 0)
             {
-                var gradients = tape.ComputeGradients(lossTensor, trainableParameters);
+                var gradients = ComputeAndPublishParameterGradients(tape, lossTensor, trainableParameters);
                 var context = new TapeStepContext<T>(trainableParameters, gradients, lossValue);
                 _optimizer.Step(context);
             }

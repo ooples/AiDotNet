@@ -47,6 +47,7 @@ namespace AiDotNet.AnomalyDetection.Probabilistic;
 [ResearchPaper("ECOD: Unsupervised Outlier Detection Using Empirical Cumulative Distribution Functions", "https://doi.org/10.1109/TKDE.2022.3159580", Year = 2022, Authors = "Zheng Li, Yue Zhao, Xiyang Hu, Nicola Botta, Cezar Ionescu, George H. Chen")]
 public class ECODDetector<T> : AnomalyDetectorBase<T>
 {
+    [Buffer]
     private Vector<T>[]? _sortedFeatureValues;
     private int _nFeatures;
     private int _nTrainingSamples;

@@ -61,7 +61,7 @@ namespace AiDotNet.VisionLanguage.Robotics;
     Year = 2023,
     Authors = "Driess et al."
 )]
-public class PaLME<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
+public partial class PaLME<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
 {
     private readonly PaLMEOptions _options;
 
@@ -115,7 +115,17 @@ public class PaLME<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
     {
         _options = options ?? new PaLMEOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        // Honor the optimizer configuration exposed by PaLMEOptions. The bare AdamW
+        // constructor uses its framework defaults, which previously made both
+        // LearningRate and WeightDecay ineffective unless callers supplied a complete
+        // optimizer instance.
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate,
+                WeightDecay = _options.WeightDecay,
+            });
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.DecoderDim;
@@ -376,22 +386,16 @@ public class PaLME<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
         int b = bse.Shape[0];
         int s = bse.Shape[1];
         int e = bse.Shape[2];
-        var pooled = new Tensor<T>(new[] { b, e });
-        var src = bse.AsSpan();
-        var dst = pooled.AsWritableSpan();
-        T invS = NumOps.FromDouble(1.0 / Math.Max(1, s));
-        for (int bi = 0; bi < b; bi++)
-        {
-            for (int ei = 0; ei < e; ei++)
-            {
-                T sum = NumOps.Zero;
-                for (int si = 0; si < s; si++)
-                {
-                    sum = NumOps.Add(sum, src[bi * s * e + si * e + ei]);
-                }
-                dst[bi * e + ei] = NumOps.Multiply(sum, invS);
-            }
-        }
+        // Tape-aware mean over the sequence axis. The previous scalar span-write loop built `pooled` as a
+        // FRESH tensor via raw AsWritableSpan writes, disconnected from `bse`'s computation graph — it
+        // SEVERED the autodiff tape. Because ForwardForTraining pools its output through here, the loss was
+        // then computed on a detached tensor: no gradient reached the encoder layers or the patch-embed, so
+        // GradientFlow was zero and Training_ShouldChangeParameters / LossStrictlyDecreases collapsed.
+        // PaLM-E trains end-to-end (gradients flow through the multimodal projection + vision encoder,
+        // Driess et al. 2023 §3), so pooling MUST stay on the tape. Sum over the sequence axis (1) then
+        // scale by 1/s for the mean — both are differentiable Engine ops.
+        var summed = Engine.ReduceSum(bse, new[] { 1 }, keepDims: false); // [B, E]
+        var pooled = Engine.TensorMultiplyScalar(summed, NumOps.FromDouble(1.0 / Math.Max(1, s)));
         // Unbatched input → strip the synthetic batch axis we added in
         // TokenizeImageInput so the test sees a rank-1 [E] result.
         if (!wasBatched && b == 1)
@@ -408,7 +412,10 @@ public class PaLME<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expected);
+            // Use the optimizer selected by the public constructor. Falling back to
+            // the two-argument overload silently ignored both a caller-supplied
+            // optimizer and PaLMEOptions' training hyperparameters.
+            TrainWithTape(input, expected, _optimizer);
         }
         finally
         {
@@ -454,15 +461,8 @@ public class PaLME<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
         return result;
     }
 
-    /// <summary>
-    /// Surfaces _patchEmbed (which lives outside Layers) to the base
-    /// weight-registry walker so its trainable tensors land in the
-    /// streaming pool when ConfigureWeightLifetime is called.
-    /// </summary>
-    protected override IEnumerable<LayerBase<T>?> GetExtraTrainableLayers()
-    {
-        yield return _patchEmbed;
-    }
+    // _patchEmbed is discovered as a single-layer member and surfaced automatically.
+    // Removed under AIDN082.
 
     /// <summary>
     /// Lazily creates _patchEmbed when the incoming parameter vector is
@@ -484,140 +484,8 @@ public class PaLME<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
         TokenizeImageInput(probe);
     }
 
-    /// <inheritdoc />
-    /// <remarks>
-    /// PaLME owns a patch-embedding Conv2D outside the standard
-    /// <see cref="NeuralNetworkBase{T}.Layers"/> collection (the patch embed
-    /// is the ViT projection that turns raw NCHW pixels into the
-    /// [B, S, VisionDim] token sequence the LayerNorm/MHA stack expects per
-    /// Driess et al. 2023 §3). Both <see cref="GetParameters"/> /
-    /// <see cref="ParameterCount"/> and <see cref="UpdateParameters"/> /
-    /// <see cref="SetParameters"/> need to include those weights so the
-    /// patch-embed survives Clone / DeepCopy / serialization round trips.
-    /// </remarks>
-    /// <inheritdoc />
-    /// <remarks>
-    /// The full PaLM-E 562B config (Driess et al. 2023 Table 1) holds ~17.5B
-    /// parameters in the layer chain alone. Vector&lt;T&gt; uses int32 indices,
-    /// so the inherited NeuralNetworkBase.ParameterCount throws once the sum
-    /// exceeds int.MaxValue. We walk Layers in long arithmetic and saturate
-    /// to int.MaxValue, treating "too many parameters to flatten" as a
-    /// reportable but non-fatal state — per-layer parameter access via
-    /// Layers[i].GetParameters() still works for callers that don't need the
-    /// flat vector. This unblocks ParameterCount &gt; 0 invariant tests
-    /// without violating the paper-faithful config size.
-    /// </remarks>
-    public override long ParameterCount
-    {
-        get
-        {
-            long total = 0L;
-            for (int i = 0; i < Layers.Count; i++)
-            {
-                total += Layers[i].ParameterCount;
-                if (total >= int.MaxValue)
-                    return int.MaxValue;
-            }
-            if (_patchEmbed is not null)
-                total += (int)_patchEmbed.ParameterCount;
-            return total >= int.MaxValue ? int.MaxValue : (int)total;
-        }
-    }
-
-    /// <inheritdoc />
-    /// <remarks>
-    /// Throws <see cref="InvalidOperationException"/> when the model's
-    /// parameter count exceeds int32 capacity (the Vector&lt;T&gt; index
-    /// limit). For models above that limit, fetch per-layer parameters via
-    /// Layers[i].GetParameters() instead. This matches the inherited
-    /// behaviour and makes the 17.5B-parameter regime explicit to callers
-    /// rather than silently truncating.
-    /// </remarks>
-    public override Vector<T> GetParameters()
-    {
-        // Compute the exact sum in long arithmetic so we surface the limit
-        // before trying to allocate a Vector<T> that would overflow.
-        long total = 0L;
-        for (int i = 0; i < Layers.Count; i++)
-            total += Layers[i].ParameterCount;
-        if (_patchEmbed is not null)
-            total += (int)_patchEmbed.ParameterCount;
-        if (total > int.MaxValue)
-        {
-            throw new InvalidOperationException(
-                $"PaLME parameter count ({total:N0}) exceeds int32 capacity "
-                    + $"({int.MaxValue:N0}); the flat Vector<T> API cannot represent "
-                    + "this many parameters in a single buffer. Use per-layer access "
-                    + "via Layers[i].GetParameters() for full-config training, or "
-                    + "construct a smaller PaLMEOptions for tests that need flat "
-                    + "parameter materialization."
-            );
-        }
-
-        var basePar = base.GetParameters();
-        if (_patchEmbed is null || _patchEmbed.ParameterCount == 0)
-            return basePar;
-        var patchPar = _patchEmbed.GetParameters();
-        var combined = new Vector<T>(basePar.Length + patchPar.Length);
-        for (int i = 0; i < basePar.Length; i++)
-            combined[i] = basePar[i];
-        for (int i = 0; i < patchPar.Length; i++)
-            combined[basePar.Length + i] = patchPar[i];
-        return combined;
-    }
-
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        // If the saved parameter vector includes patch-embed weights but
-        // _patchEmbed hasn't been instantiated (no image has flowed through
-        // yet), construct it now so the slice layout matches the saved
-        // vector. Otherwise the patch-embed slice silently drops.
-        EnsurePatchEmbedForParameterVector(parameters.Length);
-
-        // Layout matches GetParameters: [base layer params ...] [patch-embed params].
-        int patchCount = (int)(_patchEmbed?.ParameterCount ?? 0);
-        int baseCount = parameters.Length - patchCount;
-        if (baseCount < 0)
-            baseCount = parameters.Length;
-
-        var baseSlice = new Vector<T>(baseCount);
-        for (int i = 0; i < baseCount; i++)
-            baseSlice[i] = parameters[i];
-        base.SetParameters(baseSlice);
-
-        if (_patchEmbed is not null && patchCount > 0)
-        {
-            var patchSlice = new Vector<T>(patchCount);
-            for (int i = 0; i < patchCount; i++)
-                patchSlice[i] = parameters[baseCount + i];
-            _patchEmbed.SetParameters(patchSlice);
-        }
-    }
-
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        if (!_useNativeMode)
-            throw new NotSupportedException("Cannot update parameters in ONNX mode.");
-        EnsurePatchEmbedForParameterVector(parameters.Length);
-        int idx = 0;
-        foreach (var l in Layers)
-        {
-            int c = checked((int)l.ParameterCount);
-            l.UpdateParameters(parameters.Slice(idx, c));
-            idx += c;
-        }
-        // Apply the patch-embed update from the tail of the parameter vector.
-        if (_patchEmbed is not null)
-        {
-            int pc = checked((int)_patchEmbed.ParameterCount);
-            if (pc > 0 && idx + pc <= parameters.Length)
-            {
-                _patchEmbed.UpdateParameters(parameters.Slice(idx, pc));
-            }
-        }
-    }
-
+    // UpdateParameters restated a fold the base now derives from generated component registration.
+    // Removed under AIDN082.
     protected override Tensor<T> PreprocessImage(Tensor<T> image) =>
         NormalizeImage(image, _options.ImageMean, _options.ImageStd);
 

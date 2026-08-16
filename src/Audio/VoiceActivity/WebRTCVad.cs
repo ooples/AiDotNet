@@ -41,6 +41,16 @@ namespace AiDotNet.Audio.VoiceActivity;
 [ResearchPaper("WebRTC Voice Activity Detector", "https://webrtc.googlesource.com/src/+/refs/heads/main/common_audio/vad/")]
 public class WebRTCVad<T> : AudioNeuralNetworkBase<T>, IVoiceActivityDetector<T>
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// Measured from the output construction: <c>PredictCore</c> folds the whole <c>Layers</c> chain and
+    /// <c>PostprocessOutput</c> is the identity, so the width is the final layer's output dimension.
+    /// <c>LayerHelper.CreateDefaultWebRTCVadLayers</c> ends with
+    /// <c>new FullyConnectedLayer&lt;T&gt;(1, identity)</c>, commented "Binary classification output".
+    /// A structural 1 - <c>FrameSize</c> is the input width and <c>HiddenDim</c> an interior one.
+    /// </remarks>
+    protected override int OutputFeatureWidth => 1;
+
     #region Fields
 
     private readonly WebRTCVadOptions _options;
@@ -246,7 +256,7 @@ public class WebRTCVad<T> : AudioNeuralNetworkBase<T>, IVoiceActivityDetector<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expected);
+            TrainWithTape(input, expected, _optimizer);
         }
         finally
         {
@@ -254,12 +264,11 @@ public class WebRTCVad<T> : AudioNeuralNetworkBase<T>, IVoiceActivityDetector<T>
         }
     }
 
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        if (!_useNativeMode) throw new NotSupportedException("ONNX mode.");
-        int idx = 0; foreach (var l in Layers) { int c = (int)l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; }
-    }
-
+    /// <inheritdoc />
+    /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
+    /// write on every parameter surface, so the guard is stated once here instead of being
+    /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
+    protected override bool SupportsParameterMutation => _useNativeMode;
     protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio) => rawAudio;
     protected override Tensor<T> PostprocessOutput(Tensor<T> o) => o;
 

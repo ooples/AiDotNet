@@ -81,8 +81,17 @@ namespace AiDotNet.Diffusion.Audio;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("JEN-1: Text-Guided Universal Music Generation with Omnidirectional Diffusion Models", "https://arxiv.org/abs/2308.04729", Year = 2023, Authors = "Li et al.")]
-public class JEN1Model<T> : AudioDiffusionModelBase<T>
+public partial class JEN1Model<T> : AudioDiffusionModelBase<T>
 {
+    /// <inheritdoc />
+    /// <remarks>Registration order is serialization order, and matches the
+    /// concatenation the previous hand-written GetParameters performed.</remarks>
+    protected override void RegisterComponents()
+    {
+        RegisterParameterComponent(_unet);
+        RegisterParameterComponent(_audioVae);
+    }
+
     #region Constants
 
     private const int JEN1_LATENT_CHANNELS = 128;
@@ -128,7 +137,6 @@ public class JEN1Model<T> : AudioDiffusionModelBase<T>
     public override bool SupportsAudioToAudio => true;
 
     /// <inheritdoc />
-    public override long ParameterCount => _unet.ParameterCount + _audioVae.ParameterCount;
 
     #endregion
 
@@ -207,51 +215,7 @@ public class JEN1Model<T> : AudioDiffusionModelBase<T>
 
     #region IParameterizable Implementation
 
-    /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        var unetParams = _unet.GetParameters();
-        var vaeParams = _audioVae.GetParameters();
 
-        var totalLength = unetParams.Length + vaeParams.Length;
-        var combined = new Vector<T>(totalLength);
-
-        for (int i = 0; i < unetParams.Length; i++)
-            combined[i] = unetParams[i];
-        for (int i = 0; i < vaeParams.Length; i++)
-            combined[unetParams.Length + i] = vaeParams[i];
-
-        return combined;
-    }
-
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        // Use ParameterCount (cheap property) over GetParameters().Length
-        // (materialises a flat copy). checked() throws if a foundation-scale
-        // sub-model overflows int — Vector.Length is int and the slicing
-        // below cannot safely proceed past int.MaxValue anyway.
-        int unetCount = checked((int)_unet.ParameterCount);
-        int vaeCount = checked((int)_audioVae.ParameterCount);
-
-        if (parameters.Length != unetCount + vaeCount)
-        {
-            throw new ArgumentException(
-                $"Expected {unetCount + vaeCount} parameters, got {parameters.Length}.",
-                nameof(parameters));
-        }
-
-        var unetParams = new Vector<T>(unetCount);
-        var vaeParams = new Vector<T>(vaeCount);
-
-        for (int i = 0; i < unetCount; i++)
-            unetParams[i] = parameters[i];
-        for (int i = 0; i < vaeCount; i++)
-            vaeParams[i] = parameters[unetCount + i];
-
-        _unet.SetParameters(unetParams);
-        _audioVae.SetParameters(vaeParams);
-    }
 
     #endregion
 

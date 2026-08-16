@@ -6,6 +6,20 @@ enable_free_tier: true
 
 reviews:
   profile: assertive
+  # The #1789 split slices are opened as drafts on purpose: sonarcloud.yml gates its
+  # build/test jobs on `draft != true`, so drafting them avoids ~12 redundant full
+  # shard-matrix runs on branches that only have to be green once, at the integration
+  # branch. CodeRabbit skips drafts by default, which would leave those slices with no
+  # review at all -- the entire reason for splitting. Opt in explicitly.
+  auto_review:
+    drafts: true
+    # Auto-review defaults to the default branch ONLY, so PRs targeting the integration
+    # branch would get no review at all. Entries are regex matched against the base
+    # branch name; master is listed explicitly because naming any base_branches
+    # replaces the default rather than adding to it.
+    base_branches:
+      - "master"
+      - "integration/.*"
   request_changes_workflow: true
   high_level_summary: true
   high_level_summary_placeholder: "@coderabbitai summary"

@@ -1,3 +1,4 @@
+using AiDotNet.Enums;
 using AiDotNet.Models.Options;
 using AiDotNet.Onnx;
 
@@ -32,7 +33,43 @@ public class MedicalASROptions : ModelOptions
         OnnxOptions = new OnnxModelOptions(other.OnnxOptions);
         DropoutRate = other.DropoutRate;
         Language = other.Language;
+        DecoderType = other.DecoderType;
+        PyramidalReductions = other.PyramidalReductions;
+        DecoderDim = other.DecoderDim;
+        NumDecoderLayers = other.NumDecoderLayers;
     }
+
+    /// <summary>
+    /// Gets or sets which end-to-end decoder to build.
+    /// </summary>
+    /// <remarks>
+    /// The paper compares CTC and LAS and reports that "the LAS was more resilient to noisy data and
+    /// CTC required more data clean up", which is why LAS is the default for spontaneous
+    /// doctor-patient conversation. Switching to CTC reproduces the paper's other arm rather than
+    /// degrading the model.
+    /// </remarks>
+    /// <value>Defaults to <see cref="MedicalAsrDecoderType.ListenAttendSpell"/>.</value>
+    public MedicalAsrDecoderType DecoderType { get; set; } = MedicalAsrDecoderType.ListenAttendSpell;
+
+    /// <summary>
+    /// Gets or sets the number of pyramidal reductions in the LAS "listen" stage.
+    /// </summary>
+    /// <remarks>
+    /// Each pyramidal layer concatenates adjacent time steps, halving the sequence length. Without
+    /// it the speller must attend over every acoustic frame of a multi-minute consultation, which is
+    /// the cost LAS's pyramid exists to remove. Ignored when <see cref="DecoderType"/> is CTC, whose
+    /// frame-synchronous head needs the full time resolution.
+    /// </remarks>
+    /// <value>Defaults to 3, giving an 8x reduction.</value>
+    public int PyramidalReductions { get; set; } = 3;
+
+    /// <summary>Gets or sets the speller (attention decoder) hidden width.</summary>
+    /// <value>Defaults to 256.</value>
+    public int DecoderDim { get; set; } = 256;
+
+    /// <summary>Gets or sets the number of speller layers.</summary>
+    /// <value>Defaults to 2.</value>
+    public int NumDecoderLayers { get; set; } = 2;
 
     public int SampleRate { get; set; } = 16000;
     public int MaxAudioLengthSeconds { get; set; } = 30;

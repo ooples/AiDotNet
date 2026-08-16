@@ -120,8 +120,17 @@ namespace AiDotNet.Diffusion.Video;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Wan: Open and Advanced Large-Scale Video Generative Models", "https://arxiv.org/abs/2503.20314", Year = 2025, Authors = "Alibaba")]
-public class WanVideoModel<T> : VideoDiffusionModelBase<T>
+public partial class WanVideoModel<T> : VideoDiffusionModelBase<T>
 {
+    /// <inheritdoc />
+    /// <remarks>Registration order is serialization order, and matches the
+    /// concatenation the previous hand-written GetParameters performed.</remarks>
+    protected override void RegisterComponents()
+    {
+        RegisterParameterComponent(_dit);
+        RegisterParameterComponent(_temporalVAE);
+    }
+
     #region Constants
 
     /// <summary>
@@ -207,7 +216,6 @@ public class WanVideoModel<T> : VideoDiffusionModelBase<T>
     public override bool SupportsVideoToVideo => false;
 
     /// <inheritdoc />
-    public override long ParameterCount => _dit.ParameterCount + _temporalVAE.GetParameters().Length;
 
     /// <summary>
     /// Gets the model variant identifier (1.3B, 5B, or 14B).
@@ -375,56 +383,7 @@ public class WanVideoModel<T> : VideoDiffusionModelBase<T>
 
     #region IParameterizable Implementation
 
-    /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        var ditParams = _dit.GetParameters();
-        var vaeParams = _temporalVAE.GetParameters();
 
-        var combined = new Vector<T>(ditParams.Length + vaeParams.Length);
-
-        for (int i = 0; i < ditParams.Length; i++)
-        {
-            combined[i] = ditParams[i];
-        }
-
-        for (int i = 0; i < vaeParams.Length; i++)
-        {
-            combined[ditParams.Length + i] = vaeParams[i];
-        }
-
-        return combined;
-    }
-
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int ditCount = checked((int)_dit.ParameterCount);
-        var vaeCount = _temporalVAE.GetParameters().Length;
-
-        if (parameters.Length != ditCount + vaeCount)
-        {
-            throw new ArgumentException(
-                $"Expected {ditCount + vaeCount} parameters, got {parameters.Length}.",
-                nameof(parameters));
-        }
-
-        var ditParams = new Vector<T>(ditCount);
-        var vaeParams = new Vector<T>(vaeCount);
-
-        for (int i = 0; i < ditCount; i++)
-        {
-            ditParams[i] = parameters[i];
-        }
-
-        for (int i = 0; i < vaeCount; i++)
-        {
-            vaeParams[i] = parameters[ditCount + i];
-        }
-
-        _dit.SetParameters(ditParams);
-        _temporalVAE.SetParameters(vaeParams);
-    }
 
     #endregion
 

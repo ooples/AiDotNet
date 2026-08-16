@@ -1,4 +1,5 @@
 using AiDotNet.Enums;
+using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
@@ -20,23 +21,26 @@ namespace AiDotNet.SelfSupervisedLearning;
 /// <para>Derived classes (SimCLR, MoCo, BYOL, etc.) implement the specific training logic
 /// in the <see cref="TrainStepCore"/> method.</para>
 /// </remarks>
-public abstract class SelfSupervisedLearningMethodBase<T> : ModelBase<T, Tensor<T>, Tensor<T>>, ISelfSupervisedLearningMethod<T>
+public abstract partial class SelfSupervisedLearningMethodBase<T> : ModelBase<T, Tensor<T>, Tensor<T>>, ISelfSupervisedLearningMethod<T>
 {
     // NumOps and Engine are inherited from ModelBase
 
     /// <summary>
     /// The main encoder neural network.
     /// </summary>
+    [TrainableParameter]
     protected readonly INeuralNetwork<T> _encoder;
 
     /// <summary>
     /// The projection head for SSL embeddings.
     /// </summary>
+    [TrainableParameter(Optional = true)]
     protected readonly IProjectorHead<T>? _projector;
 
     /// <summary>
     /// Gets the projector, throwing if not initialized.
     /// </summary>
+    [ParameterAlias(nameof(_projector))]
     protected IProjectorHead<T> Projector => _projector ?? throw new InvalidOperationException(
         $"{GetType().Name}: Projector head not initialized. Ensure a projector was provided during construction.");
 
@@ -71,25 +75,6 @@ public abstract class SelfSupervisedLearningMethodBase<T> : ModelBase<T, Tensor<
 
     /// <inheritdoc />
     public abstract bool UsesMomentumEncoder { get; }
-
-    /// <inheritdoc />
-    public override long ParameterCount
-    {
-        get
-        {
-            int count = 0;
-            var encoderParams = _encoder.GetParameters();
-            count += encoderParams.Length;
-
-            if (_projector is not null)
-            {
-                count += (int)_projector.ParameterCount;
-            }
-
-            count += (int)GetAdditionalParameterCount();
-            return count;
-        }
-    }
 
     /// <summary>
     /// Initializes a new instance of the SelfSupervisedLearningMethodBase class.
@@ -184,114 +169,6 @@ public abstract class SelfSupervisedLearningMethodBase<T> : ModelBase<T, Tensor<
         _currentStep = 0;
         _currentEpoch = 0;
         _projector?.Reset();
-    }
-
-    /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        var encoderParams = _encoder.GetParameters();
-        var projectorParams = _projector?.GetParameters();
-        var additionalParams = GetAdditionalParameters();
-
-        // Calculate total length
-        int totalLength = encoderParams.Length;
-        if (projectorParams is not null) totalLength += projectorParams.Length;
-        if (additionalParams is not null) totalLength += additionalParams.Length;
-
-        // Create combined parameter vector
-        var combined = new T[totalLength];
-        int offset = 0;
-
-        // Copy encoder parameters
-        for (int i = 0; i < encoderParams.Length; i++)
-        {
-            combined[offset++] = encoderParams[i];
-        }
-
-        // Copy projector parameters
-        if (projectorParams is not null)
-        {
-            for (int i = 0; i < projectorParams.Length; i++)
-            {
-                combined[offset++] = projectorParams[i];
-            }
-        }
-
-        // Copy additional parameters
-        if (additionalParams is not null)
-        {
-            for (int i = 0; i < additionalParams.Length; i++)
-            {
-                combined[offset++] = additionalParams[i];
-            }
-        }
-
-        return new Vector<T>(combined);
-    }
-
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (parameters is null)
-        {
-            throw new ArgumentNullException(nameof(parameters));
-        }
-
-        if (parameters.Length != ParameterCount)
-        {
-            throw new ArgumentException(
-                $"Parameter vector length ({parameters.Length}) does not match expected count ({ParameterCount}).",
-                nameof(parameters));
-        }
-
-        int offset = 0;
-
-        // Set encoder parameters
-        var encoderParams = _encoder.GetParameters();
-        var encoderLength = encoderParams.Length;
-        var encoderParamArray = new T[encoderLength];
-        for (int i = 0; i < encoderLength; i++)
-        {
-            encoderParamArray[i] = parameters[offset++];
-        }
-        _encoder.UpdateParameters(new Vector<T>(encoderParamArray));
-
-        // Set projector parameters
-        if (_projector is not null)
-        {
-            int projectorLength = checked((int)_projector.ParameterCount);
-            var projectorParamArray = new T[projectorLength];
-            for (int i = 0; i < projectorLength; i++)
-            {
-                projectorParamArray[i] = parameters[offset++];
-            }
-            _projector.SetParameters(new Vector<T>(projectorParamArray));
-        }
-
-        // Set additional parameters
-        SetAdditionalParameters(parameters, ref offset);
-    }
-
-    /// <summary>
-    /// Gets additional parameters specific to this SSL method.
-    /// </summary>
-    /// <returns>Additional parameters, or null if none.</returns>
-    protected virtual Vector<T>? GetAdditionalParameters() => null;
-
-    /// <summary>
-    /// Gets the count of additional parameters.
-    /// </summary>
-    /// <returns>The number of additional parameters.</returns>
-    protected virtual long GetAdditionalParameterCount() => 0;
-
-    /// <summary>
-    /// Sets additional parameters specific to this SSL method.
-    /// </summary>
-    /// <param name="parameters">The full parameter vector.</param>
-    /// <param name="offset">The current offset into the parameter vector.</param>
-    protected virtual void SetAdditionalParameters(Vector<T> parameters, ref int offset)
-    {
-        // Default implementation does nothing
     }
 
     /// <summary>

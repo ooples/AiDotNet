@@ -38,7 +38,28 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Positional)]
 [LayerTask(LayerTask.PositionalEncoding)]
 [LayerProperty(IsTrainable = false, TestInputShape = "2, 4, 4", TestConstructorArgs = "2, 4", ProducesNonFiniteOutput = true)]
-internal partial class ALiBiPositionalBiasLayer<T> : LayerBase<T>
+// Ranks 3 and 4 ONLY, and that is the layer's own rule, not a guess: ForwardTraced names
+// "3D [heads, qLen, kLen] or 4D [batch, heads, qLen, kLen]" and throws for every other rank.
+//
+// This operates on an ATTENTION SCORE MATRIX, so it has two sequence axes rather than one, and roles in
+// a single layout must be distinct (ADNSHAPE002). Query positions take Time - they are the axis causal
+// masking is defined over, and ComputeBias rejects queryLen > keyLen for exactly that reason - and key
+// positions take Length. Naming them apart is what lets a relation refer to one without the other; here
+// every relation is Same(role) anyway, since the forward rents an output of `input._shape` and only adds
+// a bias, so the choice cannot change a resolved size.
+//
+// Two separate declarations rather than one with BatchOptional, because the derived contract is keyed on
+// the declared axis count: a batch-optional layout would leave the unbatched rank resolving to nothing.
+[TensorLayout(TensorAxis.Heads, TensorAxis.Time, TensorAxis.Length,
+    Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Heads, TensorAxis.Time, TensorAxis.Length,
+    Direction = TensorLayoutDirection.Output)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Heads, TensorAxis.Time, TensorAxis.Length,
+    Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Heads, TensorAxis.Time, TensorAxis.Length,
+    Direction = TensorLayoutDirection.Output)]
+[AutoParameters]
+public partial class ALiBiPositionalBiasLayer<T> : LayerBase<T>, IShapeContract
 {
     private readonly int _numHeads;
     private readonly int _maxSequenceLength;
@@ -200,7 +221,7 @@ internal partial class ALiBiPositionalBiasLayer<T> : LayerBase<T>
     /// <param name="input">Attention scores tensor of shape [batch, numHeads, queryLen, keyLen]
     /// or [numHeads, queryLen, keyLen].</param>
     /// <returns>Biased attention scores with the same shape.</returns>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         int rank = input.Shape.Length;
         int numHeads, queryLen, keyLen;
@@ -272,17 +293,13 @@ internal partial class ALiBiPositionalBiasLayer<T> : LayerBase<T>
         return output;
     }
 
-    /// <inheritdoc />
-    public override void UpdateParameters(T learningRate)
-    {
-        // No trainable parameters
-    }
 
-    /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        return Vector<T>.Empty();
-    }
+
+    // GetParameters is deliberately NOT overridden. This layer has no trainable weights, but it
+    // DOES own a registered buffer -- the ALiBi slope table -- and returning Vector<T>.Empty()
+    // excluded it from every checkpoint. LayerBase now folds registered buffers into the flat
+    // vector alongside parameters, so the slopes save and restore with the model while staying
+    // invisible to the optimizer, which reads GetTrainableParameters() and still sees nothing here.
 
     /// <inheritdoc />
     public override void ResetState()

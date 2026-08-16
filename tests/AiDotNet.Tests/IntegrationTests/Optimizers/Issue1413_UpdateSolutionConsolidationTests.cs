@@ -60,6 +60,14 @@ public class Issue1413_UpdateSolutionConsolidationTests
             randomSeed: 42);
         var model = new Transformer<float>(arch, lossFunction: new CategoricalCrossEntropyLoss<float>());
 
+        // Optimizer binding plus parameter-state enumeration can materialize lazy tensors. Complete
+        // both before sizing the synthetic flat gradient so it describes the same final layout.
+        var optimizer = BuildOptimizer(optimizerName);
+        var setModelMethod = optimizer.GetType().GetMethod("SetModel",
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public);
+        setModelMethod?.Invoke(optimizer, new object[] { model });
+        _ = model.GetParameterStateChunks().ToList();
+
         var initParams = model.GetParameters();
         // Snapshot the pre-step parameter values so we can assert that
         // UpdateSolution actually changed at least one parameter. Without
@@ -80,19 +88,12 @@ public class Issue1413_UpdateSolutionConsolidationTests
         var flatGrad = new Vector<float>(totalParams);
         for (int i = 0; i < totalParams; i++) flatGrad[i] = 0.0001f * ((i % 11) - 5);
 
-        // Construct the named optimizer with deterministic options.
-        var optimizer = BuildOptimizer(optimizerName);
         var updateSolutionMethod = optimizer.GetType().GetMethod(
             "UpdateSolution",
             System.Reflection.BindingFlags.Instance |
             System.Reflection.BindingFlags.NonPublic |
             System.Reflection.BindingFlags.Public);
         Assert.NotNull(updateSolutionMethod);
-
-        // Set model on optimizer so its internal state initializes against the right param count.
-        var setModelMethod = optimizer.GetType().GetMethod("SetModel",
-            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public);
-        setModelMethod?.Invoke(optimizer, new object[] { model });
 
         // Call UpdateSolution(model, flatGrad). With #1413's consolidation
         // this routes through base.UpdateSolution → SynthesizeTapeStepContext

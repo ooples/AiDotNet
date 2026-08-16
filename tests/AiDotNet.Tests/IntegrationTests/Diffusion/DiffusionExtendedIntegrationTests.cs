@@ -439,13 +439,6 @@ public class DiffusionExtendedIntegrationTests
     }
 
     [Fact(Timeout = 120000)]
-    public async Task BarkModel_Construction()
-    {
-        var model = new BarkModel<float>();
-        Assert.NotNull(model);
-    }
-
-    [Fact(Timeout = 120000)]
     public async Task SoundStormModel_Construction()
     {
         var model = new SoundStormModel<float>();

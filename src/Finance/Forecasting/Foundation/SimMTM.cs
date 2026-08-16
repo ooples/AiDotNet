@@ -1,4 +1,4 @@
-﻿using System.IO;
+using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Finance.Interfaces;
@@ -161,8 +161,20 @@ public class SimMTM<T> : TimeSeriesFoundationModelBase<T>
         OnnxSession = null;
         OnnxModelPath = null;
 
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
+            new AiDotNet.Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            { InitialLearningRate = 1e-4, EnableGradientClipping = true, MaxGradientNorm = 1.0 });
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
+
+        // This optimizer is the model's DEFAULT training optimizer, wired into the base tape-training
+        // loop; it is fully overridable — pass your own `optimizer` to the ctor (or configure one via
+        // the builder, which runs after construction) and that is used instead. The default LR is 1e-4
+        // because time-series foundation models fine-tune at a small LR (the SimMTM paper uses ~1e-4 with
+        // weight decay); the framework default 1e-3 overshoots the reconstruction->forecast head on the
+        // fixed-pair objective (loss climbed 0.29 -> 1.28 rather than descending). Gradient clipping is
+        // already on by default (base maxGradNorm = 1.0) but is a near-no-op under Adam — a uniform clip
+        // cancels in the per-parameter m/sqrt(v) update — so the LR, not clipping, is the effective lever.
+        SetBaseTrainOptimizer(_optimizer);
 
         CopyOptionsToFields(options);
         InitializeLayers();
@@ -230,12 +242,8 @@ public class SimMTM<T> : TimeSeriesFoundationModelBase<T>
         base.Train(input, target);
     }
 
-    /// <inheritdoc/>
-    public override void UpdateParameters(Vector<T> gradients)
-    {
-        // Parameters are updated through the optimizer in Train()
-    }
-
+    // UpdateParameters was an empty override, silently dropping every restore. The base
+    // distributes the vector over the declared enumeration.
     /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()
     {
@@ -369,46 +377,74 @@ public class SimMTM<T> : TimeSeriesFoundationModelBase<T>
         return metrics;
     }
 
+    // Per-instance statistics captured by the LAST ApplyInstanceNormalization call, used by
+    // ApplyInstanceDenormalization to reverse the normalization on the forecast (RevIN, Kim et al.
+    // 2022). SimMTM normalizes each input series to zero-mean/unit-variance before the encoder; the
+    // forecast head therefore emits values in that NORMALIZED space, so they MUST be scaled back to
+    // the series' original mean/std or the head's weights are driven to explode trying to bridge the
+    // scale gap (observed: forecast loss diverging 2.5 -> 15 during training).
+    private T[]? _lastInstanceMean;
+    private T[]? _lastInstanceStd;
+
     /// <inheritdoc/>
     public override Tensor<T> ApplyInstanceNormalization(Tensor<T> input)
+        // RevIN forward (Kim et al. 2022), delegated to the shared tape-tracked helper. The previous
+        // hand-rolled version accumulated mean/variance with scalar NumOps arithmetic and wrote the
+        // output through result.Data.Span[...], which the autodiff tape cannot observe: the normalised
+        // tensor came back as a LEAF, so no gradient could flow through the normalisation. RevIN is a
+        // differentiable layer in the paper, not a preprocessing step.
+        //
+        // SimMTM keeps its per-instance statistics in T[] fields (not the _revinMean/_revinStd
+        // Vector<T> the sibling models use), so they are copied across explicitly here for
+        // DenormalizeForecast to broadcast.
     {
-        int batchSize = input.Rank > 1 ? input.Shape[0] : 1;
-        int seqLen = input.Rank > 1 ? input.Shape[1] : input.Length;
-        var result = new Tensor<T>(input._shape);
+        var normalized = NormalizeInstanceOnTape(input, DefaultRevInEpsilon, out var mean, out var std);
 
+        _lastInstanceMean = new T[mean.Length];
+        for (int i = 0; i < mean.Length; i++)
+        {
+            _lastInstanceMean[i] = mean[i];
+        }
+
+        _lastInstanceStd = new T[std.Length];
+        for (int i = 0; i < std.Length; i++)
+        {
+            _lastInstanceStd[i] = std[i];
+        }
+
+        return normalized;
+    }
+
+    /// <summary>
+    /// Reverses <see cref="ApplyInstanceNormalization"/> on a forecast/output tensor (RevIN): each
+    /// instance's values are scaled by its captured std and shifted by its mean, so the forecast lives
+    /// in the input series' ORIGINAL scale. The per-instance mean/std are constants (detached leaves),
+    /// so this is a tape-aware affine map in <paramref name="output"/> — gradients flow to the head.
+    /// </summary>
+    private Tensor<T> ApplyInstanceDenormalization(Tensor<T> output)
+    {
+        if (_lastInstanceMean is null || _lastInstanceStd is null)
+            return output;
+
+        int batchSize = output.Rank > 1 ? output.Shape[0] : 1;
+        int perInstance = output.Length / Math.Max(1, batchSize);
+        if (batchSize != _lastInstanceMean.Length)
+            return output; // shape drifted from the norm call — skip rather than mis-scale
+
+        var meanBroad = new Tensor<T>(output._shape);
+        var stdBroad = new Tensor<T>(output._shape);
         for (int b = 0; b < batchSize; b++)
         {
-            T mean = NumOps.Zero;
-            for (int t = 0; t < seqLen; t++)
+            for (int j = 0; j < perInstance; j++)
             {
-                int idx = b * seqLen + t;
-                if (idx < input.Length)
-                    mean = NumOps.Add(mean, input[idx]);
-            }
-            mean = NumOps.Divide(mean, NumOps.FromDouble(seqLen));
-
-            T variance = NumOps.Zero;
-            for (int t = 0; t < seqLen; t++)
-            {
-                int idx = b * seqLen + t;
-                if (idx < input.Length)
-                {
-                    var diff = NumOps.Subtract(input[idx], mean);
-                    variance = NumOps.Add(variance, NumOps.Multiply(diff, diff));
-                }
-            }
-            variance = NumOps.Divide(variance, NumOps.FromDouble(seqLen));
-            T std = NumOps.Sqrt(NumOps.Add(variance, NumOps.FromDouble(1e-5)));
-
-            for (int t = 0; t < seqLen; t++)
-            {
-                int idx = b * seqLen + t;
-                if (idx < input.Length && idx < result.Length)
-                    result.Data.Span[idx] = NumOps.Divide(NumOps.Subtract(input[idx], mean), std);
+                int idx = b * perInstance + j;
+                if (idx >= output.Length) break;
+                meanBroad.Data.Span[idx] = _lastInstanceMean[b];
+                stdBroad.Data.Span[idx] = _lastInstanceStd[b];
             }
         }
 
-        return result;
+        return Engine.TensorAdd(Engine.TensorMultiply(output, stdBroad), meanBroad);
     }
 
     /// <inheritdoc/>
@@ -656,10 +692,55 @@ public class SimMTM<T> : TimeSeriesFoundationModelBase<T>
         foreach (var layer in Layers)
             current = layer.Forward(current);
 
+        // RevIN reverse step: the encoder + head ran on the instance-normalized series, so the
+        // forecast is in normalized space. Scale it back to the series' original mean/std (tape-aware)
+        // before returning — otherwise the forecast is off by the per-series scale and training drives
+        // the head weights to explode closing that gap.
+        current = ApplyInstanceDenormalization(current);
+
         if (addedBatchDim && current.Rank == 2 && current.Shape[0] == 1)
             current = Engine.Reshape(current, new[] { current.Shape[1] });
 
         return current;
+    }
+
+    /// <summary>
+    /// Training forward. Overridden so the gradient path is IDENTICAL to <see cref="PredictCore"/>'s
+    /// native path (<see cref="ForwardNative"/>): the input is instance-normalized (RevIN-style, the
+    /// paper's per-series normalization) and rank-normalized BEFORE the patch-embed -> transformer ->
+    /// head Layers, all via tape-aware <c>layer.Forward</c>. The base ForwardForTraining walked the raw
+    /// Layers with NEITHER the instance normalization NOR the rank handling, so training optimized a
+    /// DIFFERENT forward than inference — the forecast loss diverged (2.5 -> 15) because the weights
+    /// adapted to the un-normalized input scale while Predict fed the normalized scale. Instance
+    /// normalization is parameter-free and applied to the input leaf, so the tape through the trainable
+    /// Layers is fully intact.
+    /// </summary>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input)
+    {
+        return ForwardNative(input);
+    }
+
+    /// <summary>
+    /// Per-layer activations for the introspection tests. Overridden for the SAME reason as
+    /// <see cref="ForwardForTraining"/>: it must instance-normalize + rank-fix the input the way
+    /// <see cref="ForwardNative"/> does before walking the Layers, otherwise the leading patch
+    /// ReshapeLayer receives the wrong shape ("per-sample input element count (1) does not match
+    /// output element count").
+    /// </summary>
+    public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input)
+    {
+        var activations = new Dictionary<string, Tensor<T>>();
+        var current = ApplyInstanceNormalization(input);
+        if (current.Rank == 1)
+            current = Engine.Reshape(current, new[] { 1, current.Length });
+
+        for (int i = 0; i < Layers.Count; i++)
+        {
+            current = Layers[i].Forward(current);
+            activations[$"Layer_{i}_{Layers[i].GetType().Name}"] = current.Clone();
+        }
+
+        return activations;
     }
 
     protected override Tensor<T> ForecastOnnx(Tensor<T> input)

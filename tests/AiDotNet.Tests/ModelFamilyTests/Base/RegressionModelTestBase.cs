@@ -8,11 +8,48 @@ using AiDotNet.Tensors.Helpers;
 namespace AiDotNet.Tests.ModelFamilyTests.Base;
 
 /// <summary>
-/// Base test class for regression models implementing IFullModel&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;.
+/// Base test class for regression models implementing IFullModel&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt;.
 /// Tests deep mathematical invariants that any correctly implemented regression model must satisfy.
 /// </summary>
-public abstract class RegressionModelTestBase : System.IDisposable
+/// <remarks>
+/// Fixtures and assertion math remain in double precision so the invariants retain their original
+/// meaning. Only the model's Train/Predict boundary is converted to <typeparamref name="T"/>.
+/// </remarks>
+public abstract class RegressionModelTestBase<T> : System.IDisposable
 {
+    protected static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+
+    protected static Matrix<T> ToT(Matrix<double> matrix)
+    {
+        if (typeof(T) == typeof(double)) return (Matrix<T>)(object)matrix;
+
+        var converted = new Matrix<T>(matrix.Rows, matrix.Columns);
+        for (int row = 0; row < matrix.Rows; row++)
+            for (int column = 0; column < matrix.Columns; column++)
+                converted[row, column] = NumOps.FromDouble(matrix[row, column]);
+        return converted;
+    }
+
+    protected static Vector<T> ToT(Vector<double> vector)
+    {
+        if (typeof(T) == typeof(double)) return (Vector<T>)(object)vector;
+
+        var converted = new Vector<T>(vector.Length);
+        for (int i = 0; i < vector.Length; i++)
+            converted[i] = NumOps.FromDouble(vector[i]);
+        return converted;
+    }
+
+    protected static Vector<double> ToD(Vector<T> vector)
+    {
+        if (typeof(T) == typeof(double)) return (Vector<double>)(object)vector;
+
+        var converted = new Vector<double>(vector.Length);
+        for (int i = 0; i < vector.Length; i++)
+            converted[i] = NumOps.ToDouble(vector[i]);
+        return converted;
+    }
+
     /// <summary>
     /// Reclaim memory between tests (shared model-family teardown). xUnit constructs a fresh
     /// test-class instance per test and calls Dispose() afterward, so this clears the
@@ -41,7 +78,7 @@ public abstract class RegressionModelTestBase : System.IDisposable
     {
     }
 
-    protected abstract IFullModel<double, Matrix<double>, Vector<double>> CreateModel();
+    protected abstract IFullModel<T, Matrix<T>, Vector<T>> CreateModel();
 
     /// <summary>
     /// True when the monotonic-response invariant applies to this model.
@@ -120,12 +157,12 @@ public abstract class RegressionModelTestBase : System.IDisposable
         for (int i = 0; i < trainY2.Length; i++)
             shiftedY[i] = trainY2[i] + shift;
 
-        model1.Train(trainX1, trainY1);
-        model2.Train(trainX2, shiftedY);
+        model1.Train(ToT(trainX1), ToT(trainY1));
+        model2.Train(ToT(trainX2), ToT(shiftedY));
 
         var testX = ModelTestHelpers.GenerateLinearData(10, Features, ModelTestHelpers.CreateSeededRandom(99), noise: 0.0).X;
-        var pred1 = model1.Predict(testX);
-        var pred2 = model2.Predict(testX);
+        var pred1 = ToD(model1.Predict(ToT(testX)));
+        var pred2 = ToD(model2.Predict(ToT(testX)));
 
         if (ModelTestHelpers.AllFinite(pred1) && ModelTestHelpers.AllFinite(pred2))
         {
@@ -163,12 +200,12 @@ public abstract class RegressionModelTestBase : System.IDisposable
         for (int i = 0; i < trainY2.Length; i++)
             scaledY[i] = trainY2[i] * scale;
 
-        model1.Train(trainX1, trainY1);
-        model2.Train(trainX2, scaledY);
+        model1.Train(ToT(trainX1), ToT(trainY1));
+        model2.Train(ToT(trainX2), ToT(scaledY));
 
         var testX = ModelTestHelpers.GenerateLinearData(10, Features, ModelTestHelpers.CreateSeededRandom(99), noise: 0.0).X;
-        var pred1 = model1.Predict(testX);
-        var pred2 = model2.Predict(testX);
+        var pred1 = ToD(model1.Predict(ToT(testX)));
+        var pred2 = ToD(model2.Predict(ToT(testX)));
 
         if (ModelTestHelpers.AllFinite(pred1) && ModelTestHelpers.AllFinite(pred2))
         {
@@ -202,9 +239,9 @@ public abstract class RegressionModelTestBase : System.IDisposable
         var (trainX, trainY) = ModelTestHelpers.GenerateLinearData(TrainSamples, Features, rng, noise: 0.5);
         var (testX, testY) = ModelTestHelpers.GenerateLinearData(TestSamples, Features, rng, noise: 0.5);
 
-        model.Train(trainX, trainY);
-        var trainPred = model.Predict(trainX);
-        var testPred = model.Predict(testX);
+        model.Train(ToT(trainX), ToT(trainY));
+        var trainPred = ToD(model.Predict(ToT(trainX)));
+        var testPred = ToD(model.Predict(ToT(testX)));
 
         if (ModelTestHelpers.AllFinite(trainPred) && ModelTestHelpers.AllFinite(testPred))
         {
@@ -240,11 +277,11 @@ public abstract class RegressionModelTestBase : System.IDisposable
         var rngTest = ModelTestHelpers.CreateSeededRandom(99);
         var (testX, testY) = ModelTestHelpers.GenerateLinearData(50, Features, rngTest, noise: 0.1);
 
-        model1.Train(trainX1, trainY1);
-        model2.Train(trainX2, trainY2);
+        model1.Train(ToT(trainX1), ToT(trainY1));
+        model2.Train(ToT(trainX2), ToT(trainY2));
 
-        var pred1 = model1.Predict(testX);
-        var pred2 = model2.Predict(testX);
+        var pred1 = ToD(model1.Predict(ToT(testX)));
+        var pred2 = ToD(model2.Predict(ToT(testX)));
 
         if (ModelTestHelpers.AllFinite(pred1) && ModelTestHelpers.AllFinite(pred2))
         {
@@ -300,11 +337,11 @@ public abstract class RegressionModelTestBase : System.IDisposable
             testX_noisy[i, Features] = rngNoise.NextDouble() * 100.0;
         }
 
-        model1.Train(trainX_real, trainY);
-        model2.Train(trainX_noisy, trainY);
+        model1.Train(ToT(trainX_real), ToT(trainY));
+        model2.Train(ToT(trainX_noisy), ToT(trainY));
 
-        var pred1 = model1.Predict(testX_real);
-        var pred2 = model2.Predict(testX_noisy);
+        var pred1 = ToD(model1.Predict(ToT(testX_real)));
+        var pred2 = ToD(model2.Predict(ToT(testX_noisy)));
 
         if (ModelTestHelpers.AllFinite(pred1) && ModelTestHelpers.AllFinite(pred2))
         {
@@ -336,7 +373,7 @@ public abstract class RegressionModelTestBase : System.IDisposable
         int nFeatures = Math.Max(Features, 1);
         var (trainX, trainY) = ModelTestHelpers.GenerateLinearData(200, nFeatures, rng, noise: 0.01);
 
-        model.Train(trainX, trainY);
+        model.Train(ToT(trainX), ToT(trainY));
 
         // Create probe with x0 varying from -5 to 15, other features fixed at 5
         var probe = new Matrix<double>(5, nFeatures);
@@ -347,7 +384,7 @@ public abstract class RegressionModelTestBase : System.IDisposable
                 probe[i, j] = 5.0;
         }
 
-        var predictions = model.Predict(probe);
+        var predictions = ToD(model.Predict(ToT(probe)));
         if (ModelTestHelpers.AllFinite(predictions))
         {
             int monotoneViolations = 0;
@@ -379,8 +416,8 @@ public abstract class RegressionModelTestBase : System.IDisposable
         using var model = CreateModel();
         var (trainX, trainY) = ModelTestHelpers.GenerateLinearData(200, Features, rng, noise: 0.5);
 
-        model.Train(trainX, trainY);
-        var predictions = model.Predict(trainX);
+        model.Train(ToT(trainX), ToT(trainY));
+        var predictions = ToD(model.Predict(ToT(trainX)));
 
         if (ModelTestHelpers.AllFinite(predictions))
         {
@@ -422,7 +459,7 @@ public abstract class RegressionModelTestBase : System.IDisposable
         int nFeatures = Math.Max(Features, 1);
         var (trainX, trainY) = ModelTestHelpers.GenerateLinearData(200, nFeatures, rng, noise: 0.01);
 
-        model.Train(trainX, trainY);
+        model.Train(ToT(trainX), ToT(trainY));
 
         // Probe: baseline at origin, then increase each feature independently
         int probeRows = 1 + nFeatures; // baseline + one per feature
@@ -433,7 +470,7 @@ public abstract class RegressionModelTestBase : System.IDisposable
             probe[1 + f, f] = 10.0; // increase feature f by 10
         }
 
-        var predictions = model.Predict(probe);
+        var predictions = ToD(model.Predict(ToT(probe)));
         if (ModelTestHelpers.AllFinite(predictions))
         {
             // Each feature should have positive effect (GenerateLinearData uses positive coefficients)
@@ -493,8 +530,8 @@ public abstract class RegressionModelTestBase : System.IDisposable
                 permutedX[i, j] = trainX[i, j]; // keep rest
         }
 
-        model1.Train(trainX, trainY);
-        model2.Train(permutedX, trainY);
+        model1.Train(ToT(trainX), ToT(trainY));
+        model2.Train(ToT(permutedX), ToT(trainY));
 
         // Test with a specific point
         var testOrig = new Matrix<double>(1, Features);
@@ -507,8 +544,8 @@ public abstract class RegressionModelTestBase : System.IDisposable
             testPerm[0, j] = 5.0;
         }
 
-        var pred1 = model1.Predict(testOrig);
-        var pred2 = model2.Predict(testPerm);
+        var pred1 = ToD(model1.Predict(ToT(testOrig)));
+        var pred2 = ToD(model2.Predict(ToT(testPerm)));
 
         if (ModelTestHelpers.AllFinite(pred1) && ModelTestHelpers.AllFinite(pred2))
         {
@@ -537,8 +574,8 @@ public abstract class RegressionModelTestBase : System.IDisposable
         var (trainX, trainY) = ModelTestHelpers.GenerateLinearData(TrainSamples, Features, rng, noise: 0.1);
         var (testX, testY) = ModelTestHelpers.GenerateLinearData(TestSamples, Features, rng, noise: 0.1);
 
-        model.Train(trainX, trainY);
-        var predictions = model.Predict(testX);
+        model.Train(ToT(trainX), ToT(trainY));
+        var predictions = ToD(model.Predict(ToT(testX)));
 
         if (ModelTestHelpers.AllFinite(predictions))
         {
@@ -564,8 +601,8 @@ public abstract class RegressionModelTestBase : System.IDisposable
         var (trainX, trainY) = ModelTestHelpers.GenerateLinearData(TrainSamples, Features, rng);
         var (testX, _) = ModelTestHelpers.GenerateLinearData(TestSamples, Features, rng);
 
-        model.Train(trainX, trainY);
-        var predictions = model.Predict(testX);
+        model.Train(ToT(trainX), ToT(trainY));
+        var predictions = ToD(model.Predict(ToT(testX)));
 
         Assert.Equal(TestSamples, predictions.Length);
         for (int i = 0; i < predictions.Length; i++)
@@ -592,9 +629,9 @@ public abstract class RegressionModelTestBase : System.IDisposable
         var (trainX, trainY) = ModelTestHelpers.GenerateLinearData(TrainSamples, Features, rng);
         var (testX, _) = ModelTestHelpers.GenerateLinearData(TestSamples, Features, rng);
 
-        model.Train(trainX, trainY);
-        var pred1 = model.Predict(testX);
-        var pred2 = model.Predict(testX);
+        model.Train(ToT(trainX), ToT(trainY));
+        var pred1 = ToD(model.Predict(ToT(testX)));
+        var pred2 = ToD(model.Predict(ToT(testX)));
 
         for (int i = 0; i < pred1.Length; i++)
             Assert.Equal(pred1[i], pred2[i]);
@@ -614,13 +651,13 @@ public abstract class RegressionModelTestBase : System.IDisposable
         using var model = CreateModel();
         var (trainX, trainY) = ModelTestHelpers.GenerateLinearData(TrainSamples, Features, rng);
 
-        model.Train(trainX, trainY);
+        model.Train(ToT(trainX), ToT(trainY));
 
         // Test with various sample counts
         foreach (int n in new[] { 1, 5, 50 })
         {
             var testX = ModelTestHelpers.GenerateLinearData(n, Features, ModelTestHelpers.CreateSeededRandom(n), noise: 0.0).X;
-            var pred = model.Predict(testX);
+            var pred = ToD(model.Predict(ToT(testX)));
             Assert.Equal(n, pred.Length);
         }
     }
@@ -639,11 +676,11 @@ public abstract class RegressionModelTestBase : System.IDisposable
         var (trainX, trainY) = ModelTestHelpers.GenerateLinearData(TrainSamples, Features, rng);
         var (testX, _) = ModelTestHelpers.GenerateLinearData(TestSamples, Features, rng);
 
-        model.Train(trainX, trainY);
+        model.Train(ToT(trainX), ToT(trainY));
         var cloned = model.Clone();
 
-        var pred1 = model.Predict(testX);
-        var pred2 = cloned.Predict(testX);
+        var pred1 = ToD(model.Predict(ToT(testX)));
+        var pred2 = ToD(cloned.Predict(ToT(testX)));
 
         for (int i = 0; i < pred1.Length; i++)
             Assert.Equal(pred1[i], pred2[i]);
@@ -662,7 +699,7 @@ public abstract class RegressionModelTestBase : System.IDisposable
         using var model = CreateModel();
         var (trainX, trainY) = ModelTestHelpers.GenerateLinearData(TrainSamples, Features, rng);
 
-        model.Train(trainX, trainY);
+        model.Train(ToT(trainX), ToT(trainY));
         Assert.NotNull(model.GetModelMetadata());
     }
 
@@ -679,8 +716,8 @@ public abstract class RegressionModelTestBase : System.IDisposable
         using var model = CreateModel();
         var (trainX, trainY) = ModelTestHelpers.GenerateLinearData(TrainSamples, Features, rng);
 
-        model.Train(trainX, trainY);
-        if (model is not IParameterizable<double, Matrix<double>, Vector<double>> paramModel)
+        model.Train(ToT(trainX), ToT(trainY));
+        if (model is not IParameterizable<T, Matrix<T>, Vector<T>> paramModel)
         {
             // Tree/ensemble models don't implement IParameterizable â€” skip
             return;
@@ -702,7 +739,7 @@ public abstract class RegressionModelTestBase : System.IDisposable
         using var model = CreateModel();
         var (trainX, trainY) = ModelTestHelpers.GenerateLinearData(TrainSamples, Features, rng);
 
-        model.Train(trainX, trainY);
+        model.Train(ToT(trainX), ToT(trainY));
         if (model is not IFeatureAware featureAware)
         {
             // Tree/ensemble models don't implement IFeatureAware â€” skip
@@ -744,8 +781,8 @@ public abstract class RegressionModelTestBase : System.IDisposable
             y[i] = constant;
         }
 
-        model.Train(x, y);
-        var predictions = model.Predict(x);
+        model.Train(ToT(x), ToT(y));
+        var predictions = ToD(model.Predict(ToT(x)));
 
         if (ModelTestHelpers.AllFinite(predictions))
         {
@@ -783,8 +820,8 @@ public abstract class RegressionModelTestBase : System.IDisposable
             y[i] = val * 2.0 + 1.0;
         }
 
-        model.Train(x, y);
-        var predictions = model.Predict(x);
+        model.Train(ToT(x), ToT(y));
+        var predictions = ToD(model.Predict(ToT(x)));
 
         for (int i = 0; i < predictions.Length; i++)
         {
@@ -817,8 +854,8 @@ public abstract class RegressionModelTestBase : System.IDisposable
             y[i] = 3.0 * x[i, 0] + 1.0 + ModelTestHelpers.NextGaussian(rng) * 0.1;
         }
 
-        model.Train(x, y);
-        var predictions = model.Predict(x);
+        model.Train(ToT(x), ToT(y));
+        var predictions = ToD(model.Predict(ToT(x)));
         Assert.Equal(n, predictions.Length);
 
         for (int i = 0; i < predictions.Length; i++)
@@ -839,9 +876,9 @@ public abstract class RegressionModelTestBase : System.IDisposable
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var (trainX, trainY) = ModelTestHelpers.GenerateLinearData(TrainSamples, Features, rng);
-        var loader = AiDotNet.Data.Loaders.DataLoaders.FromMatrixVector(trainX, trainY);
+        var loader = AiDotNet.Data.Loaders.DataLoaders.FromMatrixVector(ToT(trainX), ToT(trainY));
 
-        var result = new AiDotNet.AiModelBuilder<double, Matrix<double>, Vector<double>>()
+        var result = new AiDotNet.AiModelBuilder<T, Matrix<T>, Vector<T>>()
             .ConfigureDataLoader(loader)
             .ConfigureModel(CreateModel())
             .BuildAsync()
@@ -861,18 +898,21 @@ public abstract class RegressionModelTestBase : System.IDisposable
         var rng = ModelTestHelpers.CreateSeededRandom();
         var (trainX, trainY) = ModelTestHelpers.GenerateLinearData(TrainSamples, Features, rng);
         var (testX, testY) = ModelTestHelpers.GenerateLinearData(TestSamples, Features, rng);
-        var loader = AiDotNet.Data.Loaders.DataLoaders.FromMatrixVector(trainX, trainY);
+        var loader = AiDotNet.Data.Loaders.DataLoaders.FromMatrixVector(ToT(trainX), ToT(trainY));
 
-        var result = new AiDotNet.AiModelBuilder<double, Matrix<double>, Vector<double>>()
+        var result = new AiDotNet.AiModelBuilder<T, Matrix<T>, Vector<T>>()
             .ConfigureDataLoader(loader)
             .ConfigureModel(CreateModel())
             .BuildAsync()
             .GetAwaiter()
             .GetResult();
 
-        var predictions = result.Predict(testX);
+        var predictions = ToD(result.Predict(ToT(testX)));
         double r2 = ModelTestHelpers.CalculateR2(testY, predictions);
         Assert.True(r2 > 0.0,
             $"Builder pipeline RÂ² = {r2:F4} â€” should be positive on linear data.");
     }
 }
+
+/// <summary>Double-precision compatibility shim for existing regression fixtures.</summary>
+public abstract class RegressionModelTestBase : RegressionModelTestBase<double> { }

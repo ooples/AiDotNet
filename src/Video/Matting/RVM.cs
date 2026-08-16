@@ -61,6 +61,10 @@ namespace AiDotNet.Video.Matting;
     "https://arxiv.org/abs/2108.11515",
     Year = 2021,
     Authors = "Shanchuan Lin, Linjie Yang, Imran Saleemi, Soumyadip Sengupta")]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Frames, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Input, BatchOptional = true)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Frames, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Output, BatchOptional = true)]
 public class RVM<T> : NeuralNetworkBase<T>
 {
     private readonly RVMOptions _options;
@@ -80,6 +84,7 @@ public class RVM<T> : NeuralNetworkBase<T>
     private readonly int _imageWidth;
 
     // Recurrent hidden state
+    [Scratch]
     private Tensor<T>? _hiddenState;
 
     #endregion
@@ -330,7 +335,7 @@ public class RVM<T> : NeuralNetworkBase<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expectedOutput);
+            TrainWithTape(input, expectedOutput, _optimizer);
         }
         finally
         {
@@ -355,23 +360,11 @@ public class RVM<T> : NeuralNetworkBase<T>
         }
     }
 
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        if (!_useNativeMode) throw new InvalidOperationException("Parameter updates are not supported in ONNX mode.");
-        int offset = 0;
-        foreach (var layer in Layers)
-        {
-            var p = layer.GetParameters();
-            if (p.Length > 0 && offset + p.Length <= parameters.Length)
-            {
-                var slice = new Vector<T>(p.Length);
-                for (int i = 0; i < p.Length; i++) slice[i] = parameters[offset + i];
-                layer.SetParameters(slice);
-                offset += p.Length;
-            }
-        }
-    }
-
+    /// <inheritdoc />
+    /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
+    /// write on every parameter surface, so the guard is stated once here instead of being
+    /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
+    protected override bool SupportsParameterMutation => _useNativeMode;
     public override ModelMetadata<T> GetModelMetadata() => new()
     {
         AdditionalInfo = new Dictionary<string, object>

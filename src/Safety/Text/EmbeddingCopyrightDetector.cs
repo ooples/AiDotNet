@@ -50,6 +50,7 @@ public class EmbeddingCopyrightDetector<T> : TextSafetyModuleBase<T>
     private readonly double _threshold;
     private readonly int _embeddingDim;
     private readonly int _passageLength;
+    [Buffer]
     private readonly Vector<T>[][] _passageEmbeddings; // [work][passage]
     private readonly string[] _sourceNames;
 

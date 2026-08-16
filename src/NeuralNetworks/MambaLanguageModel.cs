@@ -37,7 +37,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Mamba: Linear-Time Sequence Modeling with Selective State Spaces", "https://arxiv.org/abs/2312.00752", Year = 2023, Authors = "Albert Gu, Tri Dao")]
-public partial class MambaLanguageModel<T> : NeuralNetworkBase<T>
+public partial class MambaLanguageModel<T> : TokenLanguageModelLayoutBase<T>
 {
     private readonly MambaOptions _options;
     private readonly int _vocabSize;
@@ -78,7 +78,15 @@ public partial class MambaLanguageModel<T> : NeuralNetworkBase<T>
         ILossFunction<T>? lossFunction = null,
         MambaOptions? options = null)
         : base(architecture,
-            lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(NeuralNetworkTaskType.TextGeneration))
+            // Mamba's LM head emits RAW LOGITS (DenseLayer with no activation, see
+            // LayerHelper.CreateMambaLayers), so the loss must be cross-entropy-with-logits (fused
+            // log-softmax + NLL, == PyTorch nn.CrossEntropyLoss) — the same pairing
+            // RWKV4LanguageModel already uses, and the pairing the Mamba paper's LM objective assumes.
+            // The TextGeneration DEFAULT is CategoricalCrossEntropy, which expects softmax
+            // PROBABILITIES and takes log(predicted): feeding it un-normalized logits makes the
+            // objective degenerate, because every non-positive logit is clamped to the 1e-7 floor where
+            // TensorClamp has ZERO gradient, so those classes get no training signal at all.
+            lossFunction ?? new AiDotNet.LossFunctions.CrossEntropyWithLogitsLoss<T>())
     {
         if (vocabSize <= 0) throw new ArgumentException($"Vocabulary size ({vocabSize}) must be positive.", nameof(vocabSize));
         if (modelDimension <= 0) throw new ArgumentException($"Model dimension ({modelDimension}) must be positive.", nameof(modelDimension));
@@ -131,21 +139,7 @@ public partial class MambaLanguageModel<T> : NeuralNetworkBase<T>
         });
     }
 
-    public override void UpdateParameters(Vector<T> gradients)
-    {
-        if (gradients.Length != ParameterCount)
-        {
-            throw new ArgumentException(
-                $"Expected {ParameterCount} gradients, but got {gradients.Length}",
-                nameof(gradients));
-        }
-
-        var currentParams = GetParameters();
-        T learningRate = NumOps.FromDouble(0.001);
-        currentParams = Engine.Subtract(currentParams, Engine.Multiply(gradients, learningRate));
-        SetParameters(currentParams);
-    }
-
+    // UpdateParameters applied a GRADIENT STEP, but its one-argument form is the value setter and every caller passes values -- the override corrupted the model. Removed under AIDN082.
     public override ModelMetadata<T> GetModelMetadata()
     {
         return new ModelMetadata<T>

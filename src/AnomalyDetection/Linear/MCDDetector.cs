@@ -53,7 +53,9 @@ namespace AiDotNet.AnomalyDetection.Linear;
 public class MCDDetector<T> : AnomalyDetectorBase<T>
 {
     private readonly double _supportFraction;
+    [Buffer]
     private Vector<T>? _robustMean;
+    [Buffer]
     private Matrix<T>? _robustPrecision;
     private int _nFeatures;
 

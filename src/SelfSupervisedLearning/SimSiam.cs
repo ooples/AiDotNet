@@ -47,7 +47,7 @@ namespace AiDotNet.SelfSupervisedLearning;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Exploring Simple Siamese Representation Learning", "https://arxiv.org/abs/2011.10566", Year = 2021, Authors = "Xinlei Chen, Kaiming He")]
-public class SimSiam<T> : SelfSupervisedLearningMethodBase<T>
+public partial class SimSiam<T> : SelfSupervisedLearningMethodBase<T>
 {
     private readonly BYOLLoss<T> _loss;
     private readonly SelfSupervisedLearningAugmentationPolicies<T> _augmentation;
@@ -55,6 +55,7 @@ public class SimSiam<T> : SelfSupervisedLearningMethodBase<T>
     /// <summary>
     /// Gets the typed symmetric projector.
     /// </summary>
+    [ParameterAlias(nameof(_projector))]
     private SymmetricProjector<T> SymmetricProjector => (SymmetricProjector<T>)(_projector ?? throw new InvalidOperationException("Projector has not been initialized."));
 
     /// <inheritdoc />

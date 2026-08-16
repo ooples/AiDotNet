@@ -83,7 +83,7 @@ namespace AiDotNet.Finance.Forecasting.Neural;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("A Multi-Horizon Quantile Recurrent Forecaster", "https://arxiv.org/abs/1711.11053", Year = 2017, Authors = "Ruofeng Wen, Kari Torkkola, Balakrishnan Narayanaswamy, Dhruv Madeka")]
-public class MQCNN<T> : ForecastingModelBase<T>
+public partial class MQCNN<T> : ForecastingModelBase<T>
 {
     #region Execution Mode
 
@@ -269,7 +269,11 @@ public class MQCNN<T> : ForecastingModelBase<T>
         OnnxSession = new InferenceSession(onnxModelPath);
         OnnxModelPath = onnxModelPath;
 
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
+            new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate
+            });
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
 
         _lookbackWindow = options.LookbackWindow;
@@ -315,7 +319,11 @@ public class MQCNN<T> : ForecastingModelBase<T>
         OnnxSession = null;
         OnnxModelPath = null;
 
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
+            new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate
+            });
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
 
         _lookbackWindow = options.LookbackWindow;
@@ -531,17 +539,30 @@ public class MQCNN<T> : ForecastingModelBase<T>
 
         var trainableParams = Training.TapeTrainingStep<T>.CollectParameters(Layers).ToArray();
 
-        // GPU-RESIDENT fast path — fused SGD on the multi-quantile pinball
-        // objective. Falls through to the in-place SGD loop below.
+        // GPU-RESIDENT fast path — fused ADAM on the multi-quantile pinball
+        // objective. Falls through to the eager Adam step below.
+        //
+        // Adam (not plain SGD): the pinball gradient is bounded by q / (1 - q)
+        // (≤ 0.9) and then averaged over BOTH the horizon and the quantile
+        // grid, so the raw gradient magnitude reaching the weights is tiny.
+        // Fixed-rate SGD at lr=1e-3 therefore barely moves the parameters and
+        // the loss stays effectively flat (the memorization invariant caught
+        // exactly this: 0.2244 → 0.2240 over 20 steps). Adam's per-parameter
+        // second-moment normalization makes the effective step ≈ lr regardless
+        // of the small gradient scale, so the model actually fits. The model
+        // already constructs an AdamOptimizer as _optimizer; use its
+        // hyper-parameters here so the fused and eager paths agree.
         var trainableLayers = Layers.OfType<ITrainableLayer<T>>().ToList();
+        float adamLr = (float)_options.LearningRate;
         if (trainableLayers.Count > 0
             && AiDotNet.Training.CompiledTapeTrainingStep<T>.TryStepWithFusedOptimizer(
                 trainableLayers, input, target,
                 forward: ForwardForTraining,
                 computeLoss: ComputeMultiQuantilePinballLossTape,
-                optimizerType: AiDotNet.Tensors.Engines.Compilation.OptimizerType.SGD,
-                learningRate: 0.001f, beta1: 0.9f, beta2: 0.999f, epsilon: 1e-8f, weightDecay: 0f,
-                out T fusedLoss))
+                optimizerType: AiDotNet.Tensors.Engines.Compilation.OptimizerType.Adam,
+                learningRate: adamLr, beta1: 0.9f, beta2: 0.999f, epsilon: 1e-8f, weightDecay: 0f,
+                out T fusedLoss,
+                onGradients: gradients => PublishParameterGradients(gradients)))
         {
             LastLoss = fusedLoss;
             return;
@@ -551,7 +572,7 @@ public class MQCNN<T> : ForecastingModelBase<T>
         var predictions = ForwardForTraining(input);
         var lossTensor = ComputeMultiQuantilePinballLossTape(predictions, target);
 
-        var allGrads = tape.ComputeGradients(lossTensor, sources: null);
+        var allGrads = ComputeAndPublishParameterGradients(tape, lossTensor, sources: null);
         var grads = new Dictionary<Tensor<T>, Tensor<T>>(
             Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
         foreach (var param in trainableParams)
@@ -563,15 +584,21 @@ public class MQCNN<T> : ForecastingModelBase<T>
         T lossValue = lossTensor.Length > 0 ? lossTensor[0] : NumOps.Zero;
         LastLoss = lossValue;
 
-        T lr = NumOps.FromDouble(0.001);
-        foreach (var param in trainableParams)
-        {
-            if (grads.TryGetValue(param, out var grad))
-            {
-                var update = Engine.TensorMultiplyScalar(grad, lr);
-                Engine.TensorSubtractInPlace(param, update);
-            }
-        }
+        // Eager fallback (fused path unavailable, e.g. compilation disabled):
+        // apply the model's configured optimizer — an AdamOptimizer by default
+        // — through a TapeStepContext, mirroring NeuralNetworkBase.TrainWithTape.
+        // A plain fixed-rate SGD update was previously applied here at lr=1e-3;
+        // with the tiny pinball gradient (see the fused-path note above) that
+        // left the loss effectively flat and the model never memorized. Adam's
+        // adaptive per-parameter step drives the multi-quantile pinball loss
+        // down reliably.
+        var context = new TapeStepContext<T>(
+            trainableParams, grads, lossValue,
+            input, target,
+            (inp, tgt) => ForwardForTraining(inp),
+            (pred, tgt) => ComputeMultiQuantilePinballLossTape(pred, tgt),
+            parameterBuffer: null);
+        _optimizer.Step(context);
     }
 
     /// <summary>
@@ -684,16 +711,8 @@ public class MQCNN<T> : ForecastingModelBase<T>
         return Engine.TensorMultiplyScalar(totalLoss, NumOps.FromDouble(1.0 / numQ));
     }
 
-    /// <inheritdoc/>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the MQCNN model, UpdateParameters updates internal parameters or state. This keeps the MQCNN architecture aligned with the latest values.
-    /// </para>
-    /// </remarks>
-    public override void UpdateParameters(Vector<T> gradients)
-    {
-    }
-
+    // UpdateParameters was an empty override, silently dropping every restore. The base
+    // distributes the vector over the declared enumeration.
     /// <inheritdoc/>
     /// <remarks>
     /// <para>

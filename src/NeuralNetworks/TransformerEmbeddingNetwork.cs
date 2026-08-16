@@ -49,7 +49,7 @@ namespace AiDotNet.NeuralNetworks
     [ModelComplexity(ModelComplexity.High)]
     [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     [ResearchPaper("Attention Is All You Need", "https://arxiv.org/abs/1706.03762")]
-    public class TransformerEmbeddingNetwork<T> : NeuralNetworkBase<T>, IEmbeddingModel<T>
+    public class TransformerEmbeddingNetwork<T> : TextEmbeddingModelLayoutBase<T>, IEmbeddingModel<T>
     {
         private readonly TransformerEmbeddingOptions _options;
 
@@ -395,6 +395,39 @@ namespace AiDotNet.NeuralNetworks
             return result.SafeNormalize();
         }
 
+        /// <summary>
+        /// Pools every sequence in a token-level output while preserving the batch axis.
+        /// </summary>
+        /// <param name="output">A <c>[Seq, Dim]</c> or <c>[Batch, Seq, Dim]</c> tensor.</param>
+        /// <returns>A normalized <c>[1, Dim]</c> or <c>[Batch, Dim]</c> tensor.</returns>
+        protected Tensor<T> PoolBatchOutput(Tensor<T> output)
+        {
+            if (output.Shape.Length == 2)
+            {
+                var pooled = PoolOutput(output);
+                return Tensor<T>.FromVector(pooled, [1, pooled.Length]);
+            }
+
+            if (output.Shape.Length != 3)
+                throw new ArgumentException($"PoolBatchOutput expects Rank 2 [Seq, Dim] or Rank 3 [Batch, Seq, Dim] tensor, but got Rank {output.Shape.Length}.");
+
+            int batchSize = output.Shape[0];
+            int sequenceLength = output.Shape[1];
+            int dimension = output.Shape[2];
+            int sequenceSize = sequenceLength * dimension;
+            var pooledData = new T[batchSize * dimension];
+
+            for (int batch = 0; batch < batchSize; batch++)
+            {
+                var sequenceData = new T[sequenceSize];
+                output.Data.Span.Slice(batch * sequenceSize, sequenceSize).CopyTo(sequenceData);
+                var pooled = PoolOutput(new Tensor<T>(sequenceData, [sequenceLength, dimension]));
+                pooled.AsSpan().CopyTo(pooledData.AsSpan(batch * dimension, dimension));
+            }
+
+            return new Tensor<T>(pooledData, [batchSize, dimension]);
+        }
+
         /// <inheritdoc/>
         protected override Tensor<T> PredictCore(Tensor<T> input)
         {
@@ -428,22 +461,8 @@ namespace AiDotNet.NeuralNetworks
             }
         }
 
-        /// <inheritdoc/>
-        public override void UpdateParameters(Vector<T> parameters)
-        {
-            int index = 0;
-            foreach (var layer in Layers)
-            {
-                int layerParameterCount = checked((int)layer.ParameterCount);
-                if (layerParameterCount > 0)
-                {
-                    var layerParameters = parameters.Slice(index, layerParameterCount);
-                    layer.UpdateParameters(layerParameters);
-                    index += layerParameterCount;
-                }
-            }
-        }
-
+    // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
+    // exactly the same enumeration, so this said nothing the base does not already say.
         /// <inheritdoc/>
         protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
         {

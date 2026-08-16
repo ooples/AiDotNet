@@ -37,8 +37,65 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Dense)]
 [LayerTask(LayerTask.Projection)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, TestInputShape = "1, 128", TestConstructorArgs = "16, 8")]
-public partial class OctonionLinearLayer<T> : LayerBase<T>
+// FEATURE-LAST, like any linear layer - the octonion algebra changes the ARITHMETIC, not the geometry.
+// The one thing worth stating plainly is that the declared feature axis counts REALS, not octonions:
+// the base constructor is handed `[inputFeatures * 8]` and `[outputFeatures * 8]`, and ForwardTraced
+// rejects anything else outright ("Input size {inputLen} does not match expected {InputFeatures * 8}").
+// The [batch, features, 8] view exists only between the two Engine.Reshape calls inside the forward and
+// is never a shape this layer accepts or returns, so declaring a trailing 8-wide axis would describe an
+// internal step rather than the contract.
+//
+// Ranks 1 to 3 are declared because ForwardTraced branches on exactly those forms and carries every
+// leading axis through - the `else` branch folds them into a flat batch and the tail restores them via
+// `outputShape[d] = _originalInputShape[d]`. Rank 2 is the tested form
+// ([LayerProperty(TestInputShape = "1, 128")] with 16 input octonions).
+[TensorLayout(TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features, Direction = TensorLayoutDirection.Input,
+    Note = "Features are REAL components: inputFeatures octonions * 8.")]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Output)]
+[AutoParameters]
+public partial class OctonionLinearLayer<T> : LayerBase<T>, IShapeContract
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// Hand-written because the trailing axis is resized while every leading axis is carried through -
+    /// "the last axis, whatever the rank", which no fixed-rank attribute can state. Read off the tail of
+    /// <c>ForwardTraced</c>, which copies <c>_originalInputShape[d]</c> for every leading axis and sets
+    /// the last entry to <c>OutputFeatures * 8</c>.
+    /// </para>
+    /// <para>
+    /// The <c>* 8</c> is the octonion component count and belongs in the relation, not outside it: this
+    /// layer's public width is measured in reals everywhere it touches a caller (the base constructor's
+    /// <c>[outputFeatures * 8]</c>, the rank-1 return <c>Engine.Reshape(activated,
+    /// [OutputFeatures * 8])</c>). A contract stating <c>Fixed(OutputFeatures)</c> would be off by
+    /// exactly the factor that makes this layer octonionic.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        if (OutputFeatures <= 0 || inputRank < 1) return null;
+
+        var features = new OutputAxisContract(
+            TensorAxis.Features, AxisRelation.Fixed(OutputFeatures * 8));
+        OutputAxisContract Pass(TensorAxis a) => new(a, AxisRelation.Same(a));
+
+        // Enumerated rather than generated: every leading axis needs a DISTINCT role, because a role is
+        // how a relation refers back to an input axis. Ranks beyond three decline honestly.
+        return inputRank switch
+        {
+            1 => new[] { features },
+            2 => new[] { Pass(TensorAxis.Batch), features },
+            3 => new[] { Pass(TensorAxis.Batch), Pass(TensorAxis.Time), features },
+            _ => null,
+        };
+    }
+
 
     /// <summary>
     /// The octonion weight tensor with shape [OutputFeatures, InputFeatures, 8].
@@ -94,16 +151,6 @@ public partial class OctonionLinearLayer<T> : LayerBase<T>
     public int OutputFeatures { get; }
 
     /// <summary>
-    /// Gets the total number of trainable parameters.
-    /// </summary>
-    /// <remarks>
-    /// Each octonion has 8 real components, so the parameter count is:
-    /// (InputFeatures * OutputFeatures + OutputFeatures) * 8
-    /// </remarks>
-    public override long ParameterCount =>
-        (InputFeatures * OutputFeatures + OutputFeatures) * 8;
-
-    /// <summary>
     /// Gets whether this layer supports training.
     /// </summary>
     public override bool SupportsTraining => true;
@@ -120,8 +167,8 @@ public partial class OctonionLinearLayer<T> : LayerBase<T>
     /// <param name="outputFeatures">Number of output features (octonion-valued).</param>
     /// <param name="activationFunction">Optional activation function.</param>
     public OctonionLinearLayer(
-        int inputFeatures,
-        int outputFeatures,
+        [LayerState] int inputFeatures,
+        [LayerState] int outputFeatures,
         IActivationFunction<T>? activationFunction = null)
         : base(
             [inputFeatures * 8], // Input shape: inputFeatures octonions = inputFeatures * 8 reals
@@ -166,7 +213,7 @@ public partial class OctonionLinearLayer<T> : LayerBase<T>
     /// </summary>
     /// <param name="input">Input tensor with shape [inputFeatures * 8] or [batch, inputFeatures * 8].</param>
     /// <returns>Output tensor with shape [outputFeatures * 8] or [batch, outputFeatures * 8].</returns>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         _originalInputShape = input._shape;
 
@@ -213,15 +260,10 @@ public partial class OctonionLinearLayer<T> : LayerBase<T>
         // Tensor-based octonion matrix multiplication — no Octonion<T> allocation
         var output3D = Engine.OctonionMatMulTensor(input3D, _weights);
 
-        // Add biases: broadcast [OutputFeatures, 8] across batch dimension
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int o = 0; o < OutputFeatures; o++)
-            {
-                for (int c = 0; c < 8; c++)
-                    output3D[b, o, c] = NumOps.Add(output3D[b, o, c], _biases[o, c]);
-            }
-        }
+        // Add biases through the engine so the tape retains the route to _biases.
+        // Indexer mutation writes values into the matmul result but creates no backward op,
+        // which made every octonion bias look detached to reverse-mode autodiff.
+        output3D = Engine.TensorBroadcastAdd(output3D, _biases);
 
         _lastOutput = output3D;
 
@@ -268,46 +310,6 @@ public partial class OctonionLinearLayer<T> : LayerBase<T>
         // Update biases
         var scaledBiasGrad = Engine.TensorMultiplyScalar(_biasesGradient, learningRate);
         Engine.TensorSubtractInPlace(_biases, scaledBiasGrad);
-    }
-
-    /// <summary>
-    /// Gets all trainable parameters as a single vector.
-    /// </summary>
-    /// <returns>A vector containing all weights and biases.</returns>
-    public override Vector<T> GetParameters()
-    {
-        // Weights and biases are Tensor<T>, flatten directly
-        var weightsFlat = _weights.Reshape([OutputFeatures * InputFeatures * 8]);
-        var biasesFlat = _biases.Reshape([OutputFeatures * 8]);
-
-        var paramArray = new T[ParameterCount];
-        for (int i = 0; i < weightsFlat.Length; i++)
-            paramArray[i] = weightsFlat[i];
-        for (int i = 0; i < biasesFlat.Length; i++)
-            paramArray[weightsFlat.Length + i] = biasesFlat[i];
-
-        return new Vector<T>(paramArray);
-    }
-
-    /// <summary>
-    /// Sets all trainable parameters from a single vector.
-    /// </summary>
-    /// <param name="parameters">A vector containing all parameters to set.</param>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (parameters.Length != ParameterCount)
-        {
-            throw new ArgumentException($"Expected {ParameterCount} parameters, but got {parameters.Length}");
-        }
-
-        int weightSize = OutputFeatures * InputFeatures * 8;
-        int biasSize = OutputFeatures * 8;
-
-        // Copy weights from flat vector into tensor
-        for (int i = 0; i < weightSize; i++)
-            _weights.SetFlat(i, parameters[i]);
-        for (int i = 0; i < biasSize; i++)
-            _biases.SetFlat(i, parameters[weightSize + i]);
     }
 
     /// <inheritdoc/>

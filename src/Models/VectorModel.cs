@@ -13,6 +13,8 @@ using AiDotNet.Interpretability.Explainers;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Validation;
 
+using AiDotNet.Models.Parameters;
+
 namespace AiDotNet.Models;
 
 /// <summary>
@@ -60,8 +62,23 @@ namespace AiDotNet.Models;
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("Pattern Recognition and Machine Learning", "https://www.springer.com/gp/book/9780387310732")]
-public class VectorModel<T> : ModelBase<T, Matrix<T>, Vector<T>>, IInterpretableModel<T>
+public partial class VectorModel<T> : ModelBase<T, Matrix<T>, Vector<T>>, IInterpretableModel<T>
 {
+
+    /// <inheritdoc />
+    /// <remarks>The coefficient vector, which is the whole of this model. GetParameters used to hand-copy it to stop callers mutating the model through the returned vector; the source copies for the same reason.</remarks>
+    protected override void RegisterComponents()
+    {
+        RegisterParameterComponent(new VectorFieldParameterSource<T>(
+            () => Coefficients,
+            value =>
+            {
+                // Coefficients is get-only, so restore writes THROUGH it rather than replacing
+                // it -- the same thing the hand-written SetParameters did. The base fold has
+                // already rejected a wrong-length vector by this point.
+                for (int i = 0; i < Coefficients.Length; i++) Coefficients[i] = value[i];
+            }));
+    }
     /// <summary>
     /// Ridge term added to the diagonal of X^T·X when that matrix is singular, so a degenerate or
     /// collinear feature subset yields the minimum-norm solution instead of an exception.
@@ -208,25 +225,6 @@ public class VectorModel<T> : ModelBase<T, Matrix<T>, Vector<T>>, IInterpretable
     /// </para>
     /// </remarks>
     public int Complexity => Coefficients.Count(c => !NumOps.Equals(c, NumOps.Zero));
-
-    /// <summary>
-    /// Gets the number of trainable parameters in the model.
-    /// </summary>
-    /// <value>An integer representing the number of parameters.</value>
-    /// <remarks>
-    /// <para>
-    /// For a VectorModel, the number of parameters equals the number of coefficients,
-    /// as each coefficient is a trainable parameter.
-    /// </para>
-    /// <para><b>For Beginners:</b> This tells you how many weights the model has to learn.
-    ///
-    /// For a linear model:
-    /// - Each coefficient is a parameter that can be trained
-    /// - More parameters generally means more complexity
-    /// - The parameter count equals the number of features
-    /// </para>
-    /// </remarks>
-    public override long ParameterCount => Coefficients.Length;
 
     /// <summary>
     /// Determines whether a specific feature is used by the model.
@@ -930,85 +928,6 @@ public class VectorModel<T> : ModelBase<T, Matrix<T>, Vector<T>>, IInterpretable
     }
 
     /// <summary>
-    /// Gets all trainable parameters of the model as a single vector.
-    /// </summary>
-    /// <returns>A vector containing all trainable parameters (the coefficients).</returns>
-    /// <remarks>
-    /// <para>
-    /// This method returns the coefficients of the model as a vector, which represents all trainable parameters of the model.
-    /// For a vector model, the parameters are simply the coefficients vector.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method gives you access to all the weights the model uses.
-    /// 
-    /// For a linear model:
-    /// - The parameters are simply the coefficients (weights)
-    /// - This method returns a copy of those coefficients
-    /// 
-    /// This is useful for:
-    /// - Saving the model for later use
-    /// - Analyzing the learned weights
-    /// - Transferring weights to another model
-    /// - Implementing optimization algorithms
-    /// </para>
-    /// </remarks>
-    public override Vector<T> GetParameters()
-    {
-        // Create a copy of the coefficients vector to avoid external modification
-        Vector<T> parameters = new Vector<T>(Coefficients.Length);
-        for (int i = 0; i < Coefficients.Length; i++)
-        {
-            parameters[i] = Coefficients[i];
-        }
-
-        return parameters;
-    }
-
-    /// <summary>
-    /// Sets the parameters of the model.
-    /// </summary>
-    /// <param name="parameters">The parameters to set.</param>
-    /// <exception cref="ArgumentNullException">Thrown when parameters is null.</exception>
-    /// <exception cref="ArgumentException">Thrown when parameters has a different length than the model's coefficients.</exception>
-    /// <remarks>
-    /// <para>
-    /// This method sets the coefficients of the model from the provided parameters vector.
-    /// For a vector model, the parameters are simply the coefficients vector.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method updates all the weights the model uses.
-    /// 
-    /// For a linear model:
-    /// - The parameters are simply the coefficients (weights)
-    /// - This method updates those coefficients
-    /// 
-    /// This is useful for:
-    /// - Loading a saved model
-    /// - Updating weights during optimization
-    /// - Implementing learning algorithms
-    /// </para>
-    /// </remarks>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (parameters == null)
-        {
-            throw new ArgumentNullException(nameof(parameters));
-        }
-
-        if (parameters.Length != Coefficients.Length)
-        {
-            throw new ArgumentException($"Parameters length ({parameters.Length}) must match coefficients length ({Coefficients.Length}).", nameof(parameters));
-        }
-
-        // Update coefficients from parameters
-        for (int i = 0; i < parameters.Length; i++)
-        {
-            Coefficients[i] = parameters[i];
-        }
-
-        // Invalidate cached feature importance
-        _cachedFeatureImportance = null;
-    }
-
-    /// <summary>
     /// Updates the model with new parameter values.
     /// </summary>
     /// <param name="parameters">The new parameter values to use.</param>
@@ -1203,6 +1122,7 @@ public class VectorModel<T> : ModelBase<T, Matrix<T>, Vector<T>>, IInterpretable
     protected readonly HashSet<InterpretationMethod> _enabledMethods = new();
     protected Vector<int>? _sensitiveFeatures;
     protected readonly List<FairnessMetric> _fairnessMetrics = new();
+    [ExternalState]
     protected IFullModel<T, Matrix<T>, Vector<T>>? _baseModel;
 
     /// <summary>

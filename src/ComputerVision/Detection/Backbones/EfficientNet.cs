@@ -11,6 +11,8 @@ using AiDotNet.Tensors;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 
+using System.Linq;
+
 namespace AiDotNet.ComputerVision.Detection.Backbones;
 
 /// <summary>
@@ -29,8 +31,35 @@ namespace AiDotNet.ComputerVision.Detection.Backbones;
     "https://arxiv.org/abs/1905.11946",
     Year = 2019,
     Authors = "Mingxing Tan, Quoc V. Le")]
-public class EfficientNet<T> : NeuralNetworkBase<T>, IDetectionBackbone<T>
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Input, BatchOptional = true)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Output, BatchOptional = true)]
+public partial class EfficientNet<T> : NeuralNetworkBase<T>, IDetectionBackbone<T>
 {
+
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// The stem convolution and every layer inside every MBConv block.
+    /// <para>
+    /// These live outside <c>Layers</c>, held in plain block objects, which is why this backbone
+    /// used to THROW from GetParameters rather than expose a flat vector -- the base walk would
+    /// have found nothing. Refusing was never right: PyTorch has no module that declines to
+    /// enumerate its parameters, and the refusal cost this model checkpointing, flat-vector
+    /// optimizers and every count-based diagnostic. Declaring the layers here gets all of it back,
+    /// and count, vector, restore and chunks fold this one declaration.
+    /// </para>
+    /// </remarks>
+    protected override IEnumerable<LayerBase<T>?> GetExtraTrainableLayers()
+    {
+        yield return _stem;
+        foreach (var block in _blocks)
+        {
+            foreach (var layer in block.EnumerateLayers()) yield return layer;
+        }
+    }
+
     private readonly ConvolutionalLayer<T> _stem;
     private readonly List<MBConvBlock<T>> _blocks;
     private readonly EfficientNetVariant _variant;
@@ -160,20 +189,11 @@ public class EfficientNet<T> : NeuralNetworkBase<T>, IDetectionBackbone<T>
 
     public IReadOnlyList<Tensor<T>> GetFeatureMaps(Tensor<T> input) => ExtractFeatures(input);
 
-    /// <summary>
-    /// Sum across stem + every MBConv block. Inherited
-    /// <c>NeuralNetworkBase&lt;T&gt;.GetParameterCount()</c> delegates to this
-    /// virtual property, satisfying the <see cref="IDetectionBackbone{T}"/> contract.
-    /// </summary>
-    public override long ParameterCount
-    {
-        get
-        {
-            long count = _stem.ParameterCount;
-            foreach (var block in _blocks) count += block.GetParameterCount();
-            return count;
-        }
-    }
+    // ParameterCount is NOT overridden. It folds the same enumeration GetParameters
+    // does -- Layers, then GetExtraTrainableLayers() -- so the two cannot disagree. The
+    // override that was here summed the stem and blocks through GetParameterCount(),
+    // a SEPARATE source, and once the vector started folding the base enumeration the
+    // two drifted apart immediately.
 
     public void WriteParameters(BinaryWriter writer)
     {
@@ -247,17 +267,8 @@ public class EfficientNet<T> : NeuralNetworkBase<T>, IDetectionBackbone<T>
         throw new NotSupportedException(
             $"{GetType().Name}: detection backbones train as part of a parent detector.");
 
-    public override Vector<T> GetParameters() =>
-        throw new NotSupportedException(
-            $"{GetType().Name}: backbones do not expose a flat parameter vector. Use WriteParameters/ReadParameters.");
 
-    public override void SetParameters(Vector<T> parameters) =>
-        throw new NotSupportedException(
-            $"{GetType().Name}: backbones do not accept a flat parameter vector. Use ReadParameters.");
 
-    public override void UpdateParameters(Vector<T> parameters) =>
-        throw new NotSupportedException(
-            $"{GetType().Name}: backbones do not accept a flat parameter update vector.");
 
     public override IFullModel<T, Tensor<T>, Tensor<T>> WithParameters(Vector<T> parameters) =>
         throw new NotSupportedException(
@@ -316,6 +327,16 @@ public enum EfficientNetVariant
 /// </summary>
 internal class MBConvBlock<T>
 {
+
+
+    /// <summary>The trainable layers this type owns, in forward order.</summary>
+    internal IEnumerable<LayerBase<T>> EnumerateLayers()
+    {
+        if (_expand is not null) yield return _expand;
+        yield return _depthwise;
+        yield return _project;
+    }
+
     private readonly ConvolutionalLayer<T>? _expand;
     private readonly ConvolutionalLayer<T> _depthwise;
     private readonly SqueezeExcitation<T>? _se;

@@ -49,7 +49,7 @@ namespace AiDotNet.AnomalyDetection.NeuralNetwork;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("Auto-Encoding Variational Bayes", "https://doi.org/10.48550/arXiv.1312.6114", Year = 2014, Authors = "Diederik P. Kingma, Max Welling")]
-public class VAEDetector<T> : AnomalyDetectorBase<T>
+public partial class VAEDetector<T> : AnomalyDetectorBase<T>
 {
     private readonly int _latentDim;
     private readonly int _hiddenDim;
@@ -71,7 +71,9 @@ public class VAEDetector<T> : AnomalyDetectorBase<T>
     private Vector<T>? _decoderB2;
 
     // Normalization parameters
+    [Buffer]
     private Vector<T>? _dataMeans;
+    [Buffer]
     private Vector<T>? _dataStds;
 
     private int _inputDim;
@@ -270,7 +272,7 @@ public class VAEDetector<T> : AnomalyDetectorBase<T>
                     var x = data.GetRow(idx);
 
                     // Forward pass
-                    var (hidden, mean, logVar, z, reconstruction) = Forward(x);
+                    var (hidden, mean, logVar, z, reconstruction) = Forward(x, sampleLatent: true);
 
                     // Compute loss gradients and backpropagate
                     AccumulateGradients(gradients, x, hidden, mean, logVar, z, reconstruction);
@@ -282,7 +284,12 @@ public class VAEDetector<T> : AnomalyDetectorBase<T>
         }
     }
 
-    private (Vector<T> hidden, Vector<T> mean, Vector<T> logVar, Vector<T> z, Vector<T> reconstruction) Forward(Vector<T> x)
+    /// <param name="sampleLatent">
+    /// When true, draws z with the reparameterization trick z = mean + exp(0.5*logVar)*epsilon —
+    /// the stochastic estimator TRAINING needs for the gradient (Kingma and Welling 2013, eq. 10).
+    /// When false, uses z = mean, which is the deterministic latent code inference should use.
+    /// </param>
+    private (Vector<T> hidden, Vector<T> mean, Vector<T> logVar, Vector<T> z, Vector<T> reconstruction) Forward(Vector<T> x, bool sampleLatent)
     {
         var encoderW1 = _encoderW1;
         var encoderB1 = _encoderB1;
@@ -319,13 +326,26 @@ public class VAEDetector<T> : AnomalyDetectorBase<T>
             Tensor<T>.FromVector(encoderBLogVar).Reshape(1, _latentDim)).Reshape(_latentDim).ToVector();
 
         // Reparameterization: z = mean + exp(0.5 * logVar) * epsilon
+        // Sampling belongs to TRAINING only. Scoring drew a fresh epsilon on every call, so the
+        // reconstruction — and therefore the anomaly score — changed between identical Predict
+        // calls and Predict_ShouldBeDeterministic failed. Per Kingma and Welling 2013 the
+        // reparameterization trick exists to make the training objective differentiable; at
+        // inference the latent code is the distribution's mean, which is also what VAE-based
+        // anomaly detection scores against.
         var z = new Vector<T>(_latentDim);
         T half = NumOps.FromDouble(0.5);
         for (int j = 0; j < _latentDim; j++)
         {
-            T epsilon = NumOps.FromDouble(GaussianRandom()); // Random boundary
-            T std = NumOps.Exp(NumOps.Multiply(half, logVar[j]));
-            z[j] = NumOps.Add(mean[j], NumOps.Multiply(std, epsilon));
+            if (sampleLatent)
+            {
+                T epsilon = NumOps.FromDouble(GaussianRandom());
+                T std = NumOps.Exp(NumOps.Multiply(half, logVar[j]));
+                z[j] = NumOps.Add(mean[j], NumOps.Multiply(std, epsilon));
+            }
+            else
+            {
+                z[j] = mean[j];
+            }
         }
 
         // Decoder: hidden2 = ReLU(z @ W1 + b1)  (SIMD)
@@ -653,7 +673,7 @@ public class VAEDetector<T> : AnomalyDetectorBase<T>
                 x[j] = NumOps.Divide(diff, dataStds[j]);
             }
 
-            var (_, mean, logVar, _, reconstruction) = Forward(x);
+            var (_, mean, logVar, _, reconstruction) = Forward(x, sampleLatent: false);
 
             // Reconstruction error
             T reconError = NumOps.Zero;

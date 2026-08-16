@@ -62,7 +62,15 @@ namespace AiDotNet.NeuralNetworks.Layers.SSM;
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerTask(LayerTask.TemporalProcessing)]
 [LayerProperty(IsTrainable = true, IsStateful = true, Cost = ComputeCost.High, TestInputShape = "4, 256", TestConstructorArgs = "4")]
-public partial class GatedDeltaNetLayer<T> : LayerBase<T>
+// Shape-preserving; relations DISCOVERED by probing, roles read from the forward. Like every layer in
+// this folder it takes seqLen = Shape[rank-2] and modelDim = Shape[rank-1], so rank 2 is
+// [Time, Features] with NO batch axis. OutputAxesFor is generated from these layouts.
+[TensorLayout(TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
+[AutoParameters]
+public partial class GatedDeltaNetLayer<T> : LayerBase<T>, IShapeContract
 {
     private readonly int _modelDimension;
     private readonly int _numHeads;
@@ -131,7 +139,6 @@ public partial class GatedDeltaNetLayer<T> : LayerBase<T>
     private Tensor<T>? _lastAlpha;
     private Tensor<T>? _lastGate;
     private Tensor<T>? _lastGateRaw;
-    private Tensor<T>? _lastStates;
     private Tensor<T>? _lastSiluConv;
     private Tensor<T>? _lastDeltaRuleOutput;
     private int[]? _originalInputShape;
@@ -173,17 +180,6 @@ public partial class GatedDeltaNetLayer<T> : LayerBase<T>
     /// Gets the convolution kernel size.
     /// </summary>
     public int ConvKernelSize => _convKernelSize;
-
-    /// <summary>
-    /// Gets the total number of trainable parameters.
-    /// </summary>
-    public override long ParameterCount =>
-        _convWeights.Length + _convBias.Length +
-        _queryWeights.Length + _keyWeights.Length + _valueWeights.Length +
-        _betaWeights.Length + _betaBias.Length +
-        _alphaWeights.Length + _alphaBias.Length +
-        _outputGateWeights.Length + _outputGateBias.Length +
-        _outputProjectionWeights.Length + _outputProjectionBias.Length;
 
     /// <summary>
     /// Creates a new GatedDeltaNet layer.
@@ -276,7 +272,7 @@ public partial class GatedDeltaNetLayer<T> : LayerBase<T>
     }
 
     /// <inheritdoc />
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         _originalInputShape = input._shape;
 
@@ -331,7 +327,7 @@ public partial class GatedDeltaNetLayer<T> : LayerBase<T>
         _lastGateRaw = gateRaw;
 
         // Step 4: Delta rule recurrence per head
-        var output = DeltaRuleForward(q, k, v, alpha, beta, batchSize, seqLen);
+        var output = Engine.GatedDeltaNetScanForward(q, k, v, alpha, beta, _numHeads);
         _lastDeltaRuleOutput = output;
 
         // Step 5: Gated output
@@ -359,139 +355,28 @@ public partial class GatedDeltaNetLayer<T> : LayerBase<T>
     }
 
     /// <summary>
-    /// Delta rule forward: fast weight update with gated forgetting.
-    /// </summary>
-    private Tensor<T> DeltaRuleForward(
-        Tensor<T> q, Tensor<T> k, Tensor<T> v,
-        Tensor<T> alpha, Tensor<T> beta,
-        int batchSize, int seqLen)
-    {
-        var output = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
-
-        // State matrix per head: [batch, numHeads, headDim, headDim]
-        var state = new Tensor<T>(new[] { batchSize, _numHeads, _headDimension, _headDimension });
-        var allStates = new Tensor<T>(new[] { batchSize, seqLen + 1, _numHeads, _headDimension, _headDimension });
-        T keyScale = NumOps.FromDouble(1.0 / Math.Sqrt(_headDimension));
-
-        for (int t = 0; t < seqLen; t++)
-        {
-            for (int hi = 0; hi < _numHeads; hi++)
-            {
-                int dimStart = hi * _headDimension;
-
-                for (int bi = 0; bi < batchSize; bi++)
-                {
-                    T alphaVal = alpha[new[] { bi, t, hi }];
-                    T betaVal = beta[new[] { bi, t, hi }];
-
-                    // Retrieve current state's prediction for this key: S * k
-                    var sK = new T[_headDimension];
-                    for (int di = 0; di < _headDimension; di++)
-                    {
-                        sK[di] = NumOps.Zero;
-                        for (int ki = 0; ki < _headDimension; ki++)
-                        {
-                            int flatKi = dimStart + ki;
-                            T kVal = NumOps.Multiply(k[new[] { bi, t, flatKi }], keyScale);
-                            sK[di] = NumOps.Add(sK[di],
-                                NumOps.Multiply(state[new[] { bi, hi, di, ki }], kVal));
-                        }
-                    }
-
-                    // Delta: V - S*K (the error/correction term)
-                    var delta = new T[_headDimension];
-                    for (int di = 0; di < _headDimension; di++)
-                    {
-                        int flatDi = dimStart + di;
-                        delta[di] = NumOps.Subtract(v[new[] { bi, t, flatDi }], sK[di]);
-                    }
-
-                    // State update: S = alpha * S + beta * delta * K^T
-                    for (int di = 0; di < _headDimension; di++)
-                    {
-                        for (int ki = 0; ki < _headDimension; ki++)
-                        {
-                            int flatKi = dimStart + ki;
-                            T kVal = NumOps.Multiply(k[new[] { bi, t, flatKi }], keyScale);
-
-                            T prevS = state[new[] { bi, hi, di, ki }];
-                            T update = NumOps.Multiply(betaVal,
-                                NumOps.Multiply(delta[di], kVal));
-                            T newS = NumOps.Add(NumOps.Multiply(alphaVal, prevS), update);
-                            state[new[] { bi, hi, di, ki }] = newS;
-                        }
-                    }
-
-                    // Output: O = S * Q
-                    for (int di = 0; di < _headDimension; di++)
-                    {
-                        int flatDi = dimStart + di;
-                        T oVal = NumOps.Zero;
-                        for (int ki = 0; ki < _headDimension; ki++)
-                        {
-                            int flatKi = dimStart + ki;
-                            T qVal = q[new[] { bi, t, flatKi }];
-                            oVal = NumOps.Add(oVal,
-                                NumOps.Multiply(state[new[] { bi, hi, di, ki }], qVal));
-                        }
-                        output[new[] { bi, t, flatDi }] = oVal;
-                    }
-                }
-            }
-
-            // Save state snapshot for backward pass
-            for (int bi = 0; bi < batchSize; bi++)
-                for (int hi2 = 0; hi2 < _numHeads; hi2++)
-                    for (int di = 0; di < _headDimension; di++)
-                        for (int ki = 0; ki < _headDimension; ki++)
-                            allStates[new[] { bi, t + 1, hi2, di, ki }] = state[new[] { bi, hi2, di, ki }];
-        }
-
-        _lastStates = allStates;
-        return output;
-    }
-
-    /// <summary>
     /// Depthwise causal Conv1D forward.
     /// </summary>
     private Tensor<T> DepthwiseConv1DForward(Tensor<T> input, int batchSize, int seqLen)
     {
-        var output = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
-        var bias2D = Engine.Reshape(_convBias, new[] { 1, _modelDimension });
-
-        var weightSlices = new Tensor<T>[_convKernelSize];
-        for (int ki = 0; ki < _convKernelSize; ki++)
-        {
-            weightSlices[ki] = Engine.Reshape(
-                _convWeights.GetSliceAlongDimension(ki, 1),
-                new[] { 1, _modelDimension });
-        }
-
-        for (int t = 0; t < seqLen; t++)
-        {
-            // Accumulate weighted past inputs, then add bias last.
-            Tensor<T>? result_t = null;
-            for (int ki = 0; ki < _convKernelSize; ki++)
-            {
-                int srcT = t - ki;
-                if (srcT >= 0)
-                {
-                    var x_src = input.GetSliceAlongDimension(srcT, 1);
-                    var weighted = Engine.TensorBroadcastMultiply(x_src, weightSlices[ki]);
-                    result_t = result_t is null
-                        ? weighted
-                        : Engine.TensorAdd(result_t, weighted);
-                }
-            }
-
-            var final_t = result_t is null
-                ? Engine.TensorBroadcastAdd(new Tensor<T>(new[] { batchSize, _modelDimension }), bias2D)
-                : Engine.TensorBroadcastAdd(result_t, bias2D);
-
-            output.SetSlice(1, t, final_t);
-        }
-
-        return output;
+        // IEngine.DepthwiseConv1D uses [B,C,T] and cross-correlation kernel order. Flip the
+        // layer's lag-ordered weights, left-pad by K-1, and retain the first T outputs to obtain
+        // exactly y[t,c] = bias[c] + sum_k weight[c,k] * input[t-k,c]. This records one
+        // convolution node whose graph size is independent of sequence length.
+        var channelsFirst = Engine.TensorPermute(input, new[] { 0, 2, 1 });
+        var reversedKernel = Engine.Reshape(
+            Engine.TensorFlip(_convWeights, new[] { 1 }),
+            new[] { _modelDimension, 1, _convKernelSize });
+        var padded = Engine.DepthwiseConv1D(
+            channelsFirst, reversedKernel, stride: 1, padding: _convKernelSize - 1);
+        var causal = Engine.TensorSlice(
+            padded,
+            new[] { 0, 0, 0 },
+            new[] { batchSize, _modelDimension, seqLen });
+        var timeMajor = Engine.TensorPermute(causal, new[] { 0, 2, 1 });
+        return Engine.TensorBroadcastAdd(
+            timeMajor,
+            Engine.Reshape(_convBias, new[] { 1, 1, _modelDimension }));
     }
 
     private Tensor<T> ComputeSiLUDerivative(Tensor<T> x)
@@ -553,28 +438,6 @@ public partial class GatedDeltaNetLayer<T> : LayerBase<T>
 
     }
 
-    /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        var parameters = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
-        int index = 0;
-        foreach (var tensor in GetAllTensors())
-            for (int i = 0; i < tensor.Length; i++)
-                parameters[index++] = tensor[i];
-        return parameters;
-    }
-
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (parameters.Length != ParameterCount)
-            throw new ArgumentException($"Expected {ParameterCount} parameters, got {parameters.Length}");
-        int index = 0;
-        foreach (var tensor in GetAllTensors())
-            for (int i = 0; i < tensor.Length; i++)
-                tensor[i] = parameters[index++];
-    }
-
     private Tensor<T>[] GetAllTensors() =>
     [
         _convWeights, _convBias,
@@ -624,7 +487,6 @@ public partial class GatedDeltaNetLayer<T> : LayerBase<T>
         _lastAlpha = null;
         _lastGate = null;
         _lastGateRaw = null;
-        _lastStates = null;
         _lastSiluConv = null;
         _lastDeltaRuleOutput = null;
         _originalInputShape = null;

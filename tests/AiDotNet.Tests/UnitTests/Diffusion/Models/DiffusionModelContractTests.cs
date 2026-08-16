@@ -239,7 +239,8 @@ public class DiffusionModelContractTests : DiffusionUnitTestBase
         Assert.Equal(parameters.Length, cloneParameters.Length);
         for (int i = 0; i < parameters.Length; i++)
         {
-            Assert.Equal(parameters[i], cloneParameters[i]);
+            Assert.True(parameters[i].Equals(cloneParameters[i]),
+                $"Clone parameter mismatch at flat index {i}: source={parameters[i]}, clone={cloneParameters[i]}.");
         }
 
         var modifiedCloneParameters = new Vector<float>(cloneParameters.Length);
@@ -1057,19 +1058,6 @@ public class DiffusionModelContractTests : DiffusionUnitTestBase
     }
 
     [Fact(Timeout = 120000)]
-    public async Task BarkModel_DefaultConstructor_CreatesValidModel()
-    {
-        var model = new BarkModel<float>();
-
-        Assert.NotNull(model);
-        Assert.NotNull(model.NoisePredictor);
-        Assert.NotNull(model.VAE);
-        Assert.Equal(8, model.LatentChannels);
-        Assert.True(model.SupportsTextToAudio);
-        Assert.True(model.SupportsTextToSpeech);
-    }
-
-    [Fact(Timeout = 120000)]
     public async Task VoiceCraftModel_DefaultConstructor_CreatesValidModel()
     {
         var model = new VoiceCraftModel<float>();
@@ -1126,17 +1114,6 @@ public class DiffusionModelContractTests : DiffusionUnitTestBase
     }
 
     [Fact(Timeout = 120000)]
-    public async Task BarkModel_Clone_CreatesIndependentCopy()
-    {
-        var model = new BarkModel<float>();
-        var clone = model.Clone();
-
-        Assert.NotNull(clone);
-        Assert.NotSame(model, clone);
-        Assert.Equal(model.ParameterCount, clone.ParameterCount); // long==long: (int) truncated valid >2.1B (e.g. 12B FLUX) counts
-    }
-
-    [Fact(Timeout = 120000)]
     public async Task SDUpscalerModel_Clone_CreatesIndependentCopy()
     {
         var model = new SDUpscalerModel<float>();
@@ -1171,17 +1148,6 @@ public class DiffusionModelContractTests : DiffusionUnitTestBase
 
         Assert.NotNull(metadata);
         Assert.Contains("Wan", metadata.Name);
-    }
-
-    [Fact(Timeout = 120000)]
-    public async Task BarkModel_GetModelMetadata_ReturnsValidMetadata()
-    {
-        var model = new BarkModel<float>();
-
-        var metadata = model.GetModelMetadata();
-
-        Assert.NotNull(metadata);
-        Assert.Contains("Bark", metadata.Name);
     }
 
     [Fact(Timeout = 120000)]
@@ -1225,15 +1191,14 @@ public class DiffusionModelContractTests : DiffusionUnitTestBase
     /// core-transformer parameters, exceeding <c>int.MaxValue</c> (2.147 B).
     /// With #1237 landed, <see cref="IParameterizable{T,TInput,TOutput}.ParameterCount"/>
     /// is <see cref="long"/>, and the chunked
-    /// <c>GetParameterChunks()</c> API streams per-tensor weights without
-    /// materialising a flat aggregate. This test validates both:
+    /// parameter manifest describes the full topology without materialising
+    /// its tensors. This test validates both:
     /// <list type="number">
     /// <item>The model constructs with paper-faithful component types
     ///   (DiTNoisePredictor + TemporalVAE).</item>
     /// <item><see cref="IParameterizable{T,TInput,TOutput}.ParameterCount"/>
     ///   remains a structural <see cref="long"/> for lazy paper-scale
-    ///   defaults, while <c>GetParameterChunks()</c> can be enumerated
-    ///   without forcing flat materialization.</item>
+    ///   defaults, while the manifest stays shape-resolved and allocation-free.</item>
     /// </list>
     /// </summary>
     [Fact(Timeout = 120000)]
@@ -1254,24 +1219,30 @@ public class DiffusionModelContractTests : DiffusionUnitTestBase
         // #1237: ParameterCount is now long. Sora's paper config (DiT-XL/2
         // with HiddenDim 3072 x 48 layers) reports ~5.4 B parameters in the
         // paper. The default constructor is intentionally lazy, so the
-        // structural count can be paper-scale while GetParameterChunks()
-        // yields only tensors that have actually materialized. That mirrors
-        // PyTorch LazyModule behavior better than forcing a CI runner to walk
-        // billions of double values just to prove the count type.
-        Assert.True(model.ParameterCount > 0,
-            "Sora's ParameterCount should be positive (foundation-scale ~5.4 B per the paper).");
+        // structural count can be paper-scale without reading values. An explicit
+        // GetParameterChunks() call is a value read and is therefore intentionally
+        // allowed to materialize lazy weights; it must not be used as a metadata
+        // probe on a multi-billion-parameter default.
+        Assert.True(model.ParameterLayout.DeclaredParameterCount > 0,
+            "Sora's declared parameter capacity should be positive (foundation-scale ~5.4 B per the paper).");
+        Assert.DoesNotContain(model.ParameterLayout.Slots,
+            slot => slot.Readiness == AiDotNet.Models.Parameters.ParameterReadiness.ShapeDeferred);
+        Assert.Equal(model.ParameterCount, model.ParameterLayout.DeclaredParameterCount);
+        Assert.Equal(0L, model.ParameterLayout.MaterializedParameterCount);
+    }
 
-        long inspectedElements = 0;
-        int inspectedChunks = 0;
-        foreach (var chunk in model.GetParameterChunks())
-        {
-            Assert.True(chunk.Length > 0);
-            inspectedElements += chunk.Length;
-            inspectedChunks++;
-            if (inspectedChunks == 4) break;
-        }
-        Assert.True(inspectedChunks > 0, "Chunked walk should yield at least one materialized tensor.");
-        Assert.True(inspectedElements <= model.ParameterCount);
+    [Fact(Timeout = 120000)]
+    public async Task TemporalVAE_DefaultManifest_HasNoDeferredSlots()
+    {
+        await Task.Yield();
+        var vae = new AiDotNet.Diffusion.VAE.TemporalVAE<float>();
+        var deferred = vae.ParameterLayout.Slots
+            .Where(slot => slot.Readiness == AiDotNet.Models.Parameters.ParameterReadiness.ShapeDeferred)
+            .Select(slot => slot.StableId)
+            .ToArray();
+
+        Assert.True(deferred.Length == 0,
+            $"TemporalVAE should expose a construction-known allocation-free manifest. Deferred: {string.Join(", ", deferred)}");
     }
 
     [Fact(Timeout = 120000)]
@@ -1280,22 +1251,13 @@ public class DiffusionModelContractTests : DiffusionUnitTestBase
         await Task.Yield();
         var model = new UdioModel<float>();
 
-        Assert.True(model.ParameterCount > int.MaxValue,
+        Assert.True(model.ParameterLayout.DeclaredParameterCount > int.MaxValue,
             "Udio's paper-scale DiT backbone should report a foundation-scale parameter count.");
 
-        long inspectedElements = 0;
-        int inspectedChunks = 0;
-        foreach (var chunk in model.GetParameterChunks())
-        {
-            Assert.True(chunk.Length > 0);
-            inspectedElements += chunk.Length;
-            inspectedChunks++;
-            if (inspectedChunks == 4) break;
-        }
-
-        Assert.True(inspectedChunks > 0, "Chunked walk should yield at least one materialized tensor.");
-        Assert.True(inspectedElements <= model.ParameterCount,
-            "Chunk enumeration must stay bounded and must not force a flat paper-scale buffer.");
+        Assert.DoesNotContain(model.ParameterLayout.Slots,
+            slot => slot.Readiness == AiDotNet.Models.Parameters.ParameterReadiness.ShapeDeferred);
+        Assert.Equal(model.ParameterCount, model.ParameterLayout.DeclaredParameterCount);
+        Assert.Equal(0L, model.ParameterLayout.MaterializedParameterCount);
     }
 
     [Fact(Timeout = 120000)]

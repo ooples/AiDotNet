@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -70,7 +70,6 @@ public class ModifiedPolicyIterationAgent<T> : ReinforcementLearningAgentBase<T>
     private Dictionary<string, T> _valueTable;
     private Dictionary<string, int> _policy;
     private Dictionary<string, Dictionary<int, List<(string nextState, T reward, T probability)>>> _model;
-    private Random _random;
 
     /// <summary>
     /// Initializes a new instance with default options (StateSize=4, ActionSize=2).
@@ -92,7 +91,6 @@ public class ModifiedPolicyIterationAgent<T> : ReinforcementLearningAgentBase<T>
         _valueTable = new Dictionary<string, T>();
         _policy = new Dictionary<string, int>();
         _model = new Dictionary<string, Dictionary<int, List<(string, T, T)>>>();
-        _random = RandomHelper.CreateSecureRandom();
     }
 
     public override Vector<T> SelectAction(Vector<T> state, bool training = true)
@@ -101,7 +99,12 @@ public class ModifiedPolicyIterationAgent<T> : ReinforcementLearningAgentBase<T>
 
         if (!_policy.ContainsKey(stateKey))
         {
-            _policy[stateKey] = _random.Next(_options.ActionSize);
+            // Deterministic initial policy: the greedy action over the zero-initialized value table is
+            // action 0 (all action-values equal). Modified Policy Iteration (Puterman & Shin 1978) starts
+            // from an arbitrary DETERMINISTIC policy; a random initial action makes SelectAction/Predict
+            // non-reproducible and clone-variant (the clone's independent RNG picks a different action for
+            // the same unseen state). Policy Improvement refines this from the collected model.
+            _policy[stateKey] = 0;
             _valueTable[stateKey] = NumOps.Zero;
         }
 
@@ -298,7 +301,15 @@ public class ModifiedPolicyIterationAgent<T> : ReinforcementLearningAgentBase<T>
         };
     }
 
-    public override long ParameterCount => _valueTable.Count;
+    /// <inheritdoc />
+    protected override void RegisterComponents()
+    {
+        base.RegisterComponents();
+        RegisterParameterComponent(
+            "value-table",
+            new AiDotNet.Models.Parameters.KeyedScalarCollectionParameterSource<T, string>(
+                () => _valueTable));
+    }
 
     public override int FeatureCount => _options.StateSize;
 
@@ -370,43 +381,6 @@ public class ModifiedPolicyIterationAgent<T> : ReinforcementLearningAgentBase<T>
                 actionDict[actionEntry.Key] = transitionList;
             }
             _model[stateEntry.Key] = actionDict;
-        }
-    }
-
-    public override Vector<T> GetParameters()
-    {
-        // Flatten value table into vector
-        var paramsList = new List<T>();
-        foreach (var value in _valueTable.Values)
-        {
-            paramsList.Add(value);
-        }
-
-        if (paramsList.Count == 0)
-        {
-            paramsList.Add(NumOps.Zero);
-        }
-
-        var paramsVector = new Vector<T>(paramsList.Count);
-        for (int i = 0; i < paramsList.Count; i++)
-        {
-            paramsVector[i] = paramsList[i];
-        }
-
-        return paramsVector;
-    }
-
-    public override void SetParameters(Vector<T> parameters)
-    {
-        // Reconstruct value table from vector
-        int index = 0;
-        foreach (var stateKey in _valueTable.Keys.ToList())
-        {
-            if (index < parameters.Length)
-            {
-                _valueTable[stateKey] = parameters[index];
-                index++;
-            }
         }
     }
 

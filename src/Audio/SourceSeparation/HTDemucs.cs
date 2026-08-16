@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Diffusion.Audio;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -41,14 +41,24 @@ namespace AiDotNet.Audio.SourceSeparation;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Hybrid Transformers for Music Source Separation", "https://doi.org/10.1109/ICASSP49357.2023.10096956", Year = 2023, Authors = "Simon Rouard, Francisco Massa, Alexandre Défossez")]
-public class HTDemucs<T> : AudioNeuralNetworkBase<T>, IMusicSourceSeparator<T>
+public partial class HTDemucs<T> : AudioNeuralNetworkBase<T>, IMusicSourceSeparator<T>
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// DERIVED, not stored: PredictCore folds over Layers, and the last layer
+    /// CreateDefaultHTDemucsLayers emits is the decoder's multi-stem mask prediction
+    /// <c>DenseLayer&lt;T&gt;(numFreqBins * numStems)</c>. 8196 (2049 x 4 at the defaults) appears
+    /// nowhere in the options; TransformerDim is the width one layer earlier.
+    /// </remarks>
+    protected override int OutputFeatureWidth => _options.NumFreqBins * _options.NumStems;
+
     #region Fields
 
     private readonly HTDemucsOptions _options;
     public override ModelOptions GetOptions() => _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private readonly ShortTimeFourierTransform<T> _stft;
+    [Scratch]
     private Tensor<T>? _lastPhase;
     private bool _useNativeMode;
     private bool _disposed;
@@ -168,10 +178,14 @@ public class HTDemucs<T> : AudioNeuralNetworkBase<T>, IMusicSourceSeparator<T>
     public override void Train(Tensor<T> input, Tensor<T> expected)
     {
         if (IsOnnxMode) throw new NotSupportedException("Training not supported in ONNX mode.");
-        SetTrainingMode(true); try { TrainWithTape(input, expected); } finally { SetTrainingMode(false); }
+        SetTrainingMode(true); try { TrainWithTape(input, expected, _optimizer); } finally { SetTrainingMode(false); }
     }
 
-    public override void UpdateParameters(Vector<T> parameters) { if (!_useNativeMode) throw new NotSupportedException("ONNX mode."); int idx = 0; foreach (var l in Layers) { int c = (int)l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; } }
+    /// <inheritdoc />
+    /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
+    /// write on every parameter surface, so the guard is stated once here instead of being
+    /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
+    protected override bool SupportsParameterMutation => _useNativeMode;
     protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio) => ComputeSTFT(rawAudio);
     protected override Tensor<T> PostprocessOutput(Tensor<T> o) => o;
 

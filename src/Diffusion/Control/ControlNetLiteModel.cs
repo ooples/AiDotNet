@@ -51,8 +51,17 @@ namespace AiDotNet.Diffusion.Control;
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     [ResearchPaper("Adding Conditional Control to Text-to-Image Diffusion Models", "https://arxiv.org/abs/2302.05543")]
-public class ControlNetLiteModel<T> : LatentDiffusionModelBase<T>
+public partial class ControlNetLiteModel<T> : LatentDiffusionModelBase<T>
 {
+    /// <inheritdoc />
+    /// <remarks>Registration order is serialization order, and matches the
+    /// concatenation the previous hand-written GetParameters performed.</remarks>
+    protected override void RegisterComponents()
+    {
+        RegisterParameterComponent(_baseUNet);
+        RegisterParameterComponent(_controlEncoder);
+    }
+
     private const int LATENT_CHANNELS = 4;
 
     private UNetNoisePredictor<T> _baseUNet;
@@ -70,7 +79,6 @@ public class ControlNetLiteModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override int LatentChannels => LATENT_CHANNELS;
     /// <inheritdoc />
-    public override long ParameterCount => _baseUNet.ParameterCount + _controlEncoder.ParameterCount;
 
     /// <summary>
     /// Initializes a new ControlNet Lite model.
@@ -114,31 +122,7 @@ public class ControlNetLiteModel<T> : LatentDiffusionModelBase<T>
             inputChannels: 3, baseChannels: 160, channelMultipliers: new[] { 1, 2, 4 }, seed: seed);
     }
 
-    /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        var allParams = new List<T>();
-        var baseParams = _baseUNet.GetParameters();
-        for (int i = 0; i < baseParams.Length; i++) allParams.Add(baseParams[i]);
-        var ctrlParams = _controlEncoder.GetParameters();
-        for (int i = 0; i < ctrlParams.Length; i++) allParams.Add(ctrlParams[i]);
-        return new Vector<T>(allParams.ToArray());
-    }
 
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int offset = 0;
-        int baseCount = checked((int)_baseUNet.ParameterCount);
-        var baseParams = new T[baseCount];
-        for (int i = 0; i < baseCount; i++) baseParams[i] = parameters[offset + i];
-        _baseUNet.SetParameters(new Vector<T>(baseParams));
-        offset += baseCount;
-        int ctrlCount = checked((int)_controlEncoder.ParameterCount);
-        var ctrlParams = new T[ctrlCount];
-        for (int i = 0; i < ctrlCount; i++) ctrlParams[i] = parameters[offset + i];
-        _controlEncoder.SetParameters(new Vector<T>(ctrlParams));
-    }
 
     /// <inheritdoc />
     public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy() => Clone();

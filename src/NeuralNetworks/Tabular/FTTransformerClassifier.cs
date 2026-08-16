@@ -51,6 +51,11 @@ namespace AiDotNet.NeuralNetworks.Tabular;
     Authors = "Gorishniy, Y., Rubachev, I., Khrulkov, V., & Babenko, A.")]
 public class FTTransformerClassifier<T> : FTTransformerBase<T>
 {
+
+    /// <inheritdoc />
+    /// <remarks>The classification head. Everything else -- the tokenizer, the encoder stack and the final norm -- is the shared backbone, and the base folds this after it in all three surfaces.</remarks>
+    protected override IEnumerable<ILayer<T>> GetExtraTrainableLayers()
+        => new ILayer<T>[] { _classificationHead };
     private readonly int _numClasses;
     private readonly FullyConnectedLayer<T> _classificationHead;
 
@@ -63,11 +68,6 @@ public class FTTransformerClassifier<T> : FTTransformerBase<T>
     /// Gets the number of output classes.
     /// </summary>
     public int NumClasses => _numClasses;
-
-    /// <summary>
-    /// Gets the total number of trainable parameters including the classification head.
-    /// </summary>
-    public override long ParameterCount => base.ParameterCount + _classificationHead.ParameterCount;
 
     /// <summary>
     /// Initializes a new instance of the FTTransformerClassifier class.
@@ -100,6 +100,7 @@ public class FTTransformerClassifier<T> : FTTransformerBase<T>
 
         // Classification head: Linear layer from embedding dimension to number of classes
         _classificationHead = new FullyConnectedLayer<T>(
+            EmbeddingDimension,
             numClasses,
             (IActivationFunction<T>?)null);  // No activation, softmax applied separately
     }
@@ -420,55 +421,6 @@ public class FTTransformerClassifier<T> : FTTransformerBase<T>
     {
         base.UpdateParameters(learningRate);
         _classificationHead.UpdateParameters(learningRate);
-    }
-
-    /// <summary>
-    /// Gets all parameters including the classification head.
-    /// </summary>
-    public override Vector<T> GetParameters()
-    {
-        var baseParams = base.GetParameters();
-        var headParams = _classificationHead.GetParameters();
-
-        var allParams = new T[baseParams.Length + headParams.Length];
-        for (int i = 0; i < baseParams.Length; i++)
-        {
-            allParams[i] = baseParams[i];
-        }
-        for (int i = 0; i < headParams.Length; i++)
-        {
-            allParams[baseParams.Length + i] = headParams[i];
-        }
-
-        return new Vector<T>(allParams);
-    }
-
-    /// <summary>
-    /// Sets all parameters including the classification head.
-    /// </summary>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        // GetParameters concatenates [base.GetParameters() (= base.ParameterCount)][head].
-        // base.ParameterCount is the explicit-base call (backbone only, WITHOUT the head),
-        // so the base slice is exactly base.ParameterCount. The previous
-        // `base.ParameterCount - head.ParameterCount` under-counted the base by the head
-        // size, leaving the head to read trailing base params — corrupting both halves
-        // (the save/load round-trip then failed).
-        int baseCount = checked((int)base.ParameterCount);
-        var baseParams = new Vector<T>(baseCount);
-        for (int i = 0; i < baseCount; i++)
-        {
-            baseParams[i] = parameters[i];
-        }
-        base.SetParameters(baseParams);
-
-        int headCount = checked((int)_classificationHead.ParameterCount);
-        var headParams = new Vector<T>(headCount);
-        for (int i = 0; i < headCount; i++)
-        {
-            headParams[i] = parameters[baseCount + i];
-        }
-        _classificationHead.SetParameters(headParams);
     }
 
     /// <summary>

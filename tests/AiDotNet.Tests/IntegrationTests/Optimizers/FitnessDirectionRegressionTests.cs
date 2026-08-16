@@ -64,12 +64,22 @@ public class FitnessDirectionRegressionTests
             y[i] = 0.5 * x[i];
         }
 
+        // SEEDED init: without architecture.RandomSeed the weights come from the PROCESS-SHARED RNG,
+        // so baselineMse — and how well this tiny ReLU net trains from that particular init — varied
+        // run to run. CI drew an init that reached only a 19.9% MSE improvement (baseline 2.8469 →
+        // 2.2803) and failed the 20% margin by 0.1%, while the same commit passed locally. That is
+        // init luck, not a selection-direction regression: a frozen baseline yields resultMse EXACTLY
+        // equal to baselineMse, nowhere near a 19.9% gain. Seeding pins the init so this guard tests
+        // the comparator direction it was written for rather than the draw of the shared RNG.
         var net = new NeuralNetwork<double>(new NeuralNetworkArchitecture<double>(
             inputType: InputType.OneDimensional,
             taskType: NeuralNetworkTaskType.Regression,
             complexity: NetworkComplexity.Simple,
             inputSize: 1,
-            outputSize: 1));
+            outputSize: 1)
+        {
+            RandomSeed = 1234,
+        });
 
         var probes = new[] { -1.5, -0.75, 0.0, 0.75, 1.5 };
         var targets = probes.Select(p => 0.5 * p).ToArray();

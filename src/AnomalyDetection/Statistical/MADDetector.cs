@@ -50,7 +50,9 @@ public class MADDetector<T> : AnomalyDetectorBase<T>
 {
     private readonly double _madThreshold;
     private readonly double _scaleFactor;
+    [Buffer]
     private Vector<T>? _medians;
+    [Buffer]
     private Vector<T>? _mads;
 
     /// <summary>

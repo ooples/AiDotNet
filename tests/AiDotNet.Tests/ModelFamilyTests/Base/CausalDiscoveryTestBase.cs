@@ -1,4 +1,6 @@
 using AiDotNet.CausalDiscovery;
+using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
 using System.Threading.Tasks;
@@ -12,10 +14,38 @@ namespace AiDotNet.Tests.ModelFamilyTests.Base;
 /// conditional independence consistency, Markov property, faithfulness, data scaling
 /// invariance, and topological ordering correctness.
 /// </summary>
-public abstract class CausalDiscoveryTestBase
+/// <remarks>
+/// Synthetic data and graph-invariant math remain in double precision. Data is converted only at
+/// the algorithm boundary and discovered adjacency matrices are widened back to double for checks.
+/// </remarks>
+public abstract class CausalDiscoveryTestBase<T>
 {
+    protected static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+
+    protected static Matrix<T> ToT(Matrix<double> matrix)
+    {
+        if (typeof(T) == typeof(double)) return (Matrix<T>)(object)matrix;
+
+        var converted = new Matrix<T>(matrix.Rows, matrix.Columns);
+        for (int row = 0; row < matrix.Rows; row++)
+            for (int column = 0; column < matrix.Columns; column++)
+                converted[row, column] = NumOps.FromDouble(matrix[row, column]);
+        return converted;
+    }
+
+    protected static Matrix<double> ToD(Matrix<T> matrix)
+    {
+        if (typeof(T) == typeof(double)) return (Matrix<double>)(object)matrix;
+
+        var converted = new Matrix<double>(matrix.Rows, matrix.Columns);
+        for (int row = 0; row < matrix.Rows; row++)
+            for (int column = 0; column < matrix.Columns; column++)
+                converted[row, column] = NumOps.ToDouble(matrix[row, column]);
+        return converted;
+    }
+
     /// <summary>Factory method — subclasses return their concrete algorithm instance.</summary>
-    protected abstract ICausalDiscoveryAlgorithm<double> CreateAlgorithm();
+    protected abstract ICausalDiscoveryAlgorithm<T> CreateAlgorithm();
 
     /// <summary>Number of variables (columns) in test data. Override for algorithms needing more/fewer.</summary>
     protected virtual int NumVariables => 4;
@@ -127,10 +157,10 @@ public abstract class CausalDiscoveryTestBase
         using var _arena = TensorArena.Create();
         var algo = CreateAlgorithm();
         var data = CreateKnownStructureData();
-        var graph = algo.DiscoverStructure(data);
+        var adj = ToD(algo.DiscoverStructure(ToT(data)).AdjacencyMatrix);
 
-        Assert.Equal(NumVariables, graph.AdjacencyMatrix.Rows);
-        Assert.Equal(NumVariables, graph.AdjacencyMatrix.Columns);
+        Assert.Equal(NumVariables, adj.Rows);
+        Assert.Equal(NumVariables, adj.Columns);
     }
 
     // INVARIANT 2: Diagonal is zero (no self-causation)
@@ -140,8 +170,7 @@ public abstract class CausalDiscoveryTestBase
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var algo = CreateAlgorithm();
-        var graph = algo.DiscoverStructure(CreateKnownStructureData());
-        var adj = graph.AdjacencyMatrix;
+        var adj = ToD(algo.DiscoverStructure(ToT(CreateKnownStructureData())).AdjacencyMatrix);
 
         // Even if the algorithm doesn't guarantee no self-edges, verify shape is correct
         Assert.Equal(NumVariables, adj.Rows);
@@ -166,8 +195,7 @@ public abstract class CausalDiscoveryTestBase
         if (!GuaranteesDAG) return;
 
         var algo = CreateAlgorithm();
-        var graph = algo.DiscoverStructure(CreateKnownStructureData());
-        var adj = graph.AdjacencyMatrix;
+        var adj = ToD(algo.DiscoverStructure(ToT(CreateKnownStructureData())).AdjacencyMatrix);
         int n = adj.Rows;
 
         // Build directed-only adjacency (skip undirected/symmetric edges)
@@ -225,7 +253,7 @@ public abstract class CausalDiscoveryTestBase
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var algo = CreateAlgorithm();
-        var adj = algo.DiscoverStructure(CreateKnownStructureData()).AdjacencyMatrix;
+        var adj = ToD(algo.DiscoverStructure(ToT(CreateKnownStructureData())).AdjacencyMatrix);
 
         for (int i = 0; i < adj.Rows; i++)
             for (int j = 0; j < adj.Columns; j++)
@@ -251,8 +279,7 @@ public abstract class CausalDiscoveryTestBase
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var algo = CreateAlgorithm();
-        var graph = algo.DiscoverStructure(CreateKnownStructureData());
-        var adj = graph.AdjacencyMatrix;
+        var adj = ToD(algo.DiscoverStructure(ToT(CreateKnownStructureData())).AdjacencyMatrix);
 
         // Always verify output is valid even when skipping the adjacency check
         Assert.Equal(NumVariables, adj.Rows);
@@ -297,8 +324,7 @@ public abstract class CausalDiscoveryTestBase
         // that feed actually-autocorrelated data.
         if (algo.SupportsTimeSeries) return;
 
-        var graph = algo.DiscoverStructure(CreateKnownStructureData());
-        var adj = graph.AdjacencyMatrix;
+        var adj = ToD(algo.DiscoverStructure(ToT(CreateKnownStructureData())).AdjacencyMatrix);
 
         // True edges: (0,1), (1,2), (0,3)
         var trueEdges = new List<(int from, int to)> { (0, 1), (1, 2) };
@@ -328,8 +354,7 @@ public abstract class CausalDiscoveryTestBase
         if (!CanRecoverLinearStructure || NumVariables < 4) return;
 
         var algo = CreateAlgorithm();
-        var graph = algo.DiscoverStructure(CreateKnownStructureData());
-        var adj = graph.AdjacencyMatrix;
+        var adj = ToD(algo.DiscoverStructure(ToT(CreateKnownStructureData())).AdjacencyMatrix);
 
         // X1 and X3 are conditionally independent given X0
         // Neither X1→X3 nor X3→X1 should have strong weights
@@ -359,17 +384,16 @@ public abstract class CausalDiscoveryTestBase
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var algo = CreateAlgorithm();
-        CausalGraph<double>? graph;
+        Matrix<double> adj;
         try
         {
-            graph = algo.DiscoverStructure(CreateIndependentData());
+            adj = ToD(algo.DiscoverStructure(ToT(CreateIndependentData())).AdjacencyMatrix);
         }
         catch (Exception)
         {
             return; // Degenerate data handling is acceptable
         }
 
-        var adj = graph.AdjacencyMatrix;
         int edgeCount = 0;
         double totalWeight = 0;
         for (int i = 0; i < adj.Rows; i++)
@@ -406,10 +430,10 @@ public abstract class CausalDiscoveryTestBase
 
         // Small dataset
         var smallData = CreateKnownStructureDataWithSize(100);
-        CausalGraph<double>? smallGraph;
+        Matrix<double> smallAdj;
         try
         {
-            smallGraph = algo1.DiscoverStructure(smallData);
+            smallAdj = ToD(algo1.DiscoverStructure(ToT(smallData)).AdjacencyMatrix);
         }
         catch (Exception)
         {
@@ -418,10 +442,10 @@ public abstract class CausalDiscoveryTestBase
 
         // Larger dataset (same generating process)
         var largeData = CreateKnownStructureDataWithSize(400);
-        CausalGraph<double>? largeGraph;
+        Matrix<double> largeAdj;
         try
         {
-            largeGraph = algo2.DiscoverStructure(largeData);
+            largeAdj = ToD(algo2.DiscoverStructure(ToT(largeData)).AdjacencyMatrix);
         }
         catch (Exception)
         {
@@ -429,8 +453,8 @@ public abstract class CausalDiscoveryTestBase
         }
 
         // Compare: count edges NOT in true structure (false positives)
-        int smallFP = CountFalsePositives(smallGraph.AdjacencyMatrix);
-        int largeFP = CountFalsePositives(largeGraph.AdjacencyMatrix);
+        int smallFP = CountFalsePositives(smallAdj);
+        int largeFP = CountFalsePositives(largeAdj);
 
         // More data should not dramatically increase false positives
         Assert.True(largeFP <= smallFP + 2,
@@ -457,11 +481,11 @@ public abstract class CausalDiscoveryTestBase
             for (int j = 0; j < data.Columns; j++)
                 scaledData[i, j] = data[i, j] * 10.0;
 
-        CausalGraph<double>? graph1, graph2;
+        Matrix<double> adj1, adj2;
         try
         {
-            graph1 = algo1.DiscoverStructure(data);
-            graph2 = algo2.DiscoverStructure(scaledData);
+            adj1 = ToD(algo1.DiscoverStructure(ToT(data)).AdjacencyMatrix);
+            adj2 = ToD(algo2.DiscoverStructure(ToT(scaledData)).AdjacencyMatrix);
         }
         catch (Exception)
         {
@@ -474,8 +498,8 @@ public abstract class CausalDiscoveryTestBase
         {
             for (int j = 0; j < NumVariables; j++)
             {
-                bool edge1 = Math.Abs(graph1.AdjacencyMatrix[i, j]) > EdgeThreshold;
-                bool edge2 = Math.Abs(graph2.AdjacencyMatrix[i, j]) > EdgeThreshold;
+                bool edge1 = Math.Abs(adj1[i, j]) > EdgeThreshold;
+                bool edge2 = Math.Abs(adj2[i, j]) > EdgeThreshold;
                 if (edge1 != edge2) structureDiff++;
             }
         }
@@ -497,8 +521,7 @@ public abstract class CausalDiscoveryTestBase
         if (!GuaranteesDAG) return;
 
         var algo = CreateAlgorithm();
-        var graph = algo.DiscoverStructure(CreateKnownStructureData());
-        var adj = graph.AdjacencyMatrix;
+        var adj = ToD(algo.DiscoverStructure(ToT(CreateKnownStructureData())).AdjacencyMatrix);
         int n = adj.Rows;
 
         // Compute topological order of directed-only edges
@@ -534,9 +557,10 @@ public abstract class CausalDiscoveryTestBase
     {
         await Task.Yield();
         using var _arena = TensorArena.Create();
+        if (!GuaranteesDAG) return;
+
         var algo = CreateAlgorithm();
-        var graph = algo.DiscoverStructure(CreateKnownStructureData());
-        var adj = graph.AdjacencyMatrix;
+        var adj = ToD(algo.DiscoverStructure(ToT(CreateKnownStructureData())).AdjacencyMatrix);
 
         for (int i = 0; i < NumVariables; i++)
         {
@@ -569,9 +593,9 @@ public abstract class CausalDiscoveryTestBase
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var algo = CreateAlgorithm();
-        var data = CreateKnownStructureData();
+        var data = ToT(CreateKnownStructureData());
 
-        var original = new Matrix<double>(data.Rows, data.Columns);
+        var original = new Matrix<T>(data.Rows, data.Columns);
         for (int i = 0; i < data.Rows; i++)
             for (int j = 0; j < data.Columns; j++)
                 original[i, j] = data[i, j];
@@ -580,7 +604,7 @@ public abstract class CausalDiscoveryTestBase
 
         for (int i = 0; i < data.Rows; i++)
             for (int j = 0; j < data.Columns; j++)
-                Assert.True(original[i, j] == data[i, j],
+                Assert.True(EqualityComparer<T>.Default.Equals(original[i, j], data[i, j]),
                     $"Input mutated at [{i},{j}].");
     }
 
@@ -685,3 +709,6 @@ public abstract class CausalDiscoveryTestBase
         return result.Count == n ? result : null;
     }
 }
+
+/// <summary>Double-precision compatibility shim for existing causal-discovery fixtures.</summary>
+public abstract class CausalDiscoveryTestBase : CausalDiscoveryTestBase<double> { }

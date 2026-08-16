@@ -40,7 +40,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     [ResearchPaper("Gradient-Based Learning Applied to Document Recognition", "https://doi.org/10.1109/5.726791")]
-public class ConvolutionalNeuralNetwork<T> : NeuralNetworkBase<T>
+public class ConvolutionalNeuralNetwork<T> : ImageClassifierModelLayoutBase<T>
 {
     private readonly ConvolutionalNeuralNetworkOptions _options;
 
@@ -197,35 +197,8 @@ public class ConvolutionalNeuralNetwork<T> : NeuralNetworkBase<T>
         return output;
     }
 
-    /// <summary>
-    /// Updates the parameters of all layers in the network.
-    /// </summary>
-    /// <param name="parameters">A vector containing all parameters for the network.</param>
-    /// <remarks>
-    /// <para>
-    /// This method distributes the parameters to each layer based on their parameter count.
-    /// It's typically called during training after calculating parameter updates.
-    /// </para>
-    /// <para>
-    /// <b>For Beginners:</b> After the backward pass calculates how to improve the network, 
-    /// this method actually applies those improvements. It takes a list of updated settings 
-    /// (parameters) and distributes them to each layer in the network. Think of it like 
-    /// fine-tuning each part of a machine based on performance feedback. This method is 
-    /// called repeatedly during training to gradually improve the network's accuracy.
-    /// </para>
-    /// </remarks>
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        int index = 0;
-        foreach (var layer in Layers)
-        {
-            int layerParameterCount = checked((int)layer.ParameterCount);
-            var layerParameters = parameters.Slice(index, layerParameterCount);
-            layer.UpdateParameters(layerParameters);
-            index += layerParameterCount;
-        }
-    }
-
+    // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
+    // exactly the same enumeration, so this said nothing the base does not already say.
     /// <summary>
     /// Makes a prediction using the convolutional neural network for the given input.
     /// </summary>
@@ -275,6 +248,7 @@ public class ConvolutionalNeuralNetwork<T> : NeuralNetworkBase<T>
     // calls and inflating p95. The buffers depend only on batch + layer geometry
     // (weights are read fresh each call), so they're rebuilt only when the batch
     // size changes; weight updates need no invalidation.
+    [Scratch]
     private Tensor<T>[]? _convStemBuf;
     private int _convStemBatch = -1;
 
@@ -422,6 +396,11 @@ public class ConvolutionalNeuralNetwork<T> : NeuralNetworkBase<T>
                 }
                 var w = dense.GetWeights();
                 if (w.Rank != 2 || w.Shape[0] == 0 || w.Shape[1] == 0) return false;   // lazy → bail
+                // The fused path bypasses DenseLayer.Forward and therefore also bypasses its
+                // first-real-input reconciliation. A shape-only topology walk may have sized the
+                // dense tail from an approximate Flatten declaration. Fall back once so the eager
+                // layer path can bind the real width; subsequent inference calls use this fast path.
+                if (w.Shape[0] != t.Shape[t.Rank - 1]) return false;
                 t = Engine.FusedLinear(t, w, dense.GetBiases(), act);
             }
 

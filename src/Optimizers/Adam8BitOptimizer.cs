@@ -1205,27 +1205,21 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
     /// </summary>
     public override Vector<T> UpdateParameters(Vector<T> parameters, Vector<T> gradient)
     {
+        if (parameters.Length != gradient.Length)
+        {
+            throw new ArgumentException(
+                $"Parameter vector length ({parameters.Length}) must match gradient vector length ({gradient.Length}).",
+                nameof(gradient));
+        }
+
         if (_mQuantized == null && _mFullPrecision == null || _parameterLength != parameters.Length)
         {
             InitializeQuantizedState(parameters.Length);
+            _t = 0;
         }
 
         _t++;
 
-        // Dequantize current moment estimates
-        Vector<T> m;
-        if (_options.CompressBothMoments)
-        {
-            m = Dequantize(_mQuantized!, _mScales!, isSigned: true);
-        }
-        else
-        {
-            m = _mFullPrecision!;
-        }
-        var v = Dequantize(_vQuantized!, _vScales!, isSigned: false);
-
-        // Compute Adam update using full precision
-        // Use adaptive betas (consistent with UpdateSolution when UseAdaptiveBetas is enabled)
         T beta1 = _currentBeta1;
         T beta2 = _currentBeta2;
         T oneMinusBeta1 = NumOps.Subtract(NumOps.One, beta1);
@@ -1236,41 +1230,135 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
         T biasCorrection1 = NumOps.FromDouble(1 - Math.Pow(beta1Double, _t));
         T biasCorrection2 = NumOps.FromDouble(1 - Math.Pow(beta2Double, _t));
 
-        // Update biased first moment: m = beta1 * m + (1 - beta1) * gradient
-        var mScaled = (Vector<T>)Engine.Multiply(m, beta1);
-        var gradScaled = (Vector<T>)Engine.Multiply(gradient, oneMinusBeta1);
-        m = (Vector<T>)Engine.Add(mScaled, gradScaled);
+        var updatedParameters = new Vector<T>(parameters.Length, skipZeroInit: true);
+        var parameterSpan = parameters.AsSpan();
+        var gradientSpan = gradient.AsSpan();
+        var updatedSpan = updatedParameters.AsWritableSpan();
+        Span<T> fullPrecisionMSpan = _options.CompressBothMoments
+            ? Span<T>.Empty
+            : _mFullPrecision!.AsWritableSpan();
+        int blockSize = _options.BlockSize;
 
-        // Update biased second moment: v = beta2 * v + (1 - beta2) * gradient^2
-        var gradSquared = (Vector<T>)Engine.Multiply(gradient, gradient);
-        var vScaled = (Vector<T>)Engine.Multiply(v, beta2);
-        var gradSquaredScaled = (Vector<T>)Engine.Multiply(gradSquared, oneMinusBeta2);
-        v = (Vector<T>)Engine.Add(vScaled, gradSquaredScaled);
-
-        // Re-quantize the updated moments
-        if (_options.CompressBothMoments)
+        T[] mBlock = ArrayPool<T>.Shared.Rent(blockSize);
+        T[] vBlock = ArrayPool<T>.Shared.Rent(blockSize);
+        double[] absoluteValues = ArrayPool<double>.Shared.Rent(blockSize);
+        try
         {
-            Quantize(m, _mQuantized!, _mScales!, isSigned: true);
+            for (int block = 0; block < _numBlocks; block++)
+            {
+                int blockStart = block * blockSize;
+                int blockLength = Math.Min(blockSize, parameters.Length - blockStart);
+                double oldMScale = _options.CompressBothMoments ? _mScales![block] : 0.0;
+                double oldVScale = _vScales![block];
+
+                for (int j = 0; j < blockLength; j++)
+                {
+                    int i = blockStart + j;
+                    T g = gradientSpan[i];
+                    T oldM = _options.CompressBothMoments
+                        ? NumOps.FromDouble(((int)_mQuantized![i] - 128) * oldMScale)
+                        : fullPrecisionMSpan[i];
+                    T oldV = NumOps.FromDouble(_vQuantized![i] * oldVScale);
+                    T newM = NumOps.Add(
+                        NumOps.Multiply(beta1, oldM),
+                        NumOps.Multiply(oneMinusBeta1, g));
+                    T newV = NumOps.Add(
+                        NumOps.Multiply(beta2, oldV),
+                        NumOps.Multiply(oneMinusBeta2, NumOps.Multiply(g, g)));
+
+                    mBlock[j] = newM;
+                    vBlock[j] = newV;
+                    if (!_options.CompressBothMoments)
+                    {
+                        fullPrecisionMSpan[i] = newM;
+                    }
+
+                    T mHat = NumOps.Divide(newM, biasCorrection1);
+                    T vHat = NumOps.Divide(newV, biasCorrection2);
+                    T denominator = NumOps.Add(NumOps.Sqrt(vHat), epsilon);
+                    T update = NumOps.Multiply(
+                        CurrentLearningRate,
+                        NumOps.Divide(mHat, denominator));
+                    updatedSpan[i] = NumOps.Subtract(parameterSpan[i], update);
+                }
+
+                if (_options.CompressBothMoments)
+                {
+                    QuantizeBlock(mBlock, blockLength, blockStart, block, _mQuantized!, _mScales!, true, absoluteValues);
+                }
+                QuantizeBlock(vBlock, blockLength, blockStart, block, _vQuantized!, _vScales!, false, absoluteValues);
+            }
+        }
+        finally
+        {
+            ArrayPool<T>.Shared.Return(mBlock, clearArray: true);
+            ArrayPool<T>.Shared.Return(vBlock, clearArray: true);
+            ArrayPool<double>.Shared.Return(absoluteValues);
+        }
+
+        return updatedParameters;
+    }
+
+    private void QuantizeBlock(
+        T[] values,
+        int count,
+        int targetOffset,
+        int block,
+        Vector<byte> quantized,
+        Vector<double> scales,
+        bool isSigned,
+        double[] absoluteValues)
+    {
+        double maxAbs = 0.0;
+        if (_options.QuantizationPercentile >= 100)
+        {
+            for (int i = 0; i < count; i++)
+            {
+                double absoluteValue = Math.Abs(NumOps.ToDouble(values[i]));
+                if (absoluteValue > maxAbs) maxAbs = absoluteValue;
+            }
         }
         else
         {
-            _mFullPrecision = m;
+            for (int i = 0; i < count; i++)
+            {
+                absoluteValues[i] = Math.Abs(NumOps.ToDouble(values[i]));
+            }
+            Array.Sort(absoluteValues, 0, count);
+            int percentileIndex = (int)((count - 1) * _options.QuantizationPercentile / 100.0);
+            maxAbs = absoluteValues[percentileIndex];
         }
-        Quantize(v, _vQuantized!, _vScales!, isSigned: false);
 
-        // Compute bias-corrected moments
-        var mHat = (Vector<T>)Engine.Divide(m, biasCorrection1);
-        var vHat = (Vector<T>)Engine.Divide(v, biasCorrection2);
+        double scale = maxAbs / (isSigned ? 127.0 : 255.0);
+        if (scale < 1e-10) scale = 1e-10;
+        scales[block] = scale;
 
-        // Compute update
-        var vHatSqrt = (Vector<T>)Engine.Sqrt(vHat);
-        var epsilonVec = Vector<T>.CreateDefault(vHatSqrt.Length, epsilon);
-        var denominator = (Vector<T>)Engine.Add(vHatSqrt, epsilonVec);
-        var update = (Vector<T>)Engine.Divide(mHat, denominator);
-        var scaledUpdate = (Vector<T>)Engine.Multiply(update, CurrentLearningRate);
+        for (int i = 0; i < count; i++)
+        {
+            double scaled = NumOps.ToDouble(values[i]) / scale;
+            int quantizedValue;
+            if (_options.UseStochasticRounding)
+            {
+                double floor = Math.Floor(scaled);
+                double fraction = scaled - floor;
+                quantizedValue = (int)(floor + (RandomHelper.ThreadSafeRandom.NextDouble() < fraction ? 1 : 0));
+            }
+            else
+            {
+                quantizedValue = (int)Math.Round(scaled);
+            }
 
-        // Apply update
-        return (Vector<T>)Engine.Subtract(parameters, scaledUpdate);
+            if (isSigned)
+            {
+                quantizedValue = MathHelper.Clamp(quantizedValue, -127, 127);
+                quantized[targetOffset + i] = (byte)(quantizedValue + 128);
+            }
+            else
+            {
+                quantizedValue = MathHelper.Clamp(quantizedValue, 0, 255);
+                quantized[targetOffset + i] = (byte)quantizedValue;
+            }
+        }
     }
 
     /// <summary>

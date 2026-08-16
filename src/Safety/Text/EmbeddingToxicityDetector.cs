@@ -36,7 +36,7 @@ namespace AiDotNet.Safety.Text;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("MetaTox: A Unified Knowledge Graph for Enhanced LLM Toxicity Detection",
+[ResearchPaper("Enhancing LLM-based Hatred and Toxicity Detection with Meta-Toxic Knowledge Graph",
     "https://arxiv.org/abs/2412.15268",
     Year = 2024,
     Authors = "Yifan Li, Zhengnan Hou, et al.")]
@@ -47,6 +47,7 @@ public class EmbeddingToxicityDetector<T> : TextSafetyModuleBase<T>
     private readonly int _embeddingDim;
 
     // Pre-built toxic concept vectors (character n-gram hash space)
+    [Buffer]
     private readonly Vector<T>[] _toxicConceptVectors;
     private readonly SafetyCategory[] _toxicCategories;
 

@@ -9,6 +9,8 @@ using AiDotNet.Onnx;
 using AiDotNet.Tensors.Engines.Autodiff;
 using AiDotNet.Tensors.LinearAlgebra;
 
+using System.Linq;
+
 namespace AiDotNet.Audio.Fingerprinting;
 
 /// <summary>
@@ -53,8 +55,42 @@ namespace AiDotNet.Audio.Fingerprinting;
     "https://doi.org/10.1109/ICASSP49357.2023.10095969",
     Year = 2023,
     Authors = "Yusong Wu, Ke Chen, Tianyu Zhang, Yuchen Hui, Taylor Berg-Kirkpatrick, Shlomo Dubnov")]
-public class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
+// The inherited [Batch, Features] input is CORRECT - CLAP takes raw audio, per EncodeAudio's own
+// contract of "[samples] or [batch, samples]". What the declared-input check saw is the log-mel front
+// end: EncodeAudio calls PreprocessAudio BEFORE folding the stack, so Layers[0] - a
+// PatchEmbeddingLayer over Swin blocks, rank 3 or 4 - receives a spectrogram image and never the
+// waveform. Both declarations describe different tensors, so the exemption is the honest fix here; an
+// override claiming a spectrogram input would advertise a shape Predict does not accept.
+[PreprocessesInput("PreprocessAudio converts the waveform to a log-mel spectrogram image before the "
+    + "audio stack runs, so Layers[0] never sees the raw samples - see EncodeAudio.")]
+[StackInputLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    BatchOptional = true)]
+public partial class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
 {
+
+    // TextEncoderLayers is yielded by AudioNeuralNetworkBase.GetExtraTrainableLayers for every audio
+    // model that owns a text tower, so this override restated the base. Removed under AIDN082.
+
+    /// <inheritdoc />
+    /// <remarks>The learned logit scale (CLIP's temperature), a single value the contrastive
+    /// loss trains alongside the towers. The hand-written count added it as a bare "+ 1" and
+    /// the vector appended _logTemperature[0]; it is a one-element tensor, so the base fold
+    /// contributes the same single scalar in the same position.</remarks>
+    protected override IEnumerable<Tensor<T>> GetExtraTrainableTensors()
+        => new[] { _logTemperature };
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Measured: <c>PredictCore</c> delegates to <c>EncodeAudio</c>, which folds the AUDIO stack
+    /// (<c>Layers</c>) and L2-normalizes - a normalization that rescales, never reshapes.
+    /// <c>CreateDefaultCLAPAudioEncoderLayers</c> ends with global average pooling then
+    /// <c>DenseLayer&lt;T&gt;(outputSize: projectionDim)</c>, wired from <c>_options.ProjectionDim</c>
+    /// (512 in the paper). Not <c>AudioHiddenDim</c>, which the Swin blocks run at, and not
+    /// <c>VocabSize</c>, which belongs to the TEXT stack in <c>TextEncoderLayers</c> - Predict never
+    /// touches that stack.
+    /// </remarks>
+    protected override int OutputFeatureWidth => _options.ProjectionDim;
+
     private readonly CLAPModelOptions _options;
     private readonly bool _useNativeMode;
     // Captured ONNX-mode constructor inputs. Preserved so CreateNewInstance
@@ -191,6 +227,7 @@ public class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
         {
             // Default both stacks from the paper-faithful LayerHelper factories.
             Layers.AddRange(LayerHelper<T>.CreateDefaultCLAPAudioEncoderLayers(
+                audioPatchSize: _options.AudioPatchSize,
                 audioHiddenDim: _options.AudioHiddenDim,
                 audioEncoderLayers: _options.AudioEncoderLayers,
                 audioEncoderHeads: _options.AudioEncoderHeads,
@@ -305,6 +342,14 @@ public class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
         foreach (var layer in Layers) hidden = layer.Forward(hidden);
         return L2Normalize(hidden);
     }
+
+    /// <summary>
+    /// Gets native audio-layer activations using the same log-mel front end as prediction.
+    /// </summary>
+    /// <param name="input">Raw audio tensor [samples] or [batch, samples].</param>
+    /// <returns>The activation produced by each named audio encoder layer.</returns>
+    public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input)
+        => base.GetNamedLayerActivations(PreprocessAudio(input));
 
     /// <summary>
     /// Encodes a tokenised text caption into a CLAP embedding vector.
@@ -540,7 +585,8 @@ public class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
                         forward: FwdCLAP, computeLoss: LossCLAP,
                         optimizer: optimizer,
                         out T fusedLoss,
-                        extraTensors: extras))
+                        extraTensors: extras,
+                        onGradients: gradients => PublishParameterGradients(gradients)))
                 {
                     LastLoss = fusedLoss;
                     return;
@@ -585,7 +631,7 @@ public class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
             var lossSum = Engine.TensorAdd<T>(halfLossA2T, halfLossT2A);
 
             // Manual gradient + optimizer step over the combined params.
-            var grads = tape.ComputeGradients(lossSum, allParams);
+            var grads = ComputeAndPublishParameterGradients(tape, lossSum, allParams);
 
             T lossValue = lossSum.Length > 0 ? lossSum[0] : NumOps.Zero;
             LastLoss = lossValue;
@@ -641,13 +687,11 @@ public class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
         var sumAxes = new[] { 0, 1 };
         var totalLog = Engine.ReduceSum(picked, sumAxes, keepDims: false);
 
-        // halfLoss = -0.5 * totalLog / batchSize, returned as a [1] tensor.
-        T totalScalar = totalLog.Length > 0 ? totalLog[0] : NumOps.Zero;
-        T halfLossT = NumOps.Multiply(
-            NumOps.Negate(NumOps.FromDouble(0.5 / batchSize)), totalScalar);
-        var result = new Tensor<T>(new[] { 1 });
-        result[0] = halfLossT;
-        return result;
+        // halfLoss = -0.5 * totalLog / batchSize. Keep the reduction result on the
+        // engine graph: reading totalLog[0] into T and wrapping it in a new Tensor
+        // disconnects the loss from every encoder parameter, yielding all-zero grads.
+        return Engine.TensorMultiplyScalar(
+            totalLog, NumOps.FromDouble(-0.5 / batchSize));
     }
 
     #endregion
@@ -687,66 +731,10 @@ public class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
         // AudioNeuralNetworkBase manages disposal; no extra state to gate.
     }
 
-    /// <inheritdoc/>
-    public override long ParameterCount =>
-        Layers.Sum(l => l.ParameterCount)
-        + TextEncoderLayers.Sum(l => l.ParameterCount)
-        + 1; // _logTemperature (learnable τ scalar)
+ // _logTemperature (learnable τ scalar)
 
-    /// <inheritdoc/>
-    /// <remarks>
-    /// CLAP holds parameters across both encoders + the temperature.
-    /// Override <see cref="NeuralNetworkBase{T}.GetParameters"/> so
-    /// optimizers / checkpointing see the full parameter vector and the
-    /// ordering matches <see cref="UpdateParameters"/> below.
-    /// </remarks>
-    public override Vector<T> GetParameters()
-    {
-        var parts = new List<T>((int)ParameterCount);
-        foreach (var layer in Layers)
-        {
-            var p = layer.GetParameters();
-            for (int i = 0; i < p.Length; i++) parts.Add(p[i]);
-        }
-        foreach (var layer in TextEncoderLayers)
-        {
-            var p = layer.GetParameters();
-            for (int i = 0; i < p.Length; i++) parts.Add(p[i]);
-        }
-        parts.Add(_logTemperature[0]);
-        var result = new Vector<T>(parts.Count);
-        for (int i = 0; i < parts.Count; i++) result[i] = parts[i];
-        return result;
-    }
-
-    /// <inheritdoc/>
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        if (!_useNativeMode)
-            throw new NotSupportedException("Cannot update parameters in ONNX inference mode.");
-
-        int idx = 0;
-        // Audio encoder layers (the inherited Layers list — the primary stream).
-        foreach (var layer in Layers)
-        {
-            int count = (int)layer.ParameterCount;
-            layer.UpdateParameters(parameters.Slice(idx, count));
-            idx += count;
-        }
-        // Text encoder layers (the secondary stream on the audio base class).
-        foreach (var layer in TextEncoderLayers)
-        {
-            int count = (int)layer.ParameterCount;
-            layer.UpdateParameters(parameters.Slice(idx, count));
-            idx += count;
-        }
-        // Learnable temperature τ (last scalar parameter).
-        if (idx < parameters.Length)
-        {
-            _logTemperature[0] = parameters[idx];
-        }
-    }
-
+    // UpdateParameters restated a fold the base now derives from generated component registration.
+    // Removed under AIDN082.
     /// <inheritdoc/>
     protected override void SerializeNetworkSpecificData(BinaryWriter writer)
     {
@@ -816,8 +804,8 @@ public class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
     /// <inheritdoc/>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() =>
         _useNativeMode
-            ? new CLAPModel<T>(Architecture, _options)
-            : new CLAPModel<T>(Architecture, _audioEncoderPath!, _textEncoderPath, _options);
+            ? new CLAPModel<T>(Architecture, new CLAPModelOptions(_options))
+            : new CLAPModel<T>(Architecture, _audioEncoderPath!, _textEncoderPath, new CLAPModelOptions(_options));
 
     /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()

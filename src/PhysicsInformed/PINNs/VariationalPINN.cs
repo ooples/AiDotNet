@@ -91,6 +91,10 @@ namespace AiDotNet.PhysicsInformed.PINNs
     [ModelComplexity(ModelComplexity.High)]
     [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     [ResearchPaper("Variational Physics-Informed Neural Networks For Solving Partial Differential Equations", "https://doi.org/10.48550/arXiv.1912.00873", Year = 2020, Authors = "Ehsan Kharazmi, Zhongqiang Zhang, George Em Karniadakis")]
+    [TensorLayout(TensorAxis.Batch, TensorAxis.Features,
+        Direction = TensorLayoutDirection.Input, BatchOptional = true)]
+    [TensorLayout(TensorAxis.Batch, TensorAxis.Features,
+        Direction = TensorLayoutDirection.Output, BatchOptional = true)]
     public class VariationalPINN<T> : NeuralNetworkBase<T>
     {
         private readonly VariationalPINNOptions _options;
@@ -495,25 +499,8 @@ namespace AiDotNet.PhysicsInformed.PINNs
             }
         }
 
-        /// <summary>
-        /// Updates the network parameters from a flattened vector.
-        /// </summary>
-        /// <param name="parameters">Parameter vector.</param>
-        public override void UpdateParameters(Vector<T> parameters)
-        {
-            int index = 0;
-            foreach (var layer in Layers)
-            {
-                int layerParameterCount = checked((int)layer.ParameterCount);
-                if (layerParameterCount > 0)
-                {
-                    Vector<T> layerParameters = parameters.GetSubVector(index, layerParameterCount);
-                    layer.UpdateParameters(layerParameters);
-                    index += layerParameterCount;
-                }
-            }
-        }
-
+    // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
+    // exactly the same enumeration, so this said nothing the base does not already say.
         /// <summary>
         /// Performs a basic supervised training step using MSE loss.
         /// </summary>

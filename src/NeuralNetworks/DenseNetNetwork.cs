@@ -63,7 +63,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Densely Connected Convolutional Networks", "https://arxiv.org/abs/1608.06993", Year = 2017, Authors = "Gao Huang, Zhuang Liu, Laurens van der Maaten, Kilian Q. Weinberger")]
-public class DenseNetNetwork<T> : NeuralNetworkBase<T>
+public class DenseNetNetwork<T> : ImageClassifierModelLayoutBase<T>
 {
     private readonly DenseNetOptions _options;
 
@@ -355,19 +355,8 @@ public class DenseNetNetwork<T> : NeuralNetworkBase<T>
         TrainWithTape(input, expectedOutput, _optimizer);
     }
 
-    /// <inheritdoc />
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        int index = 0;
-        foreach (var layer in Layers)
-        {
-            int layerParameterCount = checked((int)layer.ParameterCount);
-            var layerParameters = parameters.Slice(index, layerParameterCount);
-            layer.UpdateParameters(layerParameters);
-            index += layerParameterCount;
-        }
-    }
-
+    // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
+    // exactly the same enumeration, so this said nothing the base does not already say.
     /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {

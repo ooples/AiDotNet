@@ -46,8 +46,17 @@ namespace AiDotNet.Diffusion.VAE;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("SDXL: Improving Latent Diffusion Models for High-Resolution Image Synthesis", "https://arxiv.org/abs/2307.01952", Year = 2023, Authors = "Podell et al.")]
-public class SDXLVAEModel<T> : VAEModelBase<T>
+public partial class SDXLVAEModel<T> : VAEModelBase<T>
 {
+    /// <inheritdoc />
+    /// <remarks>Encoder layers then decoder layers -- the order the previous hand-written
+    /// GetParameters concatenated, which is the serialization order.</remarks>
+    protected override void RegisterComponents()
+    {
+        foreach (var layer in _encoderLayers) RegisterParameterComponent(layer);
+        foreach (var layer in _decoderLayers) RegisterParameterComponent(layer);
+    }
+
     private const double SDXL_LATENT_SCALE = 0.13025;
     private const int SDXL_BASE_CHANNELS = 128;
 
@@ -77,8 +86,6 @@ public class SDXLVAEModel<T> : VAEModelBase<T>
     public override double LatentScaleFactor => SDXL_LATENT_SCALE;
 
     /// <inheritdoc />
-    public override long ParameterCount => CalculateParameterCount();
-
     /// <inheritdoc />
     public override bool SupportsTiling => true;
 
@@ -120,7 +127,8 @@ public class SDXLVAEModel<T> : VAEModelBase<T>
         int channels = _baseChannels;
 
         // Input convolution
-        _inputConv = new ConvolutionalLayer<T>(
+        _inputConv = ConvolutionalLayer<T>.WithInputDepth(
+            inputDepth: _inputChannels,
             outputDepth: channels,
             kernelSize: 3, stride: 1, padding: 1,
             activationFunction: new IdentityActivation<T>());
@@ -141,7 +149,8 @@ public class SDXLVAEModel<T> : VAEModelBase<T>
             // Downsample (except last level)
             if (level < _channelMultipliers.Length - 1)
             {
-                _encoderLayers.Add(new ConvolutionalLayer<T>(
+                _encoderLayers.Add(ConvolutionalLayer<T>.WithInputDepth(
+                    inputDepth: channels,
                     outputDepth: channels,
                     kernelSize: 3, stride: 2, padding: 1,
                     activationFunction: new IdentityActivation<T>()));
@@ -150,18 +159,21 @@ public class SDXLVAEModel<T> : VAEModelBase<T>
 
         // Mean and log-var projections
         int lastChannels = _baseChannels * _channelMultipliers[^1];
-        _meanConv = new ConvolutionalLayer<T>(
+        _meanConv = ConvolutionalLayer<T>.WithInputDepth(
+            inputDepth: lastChannels,
             outputDepth: _latentChannels,
             kernelSize: 3, stride: 1, padding: 1,
             activationFunction: new IdentityActivation<T>());
 
-        _logVarConv = new ConvolutionalLayer<T>(
+        _logVarConv = ConvolutionalLayer<T>.WithInputDepth(
+            inputDepth: lastChannels,
             outputDepth: _latentChannels,
             kernelSize: 3, stride: 1, padding: 1,
             activationFunction: new IdentityActivation<T>());
 
         // Decoder: improved SDXL decoder with higher fidelity
-        _postQuantConv = new ConvolutionalLayer<T>(
+        _postQuantConv = ConvolutionalLayer<T>.WithInputDepth(
+            inputDepth: _latentChannels,
             outputDepth: lastChannels,
             kernelSize: 3, stride: 1, padding: 1,
             activationFunction: new IdentityActivation<T>());
@@ -180,14 +192,16 @@ public class SDXLVAEModel<T> : VAEModelBase<T>
 
             if (level > 0)
             {
-                _decoderLayers.Add(new DeconvolutionalLayer<T>(
+                _decoderLayers.Add(DeconvolutionalLayer<T>.WithInputDepth(
+                    inputDepth: channels,
                     outputDepth: channels,
                     kernelSize: 4, stride: 2, padding: 1,
                     activationFunction: new IdentityActivation<T>()));
             }
         }
 
-        _outputConv = new ConvolutionalLayer<T>(
+        _outputConv = ConvolutionalLayer<T>.WithInputDepth(
+            inputDepth: channels,
             outputDepth: _inputChannels,
             kernelSize: 3, stride: 1, padding: 1,
             activationFunction: new TanhActivation<T>());
@@ -251,56 +265,12 @@ public class SDXLVAEModel<T> : VAEModelBase<T>
         });
     }
 
-    private int CalculateParameterCount()
-    {
-        long count = 0;
-
-        if (_inputConv != null) count += _inputConv.GetParameters().Length;
-        foreach (var layer in _encoderLayers) count += layer.GetParameters().Length;
-        if (_meanConv != null) count += _meanConv.GetParameters().Length;
-        if (_logVarConv != null) count += _logVarConv.GetParameters().Length;
-        if (_postQuantConv != null) count += _postQuantConv.GetParameters().Length;
-        foreach (var layer in _decoderLayers) count += layer.GetParameters().Length;
-        if (_outputConv != null) count += _outputConv.GetParameters().Length;
-
-        return (int)Math.Min(count, int.MaxValue);
-    }
-
-    /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        var parameters = new List<T>();
-
-        AddLayerParams(parameters, _inputConv);
-        foreach (var layer in _encoderLayers) AddLayerParams(parameters, layer);
-        AddLayerParams(parameters, _meanConv);
-        AddLayerParams(parameters, _logVarConv);
-        AddLayerParams(parameters, _postQuantConv);
-        foreach (var layer in _decoderLayers) AddLayerParams(parameters, layer);
-        AddLayerParams(parameters, _outputConv);
-
-        return new Vector<T>(parameters.ToArray());
-    }
 
     private static void AddLayerParams(List<T> parameters, ILayer<T>? layer)
     {
         if (layer == null) return;
         var p = layer.GetParameters();
         for (int i = 0; i < p.Length; i++) parameters.Add(p[i]);
-    }
-
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int index = 0;
-
-        SetLayerParams(_inputConv, parameters, ref index);
-        foreach (var layer in _encoderLayers) SetLayerParams(layer, parameters, ref index);
-        SetLayerParams(_meanConv, parameters, ref index);
-        SetLayerParams(_logVarConv, parameters, ref index);
-        SetLayerParams(_postQuantConv, parameters, ref index);
-        foreach (var layer in _decoderLayers) SetLayerParams(layer, parameters, ref index);
-        SetLayerParams(_outputConv, parameters, ref index);
     }
 
     private static void SetLayerParams(ILayer<T>? layer, Vector<T> parameters, ref int index)

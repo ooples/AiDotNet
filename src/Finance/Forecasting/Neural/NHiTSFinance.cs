@@ -65,7 +65,7 @@ namespace AiDotNet.Finance.Forecasting.Neural;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("N-HiTS: Neural Hierarchical Interpolation for Time Series Forecasting", "https://arxiv.org/abs/2201.12886", Year = 2023, Authors = "Cristian Challu, Kin G. Olivares, Boris N. Oreshkin, Federico Garza Ramirez, Max Mergenthaler Canseco, Artur Dubrawski")]
-public class NHiTSFinance<T> : ForecastingModelBase<T>
+public partial class NHiTSFinance<T> : ForecastingModelBase<T>
 {
     #region Execution Mode
 
@@ -221,7 +221,7 @@ public class NHiTSFinance<T> : ForecastingModelBase<T>
         OnnxSession = new InferenceSession(onnxModelPath);
         OnnxModelPath = onnxModelPath;
 
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? CreateDefaultOptimizer(options);
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
 
         _lookbackWindow = options.LookbackWindow;
@@ -268,7 +268,7 @@ public class NHiTSFinance<T> : ForecastingModelBase<T>
         OnnxSession = null;
         OnnxModelPath = null;
 
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? CreateDefaultOptimizer(options);
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
 
         _lookbackWindow = options.LookbackWindow;
@@ -286,6 +286,17 @@ public class NHiTSFinance<T> : ForecastingModelBase<T>
     }
 
     #endregion
+
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreateDefaultOptimizer(
+        NHiTSOptions<T> options)
+    {
+        return new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = options.LearningRate
+            });
+    }
 
     #region Initialization
 
@@ -453,6 +464,9 @@ public class NHiTSFinance<T> : ForecastingModelBase<T>
         base.Train(processedInput, processedTarget);
     }
 
+    /// <inheritdoc />
+    protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? TrainingOptimizer => _optimizer;
+
     /// <summary>
     /// Training-mode forward: replays the N-HiTS pipeline (pool →
     /// block → coefficients → interpolate → residual subtract/forecast
@@ -616,16 +630,8 @@ public class NHiTSFinance<T> : ForecastingModelBase<T>
         return Engine.TensorMatMul(coeffsMat, wMat);
     }
 
-    /// <inheritdoc/>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the NHiTSFinance model, UpdateParameters updates internal parameters or state. This keeps the NHiTSFinance architecture aligned with the latest values.
-    /// </para>
-    /// </remarks>
-    public override void UpdateParameters(Vector<T> gradients)
-    {
-    }
-
+    // UpdateParameters was an empty override, silently dropping every restore. The base
+    // distributes the vector over the declared enumeration.
     /// <inheritdoc/>
     /// <remarks>
     /// <para>
@@ -661,21 +667,7 @@ public class NHiTSFinance<T> : ForecastingModelBase<T>
     /// </remarks>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
-        var options = new NHiTSOptions<T>
-        {
-            LookbackWindow = _lookbackWindow,
-            ForecastHorizon = _forecastHorizon,
-            NumStacks = _numStacks,
-            NumBlocksPerStack = _numBlocksPerStack,
-            HiddenLayerSize = _hiddenSize,
-            NumHiddenLayers = _numHiddenLayers,
-            PoolingKernelSizes = _poolingKernelSizes,
-            PoolingModes = _poolingModes,
-            InterpolationModes = _interpolationModes,
-            DropoutRate = _dropout
-        };
-
-        return new NHiTSFinance<T>(Architecture, options);
+        return new NHiTSFinance<T>(Architecture, new NHiTSOptions<T>(_options));
     }
 
     /// <summary>

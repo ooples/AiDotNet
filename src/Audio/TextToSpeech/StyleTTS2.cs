@@ -50,6 +50,17 @@ namespace AiDotNet.Audio.TextToSpeech;
 [ResearchPaper("StyleTTS 2: Towards Human-Level Text-to-Speech through Style Diffusion and Adversarial Training with Large Speech Language Models", "https://arxiv.org/abs/2306.07691", Year = 2023, Authors = "Yinghao Aaron Li, Cong Han, Vinay S. Raber, Nima Mesgarani")]
 public class StyleTTS2<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// Measured from the output construction: <c>PredictCore</c> folds the whole <c>Layers</c> chain and
+    /// <c>PostprocessOutput</c> is the identity, so the width is the final layer's output dimension.
+    /// <c>LayerHelper.CreateDefaultStyleTTS2Layers</c> ends its decoder with
+    /// <c>new DenseLayer&lt;T&gt;(numMels, identity)</c>, and <c>InitializeLayers</c> passes
+    /// <c>numMels: _options.NumMels</c>. <c>StyleDim</c> is the style predictor's width mid-chain and
+    /// <c>ProsodyDim</c> the decoder's hidden width; neither reaches the output.
+    /// </remarks>
+    protected override int OutputFeatureWidth => _options.NumMels;
+
     #region Fields
 
     private readonly StyleTTS2Options _options;
@@ -213,7 +224,7 @@ public class StyleTTS2<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expected);
+            TrainWithTape(input, expected, _optimizer);
         }
         finally
         {
@@ -221,12 +232,11 @@ public class StyleTTS2<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
         }
     }
 
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        if (!_useNativeMode) throw new NotSupportedException("ONNX mode.");
-        int idx = 0; foreach (var l in Layers) { int c = (int)l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; }
-    }
-
+    /// <inheritdoc />
+    /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
+    /// write on every parameter surface, so the guard is stated once here instead of being
+    /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
+    protected override bool SupportsParameterMutation => _useNativeMode;
     protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio)
     {
         if (MelSpec is not null) return MelSpec.Forward(rawAudio);

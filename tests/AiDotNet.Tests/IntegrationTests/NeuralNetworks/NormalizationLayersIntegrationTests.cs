@@ -126,8 +126,13 @@ public class NormalizationLayersIntegrationTests
         // Act
         int paramCount = (int)layer.ParameterCount;
 
-        // Assert - gamma and beta for each feature
-        Assert.Equal(numFeatures * 2, paramCount);
+        // Assert - one canonical checkpoint surface contains learned affine state plus persistent
+        // running statistics, while optimizer discovery remains trainable-only.
+        Assert.Equal(numFeatures * 4, paramCount);
+        Assert.Equal(numFeatures * 2,
+            layer.GetTrainableParameters().Sum(tensor => tensor.Length));
+        Assert.Equal(numFeatures * 2,
+            layer.GetRegisteredBuffers().Sum(buffer => buffer.Tensor.Length));
     }
 
     #endregion

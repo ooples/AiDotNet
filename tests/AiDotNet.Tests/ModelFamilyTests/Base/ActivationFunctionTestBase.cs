@@ -7,14 +7,22 @@ using AiDotNet.Tensors.Helpers;
 namespace AiDotNet.Tests.ModelFamilyTests.Base;
 
 /// <summary>
-/// Base test class for IActivationFunction&lt;double&gt; implementations.
+/// Base test class for IActivationFunction&lt;T&gt; implementations.
 /// Tests mathematical invariants that every activation function must satisfy:
 /// finite output, derivative correctness (numerical gradient check),
 /// monotonicity properties, and edge case handling.
 /// </summary>
-public abstract class ActivationFunctionTestBase
+public abstract class ActivationFunctionTestBase<T>
 {
-    protected abstract IActivationFunction<double> CreateActivation();
+    protected static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+
+    protected static T ToT(double value) => NumOps.FromDouble(value);
+
+    protected static double ToD(T value) => Convert.ToDouble(value);
+
+    protected abstract IActivationFunction<T> CreateActivation();
+
+    protected virtual double Tolerance => typeof(T) == typeof(float) ? 1e-6 : 1e-10;
 
     /// <summary>
     /// Whether the activation is monotonically non-decreasing.
@@ -63,7 +71,7 @@ public abstract class ActivationFunctionTestBase
     /// Creates an activation and sets it to inference mode if it's stochastic.
     /// This ensures deterministic behavior for gradient checks and consistency tests.
     /// </summary>
-    protected IActivationFunction<double> CreateTestActivation()
+    protected IActivationFunction<T> CreateTestActivation()
     {
         var fn = CreateActivation();
         if (IsStochastic)
@@ -90,7 +98,7 @@ public abstract class ActivationFunctionTestBase
     public void Activate_ShouldProduceFiniteOutput(double input)
     {
         var fn = CreateActivation();
-        double output = fn.Activate(input);
+        double output = ToD(fn.Activate(ToT(input)));
 
         Assert.False(double.IsNaN(output), $"Activate({input}) returned NaN.");
         Assert.False(double.IsInfinity(output), $"Activate({input}) returned Infinity.");
@@ -109,7 +117,7 @@ public abstract class ActivationFunctionTestBase
     public void Derivative_ShouldProduceFiniteOutput(double input)
     {
         var fn = CreateActivation();
-        double deriv = fn.Derivative(input);
+        double deriv = ToD(fn.Derivative(ToT(input)));
 
         Assert.False(double.IsNaN(deriv), $"Derivative({input}) returned NaN.");
         Assert.False(double.IsInfinity(deriv), $"Derivative({input}) returned Infinity.");
@@ -130,10 +138,17 @@ public abstract class ActivationFunctionTestBase
     public void Derivative_ShouldMatchNumericalGradient(double input)
     {
         var fn = CreateTestActivation();
-        double epsilon = 1e-5;
+        double epsilon = typeof(T) == typeof(float) ? 1e-3 : 1e-5;
+        T center = ToT(input);
+        T plus = ToT(input + epsilon);
+        T minus = ToT(input - epsilon);
+        double plusValue = ToD(plus);
+        double minusValue = ToD(minus);
 
-        double analyticalDeriv = fn.Derivative(input);
-        double numericalDeriv = (fn.Activate(input + epsilon) - fn.Activate(input - epsilon)) / (2 * epsilon);
+        double analyticalDeriv = ToD(fn.Derivative(center));
+        double numericalDeriv =
+            (ToD(fn.Activate(plus)) - ToD(fn.Activate(minus))) /
+            (plusValue - minusValue);
 
         double absMax = Math.Max(Math.Abs(analyticalDeriv), Math.Abs(numericalDeriv));
         if (absMax < 1e-7) return; // Both near zero, skip
@@ -156,8 +171,8 @@ public abstract class ActivationFunctionTestBase
         if (!ZeroMapsToZero) return;
 
         var fn = CreateActivation();
-        double output = fn.Activate(0.0);
-        Assert.True(Math.Abs(output) < 1e-10,
+        double output = ToD(fn.Activate(ToT(0.0)));
+        Assert.True(Math.Abs(output) < Tolerance,
             $"Expected Activate(0) ≈ 0 but got {output}.");
     }
 
@@ -173,11 +188,11 @@ public abstract class ActivationFunctionTestBase
         if (!IsMonotonic) return;
 
         var fn = CreateTestActivation();
-        double prev = fn.Activate(-10.0);
+        double prev = ToD(fn.Activate(ToT(-10.0)));
         for (double x = -9.0; x <= 10.0; x += 0.5)
         {
-            double curr = fn.Activate(x);
-            Assert.True(curr >= prev - 1e-10,
+            double curr = ToD(fn.Activate(ToT(x)));
+            Assert.True(curr >= prev - Tolerance,
                 $"Monotonicity violated: f({x - 0.5})={prev} > f({x})={curr}.");
             prev = curr;
         }
@@ -198,7 +213,7 @@ public abstract class ActivationFunctionTestBase
         double margin = 0.1; // small margin for numerical precision
         for (double x = -20.0; x <= 20.0; x += 0.5)
         {
-            double y = fn.Activate(x);
+            double y = ToD(fn.Activate(ToT(x)));
             Assert.True(y >= BoundLower - margin && y <= BoundUpper + margin,
                 $"Bounded activation produced out-of-range value: f({x})={y}, " +
                 $"expected [{BoundLower}, {BoundUpper}].");
@@ -217,7 +232,7 @@ public abstract class ActivationFunctionTestBase
     public void Activate_LargeInput_ShouldBeStable(double input)
     {
         var fn = CreateActivation();
-        double output = fn.Activate(input);
+        double output = ToD(fn.Activate(ToT(input)));
 
         Assert.False(double.IsNaN(output), $"Activate({input}) returned NaN — overflow.");
         Assert.False(double.IsInfinity(output), $"Activate({input}) returned Infinity.");
@@ -233,18 +248,19 @@ public abstract class ActivationFunctionTestBase
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var fn = CreateTestActivation();
-        var input = new Tensor<double>([5]);
+        var input = new Tensor<T>([5]);
         var rng = new Random(42);
         for (int i = 0; i < 5; i++)
-            input[i] = rng.NextDouble() * 4.0 - 2.0; // [-2, 2]
+            input[i] = ToT(rng.NextDouble() * 4.0 - 2.0); // [-2, 2]
 
         var tensorOutput = fn.Activate(input);
 
         for (int i = 0; i < 5; i++)
         {
-            double scalarOutput = fn.Activate(input[i]);
-            Assert.True(Math.Abs(tensorOutput[i] - scalarOutput) < 1e-10,
-                $"Tensor Activate[{i}]={tensorOutput[i]} != scalar Activate({input[i]})={scalarOutput}.");
+            double scalarOutput = ToD(fn.Activate(input[i]));
+            double tensorValue = ToD(tensorOutput[i]);
+            Assert.True(Math.Abs(tensorValue - scalarOutput) < Tolerance,
+                $"Tensor Activate[{i}]={tensorValue} != scalar Activate({ToD(input[i])})={scalarOutput}.");
         }
     }
 
@@ -263,9 +279,12 @@ public abstract class ActivationFunctionTestBase
         var fn = CreateActivation();
         for (double x = -5.0; x <= 5.0; x += 0.25)
         {
-            double deriv = fn.Derivative(x);
-            Assert.True(deriv >= -1e-10,
+            double deriv = ToD(fn.Derivative(ToT(x)));
+            Assert.True(deriv >= -Tolerance,
                 $"Monotonic activation has negative derivative: f'({x})={deriv}.");
         }
     }
 }
+
+/// <summary>Default-precision alias for existing hand-written fixtures.</summary>
+public abstract class ActivationFunctionTestBase : ActivationFunctionTestBase<double> { }

@@ -1,10 +1,12 @@
-﻿using System.IO;
+using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.LossFunctions;
+using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Optimizers;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Video.Options;
 using Microsoft.ML.OnnxRuntime;
@@ -61,6 +63,10 @@ namespace AiDotNet.Video.Segmentation;
     "https://arxiv.org/abs/2207.07115",
     Year = 2022,
     Authors = "Ho Kei Cheng, Alexander G. Schwing")]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Frames, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Input, BatchOptional = true)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Frames, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Output, BatchOptional = true)]
 public class XMem<T> : NeuralNetworkBase<T>
 {
     private readonly XMemOptions _options;
@@ -94,8 +100,11 @@ public class XMem<T> : NeuralNetworkBase<T>
     private readonly int _longTermMemorySize;
 
     // Memory banks (three-tier system)
+    [Scratch]
     private readonly List<Tensor<T>> _sensoryMemory;
+    [Scratch]
     private readonly List<Tensor<T>> _workingMemory;
+    [Scratch]
     private readonly List<Tensor<T>> _longTermMemory;
 
     #endregion
@@ -156,7 +165,17 @@ public class XMem<T> : NeuralNetworkBase<T>
         _longTermMemory = [];
 
         _lossFunction = lossFunction ?? new BinaryCrossEntropyLoss<T>();
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        // Cheng and Schwing train XMem with AdamW at 1e-5 and weight decay 0.05.
+        // Keep the optimizer injectable, but make the native default reproduce those
+        // settings instead of silently using the framework's generic Adam defaults.
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate,
+                WeightDecay = _options.WeightDecay,
+                UseAdaptiveLearningRate = false,
+            });
 
         InitializeLayers();
     }
@@ -338,12 +357,92 @@ public class XMem<T> : NeuralNetworkBase<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expectedOutput);
+            TrainWithTape(input, expectedOutput, _optimizer);
         }
         finally
         {
             SetTrainingMode(false);
         }
+    }
+
+    /// <summary>
+    /// Routes training through XMem's grouped encoder, memory-read, and decoder graph.
+    /// </summary>
+    /// <remarks>
+    /// XMem's layer list contains parallel memory projections, so the base class's flat
+    /// sequential walk is not a valid XMem forward pass. Keeping these operations on the
+    /// tensor engine also preserves the autodiff graph through every trainable layer group.
+    /// </remarks>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input)
+    {
+        if (!_useNativeMode)
+            throw new InvalidOperationException("Training is not supported in ONNX mode.");
+
+        EnsureLayerRandomSeedsWired();
+
+        bool hasBatch = input.Rank == 4;
+        var frame = hasBatch ? input : AddBatchDimension(input);
+        var mask = SegmentWithMemory(frame);
+        return hasBatch ? mask : RemoveBatchDimension(mask);
+    }
+
+    /// <inheritdoc/>
+    public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input)
+    {
+        if (!_useNativeMode)
+        {
+            return new Dictionary<string, Tensor<T>>
+            {
+                ["Output"] = PredictOnnx(input).Clone(),
+            };
+        }
+
+        bool hasBatch = input.Rank == 4;
+        var frame = hasBatch ? input : AddBatchDimension(input);
+        var activations = new Dictionary<string, Tensor<T>>();
+
+        void Record(int layerIndex, Tensor<T> value) =>
+            activations[$"Layer_{layerIndex}_{Layers[layerIndex].GetType().Name}"] = value.Clone();
+
+        var queryFeatures = frame;
+        for (int i = 0; i < 4 && i < Layers.Count; i++)
+        {
+            queryFeatures = Layers[i].Forward(queryFeatures);
+            Record(i, queryFeatures);
+        }
+
+        Tensor<T> RunMemoryBranch(List<Tensor<T>> memory, int startLayer, int endLayer)
+        {
+            var branch = queryFeatures;
+            for (int i = startLayer; i < endLayer && i < Layers.Count; i++)
+            {
+                branch = Layers[i].Forward(branch);
+                Record(i, branch);
+            }
+
+            return memory.Count == 0
+                ? branch
+                : Engine.TensorAdd(branch, QueryMemory(memory, branch._shape));
+        }
+
+        var sensory = RunMemoryBranch(_sensoryMemory, 4, 6);
+        var working = RunMemoryBranch(_workingMemory, 6, 8);
+        var longTerm = RunMemoryBranch(_longTermMemory, 8, 10);
+
+        var current = ConcatenateChannels(ConcatenateChannels(sensory, working), longTerm);
+        if (Layers.Count > 10)
+        {
+            current = Layers[10].Forward(current);
+            Record(10, current);
+        }
+
+        for (int i = 11; i < Layers.Count; i++)
+        {
+            current = Layers[i].Forward(current);
+            Record(i, current);
+        }
+
+        return activations;
     }
 
     #endregion
@@ -367,9 +466,13 @@ public class XMem<T> : NeuralNetworkBase<T>
         if (_useNativeMode)
         {
             var queryFeatures = EncodeFrame(frame);
-            var sensoryResponse = QueryMemory(_sensoryMemory, queryFeatures._shape);
-            var workingResponse = QueryMemory(_workingMemory, [queryFeatures.Shape[0], _numFeatures / 2, queryFeatures.Shape[2], queryFeatures.Shape[3]]);
-            var longTermResponse = QueryMemory(_longTermMemory, [queryFeatures.Shape[0], _numFeatures / 4, queryFeatures.Shape[2], queryFeatures.Shape[3]]);
+            // The paper decodes a memory readout together with query-encoder skip features.
+            // In the compact native implementation each memory branch projects the current
+            // query and adds its matching memory readout. This keeps an empty-memory forward
+            // input-dependent and gives training a connected graph through all three stores.
+            var sensoryResponse = ReadMemoryBranch(queryFeatures, _sensoryMemory, 4, 6);
+            var workingResponse = ReadMemoryBranch(queryFeatures, _workingMemory, 6, 8);
+            var longTermResponse = ReadMemoryBranch(queryFeatures, _longTermMemory, 8, 10);
 
             var fused = FuseMemoryResponses(sensoryResponse, workingResponse, longTermResponse);
             return DecodeMask(fused);
@@ -378,6 +481,25 @@ public class XMem<T> : NeuralNetworkBase<T>
         {
             return PredictOnnx(frame);
         }
+    }
+
+    private Tensor<T> ReadMemoryBranch(
+        Tensor<T> queryFeatures,
+        List<Tensor<T>> memory,
+        int startLayer,
+        int endLayer)
+    {
+        var projectedQuery = queryFeatures;
+        for (int i = startLayer; i < endLayer && i < Layers.Count; i++)
+        {
+            projectedQuery = Layers[i].Forward(projectedQuery);
+        }
+
+        if (memory.Count == 0)
+            return projectedQuery;
+
+        var memoryReadout = QueryMemory(memory, projectedQuery._shape);
+        return Engine.TensorAdd(projectedQuery, memoryReadout);
     }
 
     private void UpdateMemoryHierarchy(Tensor<T> frame, Tensor<T> mask, int frameIndex)
@@ -498,33 +620,39 @@ public class XMem<T> : NeuralNetworkBase<T>
         var concat = ConcatenateChannels(sensory, working);
         concat = ConcatenateChannels(concat, longTerm);
 
-        // Use memory fusion layer (index 12)
-        if (Layers.Count > 12)
+        // Encoder: 0-3; memory branches: 4-9; memory fusion: 10.
+        if (Layers.Count > 10)
         {
-            return Layers[12].Forward(concat);
+            return Layers[10].Forward(concat);
         }
 
         return concat;
     }
 
+    /// <summary>
+    /// Runs the decoder over the fused readout to produce the mask.
+    /// </summary>
+    /// <remarks>
+    /// The decoder stack built by CreateDefaultXMemLayers ALREADY carries its own UpsamplingLayer(2)
+    /// between convolution stages — four of them, which is exactly the stride-16 to full-resolution
+    /// climb the paper describes ("iteratively upsamples by 2x at a time"), ending in a 1-channel
+    /// sigmoid mask head. This method additionally called Upsample2x once per layer on top of that, so
+    /// the mask was upsampled twice over and a 32x32 clip decoded to 2048x2048. Let the layers do the
+    /// upsampling they were built to do; the loop below only tops the mask up if a shallower decoder
+    /// leaves it short of the frame.
+    /// </remarks>
     private Tensor<T> DecodeMask(Tensor<T> features)
     {
         var decoded = features;
-        for (int i = 13; i < Layers.Count; i++)
+        // Decoder begins at 11. UpsamplingLayer instances in the layer list perform
+        // the four 2x steps from stride 16 back to input resolution.
+        for (int i = 11; i < Layers.Count; i++)
         {
-            if (i < Layers.Count - 1)
-            {
-                decoded = Upsample2x(decoded);
-            }
             decoded = Layers[i].Forward(decoded);
         }
 
-        while (decoded.Shape[2] < _inputHeight || decoded.Shape[3] < _inputWidth)
-            decoded = Upsample2x(decoded);
-
         return decoded;
     }
-
     private Tensor<T> ConcatenateChannels(Tensor<T> a, Tensor<T> b)
     {
         return Engine.TensorConcatenate([a, b], axis: 1);
@@ -570,43 +698,11 @@ public class XMem<T> : NeuralNetworkBase<T>
         return upsampled;
     }
 
-    private Tensor<T> Upsample2x(Tensor<T> input)
-    {
-        int batchSize = input.Shape[0];
-        int channels = input.Shape[1];
-        int height = input.Shape[2];
-        int width = input.Shape[3];
-
-        var output = new Tensor<T>([batchSize, channels, height * 2, width * 2]);
-
-        for (int b = 0; b < batchSize; b++)
-            for (int c = 0; c < channels; c++)
-                for (int h = 0; h < height; h++)
-                    for (int w = 0; w < width; w++)
-                    {
-                        T val = input[b, c, h, w];
-                        output[b, c, h * 2, w * 2] = val;
-                        output[b, c, h * 2, w * 2 + 1] = val;
-                        output[b, c, h * 2 + 1, w * 2] = val;
-                        output[b, c, h * 2 + 1, w * 2 + 1] = val;
-                    }
-
-        return output;
-    }
-
     private Tensor<T> AddBatchDimension(Tensor<T> tensor)
-    {
-        var result = new Tensor<T>([1, tensor.Shape[0], tensor.Shape[1], tensor.Shape[2]]);
-        tensor.Data.Span.CopyTo(result.Data.Span);
-        return result;
-    }
+        => Engine.Reshape(tensor, [1, tensor.Shape[0], tensor.Shape[1], tensor.Shape[2]]);
 
     private Tensor<T> RemoveBatchDimension(Tensor<T> tensor)
-    {
-        var result = new Tensor<T>([tensor.Shape[1], tensor.Shape[2], tensor.Shape[3]]);
-        tensor.Data.Span.Slice(0, result.Data.Length).CopyTo(result.Data.Span);
-        return result;
-    }
+        => Engine.Reshape(tensor, [tensor.Shape[1], tensor.Shape[2], tensor.Shape[3]]);
 
     #endregion
 
@@ -631,28 +727,47 @@ public class XMem<T> : NeuralNetworkBase<T>
                 inputHeight: _inputHeight,
                 inputWidth: _inputWidth,
                 numFeatures: _numFeatures));
+
+            PinMemoryFusionInputDepth();
         }
+    }
+
+    /// <summary>
+    /// Pins the memory-fusion layer's input depth to the width of the concatenated memory readout.
+    /// </summary>
+    /// <remarks>
+    /// ConvolutionalLayer resolves its input depth lazily from the first tensor that reaches it, and
+    /// this model does NOT use its layers in list order — the encoder, the three memory branches, the
+    /// fusion layer and the decoder are wired by SegmentWithMemory. So the fusion layer was pinned by
+    /// a sequential shape walk to its list predecessor's width and then rejected the real readout with
+    /// "Expected input depth 128, but got 448". 448 is sensory + working + long-term, exactly the
+    /// total the layer factory computes for this layer and then never applies, since there is no
+    /// constructor overload that takes an input depth. Resolve it up front instead.
+    /// </remarks>
+    private void PinMemoryFusionInputDepth()
+    {
+        const int MemoryFusionLayerIndex = 10;
+        if (Layers.Count <= MemoryFusionLayerIndex) return;
+        if (Layers[MemoryFusionLayerIndex] is not LayerBase<T> fusion) return;
+
+        int fusedChannels = _numFeatures + (_numFeatures / 2) + (_numFeatures / 4);
+
+        // The encoder is four stride-2 convolutions, so the readout is the frame reduced by 16.
+        int featureHeight = Math.Max(1, _inputHeight / 16);
+        int featureWidth = Math.Max(1, _inputWidth / 16);
+
+        fusion.ResolveShapesOnly(new[] { fusedChannels, featureHeight, featureWidth });
     }
 
     #endregion
 
     #region Serialization
 
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        if (!_useNativeMode)
-            throw new InvalidOperationException("Parameter updates are not supported in ONNX mode.");
-
-        int index = 0;
-        foreach (var layer in Layers)
-        {
-            int layerParameterCount = checked((int)layer.ParameterCount);
-            var layerParameters = parameters.Slice(index, layerParameterCount);
-            layer.UpdateParameters(layerParameters);
-            index += layerParameterCount;
-        }
-    }
-
+    /// <inheritdoc />
+    /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
+    /// write on every parameter surface, so the guard is stated once here instead of being
+    /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
+    protected override bool SupportsParameterMutation => _useNativeMode;
     public override ModelMetadata<T> GetModelMetadata()
     {
         var additionalInfo = new Dictionary<string, object>
@@ -705,14 +820,27 @@ public class XMem<T> : NeuralNetworkBase<T>
 
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
+        var copiedOptions = new XMemOptions(_options);
+        if (!_useNativeMode && _onnxModelPath is { } modelPath)
+        {
+            return new XMem<T>(
+                Architecture,
+                modelPath,
+                _sensoryMemorySize,
+                _workingMemorySize,
+                _longTermMemorySize,
+                copiedOptions);
+        }
+
         return new XMem<T>(
             Architecture,
-            _optimizer,
+            optimizer: null,
             _lossFunction,
             _numFeatures,
             _sensoryMemorySize,
             _workingMemorySize,
-            _longTermMemorySize);
+            _longTermMemorySize,
+            copiedOptions);
     }
 
     #endregion

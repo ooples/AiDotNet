@@ -48,6 +48,18 @@ namespace AiDotNet.Audio.TextToSpeech;
 [ResearchPaper("CosyVoice 2: Scalable Streaming Speech Synthesis with Large Language Models", "https://arxiv.org/abs/2412.10117", Year = 2024, Authors = "Zhihao Du, Yuxuan Wang, Qian Chen, Xian Shi, Xiang Lv, Tianyu Zhao, Zhifu Gao, Yexin Yang, Changfeng Gao, Hui Wang, Fan Yu, Huadai Liu, Zhengyan Sheng, Yue Gu, Chong Deng, Wen Wang, Shiliang Zhang, Zhijie Yan, Jinren Zhou")]
 public class CosyVoice2<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// Measured from the output construction: <c>PredictCore</c> folds the whole <c>Layers</c> chain and
+    /// <c>PostprocessOutput</c> is the identity, so the width is the final layer's output dimension.
+    /// <c>LayerHelper.CreateDefaultCosyVoice2Layers</c> ends with the mel output projection
+    /// <c>new DenseLayer&lt;T&gt;(numMels, null)</c>, and <c>InitializeLayers</c> passes
+    /// <c>numMels: _options.NumMels</c>. This is a TTS model, so it emits a mel frame, not a
+    /// vocabulary - <c>TextEncoderDim</c>, <c>DecoderDim</c> and <c>SpeakerEmbeddingDim</c> are all
+    /// interior widths.
+    /// </remarks>
+    protected override int OutputFeatureWidth => _options.NumMels;
+
     #region Fields
 
     private readonly CosyVoice2Options _options;
@@ -210,7 +222,7 @@ public class CosyVoice2<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expected);
+            TrainWithTape(input, expected, _optimizer);
         }
         finally
         {
@@ -218,12 +230,11 @@ public class CosyVoice2<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
         }
     }
 
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        if (!_useNativeMode) throw new NotSupportedException("ONNX mode.");
-        int idx = 0; foreach (var l in Layers) { int c = (int)l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; }
-    }
-
+    /// <inheritdoc />
+    /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
+    /// write on every parameter surface, so the guard is stated once here instead of being
+    /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
+    protected override bool SupportsParameterMutation => _useNativeMode;
     protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio)
     {
         if (MelSpec is not null) return MelSpec.Forward(rawAudio);

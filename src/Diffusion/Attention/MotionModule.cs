@@ -1,4 +1,5 @@
-using AiDotNet.ActivationFunctions;
+﻿using AiDotNet.ActivationFunctions;
+using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks.Attention;
 using AiDotNet.NeuralNetworks.Layers;
@@ -29,7 +30,11 @@ namespace AiDotNet.Diffusion.Attention;
 /// temporal parameters to be trained without disrupting the spatial generation quality.
 /// </para>
 /// </remarks>
-public class MotionModule<T> : LayerBase<T>
+// Shape-preserving at rank 3 [Batch, Time, Features]; only that rank was probed, so only it is declared.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
+[AutoParameters]
+public partial class MotionModule<T> : LayerBase<T>, IShapeContract
 {
     private readonly int _channels;
     private readonly int _numHeads;
@@ -121,7 +126,7 @@ public class MotionModule<T> : LayerBase<T>
     /// <summary>
     /// Applies the motion module: temporal attention + FFN with residual connections.
     /// </summary>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // #1668: skip the backward-activation cache in inference (denoise-loop arena safety).
         _lastInput = ShouldCacheForBackward ? input : null;
@@ -153,48 +158,6 @@ public class MotionModule<T> : LayerBase<T>
         _ffnOut.UpdateParameters(learningRate);
         _norm1.UpdateParameters(learningRate);
         _norm2.UpdateParameters(learningRate);
-    }
-
-    /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        var parts = new[]
-        {
-            _temporalAttention.GetParameters(),
-            _ffnIn.GetParameters(),
-            _ffnOut.GetParameters(),
-            _norm1.GetParameters(),
-            _norm2.GetParameters()
-        };
-
-        int total = 0;
-        foreach (var p in parts) total += p.Length;
-
-        var combined = new Vector<T>(total);
-        int offset = 0;
-        foreach (var p in parts)
-        {
-            for (int i = 0; i < p.Length; i++)
-                combined[offset + i] = p[i];
-            offset += p.Length;
-        }
-        return combined;
-    }
-
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        // GetParameters() concatenates sublayer params; allocates once for validation.
-        int expected = GetParameters().Length;
-        if (parameters.Length != expected)
-            throw new ArgumentException($"Expected {expected} parameters, got {parameters.Length}.", nameof(parameters));
-
-        int offset = 0;
-        SetSubParams(_temporalAttention, parameters, ref offset);
-        SetSubParams(_ffnIn, parameters, ref offset);
-        SetSubParams(_ffnOut, parameters, ref offset);
-        SetSubParams(_norm1, parameters, ref offset);
-        SetSubParams(_norm2, parameters, ref offset);
     }
 
     private static void SetSubParams(LayerBase<T> layer, Vector<T> parameters, ref int offset)

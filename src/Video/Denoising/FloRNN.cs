@@ -46,10 +46,10 @@ namespace AiDotNet.Video.Denoising;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("Flowing Recurrent Network for Video Denoising",
-    "https://arxiv.org/abs/2111.05507",
+[ResearchPaper("Unidirectional Video Denoising by Mimicking Backward Recurrent Modules with Look-ahead Forward Ones",
+    "https://arxiv.org/abs/2204.05532",
     Year = 2022,
-    Authors = "Jiahao Li, Bin Chen, Dawei Leng, Yuhui Quan")]
+    Authors = "Junyi Li, Xiaohe Wu, Zhenxing Niu, Wangmeng Zuo")]
 public class FloRNN<T> : VideoDenoisingBase<T>
 {
     private readonly FloRNNOptions _options;
@@ -88,7 +88,14 @@ public class FloRNN<T> : VideoDenoisingBase<T>
     {
         _options = options ?? new FloRNNOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate,
+                EnableGradientClipping = true,
+                MaxGradientNorm = 1.0
+            });
         InitializeLayers();
     }
 
@@ -133,7 +140,10 @@ public class FloRNN<T> : VideoDenoisingBase<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expected);
+            if (_optimizer is not null)
+                TrainWithTape(input, expected, _optimizer);
+            else
+                TrainWithTape(input, expected, _optimizer);
         }
         finally
         {
@@ -141,21 +151,8 @@ public class FloRNN<T> : VideoDenoisingBase<T>
         }
     }
 
-    /// <inheritdoc/>
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        int offset = 0;
-        foreach (var layer in Layers)
-        {
-            var p = layer.GetParameters();
-            if (offset + p.Length > parameters.Length) break;
-            var sub = new Vector<T>(p.Length);
-            for (int i = 0; i < p.Length; i++) sub[i] = parameters[offset + i];
-            layer.SetParameters(sub);
-            offset += p.Length;
-        }
-    }
-
+    // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
+    // exactly the same enumeration, so this said nothing the base does not already say.
     /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()
     {

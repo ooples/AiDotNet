@@ -146,11 +146,14 @@ public abstract class AudioEnhancerBase<T> : IAudioEnhancer<T>
         var samples = audio.ToVector().ToArray();
         var enhanced = ProcessOverlapAdd(samples);
         // Create tensor and copy enhanced data
+        // Write DIRECTLY into the tensor's storage. Tensor<T>.ToVector() materializes a COPY, not a
+        // view, so the previous `result.ToVector()[i] = ...` filled a throwaway vector and returned
+        // the freshly-allocated (all-zero) tensor — every enhancer emitted SILENCE.
         var result = new Tensor<T>([enhanced.Length]);
-        var resultVector = result.ToVector();
+        var resultSpan = result.Data.Span;
         for (int i = 0; i < enhanced.Length; i++)
         {
-            resultVector[i] = enhanced[i];
+            resultSpan[i] = enhanced[i];
         }
         return result;
     }
@@ -169,11 +172,13 @@ public abstract class AudioEnhancerBase<T> : IAudioEnhancer<T>
         var samples = audioChunk.ToVector().ToArray();
         var enhanced = ProcessStreamingChunk(samples);
         // Create tensor and copy enhanced data
+        // Same ToVector()-copy defect as Enhance above: write straight into the tensor's storage so
+        // streaming chunks carry the enhanced samples instead of zeros.
         var chunkResult = new Tensor<T>([enhanced.Length]);
-        var chunkVector = chunkResult.ToVector();
+        var chunkSpan = chunkResult.Data.Span;
         for (int i = 0; i < enhanced.Length; i++)
         {
-            chunkVector[i] = enhanced[i];
+            chunkSpan[i] = enhanced[i];
         }
         return chunkResult;
     }

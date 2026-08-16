@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Document.Interfaces;
 using AiDotNet.Document.Options;
 using AiDotNet.Enums;
@@ -54,8 +54,9 @@ namespace AiDotNet.Document.LayoutAware;
 [ModelTask(ModelTask.Detection)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[RankRoutedInputDomain(2, 8)]
 [ResearchPaper("DocFormer: End-to-End Transformer for Document Understanding", "https://doi.org/10.48550/arXiv.2106.11539", Year = 2021, Authors = "Srikar Appalaraju, Bhavan Jasani, Bhargava Urala Kota, Yusheng Xie, R. Manmatha")]
-public class DocFormer<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, IDocumentClassifier<T>
+public partial class DocFormer<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, IDocumentClassifier<T>
 {
     private readonly DocFormerOptions _options;
 
@@ -67,7 +68,7 @@ public class DocFormer<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, ID
     private readonly bool _useNativeMode;
     private readonly InferenceSession? _onnxSession;
     private readonly ITokenizer _tokenizer;
-    private readonly IOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private readonly int _hiddenDim;
     private readonly int _numLayers;
     private readonly int _numHeads;
@@ -81,9 +82,9 @@ public class DocFormer<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, ID
     private readonly List<ILayer<T>> _multiModalLayers = [];
     private readonly List<ILayer<T>> _outputLayers = [];
 
-    // Learnable spatial embeddings
-    private Tensor<T>? _spatialXEmbeddings;
-    private Tensor<T>? _spatialYEmbeddings;
+    // The spatial X/Y tables used to be model fields here. They are now inside the
+    // LayoutEmbeddingLayer that fronts the text stream, where the forward pass reads them --
+    // see LayerHelper.CreateDefaultDocFormerLayers.
 
     #endregion
 
@@ -154,7 +155,7 @@ public class DocFormer<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, ID
         int numHeads = 12,
         int vocabSize = 30522,
         int spatialDim = 128,
-        IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         DocFormerOptions? options = null)
         : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
@@ -176,8 +177,18 @@ public class DocFormer<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, ID
         _numHeads = numHeads;
         _vocabSize = vocabSize;
         _spatialDim = spatialDim;
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
-            new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> { InitialLearningRate = 1e-4, UseAMSGrad = true });
+        // DocFormer fine-tuning uses AdamW at 2.5e-5 with no warm-up and a 1.0
+        // gradient-norm cap (Appalaraju et al., ICCV 2021, Table 1). Keep the
+        // optimizer injectable so callers can fully customize the training recipe.
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
+            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = 2.5e-5,
+                WeightDecay = 0.01,
+                UseAMSGrad = false,
+                EnableGradientClipping = true,
+                MaxGradientNorm = 1.0
+            });
 
         ImageSize = imageSize;
         MaxSequenceLength = maxSequenceLength;
@@ -224,7 +235,7 @@ public class DocFormer<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, ID
         int numHeads = 12,
         int vocabSize = 30522,
         int spatialDim = 128,
-        IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         DocFormerOptions? options = null)
         : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
@@ -239,8 +250,18 @@ public class DocFormer<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, ID
         _numHeads = numHeads;
         _vocabSize = vocabSize;
         _spatialDim = spatialDim;
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
-            new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> { InitialLearningRate = 1e-4, UseAMSGrad = true });
+        // DocFormer fine-tuning uses AdamW at 2.5e-5 with no warm-up and a 1.0
+        // gradient-norm cap (Appalaraju et al., ICCV 2021, Table 1). Keep the
+        // optimizer injectable so callers can fully customize the training recipe.
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
+            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = 2.5e-5,
+                WeightDecay = 0.01,
+                UseAMSGrad = false,
+                EnableGradientClipping = true,
+                MaxGradientNorm = 1.0
+            });
 
         ImageSize = imageSize;
         MaxSequenceLength = maxSequenceLength;
@@ -248,7 +269,6 @@ public class DocFormer<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, ID
         _tokenizer = tokenizer ?? LanguageModelTokenizerFactory.CreateForBackbone(LanguageModelBackbone.OPT);
 
         InitializeLayers();
-        InitializeSpatialEmbeddings();
     }
 
     #endregion
@@ -278,29 +298,6 @@ public class DocFormer<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, ID
             imageSize: ImageSize,
             spatialDim: _spatialDim,
             numClasses: _numClasses));
-    }
-
-    private void InitializeSpatialEmbeddings()
-    {
-        var random = RandomHelper.CreateSeededRandom(42);
-
-        // Shared spatial embeddings for X and Y coordinates
-        _spatialXEmbeddings = Tensor<T>.CreateDefault([1024, _spatialDim], NumOps.Zero);
-        _spatialYEmbeddings = Tensor<T>.CreateDefault([1024, _spatialDim], NumOps.Zero);
-
-        InitializeWithSmallRandomValues(_spatialXEmbeddings, random, 0.02);
-        InitializeWithSmallRandomValues(_spatialYEmbeddings, random, 0.02);
-    }
-
-    private void InitializeWithSmallRandomValues(Tensor<T> tensor, Random random, double stdDev)
-    {
-        for (int i = 0; i < tensor.Data.Length; i++)
-        {
-            double u1 = 1.0 - random.NextDouble();
-            double u2 = 1.0 - random.NextDouble();
-            double randStdNormal = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Sin(2.0 * Math.PI * u2);
-            tensor.Data.Span[i] = NumOps.FromDouble(randStdNormal * stdDev);
-        }
     }
 
     #endregion
@@ -586,7 +583,11 @@ public class DocFormer<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, ID
     // feeding the shared stack. Without it the base linear walk sends the rank-1 token vector into the
     // rank-4-only Conv backbone and throws ("ConvolutionalLayer expects rank-3/rank-4 input; got rank 1").
     private const int VisualEncoderLayerCount = 8;
-    private const int TextEncoderLayerCount = 2;
+
+    // One, not two: the token EmbeddingLayer and the sinusoidal PositionalEncodingLayer that used to
+    // sit here are now a single LayoutEmbeddingLayer, which also carries the 2D layout terms and uses
+    // LEARNED positions (BERT's, which DocFormer inherits) rather than fixed sinusoids.
+    private const int TextEncoderLayerCount = 1;
 
     private Tensor<T> RunModalityForward(Tensor<T> input)
     {
@@ -704,7 +705,7 @@ public class DocFormer<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, ID
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expectedOutput, _optimizer as IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>);
+            TrainWithTape(input, expectedOutput, _optimizer);
         }
         finally
         {
@@ -712,19 +713,18 @@ public class DocFormer<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, ID
         }
     }
 
-    /// <inheritdoc/>
-    public override void UpdateParameters(Vector<T> gradients)
-    {
-        if (!_useNativeMode)
-            throw new NotSupportedException("Parameter updates not supported in ONNX mode.");
+    // UpdateParameters applied a GRADIENT STEP, but its one-argument form is the value setter and every caller passes values -- the override corrupted the model. Removed under AIDN082.
 
-        var currentParams = GetParameters();
-        T lr = NumOps.FromDouble(0.00005);
-
-        currentParams = Engine.Subtract(currentParams, Engine.Multiply(gradients, lr));
-        SetParameters(currentParams);
-    }
-
+    /// <summary>
+    /// Parameters cannot be written while the model is backed by a loaded ONNX graph: the weights
+    /// belong to that graph, not to this instance.
+    /// </summary>
+    /// <remarks>
+    /// Replaces a hand-written throw that used to sit inside UpdateParameters. The base checks this
+    /// on every mutating entry point rather than the one member the throw happened to guard, and
+    /// reading -- ParameterCount and GetParameters -- stays available either way.
+    /// </remarks>
+    protected override bool SupportsParameterMutation => _useNativeMode;
     #endregion
 
     #region Disposal

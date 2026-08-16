@@ -1,8 +1,9 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
 
@@ -42,8 +43,28 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 [LayerCategory(LayerCategory.Other)]
 [LayerTask(LayerTask.SequenceModeling)]
-[LayerProperty(NormalizesInput = true, IsTrainable = true, TrainsViaCustomLoss = true, TestInputShape = "4, 4", TestConstructorArgs = "4, 4, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
-public partial class ConditionalRandomFieldLayer<T> : LayerBase<T>
+[LayerProperty(NormalizesInput = true, IsTrainable = true, SupportsBackpropagation = false, TrainsViaCustomLoss = true, TestInputShape = "4, 4", TestConstructorArgs = "4, 4, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
+// Roles are quoted from this layer's own guard: "requires rank>=2 input [seqLen, numClasses] or
+// [batch, seqLen, numClasses]". The trailing axis is the tag set (Features), the one before it the
+// sequence position (Time). Batch is optional rather than a second declaration because ForwardTraced
+// treats rank 2 as the same computation -- it reshapes to [1, seqLen, numClasses], decodes, and then
+// restores the caller's shape ("Engine.Reshape(output, _originalInputShape)").
+//
+// SHAPE-PRESERVING despite being a decoder, which is the part worth stating explicitly: Viterbi picks
+// one tag per timestep, but the layer emits that choice ONE-HOT over the class axis
+// ("output[b, t, bestPath[t]] = NumOps.One") into a tensor allocated at [batchSize, seqLen,
+// _numClasses]. Nothing is reduced away, so no axis changes size. The training-mode short-circuit
+// returns the emissions unchanged, which preserves the shape for the same reason.
+//
+// Ranks above 3 also run -- the layer folds the leading axes into batch and reshapes back -- but they
+// are deliberately NOT declared: two or more leading axes cannot be given distinct roles here, and an
+// axis role is precisely how a relation names its input.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    BatchOptional = true, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    BatchOptional = true, Direction = TensorLayoutDirection.Output)]
+[AutoParameters]
+public partial class ConditionalRandomFieldLayer<T> : LayerBase<T>, IShapeContract
 {
     [TrainableParameter(Role = PersistentTensorRole.Weights)]
 
@@ -77,33 +98,26 @@ public partial class ConditionalRandomFieldLayer<T> : LayerBase<T>
     // ACTUAL length of the input that produced the cached activations, not the
     // first-resolved _sequenceLength.
     private int _lastSeqLen;
+
+    // Decode-time hard tag-topology constraints (BIO / BIOES / BILOU), derived from the label
+    // set via SetDecodeTagConstraints. Null = unconstrained (the layer is generic; a caller that
+    // doesn't supply labels keeps the old behavior). Applied ONLY in the Viterbi decode
+    // (Forward / ForwardGpu) — NEVER in ComputeNegativeLogLikelihood: the training objective
+    // stays the unconstrained CRF likelihood (Lample et al. 2016 §3.2; AllenNLP applies its
+    // `constraints` mask in viterbi_tags only). The learned transition matrix alone merely
+    // DISCOURAGES illegal moves, so an untrained / OOV-driven decode can still emit an orphan
+    // I- tag; these masks make the structural guarantee hard.
+    private bool[,]? _allowedTransitions;   // [from, to]
+    private bool[]? _allowedStart;          // START -> tag
+    private bool[]? _allowedEnd;            // tag -> END
+
+    /// <summary>Additive score penalty for a transition the tag scheme forbids. Large enough to
+    /// dominate any emission/transition sum, small enough to never overflow float accumulation
+    /// over a long sequence (256 * 1e9 = 2.56e11 &lt;&lt; float.MaxValue).</summary>
+    private const double IllegalTransitionPenalty = -1e9;
+
     private bool _isInitialized;
 
-    /// <summary>
-    /// Gets a value indicating whether this layer supports training.
-    /// </summary>
-    /// <value>
-    /// Always <c>true</c> as CRF layers have trainable parameters.
-    /// </value>
-    /// <remarks>
-    /// <para>
-    /// This property returns true because ConditionalRandomFieldLayer has trainable parameters (transition matrix,
-    /// start scores, and end scores) that are adjusted during the training process to minimize the network's error.
-    /// </para>
-    /// <para><b>For Beginners:</b> This property tells you that this layer can learn from data.
-    /// 
-    /// A value of true means:
-    /// - The layer contains values (parameters) that will change during training
-    /// - It will improve its performance as it sees more examples
-    /// - It participates in the learning process of the neural network
-    /// 
-    /// CRF layers always support training because they need to learn:
-    /// - How likely one label is to follow another (transition probabilities)
-    /// - Which labels are likely to appear at the start of a sequence
-    /// - Which labels are likely to appear at the end of a sequence
-    /// </para>
-    /// </remarks>
-    public override long ParameterCount => GetParameters().Length;
     public override bool SupportsTraining => true;
 
     /// <inheritdoc/>
@@ -197,9 +211,11 @@ public partial class ConditionalRandomFieldLayer<T> : LayerBase<T>
 
         // Cache transition matrix on GPU (persistent?)
         // _transitionMatrix is CPU Tensor. Register/Upload.
-        using var transGpu = gpuEngine.UploadToGpu(_transitionMatrix, GpuTensorRole.Constant);
-        using var startGpu = gpuEngine.UploadToGpu(_startScores, GpuTensorRole.Constant);
-        using var endGpu = gpuEngine.UploadToGpu(_endScores, GpuTensorRole.Constant);
+        // Same decode-time tag-topology masks as the CPU path (identity when unconstrained); the
+        // penalty is baked into the uploaded tensors so no kernel change is required.
+        using var transGpu = gpuEngine.UploadToGpu(ConstrainedTransitions(), GpuTensorRole.Constant);
+        using var startGpu = gpuEngine.UploadToGpu(ConstrainedStartScores(), GpuTensorRole.Constant);
+        using var endGpu = gpuEngine.UploadToGpu(ConstrainedEndScores(), GpuTensorRole.Constant);
 
         // Pre-calculate indices for gathering emissions?
         // Generating indices on CPU for every step is overhead.
@@ -567,35 +583,42 @@ public partial class ConditionalRandomFieldLayer<T> : LayerBase<T>
     /// </remarks>
     private void InitializeParameters()
     {
-        // VECTORIZED: Initialize parameters with scaled random values
-        T scale = NumOps.Sqrt(NumOps.FromDouble(2.0 / (_numClasses + _numClasses)));
-        T half = NumOps.FromDouble(0.5);
+        // Fill the ctor-allocated OWNED param tensors in place with scaled, centered uniform
+        // values: (random − 0.5) · sqrt(2 / (fan_in + fan_out)).
+        //
+        // A persistent trainable parameter MUST be an owned tensor, NOT a pool-rented
+        // Engine-op result. The prior code built each parameter via Engine.TensorSubtract /
+        // Engine.TensorMultiplyScalar, whose outputs come from AutoTensorCache.RentOrAllocate —
+        // a pooled rental. Under a TensorArena (the ModelFamily / integration test harness wraps
+        // every train step in one) the pool later re-rents that exact tensor object — same
+        // instance, same backing storage AND the same _shape array — to satisfy an unrelated
+        // allocation, silently mutating the transition matrix from [C, C] to whatever the next
+        // rental needed (e.g. [1, C·C]) mid-training. Every subsequent forward then failed with
+        // "Tensor shapes must match. Got [C] and [1, C]" / broadcast errors. RegisterTrainable-
+        // Parameter does not un-pool a rented tensor. Writing directly into the owned tensors the
+        // constructor already allocated (new Tensor<T>([...])) keeps the parameters out of the
+        // pool for their whole lifetime — the SGD/Adam step mutates them in place, preserving
+        // ownership. Mirrors how the other hand-written layers (DenseLayer, PointConvolutionLayer)
+        // initialize their weights.
+        double scale = Math.Sqrt(2.0 / (_numClasses + _numClasses));
+        var random = Random ?? RandomHelper.CreateSecureRandom();
 
-        // Initialize transition matrix: (random - 0.5) * scale
-        var transRandom = Tensor<T>.CreateRandom(_transitionMatrix.Length, 1).Reshape(_transitionMatrix._shape);
-        var transHalf = new Tensor<T>(_transitionMatrix._shape);
-        transHalf.Fill(half);
-        var transCentered = Engine.TensorSubtract(transRandom, transHalf);
-        _transitionMatrix = Engine.TensorMultiplyScalar(transCentered, scale);
+        FillCenteredUniform(_transitionMatrix, scale, random);
+        FillCenteredUniform(_startScores, scale, random);
+        FillCenteredUniform(_endScores, scale, random);
 
-        // Initialize start scores: (random - 0.5) * scale
-        var startRandom = Tensor<T>.CreateRandom(_startScores.Length, 1).Reshape(_startScores._shape);
-        var startHalf = new Tensor<T>(_startScores._shape);
-        startHalf.Fill(half);
-        var startCentered = Engine.TensorSubtract(startRandom, startHalf);
-        _startScores = Engine.TensorMultiplyScalar(startCentered, scale);
-
-        // Initialize end scores: (random - 0.5) * scale
-        var endRandom = Tensor<T>.CreateRandom(_endScores.Length, 1).Reshape(_endScores._shape);
-        var endHalf = new Tensor<T>(_endScores._shape);
-        endHalf.Fill(half);
-        var endCentered = Engine.TensorSubtract(endRandom, endHalf);
-        _endScores = Engine.TensorMultiplyScalar(endCentered, scale);
-
-        // Register after all reassignments so references are to final tensors
+        // Register after filling so references are to the final owned tensors.
         RegisterTrainableParameter(_transitionMatrix, PersistentTensorRole.Weights);
         RegisterTrainableParameter(_startScores, PersistentTensorRole.Weights);
         RegisterTrainableParameter(_endScores, PersistentTensorRole.Weights);
+    }
+
+    /// <summary>Writes (random − 0.5)·scale into every element of an owned tensor, in place.</summary>
+    private void FillCenteredUniform(Tensor<T> tensor, double scale, Random random)
+    {
+        var span = tensor.Data.Span;
+        for (int i = 0; i < span.Length; i++)
+            span[i] = NumOps.FromDouble((random.NextDouble() - 0.5) * scale);
     }
 
     /// <summary>
@@ -632,7 +655,7 @@ public partial class ConditionalRandomFieldLayer<T> : LayerBase<T>
     /// rather than just picking the best label at each position independently.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // Lazy-ctor instances start with _sequenceLength = -1; resolve
         // from input.Shape on first call. Eager-ctor instances are
@@ -763,6 +786,12 @@ public partial class ConditionalRandomFieldLayer<T> : LayerBase<T>
                 : sequenceScores;
         }
 
+        // Hard tag-topology constraints for this decode (identity when none are configured).
+        // Computed once per Forward because the parameters change between training steps.
+        var decodeTransitions = ConstrainedTransitions();
+        var decodeStart = ConstrainedStartScores();
+        var decodeEnd = ConstrainedEndScores();
+
         var output = TensorAllocator.Rent<T>([batchSize, seqLen, _numClasses]);
 
         // Process each batch item (Viterbi requires sequential time processing)
@@ -777,7 +806,7 @@ public partial class ConditionalRandomFieldLayer<T> : LayerBase<T>
 
             // VECTORIZED: Initialize first timestep - startScores + emissions[0]
             var firstEmissions = batchSeq.GetSliceAlongDimension(0, 0); // [numClasses]
-            var firstViterbi = Engine.TensorAdd(firstEmissions, _startScores);
+            var firstViterbi = Engine.TensorAdd(firstEmissions, decodeStart);
             viterbi.SetSlice(0, 0, firstViterbi);
 
             // Recursion over time (inherently sequential)
@@ -793,7 +822,7 @@ public partial class ConditionalRandomFieldLayer<T> : LayerBase<T>
                 // Then max over axis 0
 
                 var prevExpanded = Engine.Reshape(prevViterbi, [_numClasses, 1]); // [numClasses, 1]
-                var scoresWithTrans = Engine.TensorBroadcastAdd(prevExpanded, _transitionMatrix); // [numClasses, numClasses]
+                var scoresWithTrans = Engine.TensorBroadcastAdd(prevExpanded, decodeTransitions); // [numClasses, numClasses]
 
                 // This branch is INFERENCE-ONLY: the training-mode short-circuit
                 // at the top of Forward (line ~730) returns raw emissions before
@@ -826,7 +855,7 @@ public partial class ConditionalRandomFieldLayer<T> : LayerBase<T>
 
             // === VECTORIZED Termination ===
             var lastViterbi = viterbi.GetSliceAlongDimension(seqLen - 1, 0);
-            var finalScores = Engine.TensorAdd(lastViterbi, _endScores);
+            var finalScores = Engine.TensorAdd(lastViterbi, decodeEnd);
 
             // Find argmax
             T maxFinalScore = NumOps.MinValue;
@@ -933,50 +962,19 @@ public partial class ConditionalRandomFieldLayer<T> : LayerBase<T>
         if (_transitionMatrixGradient == null || _startScoresGradient == null || _endScoresGradient == null)
             throw new InvalidOperationException("Backward pass must be called before updating parameters.");
 
-        // Update using Engine tensor operations: param = param - lr * gradient
+        // Update IN PLACE (param -= lr * gradient). Reassigning to Engine.TensorSubtract's
+        // result would replace the owned parameter tensors with pool-rented ones, which the
+        // TensorArena can then re-rent out from under the layer mid-training (see
+        // InitializeParameters for the full failure mode). The in-place subtract preserves each
+        // parameter's owned storage.
         var scaledTransGrad = Engine.TensorMultiplyScalar(_transitionMatrixGradient, learningRate);
-        _transitionMatrix = Engine.TensorSubtract(_transitionMatrix, scaledTransGrad);
+        Engine.TensorSubtractInPlace(_transitionMatrix, scaledTransGrad);
 
         var scaledStartGrad = Engine.TensorMultiplyScalar(_startScoresGradient, learningRate);
-        _startScores = Engine.TensorSubtract(_startScores, scaledStartGrad);
+        Engine.TensorSubtractInPlace(_startScores, scaledStartGrad);
 
         var scaledEndGrad = Engine.TensorMultiplyScalar(_endScoresGradient, learningRate);
-        _endScores = Engine.TensorSubtract(_endScores, scaledEndGrad);
-    }
-
-    /// <summary>
-    /// Gets all trainable parameters from the layer as a single vector.
-    /// </summary>
-    /// <returns>A vector containing all trainable parameters.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method retrieves all trainable parameters from the layer (transition matrix, start scores, and
-    /// end scores) and combines them into a single vector. This is useful for optimization algorithms that
-    /// operate on all parameters at once, or for saving and loading model weights.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method collects all the learnable values from the layer into a single list.
-    /// 
-    /// The parameters include:
-    /// - The transition matrix (shows how likely one label is to follow another)
-    /// - The start scores (shows which labels are likely at sequence beginnings)
-    /// - The end scores (shows which labels are likely at sequence endings)
-    /// 
-    /// All these values are flattened into a single long list (vector).
-    /// 
-    /// This is useful for:
-    /// - Saving the model to disk
-    /// - Loading parameters from a previously trained model
-    /// - Advanced optimization techniques that need access to all parameters
-    /// </para>
-    /// </remarks>
-    public override Vector<T> GetParameters()
-    {
-        // Use Vector<T>.Concatenate for efficient parameter collection
-        var flatTrans = new Vector<T>(_transitionMatrix.ToArray());
-        var flatStart = new Vector<T>(_startScores.ToArray());
-        var flatEnd = new Vector<T>(_endScores.ToArray());
-
-        return Vector<T>.Concatenate(Vector<T>.Concatenate(flatTrans, flatStart), flatEnd);
+        Engine.TensorSubtractInPlace(_endScores, scaledEndGrad);
     }
 
     /// <summary>
@@ -1199,7 +1197,7 @@ public partial class ConditionalRandomFieldLayer<T> : LayerBase<T>
         var lseKeepDim = Engine.TensorAdd(logSum, max);
 
         // Now squeeze the reduced axis to match the shape contract.
-        var inShape = x.Shape.ToArray();
+        var inShape = x._shape;
         var outShape = new int[inShape.Length - 1];
         int oi = 0;
         for (int i = 0; i < inShape.Length; i++)
@@ -1342,22 +1340,152 @@ public partial class ConditionalRandomFieldLayer<T> : LayerBase<T>
         return metadata;
     }
 
-    public override void SetParameters(Vector<T> parameters)
+    /// <summary>Copies a flat vector into an owned tensor's storage in place (length must match).</summary>
+    private static void CopyVectorInto(Tensor<T> tensor, Vector<T> values)
     {
-        int transSize = _numClasses * _numClasses;
-        int totalParams = transSize + _numClasses * 2;
+        var span = tensor.Data.Span;
+        if (span.Length != values.Length)
+            throw new ArgumentException(
+                $"Cannot copy {values.Length} values into a tensor with {span.Length} elements.", nameof(values));
+        for (int i = 0; i < span.Length; i++)
+            span[i] = values[i];
+    }
 
-        if (parameters.Length != totalParams)
-            throw new ArgumentException($"Expected {totalParams} parameters, but got {parameters.Length}");
+    /// <summary>
+    /// Derives hard decode-time constraints on the label topology from the label set and applies
+    /// them to Viterbi decoding, so the layer can never emit a structurally invalid sequence
+    /// (an orphan <c>I-</c> tag, a sequence starting on <c>I-</c>, an <c>I-X</c> continuing a
+    /// span of a different type). The tag scheme is DETECTED from the labels, not hardcoded:
+    /// a set containing <c>E-</c>/<c>S-</c> (or BILOU <c>L-</c>/<c>U-</c>) tags is treated as
+    /// BIOES; a set containing only <c>B-</c>/<c>I-</c>/<c>O</c> as BIO; anything else (plain
+    /// class names, no prefixes) leaves the decode unconstrained.
+    /// </summary>
+    /// <param name="labelNames">Label names, index-aligned with the class axis. Must have
+    /// exactly <c>numClasses</c> entries.</param>
+    /// <remarks>
+    /// Decode-only by design: <see cref="ComputeNegativeLogLikelihood"/> is untouched, so the
+    /// training objective remains the standard (unconstrained) CRF negative log-likelihood.
+    /// </remarks>
+    public void SetDecodeTagConstraints(IReadOnlyList<string>? labelNames)
+    {
+        _allowedTransitions = null;
+        _allowedStart = null;
+        _allowedEnd = null;
+        if (labelNames is null) return;
+        if (labelNames.Count != _numClasses)
+            throw new ArgumentException(
+                $"labelNames has {labelNames.Count} entries but the CRF was constructed with " +
+                $"{_numClasses} classes; they must be index-aligned.", nameof(labelNames));
 
-        // VECTORIZED: Use Vector.Slice and Tensor.FromVector
-        var transVec = parameters.Slice(0, transSize);
-        var startVec = parameters.Slice(transSize, _numClasses);
-        var endVec = parameters.Slice(transSize + _numClasses, _numClasses);
+        var prefixes = new char[_numClasses];
+        var types = new string[_numClasses];
+        bool sawSpanOpen = false, sawIobes = false;
 
-        _transitionMatrix = Tensor<T>.FromVector(transVec).Reshape(_transitionMatrix._shape);
-        _startScores = Tensor<T>.FromVector(startVec).Reshape(_startScores._shape);
-        _endScores = Tensor<T>.FromVector(endVec).Reshape(_endScores._shape);
+        for (int i = 0; i < _numClasses; i++)
+        {
+            string tag = labelNames[i] ?? "O";
+            char prefix;
+            string type;
+            if (tag.Length > 2 && (tag[1] == '-' || tag[1] == '_'))
+            {
+                prefix = char.ToUpperInvariant(tag[0]);
+                type = tag.Substring(2);
+            }
+            else
+            {
+                prefix = 'O';
+                type = string.Empty;
+            }
+
+            // Normalize BILOU onto BIOES: L(ast) == E(nd), U(nit) == S(ingleton).
+            if (prefix == 'L') prefix = 'E';
+            if (prefix == 'U') prefix = 'S';
+            if (prefix != 'B' && prefix != 'I' && prefix != 'E' && prefix != 'S')
+            {
+                prefix = 'O';
+                type = string.Empty;
+            }
+
+            if (prefix == 'B' || prefix == 'I') sawSpanOpen = true;
+            if (prefix == 'E' || prefix == 'S') sawIobes = true;
+            prefixes[i] = prefix;
+            types[i] = type;
+        }
+
+        // Not a span-tagging scheme (no prefixed tags at all) — nothing to constrain.
+        if (!sawSpanOpen && !sawIobes) return;
+
+        var allowedTransitions = new bool[_numClasses, _numClasses];
+        var allowedStart = new bool[_numClasses];
+        var allowedEnd = new bool[_numClasses];
+
+        for (int i = 0; i < _numClasses; i++)
+        {
+            allowedStart[i] = sawIobes
+                ? prefixes[i] is 'O' or 'B' or 'S'
+                : prefixes[i] is 'O' or 'B';
+            // BIO puts no constraint on the final tag (a sentence may legitimately end mid-span,
+            // e.g. "... B-PER I-PER"); BIOES requires the span to be closed.
+            allowedEnd[i] = !sawIobes || prefixes[i] is 'O' or 'E' or 'S';
+
+            for (int j = 0; j < _numClasses; j++)
+                allowedTransitions[i, j] = sawIobes
+                    ? IsLegalIobesTransition(prefixes[i], types[i], prefixes[j], types[j])
+                    : IsLegalBioTransition(prefixes[i], types[i], prefixes[j], types[j]);
+        }
+
+        _allowedTransitions = allowedTransitions;
+        _allowedStart = allowedStart;
+        _allowedEnd = allowedEnd;
+    }
+
+    /// <summary>BIO: only an <c>I-X</c> is restricted — it must continue a <c>B-X</c>/<c>I-X</c>.</summary>
+    private static bool IsLegalBioTransition(char from, string fromType, char to, string toType)
+        => to != 'I'
+           || ((from == 'B' || from == 'I') && string.Equals(fromType, toType, StringComparison.Ordinal));
+
+    /// <summary>BIOES: an open span (B-/I-) must continue with I-/E- of the SAME type; a closed
+    /// position (O/E-/S-) must open a new span (B-/S-) or stay outside (O).</summary>
+    private static bool IsLegalIobesTransition(char from, string fromType, char to, string toType)
+        => (from == 'B' || from == 'I')
+            ? (to == 'I' || to == 'E') && string.Equals(fromType, toType, StringComparison.Ordinal)
+            : to is 'O' or 'B' or 'S';
+
+    /// <summary>Returns the transition matrix with the illegal-transition penalty added, or the
+    /// live parameter tensor itself when unconstrained. The copy is an OWNED tensor (never a
+    /// pool rental) and is transient to one decode.</summary>
+    private Tensor<T> ConstrainedTransitions()
+    {
+        if (_allowedTransitions is not { } allowed) return _transitionMatrix;
+        var masked = new Tensor<T>([_numClasses, _numClasses]);
+        var src = _transitionMatrix.Data.Span;
+        var dst = masked.Data.Span;
+        var penalty = NumOps.FromDouble(IllegalTransitionPenalty);
+        for (int i = 0; i < _numClasses; i++)
+            for (int j = 0; j < _numClasses; j++)
+            {
+                int k = i * _numClasses + j;
+                dst[k] = allowed[i, j] ? src[k] : NumOps.Add(src[k], penalty);
+            }
+        return masked;
+    }
+
+    /// <summary>Start scores with the START -&gt; I- (and START -&gt; E-/I- under BIOES) penalty applied.</summary>
+    private Tensor<T> ConstrainedStartScores() => ConstrainVector(_startScores, _allowedStart);
+
+    /// <summary>End scores with the tag -&gt; END penalty applied (BIOES only; a no-op for BIO).</summary>
+    private Tensor<T> ConstrainedEndScores() => ConstrainVector(_endScores, _allowedEnd);
+
+    private Tensor<T> ConstrainVector(Tensor<T> scores, bool[]? allowed)
+    {
+        if (allowed is null) return scores;
+        var masked = new Tensor<T>([_numClasses]);
+        var src = scores.Data.Span;
+        var dst = masked.Data.Span;
+        var penalty = NumOps.FromDouble(IllegalTransitionPenalty);
+        for (int c = 0; c < _numClasses; c++)
+            dst[c] = allowed[c] ? src[c] : NumOps.Add(src[c], penalty);
+        return masked;
     }
 
     /// <summary>

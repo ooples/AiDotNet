@@ -94,6 +94,45 @@ public class PointCloudIntegrationTests
         AssertAllFinite(output);
     }
 
+    [Fact(Timeout = 120000)]
+    public async Task DGCNN_SeededInference_ScaledInputDoesNotCollapseToZero()
+    {
+        // Regression for ReduceMax's index contract. It returns flat indices
+        // into the source tensor; EdgeConv and global pooling formerly treated
+        // those as local reduced-axis coordinates, built empty selection masks,
+        // and made every seeded point cloud produce the zero logit vector.
+        AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>.DefaultRandomSeedOverride = 1234;
+        try
+        {
+            var model = new DGCNN<double>(new DGCNNOptions
+            {
+                NumClasses = 4,
+                InputFeatureDim = 3,
+                KnnK = 7,
+                EdgeConvChannels = new[] { 8, 8 },
+                ClassifierChannels = new[] { 8 },
+                UseDropout = false,
+            });
+            var input = CreatePointCloud(numPoints: 8, featureDim: 3, seed: 42);
+            var scaled = new Tensor<double>(
+                input.ToArray().Select(value => value * 10.0).ToArray(),
+                input.Shape.ToArray());
+
+            var output = model.Predict(input);
+            var scaledOutput = model.Predict(scaled);
+
+            Assert.Contains(output.ToArray(), value => Math.Abs(value) > 1e-12);
+            Assert.True(
+                output.ToArray().Zip(scaledOutput.ToArray(), (before, after) => Math.Abs(before - after))
+                    .Any(delta => delta > 1e-8),
+                "Scaling a non-constant point cloud should change DGCNN logits.");
+        }
+        finally
+        {
+            AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>.DefaultRandomSeedOverride = null;
+        }
+    }
+
     private static Tensor<double> CreatePointCloud(int numPoints, int featureDim, int seed)
     {
         var random = RandomHelper.CreateSeededRandom(seed);

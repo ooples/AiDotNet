@@ -73,7 +73,7 @@ namespace AiDotNet.Video;
     "https://arxiv.org/abs/2107.10833",
     Year = 2021,
     Authors = "Xintao Wang, Liangbin Xie, Chao Dong, Ying Shan")]
-public class RealESRGAN<T> : VideoSuperResolutionBase<T>
+public partial class RealESRGAN<T> : VideoSuperResolutionBase<T>
 {
     private readonly RealESRGANOptions _options;
 
@@ -980,28 +980,7 @@ public class RealESRGAN<T> : VideoSuperResolutionBase<T>
 
     #region Serialization
 
-    /// <inheritdoc/>
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        ThrowIfNativeModeUnavailable();
-
-        // Split parameters between generator and discriminator
-        int generatorParams = GeneratorRequired.GetParameters().Length;
-        int discriminatorParams = DiscriminatorRequired.GetParameters().Length;
-
-        if (parameters.Length != generatorParams + discriminatorParams)
-        {
-            throw new ArgumentException(
-                $"Expected {generatorParams + discriminatorParams} parameters, got {parameters.Length}");
-        }
-
-        var genParams = parameters.Slice(0, generatorParams);
-        var discParams = parameters.Slice(generatorParams, discriminatorParams);
-
-        GeneratorRequired.SetParameters(genParams);
-        DiscriminatorRequired.SetParameters(discParams);
-    }
-
+    // UpdateParameters restated the base verbatim; ModelBase routes it to SetParameters.
     /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()
     {

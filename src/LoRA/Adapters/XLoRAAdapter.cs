@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 
@@ -59,7 +60,8 @@ namespace AiDotNet.LoRA.Adapters;
 /// https://arxiv.org/abs/2402.07148
 /// </para>
 /// </remarks>
-public class XLoRAAdapter<T> : LoRAAdapterBase<T>
+[AutoParameters]
+public partial class XLoRAAdapter<T> : LoRAAdapterBase<T>
 {
     /// <summary>
     /// Array of LoRA expert layers.
@@ -109,35 +111,6 @@ public class XLoRAAdapter<T> : LoRAAdapterBase<T>
     /// Gets the gating network used for routing.
     /// </summary>
     public DenseLayer<T> GatingNetwork => _gatingNetwork;
-
-    /// <summary>
-    /// Gets the total number of trainable parameters.
-    /// </summary>
-    /// <remarks>
-    /// Includes parameters from:
-    /// - Base layer (if not frozen)
-    /// - All expert LoRA layers
-    /// - Gating network
-    /// </remarks>
-    public override long ParameterCount
-    {
-        get
-        {
-            // long throughout — N experts × per-expert params can sum
-            // past int.MaxValue, especially for mixture-of-experts at
-            // foundation-model scales. Closes #1271.7Bnq.
-            long expertParams = 0L;
-            for (int i = 0; i < _experts.Length; i++)
-            {
-                expertParams += _experts[i].ParameterCount;
-            }
-
-            long gatingParams = _gatingNetwork.ParameterCount;
-            long baseParams = _freezeBaseLayer ? 0L : _baseLayer.ParameterCount;
-
-            return baseParams + expertParams + gatingParams;
-        }
-    }
 
     /// <summary>
     /// Temporary storage for expert outputs during forward pass (needed for backward pass).
@@ -203,7 +176,7 @@ public class XLoRAAdapter<T> : LoRAAdapterBase<T>
         // Create expert LoRA layers
         _experts = new LoRALayer<T>[numberOfExperts];
         int inputSize = GetInputShape()[0];
-        int outputSize = GetOutputShape()[0];
+        int outputSize = GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0];
 
         for (int i = 0; i < numberOfExperts; i++)
         {
@@ -214,9 +187,9 @@ public class XLoRAAdapter<T> : LoRAAdapterBase<T>
         // The gating network is a simple dense layer that maps input to expert weights
         _gatingNetwork = new DenseLayer<T>(numberOfExperts, (IVectorActivationFunction<T>)new SoftmaxActivation<T>());
 
-        // Update parameter vector to include all experts and gating network
-        Parameters = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
-        UpdateParametersFromLayers();
+        // X-LoRA replaces the standard LoRA path with its expert bank and gating network. Both are
+        // discovered as sub-layers by the generator, so exclude the unused inherited child.
+        FreezeSubLayerParameters(_loraLayer);
     }
 
     /// <summary>
@@ -249,7 +222,7 @@ public class XLoRAAdapter<T> : LoRAAdapterBase<T>
     /// - All weights sum to 1.0 (thanks to softmax in gating network)
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         _lastInput = input.Clone();
 
@@ -331,143 +304,6 @@ public class XLoRAAdapter<T> : LoRAAdapterBase<T>
         }
 
         // Update parameter vector
-        UpdateParametersFromLayers();
-    }
-
-    /// <summary>
-    /// Gets the current parameters as a vector.
-    /// </summary>
-    /// <returns>Vector containing parameters from all experts, gating network, and optionally base layer.</returns>
-    public override Vector<T> GetParameters()
-    {
-        return Parameters.Clone();
-    }
-
-    /// <summary>
-    /// Sets the layer parameters from a vector.
-    /// </summary>
-    /// <param name="parameters">Vector containing parameters for all components.</param>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (parameters.Length != ParameterCount)
-        {
-            throw new ArgumentException($"Expected {ParameterCount} parameters, got {parameters.Length}", nameof(parameters));
-        }
-
-        Parameters = parameters.Clone();
-        UpdateLayersFromParameters();
-    }
-
-    /// <summary>
-    /// Updates the parameter vector from the current layer states.
-    /// </summary>
-    protected override void UpdateParametersFromLayers()
-    {
-        int idx = 0;
-
-        // If base layer is not frozen, pack its parameters first
-        if (!_freezeBaseLayer)
-        {
-            Vector<T> baseParams = _baseLayer.GetParameters();
-            for (int i = 0; i < baseParams.Length; i++)
-            {
-                Parameters[idx++] = baseParams[i];
-            }
-        }
-
-        // Pack expert parameters
-        for (int expertIdx = 0; expertIdx < _experts.Length; expertIdx++)
-        {
-            Vector<T> expertParams = _experts[expertIdx].GetParameters();
-            for (int i = 0; i < expertParams.Length; i++)
-            {
-                Parameters[idx++] = expertParams[i];
-            }
-        }
-
-        // Pack gating network parameters
-        Vector<T> gatingParams = _gatingNetwork.GetParameters();
-        for (int i = 0; i < gatingParams.Length; i++)
-        {
-            Parameters[idx++] = gatingParams[i];
-        }
-    }
-
-    /// <summary>
-    /// Updates the layers from the parameter vector.
-    /// </summary>
-    private void UpdateLayersFromParameters()
-    {
-        int idx = 0;
-
-        // If base layer is not frozen, unpack its parameters first
-        if (!_freezeBaseLayer)
-        {
-            int baseParamCount = checked((int)_baseLayer.ParameterCount);
-            Vector<T> baseParams = new Vector<T>(baseParamCount);
-            for (int i = 0; i < baseParamCount; i++)
-            {
-                baseParams[i] = Parameters[idx++];
-            }
-            _baseLayer.SetParameters(baseParams);
-        }
-
-        // Unpack expert parameters
-        for (int expertIdx = 0; expertIdx < _experts.Length; expertIdx++)
-        {
-            int expertParamCount = (int)_experts[expertIdx].ParameterCount;
-            Vector<T> expertParams = new Vector<T>(expertParamCount);
-            for (int i = 0; i < expertParamCount; i++)
-            {
-                expertParams[i] = Parameters[idx++];
-            }
-            _experts[expertIdx].SetParameters(expertParams);
-        }
-
-        // Unpack gating network parameters
-        int gatingParamCount = checked((int)_gatingNetwork.ParameterCount);
-        Vector<T> gatingParams = new Vector<T>(gatingParamCount);
-        for (int i = 0; i < gatingParamCount; i++)
-        {
-            gatingParams[i] = Parameters[idx++];
-        }
-        _gatingNetwork.SetParameters(gatingParams);
-    }
-
-    /// <summary>
-    /// Updates the parameter gradients vector from the layer gradients.
-    /// </summary>
-    private void UpdateParameterGradientsFromLayers()
-    {
-        ParameterGradients = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
-        int idx = 0;
-
-        // If base layer is not frozen, pack its gradients first
-        if (!_freezeBaseLayer)
-        {
-            Vector<T> baseGrads = _baseLayer.GetParameterGradients();
-            for (int i = 0; i < baseGrads.Length; i++)
-            {
-                ParameterGradients[idx++] = baseGrads[i];
-            }
-        }
-
-        // Pack expert gradients
-        for (int expertIdx = 0; expertIdx < _experts.Length; expertIdx++)
-        {
-            Vector<T> expertGrads = _experts[expertIdx].GetParameterGradients();
-            for (int i = 0; i < expertGrads.Length; i++)
-            {
-                ParameterGradients[idx++] = expertGrads[i];
-            }
-        }
-
-        // Pack gating network gradients
-        Vector<T> gatingGrads = _gatingNetwork.GetParameterGradients();
-        for (int i = 0; i < gatingGrads.Length; i++)
-        {
-            ParameterGradients[idx++] = gatingGrads[i];
-        }
     }
 
     /// <summary>
@@ -517,7 +353,7 @@ public class XLoRAAdapter<T> : LoRAAdapterBase<T>
         Vector<T> baseParams = _baseLayer.GetParameters();
 
         int inputSize = GetInputShape()[0];
-        int outputSize = GetOutputShape()[0];
+        int outputSize = GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0];
         int weightCount = inputSize * outputSize;
 
         // Create new parameters with merged weights

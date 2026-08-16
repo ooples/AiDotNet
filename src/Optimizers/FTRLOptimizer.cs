@@ -134,72 +134,74 @@ public class FTRLOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
                 nameof(gradient));
         }
 
-        _t++;
-
         // Initialize state vectors if needed
-        if (_z is null || _z.Length != parameters.Length)
+        if (_z is null || _n is null || _z.Length != parameters.Length || _n.Length != parameters.Length)
         {
             _z = new Vector<T>(parameters.Length);
             _n = new Vector<T>(parameters.Length);
+            _previousParameters = null;
+            _t = 0;
         }
+
+        _t++;
 
         var alpha = NumOps.FromDouble(_options.Alpha);
         var beta = NumOps.FromDouble(_options.Beta);
         var lambda1 = NumOps.FromDouble(_options.Lambda1);
         var lambda2 = NumOps.FromDouble(_options.Lambda2);
-
-        // Vectorized gradient squared calculation
-        var gradSquared = (Vector<T>)Engine.Multiply(gradient, gradient);
-
-        // Vectorized n update: n = n + g^2
-        var nPlusGradSq = (Vector<T>)Engine.Add(_n!, gradSquared);
-
-        // Vectorized sqrt operations for sigma calculation
-        var sqrtNPlusGradSq = (Vector<T>)Engine.Sqrt(nPlusGradSq);
-        var sqrtN = (Vector<T>)Engine.Sqrt(_n!);
-        var numerator = (Vector<T>)Engine.Subtract(sqrtNPlusGradSq, sqrtN);
-        var sigma = (Vector<T>)Engine.Divide(numerator, alpha);
-
-        // Vectorized z update: z = z + g - sigma * params
-        var sigmaTimesParams = (Vector<T>)Engine.Multiply(sigma, parameters);
-        var gradMinusSigmaParams = (Vector<T>)Engine.Subtract(gradient, sigmaTimesParams);
-        _z = (Vector<T>)Engine.Add(_z!, gradMinusSigmaParams);
-
-        // Update n state
-        _n = nPlusGradSq;
-
-        // L1 thresholding requires per-element conditional logic
-        var newParameters = new Vector<T>(parameters.Length);
+        var newParameters = new Vector<T>(parameters.Length, skipZeroInit: true);
+        var parameterSpan = parameters.AsSpan();
+        var gradientSpan = gradient.AsSpan();
+        var zSpan = _z!.AsWritableSpan();
+        var nSpan = _n!.AsWritableSpan();
+        var newParameterSpan = newParameters.AsWritableSpan();
 
         for (int i = 0; i < parameters.Length; i++)
         {
-            var absZ = NumOps.Abs(_z[i]);
-            var signZ = NumOps.GreaterThan(_z[i], NumOps.Zero) ? NumOps.One :
-                        (NumOps.LessThan(_z[i], NumOps.Zero) ? NumOps.Negate(NumOps.One) : NumOps.Zero);
+            T g = gradientSpan[i];
+            T oldN = nSpan[i];
+            T newN = NumOps.Add(oldN, NumOps.Multiply(g, g));
+            T sigma = NumOps.Divide(
+                NumOps.Subtract(NumOps.Sqrt(newN), NumOps.Sqrt(oldN)),
+                alpha);
+            T newZ = NumOps.Add(
+                zSpan[i],
+                NumOps.Subtract(g, NumOps.Multiply(sigma, parameterSpan[i])));
+
+            nSpan[i] = newN;
+            zSpan[i] = newZ;
+
+            var absZ = NumOps.Abs(newZ);
+            var signZ = NumOps.GreaterThan(newZ, NumOps.Zero) ? NumOps.One :
+                        (NumOps.LessThan(newZ, NumOps.Zero) ? NumOps.Negate(NumOps.One) : NumOps.Zero);
 
             // L1 proximal operator: sparse solution via thresholding
             // If |z| <= lambda1, parameter is set to zero (sparsity)
             if (NumOps.LessThanOrEquals(absZ, lambda1))
             {
-                newParameters[i] = NumOps.Zero;
+                newParameterSpan[i] = NumOps.Zero;
             }
             else
             {
                 // FTRL proximal: w = -sign(z) * (|z| - lambda1) / (lambda2 + (sqrt(n) + beta) / alpha)
                 var absZMinusLambda1 = NumOps.Subtract(absZ, lambda1);
-                var sqrtNi = NumOps.Sqrt(nPlusGradSq[i]);
+                var sqrtNi = NumOps.Sqrt(newN);
                 var sqrtNPlusBeta = NumOps.Add(sqrtNi, beta);
                 var sqrtNPlusBetaOverAlpha = NumOps.Divide(sqrtNPlusBeta, alpha);
                 var denominator = NumOps.Add(lambda2, sqrtNPlusBetaOverAlpha);
 
                 // w = -sign(z) * (|z| - lambda1) / denominator
                 var numeratorValue = NumOps.Multiply(NumOps.Negate(signZ), absZMinusLambda1);
-                newParameters[i] = NumOps.Divide(numeratorValue, denominator);
+                newParameterSpan[i] = NumOps.Divide(numeratorValue, denominator);
             }
         }
 
         // Save for reverse updates
-        _previousParameters = new Vector<T>(parameters);
+        if (_previousParameters is null || _previousParameters.Length != parameters.Length)
+        {
+            _previousParameters = new Vector<T>(parameters.Length, skipZeroInit: true);
+        }
+        parameterSpan.CopyTo(_previousParameters.AsWritableSpan());
 
         return newParameters;
     }

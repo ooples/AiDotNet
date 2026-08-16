@@ -42,7 +42,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Eagle and Finch: RWKV with Matrix-Valued States and Dynamic Recurrence", "https://arxiv.org/abs/2404.05892", Year = 2024, Authors = "Bo Peng, Daniel Goldstein, Quentin Anthony, Alon Albalak, Eric Alcaide, Stella Biderman, Eugene Cheah, Teddy Ferdinan, Haowen Hou, Przemyslaw Kazienko, Kranthi Kiran GV, Jan Kocon, Bartlomiej Koptyra, Satyapriya Krishna, Ronald McClelland Jr., Niklas Muennighoff, Fares Obeid, Atsushi Saito, Guangyu Song, Haoqin Tu, Stanislaw Wozniak, Ruichong Zhang, Bingchen Zhao, Qihang Zhao, Peng Zhou, Jian Zhu, Rui-Jie Zhu")]
-public class FinchLanguageModel<T> : NeuralNetworkBase<T>
+public class FinchLanguageModel<T> : TokenLanguageModelLayoutBase<T>
 {
     private readonly FinchOptions _options;
     private readonly int _vocabSize;
@@ -50,6 +50,7 @@ public class FinchLanguageModel<T> : NeuralNetworkBase<T>
     private readonly int _numLayers;
     private readonly int _numHeads;
     private readonly int _maxSeqLength;
+    private readonly double _learningRate;
 
     /// <inheritdoc />
     public override bool SupportsTraining => true;
@@ -76,7 +77,8 @@ public class FinchLanguageModel<T> : NeuralNetworkBase<T>
         int numHeads = 8,
         int maxSeqLength = 512,
         ILossFunction<T>? lossFunction = null,
-        FinchOptions? options = null)
+        FinchOptions? options = null,
+        double learningRate = 0.001)
         : base(architecture,
             // Raw-logit LM head → cross-entropy-with-logits (fused log-softmax + NLL), not the
             // TextGeneration default CategoricalCrossEntropy (which log()s un-normalized logits and
@@ -90,6 +92,7 @@ public class FinchLanguageModel<T> : NeuralNetworkBase<T>
         _numLayers = numLayers;
         _numHeads = numHeads;
         _maxSeqLength = maxSeqLength;
+        _learningRate = learningRate;
         InitializeLayers();
     }
 
@@ -128,20 +131,13 @@ public class FinchLanguageModel<T> : NeuralNetworkBase<T>
         });
     }
 
-    public override void UpdateParameters(Vector<T> gradients)
-    {
-        if (gradients.Length != ParameterCount)
-        {
-            throw new ArgumentException(
-                $"Expected {ParameterCount} gradients, but got {gradients.Length}",
-                nameof(gradients));
-        }
-
-        var currentParams = GetParameters();
-        T learningRate = NumOps.FromDouble(0.001);
-        currentParams = Engine.Subtract(currentParams, Engine.Multiply(gradients, learningRate));
-        SetParameters(currentParams);
-    }
+    // UpdateParameters validated the length and distributed the vector across Layers. The base does
+    // both. Its trailing "did the loop consume the whole vector" guard is not lost either -- it
+    // protected against sum(layer.ParameterCount) drifting from ParameterCount, and the base derives
+    // the count and the distribution from ONE enumeration, so they cannot drift apart.
+    // (This model previously applied a second hard-coded SGD step here with a private learning rate
+    // and clip bound; that was already corrected, and the clipping now lives in FinchOptions where a
+    // caller can reach it.) Removed under AIDN082.
 
     public override ModelMetadata<T> GetModelMetadata()
     {
@@ -183,7 +179,7 @@ public class FinchLanguageModel<T> : NeuralNetworkBase<T>
     {
         return new FinchLanguageModel<T>(
             Architecture, _vocabSize, _modelDimension, _numLayers, _numHeads,
-            _maxSeqLength, LossFunction, _options);
+            _maxSeqLength, LossFunction, _options, _learningRate);
     }
 
     #endregion

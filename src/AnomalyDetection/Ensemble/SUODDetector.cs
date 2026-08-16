@@ -44,12 +44,15 @@ namespace AiDotNet.AnomalyDetection.Ensemble;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("SUOD: Accelerating Large-Scale Unsupervised Heterogeneous Outlier Detection", "https://doi.org/10.48550/arXiv.2003.05731", Year = 2021, Authors = "Yue Zhao, Xiyang Hu, Cheng Cheng, Cong Wang, Changlin Wan, Wen Wang, Jianing Yang, Haoping Bai, Zheng Li, Cao Xiao, Yunlong Wang, Zhi Qiao, Jiashu Sun, Leman Akoglu")]
-public class SUODDetector<T> : AnomalyDetectorBase<T>
+public partial class SUODDetector<T> : AnomalyDetectorBase<T>
 {
     private readonly bool _useRandomProjection;
     private readonly int _nProjectedFeatures;
     private List<IAnomalyDetector<T>>? _baseDetectors;
+    private List<(T Min, T Max)>? _trainingScoreRanges;
+    [Buffer]
     private Matrix<T>? _projectionMatrix;
+    [Buffer]
     private Matrix<T>? _trainingData;
 
     /// <summary>
@@ -97,11 +100,19 @@ public class SUODDetector<T> : AnomalyDetectorBase<T>
             _projectionMatrix = CreateRandomProjectionMatrix(X.Columns);
             processedData = ApplyProjection(X);
         }
+        else
+        {
+            // This optional [Buffer] is absent by configuration, not waiting for a shape. An
+            // explicit empty matrix gives the parameter manifest a resolved zero-length slot.
+            _projectionMatrix = new Matrix<T>(0, 0);
+        }
 
         // Create diverse base detectors
         _baseDetectors = new List<IAnomalyDetector<T>>();
 
         int k = Math.Min(10, processedData.Rows - 1);
+
+        _trainingScoreRanges = new List<(T Min, T Max)>();
 
         // Detector 1: LOF
         var lof = new DistanceBased.LocalOutlierFactor<T>(
@@ -110,6 +121,7 @@ public class SUODDetector<T> : AnomalyDetectorBase<T>
             randomSeed: _randomSeed);
         lof.Fit(processedData);
         _baseDetectors.Add(lof);
+        AddTrainingRange(lof.ScoreAnomalies(processedData));
 
         // Detector 2: k-NN
         var knn = new DistanceBased.KNNDetector<T>(
@@ -118,6 +130,7 @@ public class SUODDetector<T> : AnomalyDetectorBase<T>
             randomSeed: _randomSeed + 1);
         knn.Fit(processedData);
         _baseDetectors.Add(knn);
+        AddTrainingRange(knn.ScoreAnomalies(processedData));
 
         // Detector 3: Isolation Forest
         var iforest = new TreeBased.IsolationForest<T>(
@@ -127,6 +140,7 @@ public class SUODDetector<T> : AnomalyDetectorBase<T>
             randomSeed: _randomSeed + 2);
         iforest.Fit(processedData);
         _baseDetectors.Add(iforest);
+        AddTrainingRange(iforest.ScoreAnomalies(processedData));
 
         // Calculate scores for training data to set threshold
         var trainingScores = ScoreAnomaliesInternal(X);
@@ -147,18 +161,21 @@ public class SUODDetector<T> : AnomalyDetectorBase<T>
         ValidateInput(X);
 
         Matrix<T> processedData = X;
-        if (_projectionMatrix != null)
+        if (_projectionMatrix is { Rows: > 0 })
         {
             processedData = ApplyProjection(X);
         }
 
         // Collect scores from all detectors
         var allScores = new List<Vector<T>>();
+        var baseDetectors = _baseDetectors ?? throw new InvalidOperationException("Model not properly fitted.");
+        var trainingRanges = _trainingScoreRanges ?? throw new InvalidOperationException("Model not properly fitted.");
 
-        foreach (var detector in _baseDetectors ?? throw new InvalidOperationException("Model not properly fitted."))
+        for (int d = 0; d < baseDetectors.Count; d++)
         {
-            var scores = detector.ScoreAnomalies(processedData);
-            var normalizedScores = NormalizeScores(scores);
+            var scores = baseDetectors[d].ScoreAnomalies(processedData);
+            var (trainMin, trainMax) = trainingRanges[d];
+            var normalizedScores = NormalizeScores(scores, trainMin, trainMax);
             allScores.Add(normalizedScores);
         }
 
@@ -197,27 +214,40 @@ public class SUODDetector<T> : AnomalyDetectorBase<T>
         return combinedScores;
     }
 
-    private Vector<T> NormalizeScores(Vector<T> scores)
+    private void AddTrainingRange(Vector<T> scores)
     {
-        var result = new Vector<T>(scores.Length);
         T min = NumOps.MaxValue;
         T max = NumOps.MinValue;
-
         for (int i = 0; i < scores.Length; i++)
         {
             if (NumOps.LessThan(scores[i], min)) min = scores[i];
             if (NumOps.GreaterThan(scores[i], max)) max = scores[i];
         }
+        (_trainingScoreRanges ?? throw new InvalidOperationException("Training ranges have not been initialized."))
+            .Add((min, max));
+    }
+
+    private Vector<T> NormalizeScores(Vector<T> scores, T trainMin, T trainMax)
+    {
+        var result = new Vector<T>(scores.Length);
 
         // Min-max normalization
-        T range = NumOps.Subtract(max, min);
+        T range = NumOps.Subtract(trainMax, trainMin);
         T eps = NumOps.FromDouble(1e-10);
+        T half = NumOps.FromDouble(0.5);
 
-        if (NumOps.GreaterThan(range, eps))
+        for (int i = 0; i < scores.Length; i++)
         {
-            for (int i = 0; i < scores.Length; i++)
+            if (NumOps.GreaterThan(range, eps))
             {
-                result[i] = NumOps.Divide(NumOps.Subtract(scores[i], min), range);
+                T normalized = NumOps.Divide(NumOps.Subtract(scores[i], trainMin), range);
+                if (NumOps.LessThan(normalized, NumOps.Zero)) normalized = NumOps.Zero;
+                if (NumOps.GreaterThan(normalized, NumOps.One)) normalized = NumOps.One;
+                result[i] = normalized;
+            }
+            else
+            {
+                result[i] = half;
             }
         }
 
