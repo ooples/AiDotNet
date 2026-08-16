@@ -593,22 +593,84 @@ public class NeuralNetworkRegression<T> : NonLinearRegressionBase<T>
     {
         T scaleFactor = NumOps.FromDouble(1.0 / batchSize);
 
+        if (_optimizer is IGradientBasedOptimizer<T, Matrix<T>, Vector<T>> gradientOptimizer)
+        {
+            // Every parameter tensor is packed into ONE flat vector and handed to the optimizer in a
+            // single call, then scattered back.
+            //
+            // Calling the optimizer once per tensor — weights[0], biases[0], weights[1], biases[1] —
+            // is unsound for any stateful update rule. Adam keeps one pair of moment buffers and
+            // rebuilds them whenever the incoming length changes (AdamOptimizer.UpdateParameters
+            // resets _m, _v and the step counter t on a length mismatch), and these tensors have
+            // different lengths by construction. The moments were therefore discarded on every
+            // call, t never advanced past its first step, and each update collapsed to a fixed
+            // step of the learning rate in the gradient's direction, independent of curvature or
+            // gradient magnitude — which is not Adam at all, and left the network underfitting.
+            //
+            // A single flat parameter vector is also how optimizers are driven everywhere else in
+            // this library and in every mainstream framework: the moments then correspond
+            // element-for-element with the parameters across the whole network, and t advances once
+            // per batch as the algorithm intends.
+            int totalLength = 0;
+            for (int i = 0; i < _weights.Count; i++)
+            {
+                totalLength += _weights[i].Rows * _weights[i].Columns + _biases[i].Length;
+            }
+
+            var flatParameters = new Vector<T>(totalLength);
+            var flatGradients = new Vector<T>(totalLength);
+
+            int offset = 0;
+            for (int i = 0; i < _weights.Count; i++)
+            {
+                for (int r = 0; r < _weights[i].Rows; r++)
+                {
+                    for (int c = 0; c < _weights[i].Columns; c++)
+                    {
+                        flatParameters[offset] = _weights[i][r, c];
+                        flatGradients[offset] = NumOps.Multiply(weightGradients[i][r, c], scaleFactor);
+                        offset++;
+                    }
+                }
+
+                for (int b = 0; b < _biases[i].Length; b++)
+                {
+                    flatParameters[offset] = _biases[i][b];
+                    flatGradients[offset] = NumOps.Multiply(biasGradients[i][b], scaleFactor);
+                    offset++;
+                }
+            }
+
+            var updated = gradientOptimizer.UpdateParameters(flatParameters, flatGradients);
+
+            offset = 0;
+            for (int i = 0; i < _weights.Count; i++)
+            {
+                for (int r = 0; r < _weights[i].Rows; r++)
+                {
+                    for (int c = 0; c < _weights[i].Columns; c++)
+                    {
+                        _weights[i][r, c] = updated[offset++];
+                    }
+                }
+
+                for (int b = 0; b < _biases[i].Length; b++)
+                {
+                    _biases[i][b] = updated[offset++];
+                }
+            }
+
+            return;
+        }
+
         for (int i = 0; i < _weights.Count; i++)
         {
             Matrix<T> avgWeightGradient = weightGradients[i].Transform((g, _, _) => NumOps.Multiply(g, scaleFactor));
             Vector<T> avgBiasGradient = biasGradients[i].Transform(g => NumOps.Multiply(g, scaleFactor));
 
-            if (_optimizer is IGradientBasedOptimizer<T, Matrix<T>, Vector<T>> gradientOptimizer)
-            {
-                _weights[i] = gradientOptimizer.UpdateParameters(_weights[i], avgWeightGradient);
-                _biases[i] = gradientOptimizer.UpdateParameters(_biases[i], avgBiasGradient);
-            }
-            else
-            {
-                // For non-gradient-based optimizers, we'll use a simple update rule
-                _weights[i] = _weights[i].Subtract(avgWeightGradient.Multiply(NumOps.FromDouble(_options.LearningRate)));
-                _biases[i] = _biases[i].Subtract(avgBiasGradient.Multiply(NumOps.FromDouble(_options.LearningRate)));
-            }
+            // For non-gradient-based optimizers, we'll use a simple update rule
+            _weights[i] = _weights[i].Subtract(avgWeightGradient.Multiply(NumOps.FromDouble(_options.LearningRate)));
+            _biases[i] = _biases[i].Subtract(avgBiasGradient.Multiply(NumOps.FromDouble(_options.LearningRate)));
 
             // Regularization for neural network weights is applied through
             // gradient-based methods (L2 weight decay), not post-hoc matrix replacement.
