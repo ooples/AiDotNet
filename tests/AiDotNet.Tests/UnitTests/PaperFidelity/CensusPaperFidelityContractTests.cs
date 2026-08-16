@@ -188,6 +188,16 @@ public sealed class CensusPaperFidelityContractTests
         Assert.Equal(2, model.TextTransformerBlockCount);
         Assert.True(model.UsesTokenTypeEmbeddings);
         Assert.True(model.UsesBiasFreeReferenceProjections);
+
+        var singleImage = new Tensor<float>([3, 16, 16]);
+        for (int i = 0; i < singleImage.Length; i++)
+            singleImage[i] = (i % 29) / 29f;
+
+        var embedding = model.EncodeImage(singleImage);
+
+        Assert.Equal([1, 4], embedding.Shape.ToArray());
+        Assert.All(embedding.AsSpan().ToArray(), value =>
+            Assert.True(!float.IsNaN(value) && !float.IsInfinity(value)));
     }
 
     [Fact]

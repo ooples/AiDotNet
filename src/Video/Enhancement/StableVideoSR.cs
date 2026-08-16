@@ -194,6 +194,17 @@ public partial class StableVideoSR<T> : VideoSuperResolutionBase<T>
 
     #region NeuralNetworkBase
 
+    /// <inheritdoc />
+    /// <remarks>
+    /// The native diffusion core owns the model's trainable surface. Registering it gives
+    /// checkpointing, optimizers, cloning, and the performance census the same stable view of
+    /// those parameters instead of reporting an empty outer wrapper.
+    /// </remarks>
+    protected override void RegisterComponents()
+    {
+        RegisterParameterComponent("diffusion/core", _diffusionCore);
+    }
+
     protected override void InitializeLayers()
     {
         if (!_useNativeMode) return;

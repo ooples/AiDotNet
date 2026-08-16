@@ -118,8 +118,8 @@ public partial class UpscaleAVideoModel<T> : VideoDiffusionModelBase<T>
     protected override void RegisterComponents()
     {
         EnsureInitialized();
-        RegisterParameterComponent(_videoUNet);
-        RegisterParameterComponent(_temporalVAE);
+        RegisterParameterComponent("denoiser/video-unet", _videoUNet);
+        RegisterParameterComponent("vae/temporal", _temporalVAE);
     }
 
     #region Constants

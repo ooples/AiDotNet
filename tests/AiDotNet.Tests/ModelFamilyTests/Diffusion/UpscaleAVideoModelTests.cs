@@ -23,7 +23,9 @@ public class UpscaleAVideoModelTests : DiffusionModelTestBase<float>
                 inputChannels: 4, baseChannels: 32, channelMultipliers: new[] { 1, 2 },
                 numResBlocks: 1, numHeads: 8, contextDim: 1024,
                 inputHeight: 4, inputWidth: 4, numFrames: 1, clipTokenLength: 1,
-                imageConditionChannels: 3, numClassEmbeddings: 351, seed: 42),
+                imageConditionChannels: 3, concatenateImageCondition: true,
+                // Released noise levels are zero-based and inclusive: [0, 350].
+                numClassEmbeddings: 351, seed: 42),
             temporalVAE: new TemporalVAE<float>(
                 inputChannels: 3, latentChannels: 4, baseChannels: 8,
                 channelMultipliers: new[] { 1, 2, 4 }, numTemporalLayers: 1,
@@ -88,7 +90,8 @@ public class UpscaleAVideoModelTests : DiffusionModelTestBase<float>
         Assert.NotEqual(before.Hash, after.Hash);
 
         var output = PredictModel(model, lowResolution);
-        Assert.All(output.AsSpan().ToArray(), value => Assert.True(float.IsFinite(value)));
+        Assert.All(output.AsSpan().ToArray(), value =>
+            Assert.True(!float.IsNaN(value) && !float.IsInfinity(value)));
     }
 
     private static (ulong Hash, int Count, bool Finite) FingerprintTemporalParameters(
@@ -103,8 +106,8 @@ public class UpscaleAVideoModelTests : DiffusionModelTestBase<float>
         foreach (var layer in predictor.TemporalTrainingLayers)
         foreach (float value in layer.GetParameters().AsSpan())
         {
-            finite &= float.IsFinite(value);
-            hash ^= unchecked((uint)BitConverter.SingleToInt32Bits(value));
+            finite &= !float.IsNaN(value) && !float.IsInfinity(value);
+            hash ^= unchecked((uint)AiDotNet.MixedPrecision.BitConverterHelper.SingleToInt32Bits(value));
             hash *= prime;
             count++;
         }

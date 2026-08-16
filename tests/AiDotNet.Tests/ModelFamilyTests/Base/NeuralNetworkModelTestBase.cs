@@ -557,6 +557,28 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         INeuralNetworkModel<T> network,
         int requestedIterations)
     {
+        long parameterCount = 0;
+        foreach (var chunk in EnumerateParameterChunks(network))
+        {
+            parameterCount = parameterCount >= long.MaxValue - chunk.Length
+                ? long.MaxValue
+                : parameterCount + chunk.Length;
+        }
+
+        return ResolveConformanceTrainingIterations(parameterCount, requestedIterations);
+    }
+
+    /// <summary>
+    /// Applies the shared conformance budget to an already measured parameter count.
+    /// </summary>
+    /// <remarks>
+    /// The performance census uses this overload so its three iteration projections do not walk a
+    /// foundation-scale parameter surface three additional times merely to repeat the same count.
+    /// </remarks>
+    protected static int ResolveConformanceTrainingIterations(
+        long parameterCount,
+        int requestedIterations)
+    {
         Assert.True(requestedIterations > 0,
             $"Requested training iterations must be > 0; got {requestedIterations}.");
 
@@ -569,13 +591,6 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         // across machines, unlike elapsed-time early exits.
         const int MaximumConformanceSteps = 10;
         const long ParameterUpdateBudget = 75_000_000L;
-        long parameterCount = 0;
-        foreach (var chunk in EnumerateParameterChunks(network))
-        {
-            parameterCount = parameterCount >= long.MaxValue - chunk.Length
-                ? long.MaxValue
-                : parameterCount + chunk.Length;
-        }
 
         int boundedRequest = System.Math.Min(requestedIterations, MaximumConformanceSteps);
         if (parameterCount <= 0) return boundedRequest;
@@ -2368,7 +2383,11 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         // Registered parameters and persistent buffers remain pinned across Reset.
         _arena.Reset();
 
-        const int steadyForwardSamples = 3;
+        // Three samples stabilize percentiles for ordinary models. Once cold forward exceeds ten
+        // seconds, one warmed production request is already a long-duration sample; duplicating it
+        // twice adds up to minutes of harness time without increasing architecture or path coverage.
+        // Record the chosen count so the measurement contract remains explicit.
+        int steadyForwardSamples = coldForwardTimer.Elapsed >= TimeSpan.FromSeconds(10) ? 1 : 3;
         var steadyForwardMs = new double[steadyForwardSamples];
         for (int i = 0; i < steadyForwardSamples; i++)
         {
@@ -2463,22 +2482,39 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         int requestedTrainingIterations = TrainingIterations;
         int requestedTrainingReduceLossIterations = checked(TrainingIterations * 3);
         int requestedMoreDataIterations = MoreDataLongIterations;
-        int trainingIterations = ResolveConformanceTrainingIterations(network, requestedTrainingIterations);
-        int trainingReduceLossIterations = ResolveConformanceTrainingIterations(
-            network, requestedTrainingReduceLossIterations);
-        int moreDataIterations = ResolveConformanceTrainingIterations(network, requestedMoreDataIterations);
-
         long parameterCount = 0;
         int parameterSlots = 0;
+        long trainingBudgetParameterCount = 0;
+        WritePerformanceProgress(outputDirectory!, performanceFileName, "parameter-enumeration");
         if (network is AiDotNet.NeuralNetworks.NeuralNetworkBase<T> parameterNetwork)
         {
-            WritePerformanceProgress(outputDirectory!, performanceFileName, "parameter-enumeration");
-            foreach (var chunk in parameterNetwork.GetParameterStateChunks())
+            // Census metadata needs scalar and slot counts, not parameter values. The canonical
+            // readiness-aware manifest describes the same ordered surface without traversing every
+            // live tensor in a foundation-scale nested component.
+            foreach (var slot in parameterNetwork.ParameterLayout.Slots)
             {
-                parameterCount = checked(parameterCount + chunk.Tensor.Length);
+                if (slot.MaterializedParameterCount <= 0) continue;
+                parameterCount = checked(parameterCount + slot.MaterializedParameterCount);
                 parameterSlots++;
             }
+            trainingBudgetParameterCount = parameterCount;
         }
+        else
+        {
+            foreach (var chunk in EnumerateParameterChunks(network))
+            {
+                trainingBudgetParameterCount = trainingBudgetParameterCount >= long.MaxValue - chunk.Length
+                    ? long.MaxValue
+                    : trainingBudgetParameterCount + chunk.Length;
+            }
+        }
+
+        int trainingIterations = ResolveConformanceTrainingIterations(
+            trainingBudgetParameterCount, requestedTrainingIterations);
+        int trainingReduceLossIterations = ResolveConformanceTrainingIterations(
+            trainingBudgetParameterCount, requestedTrainingReduceLossIterations);
+        int moreDataIterations = ResolveConformanceTrainingIterations(
+            trainingBudgetParameterCount, requestedMoreDataIterations);
 
         totalTimer.Stop();
         process.Refresh();
@@ -2506,6 +2542,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
             osPlatform = GetPerformanceOsPlatform(),
             processArchitecture = System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture.ToString(),
             processorCount = Environment.ProcessorCount,
+            processorModel = GetPerformanceProcessorModel(),
             machineName = Environment.MachineName,
             runId = Environment.GetEnvironmentVariable("GITHUB_RUN_ID"),
             commit = Environment.GetEnvironmentVariable("GITHUB_SHA"),
@@ -2515,6 +2552,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
             constructMs = constructTimer.Elapsed.TotalMilliseconds,
             targetPreparationMs,
             coldForwardMs = coldForwardTimer.Elapsed.TotalMilliseconds,
+            steadyForwardSamples,
             steadyForwardMedianMs = steadyForwardMs[steadyForwardSamples / 2],
             steadyForwardP95Ms = steadyForwardMs[steadyForwardSamples - 1],
             tapeForwardMs,
@@ -2653,6 +2691,44 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
                 System.Runtime.InteropServices.OSPlatform.OSX)) return "macos";
         return "unknown";
     }
+
+    private static string GetPerformanceProcessorModel()
+    {
+        string? processorIdentifier = Environment.GetEnvironmentVariable("PROCESSOR_IDENTIFIER");
+        if (!string.IsNullOrWhiteSpace(processorIdentifier))
+            return NormalizePerformanceEnvironmentValue(processorIdentifier);
+
+        try
+        {
+            const string cpuInfoPath = "/proc/cpuinfo";
+            if (File.Exists(cpuInfoPath))
+            {
+                foreach (string line in File.ReadLines(cpuInfoPath))
+                {
+                    if (!line.StartsWith("model name", StringComparison.OrdinalIgnoreCase)
+                        && !line.StartsWith("hardware", StringComparison.OrdinalIgnoreCase))
+                        continue;
+
+                    int separator = line.IndexOf(':');
+                    if (separator >= 0 && separator + 1 < line.Length)
+                        return NormalizePerformanceEnvironmentValue(line.Substring(separator + 1));
+                }
+            }
+        }
+        catch (IOException)
+        {
+            // Environment identity is diagnostic metadata; an unavailable procfs must not fail a model.
+        }
+        catch (UnauthorizedAccessException)
+        {
+            // Sandboxed runners may deny procfs access. The explicit unknown value remains comparable.
+        }
+
+        return "unknown";
+    }
+
+    private static string NormalizePerformanceEnvironmentValue(string value) =>
+        value.Trim().Replace('|', '/');
 
     // =====================================================
     // MATHEMATICAL INVARIANT: Gradient Flow

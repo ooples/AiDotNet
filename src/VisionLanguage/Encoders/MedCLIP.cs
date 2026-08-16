@@ -384,8 +384,19 @@ public partial class MedCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVision
         yield return _logitScale;
     }
 
-    protected override Tensor<T> PreprocessImage(Tensor<T> image) =>
-        NormalizeImage(image, _options.ImageMean, _options.ImageStd);
+    protected override Tensor<T> PreprocessImage(Tensor<T> image)
+    {
+        var normalized = NormalizeImage(image, _options.ImageMean, _options.ImageStd);
+        if (normalized.Rank != 3)
+            return normalized;
+
+        // The native ResNet path is batch-first. Model-family fixtures and the public single-image
+        // API also accept [C,H,W]; preserve that contract by materializing an explicit batch of one
+        // before global pooling. Without it, Flatten interprets C as the batch dimension and the
+        // reference 2048-wide projection receives [2048,1] instead of [1,2048].
+        return Engine.Reshape(normalized,
+            [1, normalized.Shape[0], normalized.Shape[1], normalized.Shape[2]]);
+    }
 
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
 
