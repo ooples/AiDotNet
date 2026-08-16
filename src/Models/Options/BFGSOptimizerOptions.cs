@@ -38,6 +38,26 @@ public class BFGSOptimizerOptions<T, TInput, TOutput> : GradientBasedOptimizerOp
     public int BatchSize { get; set; } = -1;
 
     /// <summary>
+    /// Gets or sets whether each step is checked against the Armijo sufficient-decrease condition and
+    /// shortened (or rejected) when it fails. Default: <c>true</c>.
+    /// </summary>
+    /// <remarks>
+    /// BFGS produces a DIRECTION; Nocedal &amp; Wright pair it with a line search (Algorithm 3.1) because
+    /// the direction is only guaranteed to point downhill — the full step along it is not guaranteed to
+    /// improve anything. Turning this off makes every step exactly <c>lr</c> along the direction.
+    /// </remarks>
+    public bool UseLineSearch { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets how many times a failing step is halved before it is rejected outright. Default: 20.
+    /// </summary>
+    /// <remarks>
+    /// Backtracking terminates on its own for a genuine descent direction, so this bound only matters when
+    /// the direction is not one — which happens when the inverse-Hessian approximation has gone stale.
+    /// </remarks>
+    public int MaxLineSearchIterations { get; set; } = 20;
+
+    /// <summary>
     /// Gets or sets the initial learning rate for the optimization process.
     /// </summary>
     /// <value>The initial learning rate, defaulting to 1.0.</value>

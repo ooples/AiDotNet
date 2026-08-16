@@ -545,24 +545,12 @@ public class BFGSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
         var updated = UpdateParameters(pv, gv);
         context.SetFlatParameters(updated);
 
-        // If re-evaluation is available, use backtracking line search
-        if (context.SupportsReevaluation)
+        // BFGS gives a direction; the step length along it is the line search's job (Nocedal & Wright,
+        // Algorithm 3.1). This used to claim to be a backtracking line search while doing the opposite —
+        // taking a SECOND full step from the point it had just measured as worse.
+        if (_options.UseLineSearch && context.SupportsReevaluation)
         {
-            T origLoss = context.Loss;
-            T newLoss = context.Reevaluate();
-            if (NumOps.GreaterThan(newLoss, origLoss))
-            {
-                // Re-materialize sparse-embedding contributions before reading the
-                // retry's flat gradient: context.Reevaluate() recomputes the dense
-                // gradient dictionary but leaves SparseEmbeddingGradient<T> entries
-                // untouched, so GetFlatGradients on the retry would silently miss
-                // any embedding parameter whose only contribution is sparse.
-                SparseEmbeddingOptimizerHelpers.MaterializeSparseIntoGradientsDict(context, Engine);
-                var pv2 = context.GetFlatParameters();
-                var gv2 = context.GetFlatGradients();
-                var retry = UpdateParameters(pv2, gv2);
-                context.SetFlatParameters(retry);
-            }
+            ApplyBacktrackingLineSearch(context, pv, updated, gv, _options.MaxLineSearchIterations);
         }
     }
 }

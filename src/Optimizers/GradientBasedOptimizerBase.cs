@@ -1559,6 +1559,88 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         }
     }
 
+    /// <summary>
+    /// Backtracking line search on the tape path: shrinks an already-applied step until it gives sufficient
+    /// decrease, and restores the original parameters if none does.
+    /// </summary>
+    /// <param name="context">The tape step context, whose parameters currently hold the proposed step.</param>
+    /// <param name="originalParameters">The parameters before the step (a copy, not a live view).</param>
+    /// <param name="proposedParameters">The full step that was proposed.</param>
+    /// <param name="gradient">The gradient at <paramref name="originalParameters"/>.</param>
+    /// <param name="maxBacktracks">How many halvings to try before giving up and rejecting the step.</param>
+    /// <returns><c>true</c> if a step was accepted; <c>false</c> if the original parameters were restored.</returns>
+    /// <remarks>
+    /// <para>
+    /// This is Nocedal &amp; Wright, <i>Numerical Optimization</i>, Algorithm 3.1 — backtracking with the
+    /// Armijo sufficient-decrease condition <c>f(x + t·Δ) ≤ f(x) + c₁·t·∇f(x)ᵀΔ</c>, with c₁ = 1e-4 and a
+    /// halving factor of 0.5. It is what makes a quasi-Newton method's convergence argument work: the
+    /// direction is only guaranteed to be a descent direction, not the full step along it.
+    /// </para>
+    /// <para>
+    /// <b>What this replaces.</b> L-BFGS, BFGS, Newton and TrustRegion each carried the same copy-pasted
+    /// block that, when the loss got WORSE, computed and applied a second full step from the new (worse)
+    /// point — under comments claiming it was a line search or a trust-region radius adjustment. It was
+    /// neither. Taking another step away from a point you have just established is worse does not
+    /// correspond to any published method and has no descent argument; on a bad direction it compounds.
+    /// Backtracking does the opposite: it keeps the direction and shortens the step, and rejects it
+    /// outright rather than moving somewhere known to be worse.
+    /// </para>
+    /// <para>
+    /// Requires <see cref="TapeStepContext{T}.SupportsReevaluation"/>; callers check that first, since
+    /// without a loss to evaluate there is nothing to search over and the full step stands.
+    /// </para>
+    /// </remarks>
+    protected bool ApplyBacktrackingLineSearch(
+        TapeStepContext<T> context,
+        Vector<T> originalParameters,
+        Vector<T> proposedParameters,
+        Vector<T> gradient,
+        int maxBacktracks)
+    {
+        T originalLoss = context.Loss;
+        T c1 = NumOps.FromDouble(1e-4);
+
+        // slope = ∇f(x)ᵀΔ for the FULL step. Armijo scales it by t, so this is computed once.
+        T slope = NumOps.Zero;
+        for (int i = 0; i < gradient.Length && i < proposedParameters.Length; i++)
+        {
+            slope = NumOps.Add(slope, NumOps.Multiply(
+                gradient[i], NumOps.Subtract(proposedParameters[i], originalParameters[i])));
+        }
+
+        T t = NumOps.One;
+        T loss = context.Reevaluate();
+
+        for (int attempt = 0; attempt < maxBacktracks; attempt++)
+        {
+            T threshold = NumOps.Add(originalLoss, NumOps.Multiply(NumOps.Multiply(c1, t), slope));
+            if (NumOps.LessThanOrEquals(loss, threshold))
+            {
+                return true;
+            }
+
+            t = NumOps.Divide(t, NumOps.FromDouble(2.0));
+            var trial = new Vector<T>(originalParameters.Length);
+            for (int i = 0; i < trial.Length; i++)
+            {
+                trial[i] = NumOps.Add(originalParameters[i], NumOps.Multiply(
+                    t, NumOps.Subtract(proposedParameters[i], originalParameters[i])));
+            }
+
+            context.SetFlatParameters(trial);
+            loss = context.Reevaluate();
+        }
+
+        // A step that still fails Armijo after every halving is worse than not stepping, so don't.
+        if (NumOps.GreaterThanOrEquals(loss, originalLoss))
+        {
+            context.SetFlatParameters(originalParameters);
+            return false;
+        }
+
+        return true;
+    }
+
 
     /// <summary>
     /// Calculates the gradient for a given solution using a batch of training data.

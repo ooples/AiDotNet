@@ -81,6 +81,39 @@ public class LBFGSOptimizerOptions<T, TInput, TOutput> : GradientBasedOptimizerO
     public int MemorySize { get; set; } = 10;
 
     /// <summary>
+    /// Gets or sets whether each step is checked against the Armijo sufficient-decrease condition and
+    /// shortened (or rejected) when it fails. Default: <c>true</c>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The two-loop recursion produces a DIRECTION. Nocedal &amp; Wright pair it with a line search
+    /// (Algorithm 3.1) because the direction is only guaranteed to point downhill — the full step along it
+    /// is not guaranteed to improve anything, and on a non-convex objective it regularly does not. Leaving
+    /// this on is what makes the method's convergence argument apply.
+    /// </para>
+    /// <para>
+    /// Turning it off makes every step exactly <c>lr</c> along the direction, which is what PyTorch's
+    /// <c>LBFGS</c> does with its default <c>line_search_fn=None</c>, and it is also the only form the
+    /// compiled fused kernel can run: a fused step has one gradient and no way to evaluate the loss at a
+    /// trial point. So this doubles as the switch that decides whether L-BFGS can fuse.
+    /// </para>
+    /// <para><b>For Beginners:</b> A line search is "try the step, and if it made things worse, take a
+    /// smaller one instead". It costs an extra forward pass per attempt and usually pays for itself.
+    /// </para>
+    /// </remarks>
+    public bool UseLineSearch { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets how many times a failing step is halved before it is rejected outright. Default: 20.
+    /// </summary>
+    /// <remarks>
+    /// Backtracking terminates on its own for a genuine descent direction, so this bound only matters when
+    /// the direction is not one — which happens when the curvature history has gone stale. 20 halvings
+    /// takes the step below 1e-6 of its original length, well past the point where continuing is useful.
+    /// </remarks>
+    public int MaxLineSearchIterations { get; set; } = 20;
+
+    /// <summary>
     /// Gets or sets the initial learning rate for the L-BFGS algorithm, which controls the initial
     /// step size during optimization.
     /// </summary>

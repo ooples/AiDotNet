@@ -606,4 +606,112 @@ public class FusedSpecMatchesEagerBehaviourTests
         Assert.False(TryGetConfig(optimizer, out _),
             "PGD fused with an L2 prox the kernel does not implement — the fused path would run a different algorithm.");
     }
+
+    // ── L-BFGS ───────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// With the line search off, L-BFGS is the plain fixed-step two-loop recursion the plan implements.
+    /// </summary>
+    /// <remarks>
+    /// This is the same configuration PyTorch's <c>LBFGS</c> runs under its default
+    /// <c>line_search_fn=None</c>.
+    /// </remarks>
+    [Fact]
+    public void Lbfgs_WithoutLineSearch_FusesWithItsMemoryDepth()
+    {
+        var optimizer = new LBFGSOptimizer<double, Matrix<double>, Vector<double>>(
+            null,
+            new LBFGSOptimizerOptions<double, Matrix<double>, Vector<double>>
+            {
+                InitialLearningRate = 1.0,
+                MemorySize = 7,
+                UseLineSearch = false,
+                UseAdaptiveLearningRate = false,
+            });
+
+        Assert.True(TryGetConfig(optimizer, out var config));
+        Assert.Equal(Tensors.Engines.Compilation.OptimizerType.LBFGS, config.Type);
+        Assert.Equal(1.0f, config.LearningRate, 6);
+        Assert.NotNull(config.Extras);
+
+        // The memory depth determines how many curvature pairs the recursion runs over, so a default of
+        // zero here would silently reduce L-BFGS to gradient descent on the fused path.
+        Assert.Equal(7, config.Extras!.LbfgsMemorySize);
+    }
+
+    /// <summary>
+    /// With the line search on, the eager path can shorten or reject a step the fused path would take in
+    /// full, so it must decline.
+    /// </summary>
+    [Fact]
+    public void Lbfgs_WithLineSearch_Declines()
+    {
+        var optimizer = new LBFGSOptimizer<double, Matrix<double>, Vector<double>>(
+            null,
+            new LBFGSOptimizerOptions<double, Matrix<double>, Vector<double>>
+            {
+                InitialLearningRate = 1.0,
+                UseLineSearch = true,
+                UseAdaptiveLearningRate = false,
+            });
+
+        Assert.False(TryGetConfig(optimizer, out _),
+            "L-BFGS fused while its line search was enabled — the fused path cannot evaluate the loss at a " +
+            "trial point, so it would take steps the eager path would have shortened or rejected.");
+    }
+
+    /// <summary>
+    /// The line search is on by default, because that is what Algorithm 3.1 requires — so the default
+    /// configuration declines.
+    /// </summary>
+    [Fact]
+    public void Lbfgs_DefaultConfiguration_Declines()
+    {
+        var optimizer = new LBFGSOptimizer<double, Matrix<double>, Vector<double>>(
+            null, new LBFGSOptimizerOptions<double, Matrix<double>, Vector<double>>());
+
+        Assert.False(TryGetConfig(optimizer, out _));
+    }
+
+    // ── TrustRegion ──────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// With radius adaptation off, the eager step is the fixed-radius Cauchy point the plan implements.
+    /// </summary>
+    [Fact]
+    public void TrustRegion_WithFixedRadius_FusesCarryingTheRadius()
+    {
+        var optimizer = new TrustRegionOptimizer<double, Matrix<double>, Vector<double>>(
+            null,
+            new TrustRegionOptimizerOptions<double, Matrix<double>, Vector<double>>
+            {
+                InitialLearningRate = 0.5,
+                InitialTrustRegionRadius = 2.5,
+                AdaptTrustRegionRadius = false,
+                UseAdaptiveLearningRate = false,
+            });
+
+        Assert.True(TryGetConfig(optimizer, out var config));
+        Assert.Equal(Tensors.Engines.Compilation.OptimizerType.TrustRegion, config.Type);
+
+        // The kernel computes min(radius/||g||, lr), so both numbers have to arrive.
+        Assert.Equal(0.5f, config.LearningRate, 6);
+        Assert.NotNull(config.Extras);
+        Assert.Equal(2.5f, config.Extras!.TrustRegionRadius, 6);
+    }
+
+    /// <summary>
+    /// With adaptation on — the default, since resizing the region is the method — the eager path can
+    /// shrink the radius or reject a step outright, neither of which the fused path does.
+    /// </summary>
+    [Fact]
+    public void TrustRegion_WithRadiusAdaptation_Declines()
+    {
+        var optimizer = new TrustRegionOptimizer<double, Matrix<double>, Vector<double>>(
+            null, new TrustRegionOptimizerOptions<double, Matrix<double>, Vector<double>>());
+
+        Assert.False(TryGetConfig(optimizer, out _),
+            "Trust region fused while adapting its radius — the fused path holds the radius fixed, so the " +
+            "two would diverge from the second step onward.");
+    }
 }

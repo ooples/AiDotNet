@@ -94,6 +94,25 @@ public class TrustRegionOptimizerOptions<T, TInput, TOutput> : GradientBasedOpti
     public double InitialTrustRegionRadius { get; set; } = 1.0;
 
     /// <summary>
+    /// Gets or sets whether the trust region is resized (and unsuccessful steps rejected) after every step.
+    /// Default: <c>true</c>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Resizing the region from the ratio of actual to predicted reduction is the trust-region method —
+    /// without it, "trust region" just names a fixed cap on the step length. Leaving this on is what makes
+    /// the region adapt to how well the quadratic model is predicting.
+    /// </para>
+    /// <para>
+    /// Turning it off fixes the radius at <see cref="InitialTrustRegionRadius"/>, which is the only form
+    /// the compiled fused kernel can run: measuring the actual reduction needs the loss at the trial
+    /// point, and a fused step has one gradient and no loss evaluation. So this doubles as the switch that
+    /// decides whether trust region can fuse.
+    /// </para>
+    /// </remarks>
+    public bool AdaptTrustRegionRadius { get; set; } = true;
+
+    /// <summary>
     /// Gets or sets the minimum allowed radius of the trust region.
     /// </summary>
     /// <value>A positive double value, defaulting to 1e-6.</value>
