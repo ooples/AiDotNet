@@ -161,7 +161,56 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// <see cref="WithParameters"/> and <see cref="DeepCopy"/> because it is immutable configuration
     /// from the result's perspective.
     /// </remarks>
+    [JsonProperty]
     public SegmentationVisualizationConfig? SegmentationVisualization { get; internal set; }
+
+    /// <summary>
+    /// Writes a compact text view of a segmentation prediction for terminals and CI logs.
+    /// </summary>
+    /// <param name="output">The segmentation prediction to display.</param>
+    /// <param name="title">Optional heading written above the visualization.</param>
+    /// <param name="maxWidth">Maximum number of character cells used for one output row.</param>
+    /// <param name="writer">Destination writer. When omitted, output is written to the console.</param>
+    /// <remarks>
+    /// <para>
+    /// This facade method keeps the dashboard implementation private while giving callers one stable
+    /// result-oriented API for inspecting a prediction.
+    /// </para>
+    /// <para><b>For Beginners:</b> Call this when you want to quickly inspect which class or instance
+    /// owns each part of an image without creating an image file.</para>
+    /// </remarks>
+    public void RenderSegmentationAscii(
+        SegmentationOutput<T> output,
+        string? title = null,
+        int maxWidth = 80,
+        TextWriter? writer = null) =>
+        new SegmentationVisualizer().RenderAsciiOverlay(output, title, maxWidth, writer);
+
+    /// <summary>
+    /// Creates a self-contained HTML page containing a rendered segmentation overlay and legend.
+    /// </summary>
+    /// <param name="image">Source image shaped [3,H,W], or [H,W] for greyscale.</param>
+    /// <param name="output">The segmentation prediction to visualize.</param>
+    /// <param name="config">
+    /// Optional per-call settings. When omitted, <see cref="SegmentationVisualization"/> is used;
+    /// if neither was configured, the standard visualization defaults are applied.
+    /// </param>
+    /// <param name="title">Heading placed in the generated page.</param>
+    /// <returns>A complete HTML document whose image is embedded as a data URI.</returns>
+    /// <remarks>
+    /// <b>For Beginners:</b> Configuration supplied to <c>ConfigureSegmentationVisualization</c>
+    /// automatically becomes the default here, so it does not need to be repeated for every result.
+    /// </remarks>
+    public string GenerateSegmentationHtmlOverlay(
+        Tensor<T> image,
+        SegmentationOutput<T> output,
+        SegmentationVisualizationConfig? config = null,
+        string title = "Segmentation Overlay") =>
+        new SegmentationVisualizer().GenerateHtmlOverlay(
+            image,
+            output,
+            config ?? SegmentationVisualization,
+            title);
 
     /// <summary>
     /// Gets the model, throwing if it has not been set.
@@ -5761,6 +5810,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
                 CrossValidationResult = deserializedObject.CrossValidationResult;
                 AutoMLSummary = deserializedObject.AutoMLSummary;
                 DeploymentConfiguration = deserializedObject.DeploymentConfiguration;
+                SegmentationVisualization = deserializedObject.SegmentationVisualization;
                 // Weight-streaming telemetry — preserve through deserialize so
                 // a saved-and-loaded result keeps the report that was produced
                 // when the model was first built. Closes review-comment

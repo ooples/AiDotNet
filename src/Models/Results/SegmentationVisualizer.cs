@@ -8,11 +8,11 @@ using AiDotNet.Tensors.Interfaces;
 using AiDotNet.Tensors.LinearAlgebra;
 using SysConsole = System.Console;
 
-namespace AiDotNet.Dashboard.Visualization;
+namespace AiDotNet.Models.Results;
 
 /// <summary>
-/// Presents a segmentation overlay in the two forms this dashboard can actually deliver: a terminal
-/// rendering and a self-contained HTML page.
+/// Implements the two segmentation presentation formats exposed by <see cref="AiModelResult{T,TInput,TOutput}"/>:
+/// a terminal rendering and a self-contained HTML page.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -33,7 +33,7 @@ namespace AiDotNet.Dashboard.Visualization;
 /// browser understands is the better trade here.
 /// </para>
 /// </remarks>
-public class SegmentationVisualizer
+internal sealed class SegmentationVisualizer
 {
     /// <summary>
     /// Prints an ASCII overlay to the console: one character per cell, chosen by which instance covers

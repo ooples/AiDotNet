@@ -159,4 +159,52 @@ public partial class AiModelBuilder<T, TInput, TOutput>
 
         Assert.DoesNotContain(Run(first, second), item => item.Id is "AIDN096" or "AIDN097");
     }
+
+    [Fact]
+    public async Task NameOfAccessor_DoesNotCountAsAConfiguredValueRead()
+    {
+        await Task.Yield();
+        const string source = @"
+namespace AiDotNet;
+public partial class AiModelBuilder<T, TInput, TOutput>
+{
+    private object _configured;
+    internal object Configured => _configured;
+    public AiModelBuilder<T, TInput, TOutput> ConfigureValue(object value)
+    {
+        _configured = value;
+        return this;
+    }
+    public string Describe() => nameof(Configured);
+}";
+
+        var diagnostic = Assert.Single(Run(source).Where(item => item.Id == "AIDN097"));
+        Assert.Contains("Configured", diagnostic.GetMessage(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task SimpleAccessorAssignment_DoesNotCountAsAConfiguredValueRead()
+    {
+        await Task.Yield();
+        const string source = @"
+namespace AiDotNet;
+public partial class AiModelBuilder<T, TInput, TOutput>
+{
+    private object _configured;
+    internal object Configured
+    {
+        get => _configured;
+        set => _configured = value;
+    }
+    public AiModelBuilder<T, TInput, TOutput> ConfigureValue(object value)
+    {
+        _configured = value;
+        return this;
+    }
+    public void Reset(object value) => Configured = value;
+}";
+
+        var diagnostic = Assert.Single(Run(source).Where(item => item.Id == "AIDN097"));
+        Assert.Contains("Configured", diagnostic.GetMessage(), StringComparison.Ordinal);
+    }
 }

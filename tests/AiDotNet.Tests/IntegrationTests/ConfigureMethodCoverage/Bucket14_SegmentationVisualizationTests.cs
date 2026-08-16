@@ -1,7 +1,9 @@
 using AiDotNet.ComputerVision.Segmentation.Common;
+using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
 using AiDotNet.Models;
+using AiDotNet.Models.Results;
 using Xunit;
 
 namespace AiDotNet.Tests.IntegrationTests.ConfigureMethodCoverage;
@@ -70,6 +72,41 @@ public class Bucket14_SegmentationVisualizationTests : ConfigureMethodTestBase
             result.DeepCopy());
         Assert.Same(config, withParameters.SegmentationVisualization);
         Assert.Same(config, deepCopy.SegmentationVisualization);
+    }
+
+    [Fact]
+    [Trait("category", "integration-configure-method")]
+    public async Task SegmentationVisualization_SurvivesSerializationRoundTrip()
+    {
+        await Task.Yield();
+        var original = new AiModelResult<float, Tensor<float>, Tensor<float>>
+        {
+            SegmentationVisualization = new SegmentationVisualizationConfig
+            {
+                Alpha = 0.27,
+                DrawContours = false,
+                ContourThickness = 5,
+                ShowLabels = false,
+                ShowScores = true,
+                MinDisplayConfidence = 0.81,
+            },
+        };
+
+        byte[] serialized;
+        var restored = new AiModelResult<float, Tensor<float>, Tensor<float>>();
+        using (ModelPersistenceGuard.InternalOperation())
+        {
+            serialized = original.Serialize();
+            restored.Deserialize(serialized);
+        }
+
+        var config = Assert.IsType<SegmentationVisualizationConfig>(restored.SegmentationVisualization);
+        Assert.Equal(0.27, config.Alpha);
+        Assert.False(config.DrawContours);
+        Assert.Equal(5, config.ContourThickness);
+        Assert.False(config.ShowLabels);
+        Assert.True(config.ShowScores);
+        Assert.Equal(0.81, config.MinDisplayConfidence);
     }
 
     /// <summary>
@@ -353,6 +390,53 @@ public class Bucket14_SegmentationVisualizationTests : ConfigureMethodTestBase
         Assert.Equal(0.0f, rendered[0, 0, 0], 6);
         Assert.Equal(1.0f, rendered[1, 0, 0], 6);
         Assert.Equal(0.0f, rendered[2, 0, 0], 6);
+    }
+
+    [Fact]
+    [Trait("category", "integration-configure-method")]
+    public async Task Render_ClassMapLabelsAreDrawnAndScoresAreRejectedExplicitly()
+    {
+        await Task.Yield();
+        var classMap = new Tensor<float>([32, 64]);
+        for (int y = 15; y < 24; y++)
+            for (int x = 20; x < 48; x++)
+                classMap[y, x] = 1.0f;
+
+        var output = new SegmentationOutput<float>
+        {
+            ClassMap = classMap,
+            ClassNames = ["background", "road"],
+            NumClasses = 2,
+            ImageHeight = 32,
+            ImageWidth = 64,
+        };
+        var image = SolidImage(32, 64, 0.0f);
+        var rendered = SegmentationRenderer.Render(
+            image,
+            output,
+            new SegmentationVisualizationConfig
+            {
+                Alpha = 0.0,
+                DrawContours = false,
+                ShowLabels = true,
+                ShowScores = false,
+            });
+
+        int labelPixelsOutsideRegion = 0;
+        for (int y = 0; y < 15; y++)
+            for (int x = 0; x < 64; x++)
+                if (rendered[0, y, x] != 0.0f
+                    || rendered[1, y, x] != 0.0f
+                    || rendered[2, y, x] != 0.0f)
+                    labelPixelsOutsideRegion++;
+
+        Assert.True(labelPixelsOutsideRegion > 0, "The class-map label was accepted but not drawn.");
+
+        var error = Assert.Throws<NotSupportedException>(() => SegmentationRenderer.Render(
+            image,
+            output,
+            new SegmentationVisualizationConfig { ShowLabels = false, ShowScores = true }));
+        Assert.Contains("class map alone", error.Message, StringComparison.Ordinal);
     }
 
     [Fact]

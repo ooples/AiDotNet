@@ -119,6 +119,13 @@ public static class SegmentationRenderer
         }
         else if (output.ClassMap is not null)
         {
+            if (config.ShowScores)
+            {
+                throw new NotSupportedException(
+                    "ShowScores cannot be derived from a class map alone because it has no " +
+                    "per-instance confidence value. Supply InstanceMasks with InstanceScores, " +
+                    "or set ShowScores = false. The setting is rejected rather than ignored.");
+            }
             masks = ClassMapToMasks(output.ClassMap, Math.Max(output.NumClasses, 1), numOps);
         }
         else
@@ -147,6 +154,14 @@ public static class SegmentationRenderer
                 output,
                 keptInstances,
                 config,
+                palette,
+                numOps,
+                drawResult.Scale);
+        else if (config.ShowLabels && output.ClassMap is not null)
+            DrawClassLabels(
+                rendered,
+                drawResult.MaskAnchors,
+                output,
                 palette,
                 numOps,
                 drawResult.Scale);
@@ -583,6 +598,40 @@ public static class SegmentationRenderer
         }
 
         return label;
+    }
+
+    /// <summary>
+    /// Labels semantic regions by class ID. Class-map mask channels intentionally share their index
+    /// with the source class ID, so anchors and palette entries remain aligned without a lookup table.
+    /// </summary>
+    private static void DrawClassLabels<T>(
+        Tensor<T> rgb,
+        MaskAnchor[] anchors,
+        SegmentationOutput<T> output,
+        byte[,] palette,
+        INumericOperations<T> numOps,
+        double scaleRange)
+    {
+        int paletteSize = palette.GetLength(0);
+        for (int classId = 1; classId < anchors.Length; classId++)
+        {
+            MaskAnchor anchor = anchors[classId];
+            if (!anchor.HasValue) continue;
+
+            string text = output.ClassNames is not null
+                && classId < output.ClassNames.Length
+                && !string.IsNullOrWhiteSpace(output.ClassNames[classId])
+                    ? output.ClassNames[classId]
+                    : $"class {classId}";
+
+            int originY = anchor.Y - BitmapFont5x7.MeasureHeight(1) - 1;
+            if (originY < 0) originY = anchor.Y + 1;
+
+            double r = palette[classId % paletteSize, 0] * scaleRange / 255.0;
+            double g = palette[classId % paletteSize, 1] * scaleRange / 255.0;
+            double b = palette[classId % paletteSize, 2] * scaleRange / 255.0;
+            BitmapFont5x7.DrawText(rgb, numOps, text, anchor.X, originY, r, g, b);
+        }
     }
 
     /// <summary>

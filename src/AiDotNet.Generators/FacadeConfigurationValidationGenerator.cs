@@ -171,7 +171,9 @@ public class FacadeConfigurationValidationGenerator : IIncrementalGenerator
             }
 
             if (referencedSymbol is IPropertySymbol propertySymbol
-                && BelongsToFacade(propertySymbol.ContainingType, declaredSymbol))
+                && BelongsToFacade(propertySymbol.ContainingType, declaredSymbol)
+                && !IsWithinNameOfExpression(identifier)
+                && !IsSimpleAssignmentTarget(identifier))
             {
                 accessorCalls.Add(propertySymbol.Name);
             }
@@ -218,6 +220,14 @@ public class FacadeConfigurationValidationGenerator : IIncrementalGenerator
         return target.Parent is AssignmentExpressionSyntax assignment
             && assignment.Left == target
             && assignment.IsKind(SyntaxKind.SimpleAssignmentExpression);
+    }
+
+    private static bool IsWithinNameOfExpression(IdentifierNameSyntax identifier)
+    {
+        var argument = identifier.FirstAncestorOrSelf<ArgumentSyntax>();
+        return argument?.Parent?.Parent is InvocationExpressionSyntax invocation
+            && invocation.Expression is IdentifierNameSyntax nameOfIdentifier
+            && nameOfIdentifier.Identifier.ValueText == "nameof";
     }
 
     private static void Analyze(

@@ -4,7 +4,7 @@ using System.Linq;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using AiDotNet.ComputerVision.Segmentation.Common;
-using AiDotNet.Dashboard.Visualization;
+using AiDotNet.Models.Results;
 using Xunit;
 
 namespace AiDotNet.Tests.UnitTests.Dashboard;
@@ -21,8 +21,8 @@ namespace AiDotNet.Tests.UnitTests.Dashboard;
 /// data URI and assert the actual bytes, rather than checking that a string was produced.
 /// </para>
 /// <para>
-/// Everything is asserted through the PUBLIC surface (GenerateHtmlOverlay), so the tests exercise the
-/// path a caller actually uses.
+/// Everything is asserted through the public <see cref="AiModelResult{T,TInput,TOutput}"/> facade,
+/// so the tests exercise the path a caller actually uses without exposing the presentation helper.
 /// </para>
 /// </remarks>
 public class SegmentationVisualizerTests
@@ -36,16 +36,16 @@ public class SegmentationVisualizerTests
     /// pixel data, and the row stride must include the padding.
     /// </summary>
     [Fact]
-    public void EncodedBmp_HasCorrectHeaderDimensionsAndBottomUpRowOrder()
+    public async Task EncodedBmp_HasCorrectHeaderDimensionsAndBottomUpRowOrder()
     {
+        await Task.Yield();
         // Distinct top-left pixel so orientation is detectable; everything else black.
         var image = new Tensor<float>([3, Height, Width]);
         image[0, 0, 0] = 1.0f;   // pure red at (row 0, col 0)
 
         var output = MakeSingleInstanceOutput();
 
-        var html = new SegmentationVisualizer().GenerateHtmlOverlay(
-            image, output,
+        var result = CreateResult(
             new SegmentationVisualizationConfig
             {
                 Alpha = 0.0,          // leave the source pixels untouched so orientation is unambiguous
@@ -54,6 +54,7 @@ public class SegmentationVisualizerTests
                 ShowScores = false,
                 ShowBoundingBoxes = false,
             });
+        var html = result.GenerateSegmentationHtmlOverlay(image, output);
 
         byte[] bmp = ExtractBmp(html);
 
@@ -91,12 +92,13 @@ public class SegmentationVisualizerTests
     /// plausible but are swapped, which no shape assertion would catch.
     /// </summary>
     [Fact]
-    public void EncodedBmp_WritesChannelsInBgrOrder()
+    public async Task EncodedBmp_WritesChannelsInBgrOrder()
     {
+        await Task.Yield();
         var image = new Tensor<float>([3, Height, Width]);
         image[2, 0, 0] = 1.0f;   // pure BLUE at the top-left
 
-        var html = new SegmentationVisualizer().GenerateHtmlOverlay(
+        var html = CreateResult().GenerateSegmentationHtmlOverlay(
             image, MakeSingleInstanceOutput(),
             new SegmentationVisualizationConfig
             {
@@ -117,15 +119,16 @@ public class SegmentationVisualizerTests
     /// as an almost-black image.
     /// </summary>
     [Fact]
-    public void EncodedBmp_ScalesNormalizedImagesToFullByteRange()
+    public async Task EncodedBmp_ScalesNormalizedImagesToFullByteRange()
     {
+        await Task.Yield();
         var image = new Tensor<float>([3, Height, Width]);
         for (int c = 0; c < 3; c++)
             for (int y = 0; y < Height; y++)
                 for (int x = 0; x < Width; x++)
                     image[c, y, x] = 1.0f;   // white, in [0,1] terms
 
-        var html = new SegmentationVisualizer().GenerateHtmlOverlay(
+        var html = CreateResult().GenerateSegmentationHtmlOverlay(
             image, MakeSingleInstanceOutput(),
             new SegmentationVisualizationConfig
             {
@@ -152,7 +155,7 @@ public class SegmentationVisualizerTests
                 for (int x = 0; x < Width; x++)
                     image[c, y, x] = 128.0f;
 
-        var html = new SegmentationVisualizer().GenerateHtmlOverlay(
+        var html = CreateResult().GenerateSegmentationHtmlOverlay(
             image, MakeSingleInstanceOutput(),
             new SegmentationVisualizationConfig
             {
@@ -162,7 +165,6 @@ public class SegmentationVisualizerTests
                 ShowScores = false,
                 ShowBoundingBoxes = false,
             });
-
         byte[] bmp = ExtractBmp(html);
         Assert.Equal(128, bmp[54 + 0]);
         Assert.Equal(128, bmp[54 + 1]);
@@ -186,7 +188,7 @@ public class SegmentationVisualizerTests
         };
         using var writer = new StringWriter();
 
-        new SegmentationVisualizer().RenderAsciiOverlay(output, maxWidth: Width, writer: writer);
+        CreateResult().RenderSegmentationAscii(output, maxWidth: Width, writer: writer);
 
         string[] mapRows = writer.ToString()
             .Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries)
@@ -198,10 +200,11 @@ public class SegmentationVisualizerTests
 
     /// <summary>The HTML is self-contained and carries the legend, so it can be attached to a report.</summary>
     [Fact]
-    public void GenerateHtmlOverlay_ProducesSelfContainedPageWithLegend()
+    public async Task GenerateHtmlOverlay_ProducesSelfContainedPageWithLegend()
     {
+        await Task.Yield();
         var image = new Tensor<float>([3, Height, Width]);
-        var html = new SegmentationVisualizer().GenerateHtmlOverlay(
+        var html = CreateResult().GenerateSegmentationHtmlOverlay(
             image, MakeSingleInstanceOutput(),
             new SegmentationVisualizationConfig { ShowLabels = false, ShowScores = false },
             title: "Overlay <check>");
@@ -211,6 +214,10 @@ public class SegmentationVisualizerTests
         Assert.Contains("Overlay &lt;check&gt;", html);   // title is HTML-escaped
         Assert.Contains("<table>", html);                 // legend present
     }
+
+    private static AiModelResult<float, Tensor<float>, Tensor<float>> CreateResult(
+        SegmentationVisualizationConfig? config = null) =>
+        new() { SegmentationVisualization = config };
 
     private static SegmentationOutput<float> MakeSingleInstanceOutput()
     {
