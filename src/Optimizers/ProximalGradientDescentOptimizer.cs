@@ -262,15 +262,32 @@ public class ProximalGradientDescentOptimizer<T, TInput, TOutput> : GradientBase
             return configured;
         }
 
+        // Copy the configured options and override only Strength. Constructing a fresh
+        // RegularizationOptions would reset Type to None and L1Ratio to its default, so anything reading
+        // GetOptions() for metadata would see a regularizer that describes itself wrongly — harmless while
+        // only Strength is read, and a trap the moment something else is.
+        var rescaled = CloneWithStrength(configured.GetOptions(), strength.Value);
         return configured switch
         {
-            L1Regularization<T, TInput, TOutput> => new L1Regularization<T, TInput, TOutput>(
-                new RegularizationOptions { Strength = strength.Value }),
-            L2Regularization<T, TInput, TOutput> => new L2Regularization<T, TInput, TOutput>(
-                new RegularizationOptions { Strength = strength.Value }),
+            L1Regularization<T, TInput, TOutput> => new L1Regularization<T, TInput, TOutput>(rescaled),
+            L2Regularization<T, TInput, TOutput> => new L2Regularization<T, TInput, TOutput>(rescaled),
             _ => configured,
         };
     }
+
+    /// <summary>
+    /// Copies regularization options, replacing only the strength.
+    /// </summary>
+    /// <param name="source">The options to copy.</param>
+    /// <param name="strength">The strength the copy should carry.</param>
+    /// <returns>A copy identical to <paramref name="source"/> apart from its strength.</returns>
+    internal static RegularizationOptions CloneWithStrength(RegularizationOptions source, double strength)
+        => new RegularizationOptions
+        {
+            Type = source.Type,
+            Strength = strength,
+            L1Ratio = source.L1Ratio,
+        };
 
     /// <summary>
     /// Initializes the adaptive parameters used by the Proximal Gradient Descent algorithm.

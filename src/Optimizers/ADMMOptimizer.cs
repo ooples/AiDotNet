@@ -238,13 +238,15 @@ public class ADMMOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
                 return _regularization;
             }
 
-            double scaled = _regularization.GetOptions().Strength / rho;
+            // Copy the configured options and override only Strength, so Type and L1Ratio survive — a
+            // fresh RegularizationOptions would reset them and make GetOptions() describe a different
+            // regularizer than the one being applied.
+            var rescaled = ProximalGradientDescentOptimizer<T, TInput, TOutput>.CloneWithStrength(
+                _regularization.GetOptions(), _regularization.GetOptions().Strength / rho);
             return _regularization switch
             {
-                L1Regularization<T, TInput, TOutput> => new L1Regularization<T, TInput, TOutput>(
-                    new RegularizationOptions { Strength = scaled }),
-                L2Regularization<T, TInput, TOutput> => new L2Regularization<T, TInput, TOutput>(
-                    new RegularizationOptions { Strength = scaled }),
+                L1Regularization<T, TInput, TOutput> => new L1Regularization<T, TInput, TOutput>(rescaled),
+                L2Regularization<T, TInput, TOutput> => new L2Regularization<T, TInput, TOutput>(rescaled),
                 _ => _regularization,
             };
         }

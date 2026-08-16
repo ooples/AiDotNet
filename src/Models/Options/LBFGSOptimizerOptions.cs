@@ -40,6 +40,31 @@ public class LBFGSOptimizerOptions<T, TInput, TOutput> : GradientBasedOptimizerO
         MaxIterations = 1000;
     }
 
+    /// <summary>Creates a complete copy of an existing L-BFGS options instance.</summary>
+    /// <param name="other">The options instance to copy.</param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="other"/> is null.</exception>
+    /// <remarks>
+    /// Reference-typed collaborators are shared rather than duplicated — see
+    /// <see cref="GradientBasedOptimizerOptions{T, TInput, TOutput}"/>'s copy helper for what that means.
+    /// </remarks>
+    public LBFGSOptimizerOptions(LBFGSOptimizerOptions<T, TInput, TOutput> other)
+    {
+        if (other is null) throw new ArgumentNullException(nameof(other));
+
+        CopyInheritedPropertiesFrom(other);
+        BatchSize = other.BatchSize;
+        MemorySize = other.MemorySize;
+        UseLineSearch = other.UseLineSearch;
+        MaxLineSearchIterations = other.MaxLineSearchIterations;
+        InitialLearningRate = other.InitialLearningRate;
+        // `new` shadows of the base properties: CopyInheritedPropertiesFrom copies the BASE ones and
+        // leaves these at their defaults, so they have to be named here.
+        MinLearningRate = other.MinLearningRate;
+        MaxLearningRate = other.MaxLearningRate;
+        LearningRateIncreaseFactor = other.LearningRateIncreaseFactor;
+        LearningRateDecreaseFactor = other.LearningRateDecreaseFactor;
+    }
+
     /// <summary>
     /// Gets or sets the batch size for gradient computation.
     /// </summary>
@@ -82,8 +107,9 @@ public class LBFGSOptimizerOptions<T, TInput, TOutput> : GradientBasedOptimizerO
 
     /// <summary>
     /// Gets or sets whether each step is checked against the Armijo sufficient-decrease condition and
-    /// shortened (or rejected) when it fails. Default: <c>true</c>.
+    /// shortened (or rejected) when it fails.
     /// </summary>
+    /// <value><c>true</c> to line-search each step; <c>false</c> to take the full step. Default: <c>true</c>.</value>
     /// <remarks>
     /// <para>
     /// The two-loop recursion produces a DIRECTION. Nocedal &amp; Wright pair it with a line search
@@ -104,12 +130,19 @@ public class LBFGSOptimizerOptions<T, TInput, TOutput> : GradientBasedOptimizerO
     public bool UseLineSearch { get; set; } = true;
 
     /// <summary>
-    /// Gets or sets how many times a failing step is halved before it is rejected outright. Default: 20.
+    /// Gets or sets how many times a failing step is halved before it is rejected outright.
     /// </summary>
+    /// <value>A positive integer, defaulting to 20.</value>
     /// <remarks>
+    /// <para>
     /// Backtracking terminates on its own for a genuine descent direction, so this bound only matters when
     /// the direction is not one — which happens when the curvature history has gone stale. 20 halvings
-    /// takes the step below 1e-6 of its original length, well past the point where continuing is useful.
+    /// takes the step below 1e-6 of its original length (0.5^20), well past the point where continuing is
+    /// useful.
+    /// </para>
+    /// <para><b>For Beginners:</b> How many times to try a smaller step before giving up on this one and
+    /// leaving the parameters where they were. You rarely need to change it.
+    /// </para>
     /// </remarks>
     public int MaxLineSearchIterations { get; set; } = 20;
 

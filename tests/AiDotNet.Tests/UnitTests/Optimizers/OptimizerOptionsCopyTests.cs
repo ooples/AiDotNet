@@ -47,6 +47,36 @@ public class OptimizerOptionsCopyTests
     /// null on both sides, so <c>Assert.Equal(null, null)</c> passed whether or not the copy constructor
     /// touched it. The test claimed to check every settable property while quietly checking a subset.
     /// </remarks>
+    [Fact]
+    public void BFGSCopyConstructor_CopiesEverySettablePropertyAndRejectsNull()
+    {
+        var source = Populate(new BFGSOptimizerOptions<double, Matrix<double>, Vector<double>>(), out var unmutated);
+
+        AssertCompleteCopy(source, new BFGSOptimizerOptions<double, Matrix<double>, Vector<double>>(source), unmutated);
+        Assert.Throws<ArgumentNullException>(() =>
+            new BFGSOptimizerOptions<double, Matrix<double>, Vector<double>>(null!));
+    }
+
+    [Fact]
+    public void LBFGSCopyConstructor_CopiesEverySettablePropertyAndRejectsNull()
+    {
+        var source = Populate(new LBFGSOptimizerOptions<double, Matrix<double>, Vector<double>>(), out var unmutated);
+
+        AssertCompleteCopy(source, new LBFGSOptimizerOptions<double, Matrix<double>, Vector<double>>(source), unmutated);
+        Assert.Throws<ArgumentNullException>(() =>
+            new LBFGSOptimizerOptions<double, Matrix<double>, Vector<double>>(null!));
+    }
+
+    [Fact]
+    public void TrustRegionCopyConstructor_CopiesEverySettablePropertyAndRejectsNull()
+    {
+        var source = Populate(new TrustRegionOptimizerOptions<double, Matrix<double>, Vector<double>>(), out var unmutated);
+
+        AssertCompleteCopy(source, new TrustRegionOptimizerOptions<double, Matrix<double>, Vector<double>>(source), unmutated);
+        Assert.Throws<ArgumentNullException>(() =>
+            new TrustRegionOptimizerOptions<double, Matrix<double>, Vector<double>>(null!));
+    }
+
     private static TOptions Populate<TOptions>(TOptions options, out List<string> unmutated)
     {
         var skipped = new List<string>();
@@ -115,7 +145,9 @@ public class OptimizerOptionsCopyTests
         Assert.NotSame(source, copy);
         foreach (var property in WritableProperties(typeof(TOptions)))
         {
-            Assert.Equal(property.GetValue(source), property.GetValue(copy));
+            Assert.True(Equals(property.GetValue(source), property.GetValue(copy)),
+                $"{typeof(TOptions).Name}.{property.Name} was not copied: source has " +
+                $"{property.GetValue(source) ?? "null"}, copy has {property.GetValue(copy) ?? "null"}.");
         }
 
         var unexpected = unmutated.Where(name => !KnownUncoverableProperties.Contains(name)).ToList();

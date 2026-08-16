@@ -891,12 +891,15 @@ public class TrustRegionOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBa
         T rho = NumOps.Divide(actualReduction, predictedReduction);
         T stepNorm = NumOps.Sqrt(stepSquaredNorm);
 
-        if (NumOps.LessThan(rho, NumOps.FromDouble(0.25)))
+        // The three thresholds are the options this class already exposes for exactly this test, rather
+        // than the textbook constants inlined: a caller who tuned UnsuccessfulThreshold and found it did
+        // nothing on the tape path would have no way to tell that the number was being ignored.
+        if (NumOps.LessThan(rho, NumOps.FromDouble(_options.UnsuccessfulThreshold)))
         {
             _trustRegionRadius = NumOps.Multiply(
                 _trustRegionRadius, NumOps.FromDouble(_options.ContractionFactor));
         }
-        else if (NumOps.GreaterThan(rho, NumOps.FromDouble(0.75))
+        else if (NumOps.GreaterThan(rho, NumOps.FromDouble(_options.VerySuccessfulThreshold))
             && NumOps.GreaterThanOrEquals(stepNorm, NumOps.Multiply(_trustRegionRadius, NumOps.FromDouble(0.99))))
         {
             _trustRegionRadius = NumOps.Multiply(
@@ -908,9 +911,10 @@ public class TrustRegionOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBa
             NumOps.FromDouble(_options.MinTrustRegionRadius),
             NumOps.FromDouble(_options.MaxTrustRegionRadius));
 
-        // Reject: the step did not reduce the objective, so it is not taken. The shrunken radius means the
-        // next attempt is shorter, which is the mechanism by which a trust region recovers.
-        if (NumOps.LessThanOrEquals(rho, NumOps.Zero))
+        // Reject: the model's prediction was too poor to accept the step, so it is not taken. The shrunken
+        // radius means the next attempt is shorter, which is the mechanism by which a trust region
+        // recovers. Nocedal & Wright's eta lives in [0, 1/4); AcceptanceThreshold defaults to 0.1.
+        if (NumOps.LessThanOrEquals(rho, NumOps.FromDouble(_options.AcceptanceThreshold)))
         {
             context.SetFlatParameters(originalParameters);
         }

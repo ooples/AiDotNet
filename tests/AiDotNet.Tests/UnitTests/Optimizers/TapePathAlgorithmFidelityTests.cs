@@ -1,8 +1,12 @@
 using System;
+using System.Collections.Generic;
+using AiDotNet.Helpers;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.Optimizers;
 using AiDotNet.Regularization;
+using AiDotNet.Tensors;
+using AiDotNet.Tensors.Engines.Autodiff;
 using Xunit;
 
 namespace AiDotNet.Tests.UnitTests.Optimizers;
@@ -209,22 +213,34 @@ public class TapePathAlgorithmFidelityTests
         var p = new Vector<double>(new[] { 0.7 });
         var g = new Vector<double>(new[] { 0.3 });
 
+        // Independent transcription of the whole recurrence, not just "the steps differ" — a sign error in
+        // the coupling, a missing u-update or a wrong rho scaling all produce unequal deltas too, so
+        // inequality alone accepts most of the ways this can be wrong.
+        const double rho = 2.0;
+        var regularization = new L2Regularization<double, Matrix<double>, Vector<double>>();
+        double strengthOverRho = regularization.GetOptions().Strength / rho;
+
+        double x = p[0], z = 0.0, u = 0.0;
+        var expected = new double[4];
+        for (int s = 0; s < 4; s++)
+        {
+            x -= Lr * (g[0] + rho * ((x - z) + u));
+            z = (x + u) * (1.0 - strengthOverRho);   // L2 prox at Strength/rho
+            u += x - z;
+            expected[s] = x;
+        }
+
         var prev = p;
-        var deltas = new double[4];
         for (int s = 0; s < 4; s++)
         {
             var next = optimizer.UpdateParameters(prev, g);
-            deltas[s] = next[0] - prev[0];
+            Assert.Equal(expected[s], next[0], 10);
             prev = next;
         }
 
-        // Under plain SGD every delta would be identical (-lr*g). The dual/coupling terms make them differ.
-        bool allEqual = true;
-        for (int s = 1; s < deltas.Length; s++)
-            if (Math.Abs(deltas[s] - deltas[0]) > 1e-12) allEqual = false;
-
-        Assert.False(allEqual,
-            "every ADMM step was identical, which is the signature of a plain -lr*g update with no dual variable.");
+        // And the dual variable is genuinely accumulating rather than being recomputed each step: u after
+        // four steps is the running sum of the primal residuals, which is not any single one of them.
+        Assert.NotEqual(0.0, u, 10);
     }
 
     // ── LevenbergMarquardt ───────────────────────────────────────────────────
@@ -243,8 +259,20 @@ public class TapePathAlgorithmFidelityTests
         var optimizer = new LevenbergMarquardtOptimizer<double, Matrix<double>, Vector<double>>(
             null, new LevenbergMarquardtOptimizerOptions<double, Matrix<double>, Vector<double>>());
 
-        var ex = Assert.Throws<NotSupportedException>(
-            () => optimizer.Step(null!));
+        // A real context, not null: LM's Step happens to throw before touching its argument today, so
+        // passing null would keep passing only for as long as that statement order holds — and if someone
+        // added a guard ahead of the throw, the failure would read as a NullReferenceException in the test
+        // rather than as the contract change it is.
+        var parameter = new Tensor<double>(new[] { 1 }, new Vector<double>(new[] { 0.5 }));
+        var context = new TapeStepContext<double>(
+            new[] { parameter },
+            new Dictionary<Tensor<double>, Tensor<double>>(TensorReferenceComparer<Tensor<double>>.Instance)
+            {
+                [parameter] = new Tensor<double>(new[] { 1 }, new Vector<double>(new[] { 0.25 })),
+            },
+            loss: 0.0);
+
+        var ex = Assert.Throws<NotSupportedException>(() => optimizer.Step(context));
 
         Assert.Contains("Jacobian", ex.Message);
         // The message must point somewhere useful, not just refuse.

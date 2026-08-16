@@ -59,6 +59,47 @@ public class TapeOptimizerSerializationTests
         Step(restored, restoredParameters, CreateSecondGradients(restoredParameters));
 
         AssertParametersEqual(optimizerName, uninterruptedParameters, restoredParameters);
+
+        AssertAsgdAverageRestored(optimizerName, uninterrupted, uninterruptedParameters, restored, restoredParameters);
+    }
+
+    /// <summary>
+    /// ASGD's averaged iterate is state the updated parameters cannot reveal, so it needs its own check.
+    /// </summary>
+    /// <remarks>
+    /// The parameter comparison above passes whether or not <c>_tapeAx</c> survived the round trip: the
+    /// running average is written but never read back into the parameters, so a restore that dropped it
+    /// would look identical. It is the value <c>GetAveragedParameters</c> hands back as the solution,
+    /// which is the whole point of Polyak-Ruppert averaging, so a silent reset would surface only as a
+    /// worse final model.
+    /// </remarks>
+    private static void AssertAsgdAverageRestored(
+        string optimizerName,
+        IGradientBasedOptimizer<double, Tensor<double>, Tensor<double>> uninterrupted,
+        Tensor<double>[] uninterruptedParameters,
+        IGradientBasedOptimizer<double, Tensor<double>, Tensor<double>> restored,
+        Tensor<double>[] restoredParameters)
+    {
+        if (uninterrupted is not ASGDOptimizer<double, Tensor<double>, Tensor<double>> uninterruptedAsgd
+            || restored is not ASGDOptimizer<double, Tensor<double>, Tensor<double>> restoredAsgd)
+        {
+            return;
+        }
+
+        for (int p = 0; p < uninterruptedParameters.Length; p++)
+        {
+            var expected = uninterruptedAsgd.GetTapeAveragedParameterForTests(uninterruptedParameters[p]);
+            var actual = restoredAsgd.GetTapeAveragedParameterForTests(restoredParameters[p]);
+
+            Assert.NotNull(expected);
+            Assert.NotNull(actual);
+            for (int i = 0; i < expected!.Length; i++)
+            {
+                Assert.True(Math.Abs(expected[i] - actual![i]) < 1e-12,
+                    $"{optimizerName} restored a different averaged iterate at parameter {p} index {i}: " +
+                    $"expected {expected[i]:R}, actual {actual[i]:R}.");
+            }
+        }
     }
 
     [Fact]

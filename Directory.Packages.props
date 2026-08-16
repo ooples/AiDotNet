@@ -313,11 +313,14 @@
          and #876's direct-PTX global-pooling family. The managed and native packages were published
          together and remain pinned as one lockstep release set. -->
 
-    <!-- These packages are published and consumed as a lockstep release set. -->
-    <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.126.0" />
-    <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.126.0" />
+    <!-- These packages are published and consumed as a lockstep release set, so they move together.
+         The natives were left at 0.126.0 when Tensors went to 0.127.0, which contradicted that and would
+         have quietly become a real mismatch the first time a native binary changed. 0.127.0 of all three
+         is published. -->
+    <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.127.0" />
+    <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.127.0" />
     <PackageVersion Include="AiDotNet.Tensors" Version="0.127.0" />
-    <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.126.0" />
+    <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.127.0" />
     <!-- Microsoft / .NET -->
     <PackageVersion Include="Microsoft.CSharp" Version="4.7.0" />
     <PackageVersion Include="Microsoft.Data.Sqlite" Version="10.0.10" />
