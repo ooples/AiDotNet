@@ -153,6 +153,34 @@ public static class DeserializationHelper
             return (ILayer<T>)generatedLayer;
         }
 
+        // The registry, for the same reason the clone path consults it (LayerCloning.cs:309): the
+        // generated table above is compiled from AiDotNet's own source, so it can only ever name
+        // layers AiDotNet ships. A layer in a consumer's assembly has no entry and never can.
+        //
+        // Cloning got this tier and deserialization did not, which left the two halves of one
+        // mechanism disagreeing: a consumer's layer could be cloned but not loaded from a payload,
+        // even though both rebuild from the same recorded construction state. WriteConstructionState
+        // is called by GetMetadata (LayerBase.cs:6634), so `additionalParams` here holds exactly the
+        // values the clone path passes in its bag.
+        {
+            Type closedLayerType = openGenericType.IsGenericTypeDefinition
+                ? openGenericType.MakeGenericType(typeof(T))
+                : openGenericType;
+
+            if (AiDotNet.Serialization.LayerFactoryRegistry<T>.TryCreate(
+                    closedLayerType,
+                    genericDefForValidation,
+                    new AiDotNet.Serialization.LayerStateBag(additionalParams, layerType),
+                    TryRestoreActivation<T>(additionalParams),
+                    TryRestoreVectorActivation<T>(additionalParams),
+                    out var registeredLayer)
+                && registeredLayer is ILayer<T> registeredAsLayer)
+            {
+                PreResolveLazyShape(registeredAsLayer, inputShape);
+                return registeredAsLayer;
+            }
+        }
+
         // Validate input/output shapes (skip for shape-agnostic layers)
         if (!isShapeAgnosticLayer)
         {
