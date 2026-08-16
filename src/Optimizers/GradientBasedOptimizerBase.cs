@@ -1611,6 +1611,12 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         T t = NumOps.One;
         T loss = context.Reevaluate();
 
+        // One trial vector for the whole search, overwritten per attempt. SetFlatParameters copies the
+        // values out rather than retaining the vector, so reusing it is safe — and at the default bound
+        // that is up to 20 full-length allocations per step avoided, on a path that already pays for a
+        // forward pass per attempt.
+        Vector<T>? trial = null;
+
         for (int attempt = 0; attempt < maxBacktracks; attempt++)
         {
             T threshold = NumOps.Add(originalLoss, NumOps.Multiply(NumOps.Multiply(c1, t), slope));
@@ -1620,7 +1626,7 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
             }
 
             t = NumOps.Divide(t, NumOps.FromDouble(2.0));
-            var trial = new Vector<T>(originalParameters.Length);
+            trial ??= new Vector<T>(originalParameters.Length);
             for (int i = 0; i < trial.Length; i++)
             {
                 trial[i] = NumOps.Add(originalParameters[i], NumOps.Multiply(

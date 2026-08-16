@@ -826,6 +826,12 @@ public class TrustRegionOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBa
 
         if (!_options.AdaptTrustRegionRadius || !context.SupportsReevaluation)
         {
+            // Restore, do not just return. UpdateParameters adapts the radius unconditionally from its
+            // gradient-norm proxy, so leaving it be would let the radius drift on a path that has
+            // adaptation switched OFF — and the fused spec hands the kernel a constant
+            // InitialTrustRegionRadius on the strength of that switch, so the eager and fused paths would
+            // separate from the second step onward.
+            _trustRegionRadius = radiusBeforeStep;
             return;
         }
 

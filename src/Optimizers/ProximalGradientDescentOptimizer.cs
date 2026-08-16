@@ -506,7 +506,9 @@ public class ProximalGradientDescentOptimizer<T, TInput, TOutput> : GradientBase
         if (_previousParameters == null || _previousParameters.Length != updatedParameters.Length)
         {
             throw new InvalidOperationException(
-                "Proximal GD optimizer state is not initialized. ReverseUpdate must be called after UpdateSolution.");
+                "Proximal GD optimizer state is not initialized. ReverseUpdate must be called after a step " +
+                "(UpdateSolution or UpdateParameters), which is what records the pre-update parameters it " +
+                "returns.");
         }
 
         // === Vectorized Reverse PGD Update (Phase B: US-GPU-015) ===
@@ -762,6 +764,13 @@ public class ProximalGradientDescentOptimizer<T, TInput, TOutput> : GradientBase
                 $"Parameter vector length ({parameters.Length}) must match gradient vector length ({gradient.Length}).",
                 nameof(gradient));
         }
+
+        // Snapshot before stepping, exactly as UpdateSolution does. ReverseUpdate hands this vector back —
+        // the proximal operator is not invertible, so the saved pre-update state is the only answer it
+        // has. Without this, a session that only ever called UpdateParameters would make ReverseUpdate
+        // throw an error naming UpdateSolution (no longer the only stepping path), and a session that
+        // called UpdateSolution earlier would get a stale snapshot from that older step, silently.
+        _previousParameters = new Vector<T>(parameters);
 
         var gradientStep = (Vector<T>)Engine.Multiply(gradient, CurrentLearningRate);
         var stepped = (Vector<T>)Engine.Subtract(parameters, gradientStep);

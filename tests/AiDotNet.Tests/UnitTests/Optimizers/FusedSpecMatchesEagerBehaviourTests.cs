@@ -501,6 +501,27 @@ public class FusedSpecMatchesEagerBehaviourTests
         Assert.Equal(0.0, actual[2], 12);
     }
 
+    /// <summary>
+    /// FTRL's learning rate is Alpha, which no schedule can move, so an attached schedule means the caller
+    /// expects behaviour this optimizer does not have.
+    /// </summary>
+    [Fact]
+    public void Ftrl_DeclinesOnANonConstantSchedule()
+    {
+        var optimizer = new FTRLOptimizer<double, Matrix<double>, Vector<double>>(
+            null,
+            new FTRLOptimizerOptions<double, Matrix<double>, Vector<double>>
+            {
+                Alpha = 0.02,
+                UseAdaptiveLearningRate = false,
+                LearningRateScheduler = new AiDotNet.LearningRateSchedulers.ExponentialLRScheduler(0.02, 0.95),
+            });
+
+        Assert.False(TryGetConfig(optimizer, out _),
+            "FTRL fused with a schedule attached; the eager update reads Alpha, so the schedule would have " +
+            "applied on the fused path and nowhere else.");
+    }
+
     // ── ProximalGradientDescent ──────────────────────────────────────────────
 
     /// <summary>
@@ -631,6 +652,38 @@ public class FusedSpecMatchesEagerBehaviourTests
         // Coordinates 2 and 3 land inside the threshold and must be exactly zero, not merely small.
         Assert.Equal(0.0, actual[2], 12);
         Assert.Equal(0.0, actual[3], 12);
+    }
+
+    /// <summary>
+    /// The <c>L1 = Strength/lr</c> conversion only holds for the lr the kernel is configured with, so the
+    /// L1 case declines whenever the rate can move underneath it or cannot be divided by.
+    /// </summary>
+    /// <remarks>
+    /// These guards carry the whole safety argument for that conversion. Without a test, a later refactor
+    /// can drop one and fuse a mapping that is exact only at a fixed learning rate — which converges, so
+    /// nothing would report it.
+    /// </remarks>
+    [Theory]
+    [InlineData("schedule")]
+    [InlineData("zero-lr")]
+    [InlineData("adaptive")]
+    public void ProximalGradientDescent_L1_DeclinesWhenTheRateCannotBeDividedBy(string scenario)
+    {
+        var options = new ProximalGradientDescentOptimizerOptions<double, Matrix<double>, Vector<double>>
+        {
+            InitialLearningRate = scenario == "zero-lr" ? 0.0 : 0.1,
+            UseAdaptiveLearningRate = scenario == "adaptive",
+            Regularization = new L1Regularization<double, Matrix<double>, Vector<double>>(
+                new RegularizationOptions { Strength = 0.04 }),
+            LearningRateScheduler = scenario == "schedule"
+                ? new AiDotNet.LearningRateSchedulers.ExponentialLRScheduler(0.1, 0.95)
+                : null,
+        };
+        var optimizer = new ProximalGradientDescentOptimizer<double, Matrix<double>, Vector<double>>(null, options);
+
+        Assert.False(TryGetConfig(optimizer, out _),
+            $"PGD fused its L1 case under '{scenario}'; the L1 = Strength/lr conversion only reproduces the " +
+            "eager threshold for the exact lr the kernel was configured with.");
     }
 
     /// <summary>

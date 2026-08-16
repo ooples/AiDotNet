@@ -38,7 +38,7 @@ public class TapeStepAcceptanceTests
     /// parameters and every quantity the optimizers compute has a closed form to compare against.
     /// </remarks>
     private static TapeStepContext<double> CreateQuadraticContext(
-        Tensor<double> parameter, Tensor<double> target, out Tensor<double> gradientTensor)
+        Tensor<double> parameter, Tensor<double> target)
     {
         var engine = AiDotNetEngine.Current;
 
@@ -51,7 +51,7 @@ public class TapeStepAcceptanceTests
 
         // Seed the initial gradient and loss the way a training step would have.
         double loss = 0.0;
-        gradientTensor = new Tensor<double>(parameter._shape);
+        var gradientTensor = new Tensor<double>(parameter._shape);
         for (int i = 0; i < parameter.Length; i++)
         {
             double d = parameter[i] - target[i];
@@ -80,7 +80,9 @@ public class TapeStepAcceptanceTests
     /// On the first step there is no curvature history, so the direction is −g and the full step is
     /// w − lr·2(w − t). At w = 1, t = 0 and lr = 2 that lands at −3: three times as far from the minimum,
     /// nine times the loss. Backtracking halves twice — the first halving lands at −1, which is symmetric
-    /// and therefore not a sufficient decrease — and accepts 0.25, which is exactly the minimum.
+    /// and therefore not a sufficient decrease — and accepts an Armijo step scale of t = 0.25. That is the
+    /// SCALE, not the resulting parameter: the trial point is 1 + 0.25*(−4) = 0, exactly the minimum, which
+    /// is what the assertion below checks.
     /// </para>
     /// <para>
     /// The replaced code would have taken a second full step from −3, reaching +9.
@@ -91,7 +93,7 @@ public class TapeStepAcceptanceTests
     {
         var parameter = new Tensor<double>(new[] { 1 }, new Vector<double>(new[] { 1.0 }));
         var target = new Tensor<double>(new[] { 1 }, new Vector<double>(new[] { 0.0 }));
-        var context = CreateQuadraticContext(parameter, target, out _);
+        var context = CreateQuadraticContext(parameter, target);
 
         var optimizer = new LBFGSOptimizer<double, Matrix<double>, Vector<double>>(
             null,
@@ -120,7 +122,7 @@ public class TapeStepAcceptanceTests
     {
         var parameter = new Tensor<double>(new[] { 1 }, new Vector<double>(new[] { 1.0 }));
         var target = new Tensor<double>(new[] { 1 }, new Vector<double>(new[] { 0.0 }));
-        var context = CreateQuadraticContext(parameter, target, out _);
+        var context = CreateQuadraticContext(parameter, target);
 
         var optimizer = new LBFGSOptimizer<double, Matrix<double>, Vector<double>>(
             null,
@@ -150,7 +152,7 @@ public class TapeStepAcceptanceTests
     {
         var parameter = new Tensor<double>(new[] { 1 }, new Vector<double>(new[] { 1.0 }));
         var target = new Tensor<double>(new[] { 1 }, new Vector<double>(new[] { 0.0 }));
-        var context = CreateQuadraticContext(parameter, target, out _);
+        var context = CreateQuadraticContext(parameter, target);
 
         var optimizer = new LBFGSOptimizer<double, Matrix<double>, Vector<double>>(
             null,
@@ -188,7 +190,7 @@ public class TapeStepAcceptanceTests
     {
         var parameter = new Tensor<double>(new[] { 1 }, new Vector<double>(new[] { 1.0 }));
         var target = new Tensor<double>(new[] { 1 }, new Vector<double>(new[] { 0.0 }));
-        var context = CreateQuadraticContext(parameter, target, out _);
+        var context = CreateQuadraticContext(parameter, target);
 
         var optimizer = new TrustRegionOptimizer<double, Matrix<double>, Vector<double>>(
             null,
@@ -215,7 +217,7 @@ public class TapeStepAcceptanceTests
     {
         var parameter = new Tensor<double>(new[] { 1 }, new Vector<double>(new[] { 1.0 }));
         var target = new Tensor<double>(new[] { 1 }, new Vector<double>(new[] { 0.0 }));
-        var context = CreateQuadraticContext(parameter, target, out _);
+        var context = CreateQuadraticContext(parameter, target);
 
         var optimizer = new TrustRegionOptimizer<double, Matrix<double>, Vector<double>>(
             null,
@@ -231,6 +233,27 @@ public class TapeStepAcceptanceTests
 
         // alpha = min(3/2, 2) = 1.5, so w = 1 - 1.5*2 = -2.
         Assert.Equal(-2.0, parameter[0], 9);
+
+        // And the radius really is fixed. UpdateParameters adapts it unconditionally from its
+        // gradient-norm proxy, so the non-adapting path has to RESTORE the pre-step value rather than just
+        // skip the ratio test — otherwise the radius drifts with adaptation switched off, and the fused
+        // spec's promise of a constant InitialTrustRegionRadius stops being true after one step.
+        Assert.Equal(3.0, GetTrustRegionRadius(optimizer), 12);
+
+        // A second step must not move it either.
+        var context2 = CreateQuadraticContext(parameter, target);
+        optimizer.Step(context2);
+        Assert.Equal(3.0, GetTrustRegionRadius(optimizer), 12);
+    }
+
+    private static double GetTrustRegionRadius(
+        TrustRegionOptimizer<double, Matrix<double>, Vector<double>> optimizer)
+    {
+        var field = typeof(TrustRegionOptimizer<double, Matrix<double>, Vector<double>>).GetField(
+            "_trustRegionRadius",
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+        Assert.NotNull(field);
+        return (double)field!.GetValue(optimizer)!;
     }
 
     /// <summary>
@@ -246,7 +269,7 @@ public class TapeStepAcceptanceTests
     {
         var parameter = new Tensor<double>(new[] { 1 }, new Vector<double>(new[] { 1.0 }));
         var target = new Tensor<double>(new[] { 1 }, new Vector<double>(new[] { 0.0 }));
-        var context = CreateQuadraticContext(parameter, target, out _);
+        var context = CreateQuadraticContext(parameter, target);
 
         var optimizer = new TrustRegionOptimizer<double, Matrix<double>, Vector<double>>(
             null,
