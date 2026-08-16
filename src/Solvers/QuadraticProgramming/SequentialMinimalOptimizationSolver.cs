@@ -232,11 +232,21 @@ public sealed class SequentialMinimalOptimizationSolver<T>
         T yi = labels[i];
         T yj = labels[j];
 
-        // Curvature along the constraint line. A non-positive value means the kernel is not
-        // positive definite; LIBSVM substitutes a small positive number so the step remains
-        // well defined rather than skipping the pair.
+        // Curvature along the constraint line. The feasible direction is Δα_i = y_i·t,
+        // Δα_j = −y_j·t, so the curvature is dᵀQd/t² = Q_ii + Q_jj − 2·y_i·y_j·Q_ij, which reduces
+        // to K_ii + K_jj − 2·K_ij in the raw kernel. The y_i·y_j factor on the cross term is
+        // essential: without it, a pair with OPPOSITE labels produces exactly zero curvature (the
+        // two label signs cancel), the step falls back to the degenerate-curvature branch, and the
+        // solver thrashes against its iteration limit instead of taking the one exact step that
+        // solves a two-point problem outright.
+        //
+        // A non-positive value after that means the kernel is genuinely not positive definite;
+        // LIBSVM substitutes a small positive number so the step stays well defined.
         T curvature = NumOps.Subtract(
-            NumOps.Add(q(i, i), q(j, j)), NumOps.Multiply(NumOps.FromDouble(2.0), q(i, j)));
+            NumOps.Add(q(i, i), q(j, j)),
+            NumOps.Multiply(
+                NumOps.FromDouble(2.0),
+                NumOps.Multiply(NumOps.Multiply(yi, yj), q(i, j))));
 
         if (!NumOps.GreaterThan(curvature, NumOps.Zero))
         {

@@ -63,6 +63,16 @@ namespace AiDotNet.Models;
 public class VectorModel<T> : ModelBase<T, Matrix<T>, Vector<T>>, IInterpretableModel<T>
 {
     /// <summary>
+    /// Ridge term added to the diagonal of X^T·X when that matrix is singular, so a degenerate or
+    /// collinear feature subset yields the minimum-norm solution instead of an exception.
+    /// </summary>
+    /// <remarks>
+    /// Small enough not to perturb a well-conditioned fit measurably, large enough to make a
+    /// rank-deficient system solvable in double precision.
+    /// </remarks>
+    private const double SingularityRidge = 1e-10;
+
+    /// <summary>
     /// Gets the vector of coefficients used by the model.
     /// </summary>
     /// <value>A Vector&lt;T&gt; containing the model's coefficients.</value>
@@ -462,11 +472,20 @@ public class VectorModel<T> : ModelBase<T, Matrix<T>, Vector<T>>, IInterpretable
             Matrix<T> XTranspose = X.Transpose();
             Matrix<T> XTX = XTranspose * X;
 
-            // Check if XTX is singular (not invertible)
+            // A singular X^T·X means the features are linearly dependent, or there are more
+            // features than data points. Throwing there made this model unusable as a population
+            // member inside a search: a genetic optimizer evaluates many candidate feature subsets,
+            // and collinear or degenerate subsets are a normal, expected part of that search rather
+            // than a caller error. Adding a small ridge term to the diagonal makes the system
+            // solvable and selects the minimum-norm solution among the equivalent ones — which is
+            // exactly what the previous error message told callers to do.
             if (!XTX.IsInvertible())
             {
-                throw new InvalidOperationException("The matrix X^T * X is not invertible. " +
-                    "This can happen when features are linearly dependent or when there are more features than data points.");
+                T ridge = NumOps.FromDouble(SingularityRidge);
+                for (int i = 0; i < XTX.Rows; i++)
+                {
+                    XTX[i, i] = NumOps.Add(XTX[i, i], ridge);
+                }
             }
 
             Matrix<T> XTXInverse = XTX.Inverse();

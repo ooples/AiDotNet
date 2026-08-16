@@ -400,6 +400,25 @@ public class SymbolicRegression<T> : NonLinearRegressionBase<T>
     {
         if (_useOLS && _olsCoefficients is not null)
             return Enumerable.Range(0, _olsCoefficients.Length);
+
+        // Report the features the EVOLVED model actually uses. The base implementation derives
+        // active features from Alphas and SupportVectors, which this model never populates — those
+        // belong to the kernel models it shares a base class with — so it reported no active
+        // features at all once the real search started running.
+        if (_bestModel is not null)
+        {
+            // Parameter 0 is the intercept, which is not a feature; the remaining parameters map to
+            // the caller's feature columns shifted by one.
+            var parameters = InterfaceGuard.Parameterizable(_bestModel).GetParameters();
+            var active = new List<int>();
+            for (int i = 1; i < parameters.Length; i++)
+            {
+                if (!NumOps.Equals(parameters[i], NumOps.Zero)) active.Add(i - 1);
+            }
+
+            if (active.Count > 0) return active;
+        }
+
         return base.GetActiveFeatureIndices();
     }
 
@@ -421,17 +440,49 @@ public class SymbolicRegression<T> : NonLinearRegressionBase<T>
             : x;
         var preprocessedY = y;
 
-        // Split the data into training, validation, and test sets
+        // Split the data into training, validation, and test sets.
+        //
+        // The proportional split alone produces EMPTY validation or test sets on small inputs
+        // (fewer than seven rows makes 15% round down to zero), and an empty split propagates into
+        // the optimizer's evaluation as an index error rather than anything diagnosable. Guarantee
+        // at least one row in each split whenever there are enough rows to do so, and fall back to
+        // evaluating on the training data itself when there are not.
         int totalSamples = preprocessedX.Rows;
-        int trainSize = (int)(totalSamples * 0.7);  // 70% training
-        int valSize = (int)(totalSamples * 0.15);    // 15% validation
+        if (totalSamples < 3)
+        {
+            throw new ArgumentException(
+                $"Symbolic regression needs at least 3 samples to form train/validation/test " +
+                $"splits, but received {totalSamples}.", nameof(x));
+        }
+
+        int trainSize = Math.Max(1, (int)(totalSamples * 0.7));  // 70% training
+        int valSize = Math.Max(1, (int)(totalSamples * 0.15));   // 15% validation
         int testSize = totalSamples - trainSize - valSize;
 
-        var XTrain = preprocessedX.GetSubMatrix(0, trainSize, 0, preprocessedX.Columns);
+        if (testSize < 1)
+        {
+            // Give the test split its row back from training, which is always the largest.
+            testSize = 1;
+            trainSize = totalSamples - valSize - testSize;
+        }
+
+        // GetSubMatrix takes (startRow, startColumn, rowCount, columnCount). These calls previously
+        // passed the split size as the START COLUMN, so every split came back with zero rows while
+        // its matching target vector kept the full length — which surfaced far downstream as
+        // "Number of rows in X (0) must match the length of y (70)". The argument order was wrong
+        // from the day it was written and went unnoticed because the OLS short-circuit above meant
+        // this code never executed.
+        // A leading constant column gives the evolved model an INTERCEPT. Without one the fitted
+        // expression is forced through the origin, so shifting every target by a constant does not
+        // shift the predictions by that constant — the model has no term able to absorb the offset.
+        // Predict and PredictSingle prepend the same column.
+        var designMatrix = preprocessedX.AddConstantColumn(NumOps.One);
+
+        var XTrain = designMatrix.GetSubMatrix(0, 0, trainSize, designMatrix.Columns);
         var yTrain = preprocessedY.SubVector(0, trainSize);
-        var XVal = preprocessedX.GetSubMatrix(trainSize, valSize, 0, preprocessedX.Columns);
+        var XVal = designMatrix.GetSubMatrix(trainSize, 0, valSize, designMatrix.Columns);
         var yVal = preprocessedY.SubVector(trainSize, valSize);
-        var XTest = preprocessedX.GetSubMatrix(trainSize + valSize, testSize, 0, preprocessedX.Columns);
+        var XTest = designMatrix.GetSubMatrix(trainSize + valSize, 0, testSize, designMatrix.Columns);
         var yTest = preprocessedY.SubVector(trainSize + valSize, testSize);
 
         // Recreate the optimizer with proper dimensions based on actual input data
@@ -494,7 +545,7 @@ public class SymbolicRegression<T> : NonLinearRegressionBase<T>
             return predictions;
         }
 
-        return _bestModel?.Predict(X) ?? Vector<T>.Empty();
+        return _bestModel?.Predict(X.AddConstantColumn(NumOps.One)) ?? Vector<T>.Empty();
     }
 
     /// <summary>
@@ -536,7 +587,8 @@ public class SymbolicRegression<T> : NonLinearRegressionBase<T>
         }
 
         Vector<T> regularizedInput = Regularization.Regularize(input);
-        return _bestModel.Predict(Matrix<T>.FromVector(regularizedInput))[0];
+        return _bestModel.Predict(
+            Matrix<T>.FromVector(regularizedInput).AddConstantColumn(NumOps.One))[0];
     }
 
     /// <summary>

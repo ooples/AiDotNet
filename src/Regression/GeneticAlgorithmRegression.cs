@@ -205,17 +205,36 @@ public class GeneticAlgorithmRegression<T> : RegressionBase<T>
             : x;
         var preprocessedY = y;
 
-        // Split the data using the base class options
+        // Split the data using the base class options. Each split needs at least one row: a
+        // proportional split alone empties the validation or test set on small inputs.
         int totalSamples = preprocessedX.Rows;
-        int trainSize = (int)(totalSamples * 0.7);  // 70% training
-        int valSize = (int)(totalSamples * 0.15);    // 15% validation
+        if (totalSamples < 3)
+        {
+            throw new ArgumentException(
+                $"Genetic algorithm regression needs at least 3 samples to form " +
+                $"train/validation/test splits, but received {totalSamples}.", nameof(x));
+        }
+
+        int trainSize = Math.Max(1, (int)(totalSamples * 0.7));  // 70% training
+        int valSize = Math.Max(1, (int)(totalSamples * 0.15));   // 15% validation
         int testSize = totalSamples - trainSize - valSize;
 
-        var xTrain = preprocessedX.GetSubMatrix(0, trainSize, 0, preprocessedX.Columns);
+        if (testSize < 1)
+        {
+            testSize = 1;
+            trainSize = totalSamples - valSize - testSize;
+        }
+
+        // GetSubMatrix takes (startRow, startColumn, rowCount, columnCount). These calls previously
+        // passed the split size as the START COLUMN, so every split came back with zero rows while
+        // its matching target vector kept the full length. The argument order was wrong from the
+        // day it was written and went unnoticed because the OLS short-circuit above meant this code
+        // never executed.
+        var xTrain = preprocessedX.GetSubMatrix(0, 0, trainSize, preprocessedX.Columns);
         var yTrain = preprocessedY.SubVector(0, trainSize);
-        var xVal = preprocessedX.GetSubMatrix(trainSize, valSize, 0, preprocessedX.Columns);
+        var xVal = preprocessedX.GetSubMatrix(trainSize, 0, valSize, preprocessedX.Columns);
         var yVal = preprocessedY.SubVector(trainSize, valSize);
-        var xTest = preprocessedX.GetSubMatrix(trainSize + valSize, testSize, 0, preprocessedX.Columns);
+        var xTest = preprocessedX.GetSubMatrix(trainSize + valSize, 0, testSize, preprocessedX.Columns);
         var yTest = preprocessedY.SubVector(trainSize + valSize, testSize);
 
         // If HasIntercept is true, prepend a column of 1s to each matrix for the intercept term
