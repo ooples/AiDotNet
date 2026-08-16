@@ -97,34 +97,6 @@ public sealed class SimplexSolver<T> : ILinearProgramSolver<T>
     /// </remarks>
     private sealed class StandardForm
     {
-        /// <summary>
-        /// How one original variable is reconstructed from the non-negative standard-form variables.
-        /// </summary>
-        private readonly struct VariableMapping
-        {
-            /// <summary>Column of the primary non-negative variable.</summary>
-            public int PrimaryColumn { get; }
-
-            /// <summary>
-            /// Column of the negative part for a free variable, or -1 when the variable is not free.
-            /// </summary>
-            public int NegativePartColumn { get; }
-
-            /// <summary>Constant added after scaling: the shift or the reflection origin.</summary>
-            public T Offset { get; }
-
-            /// <summary>+1 for a shifted variable, -1 for one reflected about its upper bound.</summary>
-            public T Scale { get; }
-
-            public VariableMapping(int primaryColumn, int negativePartColumn, T offset, T scale)
-            {
-                PrimaryColumn = primaryColumn;
-                NegativePartColumn = negativePartColumn;
-                Offset = offset;
-                Scale = scale;
-            }
-        }
-
         private readonly SimplexSolverOptions _options;
         private readonly T _tolerance;
 
@@ -136,7 +108,7 @@ public sealed class SimplexSolver<T> : ILinearProgramSolver<T>
 
         private readonly Vector<T> _phaseTwoObjective;
         private readonly HashSet<int> _artificialColumns;
-        private readonly List<VariableMapping> _variableMappings;
+        private readonly LinearProgramStandardForm<T> _nonNegativeForm;
 
         // Auxiliary column carrying each original constraint's dual value; -1 when the row has none.
         private readonly int[] _inequalitySlackColumns;
@@ -144,7 +116,6 @@ public sealed class SimplexSolver<T> : ILinearProgramSolver<T>
         private readonly bool[] _rowWasNegated;
 
         private readonly T _originalObjectiveOffset;
-        private readonly int _originalVariableCount;
 
         private bool _phaseOneActive = true;
         private int _iterations;
@@ -157,12 +128,11 @@ public sealed class SimplexSolver<T> : ILinearProgramSolver<T>
             int[] basis,
             Vector<T> phaseTwoObjective,
             HashSet<int> artificialColumns,
-            List<VariableMapping> variableMappings,
+            LinearProgramStandardForm<T> nonNegativeForm,
             int[] inequalitySlackColumns,
             int[] equalityArtificialColumns,
             bool[] rowWasNegated,
-            T originalObjectiveOffset,
-            int originalVariableCount)
+            T originalObjectiveOffset)
         {
             _options = options;
             _tolerance = NumOps.FromDouble(options.Tolerance);
@@ -172,107 +142,29 @@ public sealed class SimplexSolver<T> : ILinearProgramSolver<T>
             _basis = basis;
             _phaseTwoObjective = phaseTwoObjective;
             _artificialColumns = artificialColumns;
-            _variableMappings = variableMappings;
+            _nonNegativeForm = nonNegativeForm;
             _inequalitySlackColumns = inequalitySlackColumns;
             _equalityArtificialColumns = equalityArtificialColumns;
             _rowWasNegated = rowWasNegated;
             _originalObjectiveOffset = originalObjectiveOffset;
-            _originalVariableCount = originalVariableCount;
         }
 
         public static StandardForm Build(LinearProgram<T> program, SimplexSolverOptions options)
         {
-            int originalVariableCount = program.VariableCount;
+            // --- Steps 1-3: non-negative variables, shifted rows, non-negative right-hand side ---
+            // Shared with the interior-point solver, which needs the same rewrite but different
+            // auxiliary columns afterwards.
+            var nonNegativeForm = LinearProgramStandardForm<T>.Build(program);
 
-            // --- Step 1: map each original variable onto non-negative standard-form variables ---
-            var mappings = new List<VariableMapping>(originalVariableCount);
-            var upperBoundRows = new List<(int MappingIndex, T Limit)>();
-            int nextColumn = 0;
+            int structuralColumnCount = nonNegativeForm.VariableCount;
+            int inequalityRowCount = nonNegativeForm.InequalityRowCount;
+            int equalityRowCount = nonNegativeForm.EqualityRowCount;
+            int constraintCount = nonNegativeForm.Rows.Count;
 
-            for (int i = 0; i < originalVariableCount; i++)
-            {
-                T lower = program.LowerBounds is null ? NumOps.Zero : program.LowerBounds[i];
-                T upper = program.UpperBounds is null
-                    ? NumOps.FromDouble(double.PositiveInfinity)
-                    : program.UpperBounds[i];
-
-                bool lowerIsFinite = IsFinite(lower);
-                bool upperIsFinite = IsFinite(upper);
-
-                if (lowerIsFinite)
-                {
-                    // x = lower + z, z >= 0.
-                    mappings.Add(new VariableMapping(nextColumn++, -1, lower, NumOps.One));
-                    if (upperIsFinite)
-                    {
-                        upperBoundRows.Add((mappings.Count - 1, NumOps.Subtract(upper, lower)));
-                    }
-                }
-                else if (upperIsFinite)
-                {
-                    // x = upper - z, z >= 0. No extra row: z >= 0 already encodes x <= upper.
-                    mappings.Add(new VariableMapping(
-                        nextColumn++, -1, upper, NumOps.Negate(NumOps.One)));
-                }
-                else
-                {
-                    // Free variable: x = z⁺ - z⁻ with both parts non-negative.
-                    int positiveColumn = nextColumn++;
-                    int negativeColumn = nextColumn++;
-                    mappings.Add(new VariableMapping(
-                        positiveColumn, negativeColumn, NumOps.Zero, NumOps.One));
-                }
-            }
-
-            int structuralColumnCount = nextColumn;
-
-            // --- Step 2: collect the constraint rows in shifted coordinates ---
-            int inequalityRowCount = program.InequalityMatrix?.Rows ?? 0;
-            int equalityRowCount = program.EqualityMatrix?.Rows ?? 0;
-            int constraintCount = inequalityRowCount + equalityRowCount + upperBoundRows.Count;
-
-            var rows = new List<Vector<T>>(constraintCount);
-            var rightHandSides = new List<T>(constraintCount);
-            var isEquality = new List<bool>(constraintCount);
-
-            for (int r = 0; r < inequalityRowCount; r++)
-            {
-                var (row, shift) = ProjectRow(program.InequalityMatrix!, r, mappings, structuralColumnCount);
-                rows.Add(row);
-                rightHandSides.Add(NumOps.Subtract(program.InequalityBounds![r], shift));
-                isEquality.Add(false);
-            }
-
-            for (int r = 0; r < equalityRowCount; r++)
-            {
-                var (row, shift) = ProjectRow(program.EqualityMatrix!, r, mappings, structuralColumnCount);
-                rows.Add(row);
-                rightHandSides.Add(NumOps.Subtract(program.EqualityBounds![r], shift));
-                isEquality.Add(true);
-            }
-
-            foreach (var (mappingIndex, limit) in upperBoundRows)
-            {
-                var row = new Vector<T>(structuralColumnCount);
-                row[mappings[mappingIndex].PrimaryColumn] = NumOps.One;
-                rows.Add(row);
-                rightHandSides.Add(limit);
-                isEquality.Add(false);
-            }
-
-            // --- Step 3: negate rows with a negative right-hand side ---
-            // The tableau requires b >= 0 so the starting basis is feasible. Negating preserves the
-            // row's meaning but flips <= into >=, changing which auxiliary column it needs.
-            var rowWasNegated = new bool[constraintCount];
-            for (int r = 0; r < constraintCount; r++)
-            {
-                if (NumOps.LessThan(rightHandSides[r], NumOps.Zero))
-                {
-                    rows[r] = Negate(rows[r]);
-                    rightHandSides[r] = NumOps.Negate(rightHandSides[r]);
-                    rowWasNegated[r] = true;
-                }
-            }
+            var rows = nonNegativeForm.Rows;
+            var rightHandSides = nonNegativeForm.RightHandSides;
+            var isEquality = nonNegativeForm.IsEquality;
+            var rowWasNegated = nonNegativeForm.RowWasNegated;
 
             // --- Step 4: assign auxiliary columns ---
             //   <= row  -> slack (+1), which also serves as the initial basic variable
@@ -327,27 +219,15 @@ public sealed class SimplexSolver<T> : ILinearProgramSolver<T>
                 }
             }
 
-            // --- Step 5: project the objective into standard-form coordinates ---
+            // --- Step 5: widen the projected objective to cover the auxiliary columns ---
+            // The auxiliary columns carry no objective cost, so they stay zero.
             var phaseTwoObjective = new Vector<T>(columnCount);
-            T objectiveOffset = NumOps.Zero;
-            for (int i = 0; i < originalVariableCount; i++)
+            for (int c = 0; c < structuralColumnCount; c++)
             {
-                T coefficient = program.Objective[i];
-                var mapping = mappings[i];
-
-                // c_i * x_i = c_i * offset + c_i * scale * z  [- c_i * scale * z⁻ when free]
-                objectiveOffset = NumOps.Add(objectiveOffset, NumOps.Multiply(coefficient, mapping.Offset));
-                phaseTwoObjective[mapping.PrimaryColumn] = NumOps.Add(
-                    phaseTwoObjective[mapping.PrimaryColumn],
-                    NumOps.Multiply(coefficient, mapping.Scale));
-
-                if (mapping.NegativePartColumn >= 0)
-                {
-                    phaseTwoObjective[mapping.NegativePartColumn] = NumOps.Subtract(
-                        phaseTwoObjective[mapping.NegativePartColumn],
-                        NumOps.Multiply(coefficient, mapping.Scale));
-                }
+                phaseTwoObjective[c] = nonNegativeForm.Objective[c];
             }
+
+            T objectiveOffset = nonNegativeForm.ObjectiveOffset;
 
             var inequalitySlackColumns = new int[inequalityRowCount];
             for (int r = 0; r < inequalityRowCount; r++) inequalitySlackColumns[r] = slackColumnOfRow[r];
@@ -360,50 +240,8 @@ public sealed class SimplexSolver<T> : ILinearProgramSolver<T>
 
             return new StandardForm(
                 options, tableau, constraintCount, columnCount, basis, phaseTwoObjective,
-                artificialColumns, mappings, inequalitySlackColumns, equalityArtificialColumns,
-                rowWasNegated, objectiveOffset, originalVariableCount);
-        }
-
-        /// <summary>
-        /// Rewrites one original constraint row in shifted coordinates, returning the new
-        /// coefficients and the constant the shift contributes (which moves to the right-hand side).
-        /// </summary>
-        private static (Vector<T> Row, T Shift) ProjectRow(
-            Matrix<T> matrix, int rowIndex, List<VariableMapping> mappings, int structuralColumnCount)
-        {
-            var row = new Vector<T>(structuralColumnCount);
-            T shift = NumOps.Zero;
-
-            for (int i = 0; i < mappings.Count; i++)
-            {
-                T coefficient = matrix[rowIndex, i];
-                var mapping = mappings[i];
-
-                shift = NumOps.Add(shift, NumOps.Multiply(coefficient, mapping.Offset));
-                row[mapping.PrimaryColumn] = NumOps.Add(
-                    row[mapping.PrimaryColumn], NumOps.Multiply(coefficient, mapping.Scale));
-
-                if (mapping.NegativePartColumn >= 0)
-                {
-                    row[mapping.NegativePartColumn] = NumOps.Subtract(
-                        row[mapping.NegativePartColumn], NumOps.Multiply(coefficient, mapping.Scale));
-                }
-            }
-
-            return (row, shift);
-        }
-
-        private static Vector<T> Negate(Vector<T> vector)
-        {
-            var result = new Vector<T>(vector.Length);
-            for (int i = 0; i < vector.Length; i++) result[i] = NumOps.Negate(vector[i]);
-            return result;
-        }
-
-        private static bool IsFinite(T value)
-        {
-            double asDouble = NumOps.ToDouble(value);
-            return !double.IsInfinity(asDouble) && !double.IsNaN(asDouble);
+                artificialColumns, nonNegativeForm, inequalitySlackColumns, equalityArtificialColumns,
+                rowWasNegated, objectiveOffset);
         }
 
         public LinearProgramSolution<T> Solve()
@@ -671,21 +509,7 @@ public sealed class SimplexSolver<T> : ILinearProgramSolver<T>
             }
 
             // Undo the shift, reflection and splitting to recover the caller's variables.
-            var solution = new Vector<T>(_originalVariableCount);
-            for (int i = 0; i < _originalVariableCount; i++)
-            {
-                var mapping = _variableMappings[i];
-                T value = standardValues[mapping.PrimaryColumn];
-
-                if (mapping.NegativePartColumn >= 0)
-                {
-                    value = NumOps.Subtract(value, standardValues[mapping.NegativePartColumn]);
-                }
-
-                solution[i] = NumOps.Add(mapping.Offset, NumOps.Multiply(mapping.Scale, value));
-            }
-
-            return solution;
+            return _nonNegativeForm.RecoverOriginalVariables(standardValues);
         }
 
         /// <summary>
