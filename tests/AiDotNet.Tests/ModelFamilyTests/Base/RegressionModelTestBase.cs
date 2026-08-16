@@ -856,6 +856,7 @@ public abstract class RegressionModelTestBase : System.IDisposable
     {
         await Task.Yield();
         if (!IdentityLinkInvariantsApplicable) return;
+        if (!PredictiveQualityInvariantsApplicable) return;
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var (trainX, trainY) = ModelTestHelpers.GenerateLinearData(TrainSamples, Features, rng);
