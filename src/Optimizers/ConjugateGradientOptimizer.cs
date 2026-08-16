@@ -444,21 +444,21 @@ public class ConjugateGradientOptimizer<T, TInput, TOutput> : GradientBasedOptim
                 nameof(gradient));
         }
 
-        // Captured into locals so the compiler can see they stay non-null through the block below; the
-        // fields themselves are nullable and reset on restart.
+        // Captured into locals so the compiler can see `_previousDirection` stays non-null through the
+        // block below. `_previousGradient` is not nullable — it starts as an empty vector, which the
+        // length check below rejects, giving the same restart.
         var previousGradient = _previousGradient;
         var previousDirection = _previousDirection;
 
         var negGradient = (Vector<T>)Engine.Multiply(gradient, NumOps.Negate(NumOps.One));
 
         // Restart whenever the history is missing or stale (e.g. the parameter count changed).
-        bool canContinue = previousGradient is not null
-            && previousDirection is not null
+        bool canContinue = previousDirection is not null
             && previousGradient.Length == gradient.Length
             && previousDirection.Length == gradient.Length;
 
         Vector<T> direction = negGradient;
-        if (canContinue && previousGradient is not null && previousDirection is not null)
+        if (canContinue && previousDirection is not null)
         {
             var denominator = previousGradient.DotProduct(previousGradient);
             if (NumOps.GreaterThan(NumOps.Abs(denominator), NumOps.FromDouble(1e-30)))

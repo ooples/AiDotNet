@@ -57,6 +57,21 @@ public class OptimizerFactoryTests
     }
 
     /// <summary>
+    /// Every enum value the class declares as having no implementation, so the diagnostic-message test
+    /// covers all of them and picks up new entries automatically.
+    /// </summary>
+    public static TheoryData<OptimizerType> UnimplementedOptimizerTypes
+    {
+        get
+        {
+            var data = new TheoryData<OptimizerType>();
+            foreach (var t in UnimplementedByDesign.Keys)
+                data.Add(t);
+            return data;
+        }
+    }
+
+    /// <summary>
     /// Every enum value that names a shipped optimizer must build with default options.
     /// </summary>
     [Theory]
@@ -76,6 +91,34 @@ public class OptimizerFactoryTests
         }
 
         Assert.NotNull(optimizer);
+
+        // Building it is not enough — the instance must be the implementation the enum names, and it must
+        // be usable. A factory that quietly fell back to a default optimizer would still produce a
+        // non-null object and pass a NotNull-only test.
+        //
+        // Asserted as a round trip rather than `GetOptimizerType(x) == type`, because several enum values
+        // are aliases of one implementation (AdaGrad/Adagrad, Adamax/AdaMax, ...) and the reverse map
+        // deliberately reports one canonical name for each. What must hold is that the canonical name
+        // rebuilds the same implementation.
+        var factoryType = OptimizerFactory<double, Matrix<double>, Vector<double>>.GetOptimizerType(optimizer);
+        var rebuilt = OptimizerFactory<double, Matrix<double>, Vector<double>>.CreateOptimizer(factoryType);
+        Assert.Equal(optimizer.GetType(), rebuilt.GetType());
+
+        if (optimizer is IGradientBasedOptimizer<double, Matrix<double>, Vector<double>> gradientBased)
+        {
+            var parameters = new Vector<double>(new[] { 0.5, -0.25, 0.125 });
+            var gradient = new Vector<double>(new[] { 0.1, -0.2, 0.3 });
+            var updated = gradientBased.UpdateParameters(parameters, gradient);
+
+            Assert.Equal(parameters.Length, updated.Length);
+            for (int i = 0; i < updated.Length; i++)
+            {
+                Assert.False(double.IsNaN(updated[i]),
+                    $"OptimizerType.{type} produced NaN at index {i} on its first step from default options.");
+                Assert.False(double.IsInfinity(updated[i]),
+                    $"OptimizerType.{type} produced an infinity at index {i} on its first step from default options.");
+            }
+        }
     }
 
     /// <summary>
@@ -166,8 +209,7 @@ public class OptimizerFactoryTests
     /// rather than the bare "Unknown optimizer type" that reads like the value is invalid.
     /// </summary>
     [Theory]
-    [InlineData(OptimizerType.QuasiNewton)]
-    [InlineData(OptimizerType.HillClimbing)]
+    [MemberData(nameof(UnimplementedOptimizerTypes))]
     public void CreateOptimizer_ForAnUnimplementedType_ExplainsWhatIsAvailable(OptimizerType type)
     {
         var ex = Assert.Throws<ArgumentException>(() =>

@@ -11238,14 +11238,9 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         out AiDotNet.Tensors.Engines.Compilation.LrSchedule? lrSchedule,
         out bool useBf16Moments)
     {
-        // Open/closed-compliant dispatch: the optimizer self-describes its fused
-        // config (incl. selecting the AMSGrad kernel variant when it opts in, and
-        // converting any attached LR scheduler) via IFusedOptimizerSpec. Replaces
-        // the old type-switch that had to be edited for every new optimizer and
-        // silently rejected AMSGrad. Only optimizers that actually have a fused
-        // SIMD kernel implement the interface, so there is no central whitelist to
-        // maintain — an optimizer without a kernel simply isn't an
-        // IFusedOptimizerSpec and uses the eager tape.
+        // Delegates to the config-returning overload rather than repeating the dispatch check. Two copies
+        // of one rule drift the moment a future edit touches only one of them, and this overload exists
+        // solely to unpack what that one already decided.
         optimizerType = default;
         learningRate = 0f;
         beta1 = 0f;
@@ -11255,8 +11250,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         lrSchedule = null;
         useBf16Moments = false;
 
-        if (optimizer is not Optimizers.Fused.IFusedOptimizerSpec spec
-            || !spec.TryGetFusedOptimizerConfig(out var cfg))
+        if (!TryMapToFusedOptimizerConfig(optimizer, out var cfg))
             return false;
 
         optimizerType = cfg.Type;

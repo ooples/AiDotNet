@@ -272,10 +272,16 @@ public static class OptimizerFactory<T, TInput, TOutput>
             //
             // Prefer parameterless, then fewest required (non-default) parameters, then fewest total.
             // More stable than purely fewest-parameter selection.
+            //
+            // The signature key is the final tiebreak and is not optional: Type.GetConstructors() has no
+            // documented order, so two constructors tying on all three counts would otherwise be separated
+            // by whatever the runtime happened to return first — and the same optimizer could be built
+            // through a different constructor in another process or on another framework version.
             ctor = constructors
                 .OrderBy(c => c.GetParameters().Length == 0 ? 0 : 1)
                 .ThenBy(c => c.GetParameters().Count(p => !p.HasDefaultValue))
                 .ThenBy(c => c.GetParameters().Length)
+                .ThenBy(CtorSignatureKey, StringComparer.Ordinal)
                 .First();
         }
         else
@@ -286,6 +292,7 @@ public static class OptimizerFactory<T, TInput, TOutput>
                 .Where(c => c.GetParameters().Any(p => p.ParameterType.IsAssignableFrom(optionsType)))
                 .OrderBy(c => c.GetParameters().Count(p => !p.HasDefaultValue))
                 .ThenBy(c => c.GetParameters().Length)
+                .ThenBy(CtorSignatureKey, StringComparer.Ordinal)
                 .FirstOrDefault();
 
             if (candidate is null)
@@ -343,4 +350,18 @@ public static class OptimizerFactory<T, TInput, TOutput>
             ? throw new InvalidOperationException($"Failed to create instance of {concreteType.Name}")
             : (IOptimizer<T, TInput, TOutput>)instance;
     }
+
+    /// <summary>
+    /// A stable ordering key for a constructor: its parameter types, in order, joined.
+    /// </summary>
+    /// <param name="ctor">The constructor to describe.</param>
+    /// <returns>A key that depends only on the signature, never on reflection order.</returns>
+    /// <remarks>
+    /// Used as the last tiebreak in constructor selection. Two constructors that tie on every count would
+    /// otherwise be separated by <see cref="Type.GetConstructors()"/>, whose order is undocumented — so the
+    /// same optimizer could be built through a different constructor in another process or on another
+    /// framework version, and only some of those would bind the caller's options.
+    /// </remarks>
+    private static string CtorSignatureKey(System.Reflection.ConstructorInfo ctor)
+        => string.Join(",", ctor.GetParameters().Select(p => p.ParameterType.FullName ?? p.ParameterType.Name));
 }

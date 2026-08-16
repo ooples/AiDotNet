@@ -191,19 +191,63 @@ public class ADMMOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
     /// </summary>
     /// <param name="x">The current primal variable.</param>
     /// <remarks>
+    /// <para>
+    /// Boyd et al. (2011): <c>z = argmin_z ( g(z) + (rho/2)·‖x - z + u‖² ) = prox_{g/rho}(x + u)</c>.
+    /// The penalty parameter scales the STRENGTH of the proximal operator, not its argument. For an L1
+    /// split that means soft-thresholding <c>x + u</c> at <c>Strength/rho</c>.
+    /// </para>
+    /// <para>
+    /// This used to compute <c>Regularize((x + u)/rho)</c> — scaling the argument and leaving the
+    /// threshold alone, which is a different function: for L1 it equals
+    /// <c>(1/rho)·soft_threshold(x + u, Strength·rho)</c>, so both the threshold and the magnitude of z
+    /// are wrong by factors of rho. The two coincide exactly at rho = 1, which is the default, which is
+    /// why it went unnoticed.
+    /// </para>
+    /// <para>
+    /// The scaling is applied by rebuilding the regularizer at <c>Strength/rho</c> rather than by adding a
+    /// rho-aware method to every regularizer. A custom regularizer cannot be rebuilt that way — its
+    /// strength may not be its only parameter — so it is applied as configured, and a caller using one
+    /// with rho != 1 is choosing their own proximal scaling.
+    /// </para>
     /// <para><b>For Beginners:</b> This step applies the regularization to the solution.
     /// It's like smoothing out the solution to prevent overfitting.
     /// </para>
     /// </remarks>
     private void UpdateZ(Vector<T> x)
     {
-        // === Vectorized Z Update using IEngine (Phase B: US-GPU-015) ===
-        // z = regularize((x + u) / rho)
-
         var xPlusU = (Vector<T>)Engine.Add(x, _u);
-        var invRho = NumOps.FromDouble(1.0 / _options.Rho);
-        var scaledXPlusU = (Vector<T>)Engine.Multiply(xPlusU, invRho);
-        _z = _regularization.Regularize(scaledXPlusU);
+        _z = ProximalOperator.Regularize(xPlusU);
+    }
+
+    /// <summary>
+    /// The configured regularizer rescaled to <c>Strength/rho</c>, which is the proximal operator ADMM's
+    /// z-step actually calls for.
+    /// </summary>
+    /// <remarks>
+    /// Rebuilt on each access rather than cached, because <c>Rho</c> and <c>Regularization</c> both come
+    /// from the options object and can be replaced through <c>UpdateOptions</c> or a deserialize; a cached
+    /// operator would keep applying the previous configuration's scaling.
+    /// </remarks>
+    private IRegularization<T, TInput, TOutput> ProximalOperator
+    {
+        get
+        {
+            double rho = _options.Rho;
+            if (!(rho > 0.0) || double.IsInfinity(rho))
+            {
+                return _regularization;
+            }
+
+            double scaled = _regularization.GetOptions().Strength / rho;
+            return _regularization switch
+            {
+                L1Regularization<T, TInput, TOutput> => new L1Regularization<T, TInput, TOutput>(
+                    new RegularizationOptions { Strength = scaled }),
+                L2Regularization<T, TInput, TOutput> => new L2Regularization<T, TInput, TOutput>(
+                    new RegularizationOptions { Strength = scaled }),
+                _ => _regularization,
+            };
+        }
     }
 
     /// <summary>
@@ -493,9 +537,11 @@ public class ADMMOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
                 nameof(gradient));
         }
 
+        // Both are non-nullable and start as Vector<T>.Empty(), so the length test alone covers the
+        // first call as well as a parameter-count change.
         int n = parameters.Length;
-        if (_z is null || _z.Length != n) _z = Vector<T>.CreateDefault(n, NumOps.Zero);
-        if (_u is null || _u.Length != n) _u = Vector<T>.CreateDefault(n, NumOps.Zero);
+        if (_z.Length != n) _z = Vector<T>.CreateDefault(n, NumOps.Zero);
+        if (_u.Length != n) _u = Vector<T>.CreateDefault(n, NumOps.Zero);
 
         var rho = NumOps.FromDouble(_options.Rho);
 

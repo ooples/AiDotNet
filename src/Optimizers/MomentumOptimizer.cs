@@ -48,6 +48,12 @@ public class MomentumOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
         if (_options.UseAdaptiveLearningRate) return false;
         if (_options.UseAdaptiveMomentum) return false;
         if (!TryGetFusedLrSchedule(out var schedule)) return false;
+        // The two paths store DIFFERENT things in the velocity buffer: the eager step accumulates
+        // lr_t * grad, the kernel accumulates the raw gradient and applies lr_t at the parameter write.
+        // Constant lr makes those identical (it factors out of the whole recurrence); a schedule does not,
+        // because the kernel would re-scale the entire accumulated history by the CURRENT rate while the
+        // eager path keeps each gradient at the rate that was in force when it arrived.
+        if (schedule is not null) return false;
 
         config = new Fused.FusedOptimizerConfig(
             Tensors.Engines.Compilation.OptimizerType.SGDMomentum,

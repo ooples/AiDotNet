@@ -253,6 +253,53 @@ public class FusedSpecMatchesEagerBehaviourTests
             "CoordinateDescent fused under a moving learning rate; the u = lr*v identity only holds while lr is fixed.");
     }
 
+    /// <summary>
+    /// Momentum stores <c>lr_t * grad</c> in its velocity while the kernel stores the raw gradient and
+    /// applies the rate at the parameter write, so a moving rate separates the two.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Constant lr makes the two identical because it factors out of the whole recurrence. Under a
+    /// schedule the kernel re-scales the ENTIRE accumulated history by the current rate, while the eager
+    /// path keeps each gradient at the rate that was in force when it arrived — the same distinction that
+    /// made the LARS kernel wrong.
+    /// </para>
+    /// <para>
+    /// NAG is unaffected and does not decline here: its eager step already stores the unscaled gradient
+    /// (<c>v = mu*v + g; p -= lr*(g + mu*v)</c>), which is the kernel's convention exactly.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public void Momentum_DeclinesOnANonConstantSchedule()
+    {
+        var optimizer = new MomentumOptimizer<double, Matrix<double>, Vector<double>>(
+            null,
+            new MomentumOptimizerOptions<double, Matrix<double>, Vector<double>>
+            {
+                InitialLearningRate = 0.05,
+                UseAdaptiveLearningRate = false,
+                UseAdaptiveMomentum = false,
+                LearningRateScheduler = new AiDotNet.LearningRateSchedulers.ExponentialLRScheduler(0.05, 0.95),
+            });
+
+        Assert.False(TryGetConfig(optimizer, out _),
+            "Momentum fused under a moving learning rate; its velocity holds lr*grad, so the fused path " +
+            "would re-scale the accumulated history by the current rate.");
+
+        // Without a schedule the same configuration still fuses — the decline is about the schedule, not
+        // a blanket refusal.
+        var constant = new MomentumOptimizer<double, Matrix<double>, Vector<double>>(
+            null,
+            new MomentumOptimizerOptions<double, Matrix<double>, Vector<double>>
+            {
+                InitialLearningRate = 0.05,
+                UseAdaptiveLearningRate = false,
+                UseAdaptiveMomentum = false,
+            });
+        Assert.True(TryGetConfig(constant, out var config));
+        Assert.Equal(Tensors.Engines.Compilation.OptimizerType.SGDMomentum, config.Type);
+    }
+
     // ── NesterovAcceleratedGradient → SGDMomentum + Nesterov ─────────────────
 
     /// <summary>

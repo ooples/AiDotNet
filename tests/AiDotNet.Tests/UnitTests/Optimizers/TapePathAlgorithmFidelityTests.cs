@@ -1,6 +1,8 @@
 using System;
+using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.Optimizers;
+using AiDotNet.Regularization;
 using Xunit;
 
 namespace AiDotNet.Tests.UnitTests.Optimizers;
@@ -129,6 +131,64 @@ public class TapePathAlgorithmFidelityTests
             Assert.False(double.IsNaN(v));
             Assert.False(double.IsInfinity(v));
         }
+    }
+
+    /// <summary>
+    /// The penalty parameter scales the STRENGTH of the z-step's proximal operator, not its argument.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Boyd et al. (2011): <c>z = prox_{g/rho}(x + u)</c>, so an L1 split soft-thresholds <c>x + u</c> at
+    /// <c>Strength/rho</c>. Applying <c>Regularize((x + u)/rho)</c> instead — scaling the argument and
+    /// leaving the threshold alone — is a different function, equal to
+    /// <c>(1/rho)·soft_threshold(x + u, Strength·rho)</c>. With rho = 2 and Strength = 0.4 the two give
+    /// 0.7 and 0.25 for a coordinate at 1.0, which is not a rounding difference.
+    /// </para>
+    /// <para>
+    /// They coincide exactly at rho = 1, the default, which is why this test uses rho = 2.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public void Admm_ZStepScalesTheProxStrengthByRho_NotItsArgument()
+    {
+        const double rho = 2.0, strength = 0.4;
+        var optimizer = new ADMMOptimizer<double, Matrix<double>, Vector<double>>(
+            null, new ADMMOptimizerOptions<double, Matrix<double>, Vector<double>>
+            {
+                InitialLearningRate = 0.0,   // isolate the z-step: x does not move
+                Rho = rho,
+                UseAdaptiveLearningRate = false,
+                Regularization = new L1Regularization<double, Matrix<double>, Vector<double>>(
+                    new RegularizationOptions { Strength = strength }),
+            });
+
+        var p = new Vector<double>(new[] { 1.0, -1.0, 0.15 });
+        var zeroGradient = new Vector<double>(new[] { 0.0, 0.0, 0.0 });
+
+        optimizer.UpdateParameters(p, zeroGradient);
+
+        // u starts at zero, so after the first step z = soft_threshold(x, strength/rho) with
+        // strength/rho = 0.2, and u = x - z.
+        var z = GetPrivateVector(optimizer, "_z");
+        Assert.Equal(0.8, z[0], 12);
+        Assert.Equal(-0.8, z[1], 12);
+
+        // The rejected scaling would have produced (1/2)*soft_threshold(1.0, 0.8) = 0.1 here.
+        Assert.NotEqual(0.1, z[0], 6);
+
+        // 0.15 is inside the 0.2 threshold and must be exactly zero — the sparsity that is the point of
+        // an L1 split, and the part a wrong-but-plausible scaling still gets qualitatively right.
+        Assert.Equal(0.0, z[2], 12);
+    }
+
+    private static Vector<double> GetPrivateVector(object instance, string fieldName)
+    {
+        var field = instance.GetType().GetField(fieldName,
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+        Assert.NotNull(field);
+        var value = field!.GetValue(instance);
+        Assert.NotNull(value);
+        return (Vector<double>)value!;
     }
 
     /// <summary>

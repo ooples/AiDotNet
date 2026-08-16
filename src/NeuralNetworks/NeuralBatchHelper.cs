@@ -511,11 +511,20 @@ internal static class NeuralBatchHelper
 
         if (model is NeuralNetworkBase<T> nn
             && X is Tensor<T> xTensor
-            && xTensor.Rank >= 1
-            && xTensor.Shape[0] > 1)
+            && xTensor.Rank >= 1)
         {
             try
             {
+                // A single sample needs no estimation or chunking, but it still runs a forward pass that
+                // rents pooled buffers — so it belongs INSIDE the cleanup scope, not before it. Gating the
+                // whole block on Shape[0] > 1 let a one-sample prediction return holding pool memory the
+                // caller had just set a ceiling on.
+                if (xTensor.Shape[0] <= 1)
+                {
+                    var single = nn.Predict(xTensor);
+                    return single is TOutput st ? st : model.Predict(X);
+                }
+
                 int chunk = EstimateChunkSize(nn, xTensor, memoryBudgetBytes);
                 if (chunk >= xTensor.Shape[0])
                 {

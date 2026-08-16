@@ -34,9 +34,20 @@ public class GradientBasedOptimizerOptions<T, TInput, TOutput> : OptimizationAlg
     /// </summary>
     /// <param name="other">The options instance to copy.</param>
     /// <remarks>
+    /// <para>
     /// Concrete optimizer option classes call this from their copy constructors before copying their own
     /// properties. Keeping the inherited list here prevents newly added optimizers from silently losing shared
     /// configuration such as reproducibility seeds, schedulers, clipping, caching, or early-stopping policy.
+    /// </para>
+    /// <para>
+    /// <b>The copy is SHALLOW for reference-typed collaborators, and several of them hold per-run state.</b>
+    /// <see cref="GradientCache"/>, <c>ModelCache</c>, <c>FitDetector</c>, <c>FitnessCalculator</c>,
+    /// <c>PredictionOptions</c> and <c>ModelStatsOptions</c> are shared with <paramref name="other"/>, not
+    /// duplicated — so two optimizers built from one options instance write into the same caches and one
+    /// run's entries are visible to the other. That is deliberate (the caches exist to be shared, and
+    /// cloning a fitness calculator mid-run would be worse), but it is the opposite of what "a complete
+    /// copy" suggests. Assign fresh instances after copying when the two runs must be independent.
+    /// </para>
     /// </remarks>
     protected void CopyInheritedPropertiesFrom(GradientBasedOptimizerOptions<T, TInput, TOutput> other)
     {
