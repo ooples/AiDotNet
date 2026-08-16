@@ -11418,7 +11418,7 @@ public static class LayerHelper<T>
         int vocabSize = 50265)
     {
         return (CreateDessurtEncoderLayers(encoderDim, encoderLayers, numHeads),
-                CreateDessurtDecoderLayers(decoderDim, decoderLayers, numHeads, vocabSize));
+                CreateDessurtDecoderLayers(encoderDim, decoderDim, decoderLayers, numHeads, vocabSize));
     }
 
     private static IEnumerable<ILayer<T>> CreateDessurtEncoderLayers(int hiddenDim, int numLayers, int numHeads, int maxPatches = 1025)
@@ -11447,7 +11447,8 @@ public static class LayerHelper<T>
         }
     }
 
-    private static IEnumerable<ILayer<T>> CreateDessurtDecoderLayers(int hiddenDim, int numLayers, int numHeads, int vocabSize)
+    private static IEnumerable<ILayer<T>> CreateDessurtDecoderLayers(
+        int encoderDim, int hiddenDim, int numLayers, int numHeads, int vocabSize)
     {
         IActivationFunction<T> geluActivation = new GELUActivation<T>();
         IActivationFunction<T> identityActivation = new IdentityActivation<T>();

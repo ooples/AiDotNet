@@ -1,4 +1,5 @@
 using AiDotNet.Helpers;
+using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Validation;
 
@@ -29,16 +30,19 @@ public abstract partial class TeacherStudentSSL<T> : SelfSupervisedLearningMetho
     /// <summary>
     /// The teacher encoder (momentum-updated copy of student).
     /// </summary>
+    [FrozenParameter]
     protected readonly IMomentumEncoder<T> TeacherEncoder;
 
     /// <summary>
     /// The teacher projection head.
     /// </summary>
+    [FrozenParameter]
     protected readonly IProjectorHead<T> TeacherProjector;
 
     /// <summary>
     /// Centering mechanism to prevent collapse.
     /// </summary>
+    [Buffer]
     protected readonly CenteringMechanism<T> Centering;
 
     /// <summary>
@@ -192,24 +196,4 @@ public abstract partial class TeacherStudentSSL<T> : SelfSupervisedLearningMetho
         TeacherEncoder.SetMomentum(newMomentum);
     }
 
-    /// <inheritdoc />
-    protected override long GetAdditionalParameterCount()
-    {
-        return TeacherEncoder.GetParameters().Length + TeacherProjector.ParameterCount;
-    }
-
-    /// <inheritdoc />
-    protected override Vector<T>? GetAdditionalParameters()
-    {
-        var teacherEncoderParams = TeacherEncoder.GetParameters();
-        var teacherProjectorParams = TeacherProjector.GetParameters();
-
-        var combined = new T[teacherEncoderParams.Length + teacherProjectorParams.Length];
-        for (int i = 0; i < teacherEncoderParams.Length; i++)
-            combined[i] = teacherEncoderParams[i];
-        for (int i = 0; i < teacherProjectorParams.Length; i++)
-            combined[teacherEncoderParams.Length + i] = teacherProjectorParams[i];
-
-        return new Vector<T>(combined);
-    }
 }

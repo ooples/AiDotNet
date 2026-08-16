@@ -539,17 +539,12 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // layers, 25 heads (Chen et al. 2024, InternVL). A single fp32 CPU forward over 112px/14px = 64
         // patch tokens through 48 layers of 3200-dim O(n^2) attention inherently exceeds the 120s per-test
         // timeout — genuine foundation-scale compute, not a correctness bug (gradients flow; the ViT stack
-        // is paper-faithful). Runs in the nightly heavy lane, matching its VLM sibling Phi3Vision.
+        // is paper-faithful). Runs in the nightly heavy lane.
         "InternViT",
         // #1719 follow-up (#1694 endgame): verified-genuine foundation-scale OOM/120s-timeout on the gate
         // box — 9B-class generative VLM (same family as LXMERT/METER/SmolVLM) and an audio-LM. The
         // gradients DO flow; the footprint simply exceeds the runner, so they run in the nightly heavy lane.
         "IDEFICS", "MusicFlamingo",
-        // LLaVAVideo: foundation-scale video-language model — 336px frames / 16px patches = 441 vision
-        // tokens x up to 64 frames (~28K tokens) at VisionDim 1024 with 32-head O(n^2) attention, so a
-        // single CPU forward inherently exceeds the 120s per-test timeout. Not a correctness bug (same
-        // class as IDEFICS/MusicFlamingo); runs in the nightly heavy lane rather than the default shard.
-        "LLaVAVideo",
         // MGLDVSR: motion-guided LATENT DIFFUSION for video super-resolution (Yang 2024). Each forward
         // runs 20 denoising steps (20 U-Net passes) over video latents, and the training invariants
         // (MoreData = 200 iterations) multiply that out well past the 120s per-test timeout on CPU.
@@ -613,7 +608,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // clip — genuine heavy conv compute (NOT an O(n^2)-attention pathology: the factory is
         // conv-only), so a 10-iteration Training_ShouldReduceLoss exceeds the 120s per-test budget on
         // CPU (verified: it, MoreData and Metadata all time out at 120000ms). Same class as the
-        // already-tagged video models (MGLDVSR / InternVideo2 / LLaVAVideo) — runs in the nightly heavy
+        // already-tagged video models (MGLDVSR / InternVideo2) — runs in the nightly heavy
         // lane. (A separate fidelity follow-up tracks wiring the paper's masked inter/intra-frame
         // attention, which the default factory does not yet build.)
         "MIAVSR",
@@ -11116,8 +11111,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         if (IsHeavyTimeoutGeneratedModel(model.ClassName))
         {
             sb.AppendLine("[Xunit.Collection(\"FoundationScaleSerial\")]");
-            heavyTimeout = true;
-        }
         if (heavyTimeout)
             sb.AppendLine("[Xunit.Trait(\"Category\", \"HeavyTimeout\")]");
         sb.AppendLine($"public class {testClassName} : {baseClassName}");
@@ -13165,7 +13158,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             sb.AppendLine("        using var network = CreateNetwork();");
             sb.AppendLine("        var trainInput = CreateRandomTensor(InputShape, rng);");
             sb.AppendLine("        var trainTarget = CreateRandomTargetTensor(EffectiveOutputShape, rng);");
-            sb.AppendLine("        for (int i = 0; i < TrainingIterations; i++) network.Train(trainInput, trainTarget);");
+            sb.AppendLine("        int iterations = ResolveConformanceTrainingIterations(network, TrainingIterations);");
+            sb.AppendLine("        for (int i = 0; i < iterations; i++) network.Train(trainInput, trainTarget);");
             sb.AppendLine("        var input1 = CreateConstantTensor(InputShape, 0.1);");
             sb.AppendLine("        var input2 = CreateConstantTensor(InputShape, 0.9);");
             sb.AppendLine("        var output1 = network.Predict(input1);");
@@ -13328,7 +13322,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 sb.AppendLine("        using var network = CreateNetwork();");
                 sb.AppendLine("        var trainInput = CreateRandomTensor(InputShape, rng);");
                 sb.AppendLine("        var trainTarget = CreateRandomTargetTensor(EffectiveOutputShape, rng);");
-                sb.AppendLine("        for (int i = 0; i < TrainingIterations; i++) network.Train(trainInput, trainTarget);");
+                sb.AppendLine("        int iterations = ResolveConformanceTrainingIterations(network, TrainingIterations);");
+                sb.AppendLine("        for (int i = 0; i < iterations; i++) network.Train(trainInput, trainTarget);");
                 sb.AppendLine("        // Build two DIFFERENT integer-token sequences so EmbeddingLayer's");
                 sb.AppendLine("        // int-truncation produces distinct lookups (constant float inputs all");
                 sb.AppendLine("        // collapse to token 0 under (int) truncation).");
@@ -16857,18 +16852,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
     /// whose <c>Training_*</c> invariants exceed the 120 s timeout because
     /// the encoder is wide / deep enough to make a full step take ≳ 1 s.
     /// </remarks>
-    // Generated models whose tests are CORRECT but foundation-scale: a single
-    // forward at their paper-scale width (e.g. the proprietary VLMs at
-    // VisionDim=1024) exceeds the 120 s per-test gate. Tagged HeavyTimeout so the
-    // default sharded run skips them (it filters Category!=HeavyTimeout) and they
-    // run in the nightly lane. Drop a model from here once it fits the budget.
-    private static bool IsHeavyTimeoutGeneratedModel(string className)
-    {
-        int tickIdx = className.IndexOf('`');
-        if (tickIdx > 0) className = className.Substring(0, tickIdx);
-        return className is "ClaudeVision" or "GeminiVision" or "GrokVision";
-    }
-
     private static bool IsPaperScaleVisionLanguageModel(string className)
     {
         int tickIdx = className.IndexOf('`');
@@ -17085,7 +17068,12 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // NHiTSFinance: NHiTSOptions.ForecastHorizon = 24. Pairs with
             // GetForecastingPaperContextLength returning 48 for NHiTSFinance
             // so the lookback window matches the model's configured default.
-            "NHiTSFinance" => "24",
+            "NHiTSFinance" => "1, 24",
+
+            // N-HiTS and Non-stationary Transformer both preserve an explicit batch axis in
+            // native training. Keep output declarations aligned with the batched inputs emitted
+            // below so the generated fixture exercises the real training contract.
+            "NonStationaryTransformer" => "1, 24, 7",
 
             // STGNN (Yu et al. 2018): per-node output [numNodes, forecastHorizon*
             // numFeatures] = [207, 12] (METR-LA defaults numNodes=207,
@@ -17129,6 +17117,15 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // TimesNet (Wu et al. 2023): paper-faithful multivariate input
             // [B, S, M]. M = TimesNetOptions.NumFeatures default 7.
             "TimesNet" => $"1, {ctx}, 7",
+
+            // N-HiTS pooling slices axis 1 in its native tape path. A flat [48] public probe is
+            // accepted by Predict (which promotes it), but BuildTrainingObjective receives the
+            // unpromoted tensor. Emit the ordinary batched time-series form once in the generator.
+            "NHiTSFinance" => $"1, {ctx}",
+
+            // The model's documented contract is [batch, sequence=96, features=7]. The former
+            // family fallback emitted a rank-1 [512] vector and failed in the first attention.
+            "NonStationaryTransformer" => "1, 96, 7",
 
             // Kronos (financial OHLCV decoder): paper-faithful multi-feature
             // candlestick input. KronosOptions.NumCandlestickFeatures = 5

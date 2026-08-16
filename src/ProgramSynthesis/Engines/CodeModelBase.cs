@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -23,6 +24,10 @@ namespace AiDotNet.ProgramSynthesis.Engines;
 /// Base class for code models that provides shared tokenization, task dispatch, and structured outputs.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations (e.g., double, float).</typeparam>
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time,
+    Direction = TensorLayoutDirection.Input, BatchOptional = true)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Classes,
+    Direction = TensorLayoutDirection.Output, BatchOptional = true)]
 public abstract class CodeModelBase<T> : NeuralNetworkBase<T>, ICodeModel<T>
 {
     private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(1);

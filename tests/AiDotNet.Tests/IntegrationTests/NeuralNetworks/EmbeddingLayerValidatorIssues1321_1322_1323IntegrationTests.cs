@@ -1,4 +1,5 @@
 using AiDotNet.ActivationFunctions;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.FitDetectors;
 using AiDotNet.Helpers;

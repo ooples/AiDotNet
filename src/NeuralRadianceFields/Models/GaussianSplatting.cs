@@ -2423,6 +2423,13 @@ public partial class GaussianSplatting<T> : NeuralNetworkBase<T>, IRadianceField
             meanDensityGrad = NumOps.Multiply(sum, invRays);
         }
 
+        int publishedLength = 0;
+        for (int g = 0; g < _gaussians.Count; g++)
+            publishedLength += 11 + _gaussians[g].Color.Length;
+        var publishedGradients = new Vector<T>(publishedLength);
+        var publishedSpan = publishedGradients.AsWritableSpan();
+        int publishedOffset = 0;
+
         for (int g = 0; g < _gaussians.Count; g++)
         {
             var gauss = _gaussians[g];
@@ -2439,6 +2446,7 @@ public partial class GaussianSplatting<T> : NeuralNetworkBase<T>, IRadianceField
             {
                 int colorIdx = sh ? c * basisCount : c;
                 if (colorIdx >= gauss.Color.Length) continue;
+                publishedSpan[publishedOffset + 11 + colorIdx] = meanRgbGrad[c];
                 var delta = NumOps.Multiply(meanRgbGrad[c], colorStep);
                 gauss.Color[colorIdx] = NumOps.Subtract(gauss.Color[colorIdx], delta);
             }
@@ -2447,11 +2455,16 @@ public partial class GaussianSplatting<T> : NeuralNetworkBase<T>, IRadianceField
             // monotonic function of opacity), so a 4-channel ray target trains geometry too.
             if (hasDensityChannel)
             {
+                publishedSpan[publishedOffset + 10] = meanDensityGrad;
                 var opacityStep = NumOps.FromDouble(OpacityLearningRate * gauss.OpacityLrScale);
                 var delta = NumOps.Multiply(meanDensityGrad, opacityStep);
                 gauss.Opacity = NumOps.Subtract(gauss.Opacity, delta);
             }
+
+            publishedOffset += 11 + gauss.Color.Length;
         }
+
+        PublishFlatParameterGradients(publishedGradients);
     }
 
     // ParameterCount was a formula here -- perGaussian * _gaussians.Count -- restating the layout
@@ -2856,9 +2869,20 @@ public partial class GaussianSplatting<T> : NeuralNetworkBase<T>, IRadianceField
         var gradients = new List<GaussianGradient>(sorted.Count);
         int basisCount = GetShBasisCount();
 
+        var publishedOffsets = new Dictionary<Gaussian, int>();
+        int publishedLength = 0;
+        for (int i = 0; i < _gaussians.Count; i++)
+        {
+            publishedOffsets[_gaussians[i]] = publishedLength;
+            publishedLength += 11 + _gaussians[i].Color.Length;
+        }
+        var publishedGradients = new Vector<T>(publishedLength);
+        var publishedSpan = publishedGradients.AsWritableSpan();
+
         foreach (var gaussian in sorted)
         {
             var source = gaussian.Source;
+            int publishedOffset = publishedOffsets[source];
             double gradPosX = 0.0;
             double gradPosY = 0.0;
             double gradPosZ = 0.0;
@@ -2988,6 +3012,11 @@ public partial class GaussianSplatting<T> : NeuralNetworkBase<T>, IRadianceField
             double lrOpacity  = OpacityLearningRate  * source.OpacityLrScale;
             double lrPosition = PositionLearningRate * source.PositionLrScale;
 
+            publishedSpan[publishedOffset] = NumOps.FromDouble(gradPosX);
+            publishedSpan[publishedOffset + 1] = NumOps.FromDouble(gradPosY);
+            publishedSpan[publishedOffset + 2] = NumOps.FromDouble(gradPosZ);
+            publishedSpan[publishedOffset + 10] = NumOps.FromDouble(gradOpacity);
+
             if (_useSphericalHarmonics && gradCoeffR != null && gradCoeffG != null && gradCoeffB != null)
             {
                 for (int b = 0; b < basisCount; b++)
@@ -2995,6 +3024,10 @@ public partial class GaussianSplatting<T> : NeuralNetworkBase<T>, IRadianceField
                     int rIdx = b;
                     int gIdx = b + basisCount;
                     int bIdx = b + 2 * basisCount;
+
+                    publishedSpan[publishedOffset + 11 + rIdx] = NumOps.FromDouble(gradCoeffR[b]);
+                    publishedSpan[publishedOffset + 11 + gIdx] = NumOps.FromDouble(gradCoeffG[b]);
+                    publishedSpan[publishedOffset + 11 + bIdx] = NumOps.FromDouble(gradCoeffB[b]);
 
                     source.Color[rIdx] = NumOps.FromDouble(
                         NumOps.ToDouble(source.Color[rIdx]) - lrColor * gradCoeffR[b]);
@@ -3006,6 +3039,9 @@ public partial class GaussianSplatting<T> : NeuralNetworkBase<T>, IRadianceField
             }
             else
             {
+                publishedSpan[publishedOffset + 11] = NumOps.FromDouble(gradColorR);
+                publishedSpan[publishedOffset + 12] = NumOps.FromDouble(gradColorG);
+                publishedSpan[publishedOffset + 13] = NumOps.FromDouble(gradColorB);
                 source.Color[0] = NumOps.FromDouble(Clamp01(NumOps.ToDouble(source.Color[0]) - lrColor * gradColorR));
                 source.Color[1] = NumOps.FromDouble(Clamp01(NumOps.ToDouble(source.Color[1]) - lrColor * gradColorG));
                 source.Color[2] = NumOps.FromDouble(Clamp01(NumOps.ToDouble(source.Color[2]) - lrColor * gradColorB));
@@ -3103,6 +3139,10 @@ public partial class GaussianSplatting<T> : NeuralNetworkBase<T>, IRadianceField
                 double gradScaleY = 2.0 * sy * rt11;
                 double gradScaleZ = 2.0 * sz * rt22;
 
+                publishedSpan[publishedOffset + 7] = NumOps.FromDouble(gradScaleX);
+                publishedSpan[publishedOffset + 8] = NumOps.FromDouble(gradScaleY);
+                publishedSpan[publishedOffset + 9] = NumOps.FromDouble(gradScaleZ);
+
                 double lrScale = ScaleLearningRate * source.ScaleLrScale;
                 sx = Math.Max(MinScale, sx - lrScale * gradScaleX);
                 sy = Math.Max(MinScale, sy - lrScale * gradScaleY);
@@ -3148,6 +3188,11 @@ public partial class GaussianSplatting<T> : NeuralNetworkBase<T>, IRadianceField
                                + gR10 * (2.0 * qw) + gR11 * (-4.0 * qz) + gR12 * (2.0 * qy)
                                + gR20 * (2.0 * qx) + gR21 * (2.0 * qy);
 
+                publishedSpan[publishedOffset + 3] = NumOps.FromDouble(gradW);
+                publishedSpan[publishedOffset + 4] = NumOps.FromDouble(gradX);
+                publishedSpan[publishedOffset + 5] = NumOps.FromDouble(gradY);
+                publishedSpan[publishedOffset + 6] = NumOps.FromDouble(gradZ);
+
                 double lrRotation = RotationLearningRate * source.RotationLrScale;
                 qw -= lrRotation * gradW;
                 qx -= lrRotation * gradX;
@@ -3182,6 +3227,7 @@ public partial class GaussianSplatting<T> : NeuralNetworkBase<T>, IRadianceField
         }
 
         MarkSpatialIndexDirty();
+        PublishFlatParameterGradients(publishedGradients);
         return gradients;
     }
 

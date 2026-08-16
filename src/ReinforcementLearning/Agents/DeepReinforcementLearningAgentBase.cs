@@ -120,8 +120,12 @@ public abstract partial class DeepReinforcementLearningAgentBase<T> : Reinforcem
     /// Gets the total number of trainable parameters across all networks.
     /// </summary>
     /// <remarks>
-    /// This sums the parameter counts from all neural networks used by the agent.
-    /// Useful for monitoring model complexity and memory requirements.
+    /// Target-network agents must not copy the lazy, pre-forward view: a concrete architecture can
+    /// have shape-resolved weights whose storage has not been allocated yet, in which case a bare
+    /// <c>GetParameters()</c> honestly returns an empty vector. Materializing both peers here gives
+    /// every DQN/actor-critic implementation the same lifecycle rule. Comparing stable manifest
+    /// fingerprints before applying values is stronger than a length check: it also rejects shifted
+    /// slot boundaries or semantic-role changes that happen to preserve the aggregate count.
     /// </remarks>
     /// <summary>
     /// Folded from <see cref="GetParameters"/>, so the count and the vector cannot disagree.

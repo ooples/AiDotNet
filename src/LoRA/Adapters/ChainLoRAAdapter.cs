@@ -123,16 +123,6 @@ public partial class ChainLoRAAdapter<T> : LoRAAdapterBase<T>
     private readonly int _chainLength;
 
     /// <summary>
-    /// Cached parameter count reflecting current chain state.
-    /// </summary>
-    /// <remarks>
-    /// This field is updated whenever adapters are merged/unmerged to avoid
-    /// recomputing the count on every access and to provide a stable value
-    /// during base class construction before the chain is fully initialized.
-    /// </remarks>
-    private long _currentParameterCount;
-
-    /// <summary>
     /// Gets the total number of adapters in the chain.
     /// </summary>
     /// <remarks>
@@ -227,8 +217,8 @@ public partial class ChainLoRAAdapter<T> : LoRAAdapterBase<T>
             _mergedStatus.Add(false);
         }
 
-        // Update parameter count to reflect all unmerged adapters
-        UpdateParameterCount();
+        // The chain replaces the one standard LoRA child created by the base adapter.
+        FreezeSubLayerParameters(_loraLayer);
     }
 
     /// <summary>
@@ -287,7 +277,7 @@ public partial class ChainLoRAAdapter<T> : LoRAAdapterBase<T>
         }
 
         _mergedStatus[_activeAdapterIndex] = true;
-        UpdateParameterCount();
+        FreezeSubLayerParameters(_adapterChain[_activeAdapterIndex]);
     }
 
     /// <summary>
@@ -309,7 +299,7 @@ public partial class ChainLoRAAdapter<T> : LoRAAdapterBase<T>
         }
 
         _mergedStatus[index] = false;
-        UpdateParameterCount();
+        UnfreezeSubLayerParameters(_adapterChain[index]);
     }
 
     /// <summary>

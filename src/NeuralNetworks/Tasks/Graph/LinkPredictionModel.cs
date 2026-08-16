@@ -722,7 +722,7 @@ public partial class LinkPredictionModel<T> : NeuralNetworkBase<T>
             var trainableParameters = Training.TapeTrainingStep<T>.CollectParameters(Layers, LayerStructureVersion);
             if (trainableParameters.Count > 0)
             {
-                var gradients = tape.ComputeGradients(lossTensor, trainableParameters);
+                var gradients = ComputeAndPublishParameterGradients(tape, lossTensor, trainableParameters);
                 var context = new TapeStepContext<T>(trainableParameters, gradients, lossValue);
                 _optimizer.Step(context);
             }

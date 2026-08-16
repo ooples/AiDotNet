@@ -305,6 +305,15 @@ public partial class AudioLM<T> : TtsModelBase<T>, ICodecTts<T>
                 WeightDecay = _options.WeightDecay
             });
 
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreateDefaultOptimizer()
+        => new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate,
+                WeightDecay = _options.WeightDecay
+            });
+
     private void ThrowIfDisposed()
     {
         if (_disposed)

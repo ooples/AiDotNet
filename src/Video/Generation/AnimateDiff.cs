@@ -63,6 +63,10 @@ namespace AiDotNet.Video.Generation;
     "https://arxiv.org/abs/2307.04725",
     Year = 2023,
     Authors = "Yuwei Guo, Ceyuan Yang, Anyi Rao, Zhengyang Liang, Yaohui Wang, Yu Qiao, Maneesh Agrawala, Dahua Lin, Bo Dai")]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Input, BatchOptional = true)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Frames, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Output, BatchOptional = true)]
 public class AnimateDiff<T> : NeuralNetworkBase<T>
 {
     private readonly AnimateDiffOptions _options;

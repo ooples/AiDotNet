@@ -110,6 +110,7 @@ public partial class BASEDLayer<T> : LayerBase<T>, IShapeContract
     private Tensor<T> _windowValueWeights;
 
     // Feature map scale parameter for Taylor expansion: [numHeads, headDim]
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
     private Tensor<T> _featureMapScale;
 
     // Mixing gate: learned alpha per head [modelDim, numHeads]
@@ -356,16 +357,51 @@ public partial class BASEDLayer<T> : LayerBase<T>, IShapeContract
         _lastMixingAlphaRaw = alphaRaw;
         _lastMixingAlpha = alpha;
 
-        // Step 3: Linear attention with Taylor feature map
-        var linearOutput = LinearAttentionForward(linQ, linK, linV, batchSize, seqLen);
+        // Step 3: Linear attention with a vectorized Taylor feature map.
+        var qHeads = Engine.Reshape(
+            linQ,
+            new[] { batchSize, seqLen, _numHeads, _headDimension });
+        var kHeads = Engine.Reshape(
+            linK,
+            new[] { batchSize, seqLen, _numHeads, _headDimension });
+        var vHeads = Engine.Reshape(
+            linV,
+            new[] { batchSize, seqLen, _numHeads, _headDimension });
+        var featureScale = Engine.TensorBroadcastTo(
+            Engine.Reshape(_featureMapScale, new[] { 1, 1, _numHeads, _headDimension }),
+            new[] { batchSize, seqLen, _numHeads, _headDimension });
+        T keyScale = NumOps.FromDouble(1.0 / Math.Sqrt(_headDimension));
+        var scaledQ = Engine.TensorMultiplyScalar(
+            Engine.TensorMultiply(qHeads, featureScale), keyScale);
+        var scaledK = Engine.TensorMultiplyScalar(
+            Engine.TensorMultiply(kHeads, featureScale), keyScale);
+        var phiQ = CreateTaylorFeatures(scaledQ);
+        var phiK = CreateTaylorFeatures(scaledK);
+        var linearOutput = Engine.Reshape(
+            CausalLinearAttention.NormalizedHeads(
+                Engine, phiQ, phiK, vHeads, NumOps.FromDouble(1e-6)),
+            new[] { batchSize, seqLen, _modelDimension });
         _lastLinearOutput = linearOutput;
 
         // Step 4: Sliding window causal attention
-        var windowOutput = SlidingWindowAttentionForward(winQ, winK, winV, batchSize, seqLen);
+        var windowOutput = CausalLinearAttention.ScaledDotProduct(
+            Engine, winQ, winK, winV, _numHeads, causal: true, windowSize: _windowSize);
         _lastWindowOutput = windowOutput;
 
         // Step 5: Combine linear and window attention using learned alpha
-        var combined = CombineAttentionOutputs(linearOutput, windowOutput, alpha, batchSize, seqLen);
+        var alphaHeads = Engine.TensorBroadcastTo(
+            Engine.TensorExpandDims(alpha, axis: 3),
+            new[] { batchSize, seqLen, _numHeads, _headDimension });
+        var alphaModel = Engine.Reshape(
+            alphaHeads,
+            new[] { batchSize, seqLen, _modelDimension });
+        var ones = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
+        ones.Fill(NumOps.One);
+        var combined = Engine.TensorAdd(
+            Engine.TensorMultiply(alphaModel, linearOutput),
+            Engine.TensorMultiply(
+                Engine.TensorSubtract(ones, alphaModel),
+                windowOutput));
         _lastCombinedOutput = combined;
 
         // Step 6: Output projection
@@ -387,6 +423,21 @@ public partial class BASEDLayer<T> : LayerBase<T>, IShapeContract
         outputShape[rank - 2] = seqLen;
         outputShape[rank - 1] = _modelDimension;
         return Engine.Reshape(result, outputShape);
+    }
+
+    private Tensor<T> CreateTaylorFeatures(Tensor<T> scaled)
+    {
+        if (_featureExpansion == 1)
+            return scaled;
+
+        var parts = new Tensor<T>[_featureExpansion];
+        parts[0] = scaled;
+        parts[1] = Engine.TensorMultiplyScalar(
+            Engine.TensorMultiply(scaled, scaled),
+            NumOps.FromDouble(1.0 / Math.Sqrt(2.0)));
+        for (int expansion = 2; expansion < _featureExpansion; expansion++)
+            parts[expansion] = new Tensor<T>(scaled._shape);
+        return Engine.TensorConcatenate(parts, axis: 3);
     }
 
     /// <summary>

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Enums;
@@ -21,13 +22,15 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks;
 /// round-trip (train → GetParameters → save → fresh model → SetParameters) threw
 /// <c>Expected N parameters, got M</c>.
 ///
-/// The fix has two arms:
-///   1. <c>ParameterCount</c> sums per-layer counts fresh on every access — never goes stale.
-///   2. Public <c>ResolveShapes(sampleInput)</c> method lets callers materialize lazy layers
-///      up-front so a fresh model's <c>SetParameters</c> sees the same size the trained
-///      model's <c>GetParameters</c> returned.
+/// The completed contract has three arms:
+///   1. <c>ParameterCount</c> sums the generated structural manifest on every access — never stale
+///      and never dependent on whether weights happen to have been allocated.
+///   2. Architecture-known models resolve their declared topology automatically, so a fresh model
+///      can restore a checkpoint without a warm-up forward or model-specific parameter override.
+///   3. Public <c>ResolveShapes(sampleInput)</c> remains available for genuinely data-dependent
+///      topology and is idempotent after automatic resolution.
 ///
-/// These tests pin both arms.
+/// These tests pin all three arms.
 /// </summary>
 public class NeuralNetworkBaseResolveShapesTests
 {
@@ -84,7 +87,7 @@ public class NeuralNetworkBaseResolveShapesTests
     }
 
     [Fact]
-    public void ParameterCount_ReflectsLazyShapeResolutionAfterTrain()
+    public async Task LazyComposite_ManifestBuildsChildStructureWithoutDeclaringItParameterFree()
     {
         // A fresh model has resolved shapes but deliberately unmaterialized weights. Reads stay
         // allocation-free, so the concrete count is honestly zero and readiness carries the fact
@@ -99,13 +102,10 @@ public class NeuralNetworkBaseResolveShapesTests
         var (x, y) = DummyBatch(32);
         model.Train(x, y);
 
-        // Post-train ParameterCount MUST reflect the resolved sizes. Pre-#1832 the cache
-        // stuck at freshCount and this assertion failed.
+        // Training materializes values but must not change a constructor-known structural count.
+        // Pre-#1832 the cache and the materialized vector described different layouts.
         long resolvedCount = model.ParameterCount;
-        Assert.True(resolvedCount > freshCount,
-            $"ParameterCount should grow after lazy shape resolution during first Train " +
-            $"(fresh={freshCount}, resolved={resolvedCount}). If they're equal, the stale " +
-            $"cache from pre-#1832 is back.");
+        Assert.Equal(freshCount, resolvedCount);
 
         // ParameterCount and GetParameters().Length MUST agree post-resolution — that's the
         // invariant SetParameters relies on for length validation.
@@ -113,27 +113,30 @@ public class NeuralNetworkBaseResolveShapesTests
     }
 
     [Fact]
-    public void ResolveShapes_UnblocksFlatVectorRoundTrip()
+    public async Task AutomaticShapeResolution_UnblocksFlatVectorRoundTrip()
     {
+        await Task.Yield();
+
         // Train a model briefly to materialize its lazy shapes + move some weights.
         var trained = BuildNeRF();
         var (x, y) = DummyBatch(32, seed: 1);
         trained.Train(x, y);
         var savedParams = trained.GetParameters();
 
-        // Fresh sibling — same architecture, no Train yet, lazy shapes still un-materialized.
+        // A fresh sibling reports the same structural width before allocating values. Restore is
+        // therefore warm-up-free: model creators do not need a parameter or shape override and
+        // users do not need to know which sample tensor would initialize the graph.
         var fresh = BuildNeRF();
-        Assert.True(fresh.GetParameters().Length < savedParams.Length,
-            "Fresh sibling should have FEWER parameters than the trained model (lazy layers " +
-            "not yet resolved). If they're equal, the test fixture broke.");
+        Assert.Equal(savedParams.Length, fresh.ParameterCount);
+        Assert.True(fresh.HasUninitializedParameters);
 
         // NeRF declares its real non-sequential topology in ResolveLazyLayerShapes, so restore can
         // materialize that known layout on demand without requiring a sample input first.
         fresh.SetParameters(savedParams);
         Assert.Equal(savedParams.Length, fresh.GetParameters().Length);
 
-        // ResolveShapes with a sample input drives one forward pass to materialize the
-        // lazy layers. After it returns, the fresh model's size matches the trained one.
+        // ResolveShapes remains a safe, idempotent operation for callers that use it uniformly
+        // across architecture-known and genuinely data-dependent models.
         var sample = new Tensor<float>(new[] { 1, 6 }, new Vector<float>(new float[6]));
         fresh.ResolveShapes(sample);
         Assert.Equal(savedParams.Length, fresh.GetParameters().Length);

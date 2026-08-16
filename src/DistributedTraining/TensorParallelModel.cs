@@ -491,27 +491,11 @@ public partial class TensorParallelModel<T, TInput, TOutput> : ShardedModelBase<
         return metadata;
     }
 
-    /// <inheritdoc/>
-    public override Vector<T> GetParameters()
+    /// <inheritdoc />
+    protected override IParameterSource<T>? GetAuthoritativeParameterSource()
     {
         EnsureShardingInitialized();
-        // In compute-partitioned mode the authoritative parameters are this rank's Column/Row weight shards
-        // held by the partitioned model, not the flat LocalShard of the replication fallback.
-        if (_computePartitioned && _partitionedModel is not null)
-            return _partitionedModel.GetParameters();
-        return base.GetParameters();
-    }
-
-    /// <inheritdoc/>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        EnsureShardingInitialized();
-        if (_computePartitioned && _partitionedModel is not null)
-        {
-            _partitionedModel.SetParameters(parameters);
-            return;
-        }
-        base.SetParameters(parameters);
+        return _computePartitioned ? _partitionedModel : null;
     }
 
     /// <inheritdoc/>

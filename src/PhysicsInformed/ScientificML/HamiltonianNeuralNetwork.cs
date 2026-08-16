@@ -84,6 +84,10 @@ namespace AiDotNet.PhysicsInformed.ScientificML
     [ModelComplexity(ModelComplexity.High)]
     [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     [ResearchPaper("Hamiltonian Neural Networks", "https://doi.org/10.48550/arXiv.1906.01563", Year = 2019, Authors = "Sam Greydanus, Misko Dzamba, Jason Yosinski")]
+    [TensorLayout(TensorAxis.Batch, TensorAxis.Features,
+        Direction = TensorLayoutDirection.Input, BatchOptional = true)]
+    [TensorLayout(TensorAxis.Batch, TensorAxis.Features,
+        Direction = TensorLayoutDirection.Output, BatchOptional = true)]
     public class HamiltonianNeuralNetwork<T> : NeuralNetworkBase<T>
     {
         private readonly HamiltonianNeuralNetworkOptions _options;

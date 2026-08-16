@@ -327,48 +327,14 @@ public partial class PaTHAttentionLayer<T> : LayerBase<T>, IShapeContract
         _lastValue = v;
 
         // Step 2: Apply Householder reflections to Q and K
-        var reflectedQ = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
-        var reflectedK = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
-
-        for (int bi = 0; bi < batchSize; bi++)
-        {
-            for (int t = 0; t < seqLen; t++)
-            {
-                int posIndex = Math.Min(t, _sequenceLength - 1);
-                for (int hi = 0; hi < _numHeads; hi++)
-                {
-                    int dimStart = hi * _headDimension;
-
-                    // Extract head-specific Q and K vectors
-                    var qHead = new T[_headDimension];
-                    var kHead = new T[_headDimension];
-                    for (int di = 0; di < _headDimension; di++)
-                    {
-                        int flatDi = dimStart + di;
-                        qHead[di] = q[new[] { bi, t, flatDi }];
-                        kHead[di] = k[new[] { bi, t, flatDi }];
-                    }
-
-                    // Apply Householder reflection
-                    var rQ = new T[_headDimension];
-                    var rK = new T[_headDimension];
-                    ApplyHouseholderReflection(qHead, posIndex, hi, rQ);
-                    ApplyHouseholderReflection(kHead, posIndex, hi, rK);
-
-                    for (int di = 0; di < _headDimension; di++)
-                    {
-                        int flatDi = dimStart + di;
-                        reflectedQ[new[] { bi, t, flatDi }] = rQ[di];
-                        reflectedK[new[] { bi, t, flatDi }] = rK[di];
-                    }
-                }
-            }
-        }
+        var reflectedQ = ApplyHouseholderReflection(q, batchSize, seqLen);
+        var reflectedK = ApplyHouseholderReflection(k, batchSize, seqLen);
         _lastReflectedQ = reflectedQ;
         _lastReflectedK = reflectedK;
 
         // Step 3: Compute attention with reflected Q and K
-        var attnOutput = ComputeAttention(reflectedQ, reflectedK, v, batchSize, seqLen);
+        var attnOutput = CausalLinearAttention.ScaledDotProduct(
+            Engine, reflectedQ, reflectedK, v, _numHeads, causal: false);
         _lastAttentionOutput = attnOutput;
 
         // Step 4: Output gate
@@ -401,6 +367,37 @@ public partial class PaTHAttentionLayer<T> : LayerBase<T>, IShapeContract
         outputShape[rank - 2] = seqLen;
         outputShape[rank - 1] = _modelDimension;
         return Engine.Reshape(result, outputShape);
+    }
+
+    private Tensor<T> ApplyHouseholderReflection(
+        Tensor<T> input, int batchSize, int seqLen)
+    {
+        var heads = Engine.Reshape(
+            input,
+            new[] { batchSize, seqLen, _numHeads, _headDimension });
+        var positionVectors = Engine.TensorSlice(
+            _householderVectors,
+            new[] { 0, 0, 0 },
+            new[] { seqLen, _numHeads, _headDimension });
+        var vectors = Engine.TensorBroadcastTo(
+            Engine.Reshape(
+                positionVectors,
+                new[] { 1, seqLen, _numHeads, _headDimension }),
+            new[] { batchSize, seqLen, _numHeads, _headDimension });
+        var dot = Engine.ReduceSum(
+            Engine.TensorMultiply(vectors, heads), new[] { 3 }, keepDims: true);
+        var normSquared = Engine.TensorAddScalar(
+            Engine.ReduceSum(
+                Engine.TensorSquare(vectors), new[] { 3 }, keepDims: true),
+            NumOps.FromDouble(1e-10));
+        var coefficient = Engine.TensorMultiplyScalar(
+            Engine.TensorDivide(dot, normSquared), NumOps.FromDouble(2.0));
+        var reflected = Engine.TensorSubtract(
+            heads,
+            Engine.TensorBroadcastMultiply(vectors, coefficient));
+        return Engine.Reshape(
+            reflected,
+            new[] { batchSize, seqLen, _modelDimension });
     }
 
     /// <summary>

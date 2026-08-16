@@ -1,4 +1,6 @@
 using System;
+using System.Linq;
+using AiDotNet.Diffusion.NoisePredictors;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.NeuralNetworks;
@@ -31,6 +33,37 @@ public class CopyOnWriteCloneTests
 
     private static Tensor<double> Input() =>
         new(new Vector<double>(new[] { 0.1, -0.2, 0.3, -0.4 }), new[] { 1, 4 });
+
+    [Fact]
+    public void RejectedCandidate_WithBorrowedArchitectureLayers_DoesNotDisposeSource()
+    {
+        using var sharedLayer = new DenseLayer<double>(2);
+        var architecture = new NeuralNetworkArchitecture<double>(
+            inputType: InputType.OneDimensional,
+            taskType: NeuralNetworkTaskType.Regression,
+            inputSize: 4,
+            outputSize: 2,
+            layers: new System.Collections.Generic.List<AiDotNet.Interfaces.ILayer<double>>
+            {
+                sharedLayer
+            });
+        using var source = new NeuralNetwork<double>(architecture);
+        var input = Input();
+        var expected = source.Predict(input);
+
+        using var clone = (NeuralNetwork<double>)source.Clone();
+
+        // The first COW candidate is intentionally rejected because CreateNewInstance receives
+        // the architecture's same layer objects. Cleaning up that rejected candidate must observe
+        // the ownership boundary and leave the source layer executable.
+        var sourceAfterClone = source.Predict(input);
+        Assert.Equal(expected.Length, sourceAfterClone.Length);
+        for (int i = 0; i < expected.Length; i++)
+            Assert.Equal(expected[i], sourceAfterClone[i], 10);
+
+        var clonePrediction = clone.Predict(input);
+        Assert.Equal(expected.Length, clonePrediction.Length);
+    }
 
     [Fact]
     public void Clone_IsObservationallyIdentical_AndIndependentUnderMutation()

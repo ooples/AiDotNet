@@ -134,11 +134,10 @@ public partial class S4DLayer<T> : LayerBase<T>, IShapeContract
 
     /// <inheritdoc />
     /// <summary>
-    /// Training is not yet supported. The backward pass uses simplified gradient paths and skips
-    /// the chain rule through exp(delta*A) and delta*B discretization. Full backpropagation through
-    /// the S4D recurrence is required before enabling training.
+    /// Training uses the fused complex diagonal SSM scan's analytic BPTT node. The ZOH
+    /// discretization remains expressed through differentiable engine operations.
     /// </summary>
-    public override bool SupportsTraining => false;
+    public override bool SupportsTraining => true;
 
     /// <summary>
     /// Gets the model dimension (d_model) of this S4D layer.
@@ -390,11 +389,8 @@ public partial class S4DLayer<T> : LayerBase<T>, IShapeContract
         var projected3D = Engine.Reshape(projectedWithBias, new[] { batchSize, seqLen, _innerDimension });
         _lastProjectedInput = projected3D;
 
-        // Step 2: Compute SSM via kernel convolution (numerically stable for training)
-        // Following S4D paper: K[l] = 2 * Re(sum_n C_eff_n * A_bar_n^l)
-        // where C_eff = C * (A_bar - 1) / A * B = C * B_bar
-        // y = causal_conv1d(x, K) + D * x
-        var scanOutput = KernelBasedForward(projected3D, batchSize, seqLen);
+        // Step 2: ZOH discretization followed by one fused differentiable grouped scan.
+        var scanOutput = FusedScanForward(projected3D, batchSize, seqLen);
         _lastScanOutputReal = scanOutput;
 
         // Step 3: Output projection [batch*seq, innerDim] -> [batch*seq, modelDim]
@@ -435,21 +431,12 @@ public partial class S4DLayer<T> : LayerBase<T>, IShapeContract
     /// </para>
     /// </remarks>
     /// <summary>
-    /// Kernel-based S4D forward (from the paper). Computes the SSM kernel
-    /// K[d,l] = Re(sum_n C_eff[d,n] * A_bar[d,n]^l) and convolves with input.
-    /// This is numerically stable because the backward through conv1d doesn't
-    /// involve BPTT through the recurrence.
+    /// Discretizes the continuous SSM parameters and evaluates the recurrence through
+    /// the engine's fused, tape-aware complex diagonal scan.
     /// </summary>
-    private Tensor<T> KernelBasedForward(Tensor<T> x, int batchSize, int seqLen)
+    private Tensor<T> FusedScanForward(Tensor<T> x, int batchSize, int seqLen)
     {
         var delta = Engine.TensorExp(_logDelta);
-
-        // Compute kernel K[d, l] for l = 0..seqLen-1
-        // K[d, l] = Re(sum_n C_eff[d,n] * A_bar[d,n]^l)
-        // where C_eff = C * B_bar = C * (A_bar - 1) / A * B
-        var kernel = new Tensor<T>([_innerDimension, seqLen]);
-
-        // Cache intermediates for backward
         _cachedKernelDelta = delta;
         _cachedKernelSeqLen = seqLen;
 
@@ -553,9 +540,8 @@ public partial class S4DLayer<T> : LayerBase<T>, IShapeContract
     }
 
     // Cached values for kernel-based backward
-    private Tensor<T>? _cachedKernel;
+    private Tensor<T>? _cachedKernel = null;
     private Tensor<T>? _cachedKernelDelta;
-    private int _cachedKernelSeqLen;
 
     private Tensor<T> ComplexRecurrentScan(Tensor<T> x, int batchSize, int seqLen)
     {

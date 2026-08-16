@@ -442,7 +442,7 @@ public partial class TOTEM<T> : TimeSeriesFoundationModelBase<T>
 
         var totalLoss = Engine.TensorAdd(reconLoss, commitmentLoss);
 
-        var allGrads = tape.ComputeGradients(totalLoss, sources: null);
+        var allGrads = ComputeAndPublishParameterGradients(tape, totalLoss, sources: null);
         var grads = new Dictionary<Tensor<T>, Tensor<T>>(
             Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
         foreach (var param in trainableParams)

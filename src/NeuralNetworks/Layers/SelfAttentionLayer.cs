@@ -617,7 +617,7 @@ public partial class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T
     {
         // Materialize lazy-init weights before any Q/K/V projection runs — same
         // contract DenseLayer gives for lazy layers.
-        EnsureInitialized();
+        EnsureInitializedFromInput(input);
 
         // Store original shape for any-rank tensor support
         _originalInputShape = input._shape;
@@ -829,13 +829,12 @@ public partial class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T
         if (inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
 
-        // Materialize lazy Q/K/V/bias tensors before GPU path.
-        EnsureInitialized();
-
         if (Engine is not DirectGpuTensorEngine gpuEngine)
             throw new InvalidOperationException("ForwardGpu requires DirectGpuTensorEngine.");
 
         var input = inputs[0];
+        // Materialize or adopt lazy Q/K/V/bias tensors through the common lifecycle before GPU use.
+        EnsureInitializedFromInput(input);
 
         // Get dimensions from input shape
         int[] inputShape = input._shape;

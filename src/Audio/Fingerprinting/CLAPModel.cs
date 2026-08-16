@@ -583,7 +583,8 @@ public partial class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprint
                         forward: FwdCLAP, computeLoss: LossCLAP,
                         optimizer: optimizer,
                         out T fusedLoss,
-                        extraTensors: extras))
+                        extraTensors: extras,
+                        onGradients: gradients => PublishParameterGradients(gradients)))
                 {
                     LastLoss = fusedLoss;
                     return;
@@ -628,7 +629,7 @@ public partial class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprint
             var lossSum = Engine.TensorAdd<T>(halfLossA2T, halfLossT2A);
 
             // Manual gradient + optimizer step over the combined params.
-            var grads = tape.ComputeGradients(lossSum, allParams);
+            var grads = ComputeAndPublishParameterGradients(tape, lossSum, allParams);
 
             T lossValue = lossSum.Length > 0 ? lossSum[0] : NumOps.Zero;
             LastLoss = lossValue;

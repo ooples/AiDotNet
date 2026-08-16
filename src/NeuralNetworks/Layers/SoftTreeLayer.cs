@@ -1,6 +1,5 @@
 ﻿using AiDotNet.Helpers;
 using AiDotNet.Attributes;
-using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
@@ -123,7 +122,6 @@ public partial class SoftTreeLayer<T> : LayerBase<T>, IShapeContract
 
     /// <inheritdoc/>
     private Tensor<T>? _cachedRightProbs;
-    private Tensor<T>? _cachedNodeProbs;
     private Tensor<T>? _cachedSplitLogits;
 
     /// <summary>Construction state: the 'initScale' the layer was built with.</summary>
@@ -229,16 +227,12 @@ public partial class SoftTreeLayer<T> : LayerBase<T>, IShapeContract
         var splitLogits = Engine.TensorMatMul(x, splitWeightsT);
 
         // Add biases (broadcast)
-        var biasesBroadcast = new Tensor<T>([1, _numInternalNodes]);
-        for (int i = 0; i < _numInternalNodes; i++)
-        {
-            biasesBroadcast[i] = _splitBiases[i];
-        }
+        var biasesBroadcast = Engine.Reshape(_splitBiases, [1, _numInternalNodes]);
         splitLogits = Engine.TensorBroadcastAdd(splitLogits, biasesBroadcast);
 
         // Apply temperature scaling
         var tempScale = NumOps.FromDouble(1.0 / _temperature);
-        splitLogits = splitLogits.Multiply(tempScale);
+        splitLogits = Engine.TensorMultiplyScalar(splitLogits, tempScale);
 
         // Cache split logits for backward
         _cachedSplitLogits = splitLogits;
@@ -276,36 +270,35 @@ public partial class SoftTreeLayer<T> : LayerBase<T>, IShapeContract
     /// </summary>
     private Tensor<T> ComputePathProbabilities(Tensor<T> rightProbs, int batchSize)
     {
-        var pathProbs = TensorAllocator.Rent<T>([batchSize, _numLeaves]);
-
-        // Initialize all paths with probability 1 at root
-        var nodeProbs = TensorAllocator.Rent<T>([batchSize, _numInternalNodes + _numLeaves]);
-        for (int b = 0; b < batchSize; b++)
+        // Preserve the heap ordering used by the original scalar implementation, but express every
+        // probability transition as an IEngine operation. Filling rented tensors element by element
+        // copied values out of rightProbs and severed the tape at the tree itself.
+        var currentLevel = new List<Tensor<T>>
         {
-            nodeProbs[b * (nodeProbs.Shape[1])] = NumOps.One;  // Root node
-        }
+            Tensor<T>.CreateDefault([batchSize, 1], NumOps.One)
+        };
 
-        // Propagate probabilities through tree (level by level)
-        for (int node = 0; node < _numInternalNodes; node++)
+        for (int level = 0; level < _depth; level++)
         {
-            int leftChild = 2 * node + 1;
-            int rightChild = 2 * node + 2;
+            int firstNodeAtLevel = (1 << level) - 1;
+            var nextLevel = new List<Tensor<T>>(currentLevel.Count * 2);
 
-            for (int b = 0; b < batchSize; b++)
+            for (int nodeAtLevel = 0; nodeAtLevel < currentLevel.Count; nodeAtLevel++)
             {
-                var nodeProb = nodeProbs[b * (nodeProbs.Shape[1]) + node];
-                var rightP = rightProbs[b * _numInternalNodes + node];
-                var leftP = NumOps.Subtract(NumOps.One, rightP);
+                var rightProbability = Engine.TensorNarrow(
+                    rightProbs,
+                    dim: 1,
+                    start: firstNodeAtLevel + nodeAtLevel,
+                    length: 1);
+                var leftProbability = Engine.TensorNegate(
+                    Engine.TensorSubtractScalar(rightProbability, NumOps.One));
+                var parentProbability = currentLevel[nodeAtLevel];
 
-                if (leftChild < _numInternalNodes + _numLeaves)
-                {
-                    nodeProbs[b * (nodeProbs.Shape[1]) + leftChild] = NumOps.Multiply(nodeProb, leftP);
-                }
-                if (rightChild < _numInternalNodes + _numLeaves)
-                {
-                    nodeProbs[b * (nodeProbs.Shape[1]) + rightChild] = NumOps.Multiply(nodeProb, rightP);
-                }
+                nextLevel.Add(Engine.TensorMultiply(parentProbability, leftProbability));
+                nextLevel.Add(Engine.TensorMultiply(parentProbability, rightProbability));
             }
+
+            currentLevel = nextLevel;
         }
 
         // Extract leaf probabilities

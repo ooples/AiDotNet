@@ -106,57 +106,25 @@ public partial class SequenceLastLayer<T> : LayerBase<T>, IShapeContract
         {
             // Shape: [seqLen, features] -> [features]
             int seqLen = input.Shape[0];
-            int features = input.Shape[1];
             _lastSequenceLength = seqLen;
-
-            // Extract last row
-            var result = new Tensor<T>([features]);
-            int offset = (seqLen - 1) * features;
-            for (int i = 0; i < features; i++)
-            {
-                result.Data.Span[i] = input.Data.Span[offset + i];
-            }
-            return result;
+            return Engine.TensorSliceAxis(input, axis: 0, index: seqLen - 1);
         }
         else if (rank == 3)
         {
             // Shape: [seqLen, batch, features] -> [batch, features]
             int seqLen = input.Shape[0];
-            int batch = input.Shape[1];
-            int features = input.Shape[2];
             _lastSequenceLength = seqLen;
-
-            var result = new Tensor<T>([batch, features]);
-            int stride = batch * features;
-            int lastOffset = (seqLen - 1) * stride;
-            for (int i = 0; i < batch * features; i++)
-            {
-                result.Data.Span[i] = input.Data.Span[lastOffset + i];
-            }
-            return result;
+            return Engine.TensorSliceAxis(input, axis: 0, index: seqLen - 1);
         }
         else
         {
-            // Higher rank (>= 4): treat dim[0] as seqLen, extract last slice with remaining dims
+            // Treat dimension 0 as the sequence axis and preserve every remaining
+            // dimension. Going through the engine is essential here: copying Data
+            // into a new Tensor detaches the result from an active gradient tape and
+            // silently turns every upstream recurrent gradient into zero.
             int seqLen = input.Shape[0];
             _lastSequenceLength = seqLen;
-
-            // Output shape is input shape minus the first dimension
-            var outputShape = new int[rank - 1];
-            int sliceSize = 1;
-            for (int d = 1; d < rank; d++)
-            {
-                outputShape[d - 1] = input.Shape[d];
-                sliceSize *= input.Shape[d];
-            }
-
-            var result = new Tensor<T>(outputShape);
-            int lastOffset = (seqLen - 1) * sliceSize;
-            for (int i = 0; i < sliceSize; i++)
-            {
-                result.Data.Span[i] = input.Data.Span[lastOffset + i];
-            }
-            return result;
+            return Engine.TensorSliceAxis(input, axis: 0, index: seqLen - 1);
         }
     }
 

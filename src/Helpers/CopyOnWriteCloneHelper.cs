@@ -49,21 +49,34 @@ internal static class CopyOnWriteCloneHelper
         // mutating anything, so we never leave a half-shared clone and never rebind a shape-incompatible
         // tensor. A count-only check would let a same-count but differently-shaped graph (e.g. a custom
         // source whose predictor/VAE was built with different channel widths than the clone's defaults)
-        // pass, share, and silently corrupt the clone; a shape mismatch must instead fall back to the
-        // eager copy. A freshly-constructed clone whose lazy layers aren't resolved yet shows up here as
-        // a zero-/mismatched-shape tensor and also falls back.
+        // pass, share, and silently corrupt the clone. A shape-resolved lazy destination is the one safe
+        // exception: its generated declarations prove the exact shapes even though its current tensors
+        // are still zero-sized placeholders. Validate against those declarations instead of forcing a
+        // throwaway forward merely to allocate destination storage that will immediately be replaced.
         for (int i = 0; i < srcLayers.Count; i++)
         {
-            var sps = srcLayers[i].GetTrainableParameters();
-            var dps = dstLayers[i].GetTrainableParameters();
-            if (sps.Count != dps.Count) return false;
-            for (int p = 0; p < sps.Count; p++)
-                if (!ShapesEqual(sps[p], dps[p])) return false;
+            var sps = GetAuthoritativeSourceValues(srcLayers[i]);
+            var dps = GetWithoutMaterialization(dstLayers[i]);
+            bool currentShapesMatch = sps.Count == dps.Count;
+            if (currentShapesMatch)
+            {
+                for (int p = 0; p < sps.Count; p++)
+                {
+                    if (ShapesEqual(sps[p], dps[p])) continue;
+                    currentShapesMatch = false;
+                    break;
+                }
+            }
+
+            if (currentShapesMatch) continue;
+            if (dstLayers[i] is not AiDotNet.NeuralNetworks.Layers.LayerBase<T> destinationBase
+                || !destinationBase.CanAdoptTrainableParametersWithoutMaterialization(sps))
+                return false;
         }
 
         for (int i = 0; i < srcLayers.Count; i++)
         {
-            var sp = srcLayers[i].GetTrainableParameters();
+            var sp = GetAuthoritativeSourceValues(srcLayers[i]);
             if (sp.Count == 0) continue;
             var shared = new Tensor<T>[sp.Count];
             for (int p = 0; p < sp.Count; p++)
@@ -73,6 +86,16 @@ internal static class CopyOnWriteCloneHelper
 
         return true;
     }
+
+    private static IReadOnlyList<Tensor<T>> GetWithoutMaterialization<T>(ITrainableLayer<T> layer) =>
+        layer is AiDotNet.NeuralNetworks.Layers.LayerBase<T> layerBase
+            ? layerBase.GetTrainableParametersWithoutMaterialization()
+            : layer.GetTrainableParameters();
+
+    private static IReadOnlyList<Tensor<T>> GetAuthoritativeSourceValues<T>(ITrainableLayer<T> layer) =>
+        layer is AiDotNet.NeuralNetworks.Layers.LayerBase<T> layerBase
+            ? layerBase.GetOwnTrainableParameterValueTensors()
+            : layer.GetTrainableParameters();
 
     private static bool ShapesEqual<T>(Tensor<T> a, Tensor<T> b)
     {

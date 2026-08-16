@@ -90,6 +90,7 @@ public partial class RandomSurvivalForest<T> : SurvivalModelBase<T>
     /// <summary>
     /// The survival trees.
     /// </summary>
+    [FittedParameter]
     private List<SurvivalTree>? _trees;
 
     /// <summary>
@@ -503,19 +504,6 @@ public partial class RandomSurvivalForest<T> : SurvivalModelBase<T>
         }
 
         return result;
-    }
-
-    /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        // Random Forest parameters are complex - just return tree count
-        return new Vector<T>(new[] { NumOps.FromDouble(NumTrees) });
-    }
-
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        // Parameters are read-only for Random Forest
     }
 
     /// <inheritdoc />

@@ -1,10 +1,12 @@
 ﻿using System.IO;
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Finance.Interfaces;
 using AiDotNet.Helpers;
 using AiDotNet.LossFunctions;
 using AiDotNet.Models;
 using AiDotNet.NeuralNetworks;
+using AiDotNet.NeuralNetworks.Layers;
 using Microsoft.ML.OnnxRuntime;
 using OnnxTensors = Microsoft.ML.OnnxRuntime.Tensors;
 
@@ -44,6 +46,19 @@ namespace AiDotNet.Finance.Base;
 /// </remarks>
 public abstract partial class FinancialModelBase<T> : NeuralNetworkBase<T>, IFinancialModel<T>
 {
+    /// <summary>
+    /// Resolves the public finance-input domain from the first semantic consumer in the canonical
+    /// layer graph.
+    /// </summary>
+    /// <remarks>
+    /// Most finance models consume continuous observations, while financial language models consume
+    /// bounded token IDs. The graph already declares that distinction at its first transforming
+    /// layer, so the generated family contract delegates to the base graph resolver instead of
+    /// requiring each NLP model and each fixture to repeat a vocabulary-specific override.
+    /// </remarks>
+    protected virtual LayerInputDomain ResolveFinancialInputDomain(int[]? inputShape) =>
+        base.GetInputDomain(inputShape);
+
     /// <summary>
     /// Gets the model-specific optimizer used by the common tape training path.
     /// A null value retains the neural-network default optimizer.

@@ -1,4 +1,5 @@
 using System.IO;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -35,6 +36,24 @@ namespace AiDotNet.Diffusion.Conditioning;
 /// </remarks>
 public abstract partial class TextConditioningBase<T> : NeuralNetworkBase<T>, IConditioningModule<T>
 {
+    /// <inheritdoc />
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+        => inputRank switch
+        {
+            1 =>
+            [
+                new OutputAxisContract(TensorAxis.Time, AxisRelation.Same(TensorAxis.Time)),
+                new OutputAxisContract(TensorAxis.Features, AxisRelation.Fixed(EmbeddingDimension)),
+            ],
+            2 =>
+            [
+                new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+                new OutputAxisContract(TensorAxis.Time, AxisRelation.Same(TensorAxis.Time)),
+                new OutputAxisContract(TensorAxis.Features, AxisRelation.Fixed(EmbeddingDimension)),
+            ],
+            _ => null,
+        };
+
     /// <summary>The injected tokenizer for this conditioner's text input.</summary>
     protected ITokenizer Tokenizer { get; }
 

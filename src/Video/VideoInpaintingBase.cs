@@ -1,4 +1,7 @@
-﻿using AiDotNet.Helpers;
+﻿using System.Collections.Generic;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
+using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
@@ -30,6 +33,18 @@ namespace AiDotNet.Video;
 /// </remarks>
 public abstract partial class VideoInpaintingBase<T> : VideoNeuralNetworkBase<T>
 {
+    /// <inheritdoc />
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+        => inputRank == 4
+            ?
+            [
+                new OutputAxisContract(TensorAxis.Frames, AxisRelation.Same(TensorAxis.Frames)),
+                new OutputAxisContract(TensorAxis.Channels, AxisRelation.Same(TensorAxis.Channels)),
+                new OutputAxisContract(TensorAxis.Height, AxisRelation.Same(TensorAxis.Height)),
+                new OutputAxisContract(TensorAxis.Width, AxisRelation.Same(TensorAxis.Width)),
+            ]
+            : null;
+
     /// <summary>
     /// Gets whether this model supports temporal propagation for inpainting.
     /// </summary>

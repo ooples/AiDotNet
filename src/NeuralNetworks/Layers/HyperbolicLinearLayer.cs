@@ -322,9 +322,11 @@ public partial class HyperbolicLinearLayer<T> : LayerBase<T>, IShapeContract
         var ballInput = Engine.TensorBroadcastMultiply(projScale0, scaledInput); // exp_0(v/√d), inside ball, relative scale preserved
 
         // Step 1: Linear projection Mx = x_ball @ W^T
-        var weightsT = IsTrainingMode
-            ? Engine.TensorTranspose(_weights)
-            : (_weightsTCache ??= Engine.TensorTranspose(_weights));
+        // Always derive the transpose inside the current engine graph. A cached
+        // transpose is a detached tensor leaf when a numerical-gradient test (or
+        // user) records a tape while the layer remains in inference mode, which
+        // silently gives every weight a zero gradient.
+        var weightsT = Engine.TensorTranspose(_weights);
         var mx = Engine.TensorMatMul(ballInput, weightsT); // [batch, outputFeatures]
 
         // Step 2: Compute ||x_ball|| per sample (already inside ball, so √c·||x|| < 1)

@@ -135,31 +135,37 @@ public partial class DVoRAAdapter<T> : LoRAAdapterBase<T>
     /// <summary>
     /// Gradient for magnitude vector computed during backpropagation.
     /// </summary>
+    [Scratch]
     private Vector<T>? _magnitudeGradient;
 
     /// <summary>
     /// Gradient for scaling vector d computed during backpropagation.
     /// </summary>
+    [Scratch]
     private Vector<T>? _scalingVectorDGradient;
 
     /// <summary>
     /// Gradient for scaling vector b computed during backpropagation.
     /// </summary>
+    [Scratch]
     private Vector<T>? _scalingVectorBGradient;
 
     /// <summary>
     /// Cached normalized direction from the last forward pass, used in backpropagation.
     /// </summary>
+    [Scratch]
     private Matrix<T>? _lastNormalizedDirection;
 
     /// <summary>
     /// Stored input from the forward pass, needed for gradient computation.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastInput;
 
     /// <summary>
     /// Stored intermediate value from forward pass, needed for backward pass.
     /// </summary>
+    [Scratch]
     private Matrix<T>? _lastIntermediate;
 
     /// <summary>

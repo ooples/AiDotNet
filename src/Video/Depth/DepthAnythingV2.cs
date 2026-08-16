@@ -683,6 +683,22 @@ public partial class DepthAnythingV2<T> : NeuralNetworkBase<T>
         };
     }
 
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? CreateOptimizerForClone()
+    {
+        return _optimizer switch
+        {
+            AdamWOptimizer<T, Tensor<T>, Tensor<T>> when _optimizer.GetOptions() is AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>> options
+                => new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+                    null,
+                    new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>(options)),
+            AdamOptimizer<T, Tensor<T>, Tensor<T>> when _optimizer.GetOptions() is AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> options
+                => new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
+                    null,
+                    new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>(options)),
+            _ => null
+        };
+    }
+
     #endregion
 
     #region IDisposable

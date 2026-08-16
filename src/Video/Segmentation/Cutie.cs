@@ -66,6 +66,10 @@ namespace AiDotNet.Video.Segmentation;
     "https://arxiv.org/abs/2310.12982",
     Year = 2024,
     Authors = "Ho Kei Cheng, Seoung Wug Oh, Brian Price, Joon-Young Lee, Alexander Schwing")]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Frames, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Input, BatchOptional = true)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Frames, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Output, BatchOptional = true)]
 public class Cutie<T> : NeuralNetworkBase<T>
 {
     private readonly CutieOptions _options;

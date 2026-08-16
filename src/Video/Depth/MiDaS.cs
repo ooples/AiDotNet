@@ -60,6 +60,10 @@ namespace AiDotNet.Video.Depth;
     "https://arxiv.org/abs/1907.01341",
     Year = 2020,
     Authors = "Rene Ranftl, Katrin Lasinger, David Hafner, Konrad Schindler, Vladlen Koltun")]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Input, BatchOptional = true)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Output, BatchOptional = true)]
 public class MiDaS<T> : NeuralNetworkBase<T>
 {
     private readonly MiDaSOptions _options;

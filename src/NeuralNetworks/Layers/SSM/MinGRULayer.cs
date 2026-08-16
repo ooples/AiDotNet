@@ -333,35 +333,25 @@ public partial class MinGRULayer<T> : LayerBase<T>, IShapeContract
         Tensor<T> gate, Tensor<T> candidate,
         int batchSize, int seqLen)
     {
-        var output = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _expandedDimension });
-
-        // Store all hidden states including h_0 for backward pass: [batch, seqLen+1, expandedDim]
-        var allHidden = TensorAllocator.Rent<T>(new[] { batchSize, seqLen + 1, _expandedDimension });
-        // h_0 is initialized to zero (already default)
+        var hidden = Tensor<T>.CreateDefault([batchSize, _expandedDimension], NumOps.Zero);
+        var hiddenSteps = new List<Tensor<T>>(seqLen);
 
         for (int t = 0; t < seqLen; t++)
         {
-            for (int bi = 0; bi < batchSize; bi++)
-            {
-                for (int d = 0; d < _expandedDimension; d++)
-                {
-                    T z = gate[new[] { bi, t, d }];
-                    T hTilde = candidate[new[] { bi, t, d }];
-                    T hPrev = allHidden[new[] { bi, t, d }];
-
-                    // h_t = (1 - z_t) * h_{t-1} + z_t * h_tilde_t
-                    T oneMinusZ = NumOps.Subtract(NumOps.One, z);
-                    T hNew = NumOps.Add(
-                        NumOps.Multiply(oneMinusZ, hPrev),
-                        NumOps.Multiply(z, hTilde));
-
-                    allHidden[new[] { bi, t + 1, d }] = hNew;
-                    output[new[] { bi, t, d }] = hNew;
-                }
-            }
+            var z = Engine.TensorSqueeze(Engine.TensorNarrow(gate, 1, t, 1), axis: 1);
+            var hTilde = Engine.TensorSqueeze(Engine.TensorNarrow(candidate, 1, t, 1), axis: 1);
+            var oneMinusZ = Engine.ScalarMinusTensor(NumOps.One, z);
+            hidden = Engine.TensorAdd(
+                Engine.TensorMultiply(oneMinusZ, hidden),
+                Engine.TensorMultiply(z, hTilde));
+            hiddenSteps.Add(Engine.TensorExpandDims(hidden, axis: 1));
         }
 
-        _lastHiddenStates = allHidden;
+        var output = hiddenSteps.Count == 1
+            ? hiddenSteps[0]
+            : Engine.TensorConcatenate(hiddenSteps.ToArray(), axis: 1);
+        var initialState = Tensor<T>.CreateDefault([batchSize, 1, _expandedDimension], NumOps.Zero);
+        _lastHiddenStates = Engine.TensorConcatenate([initialState, output], axis: 1);
         return output;
     }
 

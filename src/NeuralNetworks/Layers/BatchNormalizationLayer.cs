@@ -78,7 +78,8 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
     /// Also known as gamma. This learnable parameter allows the network to scale
     /// each normalized feature. Initialized to ones.
     /// </remarks>
-    [TrainableParameter(Role = PersistentTensorRole.NormalizationParams)]
+    [TrainableParameter(Role = PersistentTensorRole.NormalizationParams,
+        Shape = "InputShape[0]")]
 
     private Tensor<T> _gamma;
 
@@ -89,6 +90,8 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
     /// Also known as beta. This learnable parameter allows the network to shift
     /// each normalized feature. Initialized to zeros.
     /// </remarks>
+    [TrainableParameter(Role = PersistentTensorRole.NormalizationParams,
+        Shape = "InputShape[0]")]
     private Tensor<T> _beta;
 
     /// <summary>
@@ -98,6 +101,7 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
     /// This is updated during training and used for normalization during inference.
     /// Initialized to zeros.
     /// </remarks>
+    [Buffer(Name = "running_mean", Role = PersistentTensorRole.Constant)]
     private Tensor<T> _runningMean;
 
     /// <summary>
@@ -107,6 +111,7 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
     /// This is updated during training and used for normalization during inference.
     /// Initialized to ones.
     /// </remarks>
+    [Buffer(Name = "running_variance", Role = PersistentTensorRole.Constant)]
     private Tensor<T> _runningVariance;
 
     /// <summary>
@@ -540,6 +545,24 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
         // channel by paper-faithful CNN architectures (Conv → BN → ReLU);
         // sequence models / transformers use LayerNorm per Ba et al. 2016,
         // not BN, so there's no rank-3 ambiguity to mis-route here.
+        BindToActualInput(input, preserveExistingValues: true);
+    }
+
+    /// <summary>
+    /// Rebinds a lazy BatchNorm to the channel width observed by its first real forward when a
+    /// prior shape-only network walk used an approximate sequential shape.
+    /// </summary>
+    /// <remarks>
+    /// Only the shape-only provenance path reaches this hook. Explicitly-sized BatchNorm layers
+    /// remain strict; an architecture-defined width is never silently changed.
+    /// </remarks>
+    protected override void ReconcileShapeOnlyResolution(Tensor<T> input)
+    {
+        BindToActualInput(input, preserveExistingValues: false);
+    }
+
+    private void BindToActualInput(Tensor<T> input, bool preserveExistingValues)
+    {
         int rank = input.Shape.Length;
         int numFeatures = rank switch
         {
@@ -555,6 +578,25 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
                 nameof(input));
         }
 
+        // Correctly SIZED is not the same question as correctly REGISTERED, and this guard
+        // replaced WeightsAlreadyAllocated, which answered both. Gamma can already be the right
+        // length while the trainable registry is still empty -- a shape-only walk resolves the
+        // width without allocating, and a deserialize installs values into the fields before any
+        // forward has registered them. Comparing lengths alone skipped the block in exactly those
+        // cases, so RegisterTrainableParameter never ran and the layer reported zero registered
+        // parameters against a layout that carried two ("has 0 registered parameters but
+        // received 2" on every clone/deserialize through BatchNorm).
+        //
+        // Re-entering the block when registration is missing is safe for trained values: the
+        // preserveExistingValues copy below carries them into the new tensors whenever the widths
+        // already agree, which is the whole reason that copy exists.
+        bool affineParametersRegistered = RegisteredTrainableParameterCount >= 2;
+        bool needsResize = !affineParametersRegistered
+            || _gamma.Length != numFeatures
+            || _beta.Length != numFeatures
+            || _runningMean.Length != numFeatures
+            || _runningVariance.Length != numFeatures;
+
         // Apply deferred ZeroInitGamma if requested before shape resolution.
         T gammaInit = _zeroInitGammaPending ? NumOps.Zero : NumOps.One;
         _zeroInitGammaPending = false;
@@ -567,7 +609,7 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
         // Idempotent: don't re-allocate/re-init gamma/beta/running-stats a clone/deserialize already
         // installed — re-filling gamma and running-variance would drop trained normalization params
         // (#1221 Clone_AfterTraining). See Conv1DLayer.
-        if (!WeightsAlreadyAllocated(_gamma, numFeatures))
+        if (needsResize)
         {
             _gamma = AllocateLazyWeight([numFeatures]);
             _gamma.Fill(gammaInit);

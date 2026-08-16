@@ -74,26 +74,31 @@ public partial class NOLAAdapter<T> : LoRAAdapterBase<T>
     /// <summary>
     /// Gradients for coefficients A computed during backpropagation.
     /// </summary>
+    [Scratch]
     private Vector<T>? _coefficientsAGradient;
 
     /// <summary>
     /// Gradients for coefficients B computed during backpropagation.
     /// </summary>
+    [Scratch]
     private Vector<T>? _coefficientsBGradient;
 
     /// <summary>
     /// Cached matrix A from last forward pass (used in backward pass).
     /// </summary>
+    [Scratch]
     private Matrix<T>? _cachedMatrixA;
 
     /// <summary>
     /// Cached matrix B from last forward pass (used in backward pass).
     /// </summary>
+    [Scratch]
     private Matrix<T>? _cachedMatrixB;
 
     /// <summary>
     /// Cached input from last forward pass (needed for gradient computation).
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastInput;
 
     /// <summary>

@@ -1,4 +1,6 @@
-﻿using AiDotNet.Finance.Interfaces;
+﻿using AiDotNet.Attributes;
+using AiDotNet.Enums;
+using AiDotNet.Finance.Interfaces;
 using AiDotNet.Helpers;
 using AiDotNet.LossFunctions;
 using AiDotNet.Models;

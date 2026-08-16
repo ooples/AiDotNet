@@ -76,9 +76,11 @@ public partial class InstanceNormalizationLayer<T> : LayerBase<T>, IShapeContrac
     private readonly T _epsilon;
     private readonly int _numChannels;
     private readonly bool _affine;
-    [TrainableParameter(Role = PersistentTensorRole.NormalizationParams)]
-
+    [TrainableParameter(Role = PersistentTensorRole.NormalizationParams,
+        Shape = "_numChannels", Condition = nameof(Affine))]
     private Tensor<T> _gamma;
+    [TrainableParameter(Role = PersistentTensorRole.NormalizationParams,
+        Shape = "_numChannels", Condition = nameof(Affine))]
     private Tensor<T> _beta;
     private Tensor<T>? _lastInput;
     private Tensor<T>? _lastMean;

@@ -49,7 +49,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     [ResearchPaper("Learning Internal Representations by Error Propagation", "https://doi.org/10.21236/ADA164453")]
-public class NeuralNetwork<T> : NeuralNetworkBase<T>
+public class NeuralNetwork<T> : VectorModelLayoutBase<T>
 {
     private readonly NeuralNetworkDefaultOptions _options;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;

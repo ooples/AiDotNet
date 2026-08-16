@@ -164,7 +164,7 @@ public partial class LSTMLayer<T> : LayerBase<T>, IShapeContract
     /// about previous subjects when a new subject is introduced.
     /// </para>
     /// </remarks>
-    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+    [TrainableParameter(Role = PersistentTensorRole.Weights, Shape = "_hiddenSize, _inputSize")]
 
     private Tensor<T> _weightsFi;
 
@@ -187,6 +187,7 @@ public partial class LSTMLayer<T> : LayerBase<T>, IShapeContract
     /// information about a new subject being discussed.
     /// </para>
     /// </remarks>
+    [TrainableParameter(Role = PersistentTensorRole.Weights, Shape = "_hiddenSize, _inputSize")]
     private Tensor<T> _weightsIi;
 
     /// <summary>
@@ -208,6 +209,7 @@ public partial class LSTMLayer<T> : LayerBase<T>, IShapeContract
     /// in the cell's memory.
     /// </para>
     /// </remarks>
+    [TrainableParameter(Role = PersistentTensorRole.Weights, Shape = "_hiddenSize, _inputSize")]
     private Tensor<T> _weightsCi;
 
     /// <summary>
@@ -229,6 +231,7 @@ public partial class LSTMLayer<T> : LayerBase<T>, IShapeContract
     /// parts of the accumulated context are relevant for predicting the next word.
     /// </para>
     /// </remarks>
+    [TrainableParameter(Role = PersistentTensorRole.Weights, Shape = "_hiddenSize, _inputSize")]
     private Tensor<T> _weightsOi;
 
     /// <summary>
@@ -250,6 +253,7 @@ public partial class LSTMLayer<T> : LayerBase<T>, IShapeContract
     /// on both current input and previous context.
     /// </para>
     /// </remarks>
+    [TrainableParameter(Role = PersistentTensorRole.Weights, Shape = "_hiddenSize, _hiddenSize")]
     private Tensor<T> _weightsFh;
 
     /// <summary>
@@ -271,6 +275,7 @@ public partial class LSTMLayer<T> : LayerBase<T>, IShapeContract
     /// or complements existing knowledge.
     /// </para>
     /// </remarks>
+    [TrainableParameter(Role = PersistentTensorRole.Weights, Shape = "_hiddenSize, _hiddenSize")]
     private Tensor<T> _weightsIh;
 
     /// <summary>
@@ -292,6 +297,7 @@ public partial class LSTMLayer<T> : LayerBase<T>, IShapeContract
     /// that consider both current input and previous context.
     /// </para>
     /// </remarks>
+    [TrainableParameter(Role = PersistentTensorRole.Weights, Shape = "_hiddenSize, _hiddenSize")]
     private Tensor<T> _weightsCh;
 
     /// <summary>
@@ -313,6 +319,7 @@ public partial class LSTMLayer<T> : LayerBase<T>, IShapeContract
     /// output decisions based on both current input and previous context.
     /// </para>
     /// </remarks>
+    [TrainableParameter(Role = PersistentTensorRole.Weights, Shape = "_hiddenSize, _hiddenSize")]
     private Tensor<T> _weightsOh;
 
     /// <summary>
@@ -335,7 +342,7 @@ public partial class LSTMLayer<T> : LayerBase<T>, IShapeContract
     /// or context is considered.
     /// </para>
     /// </remarks>
-    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+    [TrainableParameter(Role = PersistentTensorRole.Biases, Shape = "_hiddenSize")]
 
     private Tensor<T> _biasF;
 
@@ -358,6 +365,7 @@ public partial class LSTMLayer<T> : LayerBase<T>, IShapeContract
     /// the specific input or context.
     /// </para>
     /// </remarks>
+    [TrainableParameter(Role = PersistentTensorRole.Biases, Shape = "_hiddenSize")]
     private Tensor<T> _biasI;
 
     /// <summary>
@@ -379,6 +387,7 @@ public partial class LSTMLayer<T> : LayerBase<T>, IShapeContract
     /// considering specific inputs or context.
     /// </para>
     /// </remarks>
+    [TrainableParameter(Role = PersistentTensorRole.Biases, Shape = "_hiddenSize")]
     private Tensor<T> _biasC;
 
     /// <summary>
@@ -400,6 +409,7 @@ public partial class LSTMLayer<T> : LayerBase<T>, IShapeContract
     /// the specific input or context.
     /// </para>
     /// </remarks>
+    [TrainableParameter(Role = PersistentTensorRole.Biases, Shape = "_hiddenSize")]
     private Tensor<T> _biasO;
 
     /// <summary>
@@ -1189,7 +1199,12 @@ public partial class LSTMLayer<T> : LayerBase<T>, IShapeContract
             // (ooples/AiDotNet.Tensors#587); on an older package the primitive throws
             // under a tape — caught below so the per-step path still runs.
             Tensor<T>? fusedOutput = null;
-            if (IsTrainingMode)
+            // Eval mode controls stochastic/stateful layer behavior; it must not disable autodiff.
+            // Generated finite-difference checks deliberately use eval mode inside a live tape. In
+            // that case the detached inference weight cache stranded every original trainable
+            // tensor, so choose the differentiable stack whenever a tape is active.
+            bool tapeActive = AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>.Current is not null;
+            if (IsTrainingMode || tapeActive)
             {
                 try { fusedOutput = TryFusedLstmForwardTraining(cpuEngForFused, input3D, batchSize, timeSteps); }
                 catch (InvalidOperationException) { fusedOutput = null; }

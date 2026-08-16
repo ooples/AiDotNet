@@ -126,6 +126,7 @@ public partial class MoRAAdapter<T> : LoRAAdapterBase<T>
     /// This is a non-trainable orthogonal matrix that compresses the input.
     /// It's generated once during initialization using Gram-Schmidt orthogonalization and remains fixed.
     /// </remarks>
+    [Buffer]
     private readonly Matrix<T> _compressionMatrix;
 
     /// <summary>
@@ -135,6 +136,7 @@ public partial class MoRAAdapter<T> : LoRAAdapterBase<T>
     /// This is a non-trainable orthogonal matrix that decompresses the output.
     /// In this implementation, it's the transpose of the compression matrix.
     /// </remarks>
+    [Buffer]
     private readonly Matrix<T> _decompressionMatrix;
 
     /// <summary>
@@ -150,16 +152,19 @@ public partial class MoRAAdapter<T> : LoRAAdapterBase<T>
     /// <summary>
     /// Gradients for matrix M computed during backpropagation.
     /// </summary>
+    [Scratch]
     private Matrix<T>? _matrixMGradient;
 
     /// <summary>
     /// Stored input from the forward pass, needed for gradient computation.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastInput;
 
     /// <summary>
     /// Cached compressed input from forward pass.
     /// </summary>
+    [Scratch]
     private Matrix<T>? _lastCompressed;
 
     /// <summary>
@@ -205,9 +210,9 @@ public partial class MoRAAdapter<T> : LoRAAdapterBase<T>
         _compressionMatrix = GenerateOrthogonalMatrix(dimension, _squareRank);
         _decompressionMatrix = _compressionMatrix.Transpose();
 
-        // CRITICAL: Reallocate Parameters and ParameterGradients now that _squareRank is set
-        // The base constructor allocated them when _squareRank was 0, creating zero-length buffers
-        RebuildParameterSnapshot();
+        // MoRA uses its square factor and fixed projection buffers instead of the standard LoRA
+        // child. The generator exposes all three without a flat shadow snapshot.
+        FreezeSubLayerParameters(_loraLayer);
     }
 
     private void InitializeMatrixM()

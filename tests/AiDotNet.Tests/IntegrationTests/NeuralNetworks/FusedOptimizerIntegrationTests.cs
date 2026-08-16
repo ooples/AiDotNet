@@ -762,7 +762,7 @@ public class FusedOptimizerIntegrationTests
     /// with a custom optimizer and exposes <see cref="NeuralNetworkBase{T}.LastLoss"/>
     /// for test assertions.
     /// </summary>
-    internal sealed class FusedTrainingTestNetwork : NeuralNetworkBase<float>
+    internal sealed class FusedTrainingTestNetwork : VectorModelLayoutBase<float>
     {
         public FusedTrainingTestNetwork(NeuralNetworkArchitecture<float> architecture)
             : base(architecture, new MeanSquaredErrorLoss<float>())
@@ -821,7 +821,7 @@ public class FusedOptimizerIntegrationTests
         protected override void DeserializeNetworkSpecificData(BinaryReader reader) { }
     }
 
-    internal sealed class FusedTrainingTestNetworkDouble : NeuralNetworkBase<double>
+    internal sealed class FusedTrainingTestNetworkDouble : VectorModelLayoutBase<double>
     {
         public FusedTrainingTestNetworkDouble(NeuralNetworkArchitecture<double> architecture)
             : base(architecture, new MeanSquaredErrorLoss<double>())

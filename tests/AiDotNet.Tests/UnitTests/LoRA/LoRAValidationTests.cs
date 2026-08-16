@@ -106,6 +106,7 @@ public class LoRAValidationTests
     {
         // Arrange
         var baseLayer = new DenseLayer<double>(5);
+        baseLayer.ResolveFromShape(new[] { 10 });
 
         // Act & Assert
         var ex = Assert.Throws<ArgumentOutOfRangeException>(() =>
@@ -120,6 +121,7 @@ public class LoRAValidationTests
     {
         // Arrange
         var baseLayer = new DenseLayer<double>(5);
+        baseLayer.ResolveFromShape(new[] { 10 });
 
         // Act & Assert
         var ex = Assert.Throws<ArgumentOutOfRangeException>(() =>
@@ -134,6 +136,7 @@ public class LoRAValidationTests
     {
         // Arrange
         var baseLayer = new DenseLayer<double>(5);
+        baseLayer.ResolveFromShape(new[] { 10 });
 
         // Act
         var adapter = new AdaLoRAAdapter<double>(baseLayer, maxRank: 4, alpha: 4, freezeBaseLayer: true,
@@ -141,6 +144,18 @@ public class LoRAValidationTests
 
         // Assert
         Assert.NotNull(adapter);
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task DirectAdapter_UnresolvedBase_ReportsShapeDeferredInsteadOfGuessing()
+    {
+        var baseLayer = new DenseLayer<double>(5);
+
+        var error = Assert.Throws<InvalidOperationException>(() =>
+            new StandardLoRAAdapter<double>(baseLayer, rank: 4));
+
+        Assert.Contains("ShapeDeferred", error.Message, StringComparison.Ordinal);
+        Assert.Equal(-1, baseLayer.GetInputShape()[0]);
     }
 
     #endregion

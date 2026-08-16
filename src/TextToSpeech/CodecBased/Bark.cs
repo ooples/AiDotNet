@@ -1,78 +1,54 @@
 using AiDotNet.Attributes;
-using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
-using AiDotNet.LinearAlgebra;
-using AiDotNet.Models.Options;
+using AiDotNet.Models;
 using AiDotNet.NeuralNetworks;
-using AiDotNet.Onnx;
-using AiDotNet.Optimizers;
 using AiDotNet.TextToSpeech.Interfaces;
+using AiDotNet.Tokenization.HuggingFace;
+using AiDotNet.Tokenization.Interfaces;
+using AiDotNet.Tokenization.Models;
 
 namespace AiDotNet.TextToSpeech.CodecBased;
 
-/// <summary>Bark: GPT-based text-to-audio model generating speech, music, and sound effects from text prompts.</summary>
-/// <typeparam name="T">The numeric type used for calculations.</typeparam>
-/// <remarks><para><b>References:</b><list type="bullet"><item>Project: "Bark: Text-to-Audio Model" (Suno AI, 2023)</item></list></para><para><b>For Beginners:</b> Bark: GPT-based text-to-audio model generating speech, music, and sound effects from text prompts.. This model converts text input into speech audio output.</para></remarks>
-/// <example>
-/// <code>
-/// // Create a Bark model for GPT-based text-to-audio generation
-/// // capable of producing speech, music, and sound effects from prompts
-/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
-///     inputType: InputType.OneDimensional,
-///     taskType: NeuralNetworkTaskType.Regression,
-///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
-///
-/// // ONNX inference mode with pre-trained model
-/// var model = new Bark&lt;double&gt;(architecture, "bark.onnx");
-///
-/// // Training mode with native layers
-/// var trainModel = new Bark&lt;double&gt;(architecture, new BarkOptions());
-/// </code>
-/// </example>
+/// <summary>
+/// Beginner-friendly text façade over the shared <see cref="BarkModel{T}"/> foundation model.
+/// </summary>
+/// <remarks>
+/// This type adds tokenizer loading and text-oriented synthesis. It inherits the one Bark neural
+/// implementation rather than constructing another layer stack, so the low-level and high-level
+/// APIs cannot drift in architecture, parameters, caching behavior, or checkpoint layout.
+/// </remarks>
 [ModelDomain(ModelDomain.Audio)]
+[ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Transformer)]
+[ModelCategory(ModelCategory.FoundationModel)]
 [ModelTask(ModelTask.Generation)]
+[ModelTask(ModelTask.TextToSpeech)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Bark: Text-Prompted Generative Audio Model", "https://github.com/suno-ai/bark")]
 public partial class Bark<T> : TtsModelBase<T>, ICodecTts<T>
 {
-    private readonly BarkOptions _options;
+    private readonly ITokenizer? _configuredTokenizer;
+    private ITokenizer? _loadedTokenizer;
 
-    public override ModelOptions GetOptions() => _options;
-
-    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
-    private bool _useNativeMode;
-    private bool _disposed;
-
+    /// <summary>Creates Bark with full checkpoint defaults and lazy tokenizer loading.</summary>
     public Bark(
-        NeuralNetworkArchitecture<T> architecture,
-        string modelPath,
-        BarkOptions? options = null
-    )
-        : base(architecture)
+        BarkOptions? options = null,
+        IAudioCodec<T>? codec = null,
+        ITokenizer? tokenizer = null,
+        int? seed = null)
+        : base(options, codec, seed)
     {
-        _options = options ?? new BarkOptions();
-        _useNativeMode = false;
-        base.SampleRate = _options.SampleRate;
-        base.MelChannels = _options.MelChannels;
-        base.HopSize = _options.HopSize;
-        base.HiddenDim = _options.LLMDim;
-        if (string.IsNullOrWhiteSpace(modelPath))
-            throw new ArgumentException("Model path required.", nameof(modelPath));
-        if (!File.Exists(modelPath))
-            throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath);
-        _options.ModelPath = modelPath;
-        OnnxModel = new OnnxModel<T>(modelPath, _options.OnnxOptions);
-        InitializeLayers();
+        _configuredTokenizer = tokenizer;
     }
 
+    /// <summary>Creates Bark with an explicit architecture descriptor.</summary>
     public Bark(
         NeuralNetworkArchitecture<T> architecture,
         BarkOptions? options = null,
-        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null
-    )
-        : base(architecture)
+        IAudioCodec<T>? codec = null,
+        ITokenizer? tokenizer = null)
+        : base(architecture, options, codec)
     {
         _options = options ?? new BarkOptions();
         _useNativeMode = true;
@@ -104,31 +80,63 @@ public partial class Bark<T> : TtsModelBase<T>, ICodecTts<T>
     protected override int OutputFeatureWidth => _options.NumCodebooks * _options.CodebookSize;
     public int CodecFrameRate => _options.CodecFrameRate;
 
-    /// <summary>Synthesizes speech. Bark uses hierarchical GPT transformers: semantic tokens -> coarse acoustic -> fine acoustic -> EnCodec decoder.</summary>
+    /// <inheritdoc />
+    public int MaxTextLength => BarkConfiguration.MaxTextLength;
+
+    /// <inheritdoc />
+    public int NumCodebooks => NumberOfCodebooks;
+
+    /// <inheritdoc />
+    int ICodecTts<T>.CodebookSize => CodebookSize;
+
+    /// <inheritdoc />
+    int ICodecTts<T>.CodecFrameRate => CodecFrameRate;
+
+    /// <summary>Synthesizes a 24 kHz waveform from text using all four Bark stages.</summary>
     public Tensor<T> Synthesize(string text)
+        => SynthesizeDetailed(text).Audio;
+
+    /// <summary>Synthesizes text and returns semantic, coarse, fine, audio, and timing outputs.</summary>
+    public BarkGenerationResult<T> SynthesizeDetailed(
+        string text,
+        BarkGenerationOptions? generationOptions = null,
+        BarkHistoryPrompt? history = null,
+        CancellationToken cancellationToken = default)
     {
-        ThrowIfDisposed();
-        var input = PreprocessText(text);
-        if (IsOnnxMode && OnnxModel is not null)
-            return OnnxModel.Run(input);
-        var output = Predict(input);
-        return PostprocessAudio(output);
+        var tokenIds = Tokenize(text);
+        return Generate(tokenIds, generationOptions, history, cancellationToken);
     }
 
+    /// <summary>Asynchronously synthesizes text with cooperative cancellation.</summary>
+    public async Task<Tensor<T>> SynthesizeAsync(
+        string text,
+        BarkGenerationOptions? generationOptions = null,
+        BarkHistoryPrompt? history = null,
+        CancellationToken cancellationToken = default)
+    {
+        await Task.Yield();
+        var tokenIds = Tokenize(text);
+        var result = await GenerateAsync(tokenIds, generationOptions, history, cancellationToken)
+            .ConfigureAwait(false);
+        return result.Audio;
+    }
+
+    /// <inheritdoc />
     public Tensor<T> EncodeToTokens(Tensor<T> audio)
-    {
-        ThrowIfDisposed();
-        if (IsOnnxMode && OnnxModel is not null)
-            return OnnxModel.Run(audio);
-        return Predict(audio);
-    }
+        => ToTensor(EncodeAudio(audio));
 
+    /// <inheritdoc />
     public Tensor<T> DecodeFromTokens(Tensor<T> tokens)
+        => DecodeAudioTokens(ToArray(tokens));
+
+    /// <inheritdoc />
+    public override ModelMetadata<T> GetModelMetadata()
     {
-        ThrowIfDisposed();
-        if (IsOnnxMode && OnnxModel is not null)
-            return OnnxModel.Run(tokens);
-        return Predict(tokens);
+        var metadata = base.GetModelMetadata();
+        metadata.Name = "Bark-Text";
+        metadata.SetProperty("tokenizer", BarkConfiguration.TokenizerModelName);
+        metadata.SetProperty("api", "beginner-text-facade");
+        return metadata;
     }
 
     protected override Tensor<T> PreprocessText(string text)
@@ -253,15 +261,29 @@ public partial class Bark<T> : TtsModelBase<T>, ICodecTts<T>
 
     private void ThrowIfDisposed()
     {
-        if (_disposed)
-            throw new ObjectDisposedException(GetType().FullName ?? nameof(Bark<T>));
+        var tensor = new Tensor<T>([tokens.Count]);
+        for (int index = 0; index < tokens.Count; index++)
+            tensor[index] = NumOps.FromDouble(tokens[index]);
+        return tensor;
     }
 
-    protected override void Dispose(bool disposing)
+    private Tensor<T> ToTensor(int[,] tokens)
     {
-        if (_disposed)
-            return;
-        _disposed = true;
-        base.Dispose(disposing);
+        var tensor = new Tensor<T>([tokens.GetLength(0), tokens.GetLength(1)]);
+        for (int codebook = 0; codebook < tokens.GetLength(0); codebook++)
+            for (int frame = 0; frame < tokens.GetLength(1); frame++)
+                tensor[codebook, frame] = NumOps.FromDouble(tokens[codebook, frame]);
+        return tensor;
+    }
+
+    private int[,] ToArray(Tensor<T> tokens)
+    {
+        if (tokens.Shape.Length != 2)
+            throw new ArgumentException("Bark codec tokens must have shape [codebook, frame].", nameof(tokens));
+        var result = new int[tokens.Shape[0], tokens.Shape[1]];
+        for (int codebook = 0; codebook < result.GetLength(0); codebook++)
+            for (int frame = 0; frame < result.GetLength(1); frame++)
+                result[codebook, frame] = Convert.ToInt32(NumOps.ToDouble(tokens[codebook, frame]));
+        return result;
     }
 }

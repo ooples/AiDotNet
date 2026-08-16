@@ -339,120 +339,50 @@ public partial class ObliviousDecisionTreeLayer<T> : LayerBase<T>, IShapeContrac
 
     private Tensor<T> ComputeFeatureSelections()
     {
-        var selections = new Tensor<T>([_depth, _inputDim]);
-
-        for (int level = 0; level < _depth; level++)
-        {
-            // Softmax over features for this level
-            var maxVal = _featureSelectionWeights[level * _inputDim];
-            for (int f = 1; f < _inputDim; f++)
-            {
-                var val = _featureSelectionWeights[level * _inputDim + f];
-                if (NumOps.Compare(val, maxVal) > 0)
-                    maxVal = val;
-            }
-
-            var sumExp = NumOps.Zero;
-            for (int f = 0; f < _inputDim; f++)
-            {
-                var exp = NumOps.Exp(NumOps.Subtract(
-                    _featureSelectionWeights[level * _inputDim + f], maxVal));
-                selections[level * _inputDim + f] = exp;
-                sumExp = NumOps.Add(sumExp, exp);
-            }
-
-            for (int f = 0; f < _inputDim; f++)
-            {
-                selections[level * _inputDim + f] = NumOps.Divide(
-                    selections[level * _inputDim + f], sumExp);
-            }
-        }
-
-        return selections;
+        return Engine.TensorSoftmax(_featureSelectionWeights, axis: 1);
     }
 
     private Tensor<T> ComputeSplitDecisions(Tensor<T> input, Tensor<T> featureSelections, int batchSize)
     {
-        // [batchSize, depth] - probability of going right at each level
-        var decisions = TensorAllocator.Rent<T>([batchSize, _depth]);
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int level = 0; level < _depth; level++)
-            {
-                // Compute weighted feature value
-                var weightedFeature = NumOps.Zero;
-                for (int f = 0; f < _inputDim; f++)
-                {
-                    weightedFeature = NumOps.Add(weightedFeature,
-                        NumOps.Multiply(
-                            featureSelections[level * _inputDim + f],
-                            input[b * _inputDim + f]));
-                }
-
-                // Soft split decision using sigmoid
-                var logit = NumOps.Subtract(weightedFeature, _thresholds[level]);
-                var rightProb = Sigmoid(logit);
-                decisions[b * _depth + level] = rightProb;
-            }
-        }
-
-        return decisions;
+        // [batch, input] @ [input, depth] => [batch, depth]. Keep both the
+        // feature-selection weights and thresholds on the active tape.
+        var weightedFeatures = Engine.TensorMatMul(
+            input,
+            Engine.TensorTranspose(featureSelections));
+        var negativeThresholds = Engine.Reshape(
+            Engine.TensorNegate(_thresholds),
+            [1, _depth]);
+        return Engine.Sigmoid(Engine.TensorBroadcastAdd(weightedFeatures, negativeThresholds));
     }
 
     private Tensor<T> ComputeLeafProbabilities(Tensor<T> splitDecisions, int batchSize)
     {
-        var leafProbs = TensorAllocator.Rent<T>([batchSize, _numLeaves]);
-
-        for (int b = 0; b < batchSize; b++)
+        var paths = new List<Tensor<T>>
         {
-            for (int leaf = 0; leaf < _numLeaves; leaf++)
-            {
-                // Compute probability of reaching this leaf
-                var prob = NumOps.One;
-                for (int level = 0; level < _depth; level++)
-                {
-                    var rightProb = splitDecisions[b * _depth + level];
-                    var leftProb = NumOps.Subtract(NumOps.One, rightProb);
+            Tensor<T>.CreateDefault([batchSize, 1], NumOps.One)
+        };
 
-                    // Check if this leaf goes right or left at this level
-                    bool goRight = ((leaf >> (_depth - 1 - level)) & 1) == 1;
-                    prob = NumOps.Multiply(prob, goRight ? rightProb : leftProb);
-                }
-                leafProbs[b * _numLeaves + leaf] = prob;
+        for (int level = 0; level < _depth; level++)
+        {
+            var right = Engine.TensorNarrow(splitDecisions, dim: 1, start: level, length: 1);
+            var left = Engine.TensorNegate(Engine.TensorSubtractScalar(right, NumOps.One));
+            var next = new List<Tensor<T>>(paths.Count * 2);
+            foreach (var parent in paths)
+            {
+                next.Add(Engine.TensorMultiply(parent, left));
+                next.Add(Engine.TensorMultiply(parent, right));
             }
+            paths = next;
         }
 
-        return leafProbs;
+        return paths.Count == 1
+            ? paths[0]
+            : Engine.TensorConcatenate(paths.ToArray(), axis: 1);
     }
 
     private Tensor<T> ComputeOutput(Tensor<T> leafProbs, int batchSize)
     {
-        var output = TensorAllocator.Rent<T>([batchSize, _outputDim]);
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int o = 0; o < _outputDim; o++)
-            {
-                var sum = NumOps.Zero;
-                for (int leaf = 0; leaf < _numLeaves; leaf++)
-                {
-                    sum = NumOps.Add(sum, NumOps.Multiply(
-                        leafProbs[b * _numLeaves + leaf],
-                        _leafValues[leaf * _outputDim + o]));
-                }
-                output[b * _outputDim + o] = sum;
-            }
-        }
-
-        return output;
-    }
-
-    private T Sigmoid(T x)
-    {
-        var negX = NumOps.Negate(x);
-        var expNegX = NumOps.Exp(negX);
-        return NumOps.Divide(NumOps.One, NumOps.Add(NumOps.One, expNegX));
+        return Engine.TensorMatMul(leafProbs, _leafValues);
     }
 
     /// <summary>

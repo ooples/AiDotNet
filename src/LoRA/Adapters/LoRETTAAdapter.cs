@@ -72,6 +72,7 @@ public partial class LoRETTAAdapter<T> : LoRAAdapterBase<T>
     /// Tensor-train cores representing the weight decomposition.
     /// Core k has shape (ttRanks[k-1], coreShape[k], ttRanks[k]).
     /// </summary>
+    [TrainableParameter]
     private readonly List<Tensor<T>> _ttCores;
 
     /// <summary>
@@ -93,11 +94,13 @@ public partial class LoRETTAAdapter<T> : LoRAAdapterBase<T>
     /// <summary>
     /// Gradients for each TT core computed during backpropagation.
     /// </summary>
+    [Scratch]
     private List<Tensor<T>>? _ttCoreGradients;
 
     /// <summary>
     /// Cached intermediate tensors from forward pass, needed for gradient computation.
     /// </summary>
+    [Scratch]
     private List<Tensor<T>>? _forwardIntermediates;
 
     /// <summary>

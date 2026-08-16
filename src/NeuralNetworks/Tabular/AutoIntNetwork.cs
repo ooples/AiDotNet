@@ -60,7 +60,7 @@ namespace AiDotNet.NeuralNetworks.Tabular;
     "https://arxiv.org/abs/1810.11921",
     Year = 2019,
     Authors = "Song, W., Shi, C., Xiao, Z., Duan, Z., Xu, Y., Zhang, M., & Tang, J.")]
-public class AutoIntNetwork<T> : NeuralNetworkBase<T>
+public class AutoIntNetwork<T> : TabularNeuralNetworkBase<T>
 {
     private AutoIntOptions<T> _options;
 

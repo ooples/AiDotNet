@@ -1058,19 +1058,6 @@ public class DiffusionModelContractTests : DiffusionUnitTestBase
     }
 
     [Fact(Timeout = 120000)]
-    public async Task BarkModel_DefaultConstructor_CreatesValidModel()
-    {
-        var model = new BarkModel<float>();
-
-        Assert.NotNull(model);
-        Assert.NotNull(model.NoisePredictor);
-        Assert.NotNull(model.VAE);
-        Assert.Equal(8, model.LatentChannels);
-        Assert.True(model.SupportsTextToAudio);
-        Assert.True(model.SupportsTextToSpeech);
-    }
-
-    [Fact(Timeout = 120000)]
     public async Task VoiceCraftModel_DefaultConstructor_CreatesValidModel()
     {
         var model = new VoiceCraftModel<float>();
@@ -1127,17 +1114,6 @@ public class DiffusionModelContractTests : DiffusionUnitTestBase
     }
 
     [Fact(Timeout = 120000)]
-    public async Task BarkModel_Clone_CreatesIndependentCopy()
-    {
-        var model = new BarkModel<float>();
-        var clone = model.Clone();
-
-        Assert.NotNull(clone);
-        Assert.NotSame(model, clone);
-        Assert.Equal(model.ParameterCount, clone.ParameterCount); // long==long: (int) truncated valid >2.1B (e.g. 12B FLUX) counts
-    }
-
-    [Fact(Timeout = 120000)]
     public async Task SDUpscalerModel_Clone_CreatesIndependentCopy()
     {
         var model = new SDUpscalerModel<float>();
@@ -1172,17 +1148,6 @@ public class DiffusionModelContractTests : DiffusionUnitTestBase
 
         Assert.NotNull(metadata);
         Assert.Contains("Wan", metadata.Name);
-    }
-
-    [Fact(Timeout = 120000)]
-    public async Task BarkModel_GetModelMetadata_ReturnsValidMetadata()
-    {
-        var model = new BarkModel<float>();
-
-        var metadata = model.GetModelMetadata();
-
-        Assert.NotNull(metadata);
-        Assert.Contains("Bark", metadata.Name);
     }
 
     [Fact(Timeout = 120000)]
@@ -1285,7 +1250,7 @@ public class DiffusionModelContractTests : DiffusionUnitTestBase
         await Task.Yield();
         var model = new UdioModel<float>();
 
-        Assert.True(model.ParameterCount > int.MaxValue,
+        Assert.True(model.ParameterLayout.DeclaredParameterCount > int.MaxValue,
             "Udio's paper-scale DiT backbone should report a foundation-scale parameter count.");
 
         Assert.DoesNotContain(model.ParameterLayout.Slots,

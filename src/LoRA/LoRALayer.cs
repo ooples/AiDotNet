@@ -181,11 +181,13 @@ public partial class LoRALayer<T> : LayerBase<T>, IShapeContract
     /// <summary>
     /// Stored input from the forward pass, needed for gradient computation.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastInput;
 
     /// <summary>
     /// Stored pre-activation output from the forward pass, needed for activation derivative computation.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastPreActivation;
 
     /// <summary>

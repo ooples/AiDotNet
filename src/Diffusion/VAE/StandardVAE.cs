@@ -450,7 +450,7 @@ public partial class StandardVAE<T> : VAEModelBase<T>
     public override Tensor<T> Encode(Tensor<T> image, bool sampleMode = true)
     {
         EnsureLayersInitialized();
-        _preserveMaterializedParameters = true;
+        if (!LayerBase<T>.IsInferringShapes) _preserveMaterializedParameters = true;
         var (mean, logVar) = EncodeWithDistribution(image);
 
         if (sampleMode)
@@ -503,7 +503,7 @@ public partial class StandardVAE<T> : VAEModelBase<T>
     public override Tensor<T> Decode(Tensor<T> latent)
     {
         EnsureLayersInitialized();
-        _preserveMaterializedParameters = true;
+        if (!LayerBase<T>.IsInferringShapes) _preserveMaterializedParameters = true;
         if (_postQuantConv == null || _outputConv == null)
         {
             throw new InvalidOperationException("Decoder layers not initialized.");
@@ -669,10 +669,22 @@ public partial class StandardVAE<T> : VAEModelBase<T>
             latentScaleFactor: _latentScaleFactor,
             lossFunction: LossFunction);
 
-        // Keep untouched default VAEs structural. Already-materialized eager
-        // tensors are still copied, but lazy tensors are resolved only after
-        // Encode/Decode or SetParameters has established runtime weight state.
-        if (_preserveMaterializedParameters)
+        // Keep source and destination at the same structural lifecycle before comparing or copying
+        // tensors. ParameterCount/GetParameters can resolve the lazy graph without a real forward;
+        // measuring before that resolution and copying afterward compares different layer sequences.
+        bool structureResolved = _shapesResolvedViaForward;
+        if (structureResolved)
+            clone.ResolveShapesViaForward();
+        else if (_layersInitialized)
+            clone.EnsureLayersInitialized();
+
+        // A flat parameter read materializes the complete generated surface without running
+        // Encode/Decode, so the forward-only flag is not enough to decide whether trained state
+        // exists. Only compare against ParameterCount after structure is already stable, ensuring
+        // the metadata read cannot mutate the sequence being measured.
+        bool hasCompleteMaterializedSurface = structureResolved
+            && GetMaterializedParameterCount() == ParameterCount;
+        if (_preserveMaterializedParameters || hasCompleteMaterializedSurface)
         {
             TriggerLazyShapeResolution();
             clone.TriggerLazyShapeResolution();
@@ -680,14 +692,17 @@ public partial class StandardVAE<T> : VAEModelBase<T>
         }
         else
         {
-            if (_layersInitialized)
-            {
-                clone.EnsureLayersInitialized();
-            }
-
             CopyMaterializedParametersTo(clone);
         }
         return clone;
+    }
+
+    private long GetMaterializedParameterCount()
+    {
+        long count = 0;
+        foreach (var parameter in EnumerateMaterializedModelParameters())
+            count = checked(count + parameter.Length);
+        return count;
     }
 
     private void CopyMaterializedParametersTo(StandardVAE<T> clone)
@@ -753,6 +768,29 @@ public partial class StandardVAE<T> : VAEModelBase<T>
     /// underflow.
     /// </remarks>
     private bool _lazyShapesResolved;
+
+    private bool _shapesResolvedViaForward;
+
+    /// <summary>
+    /// Resolves every lazy encoder and decoder shape through the real VAE topology without allocating
+    /// parameter storage. Parameter manifests call this path; explicit value reads continue to use
+    /// <see cref="TriggerLazyShapeResolution"/> and therefore materialize the same resolved shapes.
+    /// </summary>
+    private void ResolveShapesViaForward()
+    {
+        EnsureLayersInitialized();
+        if (_shapesResolvedViaForward) return;
+        _shapesResolvedViaForward = true;
+
+        int downsamples = _channelMultipliers.Length - 1;
+        int dummySpatial = 1 << Math.Max(downsamples, 1);
+        var dummyImage = new Tensor<T>(new[] { 1, _inputChannels, dummySpatial, dummySpatial });
+        LayerBase<T>.RunShapeInference(() =>
+        {
+            var dummyLatent = Encode(dummyImage, sampleMode: false);
+            _ = Decode(dummyLatent);
+        });
+    }
 
     internal void TriggerLazyShapeResolution()
     {

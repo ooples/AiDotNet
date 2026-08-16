@@ -255,57 +255,18 @@ public partial class GatedLinearAttentionLayer<T> : LayerBase<T>, IShapeContract
         _lastValue = v;
         _lastGate = gate;
 
-        // Gated linear attention recurrence per head
-        var output = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, totalDim });
-
-        for (int hi = 0; hi < _numHeads; hi++)
-        {
-            int dimStart = hi * _headDimension;
-
-            // State matrix: [batch, headDim, keyDim] (KV outer product accumulator)
-            var state = TensorAllocator.Rent<T>(new[] { batchSize, _headDimension, _keyDimension });
-
-            for (int t = 0; t < seqLen; t++)
-            {
-                for (int bi = 0; bi < batchSize; bi++)
-                {
-                    // Gate value for this head (use first element per head as scalar gate)
-                    T gateVal = gate[new[] { bi, t, dimStart }];
-
-                    // Gated state update: S = gate * S + K^T * V (outer product of K and V)
-                    for (int di = 0; di < _headDimension; di++)
-                    {
-                        for (int ki = 0; ki < _keyDimension; ki++)
-                        {
-                            int flatK = dimStart + ki;
-                            int flatD = dimStart + di;
-                            T kVal = k[new[] { bi, t, flatK }];
-                            T vVal = v[new[] { bi, t, flatD }];
-
-                            T prevState = state[new[] { bi, di, ki }];
-                            T kvOuter = NumOps.Multiply(kVal, vVal);
-                            T newState = NumOps.Add(
-                                NumOps.Multiply(gateVal, prevState), kvOuter);
-                            state[new[] { bi, di, ki }] = newState;
-                        }
-                    }
-
-                    // Output: O = Q * S → O[k] = sum_d Q[d] * S[d, k]
-                    for (int ki = 0; ki < _keyDimension; ki++)
-                    {
-                        int flatK = dimStart + ki;
-                        T sum = NumOps.Zero;
-                        for (int di = 0; di < _headDimension; di++)
-                        {
-                            T qVal = q[new[] { bi, t, dimStart + di }];
-                            sum = NumOps.Add(sum, NumOps.Multiply(qVal, state[new[] { bi, di, ki }]));
-                        }
-                        output[new[] { bi, t, flatK }] = NumOps.Add(
-                            output[new[] { bi, t, flatK }], sum);
-                    }
-                }
-            }
-        }
+        // The recurrence consumes one scalar gate per head. Extract the first channel from each
+        // head exactly as the original implementation did, but keep the extraction and scan on the
+        // tape. GlaScanForward records one analytic BPTT node instead of detaching through scalar
+        // writes or expanding O(sequence * heads * headDim^2) tiny operations.
+        var gateByHead = Engine.Reshape(
+            Engine.TensorSliceAxis(
+                Engine.Reshape(gate,
+                    new[] { batchSize, seqLen, _numHeads, _headDimension }),
+                axis: 3,
+                index: 0),
+            new[] { batchSize, seqLen, _numHeads });
+        var output = Engine.GlaScanForward(q, k, v, gateByHead, _numHeads);
 
         _lastAttnOutput = output;
 

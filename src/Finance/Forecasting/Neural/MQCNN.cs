@@ -571,7 +571,7 @@ public partial class MQCNN<T> : ForecastingModelBase<T>
         var predictions = ForwardForTraining(input);
         var lossTensor = ComputeMultiQuantilePinballLossTape(predictions, target);
 
-        var allGrads = tape.ComputeGradients(lossTensor, sources: null);
+        var allGrads = ComputeAndPublishParameterGradients(tape, lossTensor, sources: null);
         var grads = new Dictionary<Tensor<T>, Tensor<T>>(
             Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
         foreach (var param in trainableParams)

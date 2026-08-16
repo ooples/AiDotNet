@@ -26,6 +26,14 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
             VBLoRAAdapter<double>.ClearBanks();
         }
 
+        private static DenseLayer<double> CreateResolvedBaseLayer(
+            IActivationFunction<double>? activation = null)
+        {
+            var layer = new DenseLayer<double>(5, activation);
+            layer.ResolveFromShape([10]);
+            return layer;
+        }
+
         [Fact(Timeout = 120000)]
         public async Task DenseLayerForward_WithNonZeroInput_ProducesNonZeroOutput()
         {
@@ -45,7 +53,7 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
         public async Task Constructor_WithValidParameters_InitializesCorrectly()
         {
             // Arrange
-            var baseLayer = new DenseLayer<double>(5, (IActivationFunction<double>)new IdentityActivation<double>());
+            var baseLayer = CreateResolvedBaseLayer(new IdentityActivation<double>());
 
             // Act
             var adapter = new VBLoRAAdapter<double>(
@@ -68,7 +76,7 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
         public async Task Constructor_CreatesSharedBanks()
         {
             // Arrange
-            var baseLayer = new DenseLayer<double>(5, (IActivationFunction<double>)new IdentityActivation<double>());
+            var baseLayer = CreateResolvedBaseLayer(new IdentityActivation<double>());
 
             // Act
             var adapter = new VBLoRAAdapter<double>(
@@ -93,8 +101,8 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
         public async Task Constructor_WithSameBankKey_SharesBanks()
         {
             // Arrange
-            var baseLayer1 = new DenseLayer<double>(5, (IActivationFunction<double>)new IdentityActivation<double>());
-            var baseLayer2 = new DenseLayer<double>(5, (IActivationFunction<double>)new IdentityActivation<double>());
+            var baseLayer1 = CreateResolvedBaseLayer(new IdentityActivation<double>());
+            var baseLayer2 = CreateResolvedBaseLayer(new IdentityActivation<double>());
 
             // Act
             var adapter1 = new VBLoRAAdapter<double>(
@@ -132,8 +140,8 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
         public async Task Constructor_WithDifferentBankKeys_CreatesSeparateBanks()
         {
             // Arrange
-            var baseLayer1 = new DenseLayer<double>(5, (IActivationFunction<double>?)null);
-            var baseLayer2 = new DenseLayer<double>(5, (IActivationFunction<double>?)null);
+            var baseLayer1 = CreateResolvedBaseLayer();
+            var baseLayer2 = CreateResolvedBaseLayer();
 
             // Act
             var adapter1 = new VBLoRAAdapter<double>(
@@ -177,7 +185,7 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
         public async Task BankIndices_ReturnsCorrectLength()
         {
             // Arrange
-            var baseLayer = new DenseLayer<double>(5, (IActivationFunction<double>?)null);
+            var baseLayer = CreateResolvedBaseLayer();
 
             // Act
             var adapter = new VBLoRAAdapter<double>(
@@ -195,7 +203,7 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
         public async Task BankIndices_WithCustomIndices_UsesProvidedValues()
         {
             // Arrange
-            var baseLayer = new DenseLayer<double>(5, (IActivationFunction<double>?)null);
+            var baseLayer = CreateResolvedBaseLayer();
             int[] customIndicesA = new[] { 0, 2, 5 };
             int[] customIndicesB = new[] { 1, 3, 7 };
 
@@ -217,7 +225,7 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
         public async Task Constructor_WithInvalidBankSizeA_ThrowsArgumentException()
         {
             // Arrange
-            var baseLayer = new DenseLayer<double>(5, (IActivationFunction<double>?)null);
+            var baseLayer = CreateResolvedBaseLayer();
 
             // Act & Assert
             Assert.Throws<ArgumentException>(() => new VBLoRAAdapter<double>(
@@ -231,7 +239,7 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
         public async Task Constructor_WithInvalidBankSizeB_ThrowsArgumentException()
         {
             // Arrange
-            var baseLayer = new DenseLayer<double>(5, (IActivationFunction<double>?)null);
+            var baseLayer = CreateResolvedBaseLayer();
 
             // Act & Assert
             Assert.Throws<ArgumentException>(() => new VBLoRAAdapter<double>(
@@ -245,7 +253,7 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
         public async Task Constructor_WithRankExceedingBankSizeA_ThrowsArgumentOutOfRangeException()
         {
             // Arrange
-            var baseLayer = new DenseLayer<double>(5, (IActivationFunction<double>?)null);
+            var baseLayer = CreateResolvedBaseLayer();
 
             // Act & Assert - ArgumentOutOfRangeException is correct for invalid range values
             Assert.Throws<ArgumentOutOfRangeException>(() => new VBLoRAAdapter<double>(
@@ -259,7 +267,7 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
         public async Task Constructor_WithRankExceedingBankSizeB_ThrowsArgumentException()
         {
             // Arrange
-            var baseLayer = new DenseLayer<double>(5, (IActivationFunction<double>?)null);
+            var baseLayer = CreateResolvedBaseLayer();
 
             // Act & Assert
             Assert.Throws<ArgumentException>(() => new VBLoRAAdapter<double>(
@@ -273,7 +281,7 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
         public async Task Constructor_WithInvalidIndicesA_ThrowsArgumentException()
         {
             // Arrange
-            var baseLayer = new DenseLayer<double>(5, (IActivationFunction<double>?)null);
+            var baseLayer = CreateResolvedBaseLayer();
             int[] invalidIndices = new[] { 0, 2, 15 }; // 15 exceeds bankSizeA
 
             // Act & Assert
@@ -289,7 +297,7 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
         public async Task Forward_ProducesCorrectOutputShape()
         {
             // Arrange
-            var baseLayer = new DenseLayer<double>(5, (IActivationFunction<double>?)null);
+            var baseLayer = CreateResolvedBaseLayer();
             var adapter = new VBLoRAAdapter<double>(
                 baseLayer,
                 rank: 3,
@@ -310,7 +318,7 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
         public async Task Forward_CombinesBaseAndVBLoRAOutputs()
         {
             // Arrange
-            var baseLayer = new DenseLayer<double>(5, (IActivationFunction<double>?)null);
+            var baseLayer = CreateResolvedBaseLayer();
             var adapter = new VBLoRAAdapter<double>(
                 baseLayer,
                 rank: 3,
@@ -338,7 +346,7 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
         public async Task MergeToOriginalLayer_ProducesValidDenseLayer()
         {
             // Arrange
-            var baseLayer = new DenseLayer<double>(5, (IActivationFunction<double>?)null);
+            var baseLayer = CreateResolvedBaseLayer();
             var adapter = new VBLoRAAdapter<double>(
                 baseLayer,
                 rank: 3,
@@ -359,7 +367,7 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
         public async Task MergedLayer_ProducesSameOutputAsAdapter()
         {
             // Arrange
-            var baseLayer = new DenseLayer<double>(5, (IActivationFunction<double>)new IdentityActivation<double>());
+            var baseLayer = CreateResolvedBaseLayer(new IdentityActivation<double>());
             Assert.IsType<IdentityActivation<double>>(baseLayer.ScalarActivation);
             var adapter = new VBLoRAAdapter<double>(
                 baseLayer,
@@ -392,8 +400,8 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
         public async Task ClearBanks_WithSpecificKey_RemovesOnlyThatBank()
         {
             // Arrange
-            var baseLayer1 = new DenseLayer<double>(5, (IActivationFunction<double>?)null);
-            var baseLayer2 = new DenseLayer<double>(5, (IActivationFunction<double>?)null);
+            var baseLayer1 = CreateResolvedBaseLayer();
+            var baseLayer2 = CreateResolvedBaseLayer();
 
             var adapter1 = new VBLoRAAdapter<double>(
                 baseLayer1,
@@ -424,8 +432,8 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
         public async Task ClearBanks_WithNullKey_RemovesAllBanks()
         {
             // Arrange
-            var baseLayer1 = new DenseLayer<double>(5, (IActivationFunction<double>?)null);
-            var baseLayer2 = new DenseLayer<double>(5, (IActivationFunction<double>?)null);
+            var baseLayer1 = CreateResolvedBaseLayer();
+            var baseLayer2 = CreateResolvedBaseLayer();
 
             var adapter1 = new VBLoRAAdapter<double>(
                 baseLayer1,
@@ -456,7 +464,7 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
         public async Task ParameterCount_MatchesLoRAParameterCount()
         {
             // Arrange
-            var baseLayer = new DenseLayer<double>(5, (IActivationFunction<double>?)null);
+            var baseLayer = CreateResolvedBaseLayer();
 
             // Act
             var adapter = new VBLoRAAdapter<double>(

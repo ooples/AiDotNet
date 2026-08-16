@@ -37,7 +37,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Gated Delta Networks: Improving Mamba2 with Delta Rule", "https://arxiv.org/abs/2412.06464", Year = 2024, Authors = "Songlin Yang, Jan Kautz, Ali Hatamizadeh")]
-public class GatedDeltaNetLanguageModel<T> : NeuralNetworkBase<T>
+public class GatedDeltaNetLanguageModel<T> : TokenLanguageModelLayoutBase<T>
 {
     private readonly GatedDeltaNetOptions _options;
     private readonly int _vocabSize;

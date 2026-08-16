@@ -38,7 +38,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("xLSTM: Extended Long Short-Term Memory", "https://arxiv.org/abs/2405.04517", Year = 2024, Authors = "Maximilian Beck, Korbinian Poppel, Markus Spanring, Andreas Auer, Oleksandra Prudnikova, Michael Kopp, Gunter Klambauer, Johannes Brandstetter, Sepp Hochreiter")]
-public class XLSTMLanguageModel<T> : NeuralNetworkBase<T>
+public class XLSTMLanguageModel<T> : TokenLanguageModelLayoutBase<T>
 {
     private readonly XLSTMOptions _options;
     private readonly int _vocabSize;

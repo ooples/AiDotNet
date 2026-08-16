@@ -95,6 +95,7 @@ public partial class RoSAAdapter<T> : LoRAAdapterBase<T>
     /// <summary>
     /// Gradients for the sparse weight component, computed during backpropagation.
     /// </summary>
+    [Scratch]
     private Matrix<T>? _sparseGradients;
 
     /// <summary>
@@ -104,6 +105,7 @@ public partial class RoSAAdapter<T> : LoRAAdapterBase<T>
     /// Stores the input activations in matrix form [batchSize, inputSize] to enable proper
     /// gradient computation: dL/dW_sparse[i,j] = sum_batch(gradMatrix[b,i] * input[b,j]) / batchSize.
     /// </remarks>
+    [Scratch]
     private Matrix<T>? _cachedInputMatrix;
 
     /// <summary>

@@ -122,11 +122,14 @@ public class SparseCategoricalCrossEntropyLoss<T> : LossFunctionBase<T>
         // If target has the same shape as predicted, treat as one-hot/dense targets
         if (target.Rank == predicted.Rank && target._shape.SequenceEqual(predicted._shape))
         {
-            target = EnsureTargetMatchesPredicted(predicted, target);
-            var product = Engine.TensorMultiply(target, logP);
-            var allAxes = Enumerable.Range(0, product.Shape.Length).ToArray();
-            var mean = Engine.ReduceMean(product, allAxes, keepDims: false);
-            return Engine.TensorNegate(mean);
+            int expectedSamples = predicted.Length / numClasses;
+            if (sampleCount != expectedSamples)
+            {
+                throw new ArgumentException(
+                    $"Sparse target contains {sampleCount} class indices, but prediction shape " +
+                    $"[{string.Join(", ", predicted.Shape)}] requires {expectedSamples}.",
+                    nameof(target));
+            }
         }
 
         // Sparse path: target contains integer class indices

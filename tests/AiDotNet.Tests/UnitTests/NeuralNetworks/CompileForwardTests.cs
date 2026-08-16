@@ -182,7 +182,7 @@ public class CompileForwardTests
     /// <summary>
     /// Minimal NeuralNetworkBase subclass for CompileForward testing.
     /// </summary>
-    private sealed class SimpleTestNetwork : NeuralNetworkBase<float>
+    private sealed class SimpleTestNetwork : VectorModelLayoutBase<float>
     {
         public SimpleTestNetwork(NeuralNetworkArchitecture<float> architecture)
             : base(architecture, new MeanSquaredErrorLoss<float>())

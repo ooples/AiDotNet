@@ -80,16 +80,19 @@ public partial class LoKrAdapter<T> : LoRAAdapterBase<T>
     /// <summary>
     /// Gradients for matrix A computed during backpropagation.
     /// </summary>
+    [Scratch]
     private Matrix<T>? _gradientA;
 
     /// <summary>
     /// Gradients for matrix B computed during backpropagation.
     /// </summary>
+    [Scratch]
     private Matrix<T>? _gradientB;
 
     /// <summary>
     /// Stored input from the forward pass, needed for gradient computation.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastInput;
 
     /// <summary>

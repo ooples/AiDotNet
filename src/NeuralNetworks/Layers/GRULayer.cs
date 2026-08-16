@@ -124,7 +124,7 @@ public partial class GRULayer<T> : LayerBase<T>, IShapeContract
     /// During training, these weights are adjusted to better recognize important patterns in your data.
     /// </para>
     /// </remarks>
-    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+    [TrainableParameter(Role = PersistentTensorRole.Weights, Shape = "_hiddenSize, _inputSize")]
     private Tensor<T> _Wz, _Wr, _Wh;
 
     /// <summary>
@@ -148,7 +148,7 @@ public partial class GRULayer<T> : LayerBase<T>, IShapeContract
     /// from words that appeared earlier in the sentence.
     /// </para>
     /// </remarks>
-    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+    [TrainableParameter(Role = PersistentTensorRole.Weights, Shape = "_hiddenSize, _hiddenSize")]
     private Tensor<T> _Uz, _Ur, _Uh;
 
     /// <summary>
@@ -171,7 +171,7 @@ public partial class GRULayer<T> : LayerBase<T>, IShapeContract
     /// They're like the "baseline" settings that get adjusted during training.
     /// </para>
     /// </remarks>
-    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+    [TrainableParameter(Role = PersistentTensorRole.Biases, Shape = "_hiddenSize")]
     private Tensor<T> _bz, _br, _bh;
 
     /// <summary>

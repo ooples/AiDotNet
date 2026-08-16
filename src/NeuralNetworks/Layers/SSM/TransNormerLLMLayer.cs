@@ -127,7 +127,6 @@ public partial class TransNormerLLMLayer<T> : LayerBase<T>, IShapeContract
     private Tensor<T>? _lastAttnRmsInv;
     private Tensor<T>? _lastGateRaw;
     private Tensor<T>? _lastGate;
-    private Tensor<T>? _lastStates;
     private int[]? _originalInputShape;
 
     // Gradients
@@ -281,44 +280,26 @@ public partial class TransNormerLLMLayer<T> : LayerBase<T>, IShapeContract
     /// <summary>
     /// Applies RMSNorm per head dimension and returns the inverse RMS for backward.
     /// </summary>
-    private void ApplyRMSNorm(
-        Tensor<T> input, Tensor<T> scale, Tensor<T> output, Tensor<T> rmsInv,
-        int batchSize, int seqLen)
+    private (Tensor<T> Output, Tensor<T> InverseRms) ApplyRMSNorm(
+        Tensor<T> input, Tensor<T> scale, int batchSize, int seqLen)
     {
-        T eps = NumOps.FromDouble(1e-6);
-
-        for (int bi = 0; bi < batchSize; bi++)
-        {
-            for (int t = 0; t < seqLen; t++)
-            {
-                for (int h = 0; h < _numHeads; h++)
-                {
-                    int dimStart = h * _headDimension;
-
-                    // Compute RMS
-                    T sumSq = NumOps.Zero;
-                    for (int d = 0; d < _headDimension; d++)
-                    {
-                        int flatD = dimStart + d;
-                        T val = input[new[] { bi, t, flatD }];
-                        sumSq = NumOps.Add(sumSq, NumOps.Multiply(val, val));
-                    }
-                    T meanSq = NumOps.Divide(sumSq, NumOps.FromDouble(_headDimension));
-                    T rms = NumOps.Sqrt(NumOps.Add(meanSq, eps));
-                    T invRms = NumOps.Divide(NumOps.One, rms);
-
-                    rmsInv[new[] { bi, t, h }] = invRms;
-
-                    // Normalize and scale
-                    for (int d = 0; d < _headDimension; d++)
-                    {
-                        int flatD = dimStart + d;
-                        T normalized = NumOps.Multiply(input[new[] { bi, t, flatD }], invRms);
-                        output[new[] { bi, t, flatD }] = NumOps.Multiply(normalized, scale[new[] { h, d }]);
-                    }
-                }
-            }
-        }
+        var heads = Engine.Reshape(
+            input,
+            new[] { batchSize, seqLen, _numHeads, _headDimension });
+        var meanSquare = Engine.TensorMultiplyScalar(
+            Engine.ReduceSum(
+                Engine.TensorSquare(heads), new[] { 3 }, keepDims: true),
+            NumOps.FromDouble(1.0 / _headDimension));
+        var inverseRms = Engine.TensorReciprocal(
+            Engine.TensorSqrt(
+                Engine.TensorAddScalar(meanSquare, NumOps.FromDouble(1e-6))));
+        var normalized = Engine.TensorBroadcastMultiply(heads, inverseRms);
+        var scaled = Engine.TensorBroadcastMultiply(
+            normalized,
+            Engine.Reshape(scale, new[] { 1, 1, _numHeads, _headDimension }));
+        return (
+            Engine.Reshape(scaled, new[] { batchSize, seqLen, _modelDimension }),
+            Engine.Reshape(inverseRms, new[] { batchSize, seqLen, _numHeads }));
     }
 
     /// <inheritdoc />
@@ -351,13 +332,8 @@ public partial class TransNormerLLMLayer<T> : LayerBase<T>, IShapeContract
         _lastValue = v;
 
         // Step 2: RMSNorm on Q and K
-        var qNormed = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
-        var kNormed = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
-        var qRmsInv = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _numHeads });
-        var kRmsInv = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _numHeads });
-
-        ApplyRMSNorm(q, _queryNormScale, qNormed, qRmsInv, batchSize, seqLen);
-        ApplyRMSNorm(k, _keyNormScale, kNormed, kRmsInv, batchSize, seqLen);
+        var (qNormed, qRmsInv) = ApplyRMSNorm(q, _queryNormScale, batchSize, seqLen);
+        var (kNormed, kRmsInv) = ApplyRMSNorm(k, _keyNormScale, batchSize, seqLen);
         _lastQueryNormed = qNormed;
         _lastKeyNormed = kNormed;
         _lastQueryRmsInv = qRmsInv;
@@ -376,9 +352,8 @@ public partial class TransNormerLLMLayer<T> : LayerBase<T>, IShapeContract
         _lastAttnRaw = attnRaw;
 
         // Step 5: RMSNorm on attention output
-        var attnNormed = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
-        var attnRmsInv = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _numHeads });
-        ApplyRMSNorm(attnRaw, _outputNormScale, attnNormed, attnRmsInv, batchSize, seqLen);
+        var (attnNormed, attnRmsInv) = ApplyRMSNorm(
+            attnRaw, _outputNormScale, batchSize, seqLen);
         _lastAttnNormed = attnNormed;
         _lastAttnRmsInv = attnRmsInv;
 
@@ -415,65 +390,12 @@ public partial class TransNormerLLMLayer<T> : LayerBase<T>, IShapeContract
         Tensor<T> q, Tensor<T> k, Tensor<T> v,
         int batchSize, int seqLen)
     {
-        var output = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
-
-        // State matrix per head: [batch, numHeads, headDim, headDim]
-        var state = new Tensor<T>(new[] { batchSize, _numHeads, _headDimension, _headDimension });
-        var allStates = new Tensor<T>(new[] { batchSize, seqLen + 1, _numHeads, _headDimension, _headDimension });
-
-        for (int t = 0; t < seqLen; t++)
-        {
-            for (int bi = 0; bi < batchSize; bi++)
-            {
-                for (int hi = 0; hi < _numHeads; hi++)
-                {
-                    int dimStart = hi * _headDimension;
-                    T gamma = _gammas[hi];
-
-                    // State update: S = gamma * S + k * v^T
-                    for (int di = 0; di < _headDimension; di++)
-                    {
-                        for (int dj = 0; dj < _headDimension; dj++)
-                        {
-                            int flatDi = dimStart + di;
-                            int flatDj = dimStart + dj;
-
-                            T prevS = state[new[] { bi, hi, di, dj }];
-                            T kVal = k[new[] { bi, t, flatDi }];
-                            T vVal = v[new[] { bi, t, flatDj }];
-
-                            T newS = NumOps.Add(
-                                NumOps.Multiply(gamma, prevS),
-                                NumOps.Multiply(kVal, vVal));
-                            state[new[] { bi, hi, di, dj }] = newS;
-                        }
-                    }
-
-                    // Output: o = S * q
-                    for (int di = 0; di < _headDimension; di++)
-                    {
-                        int flatDi = dimStart + di;
-                        T oVal = NumOps.Zero;
-                        for (int dj = 0; dj < _headDimension; dj++)
-                        {
-                            int flatDj = dimStart + dj;
-                            T qVal = q[new[] { bi, t, flatDj }];
-                            oVal = NumOps.Add(oVal,
-                                NumOps.Multiply(state[new[] { bi, hi, di, dj }], qVal));
-                        }
-                        output[new[] { bi, t, flatDi }] = oVal;
-                    }
-
-                    // Save state snapshot
-                    for (int di = 0; di < _headDimension; di++)
-                        for (int dj = 0; dj < _headDimension; dj++)
-                            allStates[new[] { bi, t + 1, hi, di, dj }] = state[new[] { bi, hi, di, dj }];
-                }
-            }
-        }
-
-        _lastStates = allStates;
-        return output;
+        var gate = Engine.TensorBroadcastTo(
+            Engine.Reshape(_gammas, new[] { 1, 1, _numHeads }),
+            new[] { batchSize, seqLen, _numHeads });
+        // GLA stores S[value,key] and returns S*q. Swapping its key/value streams stores
+        // S[key,value], so the fused read becomes the TransNormer recurrence's S*q orientation.
+        return Engine.GlaScanForward(q, v, k, gate, _numHeads);
     }
 
     /// <summary>
@@ -635,7 +557,6 @@ public partial class TransNormerLLMLayer<T> : LayerBase<T>, IShapeContract
         _lastAttnRmsInv = null;
         _lastGateRaw = null;
         _lastGate = null;
-        _lastStates = null;
         _originalInputShape = null;
         _queryWeightsGradient = null;
         _keyWeightsGradient = null;

@@ -65,14 +65,10 @@ public partial class DenseLoRAAdapter<T> : LoRAAdapterBase<T>
         {
             throw new ArgumentException("DenseLoRAAdapter only supports layers with 1D input/output shapes (Dense/FullyConnected layers)", nameof(baseLayer));
         }
-
-        // Force-resolve a lazy base layer using the LoRA decomposition's
-        // already-resolved input size (settled in the base ctor via the
-        // outSize×2 heuristic when the base was lazy). Without this, callers
-        // querying ParameterCount or GetParameters before any forward pass
-        // see only the LoRA contribution — the base reports 0 parameters
-        // because its weight tensors are still [0, ...] placeholders.
-        EnsureBaseLayerShapeResolved();
+        // Lazy base-layer resolution is intentionally left to the shared lifecycle. The adapter's
+        // synthetic input fallback is sufficient to size its low-rank tensors but is not evidence
+        // that can safely pin the wrapped layer. A real forward, an explicit-input constructor, or
+        // restore supplies authoritative shape information through the base implementation.
     }
 
     /// <summary>Construction state: the 'inputSize' the layer was built with.</summary>

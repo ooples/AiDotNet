@@ -390,41 +390,25 @@ public partial class MinLSTMLayer<T> : LayerBase<T>, IShapeContract
         Tensor<T> forgetNorm, Tensor<T> inputNorm, Tensor<T> cellCandidate,
         int batchSize, int seqLen)
     {
-        var output = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _expandedDimension });
-        // Cell state: [batch, expandedDim] -- initialized to zero
-        var cellState = new Tensor<T>(new[] { batchSize, _expandedDimension });
-        // Store all cell states for backward pass: [batch, seqLen+1, expandedDim]
-        var allCellStates = new Tensor<T>(new[] { batchSize, seqLen + 1, _expandedDimension });
-        // Initial cell state (zeros) is already at t=0
+        var cellState = Tensor<T>.CreateDefault([batchSize, _expandedDimension], NumOps.Zero);
+        var cellSteps = new List<Tensor<T>>(seqLen);
 
         for (int t = 0; t < seqLen; t++)
         {
-            for (int bi = 0; bi < batchSize; bi++)
-            {
-                for (int d = 0; d < _expandedDimension; d++)
-                {
-                    T fPrime = forgetNorm[new[] { bi, t, d }];
-                    T iPrime = inputNorm[new[] { bi, t, d }];
-                    T cTilde = cellCandidate[new[] { bi, t, d }];
-                    T cPrev = cellState[new[] { bi, d }];
-
-                    // c_t = f'_t * c_{t-1} + i'_t * c_tilde_t
-                    T cNew = NumOps.Add(
-                        NumOps.Multiply(fPrime, cPrev),
-                        NumOps.Multiply(iPrime, cTilde));
-
-                    cellState[new[] { bi, d }] = cNew;
-                    output[new[] { bi, t, d }] = cNew;
-                }
-            }
-
-            // Save cell state snapshot for backward pass
-            for (int bi = 0; bi < batchSize; bi++)
-                for (int d = 0; d < _expandedDimension; d++)
-                    allCellStates[new[] { bi, t + 1, d }] = cellState[new[] { bi, d }];
+            var fPrime = Engine.TensorSqueeze(Engine.TensorNarrow(forgetNorm, 1, t, 1), axis: 1);
+            var iPrime = Engine.TensorSqueeze(Engine.TensorNarrow(inputNorm, 1, t, 1), axis: 1);
+            var cTilde = Engine.TensorSqueeze(Engine.TensorNarrow(cellCandidate, 1, t, 1), axis: 1);
+            cellState = Engine.TensorAdd(
+                Engine.TensorMultiply(fPrime, cellState),
+                Engine.TensorMultiply(iPrime, cTilde));
+            cellSteps.Add(Engine.TensorExpandDims(cellState, axis: 1));
         }
 
-        _lastCellStates = allCellStates;
+        var output = cellSteps.Count == 1
+            ? cellSteps[0]
+            : Engine.TensorConcatenate(cellSteps.ToArray(), axis: 1);
+        var initialState = Tensor<T>.CreateDefault([batchSize, 1, _expandedDimension], NumOps.Zero);
+        _lastCellStates = Engine.TensorConcatenate([initialState, output], axis: 1);
         return output;
     }
 

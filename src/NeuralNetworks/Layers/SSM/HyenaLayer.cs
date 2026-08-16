@@ -421,28 +421,26 @@ public partial class HyenaLayer<T> : LayerBase<T>, IShapeContract
         // input: [batch, seqLen, modelDim]
         // filter: [seqLen, modelDim] (implicit filter, same for all batches)
         // output: [batch, seqLen, modelDim]
-        var output = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
-
-        for (int bi = 0; bi < batchSize; bi++)
+        var steps = new List<Tensor<T>>(seqLen);
+        for (int t = 0; t < seqLen; t++)
         {
-            for (int t = 0; t < seqLen; t++)
+            Tensor<T>? sum = null;
+            for (int k = 0; k <= t; k++)
             {
-                for (int d = 0; d < _modelDimension; d++)
-                {
-                    T sum = NumOps.Zero;
-                    // Causal: only sum over k from 0 to t
-                    for (int k = 0; k <= t; k++)
-                    {
-                        T filterVal = filter[new[] { k, d }];
-                        T inputVal = input[new[] { bi, t - k, d }];
-                        sum = NumOps.Add(sum, NumOps.Multiply(filterVal, inputVal));
-                    }
-                    output[new[] { bi, t, d }] = sum;
-                }
+                var inputStep = Engine.TensorSliceAxis(input, axis: 1, index: t - k);
+                var filterStep = Engine.Reshape(
+                    Engine.TensorSliceAxis(filter, axis: 0, index: k),
+                    new[] { 1, _modelDimension });
+                var term = Engine.TensorBroadcastMultiply(inputStep, filterStep);
+                sum = sum is null ? term : Engine.TensorAdd(sum, term);
             }
+
+            var step = sum ?? Tensor<T>.CreateDefault(
+                new[] { batchSize, _modelDimension }, NumOps.Zero);
+            steps.Add(Engine.TensorExpandDims(step, axis: 1));
         }
 
-        return output;
+        return Engine.TensorConcatenate(steps.ToArray(), axis: 1);
     }
 
     /// <summary>

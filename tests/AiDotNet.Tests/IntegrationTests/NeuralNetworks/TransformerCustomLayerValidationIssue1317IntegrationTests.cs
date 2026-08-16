@@ -1,4 +1,5 @@
 using AiDotNet.ActivationFunctions;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks;
@@ -323,8 +324,12 @@ public class TransformerCustomLayerValidationIssue1317IntegrationTests
             sequencePooling: null,
             layers: layers);
 
+    [TensorLayout(TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+    [TensorLayout(TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
+    [TensorLayout(TensorAxis.Batch, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+    [TensorLayout(TensorAxis.Batch, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
     private class ProjectingCustomLayer(int[] inputShape, int[] outputShape)
-        : LayerBase<float>(inputShape, outputShape)
+        : LayerBase<float>(inputShape, outputShape), IShapeContract
     {
         public override bool SupportsTraining => false;
 

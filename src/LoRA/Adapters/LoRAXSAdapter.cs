@@ -181,24 +181,28 @@ public partial class LoRAXSAdapter<T> : LoRAAdapterBase<T>
     /// <summary>
     /// Gradient of the trainable R matrix computed during backpropagation.
     /// </summary>
+    [Scratch]
     private Matrix<T>? _trainableRGradient;
 
     /// <summary>
     /// Intermediate result from forward pass: V_r^T * input
     /// Cached for use in backward pass.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _cachedVtInput;
 
     /// <summary>
     /// Intermediate result from forward pass: R * (V_r^T * input)
     /// Cached for use in backward pass.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _cachedRVtInput;
 
     /// <summary>
     /// Intermediate result from forward pass: Σ_r * R * (V_r^T * input)
     /// Cached for use in backward pass.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _cachedSigmaRVtInput;
 
     /// <summary>

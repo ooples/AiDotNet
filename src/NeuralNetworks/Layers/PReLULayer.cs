@@ -157,23 +157,21 @@ public partial class PReLULayer<T> : LayerBase<T>
         // #1668: also clear a previously-cached activation when caching is off (don't leave it pinned).
         _lastInput = ShouldCacheForBackward ? input : null;
 
+        // Use the dedicated IEngine primitive where its channel convention exactly matches this
+        // layer: shared slope, a rank-1 elementwise slope, rank-2 [batch, channels], or NCHW. It
+        // registers input and slope together on one tape node. Retain the general broadcast
+        // composition for caller-selected axes that the primitive does not encode.
+        if (_numParameters == 1
+            || (input.Rank == 1 && _numParameters == input.Length)
+            || (_channelAxis == 1 && (input.Rank == 2 || input.Rank >= 4)))
+        {
+            return Engine.TensorPReLU(input, _alpha);
+        }
+
         var positivePart = Engine.ReLU(input);
-        var negated = Engine.TensorNegate(input);
-        var negativePart = Engine.ReLU(negated);
-
-        Tensor<T> scaledNegative;
-        if (_numParameters == 1)
-        {
-            // Shared scalar α stored as a [1] tensor — TensorBroadcastMultiply handles the broadcast.
-            scaledNegative = Engine.TensorBroadcastMultiply(negativePart, _alpha);
-        }
-        else
-        {
-            // Per-channel α: reshape [C] → [1, …, C, …, 1] so it broadcasts across batch + spatial dims.
-            var alphaBroadcast = Engine.Reshape(_alpha, _alphaBroadcastShape);
-            scaledNegative = Engine.TensorBroadcastMultiply(negativePart, alphaBroadcast);
-        }
-
+        var negativePart = Engine.ReLU(Engine.TensorNegate(input));
+        var alphaBroadcast = Engine.Reshape(_alpha, _alphaBroadcastShape);
+        var scaledNegative = Engine.TensorBroadcastMultiply(negativePart, alphaBroadcast);
         return Engine.TensorSubtract(positivePart, scaledNegative);
     }
 

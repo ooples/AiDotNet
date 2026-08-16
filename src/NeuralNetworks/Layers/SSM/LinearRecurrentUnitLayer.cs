@@ -354,126 +354,34 @@ public partial class LinearRecurrentUnitLayer<T> : LayerBase<T>, IShapeContract
     /// </remarks>
     private Tensor<T> DiagonalComplexRecurrence(Tensor<T> u, int batchSize, int seqLen)
     {
-        var output = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
-
         // Compute lambda = exp(-exp(nu) + i*exp(theta))
         // |lambda| = exp(-exp(nu)), angle = exp(theta)
         // lambda_real = |lambda| * cos(angle)
         // lambda_imag = |lambda| * sin(angle)
-        var lambdaMag = new Tensor<T>(new[] { _stateDimension });
-        var lambdaReal = new Tensor<T>(new[] { _stateDimension });
-        var lambdaImag = new Tensor<T>(new[] { _stateDimension });
-
-        for (int n = 0; n < _stateDimension; n++)
-        {
-            double nuVal = NumOps.ToDouble(_nu[n]);
-            double thetaVal = NumOps.ToDouble(_theta[n]);
-
-            double mag = Math.Exp(-Math.Exp(nuVal));
-            double angle = Math.Exp(thetaVal);
-
-            lambdaMag[n] = NumOps.FromDouble(mag);
-            lambdaReal[n] = NumOps.FromDouble(mag * Math.Cos(angle));
-            lambdaImag[n] = NumOps.FromDouble(mag * Math.Sin(angle));
-        }
+        var lambdaMag = Engine.TensorExp(Engine.TensorNegate(Engine.TensorExp(_nu)));
+        var angle = Engine.TensorExp(_theta);
+        var lambdaReal = Engine.TensorMultiply(lambdaMag, Engine.TensorCos(angle));
+        var lambdaImag = Engine.TensorMultiply(lambdaMag, Engine.TensorSin(angle));
 
         _lastLambdaMag = lambdaMag;
         _lastLambdaReal = lambdaReal;
         _lastLambdaImag = lambdaImag;
-
-        // Hidden state: [batch, stateDimension] real and imaginary parts
-        var hReal = TensorAllocator.Rent<T>(new[] { batchSize, _stateDimension });
-        var hImag = TensorAllocator.Rent<T>(new[] { batchSize, _stateDimension });
-
-        // Store hidden states for backward pass: [batch, seqLen+1, stateDimension]
-        var allHiddenReal = TensorAllocator.Rent<T>(new[] { batchSize, seqLen + 1, _stateDimension });
-        var allHiddenImag = TensorAllocator.Rent<T>(new[] { batchSize, seqLen + 1, _stateDimension });
-
-        // D for skip connection: [1, modelDimension]
-        var D2D = _dParam.Reshape(1, _modelDimension);
-
-        for (int t = 0; t < seqLen; t++)
-        {
-            for (int bi = 0; bi < batchSize; bi++)
-            {
-                // For each state dimension n:
-                //   x_n[t] = lambda_n * x_n[t-1] + sum_d(B[d,n] * u[t,d])
-                for (int n = 0; n < _stateDimension; n++)
-                {
-                    T lR = lambdaReal[n];
-                    T lI = lambdaImag[n];
-
-                    // Complex multiply: lambda * h_prev
-                    // (lR + i*lI) * (hR + i*hI) = (lR*hR - lI*hI) + i*(lR*hI + lI*hR)
-                    T hR = hReal[new[] { bi, n }];
-                    T hI = hImag[new[] { bi, n }];
-
-                    T newHR = NumOps.Subtract(
-                        NumOps.Multiply(lR, hR),
-                        NumOps.Multiply(lI, hI));
-                    T newHI = NumOps.Add(
-                        NumOps.Multiply(lR, hI),
-                        NumOps.Multiply(lI, hR));
-
-                    // Add B * u[t]: sum over model dimensions
-                    // B is complex: (bReal[d,n] + i*bImag[d,n]) * u[t,d] (u is real)
-                    T bContribR = NumOps.Zero;
-                    T bContribI = NumOps.Zero;
-                    for (int d = 0; d < _modelDimension; d++)
-                    {
-                        T uVal = u[new[] { bi, t, d }];
-                        bContribR = NumOps.Add(bContribR,
-                            NumOps.Multiply(_bReal[new[] { d, n }], uVal));
-                        bContribI = NumOps.Add(bContribI,
-                            NumOps.Multiply(_bImag[new[] { d, n }], uVal));
-                    }
-
-                    newHR = NumOps.Add(newHR, bContribR);
-                    newHI = NumOps.Add(newHI, bContribI);
-
-                    hReal[new[] { bi, n }] = newHR;
-                    hImag[new[] { bi, n }] = newHI;
-                }
-
-                // Compute output: y[t,d] = sum_n Re(C[n,d] * x_n[t]) + D[d] * u[t,d]
-                // Re((cR + i*cI) * (hR + i*hI)) = cR*hR - cI*hI
-                for (int d = 0; d < _modelDimension; d++)
-                {
-                    T yVal = NumOps.Zero;
-                    for (int n = 0; n < _stateDimension; n++)
-                    {
-                        T cR = _cReal[new[] { n, d }];
-                        T cI = _cImag[new[] { n, d }];
-                        T xR = hReal[new[] { bi, n }];
-                        T xI = hImag[new[] { bi, n }];
-
-                        // Re(C * x) = cR * xR - cI * xI
-                        yVal = NumOps.Add(yVal,
-                            NumOps.Subtract(
-                                NumOps.Multiply(cR, xR),
-                                NumOps.Multiply(cI, xI)));
-                    }
-
-                    // Skip connection: + D[d] * u[t,d]
-                    T uVal = u[new[] { bi, t, d }];
-                    yVal = NumOps.Add(yVal, NumOps.Multiply(_dParam[d], uVal));
-
-                    output[new[] { bi, t, d }] = yVal;
-                }
-            }
-
-            // Save state snapshot for backward pass
-            for (int bi = 0; bi < batchSize; bi++)
-                for (int n = 0; n < _stateDimension; n++)
-                {
-                    allHiddenReal[new[] { bi, t + 1, n }] = hReal[new[] { bi, n }];
-                    allHiddenImag[new[] { bi, t + 1, n }] = hImag[new[] { bi, n }];
-                }
-        }
-
-        _lastHiddenStatesReal = allHiddenReal;
-        _lastHiddenStatesImag = allHiddenImag;
-        return output;
+        var groupedInput = Engine.Reshape(u, new[] { batchSize, seqLen, 1, _modelDimension });
+        var transitionReal = Engine.Reshape(lambdaReal, new[] { 1, _stateDimension });
+        var transitionImag = Engine.Reshape(lambdaImag, new[] { 1, _stateDimension });
+        var inputMapReal = Engine.Reshape(
+            Engine.TensorTranspose(_bReal), new[] { 1, _stateDimension, _modelDimension });
+        var inputMapImag = Engine.Reshape(
+            Engine.TensorTranspose(_bImag), new[] { 1, _stateDimension, _modelDimension });
+        var outputMapReal = Engine.Reshape(
+            Engine.TensorTranspose(_cReal), new[] { 1, _modelDimension, _stateDimension });
+        var outputMapImag = Engine.Reshape(
+            Engine.TensorTranspose(_cImag), new[] { 1, _modelDimension, _stateDimension });
+        var skip = Engine.Reshape(_dParam, new[] { 1, _modelDimension });
+        var output = Engine.ComplexDiagonalSsmScanForward(
+            groupedInput, transitionReal, transitionImag, inputMapReal, inputMapImag,
+            outputMapReal, outputMapImag, skip);
+        return Engine.Reshape(output, new[] { batchSize, seqLen, _modelDimension });
     }
 
     /// <summary>

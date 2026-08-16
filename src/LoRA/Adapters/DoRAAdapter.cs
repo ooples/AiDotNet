@@ -81,16 +81,19 @@ public partial class DoRAAdapter<T> : LoRAAdapterBase<T>
     /// <summary>
     /// Gradients for the magnitude component, computed during backpropagation.
     /// </summary>
+    [Scratch]
     private Vector<T>? _magnitudeGradient;
 
     /// <summary>
     /// Cached normalized direction from the last forward pass, used in backpropagation.
     /// </summary>
+    [Scratch]
     private Matrix<T>? _lastNormalizedDirection;
 
     /// <summary>
     /// Cached input matrix from forward pass (used for computing magnitude gradients in backward).
     /// </summary>
+    [Scratch]
     private Matrix<T>? _lastInputMatrix;
 
     /// <summary>

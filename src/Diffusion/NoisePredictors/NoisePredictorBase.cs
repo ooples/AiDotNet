@@ -739,6 +739,45 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape,
         // param-count/memory threshold, so tractable predictors stay fully resident.
         MaybeEngageWeightStreaming();
 
+        // The generated layer manifest can prove the complete parameter width before any values are
+        // allocated. Stream each reflected layer's OWN manifest entries in the same reflection order
+        // used by ParameterCount and GetParameters. This is deliberately lazy: MoveNext materializes
+        // only the layer that owns the next chunk, so inspecting four chunks of an 865M-parameter
+        // U-Net does not first allocate the other hundreds of tensors.
+        //
+        // Validate the completed stream against the declaration. A partial consumer may stop early by
+        // design; a full consumer can never silently receive an incomplete or duplicated surface.
+        EnsureParameterStructureReady();
+        if (TryGetDeclaredParameterCount(out long declaredCount, out _))
+        {
+            long actualCount = 0;
+            int layerIndex = 0;
+            foreach (var layer in ReflectInstanceLayers(this))
+            {
+                if (layer is not LayerBase<T> layerBase) continue;
+                foreach (var chunk in layerBase.GetOwnParameterStateChunks($"layers/{layerIndex:D8}"))
+                {
+                    var tensor = chunk.Tensor;
+                    if (tensor is null || tensor.Length == 0) continue;
+                    actualCount = checked(actualCount + tensor.Length);
+                    if (actualCount > declaredCount)
+                    {
+                        throw new AiDotNet.Models.Parameters.ParameterContractViolationException(
+                            "enumerate chunks", GetType().Name, declaredCount, actualCount);
+                    }
+                    yield return tensor;
+                }
+                layerIndex++;
+            }
+
+            if (actualCount != declaredCount)
+            {
+                throw new AiDotNet.Models.Parameters.ParameterContractViolationException(
+                    "enumerate chunks", GetType().Name, declaredCount, actualCount);
+            }
+            yield break;
+        }
+
         // Flat-free default: when reflection sees the FULL parameter set — every trainable weight
         // lives in a reflectable LayerBase field and is already resolved, so the reflected lengths
         // sum EXACTLY to ParameterCount — yield each weight tensor per-tensor, so a foundation-scale
@@ -747,9 +786,9 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape,
         // (non-LayerBase weight storage, or lazy weights not yet resolved) fall back to the legacy
         // single flat chunk — correct (keeps ParameterCount == sum-of-chunk-lengths, the #1237
         // contract), though not flat-free; such a predictor SHOULD override to be flat-free.
-        if (TryCollectReflectedParameterTensors(out var tensors))
+        if (TryCollectReflectedParameterSlots(out var slots))
         {
-            foreach (var t in tensors) yield return t;
+            foreach (var slot in slots) yield return slot.Snapshot();
             yield break;
         }
         var p = GetParameters();
@@ -766,19 +805,15 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape,
     /// storage (or unresolved lazy weights) round-trips correctly rather than dropping weights. Both
     /// callers use this same walk on the same instance, so Get and Set agree on order by construction.
     /// </summary>
-    private bool TryCollectReflectedParameterTensors(out List<Tensor<T>> tensors)
+    private bool TryCollectReflectedParameterSlots(
+        out List<LayerBase<T>.TrainableParameterValueSlot> slots)
     {
-        tensors = new List<Tensor<T>>();
+        slots = new List<LayerBase<T>.TrainableParameterValueSlot>();
         long total = 0;
-        foreach (var layer in ReflectInstanceLayers(this))
+        foreach (var slot in EnumerateParameterValueSlots())
         {
-            if (layer is not LayerBase<T> lb) continue;
-            foreach (var tensor in lb.GetTrainableParameters())
-            {
-                if (tensor is null || tensor.Length == 0) continue;
-                tensors.Add(tensor);
-                total += tensor.Length;
-            }
+            slots.Add(slot);
+            total += slot.ScalarCount;
         }
         return total > 0 && total == ParameterCount;
     }
@@ -805,7 +840,7 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape,
         // parameter set (same completeness gate → same order), consume one chunk per weight tensor and
         // copy it in place — no flat aggregate. The over/under-run + length guards make a scrambled or
         // mis-framed chunk stream fail loudly instead of silently corrupting weights.
-        if (TryCollectReflectedParameterTensors(out var tensors))
+        if (TryCollectReflectedParameterSlots(out var slots))
         {
             using var e = chunks.GetEnumerator();
             // Validate the ENTIRE stream (count, null, per-tensor length) into a src/dst pair list
@@ -814,8 +849,8 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape,
             // only tensor REFERENCES (no flat aggregate / no per-tensor data copy), so this stays
             // flat-free — matching the buffer-then-single-SetParameters atomicity of the legacy branch
             // and VAEModelBase/DiffusionModelBase without reintroducing the flat-vector OOM.
-            var pairs = new List<(Tensor<T> Src, Tensor<T> Dst)>(tensors.Count);
-            foreach (var dst in tensors)
+            var pairs = new List<(Tensor<T> Src, LayerBase<T>.TrainableParameterValueSlot Dst)>(slots.Count);
+            foreach (var dst in slots)
             {
                 if (!e.MoveNext())
                     throw new ArgumentException(
@@ -824,9 +859,9 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape,
                 var src = e.Current;
                 if (src is null)
                     throw new ArgumentException("Chunk sequence contains a null tensor.", nameof(chunks));
-                if (src.Length != dst.Length)
+                if (src.Length != dst.ScalarCount)
                     throw new ArgumentException(
-                        $"SetParameterChunks chunk length {src.Length} does not match parameter length {dst.Length}.",
+                        $"SetParameterChunks chunk length {src.Length} does not match parameter length {dst.ScalarCount}.",
                         nameof(chunks));
                 pairs.Add((src, dst));
             }
@@ -837,7 +872,7 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape,
             // All chunks validated — now copy in place. No exception can surface past this point, so
             // the predictor is never left in a partially-written state.
             foreach (var (src, dst) in pairs)
-                src.Data.Span.CopyTo(dst.Data.Span); // in place — no rebinding, no flat aggregate
+                dst.CopyFrom(src); // in place — no rebinding, no flat aggregate
             InvalidateCompiledPlans();
             return;
         }
@@ -1314,6 +1349,24 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape,
         // tensor allocated by ResolveFromShape is discarded; only the shape is used.
         ln.ResolveFromShape(new[] { 1, featureSize });
         return ln;
+    }
+
+    /// <summary>
+    /// Creates a layer normalization whose architecture-known width is visible to the parameter
+    /// manifest without allocating gamma or beta until a concrete value operation or forward pass.
+    /// </summary>
+    protected static LayerNormalizationLayer<T> LazyLayerNorm(int featureSize)
+    {
+        if (featureSize <= 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(featureSize),
+                $"LazyLayerNorm requires a positive feature size; got {featureSize}.");
+        }
+
+        var layer = new LayerNormalizationLayer<T>();
+        layer.ResolveArchitectureFeatureSizeOnly(featureSize);
+        return layer;
     }
 
     /// <summary>

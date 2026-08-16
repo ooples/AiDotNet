@@ -63,6 +63,10 @@ namespace AiDotNet.Video.Segmentation;
     "https://arxiv.org/abs/2207.07115",
     Year = 2022,
     Authors = "Ho Kei Cheng, Alexander G. Schwing")]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Frames, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Input, BatchOptional = true)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Frames, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Output, BatchOptional = true)]
 public class XMem<T> : NeuralNetworkBase<T>
 {
     private readonly XMemOptions _options;

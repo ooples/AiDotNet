@@ -137,8 +137,6 @@ public partial class MesaNetLayer<T> : LayerBase<T>, IShapeContract
     private Tensor<T>? _lastGate;
     private Tensor<T>? _lastGateRaw;
     private Tensor<T>? _lastMesaOutput;
-    private Tensor<T>? _lastInnerWeights; // [batch, seqLen+1, numHeads, headDim, headDim]
-    private Tensor<T>? _lastPMatrices;    // [batch, seqLen+1, numHeads, headDim, headDim]
     private int[]? _originalInputShape;
 
     // Gradients
@@ -387,146 +385,8 @@ public partial class MesaNetLayer<T> : LayerBase<T>, IShapeContract
         Tensor<T> q, Tensor<T> k, Tensor<T> v,
         int batchSize, int seqLen)
     {
-        var output = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
-
-        // State: inner weights W and inverse covariance P per head
-        // W: [batch, numHeads, headDim, headDim]
-        // P: [batch, numHeads, headDim, headDim] — initialized to (1/lambda) * I
-        var innerW = TensorAllocator.Rent<T>(new[] { batchSize, _numHeads, _headDimension, _headDimension });
-        var pMatrix = TensorAllocator.Rent<T>(new[] { batchSize, _numHeads, _headDimension, _headDimension });
-        var allInnerW = TensorAllocator.Rent<T>(new[] { batchSize, seqLen + 1, _numHeads, _headDimension, _headDimension });
-        var allP = TensorAllocator.Rent<T>(new[] { batchSize, seqLen + 1, _numHeads, _headDimension, _headDimension });
-
-        T invLambda = NumOps.Divide(NumOps.One, _regularization);
-
-        // Initialize W to W_0 and P to (1/lambda)*I
-        for (int bi = 0; bi < batchSize; bi++)
-        {
-            for (int hi = 0; hi < _numHeads; hi++)
-            {
-                for (int di = 0; di < _headDimension; di++)
-                {
-                    for (int dj = 0; dj < _headDimension; dj++)
-                    {
-                        T w0 = _innerWeightsInit[new[] { hi, di, dj }];
-                        innerW[new[] { bi, hi, di, dj }] = w0;
-                        allInnerW[new[] { bi, 0, hi, di, dj }] = w0;
-
-                        T pVal = di == dj ? invLambda : NumOps.Zero;
-                        pMatrix[new[] { bi, hi, di, dj }] = pVal;
-                        allP[new[] { bi, 0, hi, di, dj }] = pVal;
-                    }
-                }
-            }
-        }
-
-        for (int t = 0; t < seqLen; t++)
-        {
-            for (int hi = 0; hi < _numHeads; hi++)
-            {
-                int dimStart = hi * _headDimension;
-
-                for (int bi = 0; bi < batchSize; bi++)
-                {
-                    // Extract key and value for this head
-                    var kHead = new T[_headDimension];
-                    var vHead = new T[_headDimension];
-                    for (int di = 0; di < _headDimension; di++)
-                    {
-                        kHead[di] = k[new[] { bi, t, dimStart + di }];
-                        vHead[di] = v[new[] { bi, t, dimStart + di }];
-                    }
-
-                    // Step 1: Compute P*k
-                    var pk = new T[_headDimension];
-                    for (int di = 0; di < _headDimension; di++)
-                    {
-                        pk[di] = NumOps.Zero;
-                        for (int dj = 0; dj < _headDimension; dj++)
-                            pk[di] = NumOps.Add(pk[di],
-                                NumOps.Multiply(pMatrix[new[] { bi, hi, di, dj }], kHead[dj]));
-                    }
-
-                    // Compute scalar: 1 + k^T * P * k
-                    T kPk = NumOps.Zero;
-                    for (int di = 0; di < _headDimension; di++)
-                        kPk = NumOps.Add(kPk, NumOps.Multiply(kHead[di], pk[di]));
-                    T denom = NumOps.Add(NumOps.One, kPk);
-                    T invDenom = NumOps.Divide(NumOps.One, denom);
-
-                    // Woodbury update: P_t = P_{t-1} - (P*k)*(P*k)^T / (1 + k^T*P*k)
-                    for (int di = 0; di < _headDimension; di++)
-                    {
-                        for (int dj = 0; dj < _headDimension; dj++)
-                        {
-                            T correction = NumOps.Multiply(invDenom,
-                                NumOps.Multiply(pk[di], pk[dj]));
-                            pMatrix[new[] { bi, hi, di, dj }] = NumOps.Subtract(
-                                pMatrix[new[] { bi, hi, di, dj }], correction);
-                        }
-                    }
-
-                    // Step 2: Compute prediction error: e = W*k - v
-                    var error = new T[_headDimension];
-                    for (int di = 0; di < _headDimension; di++)
-                    {
-                        T wk = NumOps.Zero;
-                        for (int dj = 0; dj < _headDimension; dj++)
-                            wk = NumOps.Add(wk,
-                                NumOps.Multiply(innerW[new[] { bi, hi, di, dj }], kHead[dj]));
-                        error[di] = NumOps.Subtract(wk, vHead[di]);
-                    }
-
-                    // Compute k^T * P_t (using updated P)
-                    var kP = new T[_headDimension];
-                    for (int dj = 0; dj < _headDimension; dj++)
-                    {
-                        kP[dj] = NumOps.Zero;
-                        for (int di = 0; di < _headDimension; di++)
-                            kP[dj] = NumOps.Add(kP[dj],
-                                NumOps.Multiply(kHead[di], pMatrix[new[] { bi, hi, di, dj }]));
-                    }
-
-                    // Update W: W_t = W_{t-1} - error * (k^T * P_t) = W_{t-1} + (v - W*k) * k^T * P_t
-                    for (int di = 0; di < _headDimension; di++)
-                    {
-                        for (int dj = 0; dj < _headDimension; dj++)
-                        {
-                            T update = NumOps.Multiply(error[di], kP[dj]);
-                            innerW[new[] { bi, hi, di, dj }] = NumOps.Subtract(
-                                innerW[new[] { bi, hi, di, dj }], update);
-                        }
-                    }
-
-                    // Step 3: Output o = W_t * q
-                    for (int di = 0; di < _headDimension; di++)
-                    {
-                        int flatDi = dimStart + di;
-                        T oVal = NumOps.Zero;
-                        for (int dj = 0; dj < _headDimension; dj++)
-                        {
-                            int flatDj = dimStart + dj;
-                            oVal = NumOps.Add(oVal,
-                                NumOps.Multiply(innerW[new[] { bi, hi, di, dj }],
-                                    q[new[] { bi, t, flatDj }]));
-                        }
-                        output[new[] { bi, t, flatDi }] = oVal;
-                    }
-
-                    // Save snapshots
-                    for (int di = 0; di < _headDimension; di++)
-                        for (int dj = 0; dj < _headDimension; dj++)
-                        {
-                            allInnerW[new[] { bi, t + 1, hi, di, dj }] = innerW[new[] { bi, hi, di, dj }];
-                            allP[new[] { bi, t + 1, hi, di, dj }] = pMatrix[new[] { bi, hi, di, dj }];
-                        }
-                }
-            }
-        }
-
-        _lastInnerWeights = allInnerW;
-        _lastPMatrices = allP;
-        return output;
+        return Engine.MesaScanForward(
+            q, k, v, _innerWeightsInit, _regularization, _numHeads);
     }
 
     /// <summary>
@@ -698,8 +558,6 @@ public partial class MesaNetLayer<T> : LayerBase<T>, IShapeContract
         _lastGate = null;
         _lastGateRaw = null;
         _lastMesaOutput = null;
-        _lastInnerWeights = null;
-        _lastPMatrices = null;
         _originalInputShape = null;
         _queryWeightsGradient = null;
         _queryBiasGradient = null;

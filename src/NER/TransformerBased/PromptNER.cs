@@ -174,4 +174,66 @@ public class PromptNER<T> : TransformerNERBase<T>
                 SchedulerStepMode = SchedulerStepMode.StepPerBatch
             });
     }
+
+    private static IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreatePaperOptimizer(
+        TransformerNEROptions options)
+    {
+        // Existing callers that pass the shared TransformerNEROptions retain complete
+        // architecture/LR customization. PromptNEROptions additionally exposes every
+        // paper-schedule and Adam scalar; callers needing a different optimizer can still
+        // inject any IGradientBasedOptimizer through the public constructor.
+        var promptOptions = options as PromptNEROptions;
+        int warmupSteps = promptOptions?.WarmupSteps ?? 10;
+        int totalTrainingSteps = promptOptions?.TotalTrainingSteps ?? 100;
+        double warmupInitialLearningRate = promptOptions is not null &&
+            promptOptions.WarmupInitialLearningRate > 0.0
+                ? promptOptions.WarmupInitialLearningRate
+                : (warmupSteps > 0 ? options.LearningRate / warmupSteps : options.LearningRate);
+        double endLearningRate = promptOptions?.EndLearningRate ?? 0.0;
+        double beta1 = promptOptions?.AdamBeta1 ?? 0.9;
+        double beta2 = promptOptions?.AdamBeta2 ?? 0.999;
+        double epsilon = promptOptions?.AdamEpsilon ?? 1e-8;
+        bool enableGradientClipping = promptOptions?.EnableGradientClipping ?? false;
+        double maxGradientNorm = promptOptions?.MaxGradientNorm ?? 1.0;
+
+        if (warmupSteps < 0)
+            throw new ArgumentOutOfRangeException(nameof(PromptNEROptions.WarmupSteps));
+        if (totalTrainingSteps <= 0 || totalTrainingSteps < warmupSteps)
+            throw new ArgumentOutOfRangeException(nameof(PromptNEROptions.TotalTrainingSteps));
+        if (warmupInitialLearningRate < 0.0 || warmupInitialLearningRate > options.LearningRate)
+            throw new ArgumentOutOfRangeException(nameof(PromptNEROptions.WarmupInitialLearningRate));
+        if (endLearningRate < 0.0)
+            throw new ArgumentOutOfRangeException(nameof(PromptNEROptions.EndLearningRate));
+        if (beta1 <= 0.0 || beta1 >= 1.0)
+            throw new ArgumentOutOfRangeException(nameof(PromptNEROptions.AdamBeta1));
+        if (beta2 <= 0.0 || beta2 >= 1.0)
+            throw new ArgumentOutOfRangeException(nameof(PromptNEROptions.AdamBeta2));
+        if (epsilon <= 0.0)
+            throw new ArgumentOutOfRangeException(nameof(PromptNEROptions.AdamEpsilon));
+        if (enableGradientClipping && maxGradientNorm <= 0.0)
+            throw new ArgumentOutOfRangeException(nameof(PromptNEROptions.MaxGradientNorm));
+
+        var schedule = new LinearWarmupScheduler(
+            baseLearningRate: options.LearningRate,
+            warmupSteps: warmupSteps,
+            totalSteps: totalTrainingSteps,
+            warmupInitLr: warmupInitialLearningRate,
+            decayMode: LinearWarmupScheduler.DecayMode.Linear,
+            endLr: endLearningRate);
+
+        return new AdamOptimizer<T, Tensor<T>, Tensor<T>>(null,
+            new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = options.LearningRate,
+                Beta1 = beta1,
+                Beta2 = beta2,
+                Epsilon = epsilon,
+                UseAdaptiveBetas = false,
+                UseAdaptiveLearningRate = false,
+                EnableGradientClipping = enableGradientClipping,
+                MaxGradientNorm = maxGradientNorm,
+                LearningRateScheduler = schedule,
+                SchedulerStepMode = SchedulerStepMode.StepPerBatch
+            });
+    }
 }

@@ -158,7 +158,8 @@ public static class TapeTrainingStep<T>
         Tensor<T> target,
         T learningRate,
         Func<Tensor<T>, Tensor<T>> forward,
-        Func<Tensor<T>, Tensor<T>, Tensor<T>> computeLoss)
+        Func<Tensor<T>, Tensor<T>, Tensor<T>> computeLoss,
+        Action<IReadOnlyDictionary<Tensor<T>, Tensor<T>>>? onGradients = null)
     {
         var numOps = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
         var engine = AiDotNetEngine.Current;
@@ -189,6 +190,12 @@ public static class TapeTrainingStep<T>
             // 4. Compute gradients (PyTorch: loss.backward())
             grads = tape.ComputeGradients(loss, paramArray);
         }
+
+        // Publish before the update while every gradient buffer is still valid. The callback keeps
+        // this low-level training primitive model-agnostic; NeuralNetworkBase owns the public
+        // gradient surface and custom recurrent trainers can opt into the same base publication
+        // gateway without duplicating the backward pass.
+        onGradients?.Invoke(grads);
 
         // 5. Update parameters with SGD (PyTorch: optimizer.step())
         foreach (var param in paramArray)
@@ -303,17 +310,26 @@ public static class TapeTrainingStep<T>
             return _cachedTrainableLayers;
         }
 
-        var trainableLayers = new List<ITrainableLayer<T>>();
-        var seen = new HashSet<ILayer<T>>(TensorReferenceComparer<ILayer<T>>.Instance);
-        CollectTrainableRecursive(layerList, trainableLayers, seen);
-
-        var result = trainableLayers.ToArray();
+        var result = SnapshotTrainableLayerIdentities(layerList);
         _cachedTrainableLayers = result;
         _cachedTrainableVersion = structureVersion;
         _cachedTrainableLayerCount = layerList.Count;
         _cachedTrainableFirstLayer = firstLayer;
         _cachedTrainableTopologyFingerprint = fingerprint;
         return result;
+    }
+
+    /// <summary>
+    /// Recursively snapshots trainable-layer identities without reading parameter counts or
+    /// materializing lazy weights. Disposal uses this path solely to compare cache ownership.
+    /// </summary>
+    internal static ITrainableLayer<T>[] SnapshotTrainableLayerIdentities(
+        IEnumerable<ILayer<T>> layers)
+    {
+        var trainableLayers = new List<ITrainableLayer<T>>();
+        var seen = new HashSet<ILayer<T>>(TensorReferenceComparer<ILayer<T>>.Instance);
+        CollectTrainableRecursive(layers, trainableLayers, seen);
+        return trainableLayers.ToArray();
     }
 
     private static void CollectTrainableRecursive(

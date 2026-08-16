@@ -635,7 +635,6 @@ public partial class VoxLingua107Identifier<T> : AudioNeuralNetworkBase<T>, ILan
                 output = _resBlocks[blockIdx * 6 + i].Forward(output);
             }
 
-            var seOutput = output;
             int seIdx = blockIdx * 2;
             if (seIdx < _seBlocks.Count)
             {

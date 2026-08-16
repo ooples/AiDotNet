@@ -1,4 +1,4 @@
-#pragma warning disable CS0649, CS0414, CS0169
+﻿#pragma warning disable CS0649, CS0414, CS0169
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
 using AiDotNet.Interpretability;
@@ -87,6 +87,32 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             return _declaredState;
         }
     }
+    /// <summary>
+    /// Disposes a rejected copy-on-write candidate without crossing an ownership boundary back
+    /// into this model. Some legacy <c>CreateNewInstance</c> implementations reuse the source's
+    /// top-level layer objects. A normal network dispose would cascade into those shared objects
+    /// and poison the still-live source before the eager fallback began.
+    /// </summary>
+    private void DisposeRejectedCopyOnWriteCandidate(NeuralNetworkBase<T> candidate)
+    {
+        // The candidate owns its List instance, but it may not own every object in that list.
+        // Detach source identities first; the remaining candidate-only layers can be reclaimed
+        // normally. LayerBase.Dispose does not cascade into GetSubLayers, so this top-level
+        // ownership cut is both sufficient and deliberately allocation-free.
+        for (int candidateIndex = candidate._layers.Count - 1; candidateIndex >= 0; candidateIndex--)
+        {
+            var candidateLayer = candidate._layers[candidateIndex];
+            for (int sourceIndex = 0; sourceIndex < _layers.Count; sourceIndex++)
+            {
+                if (!ReferenceEquals(candidateLayer, _layers[sourceIndex])) continue;
+                candidate._layers.RemoveAt(candidateIndex);
+                break;
+            }
+        }
+
+        candidate.Dispose();
+    }
+
     /// <summary>
     /// The internal collection of layers that make up this neural network.
     /// </summary>
@@ -437,6 +463,26 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     // read (see the getter). InvalidateParameterCountCache() is retained as a
     // structure-version bump for downstream caches (buffers, tape training step, layer info)
     // even though the ParameterCount cache itself is gone.
+
+    private sealed class ParameterLayoutCacheEntry
+    {
+        public ParameterLayoutCacheEntry(
+            int structureVersion,
+            int surfaceEpoch,
+            AiDotNet.Models.Parameters.ParameterLayoutSnapshot snapshot)
+        {
+            StructureVersion = structureVersion;
+            SurfaceEpoch = surfaceEpoch;
+            Snapshot = snapshot;
+        }
+
+        public int StructureVersion { get; }
+        public int SurfaceEpoch { get; }
+        public AiDotNet.Models.Parameters.ParameterLayoutSnapshot Snapshot { get; }
+    }
+
+    private readonly object _parameterLayoutCacheLock = new();
+    private ParameterLayoutCacheEntry? _parameterLayoutCache;
 
     /// <summary>
     /// Mixed-precision training context (null if mixed-precision is disabled).
@@ -2557,6 +2603,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // side-effects of this call — kept as-is for backward compatibility with the
         // dozens of internal call sites that already invoke this on structural mutations.
         _layerStructureVersion++;
+        System.Threading.Volatile.Write(ref _parameterLayoutCache, null);
         _parameterBuffer = null;
         // Layer structure changed — re-test the skip-buffer threshold next
         // training step. Without this, a model that grew from 100M -> 200M
@@ -2831,6 +2878,169 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     {
         _layers.Clear();
         InvalidateParameterCountCache();
+    }
+
+    /// <summary>
+    /// Rebinds derived-class views of <see cref="Layers"/> after the canonical layer graph is
+    /// replaced by deserialization.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Model implementations commonly keep named fields or encoder/decoder collections that point
+    /// into <see cref="Layers"/>. Those members are aliases, not additional ownership roots. A
+    /// deserialize or eager clone replaces every canonical layer instance, so leaving those aliases
+    /// attached to the constructor graph makes forward execution use stale weights and makes the
+    /// parameter manifest count both graphs.
+    /// </para>
+    /// <para>
+    /// The model parameter generator overrides this hook and rebinds all layer-bearing members by
+    /// reference identity. Authors do not need serialization overrides or model-specific repair
+    /// code. Members that do not point into <paramref name="previousLayers"/> are independent
+    /// modules and are deliberately left unchanged.
+    /// </para>
+    /// </remarks>
+    /// <param name="previousLayers">The canonical graph owned immediately before replacement.</param>
+    /// <param name="replacementLayers">The newly deserialized canonical graph.</param>
+    protected virtual void RebindLayerAliases(
+        IReadOnlyList<ILayer<T>> previousLayers,
+        IReadOnlyList<ILayer<T>> replacementLayers)
+    {
+    }
+
+    /// <summary>Returns the replacement for one generated canonical-layer alias.</summary>
+    protected static TLayer? RebindLayerAlias<TLayer>(
+        TLayer? alias,
+        IReadOnlyList<ILayer<T>> previousLayers,
+        IReadOnlyList<ILayer<T>> replacementLayers,
+        string memberName)
+        where TLayer : class, ILayer<T>
+    {
+        if (alias is null)
+            return null;
+
+        for (int index = 0; index < previousLayers.Count; index++)
+        {
+            if (!ReferenceEquals(alias, previousLayers[index]))
+                continue;
+
+            // The destination constructor may have built a larger default topology than the graph
+            // being restored. An alias into a removed canonical layer is absent; it must never be
+            // reclassified as an independently-owned trainable module.
+            if (index >= replacementLayers.Count)
+                return null;
+
+            if (replacementLayers[index] is TLayer replacement)
+                return replacement;
+
+            throw new InvalidOperationException(
+                $"Generated layer alias '{memberName}' targets canonical layer {index}, but its " +
+                $"replacement type '{replacementLayers[index].GetType().FullName}' cannot be assigned " +
+                $"to '{typeof(TLayer).FullName}'. The serialized graph is incompatible with the " +
+                "model's declared layer-alias contract.");
+        }
+
+        // The member owns an independent layer rather than a view into Layers.
+        return alias;
+    }
+
+    /// <summary>Rebinds a non-null canonical-layer alias or reports an incompatible topology.</summary>
+    protected static TLayer RebindRequiredLayerAlias<TLayer>(
+        TLayer alias,
+        IReadOnlyList<ILayer<T>> previousLayers,
+        IReadOnlyList<ILayer<T>> replacementLayers,
+        string memberName)
+        where TLayer : class, ILayer<T>
+    {
+        return RebindLayerAlias(alias, previousLayers, replacementLayers, memberName)
+            ?? throw new InvalidOperationException(
+                $"Required layer alias '{memberName}' targeted a canonical layer removed by the " +
+                "replacement graph. Make the member nullable when that layer is conditional, or " +
+                "restore a topology satisfying the model's declared layer-alias contract.");
+    }
+
+    /// <summary>Rebinds a generated collection view of the canonical layer graph in place.</summary>
+    protected static void RebindLayerAliasCollection<TLayer>(
+        IEnumerable<TLayer>? aliases,
+        IReadOnlyList<ILayer<T>> previousLayers,
+        IReadOnlyList<ILayer<T>> replacementLayers,
+        string memberName)
+        where TLayer : class, ILayer<T>
+    {
+        if (aliases is null)
+            return;
+
+        var current = aliases.ToList();
+        var rebound = new List<TLayer>(current.Count);
+        bool changed = false;
+        for (int index = 0; index < current.Count; index++)
+        {
+            var replacement = RebindLayerAlias(
+                current[index], previousLayers, replacementLayers, memberName + "[" + index + "]");
+            if (replacement is not null)
+                rebound.Add(replacement);
+            changed |= !ReferenceEquals(current[index], replacement);
+        }
+
+        if (!changed)
+            return;
+
+        // Arrays are fixed-size but their elements remain writable.
+        if (aliases is TLayer[] array)
+        {
+            if (rebound.Count != array.Length)
+            {
+                throw new InvalidOperationException(
+                    $"Generated layer alias array '{memberName}' refers to canonical layers removed " +
+                    "by the replacement graph. Arrays cannot shrink; use a mutable IList<TLayer> " +
+                    "for a topology-conditional layer view.");
+            }
+            for (int index = 0; index < rebound.Count; index++)
+                array[index] = rebound[index];
+            return;
+        }
+
+        if (aliases is IList<TLayer> list && !list.IsReadOnly)
+        {
+            for (int index = 0; index < rebound.Count; index++)
+                list[index] = rebound[index];
+            for (int index = list.Count - 1; index >= rebound.Count; index--)
+                list.RemoveAt(index);
+            return;
+        }
+
+        // Sets and other mutable collections do not expose indexed assignment. Rebuild them while
+        // preserving the model author's collection type and its ordering/equality policy.
+        if (aliases is ICollection<TLayer> collection && !collection.IsReadOnly)
+        {
+            collection.Clear();
+            foreach (var replacement in rebound)
+                collection.Add(replacement);
+            return;
+        }
+
+        throw new InvalidOperationException(
+            $"Generated layer alias collection '{memberName}' contains references to the replaced " +
+            "canonical graph but is not mutable. Declare the member as an array, IList<TLayer>, " +
+            "or mutable ICollection<TLayer>, or provide an explicit RebindLayerAliases override.");
+    }
+
+    /// <summary>Fails fast when a readonly scalar member is a stale canonical-layer alias.</summary>
+    protected static void ValidateReadonlyLayerAlias<TLayer>(
+        TLayer? alias,
+        IReadOnlyList<ILayer<T>> previousLayers,
+        IReadOnlyList<ILayer<T>> replacementLayers,
+        string memberName)
+        where TLayer : class, ILayer<T>
+    {
+        var rebound = RebindLayerAlias(
+            alias, previousLayers, replacementLayers, memberName);
+        if (!ReferenceEquals(alias, rebound))
+        {
+            throw new InvalidOperationException(
+                $"Readonly layer member '{memberName}' aliases the canonical Layers graph and cannot " +
+                "be rebound after deserialization. Make the alias member writable or store it in a " +
+                "mutable layer collection so the generated lifecycle contract can update it.");
+        }
     }
 
     /// <summary>
@@ -3650,8 +3860,16 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
 
     public virtual Vector<T> GetParameterGradients()
     {
-        // Collect gradients from all layers
-        List<Vector<T>> allGradients = new List<Vector<T>>();
+        if (_gradientSurfaceUnavailable)
+        {
+            throw new NotSupportedException(
+                "The most recent streaming step deliberately did not retain its full gradient set. " +
+                "Raise MaxRetainedGradientScalars only when the model can afford that retention.");
+        }
+
+        if (_publishedFlatParameterGradients is not null) return _publishedFlatParameterGradients;
+
+        var allGradients = new List<Vector<T>>();
 
         foreach (var layer in Layers.Where(l => l.SupportsTraining && l.ParameterCount > 0))
         {
@@ -3963,6 +4181,19 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
 
     protected virtual void ResolveLazyLayerShapes()
     {
+        // A real input is already in hand, so guessing from the architecture would be strictly
+        // worse than waiting for it. This walk resolves lazy layers from the ARCHITECTURE's
+        // declared shape, which is the best available answer when a caller resolves shapes ahead
+        // of time -- but not when the very next statement is a forward carrying the true input.
+        //
+        // Predict now transitions to eval mode inside the funnel, and SetTrainingMode calls this
+        // walk. For a model whose PredictCore is overridden that transition never used to happen,
+        // so shapes were resolved by the real forward. Resolving from the architecture instead
+        // LOCKED every lazy layer to the fixture width before the input arrived, and a longer
+        // input then failed the first matmul ("last dim of a is 64, first dim of b is 32") --
+        // the variable-length contract every audio model is supposed to satisfy.
+        if (_deferLazyShapeResolutionToForward) return;
+
         if (_layerShapesResolved) return;
         // An EMPTY Layers is not the same as nothing to resolve. A model may hold every weight
         // in sub-structures it declares through GetExtraTrainableLayers -- a detection backbone
@@ -4007,6 +4238,32 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         {
             var layer = Layers[i];
             if (layer is null) continue;
+
+            // A graph-root declaration is consumed by both the compiler diagnostic and this
+            // runtime walker. Do not feed the preceding branch's shape into it. When the root has
+            // a constructor-known output (embedding/projection roots commonly do), restart the
+            // chain there; otherwise stop honestly and let the real external input resolve it.
+            if (LayerGraphContract.StartsIndependentBranch(layer))
+            {
+                int[]? rootOutput = null;
+                try { rootOutput = layer.GetOutputShape(); }
+                catch { }
+
+                if (rootOutput is null
+                    || rootOutput.Length == 0
+                    || !System.Array.TrueForAll(rootOutput, d => d > 0))
+                {
+                    break;
+                }
+
+                currentShape = rootOutput;
+                // A graph root is a hard provenance boundary. Even a rank-1 feature
+                // declaration is a better fallback than any shape from the preceding,
+                // unrelated branch. Retaining that branch's last rank >= 2 shape can
+                // silently size a downstream normalization layer from the wrong modality.
+                lastGoodShape = rootOutput;
+                continue;
+            }
 
             if (!TryAdvanceLayerShape(layer, ref currentShape, ref lastGoodShape))
             {
@@ -4107,7 +4364,12 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             }
             catch
             {
-                // Running shape rejected — try the fallback shape, if any.
+                // A declarative contract is an assertion about the imperative implementation, not
+                // authority to overwrite a shape the implementation rejected. In particular, the
+                // contract APIs describe batched tensors while this walk may carry per-sample shapes;
+                // accepting either interpretation here pinned downstream lazy normalization layers
+                // to the wrong width across hundreds of model-family tests. Try the already-vetted
+                // fallback shape, if any, and otherwise stop the walk without mutating later layers.
             }
         }
         return false;
@@ -5464,6 +5726,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             {
                 ApplyGradientClipping(avgGrads, maxGradNorm, paramsList);
             }
+            PublishParameterGradients(avgGrads);
             // Include extra trainable tensors in the optimizer's
             // parameter list too, so its update step (and any per-
             // parameter state it maintains) covers them.
@@ -5509,7 +5772,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// involved in Predict. Returns the original tensor if the architecture
     /// has no usable input shape or if input is already batched.
     /// </summary>
-    private Tensor<T> NormalizeInputBatchDim(Tensor<T> input)
+    protected Tensor<T> NormalizeInputBatchDim(Tensor<T> input)
     {
         int expectedUnbatchedRank = GetExpectedUnbatchedInputRank();
         if (expectedUnbatchedRank <= 0) return input;
@@ -6348,7 +6611,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     {
         if (layerIndex < 0 || layerIndex >= Layers.Count) return false;
         if (Layers[layerIndex] is not LayerBase<T> layer) return false;
-        foreach (var tensor in layer.GetTrainableParameters())
+        foreach (var tensor in layer.GetTrainableParametersWithoutMaterialization())
         {
             if (tensor is not null && tensor.Length > 0) return true;
         }
@@ -6428,7 +6691,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     {
         if (layerIndex < 0 || layerIndex >= Layers.Count) return;
         if (Layers[layerIndex] is not LayerBase<T> layer) return;
-        foreach (var tensor in layer.GetTrainableParameters())
+        foreach (var tensor in layer.GetTrainableParametersWithoutMaterialization())
         {
             if (tensor is null || tensor.Length == 0) continue;
             // Already-registered tensors (StreamingPoolHandle >= 0)
@@ -6522,7 +6785,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     private static void CollectStreamingHandles(ILayer<T> layer, System.Collections.Generic.List<long> order)
     {
         if (layer is not LayerBase<T> lb) return;
-        foreach (var t in lb.GetTrainableParameters())
+        foreach (var t in lb.GetTrainableParametersWithoutMaterialization())
             if (t is not null && t.StreamingPoolHandle >= 0) order.Add(t.StreamingPoolHandle);
     }
 
@@ -6548,7 +6811,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     {
         if (layerIndex < 0 || layerIndex >= Layers.Count) return;
         if (Layers[layerIndex] is not LayerBase<T> layer) return;
-        var tensors = layer.GetTrainableParameters();
+        var tensors = layer.GetTrainableParametersWithoutMaterialization();
         if (tensors is null) return;
         foreach (var tensor in tensors)
         {
@@ -6577,7 +6840,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     private IDisposable BeginLayerMaterializeScope(int layerIndex)
     {
         if (Layers[layerIndex] is not LayerBase<T> layer) return NoOpDisposable.Instance;
-        var tensors = layer.GetTrainableParameters();
+        var tensors = layer.GetTrainableParametersWithoutMaterialization();
         if (tensors is null || tensors.Count == 0) return NoOpDisposable.Instance;
 
         // Fast path — common case after first forward: all trainable
@@ -6704,6 +6967,10 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // path callers in one place. Both calls are idempotent (gated by
         // _layerShapesResolved / _streamingAutoDetectFinalized) so the
         // hot path is one branch + early-return after the first call.
+        // Give structural estimates a chance to engage streaming BEFORE lazy shape resolution can
+        // allocate a foundation model's native weights. Models without an estimate safely defer;
+        // the second attempt after resolution observes their exact ParameterCount.
+        TryAutoEnableWeightStreaming(isTrainingOverride: isTraining);
         ResolveLazyLayerShapes();
         // Pass the INCOMING mode explicitly: this runs before IsTrainingMode is updated below,
         // so relying on the field would finalize the streaming store dtype from the prior mode.
@@ -7014,8 +7281,15 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         for (int i = 0; i < Layers.Count; i++)
         {
             if (Layers[i] is not LayerBase<T> layer) continue;
-            layer.UseStreamingAllocator = useStreamingAlloc;
-            foreach (var tensor in layer.GetTrainableParameters())
+            layer.SetStreamingAllocatorRecursively(useStreamingAlloc);
+            // Configuration is an observation boundary, not a materialization boundary. Generated
+            // GetTrainableParameters() initializes constructor-sized lazy layers on the way past;
+            // doing that here allocated and initialized every Q/K/V/O matrix in a foundation model
+            // before its first forward. Besides making configuration take tens of seconds, it defeated
+            // streaming's layer-at-a-time peak-memory contract. Register only tensors that already
+            // exist; the first-forward allocation path uses the streaming allocator and the refresh
+            // pass registers each tensor after it materializes.
+            foreach (var tensor in layer.GetTrainableParametersWithoutMaterialization())
             {
                 if (tensor is null || tensor.Length == 0) continue;
                 // Already-registered tensors (StreamingPoolHandle >= 0
@@ -7050,8 +7324,8 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         foreach (var extra in GetExtraTrainableLayers())
         {
             if (extra is null) continue;
-            extra.UseStreamingAllocator = useStreamingAlloc;
-            foreach (var tensor in extra.GetTrainableParameters())
+            extra.SetStreamingAllocatorRecursively(useStreamingAlloc);
+            foreach (var tensor in extra.GetTrainableParametersWithoutMaterialization())
             {
                 if (tensor is null || tensor.Length == 0) continue;
                 if (tensor.StreamingPoolHandle >= 0) continue;
@@ -7142,30 +7416,34 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
 
     /// <summary>
     /// Quant-resident inference store selection (Tier 1 / AiDotNet#1622). Picks the streaming-store
-    /// precision for a foundation-scale model in INFERENCE so its weight set stays RESIDENT — no
-    /// per-forward paging I/O, which is the dominant cost of the multi-forward Predict the
-    /// ModelFamily tests run — at the best accuracy that fits <paramref name="residentBudgetBytes"/>:
+    /// precision for a foundation-scale model in INFERENCE so its executable weight set stays
+    /// RESIDENT — no per-forward paging I/O or full-weight decode, which dominate the multi-forward
+    /// Predict workload in the ModelFamily census — at the best accuracy that fits
+    /// <paramref name="residentBudgetBytes"/>:
     /// <list type="bullet">
-    /// <item>bf16 (2 B/param) when it fits — least lossy, and the current Auto-inference behaviour,
-    /// so models that already fit bf16-resident are unchanged.</item>
-    /// <item>int8-resident (1 B/param, 4x vs fp32, fed by the no-upcast int8 GEMM) when bf16 will
-    /// not fit but int8 will — this is the lever that keeps the mid-size OOM models resident.</item>
-    /// <item>int4-resident (0.5 B/param, 8x) slots in here once the Tensors package exposes
-    /// <c>StreamingStoreDtype.Int4</c>; until then the &gt;int8 case falls through.</item>
-    /// <item>If even the tightest available precision will not fit, return bf16 and let the pool
-    /// page to stay under budget (the existing streaming fallback).</item>
+    /// <item>bf16 when the native execution footprint (4 B/float parameter) fits. The current CPU
+    /// bf16 store decodes weights to fp32 for GEMM, so testing only the 2 B backing-store footprint
+    /// undercounts the live working set and can select a slower tier that immediately pages.</item>
+    /// <item>int8-resident (1 B/param, fed directly by the no-upcast int8 GEMM) when native execution
+    /// does not fit but int8 will.</item>
+    /// <item>int4-resident (packed 0.5 B/param backing store, fed by the no-upcast int4 GEMM) when
+    /// int8 will not fit but int4 will.</item>
+    /// <item>If even int4 will not fit, retain int4 and let the pool page the smallest representation.
+    /// Falling back to bf16 here quadruples backing-store I/O and reintroduces fp32 decode.</item>
     /// </list>
     /// Inference-only: training keeps the Auto policy so fp/bf16 masters are preserved.
     /// </summary>
     internal static StreamingStoreDtype ResolveInferenceStoreDtype(long paramCount, long residentBudgetBytes)
     {
         if (paramCount <= 0 || residentBudgetBytes <= 0) return StreamingStoreDtype.Auto;
-        long bf16Bytes = paramCount * 2L;
-        if (bf16Bytes <= residentBudgetBytes) return StreamingStoreDtype.Bf16; // bf16-resident
+        // Use division rather than multiplication so hostile/estimated parameter counts cannot
+        // overflow. Although the backing store is bf16, the CPU GEMM consumes a decoded fp32
+        // owner; require that native execution footprint to fit before choosing the bf16 tier.
+        if (paramCount <= residentBudgetBytes / sizeof(float)) return StreamingStoreDtype.Bf16;
         if (paramCount <= residentBudgetBytes) return StreamingStoreDtype.Int8; // int8-resident (1 B/param)
-        // int4-resident (paramCount/2 bytes) is the next rung — enabled once the int4-capable
-        // Tensors release is consumed; until then, fall back to bf16 + paging.
-        return StreamingStoreDtype.Bf16;
+        // ceil(paramCount / 2) <= budget, expressed without an overflowing +1.
+        if (paramCount / 2 + paramCount % 2 <= residentBudgetBytes) return StreamingStoreDtype.Int4;
+        return StreamingStoreDtype.Int4;
     }
 
     /// <summary>
@@ -7378,6 +7656,13 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     internal void TryAutoEnableWeightStreaming(bool? isTrainingOverride = null)
     {
         if (_streamingAutoDetectFinalized) return;
+        // The default construction flag is training=true for backward compatibility, but a newly
+        // constructed model has not declared whether its first operation will be Predict or Train.
+        // Finalizing a permanent store dtype from that ambiguous flag made constructor-time probes
+        // choose lossless training storage for later inference. Explicit SetTrainingMode transitions
+        // pass an override and are handled immediately; the public Predict/Train funnels do so before
+        // their first allocation-heavy forward.
+        if (isTrainingOverride is null && !_firstForwardCompleted && IsTrainingMode) return;
         if (_weightLifetimeConfigured)
         {
             // User opted in explicitly via ConfigureWeightLifetime. Catch
@@ -7409,54 +7694,47 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         }
         if (_streamingAutoDetectDisabled) { _streamingAutoDetectFinalized = true; return; }
 
-        long paramCount;
-        try
-        {
-            paramCount = ParameterCount;
-        }
-        catch (Exception ex) when (
-            ex is InvalidOperationException ||
-            ex is OverflowException ||
-            ex is NullReferenceException)
-        {
-            // ParameterCount can throw on partially-constructed models in
-            // these specific ways:
-            //   - InvalidOperationException: subclass ctor failing before
-            //     InitializeLayers completes (most common).
-            //   - OverflowException: int sum wraps mid-property; the
-            //     caller can fix it but we shouldn't crash auto-detect.
-            //   - NullReferenceException: a sublayer field is still null
-            //     during partial construction.
-            // Other exceptions (real bugs, GPU faults, etc.) propagate so
-            // they aren't hidden behind a silent skip. Don't finalize
-            // either: we want to retry once the model is fully built.
-            // Surface to System.Diagnostics so telemetry pipelines can see
-            // that auto-detect bailed.
-            System.Diagnostics.Debug.WriteLine(
-                $"[NeuralNetworkBase] WeightStreaming auto-detect deferred — " +
-                $"ParameterCount threw {ex.GetType().Name}: {ex.Message}");
-            return;
-        }
-
         long threshold = _streamingThresholdOverride ?? s_streamingThresholdParams;
 
-        // Lazy models (Transformer/VLM decoders built from FullyConnected /
-        // MultiHeadAttention layers that resolve their input dim on first
-        // forward) report ParameterCount == 0 here because no weight tensor
-        // has materialized yet. Relying on the post-first-forward retry is
-        // too late: that first forward is exactly what allocates the entire
-        // (multi-GB) weight set on the GC heap and OOMs on a memory-bounded
-        // runner BEFORE the retry can engage streaming. So when the
-        // materialized count is below threshold, fall back to the model's
-        // structural estimate (computed from its architecture/options, no
-        // materialization required) so streaming turns on in the ctor and
-        // the lazy weights stream as they materialize. See
-        // EstimateStructuralParameterCount.
-        long effectiveCount = paramCount;
+        // Consult the allocation-free structural estimate FIRST. Foundation models already know
+        // they cross the threshold from their options, so walking a hundreds-of-layers parameter
+        // manifest cannot improve the decision and used to add substantial constructor latency.
+        // Models without an estimate (the normal case) still use the exact, allocation-free
+        // planning count supplied by the parameter manifest.
+        long structuralCount = SafeEstimateStructuralParameterCount();
+        long effectiveCount = structuralCount;
         if (effectiveCount < threshold)
         {
-            long structural = SafeEstimateStructuralParameterCount();
-            if (structural > effectiveCount) effectiveCount = structural;
+            long paramCount;
+            try
+            {
+                paramCount = PlanningParameterCount;
+            }
+            catch (Exception ex) when (
+                ex is InvalidOperationException ||
+                ex is OverflowException ||
+                ex is NullReferenceException)
+            {
+                // ParameterCount can throw on partially-constructed models in
+                // these specific ways:
+                //   - InvalidOperationException: subclass ctor failing before
+                //     InitializeLayers completes (most common).
+                //   - OverflowException: int sum wraps mid-property; the
+                //     caller can fix it but we shouldn't crash auto-detect.
+                //   - NullReferenceException: a sublayer field is still null
+                //     during partial construction.
+                // Other exceptions (real bugs, GPU faults, etc.) propagate so
+                // they aren't hidden behind a silent skip. Don't finalize
+                // either: we want to retry once the model is fully built.
+                // Surface to System.Diagnostics so telemetry pipelines can see
+                // that auto-detect bailed.
+                System.Diagnostics.Debug.WriteLine(
+                    $"[NeuralNetworkBase] WeightStreaming auto-detect deferred — " +
+                    $"PlanningParameterCount threw {ex.GetType().Name}: {ex.Message}");
+                return;
+            }
+
+            if (paramCount > effectiveCount) effectiveCount = paramCount;
         }
 
         if (effectiveCount < threshold)
@@ -7633,6 +7911,113 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     }
 
     /// <summary>
+    /// Enumerates the complete layer graph owned by a nested network after allowing that network
+    /// to initialize and resolve itself through its own architecture.
+    /// </summary>
+    /// <remarks>
+    /// Generated composite-model plumbing calls this helper instead of reading a child network's
+    /// <see cref="Layers"/> property directly. A GAN commonly constructs its generator and
+    /// discriminator lazily; reading their layer lists before their own readiness hooks run makes a
+    /// structurally valid parent report zero parameters. Keeping readiness at this boundary also
+    /// prevents every composite model author from having to remember the lifecycle ordering.
+    /// </remarks>
+    protected static IEnumerable<LayerBase<T>?> EnumerateNestedNetworkLayers(
+        NeuralNetworkBase<T>? network)
+    {
+        if (network is null) yield break;
+
+        network.EnsureParametersReady();
+        network.ResolveLazyLayerShapes();
+
+        var seen = new List<object>();
+        bool IsNew(object candidate)
+        {
+            for (int i = 0; i < seen.Count; i++)
+            {
+                if (ReferenceEquals(seen[i], candidate)) return false;
+            }
+
+            seen.Add(candidate);
+            return true;
+        }
+
+        foreach (var layer in network.Layers)
+        {
+            if (layer is LayerBase<T> layerBase && IsNew(layerBase)) yield return layerBase;
+        }
+
+        foreach (var layer in network.GetExtraTrainableLayers())
+        {
+            if (layer is not null && IsNew(layer)) yield return layer;
+        }
+    }
+
+    /// <summary>
+    /// Enumerates raw trainable tensors owned by a nested network after applying the same readiness
+    /// contract used for its layers.
+    /// </summary>
+    protected static IEnumerable<Tensor<T>> EnumerateNestedNetworkTensors(
+        NeuralNetworkBase<T>? network)
+    {
+        if (network is null) yield break;
+
+        network.EnsureParametersReady();
+        network.ResolveLazyLayerShapes();
+
+        foreach (var tensor in network.GetExtraTrainableTensors())
+        {
+            if (tensor is not null) yield return tensor;
+        }
+    }
+
+    // NOTE for whoever converges the model-side parameter mechanisms (there are currently three:
+    // [AutoParameters] on LayerBase, RegisterComponents duplicated in DiffusionModelBase and
+    // VAEModelBase, and the GetExtraTrainable* hooks here).
+    //
+    // Hoisting RegisterComponents to this class LOOKS like the convergence, and it is not sufficient.
+    // IParameterSource<T> is flat-vector only - ParameterCount / GetParameters / SetParameters - so a
+    // registered component can be counted, saved and loaded, but CANNOT flow through the six sites
+    // here that need Tensor<T> to register gradients and streaming handles.
+    //
+    // MEASURED, and it corrects an earlier note that guessed the diffusion side had the same gap:
+    // it does not, because it does not use these hooks at all. DiffusionModelBase is NOT a
+    // NeuralNetworkBase (it implements IDiffusionModel directly) and its tape training calls
+    // CollectTrainableParameters, a cached reflective walk of the whole object graph that gathers
+    // every ITrainableLayer<T>'s tensors. A registered component therefore DOES train there, so long
+    // as its parameters live inside layers.
+    //
+    // The real hole in that walk is a BARE Tensor<T>: it returns early on `obj is Tensor<T>` and skips
+    // fields declared as Tensor<T>, so a raw learned scalar or embedding held directly by a component
+    // is saved and never trained. On this side that is exactly what GetExtraTrainableTensors exists to
+    // carry - see CLAPModel's _logTemperature.
+    //
+    // So the convergence still needs a decision, but a narrower one than first stated: either
+    // IParameterSource gains a tensor-level view, or components are explicitly save/load-only and the
+    // training paths keep using GetExtraTrainable* plus the diffusion walk. Until that is settled,
+    // adding the registry here would be a mechanism nothing on this side consumes.
+
+    /// <summary>
+    /// Returns the registered module roots used by copy-on-write cloning.
+    /// </summary>
+    /// <remarks>
+    /// This deliberately mirrors the training graph: ordinary layers come
+    /// from <see cref="Layers"/>, while models with trainable modules outside
+    /// that list expose them through <see cref="GetExtraTrainableLayers"/>.
+    /// Registered child modules are traversed by <c>TapeTrainingStep</c>.
+    /// </remarks>
+    internal IReadOnlyList<ILayer<T>> GetCopyOnWriteLayerRoots()
+    {
+        var roots = new List<ILayer<T>>(_layers.Count);
+        roots.AddRange(_layers);
+        foreach (var extra in GetExtraTrainableLayers())
+        {
+            if (extra is not null)
+                roots.Add(extra);
+        }
+        return roots;
+    }
+
+    /// <summary>
     /// Structural estimate of this model's trainable parameter count, computed
     /// from its architecture/options WITHOUT materializing any lazy weight
     /// tensors. Returns 0 by default (meaning "no estimate available — rely on
@@ -7751,7 +8136,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         if (_memoryManager is null)
             return null;
 
-        return _memoryManager.EstimateMemorySavings(ParameterCount, batchSize, sequenceLength);
+        return _memoryManager.EstimateMemorySavings(PlanningParameterCount, batchSize, sequenceLength);
     }
 
     /// <summary>
@@ -8033,7 +8418,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         SetTrainingMode(true);
         try
         {
-            var trainableParams = Training.TapeTrainingStep<T>.CollectParameters(Layers);
+            var trainableParams = CollectModelTrainableTensors();
             // Subclasses may own raw trainable tensors outside Layers
             // (e.g. ViT's cls_token / positional_embeddings). Treat
             // their presence as also satisfying the trainable-params
@@ -8502,7 +8887,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 // 0.92.0+), so the gradient set is never fully resident and registered
                 // weights are paged in/out around each backward step. Models that
                 // already fit stay on the classic path below (zero overhead).
-                long paramCount = ParameterCount;
+                long paramCount = PlanningParameterCount;
                 if (paramCount <= 0) return false;
                 long elemSize = typeof(T) == typeof(float) ? 4L : 8L;
                 // weights + gradients + Adam first/second moments at full precision.
@@ -9467,6 +9852,10 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 ApplyGradientClipping(grads, maxGradNorm, trainableParams);
             }
 
+            // Publish after loss-scale removal and global clipping so the surface is the exact
+            // derivative field handed to the optimizer, not a scaled or unclipped intermediate.
+            PublishParameterGradients(allGrads);
+
             var context = new TapeStepContext<T>(
                 trainableParams, grads, lossValue,
                 input, expected, ComputeForward,
@@ -10237,14 +10626,8 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         if (loss is null)
             return EmitFusedMissAndFallback("loss function not derived from LossFunctionBase<T>");
 
-        // Mirror the eager path's bidirectional shape alignment exactly:
-        // (a) forward has extra leading dim → reshape FORWARD to target shape
-        // (b) target has extra leading dim → reshape TARGET to forward shape
-        // The eager path at TrainWithTape reshapes target down to forward's
-        // shape in branch (b); doing it the other way (reshape forward up to
-        // target's shape) makes the loss compute in a different space and
-        // produces different gradients. Apply the same direction-aware fix
-        // inside computeLoss where both tensors are in scope.
+        // Match eager TrainWithTape: reshape the leaf target to the prediction whenever element
+        // counts agree, and never reshape the tape-tracked prediction merely to satisfy a leaf.
         // #1624 / #1640: reclaim this training step's transient activations instead of
         // letting them accumulate across steps. This is how PyTorch bounds training
         // memory: its caching allocator returns each iteration's freed blocks to a reuse
@@ -10306,14 +10689,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 trainableLayers,
                 input,
                 expected,
-                forward: inp =>
-                {
-                    var fwd = ForwardForTraining(inp);
-                    // Branch (a): fwd has extra leading batch dim.
-                    if (fwd.Rank > expected.Rank && fwd.Shape[0] == 1 && fwd.Length == expected.Length)
-                        return Engine.Reshape(fwd, expected._shape);
-                    return fwd;
-                },
+                forward: ForwardForTraining,
                 computeLoss: (pred, tgt) =>
                 {
                     // Branch (b): target has extra leading batch dim → reshape TARGET
@@ -10749,7 +11125,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             var output = ForwardForTraining(input);
             var lossTensor = computeLoss(output);
 
-            var grads = tape.ComputeGradients(lossTensor, trainableParams);
+            var grads = ComputeAndPublishParameterGradients(tape, lossTensor, trainableParams);
 
             T lossValue = lossTensor.Length > 0 ? lossTensor[0] : NumOps.Zero;
             LastLoss = lossValue;
@@ -10859,7 +11235,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             : layerParams.Concat(extraTrainableTensors).ToList();
         var opt = optimizer ?? GetOrCreateBaseOptimizer();
 
-        var grads = tape.ComputeGradients(lossTensor, trainableParams);
+        var grads = ComputeAndPublishParameterGradients(tape, lossTensor, trainableParams);
         T lossValue = lossTensor.Length > 0 ? lossTensor[0] : NumOps.Zero;
         LastLoss = lossValue;
 
@@ -10999,7 +11375,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // AIDOTNET_BF16_ADAM=1/0 still forces/pins. The reactive 8-bit ladder (_memoryLeversForced on an
         // actual OOM) is unaffected.
         const long bf16ParamThreshold = 50_000_000L;
-        return ParameterCount >= bf16ParamThreshold;
+        return PlanningParameterCount >= bf16ParamThreshold;
     }
 
     /// <summary>
@@ -11836,6 +12212,10 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         using var ms = new MemoryStream(data);
         using var reader = new BinaryReader(ms);
 
+        // Preserve the constructor graph long enough for generated named-layer views to be rebound
+        // to the deserialized graph. The references are intentionally captured, not cloned.
+        var previousLayers = _layers.ToArray();
+
         // Clear existing layers
         ClearLayers();
 
@@ -12006,6 +12386,10 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // (InvalidateParameterCountCache already calls InvalidateLayerInfoCache)
         InvalidateParameterCountCache();
 
+        // Repair all generated fields and collections that were views into the old canonical graph.
+        // Independent layer members are left alone because rebinding is reference-identity based.
+        RebindLayerAliases(previousLayers, _layers);
+
         // Deserialized models should be in inference mode by default.
         // This ensures BatchNorm uses running statistics (not batch statistics)
         // and dropout is disabled, matching the behavior of the original model.
@@ -12080,21 +12464,125 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// </remarks>
     public virtual IFullModel<T, Tensor<T>, Tensor<T>> WithParameters(Vector<T> parameters)
     {
-        // In-place update — issue #1221: DeepCopy + UpdateParameters loses
-        // gradients for lazy layers because deserialization resets them to
-        // placeholder state where ParameterCount=0, so UpdateParameters
-        // skips them.
-        UpdateParameters(parameters);
-        // The in-place write keeps every weight ARRAY's identity — and the
-        // CPU engine's inference fast paths cache derived weight forms
-        // (pre-packed GEMM panels, transposed conv kernels) keyed by that
-        // identity without re-reading contents. Flush them, or the next
-        // Predict computes with the PRE-update weights (root cause of the
-        // Issue1296 grad-accum probe failure: a WithParameters'd model with
-        // bit-identical parameters predicted differently because its MHA /
-        // FFN GEMMs consumed packs built from the pre-load random init).
-        InvalidateWeightCachesAfterSuccessfulWeightUpdate();
-        return this;
+        if (parameters is null) throw new ArgumentNullException(nameof(parameters));
+
+        var sourceLayout = ParameterLayout;
+        if (sourceLayout.Readiness is not (
+                AiDotNet.Models.Parameters.ParameterReadiness.Materialized
+                or AiDotNet.Models.Parameters.ParameterReadiness.ParameterFree
+                or AiDotNet.Models.Parameters.ParameterReadiness.ConditionalAbsent))
+        {
+            throw new AiDotNet.Models.Parameters.ParameterLayoutNotReadyException(
+                "create an independent parameterized clone of",
+                sourceLayout);
+        }
+        long sourceParameterCount = ParameterCount;
+        if (parameters.Length != sourceParameterCount)
+        {
+            throw new ArgumentException(
+                $"{GetType().Name} currently exposes {sourceParameterCount} persistent-state values, " +
+                $"but {parameters.Length} were supplied.",
+                nameof(parameters));
+        }
+
+        // IParameterizable.WithParameters promises a NEW instance. Returning `this` made ordinary
+        // ownership code dispose the source model when it disposed the result, after which lazy
+        // layers attempted to republish buffers into half-cleared registries. Clone uses the
+        // canonical copy-on-write/deep-copy pipeline, so this remains O(1)-until-write where the
+        // model supports it while preserving independent lifetime and parameter storage.
+        var copy = Clone();
+        try
+        {
+            var sourceLayoutAfterClone = ParameterLayout;
+            if (!string.Equals(
+                    sourceLayout.Fingerprint,
+                    sourceLayoutAfterClone.Fingerprint,
+                    StringComparison.Ordinal)
+                || ParameterCount != sourceParameterCount)
+            {
+                throw new InvalidOperationException(
+                    $"Cloning {GetType().Name} mutated the source model's persistent-state manifest. " +
+                    "Clone and WithParameters are observationally read-only on their source, including " +
+                    "for lazy models.");
+            }
+
+            if (copy is not NeuralNetworkBase<T> neuralCopy)
+            {
+                throw new InvalidOperationException(
+                    $"{GetType().Name}.Clone() returned {copy.GetType().Name}, which does not expose " +
+                    "the readiness-aware parameter manifest required to verify an exact clone.");
+            }
+            var copyLayout = neuralCopy.ParameterLayout;
+            if (!string.Equals(sourceLayout.Fingerprint, copyLayout.Fingerprint, StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException(
+                    $"Cloning {GetType().Name} changed parameter-manifest fingerprint " +
+                    $"{sourceLayout.Fingerprint} to {copyLayout.Fingerprint}. A clone must preserve " +
+                    "slot identities, roles, shapes, counts, order, and readiness exactly. " +
+                    DescribeParameterManifestDifference(sourceLayout, copyLayout));
+            }
+            if (copy.ParameterCount != sourceParameterCount)
+            {
+                throw new InvalidOperationException(
+                    $"Cloning {GetType().Name} changed its persistent-state manifest from " +
+                    $"{sourceParameterCount} to {copy.ParameterCount} values. A clone must preserve " +
+                    "the source's exact slot identities, roles, shapes, order, and readiness; it may " +
+                    "not silently materialize additional state.");
+            }
+            copy.SetParameters(parameters);
+            return copy;
+        }
+        catch
+        {
+            copy.Dispose();
+            throw;
+        }
+    }
+
+    private static string DescribeParameterManifestDifference(
+        AiDotNet.Models.Parameters.ParameterLayoutSnapshot source,
+        AiDotNet.Models.Parameters.ParameterLayoutSnapshot clone)
+    {
+        int common = Math.Min(source.Slots.Count, clone.Slots.Count);
+        for (int i = 0; i < common; i++)
+        {
+            var expected = source.Slots[i];
+            var actual = clone.Slots[i];
+            if (!string.Equals(expected.StableId, actual.StableId, StringComparison.Ordinal)
+                || expected.Role != actual.Role
+                || expected.Readiness != actual.Readiness
+                || expected.ParameterCount != actual.ParameterCount)
+            {
+                return $"First difference at slot {i}: source " +
+                    $"'{expected.StableId}' ({expected.Role}, {expected.Readiness}, " +
+                    $"count {expected.ParameterCount?.ToString() ?? "deferred"}); clone " +
+                    $"'{actual.StableId}' ({actual.Role}, {actual.Readiness}, " +
+                    $"count {actual.ParameterCount?.ToString() ?? "deferred"}).";
+            }
+        }
+
+        if (source.Slots.Count != clone.Slots.Count)
+        {
+            var sourceIds = source.Slots.Select(slot => slot.StableId).ToHashSet(StringComparer.Ordinal);
+            var cloneIds = clone.Slots.Select(slot => slot.StableId).ToHashSet(StringComparer.Ordinal);
+            var missing = source.Slots
+                .Where(slot => !cloneIds.Contains(slot.StableId))
+                .Select(slot => slot.StableId)
+                .Take(4)
+                .ToArray();
+            var added = clone.Slots
+                .Where(slot => !sourceIds.Contains(slot.StableId))
+                .Select(slot => slot.StableId)
+                .Take(4)
+                .ToArray();
+            string details = missing.Length == 0 && added.Length == 0
+                ? " Stable IDs repeat with different structural metadata."
+                : $" Missing IDs: [{string.Join(", ", missing)}]; added IDs: "
+                  + $"[{string.Join(", ", added)}].";
+            return $"Source has {source.Slots.Count} slots; clone has {clone.Slots.Count}." + details;
+        }
+
+        return "The difference is in shape, element type, update policy, persistence, ownership, or availability.";
     }
 
     /// <summary>
@@ -12482,6 +12970,10 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                         largeBase.DeserializeNetworkSpecificData(nsReader);
                     }
                 }
+                // CreateNewInstance implementations sometimes receive an Architecture whose layer
+                // objects still belong to the source. Generated aliases must always point at the
+                // destination's canonical graph before its manifest or forward path is observed.
+                largeBase.RebindLayerAliases(_layers, largeBase._layers);
                 largeBase.InvalidateParameterCountCache();
                 largeBase.SetTrainingMode(false);
                 // The per-layer parameter copy above skips non-trainable stochastic layers
@@ -12589,7 +13081,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         var dstLayers = AiDotNet.Helpers.CopyOnWriteCloneHelper.CollectTrainableLayers<T>(copyBase);
         if (srcLayers.Count == 0 || srcLayers.Count != dstLayers.Count)
         {
-            (copy as IDisposable)?.Dispose();
+            DisposeRejectedCopyOnWriteCandidate(copyBase);
             return false;
         }
 
@@ -12604,7 +13096,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         {
             if (ReferenceEquals(srcLayers[i], dstLayers[i]))
             {
-                (copy as IDisposable)?.Dispose();
+                DisposeRejectedCopyOnWriteCandidate(copyBase);
                 return false;
             }
         }
@@ -12619,26 +13111,34 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         {
             if (extras.MoveNext())
             {
-                (copy as IDisposable)?.Dispose();
+                DisposeRejectedCopyOnWriteCandidate(copyBase);
                 return false;
             }
         }
 
-        // Coverage guard: the share only transfers the tensors GetTrainableParameters exposes. If the
-        // model's total ParameterCount includes MORE than that — a model whose GetParameters reads
-        // weights NOT surfaced through a trainable layer (a nested sub-model's own parameters, a custom
-        // VAE/Siamese/RNN layout) — the share would be incomplete and the clone would diverge after
-        // training. Detect that cheaply (no flatten, side-effect-free) by comparing the walked tensor
-        // element count to ParameterCount, and fall back to the eager full-fidelity copy if they differ.
+        // Coverage guard: compare the walked trainable tensors with the TRAINABLE portion of the
+        // canonical state manifest. ParameterCount also includes registered non-trainable buffers;
+        // comparing the walk with that aggregate incorrectly rejected every BatchNorm model even
+        // though buffers are copied separately below. Components, nested models, or other trainable
+        // state outside the registered layer graph still increase the manifest's trainable total and
+        // conservatively force the eager full-fidelity fallback.
         long walkedParamCount = 0;
         for (int i = 0; i < srcLayers.Count; i++)
         {
-            var tp = srcLayers[i].GetTrainableParameters();
+            var tp = srcLayers[i] is LayerBase<T> sourceLayer
+                ? sourceLayer.GetTrainableParametersWithoutMaterialization()
+                : srcLayers[i].GetTrainableParameters();
             for (int p = 0; p < tp.Count; p++) walkedParamCount += tp[p].Length;
         }
-        if (walkedParamCount != ParameterCount)
+        long manifestedTrainableCount = 0;
+        foreach (var chunk in GetParameterStateChunks())
         {
-            (copy as IDisposable)?.Dispose();
+            if (chunk.Role == AiDotNet.Models.Parameters.ParameterSlotRole.Trainable)
+                manifestedTrainableCount = checked(manifestedTrainableCount + chunk.Tensor.Length);
+        }
+        if (walkedParamCount != manifestedTrainableCount)
+        {
+            DisposeRejectedCopyOnWriteCandidate(copyBase);
             return false;
         }
 
@@ -12686,7 +13186,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 && dstShapeOnly.IsShapeResolved;
             if (sp.Count != dp.Count && !shapeOnlyDestination)
             {
-                (copy as IDisposable)?.Dispose();
+                DisposeRejectedCopyOnWriteCandidate(copyBase);
                 return false;
             }
             if (!shapeOnlyDestination)
@@ -12735,13 +13235,13 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                     try { dstExtras.SetExtraParameters(srcExtras.GetExtraParameters()); }
                     catch (ArgumentException)
                     {
-                        (copy as IDisposable)?.Dispose();
+                        DisposeRejectedCopyOnWriteCandidate(copyBase);
                         return false;
                     }
                 }
                 else
                 {
-                    (copy as IDisposable)?.Dispose();
+                    DisposeRejectedCopyOnWriteCandidate(copyBase);
                     return false;
                 }
             }
@@ -12772,6 +13272,50 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 nsStream.Position = 0;
                 var nsReader = new System.IO.BinaryReader(nsStream);
                 copyBase.DeserializeNetworkSpecificData(nsReader);
+            }
+        }
+        copyBase.RebindLayerAliases(_layers, copyBase._layers);
+
+        // Copy MODEL-OWNED TRAINABLE tensors — the ones surfaced by GetExtraTrainableTensors()
+        // (ViT's CLS + positional tokens, VideoCLIP's token + positional embedding tables, DCCRN's
+        // complex conv weights). These are genuinely trainable and genuinely NOT in Layers, so
+        // neither the per-layer share above nor the SerializeNetworkSpecificData round-trip reaches
+        // them unless the model separately opts into that second hook. Without this, a clone kept
+        // the freshly RANDOM tables its CreateNewInstance() constructor built while every tensor in
+        // Layers matched the original bit-for-bit — measured on VideoCLIP as 22/22 identical chunks
+        // and equal parameter L2, yet outputs differing by 1.6e+00 on identical input.
+        //
+        // Values are copied rather than CloneShared, matching the network-specific-data round-trip
+        // just above: the destination's tensors already exist (its constructor allocated them) and
+        // cannot be re-bound from here, and an independent copy means a later in-place write to
+        // either side cannot leak into the other. Cheap for the same reason the per-layer extras
+        // are copied eagerly — these tensors are small relative to the layer weights.
+        using (var srcExtras = GetExtraTrainableTensors().GetEnumerator())
+        using (var dstExtras = copyBase.GetExtraTrainableTensors().GetEnumerator())
+        {
+            while (true)
+            {
+                bool hasSrc = srcExtras.MoveNext();
+                bool hasDst = dstExtras.MoveNext();
+                if (hasSrc != hasDst)
+                {
+                    // The copy enumerates a different number of model-owned tensors than the
+                    // source. Its geometry does not match, so fall back to the eager
+                    // full-fidelity copy rather than leave the clone partially populated.
+                    DisposeRejectedCopyOnWriteCandidate(copyBase);
+                    return false;
+                }
+                if (!hasSrc) break;
+
+                var srcTensor = srcExtras.Current;
+                var dstTensor = dstExtras.Current;
+                if (srcTensor is null || dstTensor is null) continue;
+                if (srcTensor.Length != dstTensor.Length)
+                {
+                    DisposeRejectedCopyOnWriteCandidate(copyBase);
+                    return false;
+                }
+                for (int k = 0; k < srcTensor.Length; k++) dstTensor[k] = srcTensor[k];
             }
         }
 
@@ -14123,7 +14667,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         {
             throw new InvalidOperationException(
                 "No trainable parameters found. ComputeGradients requires at least one " +
-                "layer implementing ITrainableLayer<T> with registered parameters.");
+                "registered layer or model-owned trainable tensor.");
         }
 
         var resolved = lossFunction ?? LossFunction;

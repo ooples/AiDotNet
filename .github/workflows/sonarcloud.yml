@@ -1327,8 +1327,10 @@ jobs:
             # tracked in the umbrella timeout issue and exercised by the heavy-timeout-nightly
             # workflow with a long budget. Wrapping the per-shard filter here applies the exclusion
             # across all matrix entries in one place; it is a no-op for any test not tagged
-            # [Trait("Category","HeavyTimeout")].
-            '--filter', '(${{ matrix.shard.filter }})&Category!=HeavyTimeout'
+            # [Trait("Category","HeavyTimeout")]. ModelPerformanceCensus is likewise an explicit,
+            # serial, artifact-producing lane; discovering it in the normal shards would add 863
+            # opt-out skips and no measurements because its output directory is intentionally unset.
+            '--filter', '(${{ matrix.shard.filter }})&Category!=HeavyTimeout&Category!=ModelPerformanceCensus'
           )
           if ($collectCoverage) {
             $dotnetArgs += @(
@@ -1871,7 +1873,19 @@ jobs:
     name: SonarCloud Analysis
     runs-on: ubuntu-latest
     timeout-minutes: 45
-    if: "${{ (github.event.pull_request.draft != true) && !startsWith(github.head_ref, 'release-please--') && !(github.event_name == 'push' && startsWith(github.event.head_commit.message, 'chore(master): release')) }}"
+    # always() is load-bearing, not cosmetic. Without it a single red shard fails the
+    # test-net10-sharded matrix, Actions SKIPS this job for having a failed `needs`, and because
+    # "SonarCloud Analysis" is the ONLY required status check in the `Main` ruleset, a skipped
+    # check leaves the gate unsatisfied and every PR reads BLOCKED. That made "all 158 shards
+    # green" the de facto merge bar via a `needs:` edge rather than a stated policy.
+    #
+    # SonarCloud is code-quality analysis, not a test gate. It consumes coverage by artifact
+    # pattern (coverage-<sha>-*), and those artifacts are uploaded whether a shard passed or
+    # failed, so it needs the tests to have RUN, not to have PASSED. Test outcomes are gated
+    # explicitly by the `ci-gate` job at the end of this file instead.
+    #
+    # The build IS still required: without its artifacts the analysis would be meaningless.
+    if: "${{ always() && needs.build.result == 'success' && (github.event.pull_request.draft != true) && !startsWith(github.head_ref, 'release-please--') && !(github.event_name == 'push' && startsWith(github.event.head_commit.message, 'chore(master): release')) }}"
     needs:
       - build
       - test-net10-sharded
@@ -2053,5 +2067,65 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Artifacts" >> $GITHUB_STEP_SUMMARY
           echo "- Publish size: ${{ steps.size.outputs.current_mb }} MB" >> $GITHUB_STEP_SUMMARY
+
+  # ---------------------------------------------------------------------------------------------
+  # Single aggregation gate. THIS is the job to mark as the required status check in the `Main`
+  # ruleset -- not SonarCloud, and not the shards themselves.
+  #
+  # Required-check names must be STATIC, which is why a 158-job matrix cannot be listed directly:
+  # every time a shard is re-split (G-I -> G + H-I, and so on) the job names change and any
+  # per-shard requirement silently stops applying. One fixed name in front of the matrix keeps the
+  # bar stable across re-sharding. This is the standard pattern for large matrix builds.
+  #
+  # always() means this runs even when a dependency failed -- that is the point, since a skipped
+  # required check reads as unsatisfied and blocks the PR without ever saying why. Here the result
+  # is decided explicitly below and printed, so a red gate names the job that caused it.
+  ci-gate:
+    name: CI Gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    if: "${{ always() && (github.event.pull_request.draft != true) && !startsWith(github.head_ref, 'release-please--') && !(github.event_name == 'push' && startsWith(github.event.head_commit.message, 'chore(master): release')) }}"
+    needs:
+      - build
+      - test-net10-sharded
+      - sonarcloud
+
+    steps:
+      - name: Evaluate required jobs
+        env:
+          BUILD_RESULT: ${{ needs.build.result }}
+          TESTS_RESULT: ${{ needs.test-net10-sharded.result }}
+          SONAR_RESULT: ${{ needs.sonarcloud.result }}
+        run: |
+          set -euo pipefail
+
+          echo "## CI Gate" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Job | Result |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|---|---|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| build | $BUILD_RESULT |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| test-net10-sharded | $TESTS_RESULT |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| sonarcloud | $SONAR_RESULT |" >> "$GITHUB_STEP_SUMMARY"
+
+          failed=0
+          for pair in "build:$BUILD_RESULT" "test-net10-sharded:$TESTS_RESULT" "sonarcloud:$SONAR_RESULT"; do
+            job="${pair%%:*}"
+            result="${pair#*:}"
+            # 'skipped' is deliberately NOT accepted: it is exactly how this gate used to fail
+            # open, and a check that passes because it never ran is worse than no check.
+            if [ "$result" != "success" ]; then
+              echo "::error title=CI Gate::Required job '$job' reported '$result' (expected 'success')."
+              failed=1
+            fi
+          done
+
+          if [ "$failed" -ne 0 ]; then
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "**Gate FAILED** - see the annotations above for which job blocked it." >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "**Gate PASSED** - all required jobs succeeded." >> "$GITHUB_STEP_SUMMARY"
 
   # NOTE: Website deployment has moved to deploy-website.yml (deploys to Vercel at aidotnet.dev)

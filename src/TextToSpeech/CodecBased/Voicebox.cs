@@ -379,6 +379,18 @@ public partial class Voicebox<T> : TtsModelBase<T>, ICodecTts<T>
             }
         );
 
+    private AdamOptimizer<T, Tensor<T>, Tensor<T>> CreateDefaultOptimizer() =>
+        new(
+            this,
+            new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate,
+                UseAdaptiveLearningRate = false,
+                EnableGradientClipping = true,
+                MaxGradientNorm = 0.2,
+            }
+        );
+
     private void ThrowIfDisposed()
     {
         if (_disposed)

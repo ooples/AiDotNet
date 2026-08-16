@@ -822,7 +822,7 @@ public partial class Wav2Vec2Model<T> : AudioNeuralNetworkBase<T>, ISpeechRecogn
             // PreprocessAudio -> Forward). Feeding raw input straight to the tape produced a
             // different-shaped forward than Predict ([1,64,34] vs the preprocessed [.,34]), so the
             // MSE loss shape-mismatched and every training-based invariant failed.
-            TrainWithTape(PreprocessAudio(input), expectedOutput, gradientOptimizer);
+            TrainWithTape(input, expectedOutput, gradientOptimizer);
         }
         finally
         {

@@ -69,13 +69,21 @@ public partial class LayerNormalizationLayer<T> : LayerBase<T>, IShapeContract
     /// <summary>
     /// The scale parameters learned during training.
     /// </summary>
-    [TrainableParameter(Role = PersistentTensorRole.NormalizationParams)]
-
+    // The parameterless constructor still resolves the normalized width from the actual first
+    // input's last axis. This declaration describes that width only AFTER the layer itself is
+    // resolved; it never materializes gamma from a model's public architecture shape. That lets a
+    // generated manifest validate lazy restore/COW without locking LayerNorm to an upstream width.
+    [TrainableParameter(
+        Role = PersistentTensorRole.NormalizationParams,
+        Shape = "OutputShape[0]")]
     private Tensor<T> _gamma;
 
     /// <summary>
     /// The shift parameters learned during training.
     /// </summary>
+    [TrainableParameter(
+        Role = PersistentTensorRole.NormalizationParams,
+        Shape = "OutputShape[0]")]
     private Tensor<T> _beta;
 
     /// <summary>
@@ -293,6 +301,16 @@ public partial class LayerNormalizationLayer<T> : LayerBase<T>, IShapeContract
     /// </summary>
     protected override void OnFirstForward(Tensor<T> input)
     {
+        // A chain-level shape walk is only a projection. LayerNorm is rank-agnostic and its
+        // normalized width is the last axis of the tensor that reaches it in the model's real
+        // topology; a custom forward may not follow the public Layers list sequentially. An
+        // explicit [SubLayerInput] supplied by the owning composite is different: that declaration
+        // describes the real internal edge and is authoritative. This provenance distinction keeps
+        // model-level probes deferred while letting generated composites expose a complete parameter
+        // surface without asking their authors for any normalization-specific plumbing.
+        if (IsResolvingShapesOnly && !IsResolvingDeclaredSubLayerShapeOnly)
+            return;
+
         int featureSize = input.Shape[input.Shape.Length - 1];
         if (featureSize <= 0)
         {
@@ -301,13 +319,116 @@ public partial class LayerNormalizationLayer<T> : LayerBase<T>, IShapeContract
                 nameof(input));
         }
 
-        _gamma = Tensor<T>.CreateDefault([featureSize], NumOps.One);
-        _beta = Tensor<T>.CreateDefault([featureSize], NumOps.Zero);
+        if (IsResolvingShapesOnly)
+        {
+            ResolveShapes(new[] { featureSize }, new[] { featureSize });
+            return;
+        }
 
-        RegisterTrainableParameter(_gamma, PersistentTensorRole.NormalizationParams);
-        RegisterTrainableParameter(_beta, PersistentTensorRole.NormalizationParams);
+        EnsureAffineParameters(featureSize);
+        ResolveShapes(new[] { featureSize }, new[] { featureSize });
+    }
+
+    /// <summary>
+    /// Resolves an architecture-declared normalization width without allocating affine parameters.
+    /// </summary>
+    /// <remarks>
+    /// This is the authoritative counterpart to a speculative chain-level
+    /// <see cref="LayerBase{T}.ResolveShapesOnly(int[])"/> walk. Composite base factories call it
+    /// when their own topology fixes the LayerNorm width, allowing generated parameter manifests
+    /// and copy-on-write clones to reason about gamma and beta before materialization.
+    /// </remarks>
+    internal void ResolveArchitectureFeatureSizeOnly(int featureSize)
+    {
+        if (featureSize <= 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(featureSize),
+                $"Layer normalization requires a positive feature size; got {featureSize}.");
+        }
+
+        if (IsShapeResolved)
+        {
+            int resolvedFeatureSize = InputShape[InputShape.Length - 1];
+            if (resolvedFeatureSize != featureSize)
+            {
+                throw new InvalidOperationException(
+                    $"Layer normalization is already resolved for width {resolvedFeatureSize} and cannot be rebound to {featureSize}.");
+            }
+
+            return;
+        }
 
         ResolveShapes(new[] { featureSize }, new[] { featureSize });
+    }
+
+    /// <inheritdoc />
+    protected override void EnsureInitialized()
+    {
+        if (_gamma.Length > 0 || !IsShapeResolved) return;
+
+        int featureSize = InputShape[InputShape.Length - 1];
+        if (featureSize > 0)
+            EnsureAffineParameters(featureSize);
+    }
+
+    private void EnsureAffineParameters(int featureSize)
+    {
+        if (_gamma.Length > 0) return;
+
+        _gamma = Tensor<T>.CreateDefault([featureSize], NumOps.One);
+        _beta = Tensor<T>.CreateDefault([featureSize], NumOps.Zero);
+        RegisterTrainableParameter(_gamma, PersistentTensorRole.NormalizationParams);
+        RegisterTrainableParameter(_beta, PersistentTensorRole.NormalizationParams);
+    }
+
+    /// <summary>
+    /// Rebinds a lazy LayerNorm to the feature width observed by its first real forward when a
+    /// prior shape-only network walk used an approximate sequential shape.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Shape-only propagation is intentionally allocation-compatible so parameter manifests can
+    /// be inspected before execution. For a custom or branched model, however, the sequential
+    /// walker can only approximate what a later layer receives. Treating that approximation as a
+    /// binding LayerNorm width caused one wrong guess to surface as the same gamma/input mismatch
+    /// in every model that reused the base lifecycle.
+    /// </para>
+    /// <para>
+    /// Only the shape-only provenance path reaches this hook. The eager
+    /// <see cref="LayerNormalizationLayer{T}(int, double)"/> contract remains strict and will not
+    /// silently resize an architecture-defined feature width.
+    /// </para>
+    /// </remarks>
+    protected override void ReconcileShapeOnlyResolution(Tensor<T> input)
+    {
+        int featureSize = input.Shape[input.Shape.Length - 1];
+        if (featureSize <= 0)
+        {
+            throw new ArgumentException(
+                $"LayerNormalizationLayer cannot reconcile featureSize: input.Shape[^1] = {featureSize}.",
+                nameof(input));
+        }
+
+        if (_gamma.Length != featureSize || _beta.Length != featureSize)
+        {
+            var gamma = Tensor<T>.CreateDefault([featureSize], NumOps.One);
+            var beta = Tensor<T>.CreateDefault([featureSize], NumOps.Zero);
+
+            if (!ReplaceTrainableParameter(_gamma, gamma, PersistentTensorRole.NormalizationParams))
+                RegisterTrainableParameter(gamma, PersistentTensorRole.NormalizationParams);
+            if (!ReplaceTrainableParameter(_beta, beta, PersistentTensorRole.NormalizationParams))
+                RegisterTrainableParameter(beta, PersistentTensorRole.NormalizationParams);
+
+            _gamma = gamma;
+            _beta = beta;
+            _gammaGradient = null;
+            _betaGradient = null;
+            _gammaVelocity = null;
+            _betaVelocity = null;
+        }
+
+        ResolveShapes([featureSize], [featureSize]);
     }
 
     /// <summary>

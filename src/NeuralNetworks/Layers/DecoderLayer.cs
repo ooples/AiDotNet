@@ -674,16 +674,6 @@ public partial class DecoderLayer<T> : LayerBase<T>, IShapeContract
     }
 
     /// <summary>
-    /// Declares named input ports for this multi-input layer.
-    /// </summary>
-    public override IReadOnlyList<LayerPort> InputPorts =>
-    [
-        new LayerPort("decoder_input", GetInputShape()),
-        new LayerPort("encoder_output", GetInputShape()),
-        new LayerPort("mask", GetInputShape(), Required: false)
-    ];
-
-    /// <summary>
     /// Named multi-input forward pass.
     /// </summary>
     protected override Tensor<T> ForwardTracedPorts(IReadOnlyDictionary<string, Tensor<T>> inputs)
