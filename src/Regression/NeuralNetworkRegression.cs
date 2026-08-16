@@ -61,6 +61,32 @@ public class NeuralNetworkRegression<T> : NonLinearRegressionBase<T>
     /// </value>
     private readonly NeuralNetworkRegressionOptions<T, Matrix<T>, Vector<T>> _options;
     private bool _useOLS;
+
+    /// <summary>Mean of the training targets, used to standardize them before training.</summary>
+    /// <remarks>
+    /// A network initialized with small random weights outputs values near zero, so it can only
+    /// reach a target of, say, 1000 by driving its weights far from their initialization — which
+    /// takes far more epochs than any sane default. Standardizing the targets to zero mean and unit
+    /// variance puts them in the range the network can actually represent from the outset, and the
+    /// prediction is mapped back afterwards. This is standard practice for neural regression, and
+    /// it is what makes the model behave consistently when the targets are shifted or rescaled.
+    /// </remarks>
+    private T _targetMean;
+
+    /// <summary>Standard deviation of the training targets; one when they are constant.</summary>
+    private T _targetScale;
+
+    /// <summary>Seed for the mini-batch shuffler, so training is reproducible by default.</summary>
+    private const int ShuffleSeed = 42;
+
+    /// <summary>Reused shuffler; created lazily so the sequence continues across epochs.</summary>
+    private Random? _shuffleRandom;
+
+    /// <summary>Seed for weight initialization, so two runs build the same starting network.</summary>
+    private const int InitializationSeed = 1337;
+
+    /// <summary>Reused initializer, so re-initializing layers continues the same sequence.</summary>
+    private Random? _initializationRandom;
     private Vector<T>? _olsCoefficients;
 
 
@@ -120,6 +146,8 @@ public class NeuralNetworkRegression<T> : NonLinearRegressionBase<T>
         : base(options, regularization)
     {
         _olsIntercept = NumOps.Zero;
+        _targetMean = NumOps.Zero;
+        _targetScale = NumOps.One;   // identity mapping until Train computes the real values
         _options = options ?? new NeuralNetworkRegressionOptions<T, Matrix<T>, Vector<T>>();
         _optimizer = _options.Optimizer ?? new AdamOptimizer<T, Matrix<T>, Vector<T>>(this, new AdamOptimizerOptions<T, Matrix<T>, Vector<T>>
         {
@@ -159,12 +187,31 @@ public class NeuralNetworkRegression<T> : NonLinearRegressionBase<T>
             int inputSize = _options.LayerSizes[i];
             int outputSize = _options.LayerSizes[i + 1];
 
-            Matrix<T> weight = Matrix<T>.CreateRandom(outputSize, inputSize);
-            Vector<T> bias = Vector<T>.CreateRandom(outputSize);
+            // Xavier/Glorot initialization, drawn from a SEEDED source so two runs on identical
+            // data produce identical networks. Matrix.CreateRandom and Vector.CreateRandom draw
+            // from an unseeded generator, which made training irreproducible and showed up as an
+            // intermittently failing training-versus-test error comparison.
+            _initializationRandom ??= RandomHelper.CreateSeededRandom(InitializationSeed);
 
-            // Xavier/Glorot initialization
-            T scale = NumOps.Sqrt(NumOps.FromDouble(2.0 / (inputSize + outputSize)));
-            weight = weight.Transform((w, row, col) => NumOps.Multiply(w, scale));
+            double scaleValue = Math.Sqrt(2.0 / (inputSize + outputSize));
+
+            var weight = new Matrix<T>(outputSize, inputSize);
+            for (int row = 0; row < outputSize; row++)
+            {
+                for (int col = 0; col < inputSize; col++)
+                {
+                    // Centre the uniform draw on zero before scaling, as Glorot prescribes.
+                    weight[row, col] = NumOps.FromDouble(
+                        (_initializationRandom.NextDouble() - 0.5) * 2.0 * scaleValue);
+                }
+            }
+
+            var bias = new Vector<T>(outputSize);
+            for (int row = 0; row < outputSize; row++)
+            {
+                bias[row] = NumOps.FromDouble(
+                    (_initializationRandom.NextDouble() - 0.5) * 2.0 * scaleValue);
+            }
 
             _weights.Add(weight);
             _biases.Add(bias);
@@ -214,6 +261,35 @@ public class NeuralNetworkRegression<T> : NonLinearRegressionBase<T>
             InitializeNetwork();
         }
 
+        // Standardize the targets so they sit in the range a freshly initialized network can reach.
+        T sum = NumOps.Zero;
+        for (int i = 0; i < y.Length; i++) sum = NumOps.Add(sum, y[i]);
+        _targetMean = y.Length > 0 ? NumOps.Divide(sum, NumOps.FromDouble(y.Length)) : NumOps.Zero;
+
+        T variance = NumOps.Zero;
+        for (int i = 0; i < y.Length; i++)
+        {
+            T centered = NumOps.Subtract(y[i], _targetMean);
+            variance = NumOps.Add(variance, NumOps.Multiply(centered, centered));
+        }
+
+        _targetScale = y.Length > 0
+            ? NumOps.Sqrt(NumOps.Divide(variance, NumOps.FromDouble(y.Length)))
+            : NumOps.One;
+
+        if (!NumOps.GreaterThan(_targetScale, NumOps.FromDouble(1e-10)))
+        {
+            _targetScale = NumOps.One;   // constant targets: shift only, no rescaling
+        }
+
+        var standardizedY = new Vector<T>(y.Length);
+        for (int i = 0; i < y.Length; i++)
+        {
+            standardizedY[i] = NumOps.Divide(NumOps.Subtract(y[i], _targetMean), _targetScale);
+        }
+
+        y = standardizedY;
+
         int batchSize = _options.BatchSize;
         int numBatches = (X.Rows + batchSize - 1) / batchSize;
 
@@ -232,13 +308,38 @@ public class NeuralNetworkRegression<T> : NonLinearRegressionBase<T>
 
                 Matrix<T> batchX = GetBatchRows(X, indices, startIdx, endIdx);
                 Vector<T> batchY = GetBatchElements(y, indices, startIdx, endIdx);
-                T batchLoss = NumOps.Zero; // Tape-based training handles loss computation
-                totalLoss = NumOps.Add(totalLoss, batchLoss);
-            }
 
-            if (epoch % 100 == 0)
-            {
-                Console.WriteLine($"Epoch {epoch}, Loss: {totalLoss}");
+                // This inner loop previously read, in full:
+                //     T batchLoss = NumOps.Zero; // Tape-based training handles loss computation
+                // No forward pass, no gradient, no weight update — the network sat at its random
+                // initialization through every one of the configured epochs, and nothing else in
+                // the class invoked a tape. The four pieces needed were already present and simply
+                // never called, so this wires them together.
+                var weightGradients = new List<Matrix<T>>();
+                var biasGradients = new List<Vector<T>>();
+                T batchLoss = NumOps.Zero;
+
+                for (int sample = 0; sample < batchX.Rows; sample++)
+                {
+                    var activations = ForwardPass(batchX.GetRow(sample));
+
+                    var target = new Vector<T>(1);
+                    target[0] = batchY[sample];
+
+                    var prediction = activations[activations.Count - 1];
+                    batchLoss = NumOps.Add(
+                        batchLoss, _options.LossFunction.CalculateLoss(prediction, target));
+
+                    var deltas = BackwardPass(activations, target);
+                    AccumulateGradients(activations, deltas, weightGradients, biasGradients);
+                }
+
+                if (weightGradients.Count > 0)
+                {
+                    UpdateParameters(weightGradients, biasGradients, batchX.Rows);
+                }
+
+                totalLoss = NumOps.Add(totalLoss, batchLoss);
             }
         }
     }
@@ -260,7 +361,12 @@ public class NeuralNetworkRegression<T> : NonLinearRegressionBase<T>
     /// </remarks>
     private void ShuffleArray(int[] array)
     {
-        var random = RandomHelper.CreateSecureRandom();
+        // Seeded so training is reproducible: an unseeded source made two runs on identical data
+        // produce different networks, which showed up as an intermittently failing
+        // training-versus-test error comparison. A fresh instance per call would also discard the
+        // sequence between epochs, so the shuffler is created once and reused.
+        _shuffleRandom ??= RandomHelper.CreateSeededRandom(ShuffleSeed);
+        var random = _shuffleRandom;
         int n = array.Length;
         for (int i = n - 1; i > 0; i--)
         {
@@ -536,6 +642,16 @@ public class NeuralNetworkRegression<T> : NonLinearRegressionBase<T>
     {
         if (_useOLS && _olsCoefficients is not null)
             return Enumerable.Range(0, _olsCoefficients.Length);
+
+        // A trained network feeds every input into its first weight matrix, so all features are
+        // active. The base implementation derives activity from the linear Coefficients vector,
+        // which this model never populates — so once the network actually trains (rather than
+        // returning an OLS fit), it reported no active features at all.
+        if (_weights.Count > 0)
+        {
+            return Enumerable.Range(0, _weights[0].Columns);
+        }
+
         return base.GetActiveFeatureIndices();
     }
 
@@ -560,7 +676,11 @@ public class NeuralNetworkRegression<T> : NonLinearRegressionBase<T>
         {
             Vector<T> input = X.GetRow(i);
             List<Vector<T>> activations = ForwardPass(input);
-            nnPredictions[i] = activations[activations.Count - 1][0];
+
+            // The network is trained on standardized targets, so map its output back to the
+            // original response scale.
+            T standardized = activations[activations.Count - 1][0];
+            nnPredictions[i] = NumOps.Add(NumOps.Multiply(standardized, _targetScale), _targetMean);
         }
 
         return nnPredictions;
@@ -771,8 +891,35 @@ public class NeuralNetworkRegression<T> : NonLinearRegressionBase<T>
 
     public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
     {
-        var clone = new NeuralNetworkRegression<T>(_options, Regularization);
-        clone.Deserialize(Serialize());
+        // Copy the trained state directly rather than round-tripping through Serialize/Deserialize.
+        // Two problems with the round trip: the clone was handed THIS instance's options object, so
+        // both models aliased one configuration — and Train mutates it (LayerSizes[0] is rewritten
+        // to the observed feature count) — while Deserialize then reassigned LayerSizes on that
+        // shared instance. The result was a clone whose weight shapes disagreed with its layer
+        // sizes, which surfaced as a dimension mismatch on the first forward pass.
+        var clonedOptions = new NeuralNetworkRegressionOptions<T, Matrix<T>, Vector<T>>
+        {
+            LayerSizes = [.. _options.LayerSizes],
+            Epochs = _options.Epochs,
+            BatchSize = _options.BatchSize,
+            LearningRate = _options.LearningRate,
+            LossFunction = _options.LossFunction,
+        };
+
+        var clone = new NeuralNetworkRegression<T>(clonedOptions, Regularization);
+
+        clone._weights.Clear();
+        foreach (var weight in _weights) clone._weights.Add(weight.Clone());
+
+        clone._biases.Clear();
+        foreach (var bias in _biases) clone._biases.Add(bias.Clone());
+
+        clone._useOLS = _useOLS;
+        clone._olsCoefficients = _olsCoefficients?.Clone();
+        clone._olsIntercept = _olsIntercept;
+        clone._targetMean = _targetMean;
+        clone._targetScale = _targetScale;
+
         return clone;
     }
 
