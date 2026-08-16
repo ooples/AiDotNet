@@ -11185,6 +11185,13 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
 
     private static void EmitFusedPathEventIfEnabled(bool hit, string? reason)
     {
+        // Counted unconditionally, BEFORE the level gate. The event below only fires when the caller
+        // already suspected something and turned diagnostics on; the counter answers "did the fused path
+        // engage at all?" after the fact, which is the question that would have shortened the RWKV
+        // NaN investigation (#1930) — there, the control arm silently never compiled because its optimizer
+        // had no fused spec, and nothing recorded that. One interlocked increment per training step.
+        Configuration.TrainingDiagnosticsConfig.RecordFusedOptimizerPath(hit, reason);
+
         if (Configuration.TrainingDiagnosticsConfig.Level
             < Configuration.TrainingDiagnosticLevel.PerStep)
             return;
