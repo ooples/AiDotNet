@@ -1,6 +1,8 @@
 using AiDotNet.ComputerVision.Segmentation.Common;
+using AiDotNet.Interfaces;
+using AiDotNet.LossFunctions;
+using AiDotNet.Models;
 using Xunit;
-using Xunit.Abstractions;
 
 namespace AiDotNet.Tests.IntegrationTests.ConfigureMethodCoverage;
 
@@ -12,7 +14,7 @@ namespace AiDotNet.Tests.IntegrationTests.ConfigureMethodCoverage;
 /// Before the fix in this PR this surface was the last fully-inert Configure* method on the facade:
 /// <c>_segmentationVisualizationConfig</c> was assigned, exposed through an internal accessor nobody
 /// called, and there was no segmentation-overlay renderer anywhere in the library for it to feed.
-/// The analyzer rule AIDN091 exists to make exactly that shape fail the build.
+/// The analyzer rule AIDN097 exists to make exactly that shape fail the build.
 /// </para>
 /// <para>
 /// The renderer follows <c>torchvision.utils.draw_segmentation_masks(image, masks, alpha, colors)</c>:
@@ -24,9 +26,6 @@ namespace AiDotNet.Tests.IntegrationTests.ConfigureMethodCoverage;
 [Collection("ConfigureMethodCoverage")]
 public class Bucket14_SegmentationVisualizationTests : ConfigureMethodTestBase
 {
-    private readonly ITestOutputHelper _output;
-    public Bucket14_SegmentationVisualizationTests(ITestOutputHelper output) { _output = output; }
-
     /// <summary>
     /// The stored-but-not-consumed regression guard: configure a NON-default visualization and assert
     /// the built result still carries it. If the field is ever orphaned again this fails.
@@ -37,7 +36,9 @@ public class Bucket14_SegmentationVisualizationTests : ConfigureMethodTestBase
     {
         var (features, labels) = MakeMemorizationSet();
         var loader = MakeCanaryLoader(features, labels);
-        var model = MakeCanaryModel();
+        // This test verifies configuration transport, not optimization. A parameter-free,
+        // self-supervised model keeps that contract isolated from architecture cloning.
+        var model = new PassThroughSelfSupervisedModel();
 
         var config = new SegmentationVisualizationConfig
         {
@@ -57,10 +58,18 @@ public class Bucket14_SegmentationVisualizationTests : ConfigureMethodTestBase
         var carried = result.Options!.SegmentationVisualization;
 
         Assert.NotNull(carried);
+        Assert.Same(config, result.SegmentationVisualization);
         Assert.Equal(0.25, carried!.Alpha);
         Assert.False(carried.DrawContours);
         Assert.Equal(7, carried.ContourThickness);
         Assert.Equal(0.9, carried.MinDisplayConfidence);
+
+        var withParameters = Assert.IsType<AiDotNet.Models.Results.AiModelResult<float, Tensor<float>, Tensor<float>>>(
+            result.WithParameters(result.GetParameters()));
+        var deepCopy = Assert.IsType<AiDotNet.Models.Results.AiModelResult<float, Tensor<float>, Tensor<float>>>(
+            result.DeepCopy());
+        Assert.Same(config, withParameters.SegmentationVisualization);
+        Assert.Same(config, deepCopy.SegmentationVisualization);
     }
 
     /// <summary>
@@ -300,7 +309,7 @@ public class Bucket14_SegmentationVisualizationTests : ConfigureMethodTestBase
             Alpha = 1.0,
             DrawContours = false,
             MinDisplayConfidence = 0.5,
-            ShowLabels = false,   // defaults to true; no glyph rasterizer, so it must be turned off
+            ShowLabels = false,   // keep label pixels from polluting the row-only filter assertions
         };
 
         var rendered = SegmentationRenderer.Render(image, output, config);
@@ -311,6 +320,164 @@ public class Bucket14_SegmentationVisualizationTests : ConfigureMethodTestBase
         Assert.True(keptRow > 0f, "The instance scoring 0.95 was above the 0.5 threshold but was not drawn.");
         Assert.True(droppedRow == 0f,
             $"The instance scoring 0.10 was below the 0.5 threshold but was still drawn (sum={droppedRow}).");
+    }
+
+    [Fact]
+    [Trait("category", "integration-configure-method")]
+    public async Task Render_ClassMapUsesTheClassIdAsThePaletteIndex()
+    {
+        await Task.Yield();
+        var classMap = new Tensor<float>([2, 2]);
+        classMap[0, 0] = 1.0f;
+        var output = new SegmentationOutput<float>
+        {
+            ClassMap = classMap,
+            NumClasses = 2,
+            ImageHeight = 2,
+            ImageWidth = 2,
+        };
+        var palette = new byte[,] { { 255, 0, 0 }, { 0, 255, 0 } };
+
+        var rendered = SegmentationRenderer.Render(
+            SolidImage(2, 2, 0.0f),
+            output,
+            new SegmentationVisualizationConfig
+            {
+                Alpha = 1.0,
+                DrawContours = false,
+                ShowLabels = false,
+                ShowScores = false,
+                ColorPalette = palette,
+            });
+
+        Assert.Equal(0.0f, rendered[0, 0, 0], 6);
+        Assert.Equal(1.0f, rendered[1, 0, 0], 6);
+        Assert.Equal(0.0f, rendered[2, 0, 0], 6);
+    }
+
+    [Fact]
+    [Trait("category", "integration-configure-method")]
+    public async Task Render_ConfidenceFilterAppliesToBoxesAndKeepsMaskColorsAligned()
+    {
+        await Task.Yield();
+        var masks = new Tensor<float>([2, 8, 8]);
+        masks[0, 1, 1] = 1.0f;
+        masks[1, 5, 5] = 1.0f;
+        var boxes = new Tensor<float>([2, 4]);
+        boxes[0, 0] = 0; boxes[0, 1] = 0; boxes[0, 2] = 2; boxes[0, 3] = 2;
+        boxes[1, 0] = 4; boxes[1, 1] = 4; boxes[1, 2] = 6; boxes[1, 3] = 6;
+        var output = new SegmentationOutput<float>
+        {
+            InstanceMasks = masks,
+            InstanceBoxes = boxes,
+            InstanceScores = new[] { 0.1f, 0.9f },
+            NumClasses = 2,
+            ImageHeight = 8,
+            ImageWidth = 8,
+        };
+
+        var rendered = SegmentationRenderer.Render(
+            SolidImage(8, 8, 0.0f),
+            output,
+            new SegmentationVisualizationConfig
+            {
+                Alpha = 1.0,
+                DrawContours = false,
+                ShowBoundingBoxes = true,
+                ShowLabels = false,
+                ShowScores = false,
+                MinDisplayConfidence = 0.5,
+                ColorPalette = new byte[,] { { 255, 0, 0 }, { 0, 255, 0 } },
+            });
+
+        Assert.Equal(0.0f, rendered[0, 0, 0]);
+        Assert.Equal(0.0f, rendered[1, 0, 0]);
+        Assert.Equal(0.0f, rendered[2, 0, 0]);
+        Assert.Equal(1.0f, rendered[0, 4, 4], 6);
+        Assert.Equal(0.0f, rendered[1, 4, 4], 6);
+        Assert.Equal(1.0f, rendered[0, 5, 5], 6);
+        Assert.Equal(0.0f, rendered[1, 5, 5], 6);
+    }
+
+    [Fact]
+    [Trait("category", "integration-configure-method")]
+    public async Task Render_InvalidBoxShapesFailWithTheInstanceBoxContract()
+    {
+        await Task.Yield();
+        var masks = OnesMask(4, 4);
+        var config = new SegmentationVisualizationConfig
+        {
+            ShowBoundingBoxes = true,
+            ShowLabels = false,
+            ShowScores = false,
+        };
+
+        ArgumentException rankError = Assert.Throws<ArgumentException>(() => SegmentationRenderer.Render(
+            SolidImage(4, 4, 0.0f),
+            new SegmentationOutput<float> { InstanceMasks = masks, InstanceBoxes = new Tensor<float>([4]), NumClasses = 1 },
+            config));
+        ArgumentException widthError = Assert.Throws<ArgumentException>(() => SegmentationRenderer.Render(
+            SolidImage(4, 4, 0.0f),
+            new SegmentationOutput<float> { InstanceMasks = masks, InstanceBoxes = new Tensor<float>([1, 3]), NumClasses = 1 },
+            config));
+
+        Assert.Contains("[N,4]", rankError.Message, StringComparison.Ordinal);
+        Assert.Contains("[N,4]", widthError.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    [Trait("category", "integration-configure-method")]
+    public async Task Render_LabelAnchorComesFromARealTopmostMaskPixel()
+    {
+        await Task.Yield();
+        var masks = new Tensor<float>([1, 32, 64]);
+        masks[0, 15, 20] = 1.0f; // topmost pixel
+        masks[0, 20, 5] = 1.0f;  // leftmost pixel on a different row
+        var output = new SegmentationOutput<float>
+        {
+            InstanceMasks = masks,
+            NumClasses = 1,
+            ImageHeight = 32,
+            ImageWidth = 64,
+        };
+
+        var rendered = SegmentationRenderer.Render(
+            SolidImage(32, 64, 0.0f),
+            output,
+            new SegmentationVisualizationConfig
+            {
+                Alpha = 0.0,
+                DrawContours = false,
+                ShowLabels = true,
+                ShowScores = false,
+            });
+
+        int minimumChangedX = int.MaxValue;
+        for (int y = 0; y < 32; y++)
+            for (int x = 0; x < 64; x++)
+                if (rendered[0, y, x] != 0.0f || rendered[1, y, x] != 0.0f || rendered[2, y, x] != 0.0f)
+                    minimumChangedX = Math.Min(minimumChangedX, x);
+
+        Assert.NotEqual(int.MaxValue, minimumChangedX);
+        Assert.True(minimumChangedX >= 20,
+            $"The label started at x={minimumChangedX}; it combined unrelated min-X/min-Y extents instead of anchoring to the topmost mask pixel at x=20.");
+    }
+
+    [Fact]
+    [Trait("category", "integration-configure-method")]
+    public async Task BitmapFontRejectsNonRgbDestinationsWithAnActionableContract()
+    {
+        await Task.Yield();
+        var error = Assert.Throws<ArgumentException>(() => BitmapFont5x7.DrawText(
+            new Tensor<float>([2, 4, 4]),
+            AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<float>(),
+            "label",
+            0,
+            0,
+            1.0,
+            1.0,
+            1.0));
+        Assert.Contains("[3,H,W]", error.Message, StringComparison.Ordinal);
     }
 
     private static Tensor<float> SolidImage(int height, int width, float value)
@@ -330,5 +497,55 @@ public class Bucket14_SegmentationVisualizationTests : ConfigureMethodTestBase
             for (int x = 0; x < width; x++)
                 mask[0, y, x] = 1.0f;
         return mask;
+    }
+
+    private sealed class PassThroughSelfSupervisedModel :
+        IFullModel<float, Tensor<float>, Tensor<float>>, ISelfSupervisedModel
+    {
+        public long ParameterCount => 0;
+        public bool SupportsParameterInitialization => false;
+        public ILossFunction<float> DefaultLossFunction => new MeanSquaredErrorLoss<float>();
+
+        public Vector<float> SanitizeParameters(Vector<float> parameters) => parameters;
+        public Vector<float> GetParameters() => new(0);
+
+        public void SetParameters(Vector<float> parameters)
+        {
+            if (parameters is null)
+            {
+                throw new ArgumentNullException(nameof(parameters));
+            }
+            if (parameters.Length != 0)
+            {
+                throw new ArgumentException("This test model is parameter-free.", nameof(parameters));
+            }
+        }
+
+        public IFullModel<float, Tensor<float>, Tensor<float>> WithParameters(Vector<float> parameters)
+        {
+            SetParameters(parameters);
+            return this;
+        }
+
+        public Tensor<float> Predict(Tensor<float> input) => input;
+        public void Train(Tensor<float> input, Tensor<float> expectedOutput) { }
+
+        public ModelMetadata<float> GetModelMetadata() => new()
+        {
+            Name = nameof(PassThroughSelfSupervisedModel),
+            FeatureCount = 1,
+            Complexity = 1,
+        };
+
+        public byte[] Serialize() => [];
+        public void Deserialize(byte[] data) { }
+        public void SaveModel(string filePath) { }
+        public void LoadModel(string filePath) { }
+        public void SaveState(Stream stream) { }
+        public void LoadState(Stream stream) { }
+        public Dictionary<string, float> GetFeatureImportance() => [];
+        public IFullModel<float, Tensor<float>, Tensor<float>> DeepCopy() => this;
+        public IFullModel<float, Tensor<float>, Tensor<float>> Clone() => this;
+        public void Dispose() { }
     }
 }

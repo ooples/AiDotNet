@@ -46,9 +46,14 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     /// </remarks>
     public IAiModelBuilder<T, TInput, TOutput> ConfigureAudioEffect(IAudioEffect<T> audioEffect)
     {
+        if (audioEffect is null)
+        {
+            throw new ArgumentNullException(nameof(audioEffect));
+        }
+
         // Apply the effect as a composable preprocessing step (augmentation) over audio-tensor inputs.
-        // The pipeline step IS the configuration: the effect is recoverable from the named step, so
-        // there is deliberately no separate _configuredAudioEffect mirror to fall out of sync (AIDN090).
+        // The pipeline step owns the configured effect; no separate _configuredAudioEffect mirror is
+        // maintained (AIDN096).
         _dataPipeline.AddPreprocessingStep(
             new Preprocessing.Audio.AudioEffectTransformer<T, TInput>(audioEffect), "audio_effect");
         _preprocessingPipeline = _dataPipeline.PreprocessingPipeline;

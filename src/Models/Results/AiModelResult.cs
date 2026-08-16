@@ -7,6 +7,7 @@ using AiDotNet.Benchmarking;
 using AiDotNet.Benchmarking.Models;
 using AiDotNet.CheckpointManagement;
 using AiDotNet.Configuration;
+using AiDotNet.ComputerVision.Segmentation.Common;
 using AiDotNet.Data.Structures;
 using AiDotNet.Deployment.Configuration;
 using AiDotNet.Deployment.Export;
@@ -146,6 +147,21 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// </remarks>
     [JsonIgnore]
     internal AiModelResultOptions<T, TInput, TOutput>? Options { get; private set; }
+
+    /// <summary>
+    /// Gets the segmentation-overlay defaults configured when this result was built.
+    /// </summary>
+    /// <value>
+    /// The configured visualization settings, or <see langword="null"/> when segmentation
+    /// visualization was not configured.
+    /// </value>
+    /// <remarks>
+    /// Pass this value to <see cref="SegmentationRenderer.Render{T}(Tensor{T}, SegmentationOutput{T}, SegmentationVisualizationConfig?)"/>
+    /// to render predictions with the builder's defaults. The same reference is preserved across
+    /// <see cref="WithParameters"/> and <see cref="DeepCopy"/> because it is immutable configuration
+    /// from the result's perspective.
+    /// </remarks>
+    public SegmentationVisualizationConfig? SegmentationVisualization { get; internal set; }
 
     /// <summary>
     /// Gets the model, throwing if it has not been set.
@@ -1640,6 +1656,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
 
         TextVectorizer = options.TextVectorizer;
         EmbeddingModel = options.EmbeddingModel;
+        SegmentationVisualization = options.SegmentationVisualization;
 
         ModelMetaData = Model?.GetModelMetadata() ?? new();
 
@@ -3778,6 +3795,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
             InferenceOptimizationConfig = InferenceOptimizationConfig,
             JitCompilationConfig = JitCompilationConfig,
             AllowNondeterminism = AllowNondeterminism,
+            SegmentationVisualization = SegmentationVisualization,
             ReasoningConfig = ReasoningConfig,
             KnowledgeGraph = KnowledgeGraph,
             GraphStore = GraphStore,
@@ -5530,6 +5548,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
             InferenceOptimizationConfig = InferenceOptimizationConfig,
             JitCompilationConfig = JitCompilationConfig,
             AllowNondeterminism = AllowNondeterminism,
+            SegmentationVisualization = SegmentationVisualization,
             ReasoningConfig = ReasoningConfig,
             KnowledgeGraph = KnowledgeGraph,
             GraphStore = GraphStore,

@@ -3163,7 +3163,11 @@ public partial class AiModelBuilder<T, TInput, TOutput>
 
         RunImageSpaceTrainingLoop(imageTrainable, typedLoader, raysPerBatch, imageEpochs, optimizerOptions, cancellationToken);
 
-        var result = new AiModelResult<T, TInput, TOutput> { Model = _model };
+        var result = new AiModelResult<T, TInput, TOutput>
+        {
+            Model = _model,
+            SegmentationVisualization = _segmentationVisualizationConfig,
+        };
         return Task.FromResult(result);
     }
 

@@ -1,5 +1,8 @@
 using System;
+using System.IO;
+using System.Linq;
 using System.Text.RegularExpressions;
+using System.Threading.Tasks;
 using AiDotNet.ComputerVision.Segmentation.Common;
 using AiDotNet.Dashboard.Visualization;
 using Xunit;
@@ -133,6 +136,64 @@ public class SegmentationVisualizerTests
         Assert.Equal(255, bmp[54 + 0]);
         Assert.Equal(255, bmp[54 + 1]);
         Assert.Equal(255, bmp[54 + 2]);
+    }
+
+    /// <summary>
+    /// A [0,255] image must be written through unscaled. Multiplying by 255 again would clamp a
+    /// mid-grey source to solid white.
+    /// </summary>
+    [Fact]
+    public async Task EncodedBmp_PassesEightBitImagesThroughUnscaled()
+    {
+        await Task.Yield();
+        var image = new Tensor<float>([3, Height, Width]);
+        for (int c = 0; c < 3; c++)
+            for (int y = 0; y < Height; y++)
+                for (int x = 0; x < Width; x++)
+                    image[c, y, x] = 128.0f;
+
+        var html = new SegmentationVisualizer().GenerateHtmlOverlay(
+            image, MakeSingleInstanceOutput(),
+            new SegmentationVisualizationConfig
+            {
+                Alpha = 0.0,
+                DrawContours = false,
+                ShowLabels = false,
+                ShowScores = false,
+                ShowBoundingBoxes = false,
+            });
+
+        byte[] bmp = ExtractBmp(html);
+        Assert.Equal(128, bmp[54 + 0]);
+        Assert.Equal(128, bmp[54 + 1]);
+        Assert.Equal(128, bmp[54 + 2]);
+    }
+
+    [Fact]
+    public async Task RenderAsciiOverlay_WritesToTheProvidedWriterAndUnbatchesClassMaps()
+    {
+        await Task.Yield();
+        var classMap = new Tensor<float>([1, Height, Width]);
+        for (int y = 0; y < Height; y++)
+            for (int x = 0; x < Width; x++)
+                classMap[0, y, x] = 1.0f;
+        var output = new SegmentationOutput<float>
+        {
+            ClassMap = classMap,
+            NumClasses = 2,
+            ImageHeight = Height,
+            ImageWidth = Width,
+        };
+        using var writer = new StringWriter();
+
+        new SegmentationVisualizer().RenderAsciiOverlay(output, maxWidth: Width, writer: writer);
+
+        string[] mapRows = writer.ToString()
+            .Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries)
+            .Where(line => line == new string('1', Width))
+            .ToArray();
+        Assert.Equal(2, mapRows.Length); // vertical step 2 preserves terminal character aspect ratio
+        Assert.Contains("2 class(es)", writer.ToString(), StringComparison.Ordinal);
     }
 
     /// <summary>The HTML is self-contained and carries the legend, so it can be attached to a report.</summary>

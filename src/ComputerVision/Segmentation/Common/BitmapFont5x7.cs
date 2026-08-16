@@ -184,6 +184,13 @@ internal static class BitmapFont5x7
     {
         if (string.IsNullOrEmpty(text)) return;
         if (scale < 1) scale = 1;
+        if (rgb.Rank != 3 || rgb.Shape[0] != 3)
+        {
+            throw new ArgumentException(
+                $"Bitmap text destination must be an RGB tensor shaped [3,H,W]; got rank {rgb.Rank}" +
+                (rgb.Rank == 3 ? $" with {rgb.Shape[0]} channel(s)." : "."),
+                nameof(rgb));
+        }
 
         int height = rgb.Shape[1];
         int width = rgb.Shape[2];

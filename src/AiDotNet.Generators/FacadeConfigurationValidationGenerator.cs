@@ -1,54 +1,51 @@
+using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
+using System.Threading;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
+using Microsoft.CodeAnalysis.Text;
 
 namespace AiDotNet.Generators;
 
 /// <summary>
-/// Roslyn incremental generator that enforces, at BUILD time, that every fluent
+/// Roslyn incremental generator that enforces, at build time, that every fluent
 /// <c>Configure*</c> method on the facade actually does something with what it was given.
 /// </summary>
 /// <remarks>
 /// <para>
 /// The bug class this exists to kill: a <c>Configure*</c> method accepts a value, stores it in a
 /// private field, returns <c>this</c>, and nothing ever reads that field. The caller gets no
-/// exception and no warning -- just a model built as if they had never called the method. Silent
-/// wrong behaviour is worse than a loud failure, and it is invisible in a diff because each half
-/// (the assignment, the missing read) looks fine on its own.
+/// exception and no warning -- just a model built as if they had never called the method.
 /// </para>
 /// <para>
-/// This is mechanically decidable, so it belongs in an analyzer rather than a review checklist,
-/// for the reasons set out on <see cref="GoldenPatternValidationGenerator"/>: the analyzer sees
-/// 100% of the code on every build and cannot be merged around.
-/// </para>
-/// <para>
-/// <b>Why this is cheap.</b> The fields in question are <c>private</c>, so C# accessibility means a
-/// read can only appear inside the declaring type's own (partial) declarations. The analyzer
-/// therefore only walks syntax trees that declare the facade type, not the whole compilation.
+/// <b>Why this is cheap.</b> The fields are private, so reads can only appear inside the declaring
+/// type's partial declarations. The syntax-provider transform resolves that exact symbol and
+/// immediately projects each declaration into an immutable, structurally equatable value model.
+/// No <see cref="SyntaxNode"/> or <see cref="ISymbol"/> survives into the incremental pipeline, so
+/// unrelated edits do not invalidate this analysis or retain compilations in memory.
 /// </para>
 /// <para>
 /// <b>Severity policy.</b> Ships as Warning, matching AIDN070-076. Ratchet to Error once the
 /// backlog is zero.
 /// </para>
 /// <para>
-/// <b>Rule-id range.</b> Starts at AIDN090 deliberately: 001-076 are in use here, and the
-/// 080-089 block is claimed by analyzers added on the model-family branch (AIDN082/084/085/087),
-/// so 090+ avoids an id collision when those branches meet.
+/// <b>Rule-id range.</b> AIDN096-097 follow the parameter-automation block AIDN090-095 and are
+/// uniquely owned by facade configuration validation.
 /// </para>
 /// </remarks>
 [Generator]
 public class FacadeConfigurationValidationGenerator : IIncrementalGenerator
 {
     private const string Category = "AiDotNet.FacadeConfiguration";
-
-    /// <summary>The facade types whose Configure* surface is validated.</summary>
-    private static readonly string[] FacadeTypeNames = { "AiModelBuilder" };
+    private const string FacadeTypeName = "AiModelBuilder";
+    private const string FacadeNamespace = "AiDotNet";
+    private const int FacadeArity = 3;
 
     internal static readonly DiagnosticDescriptor ConfiguredValueNeverRead = new(
-        id: "AIDN090",
+        id: "AIDN096",
         title: "Configure* method stores a value nothing ever reads",
         messageFormat: "'{0}' assigns '{1}', but nothing ever reads it -- the configuration is silently dropped",
         category: Category,
@@ -61,7 +58,7 @@ public class FacadeConfigurationValidationGenerator : IIncrementalGenerator
                      "takes effect by another route.");
 
     internal static readonly DiagnosticDescriptor ConfiguredValueOnlyExposed = new(
-        id: "AIDN091",
+        id: "AIDN097",
         title: "Configured value is only reachable through an accessor nobody calls",
         messageFormat: "'{0}' is read only by '{1}', which has no callers -- the configuration is still effectively unused",
         category: Category,
@@ -73,158 +70,379 @@ public class FacadeConfigurationValidationGenerator : IIncrementalGenerator
 
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
-        // Only the syntax trees that declare a facade partial can contain reads of its private
-        // fields, so the analysis is scoped to those trees rather than the whole compilation.
-        var facadeTrees = context.SyntaxProvider.CreateSyntaxProvider(
-                predicate: static (node, _) => node is ClassDeclarationSyntax cds
-                    && FacadeTypeNames.Contains(cds.Identifier.ValueText),
-                transform: static (ctx, _) => (ClassDeclarationSyntax)ctx.Node)
+        var facadeParts = context.SyntaxProvider.CreateSyntaxProvider(
+                predicate: static (node, _) => node is ClassDeclarationSyntax declaration
+                    && declaration.Identifier.ValueText == FacadeTypeName,
+                transform: static (syntaxContext, cancellationToken) =>
+                    CreateFacadePart(syntaxContext, cancellationToken))
+            .Where(static part => part is not null)
+            .Select(static (part, _) => part!)
             .Collect();
 
-        context.RegisterSourceOutput(facadeTrees, static (spc, declarations) =>
+        context.RegisterSourceOutput(facadeParts, static (productionContext, parts) =>
+            Analyze(productionContext, parts));
+    }
+
+    private static FacadePart? CreateFacadePart(
+        GeneratorSyntaxContext context,
+        CancellationToken cancellationToken)
+    {
+        var declaration = (ClassDeclarationSyntax)context.Node;
+        var declaredSymbol = context.SemanticModel.GetDeclaredSymbol(declaration, cancellationToken);
+        if (declaredSymbol is null
+            || declaredSymbol.Name != FacadeTypeName
+            || declaredSymbol.Arity != FacadeArity
+            || declaredSymbol.ContainingNamespace.ToDisplayString() != FacadeNamespace)
         {
-            if (declarations.IsDefaultOrEmpty) return;
+            return null;
+        }
 
-            var fields = new Dictionary<string, FieldInfo>(System.StringComparer.Ordinal);
-            var reads = new Dictionary<string, int>(System.StringComparer.Ordinal);
-            var accessorReads = new Dictionary<string, string>(System.StringComparer.Ordinal);
-            var accessorNames = new HashSet<string>(System.StringComparer.Ordinal);
-            var accessorCalls = new Dictionary<string, int>(System.StringComparer.Ordinal);
-            var assigningMethod = new Dictionary<string, string>(System.StringComparer.Ordinal);
+        string symbolKey = declaredSymbol.OriginalDefinition.ToDisplayString(
+            SymbolDisplayFormat.FullyQualifiedFormat);
+        var fields = ImmutableArray.CreateBuilder<FieldModel>();
+        var configureWrites = ImmutableArray.CreateBuilder<NamePair>();
+        var realReads = ImmutableArray.CreateBuilder<string>();
+        var accessorReads = ImmutableArray.CreateBuilder<NamePair>();
+        var accessorCalls = ImmutableArray.CreateBuilder<string>();
+        var accessorReferenceStarts = new HashSet<int>();
 
-            foreach (var decl in declarations)
+        foreach (var fieldDeclaration in declaration.Members.OfType<FieldDeclarationSyntax>())
+        {
+            foreach (var variable in fieldDeclaration.Declaration.Variables)
             {
-                CollectFields(decl, fields);
-                CollectAccessors(decl, accessorReads, accessorNames);
-            }
-
-            foreach (var decl in declarations)
-            {
-                CollectUsages(decl, fields, reads, accessorNames, accessorCalls, assigningMethod);
-            }
-
-            foreach (var kvp in fields)
-            {
-                string name = kvp.Key;
-                var info = kvp.Value;
-
-                // Only fields a Configure* method actually assigns are in scope. Plain internal
-                // state that happens to be unused is a different (and much noisier) problem.
-                if (!assigningMethod.TryGetValue(name, out var method)) continue;
-
-                reads.TryGetValue(name, out int readCount);
-                if (readCount > 0) continue;
-
-                if (accessorReads.TryGetValue(name, out var accessor))
+                if (context.SemanticModel.GetDeclaredSymbol(variable, cancellationToken) is not IFieldSymbol fieldSymbol
+                    || fieldSymbol.DeclaredAccessibility != Accessibility.Private
+                    || !BelongsToFacade(fieldSymbol.ContainingType, declaredSymbol))
                 {
-                    accessorCalls.TryGetValue(accessor, out int callCount);
-                    if (callCount == 0)
+                    continue;
+                }
+
+                fields.Add(new FieldModel(fieldSymbol.Name, SourceLocation.From(variable.Identifier)));
+            }
+        }
+
+        foreach (var property in declaration.Members.OfType<PropertyDeclarationSyntax>())
+        {
+            ExpressionSyntax? expression = GetAccessorExpression(property);
+            if (expression is null) continue;
+
+            if (context.SemanticModel.GetSymbolInfo(expression, cancellationToken).Symbol is not IFieldSymbol fieldSymbol
+                || fieldSymbol.DeclaredAccessibility != Accessibility.Private
+                || !BelongsToFacade(fieldSymbol.ContainingType, declaredSymbol))
+            {
+                continue;
+            }
+
+            accessorReads.Add(new NamePair(fieldSymbol.Name, property.Identifier.ValueText));
+            foreach (var identifier in expression.DescendantNodesAndSelf().OfType<IdentifierNameSyntax>())
+            {
+                if (context.SemanticModel.GetSymbolInfo(identifier, cancellationToken).Symbol is IFieldSymbol referenced
+                    && SymbolEqualityComparer.Default.Equals(referenced, fieldSymbol))
+                {
+                    accessorReferenceStarts.Add(identifier.SpanStart);
+                }
+            }
+        }
+
+        foreach (var identifier in declaration.DescendantNodes().OfType<IdentifierNameSyntax>())
+        {
+            ISymbol? referencedSymbol = context.SemanticModel.GetSymbolInfo(identifier, cancellationToken).Symbol;
+
+            if (referencedSymbol is IFieldSymbol fieldSymbol
+                && fieldSymbol.DeclaredAccessibility == Accessibility.Private
+                && BelongsToFacade(fieldSymbol.ContainingType, declaredSymbol))
+            {
+                if (accessorReferenceStarts.Contains(identifier.SpanStart)) continue;
+
+                if (IsSimpleAssignmentTarget(identifier))
+                {
+                    string? methodName = identifier.FirstAncestorOrSelf<MethodDeclarationSyntax>()
+                        ?.Identifier.ValueText;
+                    if (methodName is not null
+                        && methodName.StartsWith("Configure", StringComparison.Ordinal))
                     {
-                        spc.ReportDiagnostic(Diagnostic.Create(
-                            ConfiguredValueOnlyExposed, info.Location, name, accessor));
+                        configureWrites.Add(new NamePair(fieldSymbol.Name, methodName));
                     }
                     continue;
                 }
 
-                spc.ReportDiagnostic(Diagnostic.Create(
-                    ConfiguredValueNeverRead, info.Location, method, name));
-            }
-        });
-    }
-
-    private readonly struct FieldInfo
-    {
-        internal FieldInfo(Location location) => Location = location;
-        internal Location Location { get; }
-    }
-
-    private static void CollectFields(ClassDeclarationSyntax decl, Dictionary<string, FieldInfo> fields)
-    {
-        foreach (var member in decl.Members.OfType<FieldDeclarationSyntax>())
-        {
-            if (!member.Modifiers.Any(SyntaxKind.PrivateKeyword)) continue;
-            foreach (var v in member.Declaration.Variables)
-            {
-                string name = v.Identifier.ValueText;
-                if (!fields.ContainsKey(name))
-                    fields[name] = new FieldInfo(v.Identifier.GetLocation());
-            }
-        }
-    }
-
-    /// <summary>
-    /// Records expression-bodied accessors of the shape <c>X => _field;</c>. These are the reason a
-    /// naive "field is never read" check produces false negatives: the accessor IS a read, so the
-    /// field looks live even when nothing calls the accessor.
-    /// </summary>
-    private static void CollectAccessors(
-        ClassDeclarationSyntax decl,
-        Dictionary<string, string> accessorReads,
-        HashSet<string> accessorNames)
-    {
-        foreach (var prop in decl.Members.OfType<PropertyDeclarationSyntax>())
-        {
-            accessorNames.Add(prop.Identifier.ValueText);
-            if (prop.ExpressionBody?.Expression is IdentifierNameSyntax id
-                && id.Identifier.ValueText.StartsWith("_", System.StringComparison.Ordinal))
-            {
-                accessorReads[id.Identifier.ValueText] = prop.Identifier.ValueText;
-            }
-        }
-    }
-
-    private static void CollectUsages(
-        ClassDeclarationSyntax decl,
-        Dictionary<string, FieldInfo> fields,
-        Dictionary<string, int> reads,
-        HashSet<string> accessorNames,
-        Dictionary<string, int> accessorCalls,
-        Dictionary<string, string> assigningMethod)
-    {
-        foreach (var id in decl.DescendantNodes().OfType<IdentifierNameSyntax>())
-        {
-            string name = id.Identifier.ValueText;
-
-            if (accessorNames.Contains(name) && !IsOwnDeclaration(id))
-            {
-                accessorCalls.TryGetValue(name, out int c);
-                accessorCalls[name] = c + 1;
-            }
-
-            if (!fields.ContainsKey(name)) continue;
-
-            if (IsAssignmentTarget(id))
-            {
-                var method = id.FirstAncestorOrSelf<MethodDeclarationSyntax>();
-                string? methodName = method?.Identifier.ValueText;
-                if (methodName is not null
-                    && methodName.StartsWith("Configure", System.StringComparison.Ordinal)
-                    && !assigningMethod.ContainsKey(name))
-                {
-                    assigningMethod[name] = methodName;
-                }
+                realReads.Add(fieldSymbol.Name);
                 continue;
             }
 
-            // An expression-bodied accessor read is tracked separately, not as a real read.
-            if (id.Parent is ArrowExpressionClauseSyntax { Parent: PropertyDeclarationSyntax }) continue;
+            if (referencedSymbol is IPropertySymbol propertySymbol
+                && BelongsToFacade(propertySymbol.ContainingType, declaredSymbol))
+            {
+                accessorCalls.Add(propertySymbol.Name);
+            }
+        }
 
-            reads.TryGetValue(name, out int r);
-            reads[name] = r + 1;
+        return new FacadePart(
+            symbolKey,
+            fields.ToImmutable(),
+            configureWrites.ToImmutable(),
+            realReads.ToImmutable(),
+            accessorReads.ToImmutable(),
+            accessorCalls.ToImmutable());
+    }
+
+    private static bool BelongsToFacade(INamedTypeSymbol? candidate, INamedTypeSymbol facade) =>
+        candidate is not null
+        && SymbolEqualityComparer.Default.Equals(candidate.OriginalDefinition, facade.OriginalDefinition);
+
+    private static ExpressionSyntax? GetAccessorExpression(PropertyDeclarationSyntax property)
+    {
+        if (property.ExpressionBody is not null) return property.ExpressionBody.Expression;
+
+        var getter = property.AccessorList?.Accessors
+            .FirstOrDefault(accessor => accessor.IsKind(SyntaxKind.GetAccessorDeclaration));
+        if (getter?.ExpressionBody is not null) return getter.ExpressionBody.Expression;
+        if (getter?.Body?.Statements.Count == 1
+            && getter.Body.Statements[0] is ReturnStatementSyntax returnStatement)
+        {
+            return returnStatement.Expression;
+        }
+
+        return null;
+    }
+
+    private static bool IsSimpleAssignmentTarget(IdentifierNameSyntax identifier)
+    {
+        ExpressionSyntax target = identifier;
+        if (identifier.Parent is MemberAccessExpressionSyntax memberAccess
+            && memberAccess.Name == identifier)
+        {
+            target = memberAccess;
+        }
+
+        return target.Parent is AssignmentExpressionSyntax assignment
+            && assignment.Left == target
+            && assignment.IsKind(SyntaxKind.SimpleAssignmentExpression);
+    }
+
+    private static void Analyze(
+        SourceProductionContext context,
+        ImmutableArray<FacadePart> parts)
+    {
+        if (parts.IsDefaultOrEmpty) return;
+
+        var facades = new Dictionary<string, FacadeAggregate>(StringComparer.Ordinal);
+        foreach (var part in parts)
+        {
+            if (!facades.TryGetValue(part.SymbolKey, out var facade))
+            {
+                facade = new FacadeAggregate();
+                facades.Add(part.SymbolKey, facade);
+            }
+
+            foreach (var field in part.Fields)
+                if (!facade.Fields.ContainsKey(field.Name)) facade.Fields.Add(field.Name, field);
+            foreach (var write in part.ConfigureWrites)
+                if (!facade.AssigningMethods.ContainsKey(write.Left))
+                    facade.AssigningMethods.Add(write.Left, write.Right);
+            foreach (string read in part.RealReads) facade.RealReads.Add(read);
+            foreach (var accessorRead in part.AccessorReads)
+                if (!facade.AccessorReads.ContainsKey(accessorRead.Left))
+                    facade.AccessorReads.Add(accessorRead.Left, accessorRead.Right);
+            foreach (string accessorCall in part.AccessorCalls) facade.AccessorCalls.Add(accessorCall);
+        }
+
+        foreach (var facade in facades.Values)
+        {
+            foreach (var pair in facade.Fields)
+            {
+                string fieldName = pair.Key;
+                FieldModel field = pair.Value;
+                if (!facade.AssigningMethods.TryGetValue(fieldName, out string methodName)) continue;
+                if (facade.RealReads.Contains(fieldName)) continue;
+
+                if (facade.AccessorReads.TryGetValue(fieldName, out string accessorName))
+                {
+                    if (!facade.AccessorCalls.Contains(accessorName))
+                    {
+                        context.ReportDiagnostic(Diagnostic.Create(
+                            ConfiguredValueOnlyExposed,
+                            field.Location.ToLocation(),
+                            fieldName,
+                            accessorName));
+                    }
+                    continue;
+                }
+
+                context.ReportDiagnostic(Diagnostic.Create(
+                    ConfiguredValueNeverRead,
+                    field.Location.ToLocation(),
+                    methodName,
+                    fieldName));
+            }
         }
     }
 
-    private static bool IsOwnDeclaration(IdentifierNameSyntax id) =>
-        id.FirstAncestorOrSelf<PropertyDeclarationSyntax>() is { } prop
-        && prop.Identifier.ValueText == id.Identifier.ValueText;
+    private sealed class FacadeAggregate
+    {
+        internal Dictionary<string, FieldModel> Fields { get; } =
+            new(StringComparer.Ordinal);
+        internal Dictionary<string, string> AssigningMethods { get; } =
+            new(StringComparer.Ordinal);
+        internal HashSet<string> RealReads { get; } = new(StringComparer.Ordinal);
+        internal Dictionary<string, string> AccessorReads { get; } =
+            new(StringComparer.Ordinal);
+        internal HashSet<string> AccessorCalls { get; } = new(StringComparer.Ordinal);
+    }
 
-    /// <summary>
-    /// True when this identifier is the target of a plain assignment (<c>_x = v</c>). Compound and
-    /// null-coalescing assignments (<c>_x += v</c>, <c>_x ??= v</c>) read the field first, so they
-    /// are deliberately NOT treated as pure writes.
-    /// </summary>
-    private static bool IsAssignmentTarget(IdentifierNameSyntax id) =>
-        id.Parent is AssignmentExpressionSyntax assign
-        && assign.Left == id
-        && assign.IsKind(SyntaxKind.SimpleAssignmentExpression);
+    private sealed class FacadePart : IEquatable<FacadePart>
+    {
+        internal FacadePart(
+            string symbolKey,
+            ImmutableArray<FieldModel> fields,
+            ImmutableArray<NamePair> configureWrites,
+            ImmutableArray<string> realReads,
+            ImmutableArray<NamePair> accessorReads,
+            ImmutableArray<string> accessorCalls)
+        {
+            SymbolKey = symbolKey;
+            Fields = fields;
+            ConfigureWrites = configureWrites;
+            RealReads = realReads;
+            AccessorReads = accessorReads;
+            AccessorCalls = accessorCalls;
+        }
+
+        internal string SymbolKey { get; }
+        internal ImmutableArray<FieldModel> Fields { get; }
+        internal ImmutableArray<NamePair> ConfigureWrites { get; }
+        internal ImmutableArray<string> RealReads { get; }
+        internal ImmutableArray<NamePair> AccessorReads { get; }
+        internal ImmutableArray<string> AccessorCalls { get; }
+
+        public bool Equals(FacadePart? other) =>
+            other is not null
+            && SymbolKey == other.SymbolKey
+            && Fields.SequenceEqual(other.Fields)
+            && ConfigureWrites.SequenceEqual(other.ConfigureWrites)
+            && RealReads.SequenceEqual(other.RealReads, StringComparer.Ordinal)
+            && AccessorReads.SequenceEqual(other.AccessorReads)
+            && AccessorCalls.SequenceEqual(other.AccessorCalls, StringComparer.Ordinal);
+
+        public override bool Equals(object? obj) => Equals(obj as FacadePart);
+
+        public override int GetHashCode()
+        {
+            unchecked
+            {
+                int hash = SymbolKey.GetHashCode();
+                foreach (var item in Fields) hash = hash * 31 + item.GetHashCode();
+                foreach (var item in ConfigureWrites) hash = hash * 31 + item.GetHashCode();
+                foreach (var item in RealReads) hash = hash * 31 + item.GetHashCode();
+                foreach (var item in AccessorReads) hash = hash * 31 + item.GetHashCode();
+                foreach (var item in AccessorCalls) hash = hash * 31 + item.GetHashCode();
+                return hash;
+            }
+        }
+    }
+
+    private readonly struct FieldModel : IEquatable<FieldModel>
+    {
+        internal FieldModel(string name, SourceLocation location)
+        {
+            Name = name;
+            Location = location;
+        }
+
+        internal string Name { get; }
+        internal SourceLocation Location { get; }
+        public bool Equals(FieldModel other) => Name == other.Name && Location.Equals(other.Location);
+        public override bool Equals(object? obj) => obj is FieldModel other && Equals(other);
+        public override int GetHashCode() => unchecked(Name.GetHashCode() * 397 ^ Location.GetHashCode());
+    }
+
+    private readonly struct NamePair : IEquatable<NamePair>
+    {
+        internal NamePair(string left, string right)
+        {
+            Left = left;
+            Right = right;
+        }
+
+        internal string Left { get; }
+        internal string Right { get; }
+        public bool Equals(NamePair other) => Left == other.Left && Right == other.Right;
+        public override bool Equals(object? obj) => obj is NamePair other && Equals(other);
+        public override int GetHashCode() => unchecked(Left.GetHashCode() * 397 ^ Right.GetHashCode());
+    }
+
+    private readonly struct SourceLocation : IEquatable<SourceLocation>
+    {
+        private SourceLocation(
+            string path,
+            int spanStart,
+            int spanLength,
+            int startLine,
+            int startCharacter,
+            int endLine,
+            int endCharacter)
+        {
+            Path = path;
+            SpanStart = spanStart;
+            SpanLength = spanLength;
+            StartLine = startLine;
+            StartCharacter = startCharacter;
+            EndLine = endLine;
+            EndCharacter = endCharacter;
+        }
+
+        private string Path { get; }
+        private int SpanStart { get; }
+        private int SpanLength { get; }
+        private int StartLine { get; }
+        private int StartCharacter { get; }
+        private int EndLine { get; }
+        private int EndCharacter { get; }
+
+        internal static SourceLocation From(SyntaxToken token)
+        {
+            FileLinePositionSpan lines = token.SyntaxTree.GetLineSpan(token.Span);
+            return new SourceLocation(
+                token.SyntaxTree.FilePath ?? string.Empty,
+                token.SpanStart,
+                token.Span.Length,
+                lines.StartLinePosition.Line,
+                lines.StartLinePosition.Character,
+                lines.EndLinePosition.Line,
+                lines.EndLinePosition.Character);
+        }
+
+        internal Location ToLocation() => Location.Create(
+            Path,
+            new TextSpan(SpanStart, SpanLength),
+            new LinePositionSpan(
+                new LinePosition(StartLine, StartCharacter),
+                new LinePosition(EndLine, EndCharacter)));
+
+        public bool Equals(SourceLocation other) =>
+            Path == other.Path
+            && SpanStart == other.SpanStart
+            && SpanLength == other.SpanLength
+            && StartLine == other.StartLine
+            && StartCharacter == other.StartCharacter
+            && EndLine == other.EndLine
+            && EndCharacter == other.EndCharacter;
+
+        public override bool Equals(object? obj) => obj is SourceLocation other && Equals(other);
+
+        public override int GetHashCode()
+        {
+            unchecked
+            {
+                int hash = Path.GetHashCode();
+                hash = hash * 31 + SpanStart;
+                hash = hash * 31 + SpanLength;
+                hash = hash * 31 + StartLine;
+                hash = hash * 31 + StartCharacter;
+                hash = hash * 31 + EndLine;
+                hash = hash * 31 + EndCharacter;
+                return hash;
+            }
+        }
+    }
 }

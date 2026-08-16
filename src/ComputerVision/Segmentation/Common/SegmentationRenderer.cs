@@ -55,7 +55,7 @@ public static class SegmentationRenderer
         if (alpha < 0.0 || alpha > 1.0)
             throw new ArgumentOutOfRangeException(nameof(alpha), alpha, "alpha must be in [0, 1].");
 
-        return Draw(image, masks, alpha, colors, drawContours: false, contourThickness: 0);
+        return Draw(image, masks, alpha, colors, drawContours: false, contourThickness: 0).Image;
     }
 
     /// <summary>
@@ -63,10 +63,10 @@ public static class SegmentationRenderer
     /// </summary>
     /// <exception cref="NotSupportedException">
     /// Thrown when <see cref="SegmentationVisualizationConfig.ShowLabels"/> or
-    /// <see cref="SegmentationVisualizationConfig.ShowScores"/> is set. Drawing text requires a glyph
-    /// rasterizer, which this library deliberately does not depend on. Throwing is the point: a
-    /// renderer that quietly ignored those flags would be the same silently-dropped-configuration
-    /// defect this type's own analyzer rule (AIDN090) exists to prevent.
+    /// <see cref="SegmentationVisualizationConfig.ShowScores"/> is set. A bare mask stack has no
+    /// per-instance classes or scores to render; use <see cref="Render{T}"/> when labels are needed.
+    /// Throwing is the point: a renderer that quietly ignored those flags would be the same
+    /// silently-dropped-configuration defect AIDN096 exists to prevent.
     /// </exception>
     public static Tensor<T> DrawSegmentationMasks<T>(
         Tensor<T> image,
@@ -82,7 +82,7 @@ public static class SegmentationRenderer
             config.Alpha,
             ResolvePalette(config),
             config.DrawContours,
-            config.ContourThickness);
+            config.ContourThickness).Image;
     }
 
     /// <summary>
@@ -128,13 +128,28 @@ public static class SegmentationRenderer
                 nameof(output));
         }
 
-        var rendered = Draw(image, masks, config.Alpha, palette, config.DrawContours, config.ContourThickness);
+        var drawResult = Draw(
+            image,
+            masks,
+            config.Alpha,
+            palette,
+            config.DrawContours,
+            config.ContourThickness);
+        var rendered = drawResult.Image;
 
-        if (config.ShowBoundingBoxes && output.InstanceBoxes is not null)
-            DrawBoxes(rendered, output.InstanceBoxes, palette, numOps);
+        if (config.ShowBoundingBoxes && output.InstanceBoxes is not null && keptInstances is not null)
+            DrawBoxes(rendered, output.InstanceBoxes, keptInstances, palette, numOps, drawResult.Scale);
 
         if ((config.ShowLabels || config.ShowScores) && keptInstances is not null)
-            DrawInstanceLabels(rendered, masks, output, keptInstances, config, palette, numOps);
+            DrawInstanceLabels(
+                rendered,
+                drawResult.MaskAnchors,
+                output,
+                keptInstances,
+                config,
+                palette,
+                numOps,
+                drawResult.Scale);
 
         return rendered;
     }
@@ -142,7 +157,7 @@ public static class SegmentationRenderer
     /// <summary>
     /// Labels need a per-instance class and position, which only <see cref="Render{T}"/> has. The
     /// mask-only overloads therefore reject the flags rather than ignoring them: a silently dropped
-    /// setting is the defect AIDN090 exists to prevent, and here the caller simply needs the overload
+    /// setting is the defect AIDN096 exists to prevent, and here the caller simply needs the overload
     /// that carries the information labels require.
     /// </summary>
     private static void RejectLabelsWithoutInstanceContext(SegmentationVisualizationConfig config)
@@ -166,7 +181,7 @@ public static class SegmentationRenderer
     /// Returning null for the generated case defers to <see cref="BuildPalette"/>, which needs the mask
     /// count that is only known further in. Both branches are genuinely distinct — quietly collapsing
     /// them would ignore UseFixedPalette, which is the same silently-dropped-configuration defect
-    /// AIDN090 exists to catch.
+    /// AIDN096 exists to catch.
     /// </remarks>
     private static byte[,]? ResolvePalette(SegmentationVisualizationConfig config)
     {
@@ -196,6 +211,23 @@ public static class SegmentationRenderer
         return palette;
     }
 
+    /// <summary>
+    /// Detects whether an image tensor uses normalized [0,1] values or 8-bit-style [0,255] values.
+    /// </summary>
+    /// <typeparam name="T">The tensor element type.</typeparam>
+    /// <param name="image">An image tensor in any supported image shape.</param>
+    /// <returns><c>1.0</c> for normalized values or <c>255.0</c> when any value exceeds 1.</returns>
+    /// <remarks>
+    /// This is the single value-range rule used by both the core renderer and dashboard encoders.
+    /// Keeping the decision public prevents presentation layers from silently drifting to a
+    /// different scale heuristic.
+    /// </remarks>
+    public static double DetectImageScale<T>(Tensor<T> image)
+    {
+        if (image is null) throw new ArgumentNullException(nameof(image));
+        return DetectImageScale(image, MathHelper.GetNumericOperations<T>());
+    }
+
     private static (byte R, byte G, byte B) HsvToRgb(double h, double s, double v)
     {
         int sector = (int)(h * 6.0) % 6;
@@ -215,7 +247,7 @@ public static class SegmentationRenderer
         return ((byte)Math.Round(r * 255), (byte)Math.Round(g * 255), (byte)Math.Round(b * 255));
     }
 
-    private static Tensor<T> Draw<T>(
+    private static DrawResult<T> Draw<T>(
         Tensor<T> image,
         Tensor<T> masks,
         double alpha,
@@ -224,7 +256,8 @@ public static class SegmentationRenderer
         int contourThickness)
     {
         var numOps = MathHelper.GetNumericOperations<T>();
-        var rgb = ToRgb(image, numOps, out double scale);
+        var rgb = ToRgb(image, numOps);
+        double scale = DetectImageScale(rgb, numOps);
         int height = rgb.Shape[1];
         int width = rgb.Shape[2];
 
@@ -236,6 +269,7 @@ public static class SegmentationRenderer
             throw new ArgumentException("Colour palette is empty.", nameof(colors));
 
         var half = numOps.FromDouble(0.5);
+        var anchors = new MaskAnchor[numMasks];
 
         for (int m = 0; m < numMasks; m++)
         {
@@ -248,6 +282,7 @@ public static class SegmentationRenderer
                 for (int x = 0; x < width; x++)
                 {
                     if (numOps.LessThanOrEquals(maskStack[m, y, x], half)) continue;
+                    if (!anchors[m].HasValue) anchors[m] = new MaskAnchor(y, x);
                     Blend(rgb, numOps, y, x, cr, cg, cb, alpha);
                 }
             }
@@ -256,7 +291,7 @@ public static class SegmentationRenderer
                 DrawContour(rgb, maskStack, numOps, m, height, width, contourThickness, cr, cg, cb);
         }
 
-        return rgb;
+        return new DrawResult<T>(rgb, scale, anchors);
     }
 
     private static void Blend<T>(
@@ -313,24 +348,44 @@ public static class SegmentationRenderer
     }
 
     private static void DrawBoxes<T>(
-        Tensor<T> rgb, Tensor<T> boxes, byte[,] palette, INumericOperations<T> numOps)
+        Tensor<T> rgb,
+        Tensor<T> boxes,
+        List<int> keptInstances,
+        byte[,] palette,
+        INumericOperations<T> numOps,
+        double scale)
     {
+        if (boxes.Rank != 2 || boxes.Shape[1] < 4)
+        {
+            throw new ArgumentException(
+                $"InstanceBoxes must be rank 2 [N,4] with at least four coordinate columns; got rank {boxes.Rank}" +
+                (boxes.Rank == 2 ? $" and shape [{boxes.Shape[0]},{boxes.Shape[1]}]." : "."),
+                nameof(boxes));
+        }
+
         int height = rgb.Shape[1];
         int width = rgb.Shape[2];
-        double scale = DetectScale(rgb, numOps);
         int count = boxes.Shape[0];
         int paletteSize = palette.GetLength(0);
 
-        for (int i = 0; i < count; i++)
+        for (int drawn = 0; drawn < keptInstances.Count; drawn++)
         {
-            int x1 = (int)Math.Round(numOps.ToDouble(boxes[i, 0]));
-            int y1 = (int)Math.Round(numOps.ToDouble(boxes[i, 1]));
-            int x2 = (int)Math.Round(numOps.ToDouble(boxes[i, 2]));
-            int y2 = (int)Math.Round(numOps.ToDouble(boxes[i, 3]));
+            int original = keptInstances[drawn];
+            if (original < 0 || original >= count)
+            {
+                throw new ArgumentException(
+                    $"InstanceBoxes has {count} row(s), but kept instance index {original} requires a matching row.",
+                    nameof(boxes));
+            }
 
-            double cr = palette[i % paletteSize, 0] * scale / 255.0;
-            double cg = palette[i % paletteSize, 1] * scale / 255.0;
-            double cb = palette[i % paletteSize, 2] * scale / 255.0;
+            int x1 = (int)Math.Round(numOps.ToDouble(boxes[original, 0]));
+            int y1 = (int)Math.Round(numOps.ToDouble(boxes[original, 1]));
+            int x2 = (int)Math.Round(numOps.ToDouble(boxes[original, 2]));
+            int y2 = (int)Math.Round(numOps.ToDouble(boxes[original, 3]));
+
+            double cr = palette[drawn % paletteSize, 0] * scale / 255.0;
+            double cg = palette[drawn % paletteSize, 1] * scale / 255.0;
+            double cb = palette[drawn % paletteSize, 2] * scale / 255.0;
 
             void Plot(int y, int x)
             {
@@ -349,7 +404,7 @@ public static class SegmentationRenderer
     /// Normalizes the input image to a fresh [3, H, W] tensor and reports the value scale (1.0 for
     /// [0,1] images, 255.0 for [0,255]) so colours are mixed in the caller's own range.
     /// </summary>
-    private static Tensor<T> ToRgb<T>(Tensor<T> image, INumericOperations<T> numOps, out double scale)
+    private static Tensor<T> ToRgb<T>(Tensor<T> image, INumericOperations<T> numOps)
     {
         var unbatched = SegmentationTensorOps.EnsureUnbatched(image);
         int height, width, channels;
@@ -375,7 +430,6 @@ public static class SegmentationRenderer
             }
         }
 
-        scale = DetectScale(rgb, numOps);
         return rgb;
     }
 
@@ -383,15 +437,11 @@ public static class SegmentationRenderer
     /// Returns 255.0 when the image looks like 8-bit pixel values and 1.0 when it looks normalized.
     /// A value above 1 can only occur in the [0,255] convention.
     /// </summary>
-    private static double DetectScale<T>(Tensor<T> rgb, INumericOperations<T> numOps)
+    private static double DetectImageScale<T>(Tensor<T> image, INumericOperations<T> numOps)
     {
         var one = numOps.One;
-        int height = rgb.Shape[1];
-        int width = rgb.Shape[2];
-        for (int c = 0; c < 3; c++)
-            for (int y = 0; y < height; y++)
-                for (int x = 0; x < width; x++)
-                    if (numOps.GreaterThan(rgb[c, y, x], one)) return 255.0;
+        for (int index = 0; index < image.Length; index++)
+            if (numOps.GreaterThan(image[index], one)) return 255.0;
         return 1.0;
     }
 
@@ -466,49 +516,35 @@ public static class SegmentationRenderer
     /// </summary>
     private static void DrawInstanceLabels<T>(
         Tensor<T> rgb,
-        Tensor<T> drawnMasks,
+        MaskAnchor[] anchors,
         SegmentationOutput<T> output,
         List<int> keptInstances,
         SegmentationVisualizationConfig config,
         byte[,] palette,
-        INumericOperations<T> numOps)
+        INumericOperations<T> numOps,
+        double scaleRange)
     {
-        int height = rgb.Shape[1];
-        int width = rgb.Shape[2];
-        double scaleRange = DetectScale(rgb, numOps);
-        var half = numOps.FromDouble(0.5);
         int paletteSize = palette.GetLength(0);
 
-        for (int drawn = 0; drawn < keptInstances.Count && drawn < drawnMasks.Shape[0]; drawn++)
+        for (int drawn = 0; drawn < keptInstances.Count && drawn < anchors.Length; drawn++)
         {
             int original = keptInstances[drawn];
-
-            // Top-left extent of this mask; skip empty masks, which have nothing to label.
-            int minY = int.MaxValue, minX = int.MaxValue;
-            for (int y = 0; y < height; y++)
-            {
-                for (int x = 0; x < width; x++)
-                {
-                    if (numOps.LessThanOrEquals(drawnMasks[drawn, y, x], half)) continue;
-                    if (y < minY) minY = y;
-                    if (x < minX) minX = x;
-                }
-            }
-            if (minY == int.MaxValue) continue;
+            MaskAnchor anchor = anchors[drawn];
+            if (!anchor.HasValue) continue;
 
             string text = BuildLabelText(output, original, config);
             if (text.Length == 0) continue;
 
             // Prefer just above the mask; fall back to inside it when there is no room.
             int textHeight = BitmapFont5x7.MeasureHeight(1);
-            int originY = minY - textHeight - 1;
-            if (originY < 0) originY = minY + 1;
+            int originY = anchor.Y - textHeight - 1;
+            if (originY < 0) originY = anchor.Y + 1;
 
             double r = palette[drawn % paletteSize, 0] * scaleRange / 255.0;
             double g = palette[drawn % paletteSize, 1] * scaleRange / 255.0;
             double b = palette[drawn % paletteSize, 2] * scaleRange / 255.0;
 
-            BitmapFont5x7.DrawText(rgb, numOps, text, minX, originY, r, g, b);
+            BitmapFont5x7.DrawText(rgb, numOps, text, anchor.X, originY, r, g, b);
         }
     }
 
@@ -555,13 +591,13 @@ public static class SegmentationRenderer
     /// </summary>
     private static Tensor<T> ClassMapToMasks<T>(Tensor<T> classMap, int numClasses, INumericOperations<T> numOps)
     {
-        var unbatched = SegmentationTensorOps.EnsureUnbatched(classMap);
-        if (unbatched.Rank != 2)
-            throw new ArgumentException($"ClassMap must be [H,W]; got rank {unbatched.Rank}.", nameof(classMap));
+        var unbatched = SegmentationTensorOps.EnsureUnbatchedClassMap(classMap);
 
         int height = unbatched.Shape[0];
         int width = unbatched.Shape[1];
-        int channels = Math.Max(1, numClasses - 1);
+        // Channel indices deliberately equal class IDs. Channel 0 stays empty as background, so
+        // class N is rendered with palette entry N rather than being shifted to N-1.
+        int channels = Math.Max(1, numClasses);
         var masks = new Tensor<T>([channels, height, width]);
         var one = numOps.One;
 
@@ -571,9 +607,37 @@ public static class SegmentationRenderer
             {
                 int cls = (int)Math.Round(numOps.ToDouble(unbatched[y, x]));
                 if (cls <= 0 || cls >= numClasses) continue;
-                masks[cls - 1, y, x] = one;
+                masks[cls, y, x] = one;
             }
         }
         return masks;
+    }
+
+    private readonly struct DrawResult<T>
+    {
+        internal DrawResult(Tensor<T> image, double scale, MaskAnchor[] maskAnchors)
+        {
+            Image = image;
+            Scale = scale;
+            MaskAnchors = maskAnchors;
+        }
+
+        internal Tensor<T> Image { get; }
+        internal double Scale { get; }
+        internal MaskAnchor[] MaskAnchors { get; }
+    }
+
+    private readonly struct MaskAnchor
+    {
+        internal MaskAnchor(int y, int x)
+        {
+            Y = y;
+            X = x;
+            HasValue = true;
+        }
+
+        internal bool HasValue { get; }
+        internal int Y { get; }
+        internal int X { get; }
     }
 }

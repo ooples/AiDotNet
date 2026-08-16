@@ -31,11 +31,6 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         _segmentationVisualizationConfig = config ?? new SegmentationVisualizationConfig();
         return this;
     }
-
-    /// <summary>
-    /// Gets the configured segmentation visualization settings.
-    /// </summary>
-    internal SegmentationVisualizationConfig? SegmentationVisualization => _segmentationVisualizationConfig;
 }
 
 /// <summary>

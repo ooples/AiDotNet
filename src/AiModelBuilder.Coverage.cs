@@ -525,9 +525,14 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     /// </remarks>
     public IAiModelBuilder<T, TInput, TOutput> ConfigureAudioEnhancer(IAudioEnhancer<T> enhancer)
     {
+        if (enhancer is null)
+        {
+            throw new ArgumentNullException(nameof(enhancer));
+        }
+
         // Apply enhancement as a composable, fitted preprocessing step over audio-tensor inputs; its Fit
         // estimates the noise profile from the training audio so train and inference are cleaned consistently.
-        // The pipeline step IS the configuration — no separate _configuredAudioEnhancer mirror (AIDN090).
+        // The pipeline step IS the configuration — no separate _configuredAudioEnhancer mirror (AIDN096).
         _dataPipeline.AddPreprocessingStep(
             new Preprocessing.Audio.AudioEnhancementTransformer<T, TInput>(enhancer), "audio_enhancer");
         _preprocessingPipeline = _dataPipeline.PreprocessingPipeline;

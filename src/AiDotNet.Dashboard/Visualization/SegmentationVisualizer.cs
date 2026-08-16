@@ -1,5 +1,6 @@
 using System;
 using System.Globalization;
+using System.IO;
 using System.Text;
 using AiDotNet.ComputerVision.Segmentation.Common;
 using AiDotNet.Tensors.Helpers;
@@ -34,9 +35,6 @@ namespace AiDotNet.Dashboard.Visualization;
 /// </remarks>
 public class SegmentationVisualizer
 {
-    /// <summary>Characters used for the terminal overlay, from background to densest coverage.</summary>
-    private static readonly char[] DensityChars = { ' ', '.', ':', '-', '=', '+', '*', '#', '@' };
-
     /// <summary>
     /// Prints an ASCII overlay to the console: one character per cell, chosen by which instance covers
     /// it, downsampled to fit the requested width.
@@ -49,45 +47,59 @@ public class SegmentationVisualizer
     /// <param name="output">The segmentation result to display.</param>
     /// <param name="title">Optional heading.</param>
     /// <param name="maxWidth">Maximum console width; the map is downsampled to fit.</param>
-    public void RenderAsciiOverlay<T>(SegmentationOutput<T> output, string? title = null, int maxWidth = 80)
+    /// <param name="writer">Destination for the overlay. Defaults to <see cref="Console.Out"/>.</param>
+    public void RenderAsciiOverlay<T>(
+        SegmentationOutput<T> output,
+        string? title = null,
+        int maxWidth = 80,
+        TextWriter? writer = null)
     {
         if (output is null) throw new ArgumentNullException(nameof(output));
+        writer ??= SysConsole.Out;
 
-        var masks = output.InstanceMasks;
-        var classMap = output.ClassMap;
+        var masks = output.InstanceMasks is null
+            ? null
+            : SegmentationTensorOps.EnsureUnbatched(output.InstanceMasks);
+        var classMap = output.ClassMap is null
+            ? null
+            : SegmentationTensorOps.EnsureUnbatchedClassMap(output.ClassMap);
         if (masks is null && classMap is null)
         {
-            SysConsole.WriteLine("(segmentation output carries neither instance masks nor a class map)");
+            writer.WriteLine("(segmentation output carries neither instance masks nor a class map)");
             return;
         }
 
+        if (masks is not null && masks.Rank != 3)
+            throw new ArgumentException($"InstanceMasks must be [N,H,W] or [B,N,H,W]; got rank {masks.Rank}.", nameof(output));
+
         if (title is { Length: > 0 })
         {
-            SysConsole.WriteLine();
-            SysConsole.WriteLine(title);
-            SysConsole.WriteLine(new string('=', title.Length));
+            writer.WriteLine();
+            writer.WriteLine(title);
+            writer.WriteLine(new string('=', title.Length));
         }
 
         int height = masks?.Shape[1] ?? classMap!.Shape[0];
         int width = masks?.Shape[2] ?? classMap!.Shape[1];
-        int step = Math.Max(1, (int)Math.Ceiling(width / (double)Math.Max(1, maxWidth)));
+        int horizontalStep = Math.Max(1, (int)Math.Ceiling(width / (double)Math.Max(1, maxWidth)));
+        int verticalStep = horizontalStep * 2;
 
         var numOps = MathHelper.GetNumericOperations<T>();
         var builder = new StringBuilder();
 
-        for (int y = 0; y < height; y += step)
+        for (int y = 0; y < height; y += verticalStep)
         {
             builder.Clear();
-            for (int x = 0; x < width; x += step)
+            for (int x = 0; x < width; x += horizontalStep)
             {
                 int owner = OwnerAt(masks, classMap, numOps, y, x);
                 builder.Append(owner < 0 ? '.' : (char)('0' + (owner % 10)));
             }
-            SysConsole.WriteLine(builder.ToString());
+            writer.WriteLine(builder.ToString());
         }
 
-        SysConsole.WriteLine();
-        SysConsole.WriteLine($"{output.NumInstances} instance(s), {output.NumClasses} class(es); '.' = unlabelled.");
+        writer.WriteLine();
+        writer.WriteLine($"{output.NumInstances} instance(s), {output.NumClasses} class(es); '.' = unlabelled.");
     }
 
     private static int OwnerAt<T>(
@@ -177,12 +189,7 @@ public class SegmentationVisualizer
         int height = rgb.Shape[1];
         int width = rgb.Shape[2];
 
-        bool normalized = true;
-        for (int c = 0; c < 3 && normalized; c++)
-            for (int y = 0; y < height && normalized; y++)
-                for (int x = 0; x < width; x++)
-                    if (numOps.ToDouble(rgb[c, y, x]) > 1.0) { normalized = false; break; }
-        double scale = normalized ? 255.0 : 1.0;
+        double scale = 255.0 / SegmentationRenderer.DetectImageScale(rgb);
 
         int rowBytes = width * 3;
         int padding = (4 - (rowBytes % 4)) % 4;

@@ -192,7 +192,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     private IRegularization<T, TInput, TOutput>? _regularization;
     // No _fitnessCalculator / _fitDetector mirrors here: ConfigureFitnessCalculator and
     // ConfigureFitDetector delegate to _trainingCore, which owns that state. A local copy would
-    // be a second source of truth that nothing reads and that silently drifts (AIDN090).
+    // be a second source of truth that nothing reads and that silently drifts (AIDN096).
     private IFullModel<T, TInput, TOutput>? _model;
 
     /// <summary>

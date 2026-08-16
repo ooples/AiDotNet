@@ -137,6 +137,16 @@ public class AudioPreprocessingTests
         Assert.Equal(new[] { "first", "third", "first_again" }, log);
     }
 
+    [Fact]
+    public async Task AudioFacadeConfiguration_RejectsNullProcessorsAtTheCallSite()
+    {
+        await Task.Yield();
+        var builder = new AiModelBuilder<double, Tensor<double>, Tensor<double>>();
+
+        Assert.Throws<ArgumentNullException>(() => builder.ConfigureAudioEnhancer(null!));
+        Assert.Throws<ArgumentNullException>(() => builder.ConfigureAudioEffect(null!));
+    }
+
     [Fact(Timeout = 120000)]
     public async Task ConfigureAudioEnhancer_RunsEnhancerDuringBuild()
     {

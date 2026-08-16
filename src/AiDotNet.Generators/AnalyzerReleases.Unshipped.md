@@ -72,5 +72,5 @@ AIDN092 | AiDotNet.ParameterAutomation | Error | ParameterAutomationAnalyzer, Tr
 AIDN093 | AiDotNet.ParameterAutomation | Error | ParameterAutomationAnalyzer, Bound adaptive parameter axes must name one readable instance Int32 dimension
 AIDN094 | AiDotNet.ParameterAutomation | Error | ParameterAutomationAnalyzer, Trainable parameter low-precision backing must name one unique instance Tensor<Half> field
 AIDN095 | AiDotNet.ParameterAutomation | Warning | TrainableParameterGenerator, Declared parameter shapes suppressed by a dynamic registration
-AIDN090 | AiDotNet.FacadeConfiguration | Warning | FacadeConfigurationValidationGenerator, Configure* method stores a value nothing ever reads
-AIDN091 | AiDotNet.FacadeConfiguration | Warning | FacadeConfigurationValidationGenerator, Configured value is only reachable through an accessor nobody calls
+AIDN096 | AiDotNet.FacadeConfiguration | Warning | FacadeConfigurationValidationGenerator, Configure* method stores a value nothing ever reads
+AIDN097 | AiDotNet.FacadeConfiguration | Warning | FacadeConfigurationValidationGenerator, Configured value is only reachable through an accessor nobody calls

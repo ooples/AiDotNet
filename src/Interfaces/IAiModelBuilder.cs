@@ -1592,7 +1592,8 @@ public interface IAiModelBuilder<T, TInput, TOutput>
     /// <summary>
     /// Configures how segmentation results are drawn as an overlay on the source image.
     /// </summary>
-    /// <param name="config">Visualization settings. If null, defaults are used (alpha 0.5, contours on).</param>
+    /// <param name="config">Visualization settings. If null, defaults are used (alpha 0.5, contours
+    /// and labels on).</param>
     /// <returns>The builder instance for method chaining.</returns>
     /// <remarks>
     /// <para>
@@ -1600,6 +1601,12 @@ public interface IAiModelBuilder<T, TInput, TOutput>
     /// picture with each detected region tinted a distinct colour. This sets how that overlay looks;
     /// the drawing itself is done by
     /// <c>SegmentationRenderer.DrawSegmentationMasks</c>/<c>Render</c> when you render a prediction.
+    /// </para>
+    /// <para>
+    /// Labels and scores need per-instance classes and scores, so
+    /// <c>SegmentationRenderer.Render(image, SegmentationOutput, config)</c> honours them. The
+    /// mask-only <c>DrawSegmentationMasks</c> overload requires <c>ShowLabels</c> and
+    /// <c>ShowScores</c> to be disabled and rejects those flags rather than silently ignoring them.
     /// </para>
     /// <para>
     /// The settings ride through to the built result, so they only need to be stated once here rather

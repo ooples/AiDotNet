@@ -757,6 +757,10 @@ public class AiModelResultOptions<T, TInput, TOutput> : ModelOptions
     /// <summary>
     /// Segmentation overlay settings supplied via <c>ConfigureSegmentationVisualization</c>.
     /// </summary>
+    /// <value>
+    /// The default segmentation-overlay configuration to expose on the built result, or
+    /// <see langword="null"/> when no visualization defaults were configured.
+    /// </value>
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> These are the settings used when drawing a segmentation result over the
