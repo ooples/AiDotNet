@@ -598,11 +598,17 @@ public class TweedieRegression<T> : RegressionBase<T>
     /// </remarks>
     public override Vector<T> Predict(Matrix<T> x)
     {
-        // Use base linear prediction: X * Coefficients + Intercept
-        var predictions = x.Multiply(Coefficients);
-        for (int i = 0; i < predictions.Length; i++)
-            predictions[i] = NumOps.Add(predictions[i], Intercept);
-        return predictions;
+        // X * Coefficients + Intercept gives the LINEAR PREDICTOR eta, which lives on the link
+        // scale. The response is obtained by applying the inverse link — for the default log link,
+        // mu = exp(eta). Returning eta directly handed back log-scale numbers for a response-scale
+        // quantity, which is what drove R-squared sharply negative on positive data. The omission
+        // was invisible while an OLS short-circuit was fitting response-scale coefficients earlier
+        // in Train, so eta and mu happened to coincide.
+        var eta = x.Multiply(Coefficients);
+        for (int i = 0; i < eta.Length; i++)
+            eta[i] = NumOps.Add(eta[i], Intercept);
+
+        return ApplyInverseLink(eta);
     }
 
     /// <summary>

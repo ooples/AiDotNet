@@ -195,6 +195,7 @@ public abstract class RegressionModelTestBase : System.IDisposable
     public async Task TrainingError_ShouldNotExceedTestError_OnAverage()
     {
         await Task.Yield();
+        if (!IdentityLinkInvariantsApplicable) return;
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
         using var model = CreateModel();

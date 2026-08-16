@@ -254,7 +254,21 @@ public class StepwiseRegression<T> : RegressionBase<T>
         var finalRegression = new MultipleRegression<T>(Options, Regularization);
         finalRegression.Train(selectedX, y);
 
-        Coefficients = finalRegression.Coefficients;
+        // Scatter the fitted coefficients back into the ORIGINAL feature space, leaving zero for
+        // features selection rejected. The fitted vector is ordered by SELECTION order, not feature
+        // index — forward selection appends the strongest feature first, so it might be ordered
+        // [2, 0, 1]. Exposing it that way made Coefficients[j] mean "the j-th feature chosen"
+        // rather than "feature j", which is both a misleading public contract and an outright
+        // prediction bug: when selection kept every feature the lengths matched, so Predict's fast
+        // path applied those coefficients to the columns in their original order and paired every
+        // one with the wrong feature.
+        var expanded = new Vector<T>(x.Columns);
+        for (int i = 0; i < _selectedFeatures.Count; i++)
+        {
+            expanded[_selectedFeatures[i]] = finalRegression.Coefficients[i];
+        }
+
+        Coefficients = expanded;
         Intercept = finalRegression.Intercept;
     }
 
@@ -272,20 +286,18 @@ public class StepwiseRegression<T> : RegressionBase<T>
     /// </remarks>
     public override Vector<T> Predict(Matrix<T> input)
     {
-        // OLS uses all features directly
-        if (Coefficients.Length == input.Columns)
-        {
-            return base.Predict(input);
-        }
-
-        if (_selectedFeatures.Count == 0 || Coefficients.Length == 0)
+        if (Coefficients.Length == 0)
         {
             return new Vector<T>(input.Rows);
         }
 
-        // Filter input to only use selected features
-        Matrix<T> filteredInput = input.GetColumns(_selectedFeatures);
-        return base.Predict(filteredInput);
+        // Coefficients are expressed in the ORIGINAL feature space, carrying zero for every feature
+        // selection rejected, so the full input is used directly and rejected features contribute
+        // nothing. This replaces a length-comparison heuristic that decided between the full input
+        // and a filtered one: when selection happened to keep every feature the lengths matched and
+        // the filtered branch was skipped, applying selection-ordered coefficients to
+        // original-ordered columns.
+        return base.Predict(input);
     }
 
     /// <summary>
