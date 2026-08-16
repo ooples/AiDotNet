@@ -714,4 +714,47 @@ public class FusedSpecMatchesEagerBehaviourTests
             "Trust region fused while adapting its radius — the fused path holds the radius fixed, so the " +
             "two would diverge from the second step onward.");
     }
+
+    // ── Permanent declines ───────────────────────────────────────────────────
+
+    /// <summary>
+    /// Four optimizers declare the interface and always decline, so that a permanent "no" is stated rather
+    /// than inferred from a missing declaration.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The distinction is the point. Twice now, an optimizer's absence from this interface has been read as
+    /// "cannot fuse" when it meant "nobody wrote the kernel yet" — the mis-reading that scoped #1930 as
+    /// kernel work when the kernels already existed. These four are different: BFGS and DFP carry dense
+    /// n×n state that a per-parameter fused optimizer has nowhere to put, and LevenbergMarquardt and
+    /// NewtonMethod need information a fused step never receives (a residual Jacobian, Hessian-vector
+    /// products). Each says so in its own remarks.
+    /// </para>
+    /// <para>
+    /// If one of these ever gains a fused form, this test fails and the claim gets re-examined — which is
+    /// the behaviour that was missing.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public void SecondOrderOptimizersWithoutAFusedForm_DeclareTheInterfaceAndDecline()
+    {
+        var optimizers = new IFusedOptimizerSpec[]
+        {
+            new BFGSOptimizer<double, Matrix<double>, Vector<double>>(
+                null, new BFGSOptimizerOptions<double, Matrix<double>, Vector<double>>()),
+            new DFPOptimizer<double, Matrix<double>, Vector<double>>(
+                null, new DFPOptimizerOptions<double, Matrix<double>, Vector<double>>()),
+            new LevenbergMarquardtOptimizer<double, Matrix<double>, Vector<double>>(
+                null, new LevenbergMarquardtOptimizerOptions<double, Matrix<double>, Vector<double>>()),
+            new NewtonMethodOptimizer<double, Matrix<double>, Vector<double>>(
+                null, new NewtonMethodOptimizerOptions<double, Matrix<double>, Vector<double>>()),
+        };
+
+        foreach (var optimizer in optimizers)
+        {
+            Assert.False(optimizer.TryGetFusedOptimizerConfig(out _),
+                $"{optimizer.GetType().Name} reported a fused configuration. Its update is not one a fused " +
+                "step can reproduce, so fusing would run a different algorithm under the same name.");
+        }
+    }
 }

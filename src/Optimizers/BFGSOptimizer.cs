@@ -24,8 +24,35 @@ namespace AiDotNet.Optimizers;
 /// </remarks>
 [ComponentType(ComponentType.Optimizer)]
 [PipelineStage(PipelineStage.Training)]
-public class BFGSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TInput, TOutput>
+public class BFGSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TInput, TOutput>, Fused.IFusedOptimizerSpec
 {
+    /// <summary>
+    /// Declines to fuse, always.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Stated explicitly rather than by omission, because an absent spec reads as "nobody got to it yet"
+    /// and that has twice been the wrong reading in this codebase. This one is a property of the method:
+    /// BFGS carries a dense n×n inverse-Hessian approximation and updates it with two rank-one terms per
+    /// step. That state is quadratic in the parameter count and every element of the update touches all of
+    /// it, so there is nothing for a fused optimizer — which owns per-parameter buffers and a flat step —
+    /// to hold or apply. At the sizes fused training exists for, the n×n matrix does not fit in memory at
+    /// all.
+    /// </para>
+    /// <para>
+    /// The field's own answer to that is the compact representation of Byrd, Nocedal &amp; Schnabel (1994),
+    /// which stores m curvature PAIRS instead of the matrix — and that is L-BFGS, which does fuse here.
+    /// PyTorch ships only <c>LBFGS</c> from this family and documents it as supporting neither
+    /// <c>foreach</c> nor <c>fused</c>. So the way to fuse BFGS is to use <see cref="LBFGSOptimizer{T,
+    /// TInput, TOutput}"/> with a large enough memory, not to write a BFGS kernel.
+    /// </para>
+    /// </remarks>
+    bool Fused.IFusedOptimizerSpec.TryGetFusedOptimizerConfig(out Fused.FusedOptimizerConfig config)
+    {
+        config = default;
+        return false;
+    }
+
     /// <summary>
     /// The options specific to the BFGS optimization algorithm.
     /// </summary>

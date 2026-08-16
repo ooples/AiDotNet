@@ -25,8 +25,31 @@ namespace AiDotNet.Optimizers;
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 [ComponentType(ComponentType.Optimizer)]
 [PipelineStage(PipelineStage.Training)]
-public class NewtonMethodOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TInput, TOutput>
+public class NewtonMethodOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TInput, TOutput>, Fused.IFusedOptimizerSpec
 {
+    /// <summary>
+    /// Declines to fuse, always.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Stated explicitly rather than by omission, so that "no fused equivalent" is not confused with "no
+    /// kernel written yet". Newton's method solves <c>H·d = -g</c>, and this optimizer forms the
+    /// Hessian-vector products for that solve by running extra forward-over-reverse passes through the
+    /// tape — one per CG iteration. A fused step has exactly one gradient and no way to run the model
+    /// again, so the curvature the method is defined by simply is not present.
+    /// </para>
+    /// <para>
+    /// This is the same reason <c>Step</c> throws on a context that cannot re-evaluate, rather than
+    /// falling through to the base class's <c>θ -= lr·g</c>: a first-order step wearing a second-order
+    /// name converges plausibly and never says so.
+    /// </para>
+    /// </remarks>
+    bool Fused.IFusedOptimizerSpec.TryGetFusedOptimizerConfig(out Fused.FusedOptimizerConfig config)
+    {
+        config = default;
+        return false;
+    }
+
     /// <summary>
     /// The options specific to the Newton's Method optimizer.
     /// </summary>

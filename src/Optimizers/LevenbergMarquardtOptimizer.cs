@@ -26,8 +26,32 @@ namespace AiDotNet.Optimizers;
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 [ComponentType(ComponentType.Optimizer)]
 [PipelineStage(PipelineStage.Training)]
-public class LevenbergMarquardtOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TInput, TOutput>
+public class LevenbergMarquardtOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TInput, TOutput>, Fused.IFusedOptimizerSpec
 {
+    /// <summary>
+    /// Declines to fuse, always.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Stated explicitly rather than by omission, so that "no fused equivalent" is not confused with "no
+    /// kernel written yet". Levenberg-Marquardt solves
+    /// <c>(JᵀJ + λ·diag(JᵀJ))·δ = -Jᵀr</c>, which needs the residual Jacobian J and the residual vector r
+    /// — not the loss gradient. A fused step receives only <c>∇L = 2Jᵀr</c>, and J is not recoverable from
+    /// that product: the same gradient arises from infinitely many (J, r) pairs. No kernel can supply
+    /// what the caller never computed, which is why this optimizer's <c>Step</c> throws rather than
+    /// falling back to something gradient-shaped.
+    /// </para>
+    /// <para>
+    /// Fusing a least-squares method would mean the fused path running a different algorithm from the
+    /// eager one under the same name — the exact failure this interface exists to prevent.
+    /// </para>
+    /// </remarks>
+    bool Fused.IFusedOptimizerSpec.TryGetFusedOptimizerConfig(out Fused.FusedOptimizerConfig config)
+    {
+        config = default;
+        return false;
+    }
+
     /// <summary>
     /// The options specific to the Levenberg-Marquardt algorithm.
     /// </summary>
