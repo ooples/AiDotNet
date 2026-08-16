@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.NeuralNetworks.Options;
 
@@ -53,7 +53,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Learning Long-Term Dependencies with Gradient Descent is Difficult", "https://doi.org/10.1109/72.279181")]
-public partial class RecurrentNeuralNetwork<T> : NeuralNetworkBase<T>
+public partial class RecurrentNeuralNetwork<T> : SequenceModelLayoutBase<T>
 {
     private readonly RecurrentNeuralNetworkOptions _options;
 

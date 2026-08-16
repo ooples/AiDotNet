@@ -611,9 +611,28 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
         // (#1221 Clone_AfterTraining). See Conv1DLayer.
         if (needsResize)
         {
-            _gamma = AllocateLazyWeight([numFeatures]);
-            _gamma.Fill(gammaInit);
-            _beta = AllocateLazyWeight([numFeatures]);
+            var oldGamma = _gamma;
+            var oldBeta = _beta;
+            var gamma = AllocateLazyWeight([numFeatures]);
+            var beta = AllocateLazyWeight([numFeatures]);
+            gamma.Fill(gammaInit);
+
+            // A clone/deserialization path may already carry correctly-sized trained values.
+            // Shape-only reconciliation, by contrast, must not project values from a guessed
+            // width onto a different real channel contract.
+            if (preserveExistingValues && oldGamma.Length == numFeatures && oldBeta.Length == numFeatures)
+            {
+                oldGamma.Data.Span.CopyTo(gamma.AsWritableSpan());
+                oldBeta.Data.Span.CopyTo(beta.AsWritableSpan());
+            }
+
+            if (!ReplaceTrainableParameter(oldGamma, gamma, PersistentTensorRole.NormalizationParams))
+                RegisterTrainableParameter(gamma, PersistentTensorRole.NormalizationParams);
+            if (!ReplaceTrainableParameter(oldBeta, beta, PersistentTensorRole.NormalizationParams))
+                RegisterTrainableParameter(beta, PersistentTensorRole.NormalizationParams);
+
+            _gamma = gamma;
+            _beta = beta;
             // Running statistics are persistent buffers, not scratch. Lazy
             // initialization happens during the first training forward while a
             // TensorArena is active, so use the pinned allocator explicitly;
@@ -622,10 +641,13 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
             _runningMean = TensorAllocator.RentPinned<T>([numFeatures]);
             _runningVariance = TensorAllocator.RentPinned<T>([numFeatures]);
             _runningVariance.Fill(NumOps.One);
-
-            RegisterTrainableParameter(_gamma, PersistentTensorRole.NormalizationParams);
-            RegisterTrainableParameter(_beta, PersistentTensorRole.NormalizationParams);
             RegisterRunningStatisticBuffers();
+
+            _gammaGradient = null;
+            _betaGradient = null;
+            _gammaVelocity = null;
+            _betaVelocity = null;
+            ResetState();
         }
 
         // BatchNorm is SHAPE-PRESERVING (output shape == input shape). For image

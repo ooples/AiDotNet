@@ -63,6 +63,8 @@ namespace AiDotNet.Audio.Fingerprinting;
 // override claiming a spectrogram input would advertise a shape Predict does not accept.
 [PreprocessesInput("PreprocessAudio converts the waveform to a log-mel spectrogram image before the "
     + "audio stack runs, so Layers[0] never sees the raw samples - see EncodeAudio.")]
+[StackInputLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    BatchOptional = true)]
 public partial class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
 {
 

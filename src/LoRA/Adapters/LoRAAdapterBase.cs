@@ -299,23 +299,6 @@ public abstract partial class LoRAAdapterBase<T> : LayerBase<T>, ILoRAAdapter<T>
         // Create the LoRA layer - derived classes may override this via CreateLoRALayer
         _loraLayer = CreateLoRALayer(rank, alpha);
 
-        // Initialize Parameters using a NON-VIRTUAL base+LoRA-only sizing.
-        // Calling the virtual ParameterCount from a base ctor is a C#
-        // antipattern: derived adapters that override ParameterCount with
-        // derived state (delta weight matrices, importance scores, bank
-        // indices, etc.) dereference fields that the derived ctor body
-        // hasn't yet initialized — the derived state observed here is
-        // whatever default(T) the field type uses. Sizing against just
-        // _baseLayer + _loraLayer is always safe because both are fully
-        // constructed at this point.
-        //
-        // Derived adapters that override ParameterCount AND need their
-        // packed Parameters vector to round-trip (i.e., they don't
-        // override GetParameters / SetParameters with their own
-        // packing logic) MUST call RebuildParametersAfterDerivedInit()
-        // at the end of their constructor once their extra state is
-        // initialized. Most derived adapters override GetParameters
-        // and don't need this call.
         // Freezing is stated once, here. The generator discovers _baseLayer and _loraLayer as
         // sub-layers and that discovered set is authoritative, so a frozen base cannot be
         // expressed by declining to register it -- it is expressed by marking it frozen, which
@@ -328,6 +311,10 @@ public abstract partial class LoRAAdapterBase<T> : LayerBase<T>, ILoRAAdapter<T>
         // base + LoRA. The frozen case looked correct purely because freezing happened to force
         // registration on the way past.
         EnsureSubLayersRegistered();
+        if (!_usesStandardLoRAParameters)
+        {
+            FreezeSubLayerParameters(_loraLayer);
+        }
         if (_freezeBaseLayer)
         {
             FreezeSubLayerParameters(_baseLayer);

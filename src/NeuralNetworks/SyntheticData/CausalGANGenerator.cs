@@ -94,7 +94,7 @@ namespace AiDotNet.NeuralNetworks.SyntheticData;
     "https://arxiv.org/abs/1709.02023",
     Year = 2018,
     Authors = "Murat Kocaoglu, Christopher Snyder, Alexandros G. Dimakis, Sriram Vishwanath")]
-public partial class CausalGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerator<T>
+public partial class CausalGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>, ISyntheticTabularGenerator<T>
 {
     private readonly CausalGANOptions<T> _options;
     // Separate G/D optimizers (see CTGANGenerator for the divergence rationale).

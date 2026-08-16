@@ -78,6 +78,10 @@ namespace AiDotNet.Video.Prediction;
     "https://arxiv.org/abs/1706.08033",
     Year = 2017,
     Authors = "Ruben Villegas, Jimei Yang, Seunghoon Hong, Xunyu Lin, Honglak Lee")]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Frames, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Input, BatchOptional = true)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Frames, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Output, BatchOptional = true)]
 public partial class Mcnet<T> : VideoNeuralNetworkBase<T>
 {
     #region Fields

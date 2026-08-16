@@ -422,29 +422,6 @@ public partial class TLearner<T> : CausalModelBase<T>
         return data;
     }
 
-    /// <summary>
-    /// Persists the two fitted linear sub-models (treated + control weights and biases) so
-    /// <see cref="CausalModelBase{T}.DeepCopy"/> / <c>Clone</c> and Serialize/Deserialize reconstruct
-    /// them. Without this the clone copied only NumFeatures + IsFitted (base model-data) while the
-    /// weight vectors stayed at their empty <c>Vector&lt;T&gt;(0)</c> default, so EstimateTreatmentEffect
-    /// on the clone indexed <c>_weightsTreated[j]</c> out of range. Mirrors SLearner/XLearner.
-    /// </summary>
-    protected override System.Collections.Generic.Dictionary<string, object> GetAdditionalModelData()
-    {
-        var data = base.GetAdditionalModelData();
-        data["BiasTreated"] = NumOps.ToDouble(_biasTreated);
-        data["BiasControl"] = NumOps.ToDouble(_biasControl);
-        var weightsTreated = new double[_weightsTreated.Length];
-        for (int i = 0; i < _weightsTreated.Length; i++)
-            weightsTreated[i] = NumOps.ToDouble(_weightsTreated[i]);
-        data["WeightsTreated"] = weightsTreated;
-        var weightsControl = new double[_weightsControl.Length];
-        for (int i = 0; i < _weightsControl.Length; i++)
-            weightsControl[i] = NumOps.ToDouble(_weightsControl[i]);
-        data["WeightsControl"] = weightsControl;
-        return data;
-    }
-
     /// <inheritdoc />
     protected override void LoadAdditionalModelData(Newtonsoft.Json.Linq.JObject modelDataObj)
     {

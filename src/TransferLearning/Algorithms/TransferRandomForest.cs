@@ -387,31 +387,6 @@ public class MappedRandomForestModel<T> : ModelWrapperBase<T, Matrix<T>, Vector<
     }
 
     /// <inheritdoc/>
-    public override byte[] Serialize()
-    {
-        ModelPersistenceGuard.EnforceBeforeSerialize();
-        using var ms = new MemoryStream();
-        using var writer = new BinaryWriter(ms);
-        var baseBytes = BaseModel.Serialize();
-        WriteWrapper(writer, baseBytes);
-        return ms.ToArray();
-    }
-
-    /// <inheritdoc/>
-    public override void Deserialize(byte[] data)
-    {
-        ModelPersistenceGuard.EnforceBeforeDeserialize();
-        using var ms = new MemoryStream(data);
-        using var reader = new BinaryReader(ms);
-        if (TryReadWrapper(reader, out var baseBytes))
-        {
-            BaseModel.Deserialize(baseBytes);
-            return;
-        }
-        BaseModel.Deserialize(data);
-    }
-
-    /// <inheritdoc/>
     public override IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
     {
         if (BaseModel is IParameterizable<T, Matrix<T>, Vector<T>> p)

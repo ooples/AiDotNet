@@ -229,9 +229,9 @@ public partial class TiedLoRAAdapter<T> : LoRAAdapterBase<T>
         _layerScaling[0] = NumOps.One;
         _layerScalingGradient = NumOps.Zero;
 
-        // Reallocate Parameters to the reduced size (just scaling factor + base if not frozen)
-        Parameters = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
-
+        // Shared factors replace the per-layer standard LoRA factors. The generated manifest owns
+        // the layer-specific scaling tensor (plus the base layer when it is unfrozen).
+        FreezeSubLayerParameters(_loraLayer);
     }
 
     /// <summary>

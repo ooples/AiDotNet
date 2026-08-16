@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.NeuralNetworks.Options;
 
@@ -52,7 +52,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     [ResearchPaper("Training Products of Experts by Minimizing Contrastive Divergence", "https://doi.org/10.1162/089976602760128018")]
-public partial class RestrictedBoltzmannMachine<T> : NeuralNetworkBase<T>
+public partial class RestrictedBoltzmannMachine<T> : VectorModelLayoutBase<T>
 {
     private readonly RestrictedBoltzmannMachineOptions _options;
 

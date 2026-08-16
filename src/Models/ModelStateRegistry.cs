@@ -248,6 +248,50 @@ public sealed class ModelStateRegistry<T>
             return this;
         }
 
+        /// <summary>Declares a <see cref="double"/> field on the node.</summary>
+        /// <param name="get">Reads it.</param>
+        /// <param name="set">Installs a restored value.</param>
+        /// <remarks>
+        /// Distinct from <see cref="Scalar"/>, which carries the model's own <typeparamref name="T"/>.
+        /// A tree's split threshold is frequently declared as a plain <c>double</c> regardless of the
+        /// model's numeric type, and routing that through Scalar would convert it to T and back,
+        /// changing the value on any T narrower than double.
+        /// </remarks>
+        public NodeShape<TNode> Double(Func<TNode, double> get, Action<TNode, double> set)
+        {
+            Fields.Add(((n, w) => w.Write(get(n)), (n, r) => set(n, r.ReadDouble())));
+            return this;
+        }
+
+        /// <summary>Declares a <see cref="double"/> array field on the node, such as a leaf's curve.</summary>
+        /// <param name="get">Reads it.</param>
+        /// <param name="set">Installs a restored value.</param>
+        /// <remarks>
+        /// Null and empty are distinguished by a -1 length, matching the registry's own array
+        /// declarations: a leaf that never accumulated a curve is not the same as one whose curve
+        /// is empty.
+        /// </remarks>
+        public NodeShape<TNode> DoubleArray(Func<TNode, double[]?> get, Action<TNode, double[]?> set)
+        {
+            Fields.Add((
+                (n, w) =>
+                {
+                    var a = get(n);
+                    if (a is null) { w.Write(-1); return; }
+                    w.Write(a.Length);
+                    foreach (var value in a) w.Write(value);
+                },
+                (n, r) =>
+                {
+                    int length = r.ReadInt32();
+                    if (length < 0) { set(n, null); return; }
+                    var a = new double[length];
+                    for (int i = 0; i < length; i++) a[i] = r.ReadDouble();
+                    set(n, a);
+                }));
+            return this;
+        }
+
         /// <summary>Declares a boolean field on the node.</summary>
         /// <param name="get">Reads it.</param>
         /// <param name="set">Writes it.</param>
@@ -339,6 +383,71 @@ public sealed class ModelStateRegistry<T>
         return node;
     }
 
+    /// <summary>Declares a LIST of node graphs — a forest, where each entry is its own root.</summary>
+    /// <typeparam name="TNode">The node type.</typeparam>
+    /// <param name="name">A stable name, unique within the model.</param>
+    /// <param name="get">Reads the current roots.</param>
+    /// <param name="set">Installs the restored roots.</param>
+    /// <param name="describe">Describes one node, exactly as <see cref="DeclareGraph"/> does.</param>
+    /// <remarks>
+    /// <para>
+    /// The gap this fills: <see cref="DeclareGraph"/> carries ONE root, and
+    /// <see cref="DeclareChildList{TChild}"/> carries many children but demands they implement
+    /// <c>IModelSerializer</c>. An ensemble's trees are neither — many roots, and the node is a
+    /// plain private type with no serialization surface of its own. Without this overload every
+    /// forest model had to hand-write the walk, which is what ADN0060 reports and what ADN0062
+    /// reports from the other direction ("no ModelStateRegistry declaration, so nothing would
+    /// persist it").
+    /// </para>
+    /// <para>
+    /// Unlike <see cref="DeclareChildList{TChild}"/> the roots are REPLACED rather than restored in
+    /// place: how many trees a forest has is fitted, not configuration, so the count comes from the
+    /// payload rather than from whatever the constructor happened to build.
+    /// </para>
+    /// <para>
+    /// A null root is dropped rather than preserved positionally. <see cref="WriteNode"/> writes a
+    /// presence flag per node, so the stream stays aligned either way; a forest with a null tree in
+    /// it has no meaning, and keeping the slot would require a nullable element type that every
+    /// caller would then have to defend against.
+    /// </para>
+    /// </remarks>
+    public void DeclareGraphList<TNode>(
+        string name,
+        Func<List<TNode>?> get,
+        Action<List<TNode>?> set,
+        Action<NodeShape<TNode>> describe)
+        where TNode : class
+    {
+        var shape = new NodeShape<TNode>();
+        describe(shape);
+
+        if (shape.Factory is null)
+            throw new ArgumentException($"State '{name}' must declare Create so its nodes can be rebuilt.", nameof(describe));
+
+        Add(name,
+            w =>
+            {
+                var roots = get();
+                // -1 distinguishes "no list" from "an empty list", matching DeclareChildList.
+                if (roots is null) { w.Write(-1); return; }
+                w.Write(roots.Count);
+                foreach (var root in roots) WriteNode(w, root, shape);
+            },
+            r =>
+            {
+                int count = r.ReadInt32();
+                if (count < 0) { set(null); return; }
+
+                var roots = new List<TNode>(count);
+                for (int i = 0; i < count; i++)
+                {
+                    var node = ReadNode(r, shape);
+                    if (node is not null) roots.Add(node);
+                }
+                set(roots);
+            });
+    }
+
     /// <summary>Declares an array held as the model's own numeric type.</summary>
     /// <param name="name">A stable name, unique within the model.</param>
     /// <param name="get">Reads the current value.</param>
@@ -359,6 +468,47 @@ public sealed class ModelStateRegistry<T>
                 var a = new T[length];
                 for (int i = 0; i < length; i++) a[i] = Ops.FromDouble(r.ReadDouble());
                 set(a);
+            });
+
+    /// <summary>Declares a JAGGED array held as the model's own numeric type.</summary>
+    /// <param name="name">A stable name, unique within the model.</param>
+    /// <param name="get">Reads the current value.</param>
+    /// <param name="set">Installs a restored value.</param>
+    /// <remarks>
+    /// Jagged rather than rectangular deliberately: the shape this exists for is per-feature bin
+    /// thresholds, where each feature has its own bin count. A Matrix would have to pad to the
+    /// widest row and then carry the real widths separately, which is two facts that can disagree.
+    /// Each row keeps its own length, and a null row is representable so the outer and inner
+    /// nullability both round-trip.
+    /// </remarks>
+    public void DeclareJaggedArray(string name, Func<T[][]?> get, Action<T[][]?> set)
+        => Add(name,
+            w =>
+            {
+                var rows = get();
+                if (rows is null) { w.Write(-1); return; }
+                w.Write(rows.Length);
+                foreach (var row in rows)
+                {
+                    if (row is null) { w.Write(-1); continue; }
+                    w.Write(row.Length);
+                    foreach (var value in row) w.Write(Convert.ToDouble(value));
+                }
+            },
+            r =>
+            {
+                int outer = r.ReadInt32();
+                if (outer < 0) { set(null); return; }
+                var rows = new T[outer][];
+                for (int i = 0; i < outer; i++)
+                {
+                    int inner = r.ReadInt32();
+                    if (inner < 0) continue;
+                    var row = new T[inner];
+                    for (int j = 0; j < inner; j++) row[j] = Ops.FromDouble(r.ReadDouble());
+                    rows[i] = row;
+                }
+                set(rows);
             });
 
     /// <summary>Declares a list of matrices, such as per-class or per-category probability tables.</summary>
@@ -537,6 +687,42 @@ public sealed class ModelStateRegistry<T>
     /// so the pairs are sorted by key -- otherwise the same model could produce two different
     /// payloads and neither would be wrong.
     /// </remarks>
+    /// <summary>Declares a STRING-keyed table of vectors, such as per-edge or per-operation weights.</summary>
+    /// <param name="name">A stable name, unique within the model.</param>
+    /// <param name="get">Reads the current value.</param>
+    /// <param name="set">Installs a restored value.</param>
+    /// <remarks>
+    /// The int-keyed overload below cannot serve this: a supernet keys its weights by an edge name
+    /// like "node2_op3", and mapping those onto ints would need a side table that is itself state.
+    /// Keys are written in sorted order for the same reason as the int-keyed one - a Dictionary has
+    /// no inherent order, and an unstable order makes two payloads for identical state differ.
+    /// </remarks>
+    public void Declare(string name, Func<Dictionary<string, Vector<T>>?> get, Action<Dictionary<string, Vector<T>>?> set)
+        => Add(name,
+            w =>
+            {
+                var map = get();
+                if (map is null) { w.Write(-1); return; }
+                w.Write(map.Count);
+                foreach (var pair in map.OrderBy(p => p.Key, StringComparer.Ordinal))
+                {
+                    w.Write(pair.Key);
+                    WriteVector(w, pair.Value);
+                }
+            },
+            r =>
+            {
+                int count = r.ReadInt32();
+                if (count < 0) { set(null); return; }
+                var map = new Dictionary<string, Vector<T>>(count, StringComparer.Ordinal);
+                for (int i = 0; i < count; i++)
+                {
+                    string key = r.ReadString();
+                    map[key] = ReadVector(r) ?? new Vector<T>(0);
+                }
+                set(map);
+            });
+
     public void Declare(string name, Func<Dictionary<int, Vector<T>>?> get, Action<Dictionary<int, Vector<T>>?> set)
         => Add(name,
             w =>

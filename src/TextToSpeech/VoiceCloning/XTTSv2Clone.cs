@@ -359,20 +359,6 @@ public partial class XTTSv2Clone<T> : TtsModelBase<T>, ICodecTts<T>, IVoiceClone
             }
         );
 
-    private AdamWOptimizer<T, Tensor<T>, Tensor<T>> CreateDefaultOptimizer() =>
-        new(
-            this,
-            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
-            {
-                InitialLearningRate = _options.LearningRate,
-                WeightDecay = _options.WeightDecay,
-                Beta1 = _options.AdamBeta1,
-                Beta2 = _options.AdamBeta2,
-                Epsilon = _options.AdamEpsilon,
-                UseAdaptiveLearningRate = false,
-            }
-        );
-
     private void ThrowIfDisposed()
     {
         if (_disposed)

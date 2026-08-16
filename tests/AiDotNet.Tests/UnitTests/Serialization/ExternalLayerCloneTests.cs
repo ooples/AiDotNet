@@ -15,6 +15,10 @@ namespace AiDotNetTests.UnitTests.Serialization;
 /// the 321-type sweep lives in AiDotNet, so the generated factory table already names it; none of
 /// them can demonstrate what happens to somebody else's layer.
 /// </remarks>
+// Shape-preserving: the constructor passes [units] as BOTH the input and the output shape, so
+// the layer is element-wise at any rank. ADNSHAPE006 requires every LayerBase to say which it
+// is, and this is the form the descriptor prescribes for that case.
+[AiDotNet.Attributes.ElementWiseShape]
 public sealed partial class ExternalTestLayer<T> : LayerBase<T>
 {
     private readonly int _units;

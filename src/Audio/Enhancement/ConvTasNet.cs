@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Extensions;
 using AiDotNet.Interfaces;
@@ -801,6 +801,7 @@ public partial class ConvTasNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T
             var predicted = PredictCore(input);
             _ = ComputeSiSnrLoss(predicted, expected);
             var gradients = ComputeGradients(predicted, expected);
+            PublishComputedGradients(gradients);
             UpdateWeights(gradients);
         }
         finally
@@ -974,132 +975,6 @@ public partial class ConvTasNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T
     #endregion
 
     #region Serialization
-
-    /// <summary>
-    /// Serializes the model state to a byte array.
-    /// </summary>
-    public override byte[] Serialize()
-    {
-        using var stream = new MemoryStream();
-        using var writer = new BinaryWriter(stream);
-
-        // Write model configuration
-        writer.Write(SampleRate);
-        writer.Write(_encoderDim);
-        writer.Write(_kernelSize);
-        writer.Write(_bottleneckDim);
-        writer.Write(_hiddenDim);
-        writer.Write(_numBlocks);
-        writer.Write(_numRepeats);
-        writer.Write(_tcnKernelSize);
-        writer.Write(_numSources);
-
-        // Write encoder weights
-        writer.Write(_encoderWeight.Length);
-        foreach (var w in _encoderWeight)
-        {
-            writer.Write(_numOps.ToDouble(w));
-        }
-
-        // Write decoder weights
-        writer.Write(_decoderWeight.Length);
-        foreach (var w in _decoderWeight)
-        {
-            writer.Write(_numOps.ToDouble(w));
-        }
-
-        // Write mask weights
-        writer.Write(_maskWeight.Length);
-        foreach (var w in _maskWeight)
-        {
-            writer.Write(_numOps.ToDouble(w));
-        }
-
-        // Write normalization parameters
-        writer.Write(_normGamma.Length);
-        foreach (var g in _normGamma)
-        {
-            writer.Write(_numOps.ToDouble(g));
-        }
-        foreach (var b in _normBeta)
-        {
-            writer.Write(_numOps.ToDouble(b));
-        }
-
-        // The base Layers collection is intentionally empty for this manual graph.
-        // Persist the complete flat registry as well, including encoder/mask biases
-        // and every TCN block, which the legacy fields above omitted.
-        var parameters = GetParameters();
-        writer.Write(parameters.Length);
-        for (int i = 0; i < parameters.Length; i++)
-            writer.Write(_numOps.ToDouble(parameters[i]));
-
-        return stream.ToArray();
-    }
-
-    /// <summary>
-    /// Deserializes the model state from a byte array.
-    /// </summary>
-    public override void Deserialize(byte[] data)
-    {
-        using var stream = new MemoryStream(data);
-        using var reader = new BinaryReader(stream);
-
-        // Read and verify configuration
-        int sampleRate = reader.ReadInt32();
-        int encoderDim = reader.ReadInt32();
-        int kernelSize = reader.ReadInt32();
-        int bottleneckDim = reader.ReadInt32();
-        int hiddenDim = reader.ReadInt32();
-        int numBlocks = reader.ReadInt32();
-        int numRepeats = reader.ReadInt32();
-        int tcnKernelSize = reader.ReadInt32();
-        int numSources = reader.ReadInt32();
-
-        // Validate configuration matches
-        if (encoderDim != _encoderDim || kernelSize != _kernelSize || numSources != _numSources)
-        {
-            throw new InvalidOperationException("Serialized model configuration does not match current model.");
-        }
-
-        // Read encoder weights
-        int encoderLen = reader.ReadInt32();
-        for (int i = 0; i < encoderLen && i < _encoderWeight.Length; i++)
-        {
-            _encoderWeight[i] = _numOps.FromDouble(reader.ReadDouble());
-        }
-
-        // Read decoder weights
-        int decoderLen = reader.ReadInt32();
-        for (int i = 0; i < decoderLen && i < _decoderWeight.Length; i++)
-        {
-            _decoderWeight[i] = _numOps.FromDouble(reader.ReadDouble());
-        }
-
-        // Read mask weights
-        int maskLen = reader.ReadInt32();
-        for (int i = 0; i < maskLen && i < _maskWeight.Length; i++)
-        {
-            _maskWeight[i] = _numOps.FromDouble(reader.ReadDouble());
-        }
-
-        // Read normalization parameters
-        int normLen = reader.ReadInt32();
-        for (int i = 0; i < normLen && i < _normGamma.Length; i++)
-        {
-            _normGamma[i] = _numOps.FromDouble(reader.ReadDouble());
-        }
-        for (int i = 0; i < normLen && i < _normBeta.Length; i++)
-        {
-            _normBeta[i] = _numOps.FromDouble(reader.ReadDouble());
-        }
-
-        int parameterCount = reader.ReadInt32();
-        var parameters = new Vector<T>(parameterCount);
-        for (int i = 0; i < parameterCount; i++)
-            parameters[i] = _numOps.FromDouble(reader.ReadDouble());
-        SetParameters(parameters);
-    }
 
     #endregion
 

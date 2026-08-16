@@ -458,42 +458,4 @@ public partial class ChainLoRAAdapter<T> : LoRAAdapterBase<T>
         }
     }
 
-    /// <summary>
-    /// Updates the parameter count based on current frozen status.
-    /// Accumulator is <see cref="long"/> so a base + chain summing past
-    /// int.MaxValue doesn't truncate; the Vector ctor narrows via
-    /// <see cref="ParameterCountHelper.ToFlatVectorSize"/> which throws
-    /// the actionable error if the model is too large for a flat
-    /// parameter vector. Closes #1271.7BnU.
-    /// </summary>
-    private void UpdateParameterCount()
-    {
-        long count = 0L;
-
-        // Add base layer parameters if not frozen
-        if (!_freezeBaseLayer)
-        {
-            count += _baseLayer.ParameterCount;
-        }
-
-        // Add unfrozen adapter parameters
-        for (int i = 0; i < _chainLength; i++)
-        {
-            if (!_mergedStatus[i])
-            {
-                count += _adapterChain[i].ParameterCount;
-            }
-        }
-
-        // Update cached parameter count
-        _currentParameterCount = count;
-
-        // Reallocate parameter vectors with new size — narrow via the
-        // helper so a >int.MaxValue model fails fast with an actionable
-        // message rather than silently truncating.
-        int flatSize = AiDotNet.Helpers.ParameterCountHelper.ToFlatVectorSize(count);
-        Parameters = new Vector<T>(flatSize);
-        ParameterGradients = new Vector<T>(flatSize);
-    }
-
 }

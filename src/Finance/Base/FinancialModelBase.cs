@@ -1,4 +1,4 @@
-﻿using System.IO;
+using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Finance.Interfaces;
@@ -44,6 +44,9 @@ namespace AiDotNet.Finance.Base;
 /// - ONNX mode: Faster inference, pretrained, read-only
 /// </para>
 /// </remarks>
+[TensorPort("input", TensorPortDirection.Input, LayerInputDomainKind.Continuous,
+    Role = TensorPortRole.Features,
+    DomainResolver = nameof(ResolveFinancialInputDomain))]
 public abstract partial class FinancialModelBase<T> : NeuralNetworkBase<T>, IFinancialModel<T>
 {
     /// <summary>

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.ActivationFunctions;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralRadianceFields.Models;
@@ -89,12 +90,72 @@ public class NeuralNetworkBaseResolveShapesTests
     [Fact]
     public async Task LazyComposite_ManifestBuildsChildStructureWithoutDeclaringItParameterFree()
     {
-        // A fresh model has resolved shapes but deliberately unmaterialized weights. Reads stay
-        // allocation-free, so the concrete count is honestly zero and readiness carries the fact
-        // that parameters are still pending.
+        await Task.Yield();
+        using var layer = new TransformerEncoderLayer<double>(numHeads: 2, feedForwardDim: 32);
+        layer.ResolveShapesOnly(new[] { 4, 16 });
+
+        var layout = new AiDotNet.Models.Parameters.ParameterLayoutSnapshot(
+            layer.GetParameterLayout());
+
+        Assert.True(layout.ParameterCount > 0);
+        Assert.Equal(
+            AiDotNet.Models.Parameters.ParameterReadiness.ShapeResolvedUnmaterialized,
+            layout.Readiness);
+
+        long declared = layer.ParameterCount;
+        Assert.Equal(declared, layer.GetParameters().Length);
+    }
+
+    [Fact]
+    public async Task MixedCompositeManifest_PreservesConcreteSiblingsBesideDeferredChildren()
+    {
+        await Task.Yield();
+        using var block = new TransformerEncoderBlock<double>(
+            hiddenSize: 24,
+            numHeads: 4,
+            ffnDim: 48,
+            dropoutRate: 0);
+
+        // Attention and normalization are construction-sized. The two Dense FFN children are
+        // honestly deferred until a real sequence shape reaches the block.
+        var parameters = block.GetParameters();
+        var layout = new AiDotNet.Models.Parameters.ParameterLayoutSnapshot(
+            block.GetParameterLayout());
+
+        Assert.True(parameters.Length > 0);
+        Assert.Equal(AiDotNet.Models.Parameters.ParameterReadiness.ShapeDeferred, layout.Readiness);
+        Assert.Equal(parameters.Length, layout.KnownParameterCount);
+        Assert.Contains(layout.Slots, slot => slot.Readiness ==
+            AiDotNet.Models.Parameters.ParameterReadiness.ShapeDeferred);
+        Assert.Contains(layout.Slots, slot => slot.ParameterCount > 0);
+    }
+
+    [Fact]
+    public async Task ParameterShapeReadyLayer_MaterializesWithDynamicDataAxes()
+    {
+        await Task.Yield();
+        using var layer = ConvolutionalLayer<double>.WithInputDepth(
+            inputDepth: 3,
+            outputDepth: 8,
+            kernelSize: 3);
+
+        Assert.False(layer.IsShapeResolved);
+        long declared = layer.ParameterCount;
+        Assert.True(declared > 0);
+        Assert.Equal(declared, layer.GetParameters().Length);
+    }
+
+    [Fact]
+    public async Task ParameterCount_UsesDeclaredShapesBeforeTrainAndRemainsStableAfterTrain()
+    {
+        await Task.Yield();
+
+        // NeRF's topology is non-sequential, but every parameter dimension follows from its
+        // architecture. The model hook resolves that topology without allocating weights, so the
+        // generated manifest can publish the final count before the first forward.
         var model = BuildNeRF();
         long freshCount = model.ParameterCount;
-        Assert.Equal(0, freshCount);
+        Assert.True(freshCount > 0);
         Assert.True(model.HasUninitializedParameters);
 
         // First Train call materializes DenseLayer inputs via positional encoding
@@ -159,10 +220,17 @@ public class NeuralNetworkBaseResolveShapesTests
     }
 
     [Fact]
-    public void SetParameters_EmptyLazyCheckpoint_DoesNotChangeLayoutMidRestore()
+    public async Task SetParameters_EmptyTrulyShapeDeferredCheckpoint_DoesNotChangeLayoutMidRestore()
     {
-        var source = BuildLazyDenseNetwork();
-        var target = BuildLazyDenseNetwork();
+        await Task.Yield();
+
+        // No architecture supplies an input width here, so these layers are genuinely deferred.
+        // In contrast, BuildLazyDenseNetwork declares inputSize=3 and must now publish/materialize
+        // its complete generated parameter surface without a warm-up forward.
+        using var source = new DenseLayer<double>(
+            4, (IActivationFunction<double>)new ReLUActivation<double>());
+        using var target = new DenseLayer<double>(
+            4, (IActivationFunction<double>)new ReLUActivation<double>());
         var checkpoint = source.GetParameters();
 
         Assert.Empty(checkpoint);
@@ -185,5 +253,133 @@ public class NeuralNetworkBaseResolveShapesTests
         Assert.Equal(checkpoint.Length, restored.Length);
         for (int i = 0; i < checkpoint.Length; i++)
             Assert.Equal(checkpoint[i], restored[i]);
+    }
+
+    [Fact]
+    public void ShapeContractFallback_DoesNotOverrideRejectedInputGeometry()
+    {
+        // This is the model-agnostic shape pattern used by SALMONN and similar projection-based
+        // architectures. The public input is [..., 4], but the first projection changes the
+        // internal feature width to 8 before attention sees it.
+        var downstreamProjection = new FullyConnectedLayer<double>(16);
+        using var network = new NeuralNetwork<double>(
+            new NeuralNetworkArchitecture<double>(
+                inputType: InputType.TwoDimensional,
+                taskType: NeuralNetworkTaskType.Regression,
+                inputHeight: 3,
+                inputWidth: 4,
+                outputSize: 8,
+                layers:
+                [
+                    new FullyConnectedLayer<double>(8),
+                    new LayerNormalizationLayer<double>(),
+                    new FullyConnectedLayer<double>(8),
+                    new LayerNormalizationLayer<double>(),
+                    new MultiHeadAttentionLayer<double>(headCount: 2, headDimension: 4),
+                    new LayerNormalizationLayer<double>(),
+                    downstreamProjection,
+                    new FullyConnectedLayer<double>(8)
+                ]));
+
+        // The speculative architecture walk reaches attention with two invalid candidates:
+        // rank-1 [8] and stale [..., 4]. Its declarative output must not overrule either input
+        // rejection and pin downstreamProjection to the stale width.
+        network.SetTrainingMode(false);
+        Assert.False(downstreamProjection.IsShapeResolved);
+
+        var output = network.Predict(new Tensor<double>([1, 3, 4]));
+
+        Assert.Equal(new[] { 1, 3, 8 }, output.Shape.ToArray());
+        Assert.True(downstreamProjection.IsShapeResolved);
+        Assert.Equal(8, downstreamProjection.GetInputShape()[0]);
+    }
+
+    [Fact]
+    public void Dispose_DoesNotReadParameterCountOrMaterializeLazyWeights()
+    {
+        var layer = new ParameterCountBombLayer();
+        var model = new NeuralNetwork<double>(
+            new NeuralNetworkArchitecture<double>(
+                inputType: InputType.OneDimensional,
+                taskType: NeuralNetworkTaskType.Regression,
+                inputSize: 1,
+                outputSize: 1,
+                layers: [layer]));
+        layer.ParameterCountReads = 0;
+        layer.ThrowOnParameterCountRead = true;
+
+        model.Dispose();
+
+        Assert.Equal(0, layer.ParameterCountReads);
+    }
+
+    [Fact]
+    public void DeclarativeContract_CannotOverrideImperativeShapeRejection()
+    {
+        var model = BuildLazyDenseNetwork();
+        using var layer = new RejectingDeclaredLayer();
+        int[] running = [32];
+        int[] lastGood = running;
+        object?[] arguments = [layer, running, lastGood];
+
+        var advance = typeof(NeuralNetworkBase<double>).GetMethod(
+            "TryAdvanceLayerShape",
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+
+        Assert.NotNull(advance);
+        bool advanced = (bool)advance!.Invoke(model, arguments)!;
+
+        Assert.False(advanced);
+        Assert.Equal(new[] { 32 }, (int[])arguments[1]!);
+        Assert.False(layer.IsShapeResolved);
+    }
+
+    [ElementWiseShape]
+    private sealed class ParameterCountBombLayer : LayerBase<double>
+    {
+        public ParameterCountBombLayer() : base([1], [1]) { }
+
+        public int ParameterCountReads { get; set; }
+        public bool ThrowOnParameterCountRead { get; set; }
+
+        public override long ParameterCount
+        {
+            get
+            {
+                ParameterCountReads++;
+                if (ThrowOnParameterCountRead)
+                    throw new InvalidOperationException("Dispose read ParameterCount.");
+                return 0;
+            }
+        }
+
+        protected override Tensor<double> ForwardTraced(Tensor<double> input) => input;
+        public override bool SupportsTraining => false;
+        public override void ResetState() { }
+    }
+
+    [TensorLayout(TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+    [TensorLayout(TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
+    private sealed class RejectingDeclaredLayer : LayerBase<double>, IShapeContract
+    {
+        public RejectingDeclaredLayer() : base([-1], [-1])
+        {
+        }
+
+        public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+            => inputRank == 1
+                ? [new OutputAxisContract(TensorAxis.Features, AxisRelation.Fixed(256))]
+                : null;
+
+        protected override void OnFirstForward(Tensor<double> input)
+            => throw new InvalidOperationException("The imperative implementation rejects this shape.");
+
+        protected override Tensor<double> ForwardTraced(Tensor<double> input) => input;
+
+        public override bool SupportsTraining => false;
+
+        public override void ResetState()
+        {
+        }
     }
 }

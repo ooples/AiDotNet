@@ -114,6 +114,7 @@ public partial class LoRALayer<T> : LayerBase<T>, IShapeContract
     /// Think of it as compressing the input data into a smaller representation before expanding it again.
     /// </para>
     /// </remarks>
+    [TrainableParameter(Role = PersistentTensorRole.Weights, Shape = "InputShape[0], _rank")]
     private Tensor<T> _loraA;
 
     /// <summary>
@@ -129,6 +130,7 @@ public partial class LoRALayer<T> : LayerBase<T>, IShapeContract
     /// to full size. It starts at zero so the adapted model initially behaves exactly like the original.
     /// </para>
     /// </remarks>
+    [TrainableParameter(Role = PersistentTensorRole.Weights, Shape = "_rank, OutputShape[0]")]
     private Tensor<T> _loraB;
 
     /// <summary>
@@ -171,11 +173,13 @@ public partial class LoRALayer<T> : LayerBase<T>, IShapeContract
     /// <summary>
     /// Gradients for matrix A computed during backpropagation.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _loraAGradient;
 
     /// <summary>
     /// Gradients for matrix B computed during backpropagation.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _loraBGradient;
 
     /// <summary>

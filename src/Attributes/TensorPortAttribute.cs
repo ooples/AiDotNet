@@ -63,6 +63,13 @@ public sealed class TensorPortAttribute : Attribute
     public string? CustomProviderKey { get; set; }
 
     /// <summary>
+    /// Optional method accepting <c>int[]?</c> and returning the complete value domain. Use this
+    /// for packed tensors whose public domain changes with their declared shape; extracted internal
+    /// tensors are still validated at their own semantic consumers.
+    /// </summary>
+    public string? DomainResolver { get; set; }
+
+    /// <summary>
     /// Optional field/property/method expression supplying this port's shape. Empty uses
     /// <c>GetInputShape()</c> or <c>GetOutputShape()</c> according to <see cref="Direction"/>.
     /// </summary>
@@ -119,6 +126,7 @@ public sealed class TensorInputAttribute : Attribute
     public string? MaxExclusiveMember { get; set; }
     public string? MaxExclusiveResolver { get; set; }
     public string? CustomProviderKey { get; set; }
+    public string? DomainResolver { get; set; }
     public TensorPortSource Source { get; set; } = TensorPortSource.External;
     public string Variant { get; set; } = "default";
     public int ExactRank { get; set; }

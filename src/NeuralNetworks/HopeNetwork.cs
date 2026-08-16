@@ -41,7 +41,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     [ResearchPaper("Nested Learning: The Illusion of Deep Learning Architectures", "https://arxiv.org/abs/2512.24695")]
-public partial class HopeNetwork<T> : NeuralNetworkBase<T>
+public partial class HopeNetwork<T> : VectorModelLayoutBase<T>
 {
     private readonly HopeNetworkOptions _options;
 

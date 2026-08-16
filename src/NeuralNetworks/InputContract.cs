@@ -211,8 +211,58 @@ public sealed class InputContractManifest
                 + string.Join(", ", Variants.Select(item => item.Name)) + ".");
         }
 
+        var primary = selected.Ports.FirstOrDefault(port => port.Source == TensorPortSource.External);
+        if (primary is null)
+            return BoundInputContract.Invalid(this, variant,
+                "the selected input variant has no external input port");
+
+        var shapes = new Dictionary<string, int[]>(StringComparer.Ordinal)
+        {
+            [primary.Name] = (int[])primaryInputShape.Clone()
+        };
+        return BindCore(selected, shapes, resolvedPrimaryDomain);
+    }
+
+    /// <summary>Binds every supplied named input to its own concrete shape.</summary>
+    public BoundInputContract Bind(
+        IReadOnlyDictionary<string, int[]> inputShapes,
+        string variant = "default")
+    {
+        if (inputShapes is null) throw new ArgumentNullException(nameof(inputShapes));
+
+        var selected = Variants.FirstOrDefault(item =>
+            string.Equals(item.Name, variant, StringComparison.Ordinal));
+        if (selected is null)
+        {
+            return BoundInputContract.Invalid(
+                this,
+                variant,
+                $"Input variant '{variant}' does not exist. Available variants: "
+                + string.Join(", ", Variants.Select(item => item.Name)) + ".");
+        }
+
+        return BindCore(selected, inputShapes, resolvedPrimaryDomain: null);
+    }
+
+    private BoundInputContract BindCore(
+        InputContractVariant selected,
+        IReadOnlyDictionary<string, int[]> inputShapes,
+        LayerInputDomain? resolvedPrimaryDomain)
+    {
+        var primary = selected.Ports.FirstOrDefault(port => port.Source == TensorPortSource.External);
+        if (primary is null)
+            return BoundInputContract.Invalid(this, selected.Name,
+                "the selected input variant has no external input port");
+
+        int[] primaryInputShape = inputShapes.TryGetValue(primary.Name, out var suppliedPrimaryShape)
+            ? (int[])suppliedPrimaryShape.Clone()
+            : primary.Shape.ToArray();
+
         var reasons = new List<string>();
         ValidateModelShape(primaryInputShape, ShapeConstraint, reasons);
+        bool hasInvalidInput = primaryInputShape.Length == 0
+            || primaryInputShape.Any(axis => axis <= 0);
+        bool hasDeferredDeclaration = false;
 
         var seenStableIds = new HashSet<string>(StringComparer.Ordinal);
         var boundPorts = new List<LayerPort>(selected.Ports.Count);
@@ -227,15 +277,31 @@ public sealed class InputContractManifest
             var domain = isPrimary && resolvedPrimaryDomain.HasValue
                 ? resolvedPrimaryDomain.Value
                 : port.ValueDomain;
-            var shape = isPrimary ? primaryInputShape : port.Shape.ToArray();
+            var shape = ResolvePortShape(port, selected.Ports, inputShapes, new HashSet<string>(StringComparer.Ordinal));
 
             if (port.Required && port.Source == TensorPortSource.External && !domain.IsResolved)
+            {
                 reasons.Add($"port '{port.Name}' is not ready: {domain}");
+                hasDeferredDeclaration = true;
+            }
             if (port.Required && port.Source == TensorPortSource.External
                 && (shape.Length == 0 || shape.Any(axis => axis <= 0)))
-                reasons.Add(
-                    $"port '{port.Name}' is not ready: shape [{string.Join(",", shape)}] "
-                    + "must be concrete before execution");
+            {
+                if (inputShapes.ContainsKey(port.Name))
+                {
+                    reasons.Add(
+                        $"port '{port.Name}' has invalid shape [{string.Join(",", shape)}]; "
+                        + "every caller-supplied axis must be positive");
+                    hasInvalidInput = true;
+                }
+                else
+                {
+                    reasons.Add(
+                        $"port '{port.Name}' is not ready: shape [{string.Join(",", shape)}] "
+                        + "must be concrete before execution");
+                    hasDeferredDeclaration = true;
+                }
+            }
 
             ValidatePortShape(shape, port.ShapeConstraint, port.Name, reasons);
             boundPorts.Add(new LayerPort(
@@ -255,11 +321,36 @@ public sealed class InputContractManifest
 
         InputContractReadiness readiness = reasons.Count == 0
             ? InputContractReadiness.Ready
-            : reasons.Any(reason => reason.IndexOf("not ready", StringComparison.Ordinal) >= 0)
+            : hasDeferredDeclaration && !hasInvalidInput
                 ? InputContractReadiness.Deferred
                 : InputContractReadiness.Invalid;
 
-        return new BoundInputContract(this, variant, boundPorts, readiness, reasons);
+        return new BoundInputContract(this, selected.Name, boundPorts, readiness, reasons);
+    }
+
+    private static int[] ResolvePortShape(
+        LayerPort port,
+        IReadOnlyList<LayerPort> ports,
+        IReadOnlyDictionary<string, int[]> suppliedShapes,
+        ISet<string> resolving)
+    {
+        if (suppliedShapes.TryGetValue(port.Name, out var supplied))
+            return (int[])supplied.Clone();
+
+        string? relatedName = port.ShapeConstraint.SameShapeAs;
+        if (string.IsNullOrWhiteSpace(relatedName))
+            return port.Shape.ToArray();
+
+        if (!resolving.Add(port.Name))
+            return port.Shape.ToArray();
+
+        var related = ports.FirstOrDefault(candidate =>
+            string.Equals(candidate.Name, relatedName, StringComparison.Ordinal));
+        int[] resolved = related is null
+            ? port.Shape.ToArray()
+            : ResolvePortShape(related, ports, suppliedShapes, resolving);
+        resolving.Remove(port.Name);
+        return resolved;
     }
 
     internal static void ValidateModelShape(
@@ -382,15 +473,28 @@ public sealed class BoundInputContract
     /// <summary>Validates the primary public input against this bound contract.</summary>
     public void Validate<T>(Tensor<T> input)
     {
-        RequireReady();
+        RequireReadyForCaller();
         InputContractValidator.Validate(input, PrimaryInput, Manifest.OwnerName);
     }
 
     /// <summary>Validates named inputs, including required/defaulted ports and shape relations.</summary>
     public void Validate<T>(IReadOnlyDictionary<string, Tensor<T>> inputs)
     {
-        RequireReady();
+        RequireReadyForCaller();
         InputContractValidator.Validate(inputs, InputPorts, Manifest.OwnerName);
+    }
+
+    private void RequireReadyForCaller()
+    {
+        if (Readiness == InputContractReadiness.Invalid)
+        {
+            throw new InputContractViolationException(
+                $"{Manifest.OwnerName} input contract '{Variant}' rejected the supplied input: "
+                + string.Join("; ", Reasons) + ".",
+                "input");
+        }
+
+        RequireReady();
     }
 }
 
@@ -567,7 +671,13 @@ public static class InputContractTensorFactory
                     random.Next(domain.MinInclusive, domain.MaxExclusive),
                 LayerInputDomainKind.BooleanMask => random.Next(0, 2),
                 LayerInputDomainKind.AdditiveMask => random.Next(0, 2) == 0 ? 0.0 : -10_000.0,
-                _ => random.NextDouble()
+                // Unconstrained continuous means any real value. Generate a symmetric probe so
+                // shared conformance tests exercise both halves of piecewise layers (PReLU,
+                // thresholds, signed gates) instead of silently making their trainable negative
+                // branch unreachable with the former [0, 1) distribution. Probability/unit-range
+                // consumers must declare a bounded custom domain rather than relying on this
+                // unconstrained default.
+                _ => random.NextDouble() * 2.0 - 1.0
             };
             tensor[i] = numOps.FromDouble(value);
         }

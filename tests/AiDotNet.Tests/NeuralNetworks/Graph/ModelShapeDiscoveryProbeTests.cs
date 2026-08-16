@@ -168,11 +168,22 @@ public class ModelShapeDiscoveryProbeTests
                 .ToList();
         }
 
+        // A developer-only selector for reproducing one model family. The empty CI default still
+        // exercises the complete alphabetical window.
+        string? typeFilter = Environment.GetEnvironmentVariable("ADNSHAPE_PROBE_TYPE");
+        if (!string.IsNullOrWhiteSpace(typeFilter))
+        {
+            candidates = candidates
+                .Where(t => t.Name.Contains(typeFilter, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+        }
+
         int budget = EnvInt("ADNSHAPE_PROBE_BUDGET", ModelBudget, 1);
         int offset = EnvInt("ADNSHAPE_PROBE_OFFSET", 0, 0);
         if (offset > 0) candidates = candidates.Skip(offset).ToList();
         _out.WriteLine($"candidates={candidates.Count}  budget={budget}  offset={offset}"
-            + (string.IsNullOrWhiteSpace(nsFilter) ? "" : $"  namespace~{nsFilter}"));
+            + (string.IsNullOrWhiteSpace(nsFilter) ? "" : $"  namespace~{nsFilter}")
+            + (string.IsNullOrWhiteSpace(typeFilter) ? "" : $"  type~{typeFilter}"));
 
         int probed = 0, reproduced = 0, confirmed = 0, parameterised = 0, ambiguous = 0, unconfirmed = 0;
         int reachedByArchitectureCtor = 0;
@@ -344,8 +355,28 @@ public class ModelShapeDiscoveryProbeTests
         var ps = ctor.GetParameters();
         var args = new object?[ps.Length];
         args[0] = buildArch();
-        for (int i = 1; i < ps.Length; i++) args[i] = ps[i].DefaultValue;
+        for (int i = 1; i < ps.Length; i++) args[i] = ResolveProbeArgument(ps[i]);
         return ctor.Invoke(args);
+    }
+
+    /// <summary>
+    /// Gives models with production-scale defaults an explicit, faithful small profile for bounded
+    /// conformance probes. This is a convention rather than a model-name switch, so any future options
+    /// type can opt in without changing the harness.
+    /// </summary>
+    private static object? ResolveProbeArgument(ParameterInfo parameter)
+    {
+        var factory = parameter.ParameterType
+            .GetMethods(BindingFlags.Public | BindingFlags.Static)
+            .FirstOrDefault(method =>
+                method.Name == "TinyForTests"
+                && parameter.ParameterType.IsAssignableFrom(method.ReturnType)
+                && method.GetParameters().All(p => p.HasDefaultValue));
+
+        if (factory is null) return parameter.DefaultValue;
+
+        object?[] arguments = factory.GetParameters().Select(p => p.DefaultValue).ToArray();
+        return factory.Invoke(null, arguments);
     }
 
     /// <summary>

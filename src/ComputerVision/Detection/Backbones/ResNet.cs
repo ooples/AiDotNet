@@ -40,6 +40,10 @@ namespace AiDotNet.ComputerVision.Detection.Backbones;
     "https://arxiv.org/abs/1512.03385",
     Year = 2016,
     Authors = "Kaiming He, Xiangyu Zhang, Shaoqing Ren, Jian Sun")]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Input, BatchOptional = true)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Output, BatchOptional = true)]
 public partial class ResNet<T> : NeuralNetworkBase<T>, IDetectionBackbone<T>
 {
 

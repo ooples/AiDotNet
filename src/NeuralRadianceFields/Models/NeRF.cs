@@ -133,7 +133,7 @@ namespace AiDotNet.NeuralRadianceFields.Models;
 [ModelComplexity(ModelComplexity.VeryHigh)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("NeRF: Representing Scenes as Neural Radiance Fields for View Synthesis", "https://doi.org/10.1007/978-3-030-58452-8_24", Year = 2020, Authors = "Ben Mildenhall, Pratul P. Srinivasan, Matthew Tancik, Jonathan T. Barron, Ravi Ramamoorthi, Ren Ng")]
-public partial class NeRF<T> : NeuralNetworkBase<T>, IRadianceField<T>, NeuralRadianceFields.Interfaces.IImageTrainable<T>
+public partial class NeRF<T> : AiDotNet.NeuralNetworks.VectorModelLayoutBase<T>, IRadianceField<T>, NeuralRadianceFields.Interfaces.IImageTrainable<T>
 {
     private readonly NeRFOptions _options;
 

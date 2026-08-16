@@ -666,9 +666,6 @@ public partial class BarkModel<T> : TtsModelBase<T>
         }
     }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-        => new BarkModel<T>(Architecture, new BarkOptions(_options), CreateCodecForNewInstance());
-
     /// <summary>
     /// Recreates the injected codec dependency for cloning while leaving Bark parameter transfer to
     /// the framework's single generated layer manifest.

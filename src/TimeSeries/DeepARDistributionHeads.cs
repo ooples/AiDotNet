@@ -119,36 +119,6 @@ internal abstract class DeepARDistributionHead<T> : NeuralNetworks.Layers.LayerB
 
     public override bool SupportsTraining => true;
     public override void ResetState() { }
-    public override long ParameterCount
-    {
-        get
-        {
-            long count = 0;
-            foreach (var p in _params)
-                count += p.Length;
-            return count;
-        }
-    }
-
-    public override Vector<T> GetParameters()
-    {
-        long total = ParameterCount;
-        var arr = new T[total];
-        int idx = 0;
-        foreach (var p in _params)
-            for (int i = 0; i < p.Length; i++)
-                arr[idx++] = p[i];
-        return new Vector<T>(arr);
-    }
-
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int idx = 0;
-        foreach (var p in _params)
-            for (int i = 0; i < p.Length; i++)
-                p[i] = parameters[idx++];
-    }
-
     protected static void WriteTensor(BinaryWriter writer, Tensor<T> tensor)
     {
         writer.Write(tensor.Shape.Length);

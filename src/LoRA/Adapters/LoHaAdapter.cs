@@ -170,8 +170,9 @@ public partial class LoHaAdapter<T> : LoRAAdapterBase<T>
 
         }
 
-        // Initialize parameter vector
-        Parameters = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
+        // The base capability declaration excludes the unused standard LoRA child. The generated
+        // collection surface owns both matrix arrays in stable rank order, with no shadow vector
+        // or constructor-time runtime registration to keep synchronized.
     }
 
     /// <summary>

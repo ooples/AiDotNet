@@ -48,7 +48,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("The 'echo state' approach to analysing and training recurrent neural networks", "https://www.ai.rug.nl/minds/uploads/EchoStatesTechRep.pdf", Year = 2001, Authors = "Herbert Jaeger")]
-public partial class EchoStateNetwork<T> : NeuralNetworkBase<T>
+public partial class EchoStateNetwork<T> : SequenceModelLayoutBase<T>
 {
     private readonly EchoStateNetworkOptions _options;
 

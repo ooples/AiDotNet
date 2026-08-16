@@ -12,7 +12,8 @@ using AiDotNet.Interfaces;
 using AiDotNet.Interpretability;
 using AiDotNet.LossFunctions;
 using AiDotNet.Models;
-using AiDotNet.Validation;
+using AiDotNet.Validation;
+
 using AiDotNet.Models.Parameters;
 
 namespace AiDotNet.NeuralNetworks
@@ -54,9 +55,11 @@ namespace AiDotNet.NeuralNetworks
         private readonly Random _random; // Shared Random instance to avoid time-based seeding issues
 
         // Architecture parameters (alpha) - learnable parameters that determine operation weights
+        [TrainableParameter]
         private readonly List<Matrix<T>> _architectureParams;
 
         // Network weights - parameters for each operation
+        [TrainableParameter(Availability = AiDotNet.Models.Parameters.ParameterAvailability.Fit)]
         private readonly Dictionary<string, Vector<T>> _weights;
 
         // Gradients
@@ -912,105 +915,50 @@ namespace AiDotNet.NeuralNetworks
                 _weightGradients[key] = new Vector<T>(length);
             }
         }
-        public override byte[] Serialize()
+        /// <summary>
+        /// Declares the two collections the generator cannot place: the per-node architecture
+        /// matrices and the string-keyed weight table.
+        /// </summary>
+        /// <param name="state">The registry to declare into.</param>
+        /// <remarks>
+        /// Both fields are readonly, so each setter refills the existing instance rather than
+        /// replacing it - the same thing the hand-written Deserialize did with Clear() then Add().
+        /// <para>
+        /// _numNodes and _numOperations are readonly construction config; the hand-written pair
+        /// wrote them only to VALIDATE on read, throwing when they disagreed, and the recorded
+        /// constructor replays them. _architectureGradients is rebuilt to match the restored
+        /// architecture shape, exactly as the old Deserialize rebuilt it, because a gradient is
+        /// scratch from the last backward pass rather than model state.
+        /// </para>
+        /// </remarks>
+        protected override void RegisterState(ModelStateRegistry<T> state)
         {
-            using var ms = new System.IO.MemoryStream();
-            using var writer = new System.IO.BinaryWriter(ms);
+            base.RegisterState(state);
 
-            writer.Write(_numNodes);
-            writer.Write(_numOperations);
-            writer.Write(_inputSize);
-            writer.Write(_outputSize);
-
-            // Serialize architecture parameters
-            writer.Write(_architectureParams.Count);
-            foreach (var alpha in _architectureParams)
-            {
-                writer.Write(alpha.Rows);
-                writer.Write(alpha.Columns);
-                for (int i = 0; i < alpha.Rows; i++)
+            state.Declare(
+                "SuperNet._architectureParams",
+                () => _architectureParams,
+                v =>
                 {
-                    for (int j = 0; j < alpha.Columns; j++)
+                    _architectureParams.Clear();
+                    _architectureGradients.Clear();
+                    if (v is null) return;
+                    foreach (var alpha in v)
                     {
-                        writer.Write(Convert.ToDouble(alpha[i, j]));
+                        _architectureParams.Add(alpha);
+                        _architectureGradients.Add(new Matrix<T>(alpha.Rows, alpha.Columns));
                     }
-                }
-            }
+                });
 
-            // Serialize weights
-            writer.Write(_weights.Count);
-            foreach (var kvp in _weights)
-            {
-                writer.Write(kvp.Key);
-                writer.Write(kvp.Value.Length);
-                for (int i = 0; i < kvp.Value.Length; i++)
+            state.Declare(
+                "SuperNet._weights",
+                () => _weights,
+                v =>
                 {
-                    writer.Write(Convert.ToDouble(kvp.Value[i]));
-                }
-            }
-
-            return ms.ToArray();
-        }
-        public override void Deserialize(byte[] data)
-        {
-            if (data == null)
-                throw new ArgumentNullException(nameof(data), "The data parameter passed to Deserialize cannot be null.");
-
-            using var ms = new System.IO.MemoryStream(data);
-            using var reader = new System.IO.BinaryReader(ms);
-
-            // Deserialize _numNodes and _numOperations (read-only fields need reflection or constructor)
-            var numNodes = reader.ReadInt32();
-            var numOperations = reader.ReadInt32();
-
-            // Validate that deserialized structure matches this instance
-            if (numNodes != _numNodes || numOperations != _numOperations)
-            {
-                throw new InvalidOperationException(
-                    $"Deserialized model structure does not match this instance. " +
-                    $"Expected numNodes={_numNodes}, numOperations={_numOperations}, " +
-                    $"but got numNodes={numNodes}, numOperations={numOperations}.");
-            }
-
-            _inputSize = reader.ReadInt32();
-            _outputSize = reader.ReadInt32();
-
-            // Deserialize architecture parameters
-            int alphaCount = reader.ReadInt32();
-            _architectureParams.Clear();
-            _architectureGradients.Clear();
-            for (int idx = 0; idx < alphaCount; idx++)
-            {
-                int rows = reader.ReadInt32();
-                int cols = reader.ReadInt32();
-                var alpha = new Matrix<T>(rows, cols);
-                for (int i = 0; i < rows; i++)
-                {
-                    for (int j = 0; j < cols; j++)
-                    {
-                        alpha[i, j] = NumOps.FromDouble(reader.ReadDouble());
-                    }
-                }
-                _architectureParams.Add(alpha);
-                _architectureGradients.Add(new Matrix<T>(rows, cols));
-            }
-
-            // Deserialize weights
-            int weightCount = reader.ReadInt32();
-            _weights.Clear();
-            _weightGradients.Clear();
-            for (int idx = 0; idx < weightCount; idx++)
-            {
-                string key = reader.ReadString();
-                int length = reader.ReadInt32();
-                var weight = new Vector<T>(length);
-                for (int i = 0; i < length; i++)
-                {
-                    weight[i] = NumOps.FromDouble(reader.ReadDouble());
-                }
-                _weights[key] = weight;
-                _weightGradients[key] = new Vector<T>(length);
-            }
+                    _weights.Clear();
+                    if (v is null) return;
+                    foreach (var pair in v) _weights[pair.Key] = pair.Value;
+                });
         }
 
         public override Dictionary<string, T> GetFeatureImportance() => new Dictionary<string, T>();

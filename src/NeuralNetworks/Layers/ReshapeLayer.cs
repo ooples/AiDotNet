@@ -48,6 +48,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 // already rely on, applied where it is least ambiguous.
 [TensorLayout(TensorAxis.Batch, TensorAxis.Channels, Direction = TensorLayoutDirection.Input)]
 [TensorLayout(TensorAxis.Batch, TensorAxis.Channels, Direction = TensorLayoutDirection.Output)]
+[TensorLayout(TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
 [TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height,
     Direction = TensorLayoutDirection.Input)]
 [TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height,
@@ -57,7 +58,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
     Direction = TensorLayoutDirection.Output)]
 [AutoParameters]
-public partial class ReshapeLayer<T> : LayerBase<T>, IShapeContract
+public partial class ReshapeLayer<T> : LayerBase<T>, IBatchAwareShapeContract
 {
     /// <summary>
     /// The shape of the input tensor, excluding the batch dimension.
@@ -116,6 +117,31 @@ public partial class ReshapeLayer<T> : LayerBase<T>, IShapeContract
         {
             if (target[i] <= 0) return null;
             axes.Add(new OutputAxisContract(ReshapeRoles[i + 1], AxisRelation.Fixed(target[i])));
+        }
+
+        return axes;
+    }
+
+    /// <inheritdoc />
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank, bool isBatched)
+    {
+        if (isBatched) return OutputAxesFor(inputRank);
+
+        var target = _outputShape;
+        if (inputRank < 1 || target is null || target.Length == 0 || target.Length > 3)
+            return null;
+
+        TensorAxis[] perSampleRoles =
+        [
+            TensorAxis.Channels,
+            TensorAxis.Height,
+            TensorAxis.Width,
+        ];
+        var axes = new List<OutputAxisContract>(target.Length);
+        for (int i = 0; i < target.Length; i++)
+        {
+            if (target[i] <= 0) return null;
+            axes.Add(new OutputAxisContract(perSampleRoles[i], AxisRelation.Fixed(target[i])));
         }
 
         return axes;

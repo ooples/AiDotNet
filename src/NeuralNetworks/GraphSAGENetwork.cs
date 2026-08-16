@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -76,7 +76,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Inductive Representation Learning on Large Graphs", "https://arxiv.org/abs/1706.02216", Year = 2017, Authors = "William L. Hamilton, Rex Ying, Jure Leskovec")]
-public partial class GraphSAGENetwork<T> : NeuralNetworkBase<T>
+public partial class GraphSAGENetwork<T> : GraphModelLayoutBase<T>
 {
     private readonly GraphSAGEOptions _options;
 

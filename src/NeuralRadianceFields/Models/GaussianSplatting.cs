@@ -189,7 +189,7 @@ namespace AiDotNet.NeuralRadianceFields.Models;
 [ModelComplexity(ModelComplexity.VeryHigh)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("3D Gaussian Splatting for Real-Time Radiance Field Rendering", "https://doi.org/10.1145/3592433", Year = 2023, Authors = "Bernhard Kerbl, Georgios Kopanas, Thomas Leimkühler, George Drettakis")]
-public partial class GaussianSplatting<T> : NeuralNetworkBase<T>, IRadianceField<T>,
+public partial class GaussianSplatting<T> : AiDotNet.NeuralNetworks.VectorModelLayoutBase<T>, IRadianceField<T>,
     IHyperparameterAware<T, Tensor<T>, Tensor<T>>,
     NeuralRadianceFields.Interfaces.IImageTrainable<T>
 {

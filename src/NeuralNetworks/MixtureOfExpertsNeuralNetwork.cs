@@ -67,7 +67,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Outrageously Large Neural Networks: The Sparsely-Gated Mixture-of-Experts Layer", "https://arxiv.org/abs/1701.06538", Year = 2017, Authors = "Noam Shazeer, Azalia Mirhoseini, Krzysztof Maziarz, Andy Davis, Quoc Le, Geoffrey Hinton, Jeff Dean")]
-public partial class MixtureOfExpertsNeuralNetwork<T> : NeuralNetworkBase<T>
+public partial class MixtureOfExpertsNeuralNetwork<T> : VectorModelLayoutBase<T>
 {
     /// <summary>
     /// Configuration options for the MoE network.

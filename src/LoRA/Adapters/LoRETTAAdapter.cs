@@ -192,8 +192,9 @@ public partial class LoRETTAAdapter<T> : LoRAAdapterBase<T>
         _ttCores = new List<Tensor<T>>(numCores);
         InitializeTTCores();
 
-        // Update parameter vector
-        Parameters = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
+        // Tensor-train cores replace the standard LoRA factors and are emitted as one ordered
+        // trainable collection by the generator.
+        FreezeSubLayerParameters(_loraLayer);
     }
 
     /// <summary>

@@ -57,7 +57,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Visual Instruction Tuning", "https://arxiv.org/abs/2304.08485", Year = 2023, Authors = "Haotian Liu, Chunyuan Li, Qingyang Wu, Yong Jae Lee")]
-public partial class LLaVANeuralNetwork<T> : NeuralNetworkBase<T>, ILLaVAModel<T>
+public partial class LLaVANeuralNetwork<T> : MultimodalModelLayoutBase<T>, ILLaVAModel<T>
 {
     private readonly LLaVAOptions _options;
 

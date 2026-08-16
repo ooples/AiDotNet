@@ -106,7 +106,10 @@ public partial class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T
     /// Queries represent what each position in the sequence is looking for in other positions.
     /// Shape: [embeddingDimension, embeddingDimension]
     /// </remarks>
-    [TrainableParameter(Role = PersistentTensorRole.Weights, Shape = "_embeddingDimension, _embeddingDimension")]
+    [TrainableParameter(
+        Role = PersistentTensorRole.Weights,
+        Shape = "_embeddingDimension, _embeddingDimension",
+        LowPrecisionBacking = nameof(_queryWeightsHalf))]
 
     private Tensor<T> _queryWeights;
 
@@ -118,7 +121,10 @@ public partial class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T
     /// Keys represent what each position in the sequence has to offer to other positions.
     /// Shape: [embeddingDimension, embeddingDimension]
     /// </remarks>
-    [TrainableParameter(Role = PersistentTensorRole.Weights, Shape = "_embeddingDimension, _embeddingDimension")]
+    [TrainableParameter(
+        Role = PersistentTensorRole.Weights,
+        Shape = "_embeddingDimension, _embeddingDimension",
+        LowPrecisionBacking = nameof(_keyWeightsHalf))]
     private Tensor<T> _keyWeights;
 
     /// <summary>
@@ -130,7 +136,10 @@ public partial class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T
     /// is being extracted from each position.
     /// Shape: [embeddingDimension, embeddingDimension]
     /// </remarks>
-    [TrainableParameter(Role = PersistentTensorRole.Weights, Shape = "_embeddingDimension, _embeddingDimension")]
+    [TrainableParameter(
+        Role = PersistentTensorRole.Weights,
+        Shape = "_embeddingDimension, _embeddingDimension",
+        LowPrecisionBacking = nameof(_valueWeightsHalf))]
     private Tensor<T> _valueWeights;
 
     /// <summary>

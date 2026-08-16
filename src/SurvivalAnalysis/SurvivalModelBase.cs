@@ -1,4 +1,5 @@
 using System.Text;
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -30,7 +31,7 @@ namespace AiDotNet.SurvivalAnalysis;
 /// - Managing trained model state
 /// </para>
 /// </remarks>
-public abstract class SurvivalModelBase<T> : ISurvivalModel<T>, IModelShape, IParameterizable<T, Matrix<T>, Vector<T>>, IParameterManifestProvider
+public abstract partial class SurvivalModelBase<T> : ISurvivalModel<T>, IModelShape, IParameterizable<T, Matrix<T>, Vector<T>>, IParameterManifestProvider
 {
     // --- declared state (ModelStateRegistry) ---
     // Identical in every model base because these bases are siblings over the same interfaces rather
@@ -48,6 +49,20 @@ public abstract class SurvivalModelBase<T> : ISurvivalModel<T>, IModelShape, IPa
     /// <param name="state">The registry to declare into.</param>
     protected virtual void RegisterState(AiDotNet.Models.ModelStateRegistry<T> state)
     {
+        // ModelStateGenerator emits RegisterGeneratedState for a model's OWN members only -- it does
+        // not walk the base chain, and it cannot generate into this type at all, because FindHook
+        // starts at BaseType and this class is where RegisterGeneratedState is declared. So the four
+        // members below reach no generated file by either route and have to be declared by hand.
+        //
+        // They are not optional: NelsonAalenEstimator, WeibullAFT and LogNormalAFT each hand-wrote
+        // these into their own Serialize/Deserialize, which is the duplication ADN0060 exists to
+        // remove. Declaring them once here is what lets those three overrides go.
+        state.Declare("SurvivalModelBase.TrainedEventTimes",
+            () => TrainedEventTimes, v => TrainedEventTimes = v);
+        state.Declare("SurvivalModelBase.BaselineSurvivalFunction",
+            () => BaselineSurvivalFunction, v => BaselineSurvivalFunction = v);
+        state.DeclareBoolean("SurvivalModelBase.IsFitted", () => IsFitted, v => IsFitted = v);
+        state.DeclareInt32("SurvivalModelBase.NumFeatures", () => NumFeatures, v => NumFeatures = v);
     }
     /// <summary>Generated state declarations for fields declared across this model's hierarchy.</summary>
     /// <param name="state">The registry to declare into.</param>
@@ -209,13 +224,12 @@ public abstract class SurvivalModelBase<T> : ISurvivalModel<T>, IModelShape, IPa
 
     /// <inheritdoc/>
     /// <remarks>
-    /// Folds the same enumeration the vector does once components are registered. The
-    /// previous expression is kept for models not yet converted -- and it is exactly why the
-    /// two could disagree: it described the MODEL, not the vector. Measured on
-    /// CausalForest: 5 against a 6-element vector after any restore.
+    /// Folds the same enumeration the vector does once components are registered. Models still
+    /// awaiting manifest conversion fall back to their concrete vector length, so the count cannot
+    /// invent values that their read/write surface does not own.
     /// </remarks>
     public virtual long ParameterCount
-        => Registry.HasComponents ? Registry.ParameterCount : NumFeatures;
+        => Registry.HasComponents ? Registry.ParameterCount : GetParameters().Length;
     /// <inheritdoc/>
     public virtual bool SupportsParameterInitialization => Registry.CanInitializeOptimizerParameters;
     /// <inheritdoc/>

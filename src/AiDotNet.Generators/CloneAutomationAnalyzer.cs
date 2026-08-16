@@ -117,6 +117,17 @@ public class CloneAutomationAnalyzer : DiagnosticAnalyzer
         // state, not to prove the override earns its place.
         if (name is "Serialize" or "Deserialize")
         {
+            // An override that hands the work to base is a DECORATOR, not a second copy of the
+            // persistence. Counting calls, logging, timing or taking a lock around
+            // `base.Serialize()` adds no field that anyone can forget, because the base still
+            // writes every declared member. Reporting those said "declare your state instead" to
+            // code that already does exactly that.
+            //
+            // Deliberately narrow: this exempts a body only when it CALLS base. A body that calls
+            // base and then appends its own hand-written payload is still reported, which is the
+            // shape that actually risks drift.
+            if (DelegatesToBase(method, name)) return;
+
             if (context.ContainingSymbol is IMethodSymbol { OverriddenMethod: not null and not { IsAbstract: true } }
                 && context.ContainingSymbol.ContainingType is INamedTypeSymbol owner)
             {
@@ -333,6 +344,42 @@ public class CloneAutomationAnalyzer : DiagnosticAnalyzer
     /// regrow into a cycle.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// True when the body calls <c>base.&lt;name&gt;(...)</c> and writes nothing itself.
+    /// </summary>
+    /// <param name="method">The override being analysed.</param>
+    /// <param name="name">Its name, so the call must be to the SAME member on the base.</param>
+    /// <remarks>
+    /// The second condition matters. A body may call base and then append its own payload -
+    /// <c>ModelWrapperBase</c> does exactly that with the declared-state trailer - and that body IS
+    /// a place a field can be forgotten, so it stays reported. Constructing a <c>BinaryWriter</c> or
+    /// <c>BinaryReader</c> is the tell, and it is the tell every hand-written pair in this codebase
+    /// exhibits.
+    /// </remarks>
+    private static bool DelegatesToBase(MethodDeclarationSyntax method, string name)
+    {
+        SyntaxNode? body = method.Body ?? (SyntaxNode?)method.ExpressionBody?.Expression;
+        if (body is null) return false;
+
+        var callsBase = body.DescendantNodesAndSelf()
+            .OfType<InvocationExpressionSyntax>()
+            .Any(call => call.Expression is MemberAccessExpressionSyntax
+            {
+                Expression: BaseExpressionSyntax,
+                Name.Identifier.ValueText: { } called
+            } && called == name);
+
+        if (!callsBase) return false;
+
+        var writesItself = body.DescendantNodesAndSelf()
+            .OfType<ObjectCreationExpressionSyntax>()
+            .Any(created => created.Type.ToString() is var t
+                && (t.EndsWith("BinaryWriter", System.StringComparison.Ordinal)
+                    || t.EndsWith("BinaryReader", System.StringComparison.Ordinal)));
+
+        return !writesItself;
+    }
+
     private static bool IsPureForwarder(MethodDeclarationSyntax method, string name)
     {
         var expression = method.ExpressionBody?.Expression;

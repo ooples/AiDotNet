@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -8,7 +8,7 @@ using AiDotNet.LossFunctions;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.Tensors.Helpers;
-using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Models.Parameters;
 
 namespace AiDotNet.Regression;
@@ -393,138 +393,6 @@ public partial class HistGradientBoostingRegression<T> : ModelBase<T, Matrix<T>,
         var newModel = new HistGradientBoostingRegression<T>(_options);
         newModel.SetParameters(parameters);
         return newModel;
-    }
-
-    /// <summary>
-    /// Serializes the model to a byte array.
-    /// </summary>
-    public override byte[] Serialize()
-    {
-        ModelPersistenceGuard.EnforceBeforeSerialize();
-        using var ms = new MemoryStream();
-        using var writer = new BinaryWriter(ms);
-
-        // Write options
-        writer.Write(_options.NumberOfIterations);
-        writer.Write(_options.LearningRate);
-        writer.Write(_options.MaxBins);
-        writer.Write(_options.MaxDepth);
-        writer.Write(_options.MaxLeafNodes ?? -1);
-        writer.Write(_options.MinSamplesLeaf);
-        writer.Write(_options.L2Regularization);
-        writer.Write(_options.SubsampleRatio);
-
-        // Write model state
-        writer.Write(NumOps.ToDouble(_initialPrediction));
-        writer.Write(_numFeatures);
-
-        // Write bin thresholds
-        if (_binThresholds is not null)
-        {
-            writer.Write(_binThresholds.Length);
-            foreach (var featureThresholds in _binThresholds)
-            {
-                writer.Write(featureThresholds.Length);
-                foreach (var threshold in featureThresholds)
-                {
-                    writer.Write(NumOps.ToDouble(threshold));
-                }
-            }
-        }
-        else
-        {
-            writer.Write(0);
-        }
-
-        // Write trees
-        if (_trees is not null)
-        {
-            writer.Write(_trees.Count);
-            foreach (var tree in _trees)
-            {
-                SerializeTree(writer, tree);
-            }
-        }
-        else
-        {
-            writer.Write(0);
-        }
-
-        // Write feature importances
-        if (_featureImportances is not null)
-        {
-            writer.Write(_featureImportances.Length);
-            foreach (var importance in _featureImportances)
-            {
-                writer.Write(NumOps.ToDouble(importance));
-            }
-        }
-        else
-        {
-            writer.Write(0);
-        }
-
-        return ms.ToArray();
-    }
-
-    /// <summary>
-    /// Deserializes the model from a byte array.
-    /// </summary>
-    public override void Deserialize(byte[] data)
-    {
-        ModelPersistenceGuard.EnforceBeforeDeserialize();
-        using var ms = new MemoryStream(data);
-        using var reader = new BinaryReader(ms);
-
-        // Read options
-        _options.NumberOfIterations = reader.ReadInt32();
-        _options.LearningRate = reader.ReadDouble();
-        _options.MaxBins = reader.ReadInt32();
-        _options.MaxDepth = reader.ReadInt32();
-        int maxLeaf = reader.ReadInt32();
-        _options.MaxLeafNodes = maxLeaf >= 0 ? maxLeaf : null;
-        _options.MinSamplesLeaf = reader.ReadInt32();
-        _options.L2Regularization = reader.ReadDouble();
-        _options.SubsampleRatio = reader.ReadDouble();
-
-        // Read model state
-        _initialPrediction = NumOps.FromDouble(reader.ReadDouble());
-        _numFeatures = reader.ReadInt32();
-
-        // Read bin thresholds
-        int numFeatureThresholds = reader.ReadInt32();
-        if (numFeatureThresholds > 0)
-        {
-            _binThresholds = new T[numFeatureThresholds][];
-            for (int i = 0; i < numFeatureThresholds; i++)
-            {
-                int numThresholds = reader.ReadInt32();
-                _binThresholds[i] = new T[numThresholds];
-                for (int j = 0; j < numThresholds; j++)
-                {
-                    _binThresholds[i][j] = NumOps.FromDouble(reader.ReadDouble());
-                }
-            }
-        }
-
-        // Read trees
-        int numTrees = reader.ReadInt32();
-        _trees = new List<HistTreeNode>(numTrees);
-        for (int i = 0; i < numTrees; i++)
-        {
-            _trees.Add(DeserializeTree(reader));
-        }
-
-        // Read feature importances
-        int numImportances = reader.ReadInt32();
-        if (numImportances > 0)
-        {
-            _featureImportances = new T[numImportances];
-            for (int i = 0; i < numImportances; i++)
-            {
-                _featureImportances[i] = NumOps.FromDouble(reader.ReadDouble());
-            }
-        }
     }
 
     /// <summary>
@@ -1483,6 +1351,53 @@ public partial class HistGradientBoostingRegression<T> : ModelBase<T, Matrix<T>,
     /// <summary>
     /// Serializes a tree node recursively.
     /// </summary>
+    /// <summary>
+    /// Declares the two shapes the generator cannot infer: the fitted forest and the per-feature
+    /// bin thresholds.
+    /// </summary>
+    /// <param name="state">The registry to declare into.</param>
+    /// <remarks>
+    /// The node fields mirror <see cref="SerializeTree"/> exactly. <c>SampleIndices</c> is absent
+    /// from both: it indexes the training matrix, so it is scratch from fitting rather than model
+    /// state, and restoring it into a model with no training data would be meaningless.
+    /// The hand-written walk recursed only when <c>IsLeaf</c> was false; NodeShape writes a
+    /// presence flag per child instead, which represents a leaf without needing the flag to agree
+    /// with the child pointers - the old form threw if they ever disagreed.
+    /// Everything else the pair wrote is either an option replayed by the recorded constructor or a
+    /// member the generator already declares.
+    /// </remarks>
+    protected override void RegisterState(ModelStateRegistry<T> state)
+    {
+        base.RegisterState(state);
+
+        // The generator declares _initialPrediction and _featureImportances but not this;
+        // the hand-written pair wrote it, so it is declared here rather than dropped.
+        state.DeclareInt32(
+            "HistGradientBoostingRegression._numFeatures",
+            () => _numFeatures,
+            v => _numFeatures = v);
+
+        state.DeclareJaggedArray(
+            "HistGradientBoostingRegression._binThresholds",
+            () => _binThresholds,
+            v => _binThresholds = v);
+
+        state.DeclareGraphList<HistTreeNode>(
+            "HistGradientBoostingRegression._trees",
+            () => _trees,
+            v => _trees = v,
+            node => node
+                .Create(() => new HistTreeNode(NumOps.Zero))
+                .Boolean(n => n.IsLeaf, (n, v) => n.IsLeaf = v)
+                .Scalar(n => n.LeafValue, (n, v) => n.LeafValue = v)
+                .Int32(n => n.FeatureIndex, (n, v) => n.FeatureIndex = v)
+                .Int32(n => n.BinThreshold, (n, v) => n.BinThreshold = v)
+                .Scalar(n => n.Threshold, (n, v) => n.Threshold = v)
+                .Int32(n => n.Depth, (n, v) => n.Depth = v)
+                .Child(n => n.Left, (n, c) => n.Left = c)
+                .Child(n => n.Right, (n, c) => n.Right = c));
+    }
+
     private void SerializeTree(BinaryWriter writer, HistTreeNode node)
     {
         writer.Write(node.IsLeaf);

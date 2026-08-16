@@ -295,7 +295,14 @@ public abstract class ModelWrapperBase<T, TInput, TOutput> : IFullModel<T, TInpu
     // --- IModelSerializer ---
 
     /// <inheritdoc/>
-    public virtual byte[] Serialize() => BaseModel.Serialize();
+    /// <remarks>
+    /// Appends the declared-state trailer that <see cref="Deserialize"/> already strips. Without
+    /// this the two halves disagreed: Extract was called on the way in, Append was never called on
+    /// the way out, so anything a wrapper declared was read back but never written - which is the
+    /// "two places to forget the same field" defect this base exists to remove, in the base itself.
+    /// </remarks>
+    public virtual byte[] Serialize()
+        => AiDotNet.Models.ModelStateEnvelope.Append(DeclaredState, BaseModel.Serialize());
 
     /// <inheritdoc/>
     public virtual void Deserialize(byte[] data)

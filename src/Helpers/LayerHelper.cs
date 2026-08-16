@@ -11455,7 +11455,13 @@ public static class LayerHelper<T>
         int intermediateSize = hiddenDim * 4;
         int maxSequenceLength = 512;
 
-        yield return new EmbeddingLayer<T>(vocabSize, hiddenDim);
+        // The public one-input Dessurt graph receives encoded visual features here. A token
+        // EmbeddingLayer would reinterpret those continuous features as vocabulary IDs. Project
+        // only when the encoder and decoder widths differ; otherwise preserve the encoder tokens.
+        // Text-token autoregression is a separate multi-input graph and must declare its token port
+        // explicitly rather than changing the semantics of this image-only path at runtime.
+        if (encoderDim != hiddenDim)
+            yield return new DenseLayer<T>(hiddenDim, identityActivation);
         // LEARNED, not sinusoidal. PositionalEncodingLayer is SupportsTraining => false, and Dessurt's decoder
         // learns its positions -- the dead _decoderPositionEmbeddings field was that table, allocated and never read.
         yield return new LearnedPositionalEmbeddingLayer<T>(maxSequenceLength, hiddenDim);

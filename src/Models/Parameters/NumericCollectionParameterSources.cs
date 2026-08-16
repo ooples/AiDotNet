@@ -154,6 +154,25 @@ public static class ParameterCollectionOrdering
         }
         for (int i = 0; i < ordered.Count; i++) yield return ordered[i].Value;
     }
+
+    /// <summary>Returns dictionary keys in the same canonical order as <see cref="OrderedValues{TKey, TValue}"/>.</summary>
+    public static IEnumerable<TKey> OrderedKeys<TKey, TValue>(
+        IEnumerable<KeyValuePair<TKey, TValue>>? values)
+    {
+        if (values is null) yield break;
+        var ordered = new List<KeyValuePair<string, TKey>>();
+        foreach (var value in values)
+            ordered.Add(new KeyValuePair<string, TKey>(
+                ParameterCollectionKeys.Canonical(value.Key), value.Key));
+        ordered.Sort((left, right) => StringComparer.Ordinal.Compare(left.Key, right.Key));
+        for (int i = 1; i < ordered.Count; i++)
+        {
+            if (string.Equals(ordered[i - 1].Key, ordered[i].Key, StringComparison.Ordinal))
+                throw new InvalidOperationException(
+                    $"Collection parameter key '{ordered[i].Key}' is not unique after canonicalization.");
+        }
+        for (int i = 0; i < ordered.Count; i++) yield return ordered[i].Value;
+    }
 }
 
 /// <summary>An index-stable tensor collection exposed as one parameter source.</summary>

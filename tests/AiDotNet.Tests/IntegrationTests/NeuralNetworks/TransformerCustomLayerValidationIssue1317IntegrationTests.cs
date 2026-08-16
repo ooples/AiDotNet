@@ -333,6 +333,30 @@ public class TransformerCustomLayerValidationIssue1317IntegrationTests
     {
         public override bool SupportsTraining => false;
 
+        public virtual IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+        {
+            if (inputRank != GetInputShape().Length)
+                return null;
+
+            int[] shape = GetOutputShape();
+            TensorAxis[] axes = shape.Length switch
+            {
+                1 => [TensorAxis.Features],
+                2 => [TensorAxis.Batch, TensorAxis.Features],
+                _ => []
+            };
+
+            if (axes.Length == 0)
+                return null;
+
+            return axes.Select((axis, index) => new OutputAxisContract(
+                axis,
+                shape[index] > 0
+                    ? AxisRelation.Fixed(shape[index])
+                    : AxisRelation.Unknown("test fixture output contains an unresolved wildcard")))
+                .ToArray();
+        }
+
         protected override Tensor<float> ForwardTraced(Tensor<float> input)
         {
             var output = new Tensor<float>(GetOutputShape());

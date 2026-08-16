@@ -1635,6 +1635,7 @@ public partial class MixedPrecisionIntegrationTests
     /// <summary>
     /// Test layer for verifying mixed precision integration.
     /// </summary>
+    [ElementWiseShape]
     private partial class TestLayer : AiDotNet.NeuralNetworks.Layers.LayerBase<float>
     {
         private readonly string? _customName;

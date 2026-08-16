@@ -106,6 +106,7 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 // both correct about DIFFERENT tensors, and comparing them would report a defect that is not there.
 [PreprocessesInput("Tokenize quantizes the real-valued series into token bins before the stack runs, "
     + "so Layers[0] receives token indices - see PredictCore's Forward(Tokenize(input)).")]
+[StackInputLayout(TensorAxis.Batch, TensorAxis.Time, BatchOptional = true)]
 public partial class Chronos<T> : TimeSeriesFoundationModelBase<T>
 {
     #region Execution Mode

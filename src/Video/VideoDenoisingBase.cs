@@ -30,7 +30,11 @@ namespace AiDotNet.Video;
 /// (different in each frame) while real content is consistent across frames.
 /// </para>
 /// </remarks>
-public abstract partial class VideoDenoisingBase<T> : VideoNeuralNetworkBase<T>
+[TensorLayout(TensorAxis.Frames, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Frames, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Output)]
+public abstract partial class VideoDenoisingBase<T> : VideoNeuralNetworkBase<T>, IShapeContract
 {
     /// <inheritdoc />
     public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)

@@ -37,8 +37,14 @@ ADNTEST002 | AiDotNet.TestScaffold | Disabled | TestScaffoldGenerator, Generated
 ADNTEST003 | AiDotNet.TestScaffold | Error | TestScaffoldGenerator, Two models share a simple name with no registered owner
 ADNSHAPE001 | AiDotNet.Shapes | Error | ShapeDeclarationValidationGenerator, Two tensor layouts accept the same rank with different axis names
 ADNSHAPE002 | AiDotNet.Shapes | Error | ShapeDeclarationValidationGenerator, A tensor layout repeats an axis role
-ADNSHAPE003 | AiDotNet.Shapes | Warning | ShapeDeclarationValidationGenerator, Type implements IShapeContract but declares no input layout
-ADNSHAPE004 | AiDotNet.Shapes | Warning | ShapeDeclarationValidationGenerator, Layer overrides Forward instead of ForwardTraced and is invisible to graph tracing (Warning until the #1789 conversion completes; the final slice raises it to Error)
+ADNSHAPE003 | AiDotNet.Shapes | Error | ShapeDeclarationValidationGenerator, Type implements IShapeContract but declares no input layout
+ADNSHAPE004 | AiDotNet.Shapes | Error | ShapeDeclarationValidationGenerator, Layer overrides Forward instead of ForwardTraced and is invisible to graph tracing
+ADNSHAPE005 | AiDotNet.Shapes | Error | ShapeDeclarationValidationGenerator, LayerProperty rank metadata contradicts TensorLayout
+ADNSHAPE006 | AiDotNet.Shapes | Error | ShapeDeclarationValidationGenerator, Concrete layer declares no shape contract
+ADNSHAPE007 | AiDotNet.Shapes | Error | ShapeDeclarationValidationGenerator, Concrete neural-network model publishes no caller-facing shape manifest
+ADNSHAPE008 | AiDotNet.Shapes | Error | ShapeDeclarationValidationGenerator, Concrete model declares no caller-facing input layout
+ADNSHAPE009 | AiDotNet.Shapes | Error | ShapeDeclarationValidationGenerator, Concrete model declares no caller-facing output layout
+ADNSHAPE010 | AiDotNet.Shapes | Error | ShapeDeclarationValidationGenerator, Input preprocessing omits the layer-stack entry layout
 ADNPORT001 | AiDotNet.TensorPorts | Error | TensorPortContractGenerator, Integer-index port does not declare its legal upper bound
 ADNPORT002 | AiDotNet.TensorPorts | Error | TensorPortContractGenerator, Tensor-port contract references a missing member
 ADNPORT003 | AiDotNet.TensorPorts | Error | TensorPortContractGenerator, Duplicate input or output port name
@@ -52,7 +58,12 @@ ADNPORT010 | AiDotNet.TensorPorts | Error | TensorPortContractGenerator, Stable 
 ADN0058 | AiDotNet.Serialization | Error | CloneAutomationAnalyzer, Clone override duplicates what the base class already does
 ADN0059 | AiDotNet.Serialization | Info | CloneAutomationAnalyzer, Model cannot be rebuilt from its own state
 ADN0060 | AiDotNet.Serialization | Error | CloneAutomationAnalyzer, Serialization is hand-written instead of declared
+ADNPORT011 | AiDotNet.TensorPorts | Error | TensorPortContractGenerator, Derived/defaulted port or SameShapeAs relationship cannot be resolved
+ADNPORT012 | AiDotNet.TensorPorts | Error | TensorPortContractGenerator, Input variants have indistinguishable required external signatures
+ADNBUF001 | AiDotNet.ParameterAutomation | Error | TrainableParameterGenerator, Distinct persistent fields declare the same generated buffer identity
 ADNGEN001 | AiDotNet.TestScaffold | Warning | TestScaffoldGenerator, Model cannot be auto-generated a test and therefore has NO coverage
+AIDN081 | AiDotNet.ParameterAutomation | Error | ParameterAutomationAnalyzer, Layer parameter surfaces are derived by LayerBase and cannot be overridden
+AIDN082 | AiDotNet.ParameterAutomation | Error | ParameterAutomationAnalyzer, Model parameter surfaces are derived from registered components and cannot be overridden
 AIDN085 | AiDotNet.ParameterAutomation | Warning | ParameterAutomationAnalyzer, Model owns weights outside Layers but is not partial, so the generator cannot register them
 AIDN086 | AiDotNet.ComponentMetadata | Error | ComponentMetadataValidationGenerator, Layer declares a contradictory gradient contract
 AIDN087 | AiDotNet.ParameterAutomation | Warning | ParameterAutomationAnalyzer, ParameterCount compared against zero as a readiness test (Warning while the backlog is non-zero; promote to Error at zero per the ADNSHAPE006/007 ladder)
@@ -60,3 +71,7 @@ AIDN088 | AiDotNet.ParameterAutomation | Warning | ParameterAutomationAnalyzer, 
 AIDN089 | AiDotNet.ParameterAutomation | Error | ParameterAutomationAnalyzer, Numeric state has conflicting semantic classifications
 AIDN090 | AiDotNet.ParameterAutomation | Warning | ParameterAutomationAnalyzer, Nullable persistent state requires an explicit availability lifecycle
 AIDN091 | AiDotNet.ParameterAutomation | Error | ParameterAutomationAnalyzer, Parameter alias target is invalid
+AIDN092 | AiDotNet.ParameterAutomation | Error | ParameterAutomationAnalyzer, Trainable parameter condition must name one instance Boolean field or readable property
+AIDN093 | AiDotNet.ParameterAutomation | Error | ParameterAutomationAnalyzer, Bound adaptive parameter axes must name one readable instance Int32 dimension
+AIDN094 | AiDotNet.ParameterAutomation | Error | ParameterAutomationAnalyzer, Trainable parameter low-precision backing must name one unique instance Tensor<Half> field
+AIDN095 | AiDotNet.ParameterAutomation | Warning | TrainableParameterGenerator, Declared parameter shapes suppressed by a dynamic registration

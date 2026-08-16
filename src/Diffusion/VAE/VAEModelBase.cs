@@ -24,7 +24,8 @@ namespace AiDotNet.Diffusion.VAE;
 /// </para>
 /// </remarks>
 public abstract class VAEModelBase<T> : IVAEModel<T>, IModelShape,
-    AiDotNet.Models.Parameters.IParameterManifestProvider
+    AiDotNet.Models.Parameters.IParameterManifestProvider,
+    AiDotNet.Models.Parameters.IParameterSurfaceLifecycle
 {
     // --- declared state (ModelStateRegistry) ---
     // Identical in every model base because these bases are siblings over the same interfaces rather
@@ -255,6 +256,14 @@ public abstract class VAEModelBase<T> : IVAEModel<T>, IModelShape,
     public AiDotNet.Models.Parameters.ParameterLayoutSnapshot ParameterLayout
     {
         get { EnsureComponentsRegistered(); return _parameterRegistry.ParameterLayout; }
+    }
+
+    /// <inheritdoc />
+    void AiDotNet.Models.Parameters.IParameterSurfaceLifecycle.PrepareParameterSurface(
+        AiDotNet.Models.Parameters.ParameterSurfaceIntent intent)
+    {
+        EnsureComponentsRegistered();
+        _parameterRegistry.PrepareParameterSurface(intent);
     }
 
     /// <inheritdoc />

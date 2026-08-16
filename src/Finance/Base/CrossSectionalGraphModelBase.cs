@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.LinearAlgebra;
 
 namespace AiDotNet.Finance.Base;
@@ -42,6 +44,10 @@ namespace AiDotNet.Finance.Base;
 /// stocks inform each other, instead of treating each in isolation. This is the shared foundation for
 /// those, including the part where they answer more than one question at a time.</para>
 /// </remarks>
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Length, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Input, BatchOptional = true)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Length, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Output, BatchOptional = true)]
 public abstract partial class CrossSectionalGraphModelBase<T> : FinancialModelBase<T>
 {
     /// <summary>

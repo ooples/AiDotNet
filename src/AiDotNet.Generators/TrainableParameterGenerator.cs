@@ -102,6 +102,10 @@ public class TrainableParameterGenerator : IIncrementalGenerator
             // Check if class extends LayerBase<T>
             if (!ExtendsLayerBase(classSymbol)) continue;
 
+            bool hasAutoParameters = autoParamsSymbol is not null
+                && classSymbol.GetAttributes().Any(attribute =>
+                    SymbolEqualityComparer.Default.Equals(attribute.AttributeClass, autoParamsSymbol));
+
             // A layer that hand-writes its parameter accessors manages its own plumbing; generating
             // partial copies would be a duplicate-member error.
             //
@@ -121,6 +125,15 @@ public class TrainableParameterGenerator : IIncrementalGenerator
             bool declaresSetter = DeclaresAny(classSymbol, "SetTrainableParameters");
             if (declaresGetter && declaresSetter)
                 continue;
+
+            // A loop/local registration (for example, foreach (var tensor in dictionary.Values))
+            // is an explicit parameter declaration, but it cannot be reconstructed from fields at
+            // compile time. In that case the runtime registry is the complete source of truth. The
+            // detector for this case existed for a long time but was never consumed, so a single
+            // annotated field caused the generator to emit a field-only override that HID every
+            // dynamically registered tensor. HeterogeneousGraphLayer consequently registered all
+            // of its per-type weights and then reported an empty parameter surface.
+            bool useRuntimeParameterRegistry = HasAnyUnmappableRegistration(compilation, classSymbol);
 
             // Skip if already processed (multiple partial files)
             var fullName = classSymbol.ToDisplayString();
@@ -149,6 +162,8 @@ public class TrainableParameterGenerator : IIncrementalGenerator
                     var order = 0;
                     var optional = false;
                     string? shape = null;
+                    string? condition = null;
+                    string? lowPrecisionBacking = null;
 
                     foreach (var namedArg in attr.NamedArguments)
                     {
@@ -160,20 +175,42 @@ public class TrainableParameterGenerator : IIncrementalGenerator
                             optional = optVal;
                         else if (namedArg.Key == "Shape" && namedArg.Value.Value is string shapeVal)
                             shape = shapeVal;
+                        else if (namedArg.Key == "Condition" && namedArg.Value.Value is string conditionVal)
+                            condition = conditionVal;
+                        else if (namedArg.Key == "LowPrecisionBacking" && namedArg.Value.Value is string backingVal)
+                            lowPrecisionBacking = backingVal;
                     }
 
                     var explicitNullable = field.NullableAnnotation == NullableAnnotation.Annotated
                                            || field.Type.NullableAnnotation == NullableAnnotation.Annotated;
-                    paramFields.Add(new ParameterFieldInfo(
-                        field.Name, role, order, DeclIndex: 0,
-                        TypeName: field.Type.ToDisplayString(),
-                        // Nullable storage is emitted through the safe conditional mechanics while
-                        // AIDN090 requires the author to declare WHY it is nullable. This is a
-                        // migration bridge, not semantic inference: the diagnostic remains until
-                        // Optional/Availability is explicit, and the classifier never promotes an
-                        // unannotated nullable tensor into the graph.
-                        Optional: optional || explicitNullable, Nullable: explicitNullable,
-                        Shape: shape));
+                    if (IsTensorOfLayerElement(field.Type, classSymbol))
+                    {
+                        paramFields.Add(new ParameterFieldInfo(
+                            field.Name, role, order, DeclIndex: 0,
+                            TypeName: field.Type.ToDisplayString(),
+                            // Nullable storage is emitted through the safe conditional mechanics while
+                            // AIDN090 requires the author to declare WHY it is nullable. This is a
+                            // migration bridge, not semantic inference: the diagnostic remains until
+                            // Optional/Availability is explicit, and the classifier never promotes an
+                            // unannotated nullable tensor into the graph.
+                            Optional: optional || explicitNullable, Nullable: explicitNullable,
+                            Shape: shape, Condition: condition,
+                            LowPrecisionBacking: lowPrecisionBacking));
+                    }
+                    else if (TryGetTensorCollection(field.Type, classSymbol, out var collectionKind))
+                    {
+                        // A collection is one semantic declaration but contributes one optimizer tensor
+                        // per element. Its stable order is positional for arrays/lists and canonical-key
+                        // order for dictionaries, matching ModelParameterGenerator's collection sources.
+                        // The collection object may be readonly; generated restore mutates its elements,
+                        // never rebinds the field itself.
+                        paramFields.Add(new ParameterFieldInfo(
+                            field.Name, role, order, DeclIndex: 0,
+                            TypeName: field.Type.ToDisplayString(),
+                            Optional: optional || explicitNullable, Nullable: explicitNullable,
+                            Shape: shape, CollectionKind: collectionKind, Condition: condition,
+                            LowPrecisionBacking: lowPrecisionBacking));
+                    }
                 }
 
                 // Collect every declared persistent non-optimizer role through the same base
@@ -245,6 +282,36 @@ public class TrainableParameterGenerator : IIncrementalGenerator
                 }
             }
 
+            foreach (var duplicate in bufferFields
+                         .GroupBy(item => item.Name, System.StringComparer.Ordinal)
+                         .Where(group => group.Count() > 1))
+            {
+                context.ReportDiagnostic(Diagnostic.Create(
+                    DuplicateBufferIdentity,
+                    classSymbol.Locations.FirstOrDefault(),
+                    classSymbol.Name,
+                    string.Join(", ", duplicate.Select(item => item.Field)),
+                    duplicate.Key));
+            }
+
+            // Falling back to the runtime registry is legitimate -- a layer really can register
+            // tensors the generator cannot name. Doing it SILENTLY to a layer that also declares
+            // shapes is not: those declarations simply vanish from the generated surface, and the
+            // first symptom is a clone quietly keeping untrained weights. Say so at compile time.
+            var suppressedShapeFields = paramFields
+                .Where(p => p.CollectionKind == ParameterCollectionKind.Direct
+                            && !string.IsNullOrWhiteSpace(p.Shape))
+                .Select(p => p.Name)
+                .ToList();
+            if (useRuntimeParameterRegistry && suppressedShapeFields.Count > 0)
+            {
+                context.ReportDiagnostic(Diagnostic.Create(
+                    DeclaredShapesSuppressed,
+                    classSymbol.Locations.FirstOrDefault(),
+                    classSymbol.Name,
+                    string.Join(", ", suppressedShapeFields)));
+            }
+
             // Merge trainable parameters declared by attribute with the compatibility
             // RegisterTrainableParameter route. Both are explicit semantic declarations; neither
             // is tensor-type inference. Dropping either route makes a partially migrated layer's
@@ -292,7 +359,25 @@ public class TrainableParameterGenerator : IIncrementalGenerator
                 }
             }
 
-            if (paramFields.Count == 0 && subLayerFields.Count == 0 && bufferFields.Count == 0) continue;
+            bool hasImperativePersistentRegistration =
+                ParameterMemberSemanticModel.GetRegistrationClassifications(classSymbol).Count > 0
+                || HasPersistentRegistrationInvocation(classSymbol);
+            bool hasInheritedPersistentContract = HasInheritedPersistentContract(
+                classSymbol, attributeSymbol, bufferSymbol);
+            bool hasUnmodeledLayerContainer = classSymbol.GetMembers()
+                .OfType<IFieldSymbol>()
+                .Any(field => !field.IsStatic && IsPotentialLayerContainer(field.Type));
+            bool emitParameterFreeContract = hasAutoParameters
+                && !useRuntimeParameterRegistry
+                && !hasImperativePersistentRegistration
+                && !hasInheritedPersistentContract
+                && !hasUnmodeledLayerContainer
+                && paramFields.Count == 0
+                && subLayerFields.Count == 0
+                && bufferFields.Count == 0;
+
+            if (paramFields.Count == 0 && subLayerFields.Count == 0 && bufferFields.Count == 0
+                && !emitParameterFreeContract) continue;
 
             // Stable sort by Order, preserving declaration order for equal Order values.
             // List.Sort is not stable, so we use a secondary key (original index).
@@ -305,7 +390,9 @@ public class TrainableParameterGenerator : IIncrementalGenerator
             });
 
             // Generate the partial class source
-            var source = GenerateSource(classSymbol, paramFields, gradientFields, subLayerFields, bufferFields);
+            var source = GenerateSource(
+                classSymbol, paramFields, gradientFields, subLayerFields, bufferFields,
+                useRuntimeParameterRegistry, emitParameterFreeContract);
             // Use fully qualified name to avoid collisions across namespaces
             var qualifiedName = classSymbol.ToDisplayString().Replace('.', '_').Replace('<', '_').Replace('>', '_');
             var hintName = $"{qualifiedName}.TrainableParameters.g.cs";
@@ -318,7 +405,9 @@ public class TrainableParameterGenerator : IIncrementalGenerator
         List<ParameterFieldInfo> paramFields,
         Dictionary<string, GradientFieldInfo> gradientFields,
         List<SubLayerFieldInfo> subLayerFields,
-        List<(string Field, string Name, string Role, string StateRole)> bufferFields)
+        List<(string Field, string Name, string Role, string StateRole)> bufferFields,
+        bool useRuntimeParameterRegistry,
+        bool emitParameterFreeContract)
     {
         var ns = classSymbol.ContainingNamespace.ToDisplayString();
         var className = classSymbol.Name;
@@ -359,142 +448,7 @@ public class TrainableParameterGenerator : IIncrementalGenerator
         sb.AppendLine($"partial class {className}{typeParams}");
         sb.AppendLine("{");
 
-        // Buffer registration. Persistent, never trained: LayerBase folds these into
-        // ParameterCount / GetParameters / SetParameters but deliberately keeps them out of
-        // GetTrainableParameters, so the optimizer and the tape cannot touch them. This mirrors the
-        // PyTorch parameters()-versus-state_dict() split, with the difference that both surfaces
-        // here are covered by one flat vector and one checked count.
-        if (bufferFields.Count > 0)
-        {
-            sb.AppendLine("    private bool _buffersRegistered;");
-            sb.AppendLine();
-            sb.AppendLine("    /// <summary>Auto-generated: registers [Buffer] fields as persistent non-trainable state.</summary>");
-            sb.AppendLine("    private void EnsureBuffersRegistered()");
-            sb.AppendLine("    {");
-            sb.AppendLine("        if (_buffersRegistered) return;");
-            sb.AppendLine("        _buffersRegistered = true;");
-            foreach (var bf in bufferFields)
-            {
-                sb.AppendLine($"        if ({bf.Field} is not null) RegisterBuffer({bf.Field}, \"{bf.Name}\", {bf.Role}, {bf.StateRole});");
-            }
-            sb.AppendLine("    }");
-            sb.AppendLine();
-            sb.AppendLine("    /// <inheritdoc />");
-            sb.AppendLine($"    public override System.Collections.Generic.IReadOnlyList<(string Name, Tensor<{GetTypeParamName(classSymbol)}> Tensor)> GetRegisteredBuffers()");
-            sb.AppendLine("    {");
-            sb.AppendLine("        EnsureBuffersRegistered();");
-            sb.AppendLine("        return base.GetRegisteredBuffers();");
-            sb.AppendLine("    }");
-            sb.AppendLine();
-        }
-
-
-        // DeclaredSubLayerShapes — emitted from [SubLayerInput("...")] on the sub-layer fields.
-        //
-        // A composite's children do not all receive the composite's own input, and only the
-        // composite knows which gets what. Declaring it on the field lets the generator supply that
-        // fact to LayerBase.BringUpDeclaredSubLayers, so no composite implements the method.
-        var shapedSubLayers = subLayerFields
-            .Where(sl => !sl.IsCollection && !string.IsNullOrWhiteSpace(sl.InputShape))
-            .ToList();
-        if (shapedSubLayers.Count > 0)
-        {
-            string tpS = GetTypeParamName(classSymbol);
-            string subTuple = $"(LayerBase<{tpS}>? Child, AiDotNet.Tensors.LinearAlgebra.TensorShape InputShape)";
-            string subArray = $"(LayerBase<{tpS}>?, AiDotNet.Tensors.LinearAlgebra.TensorShape)";
-
-            sb.AppendLine("    /// <summary>");
-            sb.AppendLine("    /// The input shape each sub-layer receives from this composite.");
-            sb.AppendLine("    /// Auto-generated — do not modify. Edit the [SubLayerInput(\"...\")] arguments instead.");
-            sb.AppendLine("    /// </summary>");
-            sb.AppendLine("    /// <remarks>");
-            sb.AppendLine("    /// Empty while any declared child is still null or any axis is still negative: a composite");
-            sb.AppendLine("    /// builds its children inside its initializer, so both are ordinary states before that runs.");
-            sb.AppendLine("    /// Cached, because the initializer deliberately re-enters.");
-            sb.AppendLine("    /// </remarks>");
-            sb.AppendLine($"    protected override System.Collections.Generic.IReadOnlyList<{subTuple}> DeclaredSubLayerShapes()");
-            sb.AppendLine("    {");
-            sb.AppendLine("        if (__declaredSubLayerShapes is not null) return __declaredSubLayerShapes;");
-            foreach (var sl in shapedSubLayers)
-            {
-                sb.AppendLine($"        if ({sl.Name} is null) return System.Array.Empty<{subArray}>();");
-            }
-            sb.AppendLine($"        var __sub = new {subArray}[]");
-            sb.AppendLine("        {");
-            foreach (var sl in shapedSubLayers)
-            {
-                var axes = string.Join(", ", sl.InputShape!.Split(',').Select(a => a.Trim()).Where(a => a.Length > 0));
-                sb.AppendLine($"            ({sl.Name}, ShapeOf({axes})),");
-            }
-            sb.AppendLine("        };");
-            sb.AppendLine("        for (int __i = 0; __i < __sub.Length; __i++)");
-            sb.AppendLine("        {");
-            sb.AppendLine("            var __s = __sub[__i].Item2;");
-            sb.AppendLine("            for (int __d = 0; __d < __s.Length; __d++)");
-            sb.AppendLine($"                if (__s[__d] < 0) return System.Array.Empty<{subArray}>();");
-            sb.AppendLine("        }");
-            sb.AppendLine("        __declaredSubLayerShapes = __sub;");
-            sb.AppendLine("        return __declaredSubLayerShapes;");
-            sb.AppendLine("    }");
-            sb.AppendLine();
-            sb.AppendLine($"    private {subArray}[]? __declaredSubLayerShapes;");
-            sb.AppendLine();
-        }
-
-        // DeclaredParameterShapes — emitted from [TrainableParameter(Shape = "...")].
-        //
-        // This is the whole point of the Shape argument: LayerBase.TryAdoptRestoredParameters can see
-        // THAT a tensor was supplied before the first forward but not whether its shape is right, and
-        // only the layer knows that its weights are [inputSize, outputSize]. Declaring it on the field
-        // lets the generator supply that fact, so no layer hand-writes the override.
-        var shapedFields = paramFields.Where(p => !string.IsNullOrWhiteSpace(p.Shape)).ToList();
-        if (shapedFields.Count > 0)
-        {
-            string tp = GetTypeParamName(classSymbol);
-            string tupleType = $"(Tensor<{tp}>? Tensor, AiDotNet.Tensors.LinearAlgebra.TensorShape Expected, PersistentTensorRole Role)";
-            string arrayType = $"(Tensor<{tp}>?, AiDotNet.Tensors.LinearAlgebra.TensorShape, PersistentTensorRole)";
-
-            sb.AppendLine("    /// <summary>");
-            sb.AppendLine("    /// The shape each [TrainableParameter] must have once this layer's shapes are resolved.");
-            sb.AppendLine("    /// Auto-generated — do not modify. Edit the [TrainableParameter(Shape = \"...\")] arguments instead.");
-            sb.AppendLine("    /// </summary>");
-            sb.AppendLine("    /// <remarks>");
-            sb.AppendLine("    /// Returns empty while any declared axis is still the -1 lazy sentinel, which is the base's");
-            sb.AppendLine("    /// signal that this layer cannot answer yet. An axis written as * becomes -2, meaning the layer");
-            sb.AppendLine("    /// adapts that axis and a mismatch there is normal rather than a broken restore.");
-            sb.AppendLine("    /// </remarks>");
-            sb.AppendLine($"    protected override System.Collections.Generic.IReadOnlyList<{tupleType}> DeclaredParameterShapes()");
-            sb.AppendLine("    {");
-            sb.AppendLine($"        var __declared = new {arrayType}[]");
-            sb.AppendLine("        {");
-            foreach (var pf in shapedFields)
-            {
-                var axes = pf.Shape!.Split(',')
-                    .Select(a => a.Trim())
-                    .Where(a => a.Length > 0)
-                    .Select(a => a == "*" ? "-2" : a);
-                sb.AppendLine($"            ({pf.Name}, ShapeOf({string.Join(", ", axes)}), {pf.Role}),");
-            }
-            sb.AppendLine("        };");
-            sb.AppendLine();
-            sb.AppendLine("        for (int __i = 0; __i < __declared.Length; __i++)");
-            sb.AppendLine("        {");
-            sb.AppendLine("            var __s = __declared[__i].Item2;");
-            sb.AppendLine("            for (int __d = 0; __d < __s.Length; __d++)");
-            sb.AppendLine("            {");
-            sb.AppendLine("                if (__s[__d] < 0 && __s[__d] != -2)");
-            sb.AppendLine($"                    return System.Array.Empty<{arrayType}>();");
-            sb.AppendLine("            }");
-            sb.AppendLine("        }");
-            sb.AppendLine();
-            sb.AppendLine("        return __declared;");
-            sb.AppendLine("    }");
-            sb.AppendLine();
-        }
-
-        // GetTrainableParameters
-        bool hasOptional = paramFields.Any(p => p.Optional);
-        if (paramFields.Count > 0)
+        if (emitParameterFreeContract)
         {
             sb.AppendLine("    /// <summary>Auto-generated: this migrated layer declares no persistent parameter state.</summary>");
             sb.AppendLine("    protected override bool IsDeclaredParameterFree => true;");
@@ -757,16 +711,13 @@ public class TrainableParameterGenerator : IIncrementalGenerator
             {
                 sb.AppendLine("        EnsureSubLayersRegistered();");
             }
-            sb.AppendLine("        if (IsShapeResolved || ParametersAreConstructionSized) EnsureInitialized();");
-            if (hasOptional)
+            sb.AppendLine("        if (IsShapeResolved || ParametersAreConstructionSized) EnsureInitializationSerialized();");
+            if (hasOptional || hasCollections)
             {
                 sb.AppendLine($"        var __params = new System.Collections.Generic.List<Tensor<{GetTypeParamName(classSymbol)}>>({paramFields.Count});");
                 foreach (var f in paramFields)
                 {
-                    if (f.Optional)
-                        sb.AppendLine($"        if ({PresenceExpr(f)}) __params.Add({f.Name});");
-                    else
-                        sb.AppendLine($"        __params.Add({f.Name});");
+                    EmitCollectionAdd(sb, f, "__params");
                 }
                 sb.AppendLine("        return __params;");
             }
@@ -801,37 +752,6 @@ public class TrainableParameterGenerator : IIncrementalGenerator
             else
             {
                 sb.AppendLine("        return __aidnGetTrainableParameterView();");
-            }
-            sb.AppendLine("    }");
-            sb.AppendLine();
-
-            // Counting view: the same fields in the same order, minus the EnsureInitialized
-            // trampoline. ParameterCount is read by ComputeTopologyFingerprint and by Dispose, and
-            // materializing weights just to size them threw OutOfMemoryException tearing down a
-            // 774M-parameter model. Sub-layer registration is still performed -- it allocates
-            // nothing and the count would otherwise miss children.
-            sb.AppendLine("    /// <summary>Field list for ParameterCount: no lazy materialization.</summary>");
-            sb.AppendLine($"    protected override System.Collections.Generic.IReadOnlyList<Tensor<{GetTypeParamName(classSymbol)}>> GetTrainableParametersUnmaterialized()");
-            sb.AppendLine("    {");
-            if (subLayerFields.Count > 0)
-            {
-                sb.AppendLine("        EnsureSubLayersRegistered();");
-            }
-            if (hasOptional)
-            {
-                sb.AppendLine($"        var __counting = new System.Collections.Generic.List<Tensor<{GetTypeParamName(classSymbol)}>>({paramFields.Count});");
-                foreach (var f in paramFields)
-                {
-                    if (f.Optional)
-                        sb.AppendLine($"        if ({PresenceExpr(f)}) __counting.Add({f.Name});");
-                    else
-                        sb.AppendLine($"        __counting.Add({f.Name});");
-                }
-                sb.AppendLine("        return __counting;");
-            }
-            else
-            {
-                sb.AppendLine($"        return new Tensor<{GetTypeParamName(classSymbol)}>[] {{ {string.Join(", ", paramFields.Select(f => f.Name))} }};");
             }
             sb.AppendLine("    }");
             sb.AppendLine();
@@ -894,7 +814,9 @@ public class TrainableParameterGenerator : IIncrementalGenerator
                 sb.AppendLine("        int __expected = 0;");
                 foreach (var pf in paramFields)
                 {
-                    if (pf.Optional)
+                    if (pf.CollectionKind != ParameterCollectionKind.Direct)
+                        EmitCollectionCount(sb, pf, "__expected");
+                    else if (pf.Optional || pf.Condition is not null)
                         sb.AppendLine($"        if ({PresenceExpr(pf)}) __expected++;");
                     else
                         sb.AppendLine("        __expected++;");
@@ -907,12 +829,7 @@ public class TrainableParameterGenerator : IIncrementalGenerator
                 // the longer list left 576 values with nowhere to go. Accept the all-optionals-
                 // present count as well; anything between the two remains ambiguous and is
                 // rejected as before.
-                sb.AppendLine($"        const int __withAllOptional = {paramFields.Count};");
-                sb.AppendLine("        bool __materializeOptional = parameters.Count == __withAllOptional && __expected != __withAllOptional;");
-                sb.AppendLine("        if (parameters.Count != __expected && !__materializeOptional)");
-                sb.AppendLine("            throw new System.ArgumentException($\"Expected {__expected} parameters (currently-present trainable tensors) or {__withAllOptional} (all optional present), got {parameters.Count}.\", nameof(parameters));");
-                sb.AppendLine("        int __i = 0;");
-                sb.AppendLine("        ClearRegisteredParameters();");
+                sb.AppendLine("        int __withAllOptional = 0;");
                 foreach (var pf in paramFields)
                 {
                     if (pf.CollectionKind != ParameterCollectionKind.Direct)
@@ -930,7 +847,14 @@ public class TrainableParameterGenerator : IIncrementalGenerator
                 {
                     if (pf.CollectionKind != ParameterCollectionKind.Direct)
                     {
-                        sb.AppendLine($"        if (__materializeOptional || ({PresenceExpr(pf)}))");
+                        EmitCollectionAssign(sb, pf);
+                    }
+                    else if (pf.Optional || pf.Condition is not null)
+                    {
+                        string assignCondition = pf.Condition is null
+                            ? $"__materializeOptional || ({PresenceExpr(pf)})"
+                            : $"({pf.Condition}) && (__materializeOptional || ({PresenceExpr(pf)}))";
+                        sb.AppendLine($"        if ({assignCondition})");
                         sb.AppendLine("        {");
                         EmitFieldAssign(pf, "__i", "__i");
                         sb.AppendLine("            __i++;");
@@ -962,6 +886,7 @@ public class TrainableParameterGenerator : IIncrementalGenerator
                 {
                     EmitFieldAssign(paramFields[i], i.ToString(), i.ToString());
                 }
+                sb.AppendLine("        __aidnRefreshTrainableParameterViewIfCreated();");
                 // Rebind in place when the registration already has the right shape. The
                 // clear-and-re-append path below unregisters every tensor from the engine and
                 // registers it again, and the engine's persistent pool is not order-stable across
@@ -982,6 +907,7 @@ public class TrainableParameterGenerator : IIncrementalGenerator
                 sb.AppendLine($"        if (RegisteredTrainableParameterCount == {paramFields.Count})");
                 sb.AppendLine("        {");
                 sb.AppendLine("            base.SetTrainableParameters(parameters);");
+                sb.AppendLine("            MarkTrainableParametersRebound();");
                 sb.AppendLine("            return;");
                 sb.AppendLine("        }");
                 sb.AppendLine();
@@ -1187,6 +1113,212 @@ public class TrainableParameterGenerator : IIncrementalGenerator
         return sb.ToString();
     }
 
+    private static void EmitOrderedParameterManifest(
+        StringBuilder sb,
+        INamedTypeSymbol classSymbol,
+        List<ParameterFieldInfo> paramFields,
+        List<SubLayerFieldInfo> subLayerFields,
+        List<(string Field, string Name, string Role, string StateRole)> bufferFields)
+    {
+        if (paramFields.Count == 0 && subLayerFields.Count == 0 && bufferFields.Count == 0)
+            return;
+
+        var parameterNames = new HashSet<string>(paramFields.Select(field => field.Name));
+        var subLayersByName = subLayerFields.ToDictionary(field => field.Name, System.StringComparer.Ordinal);
+        var buffersByName = bufferFields.ToDictionary(field => field.Field, System.StringComparer.Ordinal);
+        var fieldsInSourceOrder = classSymbol.GetMembers()
+            .OfType<IFieldSymbol>()
+            .Where(field => !field.IsImplicitlyDeclared)
+            .OrderBy(field => field.Locations.FirstOrDefault(location => location.IsInSource)
+                ?.SourceTree?.FilePath ?? string.Empty, System.StringComparer.Ordinal)
+            .ThenBy(field => field.Locations.FirstOrDefault(location => location.IsInSource)
+                ?.SourceSpan.Start ?? int.MaxValue)
+            .ToList();
+
+        // paramFields already carries the compatibility ordering requested explicitly through
+        // [TrainableParameter(Order = ...)]. Map that sequence onto the trainable declaration
+        // positions; without an explicit Order, its stable secondary key is source order.
+        int parameterCursor = 0;
+        var emittedParameters = new HashSet<string>(System.StringComparer.Ordinal);
+
+        sb.AppendLine("    /// <summary>Appends generated parameter components in inheritance and declaration order.</summary>");
+        sb.AppendLine("    protected override void AppendDeclaredParameterComponents(");
+        sb.AppendLine("        System.Collections.Generic.List<DeclaredParameterComponent> components)");
+        sb.AppendLine("    {");
+        sb.AppendLine("        base.AppendDeclaredParameterComponents(components);");
+
+        foreach (var field in fieldsInSourceOrder)
+        {
+            if (parameterNames.Contains(field.Name) && parameterCursor < paramFields.Count)
+            {
+                var parameter = paramFields[parameterCursor++];
+                EmitManifestParameter(sb, parameter);
+                emittedParameters.Add(parameter.Name);
+                continue;
+            }
+
+            if (buffersByName.TryGetValue(field.Name, out var buffer))
+            {
+                sb.AppendLine($"        DeclareParameterBuffer(components, {buffer.Field}, \"{EscapeStringLiteral(buffer.Name)}\", {buffer.StateRole});");
+                continue;
+            }
+
+            if (subLayersByName.TryGetValue(field.Name, out var subLayer))
+            {
+                if (subLayer.IsCollection)
+                {
+                    sb.AppendLine($"        if ({subLayer.Name} is not null)");
+                    sb.AppendLine($"            foreach (var __componentLayer in {subLayer.Name})");
+                    sb.AppendLine("                DeclareParameterSubLayer(components, __componentLayer);");
+                }
+                else
+                {
+                    sb.AppendLine($"        DeclareParameterSubLayer(components, {subLayer.Name});");
+                }
+            }
+        }
+
+        // Symbols without a source location are rare (typically generated compatibility fields),
+        // but silently omitting one would be worse than placing it after source-backed declarations.
+        foreach (var parameter in paramFields)
+        {
+            if (emittedParameters.Add(parameter.Name)) EmitManifestParameter(sb, parameter);
+        }
+
+        sb.AppendLine("    }");
+        sb.AppendLine();
+    }
+
+    private static void EmitManifestParameter(StringBuilder sb, ParameterFieldInfo parameter)
+    {
+        if (parameter.CollectionKind == ParameterCollectionKind.Direct)
+        {
+            string declaration = parameter.LowPrecisionBacking is null
+                ? $"DeclareTrainableParameter(components, {parameter.Name});"
+                : $"DeclareTrainableParameter(components, {parameter.Name}, {parameter.LowPrecisionBacking});";
+            if (parameter.Condition is not null)
+                sb.AppendLine($"        if ({parameter.Condition}) {declaration}");
+            else
+                sb.AppendLine($"        {declaration}");
+            return;
+        }
+
+        string values = parameter.CollectionKind == ParameterCollectionKind.Keyed
+            ? $"global::AiDotNet.Models.Parameters.ParameterCollectionOrdering.OrderedValues({parameter.Name})"
+            : $"global::AiDotNet.Models.Parameters.ParameterCollectionOrdering.PresentNonNull({parameter.Name})";
+        if (parameter.Condition is not null)
+        {
+            sb.AppendLine($"        if ({parameter.Condition})");
+            sb.AppendLine($"            foreach (var __componentTensor in {values})");
+            sb.AppendLine("                DeclareTrainableParameter(components, __componentTensor);");
+        }
+        else
+        {
+            sb.AppendLine($"        foreach (var __componentTensor in {values})");
+            sb.AppendLine("            DeclareTrainableParameter(components, __componentTensor);");
+        }
+    }
+
+    private static void EmitDeferredInputShapeInference(
+        StringBuilder sb,
+        INamedTypeSymbol classSymbol,
+        List<ParameterFieldInfo> paramFields,
+        List<SubLayerFieldInfo> subLayerFields,
+        List<(string Field, string Name, string Role, string StateRole)> bufferFields)
+    {
+        bool completeLocalFormula = paramFields.Count > 0
+            && subLayerFields.Count == 0
+            && bufferFields.Count == 0
+            && paramFields.All(field => field.CollectionKind == ParameterCollectionKind.Direct
+                && !field.Optional
+                && field.Condition is null
+                && !string.IsNullOrWhiteSpace(field.Shape)
+                && !field.Shape!.Contains("*"));
+        if (!completeLocalFormula) return;
+
+        var referencedAxes = new SortedSet<int>();
+        foreach (var parameter in paramFields)
+        {
+            foreach (Match match in Regex.Matches(
+                         parameter.Shape!, @"InputShape\s*\[\s*(\d+)\s*\]"))
+            {
+                if (int.TryParse(match.Groups[1].Value, out int axis)) referencedAxes.Add(axis);
+            }
+        }
+        if (referencedAxes.Count == 0) return;
+
+        sb.AppendLine("    /// <summary>Infers one deferred input axis from complete generated parameter-shape formulas.</summary>");
+        sb.AppendLine("    protected override bool TryInferInputShapeFromParameterCount(int parameterCount, out int[] inputShape)");
+        sb.AppendLine("    {");
+        sb.AppendLine("        if (Parameters.Length == 0)");
+        sb.AppendLine("        {");
+
+        foreach (int axis in referencedAxes)
+        {
+            sb.AppendLine($"            if (InputShape.Length > {axis} && InputShape[{axis}] <= 0)");
+            sb.AppendLine("            {");
+            sb.AppendLine("                bool __onlyUnknownAxis = true;");
+            sb.AppendLine("                for (int __axis = 0; __axis < InputShape.Length; __axis++)");
+            sb.AppendLine($"                    if (__axis != {axis} && InputShape[__axis] <= 0) __onlyUnknownAxis = false;");
+            sb.AppendLine("                if (__onlyUnknownAxis)");
+            sb.AppendLine("                {");
+            sb.AppendLine("                    long __atOne = 0;");
+            sb.AppendLine("                    long __atTwo = 0;");
+            sb.AppendLine("                    checked");
+            sb.AppendLine("                    {");
+            foreach (var parameter in paramFields)
+            {
+                sb.AppendLine($"                        __atOne += {ShapeProduct(parameter.Shape!, axis, "1")};");
+                sb.AppendLine($"                        __atTwo += {ShapeProduct(parameter.Shape!, axis, "2")};");
+            }
+            sb.AppendLine("                    }");
+            sb.AppendLine("                    long __slope = __atTwo - __atOne;");
+            sb.AppendLine("                    long __intercept = __atOne - __slope;");
+            sb.AppendLine("                    long __numerator = parameterCount - __intercept;");
+            sb.AppendLine("                    if (__slope > 0 && __numerator > 0 && __numerator % __slope == 0");
+            sb.AppendLine("                        && __numerator / __slope <= int.MaxValue)");
+            sb.AppendLine("                    {");
+            sb.AppendLine("                        int __candidate = (int)(__numerator / __slope);");
+            sb.AppendLine("                        long __verified = 0;");
+            sb.AppendLine("                        checked");
+            sb.AppendLine("                        {");
+            foreach (var parameter in paramFields)
+                sb.AppendLine($"                            __verified += {ShapeProduct(parameter.Shape!, axis, "__candidate")};");
+            sb.AppendLine("                        }");
+            sb.AppendLine("                        if (__verified == parameterCount)");
+            sb.AppendLine("                        {");
+            sb.AppendLine("                            inputShape = (int[])InputShape.Clone();");
+            sb.AppendLine($"                            inputShape[{axis}] = __candidate;");
+            sb.AppendLine("                            return true;");
+            sb.AppendLine("                        }");
+            sb.AppendLine("                    }");
+            sb.AppendLine("                }");
+            sb.AppendLine("            }");
+        }
+
+        sb.AppendLine("        }");
+        sb.AppendLine("        return base.TryInferInputShapeFromParameterCount(parameterCount, out inputShape);");
+        sb.AppendLine("    }");
+        sb.AppendLine();
+    }
+
+    private static string ShapeProduct(string shape, int inputAxis, string replacement)
+    {
+        var axes = shape.Split(',')
+            .Select(axis => axis.Trim())
+            .Where(axis => axis.Length > 0)
+            .Select(axis => Regex.Replace(
+                axis,
+                $@"InputShape\s*\[\s*{inputAxis}\s*\]",
+                replacement))
+            .Select(axis => $"(long)({axis})")
+            .ToArray();
+        return axes.Length == 0 ? "0L" : string.Join(" * ", axes);
+    }
+
+    private static string EscapeStringLiteral(string value)
+        => value.Replace("\\", "\\\\").Replace("\"", "\\\"");
+
     /// <summary>
     /// The element type to write into the generated signatures.
     /// </summary>
@@ -1208,6 +1340,26 @@ public class TrainableParameterGenerator : IIncrementalGenerator
                 return b.TypeArguments[0].ToDisplayString();
         }
         return "T";
+    }
+
+    private static string ToValidationShapeAxis(string axis)
+        => axis == "*" || TryGetAdaptiveAxisBinding(axis, out _) ? "-2" : axis;
+
+    private static string ToCountingShapeAxis(string axis)
+        => TryGetAdaptiveAxisBinding(axis, out string binding) ? binding : axis;
+
+    private static bool TryGetAdaptiveAxisBinding(string axis, out string binding)
+    {
+        binding = string.Empty;
+        if (axis.Length < 4
+            || !axis.StartsWith("*(", System.StringComparison.Ordinal)
+            || axis[axis.Length - 1] != ')')
+        {
+            return false;
+        }
+
+        binding = axis.Substring(2, axis.Length - 3).Trim();
+        return binding.Length > 0;
     }
 
     /// <summary>True when the class itself declares any of the named members.</summary>
@@ -1305,6 +1457,55 @@ public class TrainableParameterGenerator : IIncrementalGenerator
     }
 
     /// <summary>
+    /// Recognizes mutable, deterministically ordered collections of parameter tensors. Enumerable-only
+    /// and read-only collection interfaces are deliberately rejected: generated restore must write a
+    /// replacement tensor back to the exact slot, and pretending that a read-only surface can do that
+    /// would make copy-on-write and optimizer-buffer rebinding silently update stale storage.
+    /// </summary>
+    private static bool TryGetTensorCollection(
+        ITypeSymbol type,
+        INamedTypeSymbol classSymbol,
+        out ParameterCollectionKind kind)
+    {
+        kind = ParameterCollectionKind.Direct;
+
+        if (type is IArrayTypeSymbol array && IsTensorOfLayerElement(array.ElementType, classSymbol))
+        {
+            kind = ParameterCollectionKind.Array;
+            return true;
+        }
+
+        if (type is not INamedTypeSymbol named || !named.IsGenericType)
+            return false;
+
+        if (named.TypeArguments.Length == 1 &&
+            IsTensorOfLayerElement(named.TypeArguments[0], classSymbol))
+        {
+            var open = named.OriginalDefinition.ToDisplayString();
+            if (open.StartsWith("System.Collections.Generic.List<", System.StringComparison.Ordinal) ||
+                open.StartsWith("System.Collections.Generic.IList<", System.StringComparison.Ordinal))
+            {
+                kind = ParameterCollectionKind.Indexed;
+                return true;
+            }
+        }
+
+        if (named.TypeArguments.Length == 2 &&
+            IsTensorOfLayerElement(named.TypeArguments[1], classSymbol))
+        {
+            var open = named.OriginalDefinition.ToDisplayString();
+            if (open.StartsWith("System.Collections.Generic.Dictionary<", System.StringComparison.Ordinal) ||
+                open.StartsWith("System.Collections.Generic.IDictionary<", System.StringComparison.Ordinal))
+            {
+                kind = ParameterCollectionKind.Keyed;
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>
     /// True for a field holding MANY sub-layers: TLayer[], List&lt;TLayer&gt;, IReadOnlyList&lt;TLayer&gt;
     /// and friends, where TLayer satisfies <see cref="IsLayerType"/>.
     /// </summary>
@@ -1324,6 +1525,98 @@ public class TrainableParameterGenerator : IIncrementalGenerator
         }
 
         return false;
+    }
+
+    /// <summary>
+    /// A parameter-free declaration is a closed-world claim. Prove that no base type contributes
+    /// trainable fields, buffers, registered state, or child modules before emitting it.
+    /// </summary>
+    private static bool HasInheritedPersistentContract(
+        INamedTypeSymbol classSymbol,
+        INamedTypeSymbol? trainableParameterAttribute,
+        INamedTypeSymbol? bufferAttribute)
+    {
+        for (var current = classSymbol.BaseType;
+             current is not null && !IsLayerBaseDefinition(current);
+             current = current.BaseType)
+        {
+            // GetRegistrationClassifications maps registrations back to named fields. Runtime
+            // registries can also retain tensors supplied through locals (DeepAR's AddProjection
+            // helper is the canonical example), so the raw declaration is independently enough
+            // to disprove a closed-world parameter-free claim.
+            if (ParameterMemberSemanticModel.GetRegistrationClassifications(current).Count > 0
+                || HasPersistentRegistrationInvocation(current))
+                return true;
+
+            foreach (var field in current.GetMembers().OfType<IFieldSymbol>())
+            {
+                if (field.IsStatic) continue;
+                if (IsLayerType(field.Type)
+                    || IsLayerCollectionType(field.Type)
+                    || IsPotentialLayerContainer(field.Type))
+                {
+                    return true;
+                }
+
+                foreach (var attribute in field.GetAttributes())
+                {
+                    if ((trainableParameterAttribute is not null
+                         && SymbolEqualityComparer.Default.Equals(
+                             attribute.AttributeClass, trainableParameterAttribute))
+                        || (bufferAttribute is not null
+                            && SymbolEqualityComparer.Default.Equals(
+                                attribute.AttributeClass, bufferAttribute)))
+                    {
+                        return true;
+                    }
+                }
+            }
+        }
+
+        return false;
+    }
+
+    private static bool HasPersistentRegistrationInvocation(INamedTypeSymbol type)
+    {
+        foreach (var syntaxReference in type.DeclaringSyntaxReferences)
+        {
+            if (syntaxReference.GetSyntax() is not ClassDeclarationSyntax declaration) continue;
+            foreach (var invocation in declaration.DescendantNodes().OfType<InvocationExpressionSyntax>())
+            {
+                string? callName = invocation.Expression switch
+                {
+                    IdentifierNameSyntax identifier => identifier.Identifier.ValueText,
+                    MemberAccessExpressionSyntax access => access.Name.Identifier.ValueText,
+                    _ => null
+                };
+                if (callName is "RegisterTrainableParameter"
+                    or "RegisterBuffer"
+                    or "RegisterParameterComponent")
+                {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    private static bool IsLayerBaseDefinition(INamedTypeSymbol type)
+    {
+        var display = type.OriginalDefinition.ToDisplayString();
+        return display == LayerBaseTypeName || display.StartsWith(LayerBaseTypeName + "<");
+    }
+
+    /// <summary>
+    /// Conservatively recognizes containers whose value/element type is a layer even when the
+    /// collection shape is not yet one the generator can safely enumerate (for example a keyed,
+    /// mutable task-adapter dictionary). Such a type cannot be certified parameter-free.
+    /// </summary>
+    private static bool IsPotentialLayerContainer(ITypeSymbol type)
+    {
+        if (type is IArrayTypeSymbol array) return IsLayerType(array.ElementType);
+        if (type is not INamedTypeSymbol named || !named.IsGenericType) return false;
+        return named.TypeArguments.Any(IsLayerType);
     }
 
     private static bool IsLayerType(ITypeSymbol type)
@@ -1392,8 +1685,72 @@ public class TrainableParameterGenerator : IIncrementalGenerator
             if (symbol is IFieldSymbol f
                 && SymbolEqualityComparer.Default.Equals(f.ContainingType, classSymbol))
                 continue;
+
+            // A local that this method then STORES INTO one of the class's own fields is fully
+            // mappable -- the field is the tensor's home, the local is just the expression that
+            // built it. Allocate-then-register-then-assign is the ordinary way to swap a lazily
+            // sized weight (BatchNorm and LayerNorm both resize gamma/beta this way), and treating
+            // it as dynamic made the generator fall back to the runtime registry, which SILENTLY
+            // drops DeclaredParameterShapes and the whole declared-shape surface with it -- 180
+            // generated lines down to 21 for LayerNormalizationLayer. Restore then has no declared
+            // shape to validate against, so a clone quietly keeps its freshly initialized weights
+            // instead of the trained ones.
+            if (symbol is ILocalSymbol local && LocalIsStoredIntoOwnField(invocation, model, classSymbol, local))
+                continue;
+
             return true;
         }
+        return false;
+    }
+
+    /// <summary>
+    /// True when <paramref name="local"/> is assigned to a field of <paramref name="classSymbol"/>
+    /// somewhere in the member that contains <paramref name="invocation"/>.
+    /// </summary>
+    /// <remarks>
+    /// Deliberately scoped to the containing member and to a direct <c>_field = local</c> store.
+    /// Anything less direct -- a collection element, a conditional store, a hand-off to another
+    /// method -- stays unmappable, because the generator could not then name a single field for
+    /// the registration and the runtime registry really is the only complete source of truth.
+    /// </remarks>
+    private static bool LocalIsStoredIntoOwnField(
+        SyntaxNode invocation, SemanticModel model, INamedTypeSymbol classSymbol, ILocalSymbol local)
+    {
+        SyntaxNode? member = invocation.FirstAncestorOrSelf<MemberDeclarationSyntax>();
+        if (member is null) return false;
+
+        foreach (var assignment in member.DescendantNodes().OfType<AssignmentExpressionSyntax>())
+        {
+            if (!assignment.IsKind(SyntaxKind.SimpleAssignmentExpression)) continue;
+            if (model.SyntaxTree != assignment.SyntaxTree) continue;
+
+            if (model.GetSymbolInfo(assignment.Right).Symbol is not ILocalSymbol assignedFrom
+                || !SymbolEqualityComparer.Default.Equals(assignedFrom, local))
+                continue;
+
+            if (model.GetSymbolInfo(assignment.Left).Symbol is IFieldSymbol target
+                && SymbolEqualityComparer.Default.Equals(target.ContainingType, classSymbol))
+                return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Checks every partial declaration for a registration whose tensor is supplied by a loop,
+    /// local, indexer, or other expression that cannot be named in generated source.
+    /// </summary>
+    private static bool HasAnyUnmappableRegistration(
+        Compilation compilation,
+        INamedTypeSymbol classSymbol)
+    {
+        foreach (var syntaxReference in classSymbol.DeclaringSyntaxReferences)
+        {
+            if (syntaxReference.GetSyntax() is not ClassDeclarationSyntax declaration) continue;
+            var semanticModel = compilation.GetSemanticModel(declaration.SyntaxTree);
+            if (HasUnmappableRegistration(declaration, semanticModel, classSymbol)) return true;
+        }
+
         return false;
     }
 
@@ -1462,10 +1819,136 @@ public class TrainableParameterGenerator : IIncrementalGenerator
     /// placeholder awaiting materialization -- both must be skipped, and dereferencing the first
     /// to test the second throws.
     /// </summary>
-    private static string PresenceExpr(ParameterFieldInfo pf)
-        => pf.Nullable ? $"{pf.Name} is not null && {pf.Name}.Length > 0" : $"{pf.Name}.Length > 0";
+    private static void EmitCollectionAdd(StringBuilder sb, ParameterFieldInfo pf, string destination)
+    {
+        if (pf.CollectionKind == ParameterCollectionKind.Direct)
+        {
+            if (pf.Optional || pf.Condition is not null)
+                sb.AppendLine($"        if ({PresenceExpr(pf)}) {destination}.Add({pf.Name});");
+            else
+                sb.AppendLine($"        {destination}.Add({pf.Name});");
+            return;
+        }
 
-    private record struct ParameterFieldInfo(string Name, string Role, int Order, int DeclIndex = 0, string? TypeName = null, bool Optional = false, bool Nullable = false, string? Shape = null);
+        string values = pf.CollectionKind == ParameterCollectionKind.Keyed
+            ? $"global::AiDotNet.Models.Parameters.ParameterCollectionOrdering.OrderedValues({pf.Name})"
+            : $"global::AiDotNet.Models.Parameters.ParameterCollectionOrdering.PresentNonNull({pf.Name})";
+        if (pf.Condition is not null)
+        {
+            sb.AppendLine($"        if ({pf.Condition})");
+            sb.AppendLine("        {");
+            sb.AppendLine($"            foreach (var __parameter in {values})");
+            sb.AppendLine($"                {destination}.Add(__parameter);");
+            sb.AppendLine("        }");
+        }
+        else
+        {
+            sb.AppendLine($"        foreach (var __parameter in {values})");
+            sb.AppendLine($"            {destination}.Add(__parameter);");
+        }
+    }
+
+    private static void EmitCollectionCount(StringBuilder sb, ParameterFieldInfo pf, string counter)
+    {
+        string values = pf.CollectionKind == ParameterCollectionKind.Keyed
+            ? $"global::AiDotNet.Models.Parameters.ParameterCollectionOrdering.OrderedValues({pf.Name})"
+            : $"global::AiDotNet.Models.Parameters.ParameterCollectionOrdering.PresentNonNull({pf.Name})";
+        if (pf.Condition is not null)
+            sb.AppendLine($"        if ({pf.Condition}) foreach (var __parameter in {values}) {counter}++;");
+        else
+            sb.AppendLine($"        foreach (var __parameter in {values}) {counter}++;");
+    }
+
+    private static void EmitCollectionAssign(StringBuilder sb, ParameterFieldInfo pf)
+    {
+        if (pf.Condition is not null)
+        {
+            sb.AppendLine($"        if ({pf.Condition})");
+            sb.AppendLine("        {");
+        }
+
+        string indent = pf.Condition is null ? "        " : "            ";
+        if (pf.CollectionKind is ParameterCollectionKind.Array or ParameterCollectionKind.Indexed)
+        {
+            string count = pf.CollectionKind == ParameterCollectionKind.Array
+                ? $"{pf.Name}.Length"
+                : $"{pf.Name}.Count";
+            sb.AppendLine($"{indent}if ({pf.Name} is not null)");
+            sb.AppendLine($"{indent}{{");
+            sb.AppendLine($"{indent}    for (int __slot = 0; __slot < {count}; __slot++)");
+            sb.AppendLine($"{indent}        {pf.Name}[__slot] = parameters[__i++] ?? throw new System.ArgumentNullException(nameof(parameters), \"Collection parameter is null.\");");
+            sb.AppendLine($"{indent}}}");
+        }
+        else
+        {
+            sb.AppendLine($"{indent}if ({pf.Name} is not null)");
+            sb.AppendLine($"{indent}{{");
+            sb.AppendLine($"{indent}    foreach (var __key in global::AiDotNet.Models.Parameters.ParameterCollectionOrdering.OrderedKeys({pf.Name}))");
+            sb.AppendLine($"{indent}        {pf.Name}[__key] = parameters[__i++] ?? throw new System.ArgumentNullException(nameof(parameters), \"Collection parameter is null.\");");
+            sb.AppendLine($"{indent}}}");
+        }
+
+        if (pf.Condition is not null)
+            sb.AppendLine("        }");
+    }
+
+    private static void EmitCollectionRegister(StringBuilder sb, ParameterFieldInfo pf)
+    {
+        if (pf.CollectionKind == ParameterCollectionKind.Direct)
+        {
+            if (pf.Optional || pf.Condition is not null)
+                sb.AppendLine($"        if ({PresenceExpr(pf)}) AppendTrainableParameter({pf.Name}, {pf.Role});");
+            else
+                sb.AppendLine($"        AppendTrainableParameter({pf.Name}, {pf.Role});");
+            return;
+        }
+
+        string values = pf.CollectionKind == ParameterCollectionKind.Keyed
+            ? $"global::AiDotNet.Models.Parameters.ParameterCollectionOrdering.OrderedValues({pf.Name})"
+            : $"global::AiDotNet.Models.Parameters.ParameterCollectionOrdering.PresentNonNull({pf.Name})";
+        if (pf.Condition is not null)
+        {
+            sb.AppendLine($"        if ({pf.Condition})");
+            sb.AppendLine("        {");
+            sb.AppendLine($"            foreach (var __parameter in {values})");
+            sb.AppendLine($"                AppendTrainableParameter(__parameter, {pf.Role});");
+            sb.AppendLine("        }");
+        }
+        else
+        {
+            sb.AppendLine($"        foreach (var __parameter in {values})");
+            sb.AppendLine($"            AppendTrainableParameter(__parameter, {pf.Role});");
+        }
+    }
+
+    private static string PresenceExpr(ParameterFieldInfo pf)
+    {
+        string tensorPresent = pf.Nullable
+            ? $"{pf.Name} is not null && {pf.Name}.Length > 0"
+            : $"{pf.Name}.Length > 0";
+        return pf.Condition is null ? tensorPresent : $"({pf.Condition}) && ({tensorPresent})";
+    }
+
+    private enum ParameterCollectionKind
+    {
+        Direct,
+        Array,
+        Indexed,
+        Keyed,
+    }
+
+    private record struct ParameterFieldInfo(
+        string Name,
+        string Role,
+        int Order,
+        int DeclIndex = 0,
+        string? TypeName = null,
+        bool Optional = false,
+        bool Nullable = false,
+        string? Shape = null,
+        ParameterCollectionKind CollectionKind = ParameterCollectionKind.Direct,
+        string? Condition = null,
+        string? LowPrecisionBacking = null);
     private record struct GradientFieldInfo(string Name, bool IsNullable);
     private record struct SubLayerFieldInfo(string Name, bool IsNullable, bool IsCollection, string? InputShape = null);
 }

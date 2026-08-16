@@ -134,7 +134,7 @@ public partial class FeedForwardLayer<T> : LayerBase<T>, IShapeContract
     /// to features like "contains an edge" or "contains a curved line."
     /// </para>
     /// </remarks>
-    [TrainableParameter(Role = PersistentTensorRole.Weights, Shape = "*, _outputSize")]
+    [TrainableParameter(Role = PersistentTensorRole.Weights, Shape = "*(_inputSize), _outputSize")]
     private Tensor<T> _weights;
 
     /// <summary>

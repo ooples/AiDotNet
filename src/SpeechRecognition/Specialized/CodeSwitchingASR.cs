@@ -423,7 +423,7 @@ public partial class CodeSwitchingASR<T> : AudioNeuralNetworkBase<T>, ISpeechRec
 
             using var tape = new GradientTape<T>();
             var loss = JointObjective(input, expected);
-            var gradients = tape.ComputeGradients(loss, parameters);
+            var gradients = ComputeAndPublishParameterGradients(tape, loss, parameters);
             T lossValue = loss.Length > 0 ? loss[0] : NumOps.Zero;
 
             var context = new TapeStepContext<T>(

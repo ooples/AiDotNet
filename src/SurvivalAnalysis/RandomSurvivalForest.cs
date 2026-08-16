@@ -53,15 +53,6 @@ namespace AiDotNet.SurvivalAnalysis;
 [ResearchPaper("Random Survival Forests", "https://doi.org/10.1214/08-AOAS169", Year = 2008, Authors = "Hemant Ishwaran, Udaya B. Kogalur, Eugene H. Blackstone, Michael S. Lauer")]
 public partial class RandomSurvivalForest<T> : SurvivalModelBase<T>
 {
-    /// <inheritdoc />
-    /// <remarks>
-    /// Derived from the getter, which is what ModelBase already does. The inherited override
-    /// computes NumFeatures x NumClasses, and this model has no such dense weight matrix -- it is
-    /// a forest / ensemble / AFT fit -- so the formula answered 0 while the getter returned real
-    /// values. SetParameters pairs the two by length, so the disagreement is not cosmetic.
-    /// </remarks>
-    public override long ParameterCount => GetParameters().Length;
-
     /// <summary>
     /// Gets the number of trees in the forest.
     /// </summary>
@@ -90,7 +81,6 @@ public partial class RandomSurvivalForest<T> : SurvivalModelBase<T>
     /// <summary>
     /// The survival trees.
     /// </summary>
-    [FittedParameter]
     private List<SurvivalTree>? _trees;
 
     /// <summary>
@@ -570,6 +560,31 @@ public partial class RandomSurvivalForest<T> : SurvivalModelBase<T>
     /// <summary>
     /// Internal survival tree node.
     /// </summary>
+    /// <summary>
+    /// Declares the fitted forest. The classifier cannot place it: a list of a private node type
+    /// is neither a single graph nor a list of <c>IModelSerializer</c> children, which is what
+    /// ADN0062 was reporting against the <c>[FittedParameter]</c> this replaces.
+    /// </summary>
+    /// <param name="state">The registry to declare into.</param>
+    protected override void RegisterState(AiDotNet.Models.ModelStateRegistry<T> state)
+    {
+        base.RegisterState(state);
+
+        state.DeclareGraphList<SurvivalTree>(
+            "RandomSurvivalForest._trees",
+            () => _trees,
+            v => _trees = v,
+            node => node
+                .Create(() => new SurvivalTree())
+                .Boolean(n => n.IsLeaf, (n, v) => n.IsLeaf = v)
+                .Int32(n => n.SplitFeature, (n, v) => n.SplitFeature = v)
+                .Double(n => n.SplitThreshold, (n, v) => n.SplitThreshold = v)
+                .DoubleArray(n => n.SurvivalTimes, (n, v) => n.SurvivalTimes = v)
+                .DoubleArray(n => n.SurvivalProbs, (n, v) => n.SurvivalProbs = v)
+                .Child(n => n.Left, (n, c) => n.Left = c)
+                .Child(n => n.Right, (n, c) => n.Right = c));
+    }
+
     private class SurvivalTree
     {
         public bool IsLeaf { get; set; }

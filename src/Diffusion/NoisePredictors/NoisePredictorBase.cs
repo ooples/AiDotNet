@@ -30,7 +30,9 @@ namespace AiDotNet.Diffusion.NoisePredictors;
 /// </para>
 /// </remarks>
 public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape,
-    AiDotNet.Models.Parameters.IParameterLayoutSource, IDisposable
+    AiDotNet.Models.Parameters.IParameterLayoutSource,
+    AiDotNet.Models.Parameters.IParameterManifestProvider,
+    AiDotNet.Models.Parameters.IParameterSurfaceLifecycle, IDisposable
 {
     // --- declared state (ModelStateRegistry) ---
     // Identical in every model base because these bases are siblings over the same interfaces rather
@@ -572,9 +574,9 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape,
 
             EnsureParametersReadyGuarded();
             long total = 0;
-            foreach (var tensor in EnumerateParameterTensors())
+            foreach (var slot in EnumerateParameterValueSlots())
             {
-                total += tensor.Length;
+                total += slot.ScalarCount;
             }
             return total;
         }
@@ -606,6 +608,16 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape,
                 count)
         };
     }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Noise predictors expose the same readiness-aware layout as every other model base. Keeping
+    /// this adapter here means derived predictors automatically distinguish a genuinely
+    /// parameter-free graph from one whose trainable shapes or values are still deferred; model
+    /// authors do not need a per-predictor manifest override.
+    /// </remarks>
+    public AiDotNet.Models.Parameters.ParameterLayoutSnapshot ParameterLayout =>
+        new(GetParameterLayout());
 
     /// <summary>
     /// Builds any layer objects whose dimensions are fixed by construction, without allocating
@@ -640,13 +652,26 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape,
     /// </summary>
     protected IEnumerable<Tensor<T>> EnumerateParameterTensors()
     {
+        foreach (var slot in EnumerateParameterValueSlots())
+        {
+            if (slot.ScalarCount == 0) continue;
+            yield return slot.Snapshot();
+        }
+    }
+
+    /// <summary>
+    /// Every logical trainable slot in the same reflected-layer order as the public parameter
+    /// surfaces, including values held by an alternate fp16-resident backing tensor.
+    /// </summary>
+    private IEnumerable<LayerBase<T>.TrainableParameterValueSlot> EnumerateParameterValueSlots()
+    {
         foreach (var layer in ReflectInstanceLayers(this))
         {
             if (layer is not LayerBase<T> lb) continue;
-            foreach (var tensor in lb.GetTrainableParameters())
+            foreach (var slot in lb.GetOwnTrainableParameterValueSlots())
             {
-                if (tensor is null || tensor.Length == 0) continue;
-                yield return tensor;
+                if (slot.ScalarCount == 0) continue;
+                yield return slot;
             }
         }
     }
@@ -713,6 +738,21 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape,
         finally
         {
             _resolvingParametersFor = previous;
+        }
+    }
+
+    /// <inheritdoc />
+    void AiDotNet.Models.Parameters.IParameterSurfaceLifecycle.PrepareParameterSurface(
+        AiDotNet.Models.Parameters.ParameterSurfaceIntent intent)
+    {
+        EnsureParameterStructureReady();
+        if (intent == AiDotNet.Models.Parameters.ParameterSurfaceIntent.Describe) return;
+
+        EnsureParametersReadyGuarded();
+        foreach (var layer in ReflectInstanceLayers(this))
+        {
+            if (layer is AiDotNet.Models.Parameters.IParameterSurfaceLifecycle lifecycle)
+                lifecycle.PrepareParameterSurface(intent);
         }
     }
 
@@ -1666,18 +1706,19 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape,
         EnsureParametersReadyGuarded();
 
         long total = 0;
-        foreach (var tensor in EnumerateParameterTensors())
+        var slots = EnumerateParameterValueSlots().ToList();
+        foreach (var slot in slots)
         {
-            total += tensor.Length;
+            total += slot.ScalarCount;
         }
 
         var result = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(total));
         int offset = 0;
-        foreach (var tensor in EnumerateParameterTensors())
+        foreach (var slot in slots)
         {
-            for (int i = 0; i < tensor.Length; i++)
+            for (int i = 0; i < slot.ScalarCount; i++)
             {
-                result[offset++] = tensor[i];
+                result[offset++] = slot.ReadScalar(i);
             }
         }
 
@@ -1693,9 +1734,10 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape,
         EnsureParametersReadyGuarded();
 
         long expected = 0;
-        foreach (var tensor in EnumerateParameterTensors())
+        var slots = EnumerateParameterValueSlots().ToList();
+        foreach (var slot in slots)
         {
-            expected += tensor.Length;
+            expected += slot.ScalarCount;
         }
 
         if (parameters.Length != expected)
@@ -1705,11 +1747,11 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape,
         }
 
         int offset = 0;
-        foreach (var tensor in EnumerateParameterTensors())
+        foreach (var slot in slots)
         {
-            for (int i = 0; i < tensor.Length; i++)
+            for (int i = 0; i < slot.ScalarCount; i++)
             {
-                tensor[i] = parameters[offset++];
+                slot.WriteScalar(i, parameters[offset++]);
             }
         }
     }

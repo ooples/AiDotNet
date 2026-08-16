@@ -493,7 +493,7 @@ public partial class VoxLingua107Identifier<T> : AudioNeuralNetworkBase<T>, ILan
             // configured-optimizer step.  The previous implementation calculated
             // a loss derivative and discarded it, then asked the optimizer to
             // update layers that had never received gradients.
-            TrainWithTape(PreprocessAudio(input), expectedOutput, _optimizer);
+            TrainWithTape(input, expectedOutput, _optimizer);
         }
         finally
         {

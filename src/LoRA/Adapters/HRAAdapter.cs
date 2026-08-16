@@ -290,8 +290,7 @@ public partial class HRAAdapter<T> : LoRAAdapterBase<T>
         // Sparse scaling factor (typically smaller than LoRA scaling)
         _sparseScaling = NumOps.FromDouble(0.1);
 
-        // Initialize parameters
-        Parameters = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
+        // The inherited LoRA tensors and the compact sparse tensors now form one generated manifest.
     }
 
     /// <summary>

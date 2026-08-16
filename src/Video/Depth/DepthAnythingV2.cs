@@ -65,6 +65,10 @@ namespace AiDotNet.Video.Depth;
     "https://arxiv.org/abs/2406.09414",
     Year = 2024,
     Authors = "Lihe Yang, Bingyi Kang, Zilong Huang, Zhen Zhao, Xiaogang Xu, Jiashi Feng, Hengshuang Zhao")]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Input, BatchOptional = true)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Output, BatchOptional = true)]
 public partial class DepthAnythingV2<T> : NeuralNetworkBase<T>
 {
     private readonly DepthAnythingV2Options _options;
@@ -665,22 +669,6 @@ public partial class DepthAnythingV2<T> : NeuralNetworkBase<T>
         _useNativeMode = reader.ReadBoolean();
         _onnxModelPath = reader.ReadString();
         if (string.IsNullOrEmpty(_onnxModelPath)) _onnxModelPath = null;
-    }
-
-    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? CreateOptimizerForClone()
-    {
-        return _optimizer switch
-        {
-            AdamWOptimizer<T, Tensor<T>, Tensor<T>> when _optimizer.GetOptions() is AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>> options
-                => new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
-                    null,
-                    new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>(options)),
-            AdamOptimizer<T, Tensor<T>, Tensor<T>> when _optimizer.GetOptions() is AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> options
-                => new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
-                    null,
-                    new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>(options)),
-            _ => null
-        };
     }
 
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? CreateOptimizerForClone()

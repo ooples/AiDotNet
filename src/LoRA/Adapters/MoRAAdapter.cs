@@ -117,6 +117,7 @@ public partial class MoRAAdapter<T> : LoRAAdapterBase<T>
     /// This is the core trainable component of MoRA. Unlike LoRA's rectangular matrices,
     /// M is square with dimensions (r×r), enabling higher-rank updates.
     /// </remarks>
+    [TrainableParameter]
     private Tensor<T> _matrixM;
 
     /// <summary>
@@ -226,22 +227,6 @@ public partial class MoRAAdapter<T> : LoRAAdapterBase<T>
                 _matrixM[i, j] = NumOps.Multiply(NumOps.FromDouble(Random.NextGaussian()), stddev);
             }
         }
-    }
-
-    /// <summary>
-    /// Reallocates and repopulates the Parameters and ParameterGradients vectors.
-    /// </summary>
-    /// <remarks>
-    /// Called after _squareRank and _matrixM are initialized to fix the zero-length
-    /// buffers allocated by the base constructor when _squareRank was still 0.
-    /// This ensures ParameterCount matches the actual Parameters buffer length.
-    /// </remarks>
-    private void RebuildParameterSnapshot()
-    {
-        int paramCount = ParameterCountHelper.ToFlatVectorSize(ParameterCount);
-        Parameters = new Vector<T>(paramCount);
-        ParameterGradients = new Vector<T>(paramCount);
-
     }
 
     private Matrix<T> GenerateOrthogonalMatrix(int rows, int cols)
@@ -399,8 +384,6 @@ public partial class MoRAAdapter<T> : LoRAAdapterBase<T>
             _baseLayer.UpdateParameters(learningRate);
         }
 
-        // Rebuild Parameters buffer to reflect updated _matrixM and _baseLayer
-        RebuildParameterSnapshot();
     }
 
     public override ILayer<T> MergeToOriginalLayer()

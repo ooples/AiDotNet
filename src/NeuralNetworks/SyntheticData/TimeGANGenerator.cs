@@ -83,7 +83,7 @@ namespace AiDotNet.NeuralNetworks.SyntheticData;
     "https://papers.nips.cc/paper/2019/hash/c9efe5f26cd17ba6216bbe2a7d26d490-Abstract.html",
     Year = 2019,
     Authors = "Jinsung Yoon, Daniel Jarrett, Mihaela van der Schaar")]
-public partial class TimeGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerator<T>
+public partial class TimeGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>, ISyntheticTabularGenerator<T>
 {
     private readonly TimeGANOptions<T> _options;
     // One dedicated optimizer per training phase (Yoon et al. 2019 uses separate

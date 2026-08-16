@@ -292,15 +292,6 @@ public partial class E2TTS<T> : TtsModelBase<T>, ICodecTts<T>
                 WeightDecay = _options.WeightDecay
             });
 
-    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreateDefaultOptimizer()
-        => new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
-            this,
-            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
-            {
-                InitialLearningRate = _options.LearningRate,
-                WeightDecay = _options.WeightDecay
-            });
-
     private static void ValidateOptions(E2TTSOptions opts)
     {
         if (opts.SampleRate <= 0)

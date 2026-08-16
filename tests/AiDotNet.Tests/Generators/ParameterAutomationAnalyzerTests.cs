@@ -19,6 +19,9 @@ namespace AiDotNet.Attributes
     [AttributeUsage(AttributeTargets.Field | AttributeTargets.Property)] public sealed class TrainableParameterAttribute : Attribute
     {
         public bool Optional { get; set; }
+        public string? Condition { get; set; }
+        public string? Shape { get; set; }
+        public string? LowPrecisionBacking { get; set; }
         public int Availability { get; set; }
     }
     [AttributeUsage(AttributeTargets.Field | AttributeTargets.Property)] public sealed class FittedParameterAttribute : Attribute { }
@@ -39,7 +42,21 @@ namespace AiDotNet.Tensors.LinearAlgebra
 }
 namespace AiDotNet.NeuralNetworks.Layers
 {
-    public abstract class LayerBase<T> { }
+    public abstract class LayerBase<T>
+    {
+        public virtual long ParameterCount => 0;
+        public virtual AiDotNet.Tensors.LinearAlgebra.Vector<T> GetParameters() => null!;
+        public virtual void SetParameters(AiDotNet.Tensors.LinearAlgebra.Vector<T> parameters) { }
+    }
+}
+namespace AiDotNet.Models
+{
+    public abstract class ModelBase<T>
+    {
+        public virtual long ParameterCount => 0;
+        public virtual AiDotNet.Tensors.LinearAlgebra.Vector<T> GetParameters() => null!;
+        public virtual void SetParameters(AiDotNet.Tensors.LinearAlgebra.Vector<T> parameters) { }
+    }
 }";
 
     private static ImmutableArray<MetadataReference> BaseReferences()
@@ -55,10 +72,10 @@ namespace AiDotNet.NeuralNetworks.Layers
         return references.ToImmutableArray();
     }
 
-    private static ImmutableArray<Diagnostic> Run(string source)
+    private static ImmutableArray<Diagnostic> Run(string source, string assemblyName = "AiDotNet")
     {
         var compilation = CSharpCompilation.Create(
-            "AiDotNet",
+            assemblyName,
             new[] { CSharpSyntaxTree.ParseText(Infrastructure), CSharpSyntaxTree.ParseText(source) },
             BaseReferences(),
             new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
@@ -249,5 +266,209 @@ public sealed class AliasLayer : AiDotNet.NeuralNetworks.Layers.LayerBase<double
         var diagnostic = Assert.Single(Run(source).Where(item => item.Id == "AIDN091"));
         Assert.Equal(DiagnosticSeverity.Error, diagnostic.Severity);
         Assert.Contains("_missing", diagnostic.GetMessage(), StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("Missing", "no such field")]
+    [InlineData("Rank", "not a readable Boolean")]
+    [InlineData("Shared", "instance-specific")]
+    public async Task TrainableCondition_MustNameOneInstanceBoolean(
+        string condition, string expectedReason)
+    {
+        await Task.Yield();
+        string source = $@"
+using AiDotNet.Attributes;
+public sealed class ConditionalLayer : AiDotNet.NeuralNetworks.Layers.LayerBase<double>
+{{
+    private int Rank => 2;
+    private static bool Shared => true;
+    [TrainableParameter(Condition = ""{condition}"")]
+    private AiDotNet.Tensors.LinearAlgebra.Tensor<double> _weight = new();
+}}";
+
+        var diagnostic = Assert.Single(Run(source).Where(item => item.Id == "AIDN092"));
+        Assert.Equal(DiagnosticSeverity.Error, diagnostic.Severity);
+        Assert.Contains(expectedReason, diagnostic.GetMessage(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task TrainableCondition_AcceptsReadableInstanceBoolean()
+    {
+        await Task.Yield();
+        const string source = @"
+using AiDotNet.Attributes;
+public sealed class ConditionalLayer : AiDotNet.NeuralNetworks.Layers.LayerBase<double>
+{
+    private bool Enabled => true;
+    [TrainableParameter(Condition = nameof(Enabled))]
+    private AiDotNet.Tensors.LinearAlgebra.Tensor<double> _weight = new();
+}";
+
+        Assert.DoesNotContain(Run(source), item => item.Id == "AIDN092");
+    }
+
+    [Theory]
+    [InlineData("*(Missing)", "no such field")]
+    [InlineData("*(Enabled)", "not a readable Int32")]
+    [InlineData("*(Input + 1)", "one member name")]
+    [InlineData("*Input", "must be '*' or")]
+    public async Task AdaptiveShapeBinding_MustNameOneInstanceInt32(
+        string axis, string expectedReason)
+    {
+        await Task.Yield();
+        string source = $@"
+using AiDotNet.Attributes;
+public sealed class AdaptiveLayer : AiDotNet.NeuralNetworks.Layers.LayerBase<double>
+{{
+    private bool Enabled = true;
+    private int Input = 4;
+    [TrainableParameter(Shape = ""{axis}"")]
+    private AiDotNet.Tensors.LinearAlgebra.Tensor<double> _weight = new();
+}}";
+
+        var diagnostic = Assert.Single(Run(source).Where(item => item.Id == "AIDN093"));
+        Assert.Equal(DiagnosticSeverity.Error, diagnostic.Severity);
+        Assert.Contains(expectedReason, diagnostic.GetMessage(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task AdaptiveShapeBinding_AcceptsReadableInstanceInt32AndBareWildcard()
+    {
+        await Task.Yield();
+        const string source = @"
+using AiDotNet.Attributes;
+public sealed class AdaptiveLayer : AiDotNet.NeuralNetworks.Layers.LayerBase<double>
+{
+    private int Input = 4;
+    [TrainableParameter(Shape = ""*(Input), *"")]
+    private AiDotNet.Tensors.LinearAlgebra.Tensor<double> _weight = new();
+}";
+
+        Assert.DoesNotContain(Run(source), item => item.Id == "AIDN093");
+    }
+
+    [Fact]
+    public async Task LowPrecisionBacking_IsOneExplicitLogicalParameterSlot()
+    {
+        await Task.Yield();
+        const string source = @"
+using AiDotNet.Attributes;
+public sealed class ResidentLayer : AiDotNet.NeuralNetworks.Layers.LayerBase<double>
+{
+    [TrainableParameter(LowPrecisionBacking = nameof(_weightHalf))]
+    private AiDotNet.Tensors.LinearAlgebra.Tensor<double> _weight = new();
+    private AiDotNet.Tensors.LinearAlgebra.Tensor<System.Half>? _weightHalf;
+}";
+
+        var diagnostics = Run(source);
+        Assert.DoesNotContain(diagnostics, item => item.Id == "AIDN094");
+        Assert.DoesNotContain(diagnostics, item =>
+            item.Id == "AIDN088" && item.GetMessage().Contains("_weightHalf", StringComparison.Ordinal));
+    }
+
+    [Theory]
+    [InlineData("_missing", "no such field")]
+    [InlineData("_wrongType", "not Tensor<Half>")]
+    [InlineData("Shared", "instance-specific")]
+    public async Task LowPrecisionBacking_MustNameOneInstanceHalfTensor(
+        string backing, string expectedReason)
+    {
+        await Task.Yield();
+        string source = $@"
+using AiDotNet.Attributes;
+public sealed class ResidentLayer : AiDotNet.NeuralNetworks.Layers.LayerBase<double>
+{{
+    private AiDotNet.Tensors.LinearAlgebra.Tensor<float>? _wrongType;
+    private static AiDotNet.Tensors.LinearAlgebra.Tensor<System.Half>? Shared;
+    [TrainableParameter(LowPrecisionBacking = ""{backing}"")]
+    private AiDotNet.Tensors.LinearAlgebra.Tensor<double> _weight = new();
+}}";
+
+        var diagnostic = Assert.Single(Run(source).Where(item => item.Id == "AIDN094"));
+        Assert.Equal(DiagnosticSeverity.Error, diagnostic.Severity);
+        Assert.Contains(expectedReason, diagnostic.GetMessage(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task LowPrecisionBacking_CannotRepresentTwoLogicalParameters()
+    {
+        await Task.Yield();
+        const string source = @"
+using AiDotNet.Attributes;
+public sealed class ResidentLayer : AiDotNet.NeuralNetworks.Layers.LayerBase<double>
+{
+    private AiDotNet.Tensors.LinearAlgebra.Tensor<System.Half>? _shared;
+    [TrainableParameter(LowPrecisionBacking = nameof(_shared))]
+    private AiDotNet.Tensors.LinearAlgebra.Tensor<double> _first = new();
+    [TrainableParameter(LowPrecisionBacking = nameof(_shared))]
+    private AiDotNet.Tensors.LinearAlgebra.Tensor<double> _second = new();
+}";
+
+        var diagnostics = Run(source).Where(item => item.Id == "AIDN094").ToArray();
+        Assert.Equal(2, diagnostics.Length);
+        Assert.All(diagnostics, diagnostic =>
+            Assert.Contains("more than one trainable parameter", diagnostic.GetMessage(), StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task LowPrecisionBacking_CannotBeAttachedToAParameterCollection()
+    {
+        await Task.Yield();
+        const string source = @"
+using AiDotNet.Attributes;
+public sealed class ResidentLayer : AiDotNet.NeuralNetworks.Layers.LayerBase<double>
+{
+    private AiDotNet.Tensors.LinearAlgebra.Tensor<System.Half>? _shared;
+    [TrainableParameter(LowPrecisionBacking = nameof(_shared))]
+    private AiDotNet.Tensors.LinearAlgebra.Tensor<double>[] _weights =
+        System.Array.Empty<AiDotNet.Tensors.LinearAlgebra.Tensor<double>>();
+}";
+
+        var diagnostic = Assert.Single(Run(source).Where(item => item.Id == "AIDN094"));
+        Assert.Equal(DiagnosticSeverity.Error, diagnostic.Severity);
+        Assert.Contains("only one tensor field", diagnostic.GetMessage(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task LayerParameterSurfaceOverride_IsCompileError()
+    {
+        await Task.Yield();
+        const string source = @"
+public sealed class ManualLayer : AiDotNet.NeuralNetworks.Layers.LayerBase<double>
+{
+    public override long ParameterCount => 1;
+}";
+
+        var diagnostic = Assert.Single(Run(source).Where(item => item.Id == "AIDN081"));
+        Assert.Equal(DiagnosticSeverity.Error, diagnostic.Severity);
+    }
+
+    [Fact]
+    public async Task ModelParameterSurfaceOverride_IsCompileError()
+    {
+        await Task.Yield();
+        const string source = @"
+public sealed class ManualModel : AiDotNet.Models.ModelBase<double>
+{
+    public override long ParameterCount => 1;
+}";
+
+        var diagnostic = Assert.Single(Run(source).Where(item => item.Id == "AIDN082"));
+        Assert.Equal(DiagnosticSeverity.Error, diagnostic.Severity);
+    }
+
+    [Fact]
+    public async Task AssemblyNameCannotDowngradeParameterSurfaceCompilerError()
+    {
+        await Task.Yield();
+        const string source = @"
+public sealed class FailureProbeLayer : AiDotNet.NeuralNetworks.Layers.LayerBase<double>
+{
+    public override long ParameterCount => throw new System.InvalidOperationException();
+}";
+
+        var diagnostic = Assert.Single(Run(source, "Example.Tests")
+            .Where(item => item.Id == "AIDN081"));
+        Assert.Equal(DiagnosticSeverity.Error, diagnostic.Severity);
     }
 }

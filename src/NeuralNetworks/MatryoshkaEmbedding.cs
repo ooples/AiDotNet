@@ -191,6 +191,15 @@ namespace AiDotNet.NeuralNetworks
             return new Vector<T>(resizedValues).SafeNormalize();
         }
 
+        /// <inheritdoc/>
+        protected override Tensor<T> PredictCore(Tensor<T> input)
+        {
+            // The transformer backbone produces token-level [Batch, Seq, Dim] representations,
+            // but Matryoshka's public contract is one nested embedding per input. Returning the
+            // unpooled sequence multiplied the declared embedding width by the token count.
+            return PoolBatchOutput(base.PredictCore(input));
+        }
+
         /// <summary>
         /// Retrieves metadata about the Matryoshka configuration.
         /// </summary>

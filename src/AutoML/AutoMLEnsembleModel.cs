@@ -6,7 +6,8 @@ using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
 using AiDotNet.Models;
-using AiDotNet.Serialization;
+using AiDotNet.Serialization;
+
 using System.Linq;
 using AiDotNet.Models.Parameters;
 
@@ -156,46 +157,6 @@ public sealed partial class AutoMLEnsembleModel<T> : ModelBase<T, Matrix<T>, Vec
         metadata.SetProperty("PredictionType", PredictionType.ToString());
 
         return metadata;
-    }
-
-    public override byte[] Serialize()
-    {
-        ModelPersistenceGuard.EnforceBeforeSerialize();
-        var settings = new JsonSerializerSettings
-        {
-            TypeNameHandling = TypeNameHandling.Auto,
-            SerializationBinder = new SafeSerializationBinder(),
-            Formatting = Formatting.None
-        };
-
-        var json = JsonConvert.SerializeObject(this, settings);
-        return Encoding.UTF8.GetBytes(json);
-    }
-
-    public override void Deserialize(byte[] data)
-    {
-        ModelPersistenceGuard.EnforceBeforeDeserialize();
-        if (data is null)
-        {
-            throw new ArgumentNullException(nameof(data));
-        }
-
-        var json = Encoding.UTF8.GetString(data);
-        var settings = new JsonSerializerSettings
-        {
-            TypeNameHandling = TypeNameHandling.Auto,
-            SerializationBinder = new SafeSerializationBinder()
-        };
-
-        var deserialized = JsonConvert.DeserializeObject<AutoMLEnsembleModel<T>>(json, settings);
-        if (deserialized is null)
-        {
-            throw new InvalidOperationException("Failed to deserialize ensemble model.");
-        }
-
-        SetMembers(deserialized._members);
-        PredictionType = deserialized.PredictionType;
-        Weights = deserialized.Weights ?? Array.Empty<double>();
     }
 
     private void SetMembers(List<IFullModel<T, Matrix<T>, Vector<T>>>? members)

@@ -26,7 +26,7 @@ namespace AiDotNet.TextToSpeech.CodecBased;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Bark: Text-Prompted Generative Audio Model", "https://github.com/suno-ai/bark")]
-public partial class Bark<T> : TtsModelBase<T>, ICodecTts<T>
+public partial class Bark<T> : BarkModel<T>, ICodecTts<T>
 {
     private readonly ITokenizer? _configuredTokenizer;
     private ITokenizer? _loadedTokenizer;
@@ -50,35 +50,11 @@ public partial class Bark<T> : TtsModelBase<T>, ICodecTts<T>
         ITokenizer? tokenizer = null)
         : base(architecture, options, codec)
     {
-        _options = options ?? new BarkOptions();
-        _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
-        // Bark's paper defaults build an approximately 100M-parameter transformer,
-        // whose classic tape peak can exceed a 16 GB host. Let the framework's
-        // footprint estimator select streaming training at that scale while keeping
-        // reduced/custom Bark configurations on the faster classic/fused path.
-        StreamingTraining = StreamingTrainingMode.Auto;
-        base.SampleRate = _options.SampleRate;
-        base.MelChannels = _options.MelChannels;
-        base.HopSize = _options.HopSize;
-        base.HiddenDim = _options.LLMDim;
-        InitializeLayers();
+        _configuredTokenizer = tokenizer;
     }
 
-    int ITtsModel<T>.SampleRate => _options.SampleRate;
-    public int MaxTextLength => _options.MaxTextLength;
-    public int NumCodebooks => _options.NumCodebooks;
-    public int CodebookSize => _options.CodebookSize;
-
     /// <inheritdoc />
-    /// <remarks>
-    /// TRACED, not read off an observed shape: InitializeLayers passes
-    /// <c>NumCodebooks * CodebookSize</c> as the codec vocabulary to CreateDefaultCodecLMLayers, and
-    /// that is the width the last layer emits. Recording the 8192 the sweep measured would have been
-    /// right for the default options and wrong for any other codebook configuration.
-    /// </remarks>
-    protected override int OutputFeatureWidth => _options.NumCodebooks * _options.CodebookSize;
-    public int CodecFrameRate => _options.CodecFrameRate;
+    int ITtsModel<T>.SampleRate => SampleRate;
 
     /// <inheritdoc />
     public int MaxTextLength => BarkConfiguration.MaxTextLength;
@@ -140,126 +116,28 @@ public partial class Bark<T> : TtsModelBase<T>, ICodecTts<T>
     }
 
     protected override Tensor<T> PreprocessText(string text)
-    {
-        int len = Math.Min(text.Length, _options.MaxTextLength);
-        var t = new Tensor<T>([len]);
-        for (int i = 0; i < len; i++)
-            t[i] = NumOps.FromDouble(text[i] / 128.0);
-        return t;
-    }
+        => ToTokenTensorForFacade(Tokenize(text));
 
-    protected override Tensor<T> PostprocessAudio(Tensor<T> output) => output;
-
-    protected override void InitializeLayers()
+    private IReadOnlyList<int> Tokenize(string text)
     {
-        if (!_useNativeMode)
-            return;
-        if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
-            Layers.AddRange(Architecture.Layers);
-        else
-            Layers.AddRange(
-                LayerHelper<T>.CreateDefaultCodecLMLayers(
-                    _options.TextEncoderDim,
-                    _options.LLMDim,
-                    _options.NumCodebooks * _options.CodebookSize,
-                    _options.NumEncoderLayers,
-                    _options.NumLLMLayers,
-                    _options.NumHeads,
-                    _options.DropoutRate,
-                    _options.VocabSize
-                )
-            );
-    }
+        if (string.IsNullOrWhiteSpace(text))
+            throw new ArgumentException("Bark synthesis text cannot be empty.", nameof(text));
 
-    protected override Tensor<T> PredictCore(Tensor<T> input)
-    {
-        ThrowIfDisposed();
-        if (IsOnnxMode && OnnxModel is not null)
-            return OnnxModel.Run(input);
-        SetTrainingMode(false);
-        var c = input;
-        foreach (var l in Layers)
-            c = l.Forward(c);
-        return c;
-    }
-
-    public override void Train(Tensor<T> input, Tensor<T> expected)
-    {
-        if (IsOnnxMode)
-            throw new NotSupportedException("Training not supported in ONNX mode.");
-        SetTrainingMode(true);
-        try
+        var tokenizer = _configuredTokenizer
+            ?? (_loadedTokenizer ??= AutoTokenizer.FromPretrained(BarkConfiguration.TokenizerModelName));
+        var encoded = tokenizer.Encode(text, new EncodingOptions
         {
-            TrainWithTape(input, expected, _optimizer);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
+            AddSpecialTokens = false,
+            MaxLength = MaxTextLength,
+            Truncation = true,
+            Padding = false,
+        });
+        if (encoded.TokenIds.Count == 0)
+            throw new InvalidOperationException("The configured Bark tokenizer produced no tokens.");
+        return encoded.TokenIds;
     }
 
-    /// <inheritdoc />
-    /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
-    /// write on every parameter surface, so the guard is stated once here instead of being
-    /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
-    protected override bool SupportsParameterMutation => _useNativeMode;
-    public override ModelMetadata<T> GetModelMetadata()
-    {
-        var m = new ModelMetadata<T>
-        {
-            Name = _useNativeMode ? "Bark-Native" : "Bark-ONNX",
-            Description =
-                "Bark: GPT-based text-to-audio model generating speech, music, and sound effects from text prompts.",
-            FeatureCount = _options.LLMDim,
-        };
-        m.AdditionalInfo["Architecture"] = "Bark";
-        m.AdditionalInfo["Mode"] = _useNativeMode ? "Native" : "ONNX";
-        m.AdditionalInfo["HiddenDim"] = base.HiddenDim;
-        m.AdditionalInfo["SampleRate"] = base.SampleRate;
-        m.AdditionalInfo["MelChannels"] = base.MelChannels;
-        m.AdditionalInfo["HopSize"] = base.HopSize;
-        return m;
-    }
-
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_useNativeMode);
-        writer.Write(_options.ModelPath ?? string.Empty);
-        writer.Write(_options.SampleRate);
-        writer.Write(_options.NumCodebooks);
-        writer.Write(_options.LLMDim);
-        writer.Write(_options.CodebookSize);
-        writer.Write(_options.DropoutRate);
-        writer.Write(_options.NumEncoderLayers);
-        writer.Write(_options.NumHeads);
-        writer.Write(_options.NumLLMLayers);
-        writer.Write(_options.TextEncoderDim);
-    }
-
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _useNativeMode = reader.ReadBoolean();
-        string mp = reader.ReadString();
-        if (!string.IsNullOrEmpty(mp))
-            _options.ModelPath = mp;
-        _options.SampleRate = reader.ReadInt32();
-        _options.NumCodebooks = reader.ReadInt32();
-        _options.LLMDim = reader.ReadInt32();
-        _options.CodebookSize = reader.ReadInt32();
-        _options.DropoutRate = reader.ReadDouble();
-        _options.NumEncoderLayers = reader.ReadInt32();
-        _options.NumHeads = reader.ReadInt32();
-        _options.NumLLMLayers = reader.ReadInt32();
-        _options.TextEncoderDim = reader.ReadInt32();
-        base.SampleRate = _options.SampleRate;
-        base.MelChannels = _options.MelChannels;
-        base.HopSize = _options.HopSize;
-        base.HiddenDim = _options.LLMDim;
-        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
-            OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
-    }
-
-    private void ThrowIfDisposed()
+    private Tensor<T> ToTokenTensorForFacade(IReadOnlyList<int> tokens)
     {
         var tensor = new Tensor<T>([tokens.Count]);
         for (int index = 0; index < tokens.Count; index++)

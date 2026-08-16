@@ -30,7 +30,11 @@ namespace AiDotNet.Video;
 /// stabilization), while advanced neural methods can fill in the missing edges.
 /// </para>
 /// </remarks>
-public abstract partial class VideoStabilizationBase<T> : VideoNeuralNetworkBase<T>
+[TensorLayout(TensorAxis.Frames, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Frames, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Output)]
+public abstract partial class VideoStabilizationBase<T> : VideoNeuralNetworkBase<T>, IShapeContract
 {
     /// <inheritdoc />
     public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)

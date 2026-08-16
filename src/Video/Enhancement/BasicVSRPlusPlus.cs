@@ -512,7 +512,8 @@ public partial class BasicVSRPlusPlus<T> : VideoSuperResolutionBase<T>
                 expectedOutput,
                 learningRate,
                 forward: EnhanceVideo,
-                computeLoss: (prediction, target) => loss.ComputeTapeLoss(prediction, target));
+                computeLoss: (prediction, target) => loss.ComputeTapeLoss(prediction, target),
+                onGradients: gradients => PublishParameterGradients(gradients));
         }
         finally
         {

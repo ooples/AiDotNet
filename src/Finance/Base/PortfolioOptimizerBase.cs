@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Finance.Interfaces;
 using AiDotNet.Models;
@@ -25,6 +25,10 @@ namespace AiDotNet.Finance.Base;
 /// (stocks, bonds, etc.) to achieve the best balance of risk and return.
 /// </para>
 /// </remarks>
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Length, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Input, BatchOptional = true)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Output, BatchOptional = true)]
 public abstract partial class PortfolioOptimizerBase<T> : FinancialModelBase<T>, IPortfolioOptimizer<T>
 {
     /// <summary>

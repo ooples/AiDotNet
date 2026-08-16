@@ -195,8 +195,9 @@ public partial class XLoRAAdapter<T> : LoRAAdapterBase<T>
         // The gating network is a simple dense layer that maps input to expert weights
         _gatingNetwork = new DenseLayer<T>(numberOfExperts, (IVectorActivationFunction<T>)new SoftmaxActivation<T>());
 
-        // Update parameter vector to include all experts and gating network
-        Parameters = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
+        // X-LoRA replaces the standard LoRA path with its expert bank and gating network. Both are
+        // discovered as sub-layers by the generator, so exclude the unused inherited child.
+        FreezeSubLayerParameters(_loraLayer);
     }
 
     /// <summary>

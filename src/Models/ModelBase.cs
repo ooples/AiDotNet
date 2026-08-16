@@ -408,6 +408,14 @@ public abstract class ModelBase<T, TInput, TOutput> : IFullModel<T, TInput, TOut
     /// </remarks>
     public virtual byte[] Serialize()
     {
+        // ModelSave is a licensed capability. It used to be enforced only by each model's
+        // hand-written Serialize, so deleting one of those in favour of this base -- which is
+        // exactly what ADN0060 asks for -- silently removed the gate for that model. Enforcing
+        // here means the replacement carries it for every model, and a model that still has its
+        // own override keeps enforcing there. Re-entry is harmless: InternalOperation scopes
+        // suppress the nested call.
+        ModelPersistenceGuard.EnforceBeforeSerialize();
+
         var parameters = GetParameters();
 
         using var stream = new MemoryStream();
@@ -432,6 +440,10 @@ public abstract class ModelBase<T, TInput, TOutput> : IFullModel<T, TInput, TOut
     /// <inheritdoc/>
     public virtual void Deserialize(byte[] data)
     {
+        // Load is not a paid gate, but it is still gated on an Active licence, and for the same
+        // reason as Serialize above: this base is now the replacement for the hand-written halves.
+        ModelPersistenceGuard.EnforceBeforeDeserialize();
+
         if (data is null) throw new ArgumentNullException(nameof(data));
 
         using var stream = new MemoryStream(data);

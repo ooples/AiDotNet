@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Finance.Interfaces;
 using AiDotNet.Helpers;
@@ -26,6 +26,10 @@ namespace AiDotNet.Finance.Base;
 /// can focus on the actual math of predicting risk.
 /// </para>
 /// </remarks>
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Input, BatchOptional = true)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Output, BatchOptional = true)]
 public abstract partial class RiskModelBase<T> : FinancialModelBase<T>, IRiskModel<T>
 {
     /// <summary>

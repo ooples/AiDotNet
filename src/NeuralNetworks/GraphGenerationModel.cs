@@ -1,4 +1,4 @@
-﻿#pragma warning disable CS0649, CS0414, CS0169
+#pragma warning disable CS0649, CS0414, CS0169
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Extensions;
@@ -73,7 +73,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Variational Graph Auto-Encoders", "https://arxiv.org/abs/1611.07308")]
-public partial class GraphGenerationModel<T> : NeuralNetworkBase<T>
+public partial class GraphGenerationModel<T> : GraphModelLayoutBase<T>
 {
 
     /// <inheritdoc />

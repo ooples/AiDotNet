@@ -76,6 +76,10 @@ namespace AiDotNet.Video.Understanding;
     "https://arxiv.org/abs/2109.14084",
     Year = 2021,
     Authors = "Hu Xu, Gargi Ghosh, Po-Yao Huang, Dmytro Okhonko, Armen Aghajanyan, Florian Metze, Luke Zettlemoyer, Christoph Feichtenhofer")]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Frames, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Input, BatchOptional = true)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Output, BatchOptional = true)]
 public partial class VideoCLIP<T> : NeuralNetworkBase<T>
 {
     private readonly VideoCLIPVideoOptions _options;

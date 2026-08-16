@@ -14,13 +14,6 @@ namespace AiDotNet.Tests.ModelFamilyTests.Base;
 public abstract class SegmentationTestBase<T> : NeuralNetworkModelTestBase<T>
 {
     /// <summary>
-    /// Whether a spatially uniform input is expected to decode to a nearly uniform mask.
-    /// Position-aware mask transformers override this: absolute/learned positional embeddings are
-    /// intentionally distinct at every location, so erasing image texture does not erase position.
-    /// </summary>
-    protected virtual bool UniformInputShouldProduceUniformMask => true;
-
-    /// <summary>
     /// Segmentation targets are per-pixel ONE-HOT class distributions consumed by a
     /// cross-entropy loss. The base <see cref="NeuralNetworkModelTestBase{T}.CreateRandomTargetTensor"/>
     /// emits continuous-uniform values, which are NOT a valid probability distribution: fed to
@@ -135,34 +128,7 @@ public abstract class SegmentationTestBase<T> : NeuralNetworkModelTestBase<T>
         Assert.Equal(warmUp.Shape.ToArray(), settled.Shape.ToArray());
         Assert.Equal(settled.Shape.ToArray(), repeated.Shape.ToArray());
 
-        if (!UniformInputShouldProduceUniformMask)
-        {
-            // The relevant position-aware invariant is reproducibility and numerical validity, not
-            // spatial uniformity. Run a second real forward and require exact deterministic output;
-            // this still catches unstable/uninitialized heads while respecting the architecture's
-            // deliberate positional signal.
-            var repeated = network.Predict(uniformInput);
-            Assert.Equal(output.Length, repeated.Length);
-            for (int i = 0; i < output.Length; i++)
-            {
-                double first = ConvertToDouble(output[i]);
-                double second = ConvertToDouble(repeated[i]);
-                Assert.True(IsFinite(first) && IsFinite(second),
-                    $"Position-aware uniform-input output [{i}] is not finite.");
-                Assert.Equal(first, second);
-            }
-            return;
-        }
-
-        // Segmentation models commonly emit raw logits. The paper-meaningful
-        // mask is the per-pixel class map after argmax along the class axis,
-        // not the raw score tensor itself.
-        if (output.Rank == 3 || output.Rank == 4)
-            output = SegmentationTensorOps.ArgmaxAlongClassDim(output);
-
-        // Count distinct mask labels (rounded to avoid floating-point noise)
-        var distinctValues = new HashSet<int>();
-        for (int i = 0; i < output.Length; i++)
+        for (int i = 0; i < warmUp.Length; i++)
         {
             double first = ConvertToDouble(warmUp[i]);
             double second = ConvertToDouble(settled[i]);

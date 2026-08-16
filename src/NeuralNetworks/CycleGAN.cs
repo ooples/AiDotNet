@@ -62,7 +62,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Unpaired Image-to-Image Translation using Cycle-Consistent Adversarial Networks", "https://arxiv.org/abs/1703.10593", Year = 2017, Authors = "Jun-Yan Zhu, Taesung Park, Phillip Isola, Alexei A. Efros")]
-public partial class CycleGAN<T> : NeuralNetworkBase<T>
+public partial class CycleGAN<T> : ImageTranslationModelLayoutBase<T>
 {
 
     // The four sub-networks are discovered as members and their layers surfaced in declaration

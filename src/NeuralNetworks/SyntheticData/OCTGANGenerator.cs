@@ -77,7 +77,7 @@ namespace AiDotNet.NeuralNetworks.SyntheticData;
     "https://arxiv.org/abs/2105.14969",
     Year = 2021,
     Authors = "Jayoung Kim, Jinsung Jeon, Jaehoon Lee, Jihyeon Hyeong, Noseong Park")]
-public partial class OCTGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerator<T>
+public partial class OCTGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>, ISyntheticTabularGenerator<T>
 {
     private readonly OCTGANOptions<T> _options;
     // Separate G/D optimizers (see CTGANGenerator for the divergence rationale).

@@ -141,8 +141,8 @@ public partial class GLoRAAdapter<T> : LoRAAdapterBase<T>
         int outputSize = GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0];
         _activationAdaptation = new LoRALayer<T>(inputSize, outputSize, actualActivationRank, activationAlpha);
 
-        // Update parameter vector to include activation adaptation
-        Parameters = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
+        // The generated manifest discovers _activationAdaptation after the inherited LoRA child.
+        // No flat shadow vector is needed.
     }
 
     /// <summary>

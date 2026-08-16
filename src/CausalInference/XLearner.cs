@@ -72,12 +72,12 @@ public partial class XLearner<T> : CausalModelBase<T>
     /// a forest / ensemble / AFT fit -- so the formula answered 0 while the getter returned real
     /// values. SetParameters pairs the two by length, so the disagreement is not cosmetic.
     /// </remarks>
-    public override long ParameterCount => GetParameters().Length;
-
-    /// <summary>
-    /// Weights for the control outcome model μ₀.
-    /// </summary>
-    private Vector<T> _weightsControl = new Vector<T>(0);
+    private const int ControlModel = 0;
+    private const int TreatedModel = 1;
+    private const int Tau0Model = 2;
+    private const int Tau1Model = 3;
+    private const int PropensityModel = 4;
+    private const int ModelCount = 5;
 
     /// <summary>
     /// One row per X-Learner regression: control outcome, treated outcome, the two imputed-effect

@@ -84,6 +84,24 @@ public sealed class TrainableParameterAttribute : Attribute
     public bool Optional { get; set; }
 
     /// <summary>
+    /// Gets or sets the name of an instance <see cref="bool"/> field or property that enables
+    /// this parameter for the configured layer instance.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Use <c>nameof(...)</c>, for example <c>Condition = nameof(Affine)</c>. When the condition is
+    /// false, the parameter is absent from the generated count, optimizer view, checkpoint surface,
+    /// and restore contract. This differs from <see cref="Optional"/>: an enabled optional parameter
+    /// may be materialized by restore, while a configuration-disabled parameter may not.
+    /// </para>
+    /// <para>
+    /// AIDN092 validates that the named member exists, is an instance Boolean, and is unambiguous,
+    /// turning a misspelled or structurally invalid parameter gate into a compiler error.
+    /// </para>
+    /// </remarks>
+    public string? Condition { get; set; }
+
+    /// <summary>
     /// Gets or sets when the parameter is expected to become available. This declaration is
     /// independent of nullability: a nullable tensor does not tell the generator whether it waits
     /// for shape resolution, fitting, or a conditional architecture branch.
@@ -106,10 +124,13 @@ public sealed class TrainableParameterAttribute : Attribute
     /// silently accepted incompatible weights.
     /// </para>
     /// <para>
-    /// Use <c>*</c> for an axis the layer adapts rather than fixes. <c>FeedForwardLayer</c> needs
-    /// <c>"*, OutputShape[0]"</c>: its <c>EnsureWeightShapeForInput</c> resizes the FIRST axis when a
-    /// caller's feature width disagrees, so a mismatch there is normal operation, not a broken
-    /// restore. Annotating it with a fixed first axis was measured to throw on healthy layers.
+    /// Use <c>*</c> for an axis the layer adapts rather than fixes. When its current size is known,
+    /// bind it with <c>*(_resolvedDimension)</c>. Validation still accepts a different restored size,
+    /// while the generated manifest uses the bound expression to count the current shape without
+    /// allocating its tensor. <c>FeedForwardLayer</c> uses
+    /// <c>"*(_inputSize), OutputShape[0]"</c>: its <c>EnsureWeightShapeForInput</c> resizes the first
+    /// axis when a caller's feature width disagrees, so a mismatch there is normal operation, not a
+    /// broken restore, but its resolved input width is still countable.
     /// </para>
     /// <para>
     /// Leave it null when the layer's parameters are sized entirely by its constructor and cannot
@@ -118,4 +139,23 @@ public sealed class TrainableParameterAttribute : Attribute
     /// </para>
     /// </remarks>
     public string? Shape { get; set; }
+
+    /// <summary>
+    /// Gets or sets the name of an optional <c>Tensor&lt;Half&gt;</c> field that becomes the
+    /// authoritative value store when this parameter is kept resident at low precision.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Use <c>nameof(...)</c>. The parameter remains one logical optimizer/checkpoint slot: the
+    /// generator reads and writes the low-precision backing while it is present, and falls back to
+    /// the ordinary <c>Tensor&lt;T&gt;</c> field otherwise. Rebinding the ordinary parameter clears the
+    /// backing automatically, so a restored or copy-on-write tensor cannot be shadowed by stale
+    /// resident values.
+    /// </para>
+    /// <para>
+    /// This is an explicit storage declaration, not an inference from type, nullability, or field
+    /// name. AIDN094 rejects missing, ambiguous, static, or non-<c>Tensor&lt;Half&gt;</c> backing members.
+    /// </para>
+    /// </remarks>
+    public string? LowPrecisionBacking { get; set; }
 }

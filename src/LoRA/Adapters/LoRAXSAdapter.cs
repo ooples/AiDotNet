@@ -176,6 +176,7 @@ public partial class LoRAXSAdapter<T> : LoRAAdapterBase<T>
     /// minimal parameters.
     /// </para>
     /// </remarks>
+    [TrainableParameter]
     private Tensor<T> _trainableR;
 
     /// <summary>
@@ -283,8 +284,9 @@ public partial class LoRAXSAdapter<T> : LoRAAdapterBase<T>
 
         _initializedFromSVD = false;
 
-        // Update parameters to reflect only R matrix
-        Parameters = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
+        // LoRA-XS trains only R; U, Sigma and Vt are generated buffers and the inherited standard
+        // LoRA factors do not participate in this adapter.
+        FreezeSubLayerParameters(_loraLayer);
     }
 
     /// <summary>

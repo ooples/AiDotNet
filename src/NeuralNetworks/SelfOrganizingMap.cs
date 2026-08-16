@@ -44,7 +44,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Self-Organized Formation of Topologically Correct Feature Maps", "https://doi.org/10.1007/BF00337288", Year = 1982, Authors = "Teuvo Kohonen")]
-public partial class SelfOrganizingMap<T> : NeuralNetworkBase<T>
+public partial class SelfOrganizingMap<T> : VectorModelLayoutBase<T>
 {
     private readonly SelfOrganizingMapNNOptions _options;
 
@@ -248,7 +248,7 @@ public partial class SelfOrganizingMap<T> : NeuralNetworkBase<T>
     /// <summary>
     /// Moves the BMU and its grid neighbours toward the input:
     /// W[n] += lr * h(n) * (x - W[n]), where h(n) is the Gaussian neighbourhood influence of neuron n
-    /// relative to the BMU. Fully vectorized over neurons via the engine.
+    /// relative to the BMU. The update and its published derivative share one row-major pass.
     /// </summary>
     private void UpdateWeights(Tensor<T> input, int bmu, T learningRate, T radius)
     {
@@ -257,35 +257,29 @@ public partial class SelfOrganizingMap<T> : NeuralNetworkBase<T>
         int bmuX = bmu % _mapWidth;
         int bmuY = bmu / _mapWidth;
         double radiusD = Convert.ToDouble(radius);
-        double lrD = Convert.ToDouble(learningRate);
+        var published = new Vector<T>(n * d);
 
-        // Per-neuron scalar factor lr * influence (0 outside the neighbourhood radius).
-        var factorColumn = new Tensor<T>(new[] { n, 1 });
+        // Competitive learning descends the neighbourhood-weighted codebook objective.
         for (int i = 0; i < n; i++)
         {
             int x = i % _mapWidth;
             int y = i / _mapWidth;
             double gridDist = Math.Sqrt((x - bmuX) * (x - bmuX) + (y - bmuY) * (y - bmuY));
-            double factor = 0.0;
-            if (gridDist < radiusD && radiusD > 0.0)
+            T influence = radiusD > 0.0 && gridDist < radiusD
+                ? NumOps.FromDouble(Math.Exp(-(gridDist * gridDist) / (2.0 * radiusD * radiusD)))
+                : NumOps.Zero;
+
+            for (int j = 0; j < d; j++)
             {
-                double influence = Math.Exp(-(gridDist * gridDist) / (2.0 * radiusD * radiusD));
-                factor = lrD * influence;
+                int offset = i * d + j;
+                T gradient = NumOps.Multiply(influence, NumOps.Subtract(_weights[i, j], input[j]));
+                published[offset] = gradient;
+                _weights[i, j] = NumOps.Subtract(
+                    _weights[i, j], NumOps.Multiply(learningRate, gradient));
             }
-            factorColumn[i, 0] = NumOps.FromDouble(factor);
         }
 
-        // delta[n,:] = factor[n] * (x - W[n,:]), then W += delta — all engine ops.
-        var onesRow = OnesRow();                                      // [1, D] (cached)
-
-        var inputRow = input.Reshape(new[] { 1, d });
-        var onesColumn = OnesColumn();                                // [N, 1] (cached)
-
-        var tiledInput = Engine.TensorMatMul(onesColumn, inputRow);   // [N, D]
-        var inputMinusW = Engine.TensorSubtract(tiledInput, _weights); // [N, D]
-        var tiledFactor = Engine.TensorMatMul(factorColumn, onesRow);  // [N, D]
-        var delta = Engine.TensorMultiply(tiledFactor, inputMinusW);   // [N, D]
-        _weights = Engine.TensorAdd(_weights, delta);
+        PublishFlatParameterGradients(published);
     }
 
     /// <inheritdoc/>
@@ -413,14 +407,6 @@ public partial class SelfOrganizingMap<T> : NeuralNetworkBase<T>
     protected override IEnumerable<Tensor<T>> GetExtraTrainableTensors()
     {
         yield return _weights;
-    }
-
-    /// <inheritdoc/>
-    public override Vector<T> GetParameterGradients()
-    {
-        // SOM uses competitive learning, not gradient descent; the effective "gradient" is the BMU +
-        // neighbourhood weight delta. Return a zero-length-consistent vector for gradient-flow checks.
-        return new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
     }
 
     /// <inheritdoc/>

@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.NeuralNetworks.Options;
 
@@ -50,7 +50,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     [ResearchPaper("Why Neurons Have Thousands of Synapses, a Theory of Sequence Memory in Neocortex", "https://doi.org/10.3389/fncir.2016.00023")]
-public partial class HTMNetwork<T> : NeuralNetworkBase<T>
+public partial class HTMNetwork<T> : VectorModelLayoutBase<T>
 {
     private readonly HTMNetworkOptions _options;
 

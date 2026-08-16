@@ -34,7 +34,12 @@ namespace AiDotNet.Diffusion.Conditioning;
 /// fabricates token IDs from characters.
 /// </para>
 /// </remarks>
-public abstract partial class TextConditioningBase<T> : NeuralNetworkBase<T>, IConditioningModule<T>
+[TensorLayout(TensorAxis.Time, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Output)]
+public abstract partial class TextConditioningBase<T> : NeuralNetworkBase<T>, IConditioningModule<T>, IShapeContract
 {
     /// <inheritdoc />
     public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)

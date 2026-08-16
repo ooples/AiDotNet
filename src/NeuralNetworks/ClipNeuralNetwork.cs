@@ -45,7 +45,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Learning Transferable Visual Models From Natural Language Supervision", "https://arxiv.org/abs/2103.00020", Year = 2021, Authors = "Alec Radford, Jong Wook Kim, Chris Hallacy, Aditya Ramesh, Gabriel Goh, Sandhini Agarwal, Girish Sastry, Amanda Askell, Pamela Mishkin, Jack Clark, Gretchen Krueger, Ilya Sutskever")]
-public partial class ClipNeuralNetwork<T> : NeuralNetworkBase<T>, IMultimodalEmbedding<T>, IDisposable
+public partial class ClipNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IMultimodalEmbedding<T>, IDisposable
 {
     private readonly ClipOptions _options;
 

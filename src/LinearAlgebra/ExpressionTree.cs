@@ -1,7 +1,7 @@
 using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Enums;
-using AiDotNet.Models;
+using AiDotNet.Models;
 using AiDotNet.Models.Parameters;
 
 namespace AiDotNet.LinearAlgebra;
@@ -734,34 +734,42 @@ public partial class ExpressionTree<T, TInput, TOutput> : ModelBase<T, TInput, T
     /// <b>For Beginners:</b> This converts your mathematical formula into a compact format that can be
     /// saved to a file or sent over the internet. It's like zipping up your formula for storage.
     /// </remarks>
-    public override byte[] Serialize()
-    {
-        ModelPersistenceGuard.EnforceBeforeSerialize();
-        using MemoryStream ms = new();
-        using BinaryWriter writer = new(ms);
-        Serialize(writer);
-
-        return ms.ToArray();
-    }
-
     /// <summary>
-    /// Loads an expression tree from a byte array, replacing the current tree's structure.
+    /// Declares this tree as a node graph so the base carries it, rather than the hand-written
+    /// pair that used to walk it.
     /// </summary>
-    /// <param name="data">The byte array containing the serialized expression tree.</param>
+    /// <param name="state">The registry to declare into.</param>
     /// <remarks>
-    /// <b>For Beginners:</b> This loads a previously saved formula from a compact format and
-    /// replaces the current formula with it. It's like opening a saved file and loading its contents.
+    /// The fields mirror the recursive <c>Serialize(BinaryWriter)</c> below exactly - node type,
+    /// value, then left and right - so the payload describes the same tree it always did. The
+    /// setters reach private setters legitimately because this runs inside the type that declares
+    /// them. <c>Parent</c> is deliberately absent, as it was from the hand-written walk: it is a
+    /// back-reference implied by the structure, and persisting it would encode the same edge twice.
+    /// Restoring through SetLeft/SetRight rather than the properties re-links it, which the
+    /// hand-written pair did not do - it assigned Left and Right directly and left every restored
+    /// node's Parent null.
     /// </remarks>
-    public override void Deserialize(byte[] data)
+    protected override void RegisterState(ModelStateRegistry<T> state)
     {
-        ModelPersistenceGuard.EnforceBeforeDeserialize();
-        using MemoryStream ms = new(data);
-        using BinaryReader reader = new(ms);
-        ExpressionTree<T, TInput, TOutput> deserializedTree = Deserialize(reader);
-        this.Type = deserializedTree.Type;
-        this.Value = deserializedTree.Value;
-        this.Left = deserializedTree.Left;
-        this.Right = deserializedTree.Right;
+        base.RegisterState(state);
+
+        state.DeclareGraph<ExpressionTree<T, TInput, TOutput>>(
+            "ExpressionTree.Root",
+            () => this,
+            root =>
+            {
+                if (root is null) return;
+                Type = root.Type;
+                Value = root.Value;
+                Left = root.Left;
+                Right = root.Right;
+            },
+            node => node
+                .Create(() => new ExpressionTree<T, TInput, TOutput>(ExpressionNodeType.Constant))
+                .Int32(n => (int)n.Type, (n, v) => n.Type = (ExpressionNodeType)v)
+                .Scalar(n => n.Value, (n, v) => n.Value = v)
+                .Child(n => n.Left, (n, c) => n.SetLeft(c))
+                .Child(n => n.Right, (n, c) => n.SetRight(c)));
     }
 
     /// <summary>

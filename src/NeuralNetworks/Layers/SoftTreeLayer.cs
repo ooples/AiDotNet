@@ -301,17 +301,9 @@ public partial class SoftTreeLayer<T> : LayerBase<T>, IShapeContract
             currentLevel = nextLevel;
         }
 
-        // Extract leaf probabilities
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int leaf = 0; leaf < _numLeaves; leaf++)
-            {
-                pathProbs[b * _numLeaves + leaf] = nodeProbs[b * (nodeProbs.Shape[1]) + _numInternalNodes + leaf];
-            }
-        }
-
-        _cachedNodeProbs = nodeProbs;
-        return pathProbs;
+        return currentLevel.Count == 1
+            ? currentLevel[0]
+            : Engine.TensorConcatenate(currentLevel.ToArray(), axis: 1);
     }
 
     /// <inheritdoc/>

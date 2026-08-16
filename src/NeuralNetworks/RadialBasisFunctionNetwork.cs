@@ -50,7 +50,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     [ResearchPaper("Radial Basis Functions", "https://doi.org/10.1017/CBO9780511543241")]
-public partial class RadialBasisFunctionNetwork<T> : NeuralNetworkBase<T>
+public partial class RadialBasisFunctionNetwork<T> : VectorModelLayoutBase<T>
 {
     private readonly RadialBasisFunctionNetworkOptions _options;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;

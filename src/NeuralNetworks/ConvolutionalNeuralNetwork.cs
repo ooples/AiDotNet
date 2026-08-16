@@ -40,7 +40,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     [ResearchPaper("Gradient-Based Learning Applied to Document Recognition", "https://doi.org/10.1109/5.726791")]
-public partial class ConvolutionalNeuralNetwork<T> : NeuralNetworkBase<T>
+public partial class ConvolutionalNeuralNetwork<T> : ImageClassifierModelLayoutBase<T>
 {
     private readonly ConvolutionalNeuralNetworkOptions _options;
 

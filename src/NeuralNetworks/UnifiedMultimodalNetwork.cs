@@ -48,7 +48,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     [ResearchPaper("Perceiver: General Perception with Iterative Attention", "https://arxiv.org/abs/2103.03206")]
-public partial class UnifiedMultimodalNetwork<T> : NeuralNetworkBase<T>, IUnifiedMultimodalModel<T>
+public partial class UnifiedMultimodalNetwork<T> : MultimodalModelLayoutBase<T>, IUnifiedMultimodalModel<T>
 {
     private readonly UnifiedMultimodalNetworkOptions _options;
 

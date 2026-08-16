@@ -76,7 +76,7 @@ public partial class StandardVAE<T> : VAEModelBase<T>
     protected override void RegisterComponents()
     {
         EnsureLayersInitialized();
-        TriggerLazyShapeResolution();
+        ResolveShapesViaForward();
         RegisterParameterComponent("encoder/00000000/input", _inputConv);
         RegisterLayerCollection("encoder/00000001/spatial", _encoderLayers);
         RegisterParameterComponent("encoder/00000002/mean", _meanConv);
@@ -688,7 +688,8 @@ public partial class StandardVAE<T> : VAEModelBase<T>
         {
             TriggerLazyShapeResolution();
             clone.TriggerLazyShapeResolution();
-            CopyMaterializedParametersTo(clone);
+            if (!clone.TryShareParametersFrom(this))
+                CopyMaterializedParametersTo(clone);
         }
         else
         {

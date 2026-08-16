@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.NeuralNetworks.Options;
 using AiDotNet.Optimizers;
@@ -37,7 +37,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Occupancy Networks: Learning 3D Reconstruction in Function Space", "https://arxiv.org/abs/1812.03828", Year = 2019, Authors = "Lars Mescheder, Michael Oechsle, Michael Niemeyer, Sebastian Nowozin, Andreas Geiger")]
-public partial class OccupancyNeuralNetwork<T> : NeuralNetworkBase<T>
+public partial class OccupancyNeuralNetwork<T> : VectorModelLayoutBase<T>
 {
     private readonly OccupancyNeuralNetworkOptions _options;
 

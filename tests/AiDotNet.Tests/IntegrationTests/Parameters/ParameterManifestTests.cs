@@ -4,7 +4,9 @@ using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
 using AiDotNet.Models;
 using AiDotNet.Models.Parameters;
+using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Regression;
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.TimeSeries;
 using Xunit;
 
@@ -12,6 +14,13 @@ namespace AiDotNet.Tests.IntegrationTests.Parameters;
 
 public class ParameterManifestTests
 {
+    private sealed class SerializedTreeState
+    {
+        public int Feature { get; set; }
+        public double Threshold { get; set; }
+        public List<SerializedTreeState>? Children { get; set; }
+    }
+
     [Fact]
     public async Task Registry_OrdersStorageByStableId()
     {
@@ -331,6 +340,55 @@ public class ParameterManifestTests
     }
 
     [Fact]
+    public async Task SerializedFittedGraph_RoundTripsThroughOneGeneratedParameterSource()
+    {
+        await Task.Yield();
+        SerializedTreeState? state = new()
+        {
+            Feature = 3,
+            Threshold = 1.25,
+            Children = [new SerializedTreeState { Feature = 7, Threshold = -0.5 }]
+        };
+        var source = new SerializedObjectParameterSource<double>(
+            () => state,
+            value => state = (SerializedTreeState?)value,
+            typeof(SerializedTreeState));
+
+        var parameters = source.GetParameters();
+        Assert.True(parameters.Length > 0);
+        Assert.Equal(parameters.Length, source.ParameterCount);
+
+        state = null;
+        Assert.True(source.CanResizeOnRestore);
+        source.SetParameters(parameters);
+
+        Assert.NotNull(state);
+        Assert.Equal(3, state.Feature);
+        Assert.Equal(1.25, state.Threshold);
+        var child = Assert.Single(state.Children!);
+        Assert.Equal(7, child.Feature);
+        Assert.Equal(-0.5, child.Threshold);
+    }
+
+    [Fact]
+    public async Task LayoutSnapshot_PreservesKnownSubtotalWhileAnotherSlotIsDeferred()
+    {
+        await Task.Yield();
+        var snapshot = new ParameterLayoutSnapshot(new[]
+        {
+            new ParameterSlotDescriptor(
+                "resolved", ParameterSlotRole.Trainable,
+                ParameterReadiness.ShapeResolvedUnmaterialized, 12),
+            new ParameterSlotDescriptor(
+                "deferred", ParameterSlotRole.Trainable,
+                ParameterReadiness.ShapeDeferred, null)
+        });
+
+        Assert.Null(snapshot.ParameterCount);
+        Assert.Equal(12, snapshot.KnownParameterCount);
+    }
+
+    [Fact]
     public async Task LayoutFingerprint_ChangesWhenCheckpointOwnershipOrCountChanges()
     {
         await Task.Yield();
@@ -354,6 +412,66 @@ public class ParameterManifestTests
         Assert.Matches("^[a-f0-9]{64}$", original.Fingerprint);
         Assert.NotEqual(original.Fingerprint, renamed.Fingerprint);
         Assert.NotEqual(original.Fingerprint, resized.Fingerprint);
+    }
+
+    [Fact]
+    public async Task LayoutFingerprint_DistinguishesReadinessWithIdenticalIdentityAndCount()
+    {
+        await Task.Yield();
+        var unmaterialized = new ParameterLayoutSnapshot(new[]
+        {
+            new ParameterSlotDescriptor(
+                "weight", ParameterSlotRole.Trainable,
+                ParameterReadiness.ShapeResolvedUnmaterialized, 12)
+        });
+        var materialized = new ParameterLayoutSnapshot(new[]
+        {
+            new ParameterSlotDescriptor(
+                "weight", ParameterSlotRole.Trainable,
+                ParameterReadiness.Materialized, 12)
+        });
+
+        Assert.NotEqual(unmaterialized.Fingerprint, materialized.Fingerprint);
+    }
+
+    [Fact]
+    public void LayoutSnapshot_SeparatesDeclaredCapacityFromMaterializedStorage()
+    {
+        var snapshot = new ParameterLayoutSnapshot(new[]
+        {
+            new ParameterSlotDescriptor(
+                "live", ParameterSlotRole.Trainable, ParameterReadiness.Materialized, 3),
+            new ParameterSlotDescriptor(
+                "lazy", ParameterSlotRole.Trainable,
+                ParameterReadiness.ShapeResolvedUnmaterialized, 12)
+        });
+
+        Assert.Equal(15, snapshot.DeclaredParameterCount);
+        Assert.Equal(3, snapshot.MaterializedParameterCount);
+        Assert.Equal(ParameterReadiness.ShapeResolvedUnmaterialized, snapshot.Readiness);
+    }
+
+    [Fact]
+    public void LayoutSlot_RejectsMaterializedStorageBeyondDeclaredCapacity()
+    {
+        Assert.Throws<ArgumentException>(() => new ParameterSlotDescriptor(
+            "weight", ParameterSlotRole.Trainable, ParameterReadiness.Materialized, 3,
+            materializedParameterCount: 4));
+    }
+
+    [Fact]
+    public async Task LayoutSnapshot_RejectsDuplicateStableIdentity()
+    {
+        await Task.Yield();
+        var error = Assert.Throws<ArgumentException>(() => new ParameterLayoutSnapshot(new[]
+        {
+            new ParameterSlotDescriptor(
+                "weight", ParameterSlotRole.Trainable, ParameterReadiness.Materialized, 2),
+            new ParameterSlotDescriptor(
+                "weight", ParameterSlotRole.Buffer, ParameterReadiness.Materialized, 2)
+        }));
+
+        Assert.Contains("duplicate stable identity", error.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -494,6 +612,45 @@ public class ParameterManifestTests
     }
 
     [Fact]
+    public async Task ResizableTensorFieldRestore_ResolvesOneDeferredAxisThenBecomesStrict()
+    {
+        await Task.Yield();
+        Tensor<double>? tensor = new(new[] { 5, 0 });
+        var source = new ResizableTensorFieldParameterSource<double>(
+            () => tensor, value => tensor = value);
+        var restored = new Vector<double>(Enumerable.Range(1, 15).Select(value => (double)value).ToArray());
+
+        Assert.True(source.CanResizeOnRestore);
+        Assert.Equal(ParameterReadiness.ShapeDeferred, Assert.Single(source.GetParameterLayout()).Readiness);
+
+        source.SetParameters(restored);
+
+        Assert.NotNull(tensor);
+        Assert.Equal(new[] { 5, 3 }, tensor.Shape.ToArray());
+        Assert.Equal(restored.ToArray(), source.GetParameters().ToArray());
+        Assert.False(source.CanResizeOnRestore);
+        Assert.Equal(ParameterReadiness.Materialized, Assert.Single(source.GetParameterLayout()).Readiness);
+        Assert.Throws<ArgumentException>(() => source.SetParameters(new Vector<double>(10)));
+    }
+
+    [Fact]
+    public async Task ResizableTensorFieldRestore_RejectsAmbiguousOrNonDivisibleShapes()
+    {
+        await Task.Yield();
+        Tensor<double>? ambiguous = new(new[] { 0, 0 });
+        var ambiguousSource = new ResizableTensorFieldParameterSource<double>(
+            () => ambiguous, value => ambiguous = value);
+        Assert.Throws<ParameterLayoutNotReadyException>(() =>
+            ambiguousSource.SetParameters(new Vector<double>(6)));
+
+        Tensor<double>? nonDivisible = new(new[] { 5, 0 });
+        var nonDivisibleSource = new ResizableTensorFieldParameterSource<double>(
+            () => nonDivisible, value => nonDivisible = value);
+        Assert.Throws<ArgumentException>(() =>
+            nonDivisibleSource.SetParameters(new Vector<double>(12)));
+    }
+
+    [Fact]
     public async Task MatrixAndVectorFieldRestore_RequireExactLengths()
     {
         await Task.Yield();
@@ -528,6 +685,43 @@ public class ParameterManifestTests
 
         Assert.Null(first.LastRestored);
         Assert.Null(second.LastRestored);
+    }
+
+    [Fact]
+    public async Task ComponentCollection_PreservesDeclaredMemberLayoutAcrossReadAndRestore()
+    {
+        await Task.Yield();
+        var member = new ContractProbeSource(
+            declaredCount: 3,
+            values: new[] { 1d, 2d, 3d },
+            reportedParameterCount: 2);
+        var source = new ComponentCollectionParameterSource<double>(() => new[] { member });
+
+        var slot = Assert.Single(source.GetParameterLayout());
+        Assert.Equal("index=00000000", slot.StableId);
+        Assert.Equal(3, slot.ParameterCount);
+        Assert.Equal(3, source.ParameterCount);
+        Assert.Equal(new[] { 1d, 2d, 3d }, source.GetParameters().ToArray());
+
+        source.SetParameters(new Vector<double>(new[] { 4d, 5d, 6d }));
+        Assert.Equal(new[] { 4d, 5d, 6d }, member.LastRestored);
+    }
+
+    [Fact]
+    public async Task LayerManifest_DoesNotDuplicateRegisteredSubLayerParameters()
+    {
+        await Task.Yield();
+        var layer = new BidirectionalLayer<double>(
+            new RecurrentLayer<double>(8),
+            activationFunction: (IActivationFunction<double>?)null);
+        var input = Tensor<double>.CreateRandom(2, 3, 4);
+
+        layer.Forward(input);
+
+        Assert.Equal(layer.GetParameters().Length, layer.ParameterCount);
+        Assert.Equal(
+            layer.GetParameters().Length,
+            layer.GetParameterLayout().Sum(slot => slot.ParameterCount ?? 0));
     }
 
     [Fact]
@@ -660,6 +854,91 @@ public class ParameterManifestTests
     }
 
     [Fact]
+    public async Task Describe_PreparesEveryComponentBeforeCapturingOneTransactionalLayout()
+    {
+        await Task.Yield();
+        var deferred = new AlwaysDeferredLifecycleSource();
+        var resolved = new LifecycleProbeSource();
+        var registry = new ParameterComponentRegistry<double>();
+        registry.Register("a-deferred", deferred);
+        registry.Register("z-resolved", resolved);
+
+        var error = Assert.Throws<ParameterLayoutNotReadyException>(() => _ = registry.ParameterCount);
+
+        Assert.Equal(1, deferred.DescribeCount);
+        Assert.Equal(1, resolved.DescribeCount);
+        Assert.Equal(0, resolved.AllocationCount);
+        Assert.Equal(
+            ParameterReadiness.ShapeDeferred,
+            Assert.Single(error.Layout.Slots, slot => slot.StableId == "a-deferred").Readiness);
+        Assert.All(
+            error.Layout.Slots.Where(slot => slot.StableId.StartsWith("z-resolved/", StringComparison.Ordinal)),
+            slot =>
+            {
+                Assert.Equal(ParameterReadiness.ShapeResolvedUnmaterialized, slot.Readiness);
+                Assert.NotNull(slot.ParameterCount);
+            });
+    }
+
+    [Fact]
+    public async Task GeneratedComponentLifecycle_DescribeIsAllocationFreeAndReadIsIdempotent()
+    {
+        await Task.Yield();
+        var component = new LifecycleProbeSource();
+        var registry = new ParameterComponentRegistry<double>();
+        registry.Register("owner", new ComponentAccessorParameterSource<double>(() => component));
+
+        var described = registry.ParameterLayout;
+        Assert.Equal(3, registry.ParameterCount);
+        Assert.Equal(ParameterReadiness.ShapeResolvedUnmaterialized, described.Readiness);
+        Assert.Equal(0, component.AllocationCount);
+        Assert.Equal(new[] { "owner/running", "owner/weight" },
+            described.Slots.Select(slot => slot.StableId).OrderBy(id => id, StringComparer.Ordinal));
+        Assert.Equal(ParameterSlotRole.Buffer,
+            Assert.Single(described.Slots, slot => slot.StableId == "owner/running").Role);
+        Assert.Equal(ParameterSlotRole.Trainable,
+            Assert.Single(described.Slots, slot => slot.StableId == "owner/weight").Role);
+
+        var first = registry.GetParameters();
+        var second = registry.GetParameters();
+
+        Assert.Equal(new[] { 1d, 2d, 3d }, first.ToArray());
+        Assert.Equal(first.ToArray(), second.ToArray());
+        Assert.Equal(1, component.AllocationCount);
+        Assert.Equal(3, registry.ParameterCount);
+    }
+
+    [Fact]
+    public async Task GeneratedComponentLifecycle_RestorePreparesDestinationBeforeApplyingValues()
+    {
+        await Task.Yield();
+        var component = new LifecycleProbeSource();
+        var registry = new ParameterComponentRegistry<double>();
+        registry.Register("owner", new ComponentAccessorParameterSource<double>(() => component));
+
+        registry.SetParameters(new Vector<double>(new[] { 4d, 5d, 6d }));
+
+        Assert.Equal(1, component.AllocationCount);
+        Assert.Equal(1, component.RestoreCount);
+        Assert.Equal(new[] { 4d, 5d, 6d }, registry.GetParameters().ToArray());
+    }
+
+    [Fact]
+    public async Task GeneratedComponentLifecycle_ConcurrentReadsMaterializeOnceAndStayStable()
+    {
+        await Task.Yield();
+        var component = new LifecycleProbeSource();
+        var registry = new ParameterComponentRegistry<double>();
+        registry.Register("owner", new ComponentAccessorParameterSource<double>(() => component));
+
+        var reads = await Task.WhenAll(Enumerable.Range(0, 12)
+            .Select(_ => Task.Run(() => registry.GetParameters().ToArray())));
+
+        Assert.Equal(1, component.AllocationCount);
+        Assert.All(reads, values => Assert.Equal(new[] { 1d, 2d, 3d }, values));
+    }
+
+    [Fact]
     public async Task NeuralNetworkManifest_DescribesTheCompletePublicSurface()
     {
         await Task.Yield();
@@ -670,6 +949,111 @@ public class ParameterManifestTests
         Assert.Equal(ParameterReadiness.Materialized, layout.Readiness);
         Assert.Equal(network.ParameterCount, layout.ParameterCount);
         Assert.Equal(network.ParameterCount, network.GetParameters().Length);
+    }
+
+    [Fact]
+    public void GeneratedFixedParameterView_IsStableAndAllocationFreeAfterWarmup()
+    {
+        using var layer = new AiDotNet.NeuralNetworks.Layers.DenseLayer<double>(3);
+        _ = layer.Forward(new AiDotNet.Tensors.LinearAlgebra.Tensor<double>(new[] { 1, 4 }));
+
+        var first = layer.GetTrainableParameters();
+        var second = layer.GetTrainableParameters();
+        Assert.Same(first, second);
+
+#if NET5_0_OR_GREATER
+        long before = GC.GetAllocatedBytesForCurrentThread();
+#endif
+        for (int i = 0; i < 1_024; i++)
+            _ = layer.GetTrainableParameters();
+#if NET5_0_OR_GREATER
+        long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+
+        Assert.True(allocated <= 128,
+            $"Warm generated parameter views allocated {allocated:N0} bytes.");
+#endif
+    }
+
+    [Fact]
+    public void NeuralNetworkManifest_WarmReadsReuseSnapshotWithoutAllocating()
+    {
+        using var layer = new AiDotNet.NeuralNetworks.Layers.DenseLayer<double>(3);
+        var architecture = new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(
+            AiDotNet.Enums.InputType.OneDimensional,
+            AiDotNet.Enums.NeuralNetworkTaskType.Regression,
+            inputSize: 4,
+            outputSize: 3,
+            layers: new List<AiDotNet.Interfaces.ILayer<double>> { layer });
+        using var network = new AiDotNet.NeuralNetworks.NeuralNetwork<double>(architecture);
+        _ = network.Predict(new AiDotNet.Tensors.LinearAlgebra.Tensor<double>(new[] { 1, 4 }));
+
+        var snapshot = network.ParameterLayout;
+        _ = network.ParameterCount;
+#if NET5_0_OR_GREATER
+        long before = GC.GetAllocatedBytesForCurrentThread();
+#endif
+        for (int i = 0; i < 1_024; i++)
+        {
+            _ = network.ParameterLayout;
+            _ = network.ParameterCount;
+        }
+#if NET5_0_OR_GREATER
+        long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+#endif
+
+        Assert.Same(snapshot, network.ParameterLayout);
+#if NET5_0_OR_GREATER
+        Assert.True(allocated <= 128,
+            $"Warm layout/count reads allocated {allocated:N0} bytes.");
+#endif
+    }
+
+    [Fact]
+    public void NeuralNetworkManifest_ParameterReplacementInvalidatesSnapshot()
+    {
+        using var layer = new AiDotNet.NeuralNetworks.Layers.DenseLayer<double>(3);
+        var architecture = new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(
+            AiDotNet.Enums.InputType.OneDimensional,
+            AiDotNet.Enums.NeuralNetworkTaskType.Regression,
+            inputSize: 4,
+            outputSize: 3,
+            layers: new List<AiDotNet.Interfaces.ILayer<double>> { layer });
+        using var network = new AiDotNet.NeuralNetworks.NeuralNetwork<double>(architecture);
+        _ = network.Predict(new AiDotNet.Tensors.LinearAlgebra.Tensor<double>(new[] { 1, 4 }));
+        var before = network.ParameterLayout;
+        Assert.Equal(15, before.MaterializedParameterCount);
+
+        _ = layer.Forward(new AiDotNet.Tensors.LinearAlgebra.Tensor<double>(new[] { 1, 2 }));
+        var after = network.ParameterLayout;
+
+        Assert.NotSame(before, after);
+        Assert.Equal(9, after.MaterializedParameterCount);
+        Assert.Equal(9, network.ParameterCount);
+        Assert.Equal(9, network.GetParameters().Length);
+    }
+
+    [Fact]
+    public void NeuralNetworkManifest_ConcurrentWarmReadersSeeOneSnapshot()
+    {
+        using var layer = new AiDotNet.NeuralNetworks.Layers.DenseLayer<double>(3);
+        var architecture = new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(
+            AiDotNet.Enums.InputType.OneDimensional,
+            AiDotNet.Enums.NeuralNetworkTaskType.Regression,
+            inputSize: 4,
+            outputSize: 3,
+            layers: new List<AiDotNet.Interfaces.ILayer<double>> { layer });
+        using var network = new AiDotNet.NeuralNetworks.NeuralNetwork<double>(architecture);
+        _ = network.Predict(new AiDotNet.Tensors.LinearAlgebra.Tensor<double>(new[] { 1, 4 }));
+        var expected = network.ParameterLayout;
+        var observed = new ParameterLayoutSnapshot[64];
+
+        Parallel.For(0, observed.Length, i =>
+        {
+            observed[i] = network.ParameterLayout;
+            Assert.Equal(expected.MaterializedParameterCount, network.ParameterCount);
+        });
+
+        Assert.All(observed, snapshot => Assert.Same(expected, snapshot));
     }
 
     [Fact]
@@ -693,10 +1077,16 @@ public class ParameterManifestTests
         var policy = new AiDotNet.ReinforcementLearning.Policies.BetaPolicy<double>();
 
         var parameters = policy.GetParameters();
+        var layout = policy.ParameterLayout;
 
         Assert.Equal(policy.ParameterCount, parameters.Length);
-        Assert.Equal(policy.ParameterCount, policy.ParameterLayout.ParameterCount);
-        Assert.Single(policy.ParameterLayout.Slots);
+        Assert.Equal(policy.ParameterCount, layout.ParameterCount);
+        Assert.Single(policy.GetNetworks());
+        Assert.True(layout.Slots.Count > 1);
+        Assert.Equal(layout.Slots.Count,
+            layout.Slots.Select(slot => slot.StableId).Distinct(StringComparer.Ordinal).Count());
+        Assert.Equal(policy.ParameterCount,
+            layout.Slots.Sum(slot => slot.ParameterCount.GetValueOrDefault()));
     }
 
     [Fact]
@@ -754,6 +1144,114 @@ internal sealed class ContractProbeSource : IParameterSource<double>, IParameter
     public void SetParameters(Vector<double> parameters)
     {
         LastRestored = parameters.ToArray();
+    }
+}
+
+internal sealed class AlwaysDeferredLifecycleSource :
+    IParameterSource<double>, IParameterLayoutSource, IParameterSurfaceLifecycle
+{
+    public int DescribeCount { get; private set; }
+
+    public long ParameterCount => 0;
+
+    public void PrepareParameterSurface(ParameterSurfaceIntent intent)
+    {
+        if (intent == ParameterSurfaceIntent.Describe) DescribeCount++;
+    }
+
+    public IReadOnlyList<ParameterSlotDescriptor> GetParameterLayout() =>
+        new[]
+        {
+            new ParameterSlotDescriptor(
+                "$", ParameterSlotRole.Trainable, ParameterReadiness.ShapeDeferred, null)
+        };
+
+    public Vector<double> GetParameters() =>
+        throw new InvalidOperationException("A genuinely deferred source cannot be read.");
+
+    public void SetParameters(Vector<double> parameters) =>
+        throw new InvalidOperationException("A genuinely deferred source cannot be restored.");
+}
+
+internal sealed class LifecycleProbeSource :
+    IParameterSource<double>, IParameterLayoutSource, IParameterSurfaceLifecycle
+{
+    private readonly object _gate = new();
+    private bool _structureReady;
+    private bool _materialized;
+    private double[] _values = new[] { 1d, 2d, 3d };
+
+    public int DescribeCount { get; private set; }
+    public int AllocationCount { get; private set; }
+    public int RestoreCount { get; private set; }
+    public long ParameterCount => _structureReady ? 3 : 0;
+
+    public void PrepareParameterSurface(ParameterSurfaceIntent intent)
+    {
+        lock (_gate)
+        {
+            _structureReady = true;
+            if (intent == ParameterSurfaceIntent.Describe)
+            {
+                DescribeCount++;
+                return;
+            }
+
+            if (_materialized) return;
+            _materialized = true;
+            AllocationCount++;
+        }
+    }
+
+    public IReadOnlyList<ParameterSlotDescriptor> GetParameterLayout()
+    {
+        lock (_gate)
+        {
+            if (!_structureReady)
+            {
+                return new[]
+                {
+                    new ParameterSlotDescriptor(
+                        "$", ParameterSlotRole.Trainable, ParameterReadiness.ShapeDeferred, null)
+                };
+            }
+
+            var readiness = _materialized
+                ? ParameterReadiness.Materialized
+                : ParameterReadiness.ShapeResolvedUnmaterialized;
+            return new[]
+            {
+                new ParameterSlotDescriptor(
+                    "weight", ParameterSlotRole.Trainable, readiness, 2,
+                    shape: new[] { 2 }, elementType: typeof(double).FullName),
+                new ParameterSlotDescriptor(
+                    "running", ParameterSlotRole.Buffer, readiness, 1,
+                    shape: new[] { 1 }, elementType: typeof(double).FullName)
+            };
+        }
+    }
+
+    public Vector<double> GetParameters()
+    {
+        lock (_gate)
+        {
+            if (!_materialized)
+                throw new InvalidOperationException("Read must prepare the component first.");
+            return new Vector<double>(_values);
+        }
+    }
+
+    public void SetParameters(Vector<double> parameters)
+    {
+        lock (_gate)
+        {
+            if (!_materialized)
+                throw new InvalidOperationException("Restore must prepare the component first.");
+            if (parameters.Length != 3)
+                throw new ArgumentException("Expected three parameters.", nameof(parameters));
+            _values = parameters.ToArray();
+            RestoreCount++;
+        }
     }
 }
 

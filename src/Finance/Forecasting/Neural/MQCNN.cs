@@ -561,7 +561,8 @@ public partial class MQCNN<T> : ForecastingModelBase<T>
                 computeLoss: ComputeMultiQuantilePinballLossTape,
                 optimizerType: AiDotNet.Tensors.Engines.Compilation.OptimizerType.Adam,
                 learningRate: adamLr, beta1: 0.9f, beta2: 0.999f, epsilon: 1e-8f, weightDecay: 0f,
-                out T fusedLoss))
+                out T fusedLoss,
+                onGradients: gradients => PublishParameterGradients(gradients)))
         {
             LastLoss = fusedLoss;
             return;
