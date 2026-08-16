@@ -448,12 +448,12 @@ public class FederatedCoordinatorIntegrationTests : IClassFixture<ServingTestWeb
         for (int i = 0; i < rows; i++)
         {
             double a = i + 1;
-            double b = i + 2;
-            double c = i + 3;
+            double b = (i % 7) - 3;
+            double c = ((i * i + 3 * i + 1) % 11) - 5;
             features[i, 0] = a;
             features[i, 1] = b;
             features[i, 2] = c;
-            labels[i] = a + b + c;
+            labels[i] = (2 * a) - (3 * b) + (0.5 * c);
         }
 
         var dataLoader = DataLoaders.FromArrays(features, labels);
@@ -467,10 +467,16 @@ public class FederatedCoordinatorIntegrationTests : IClassFixture<ServingTestWeb
             .ConfigureOptimizer(optimizer)
             .BuildAsync();
 
+        byte[] serialized;
         using (AiDotNet.Helpers.ModelPersistenceGuard.InternalOperation())
         {
-            result.SaveModel(modelPath);
+            // SaveModel is intentionally always a licensed, user-facing operation. This fixture is
+            // server infrastructure, so use the internally suppressible serialization boundary and
+            // perform the file write directly, exactly as SaveModel does after enforcement.
+            serialized = result.Serialize();
         }
+
+        await File.WriteAllBytesAsync(modelPath, serialized);
     }
 
     private void CleanupLoadedModels()

@@ -45,14 +45,17 @@ public abstract class MetaLearningModelBase<T, TInput, TOutput> : ModelWrapperBa
             "Use the corresponding meta-learning algorithm to adapt the model.");
     }
 
-    /// <inheritdoc/>
-    public abstract override Vector<T> GetParameters();
-
-    /// <inheritdoc/>
-    public abstract override void SetParameters(Vector<T> parameters);
-
-    /// <inheritdoc/>
-    public override long ParameterCount => GetParameters().Length;
+    // GetParameters / SetParameters / ParameterCount are NOT re-declared here.
+    //
+    // They used to be `public abstract override`, which re-abstracted the working implementations
+    // on ModelWrapperBase and forced every adapted model below this base to write all three by
+    // hand -- the same defect that made GetParameters abstract on ModelBase. An adapted model does
+    // hold its OWN parameters rather than the wrapped model's, but that is now said by registering
+    // a component, not by reimplementing the surface.
+    //
+    // ParameterCount is gone for the same reason it went from the deep-RL agent base: it derived
+    // the count by materializing the whole vector, so the two agreed only because one was built
+    // from the other. Both now fold the same registered enumeration.
 
     /// <inheritdoc/>
     public override void ApplyGradients(Vector<T> gradients, T learningRate)

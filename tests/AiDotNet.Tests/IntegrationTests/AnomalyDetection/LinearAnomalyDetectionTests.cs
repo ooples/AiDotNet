@@ -18,18 +18,42 @@ public class LinearAnomalyDetectionTests
     {
         int n = 30;
         var data = new double[n, 3];
-        for (int i = 0; i < n - 1; i++)
-        {
-            data[i, 0] = 1.0 + 0.1 * (i % 5);
-            data[i, 1] = 2.0 + 0.1 * (i % 7);
-            data[i, 2] = 0.5 + 0.05 * (i % 3);
-        }
+        for (int i = 0; i < n - 1; i++) FillNormalRow(data, i);
 
         data[n - 1, 0] = 100.0;
         data[n - 1, 1] = 100.0;
         data[n - 1, 2] = 100.0;
 
         return new Matrix<double>(data);
+    }
+
+    // Inlier-only training set (the 29 normal rows of CreateTestData, without the
+    // outlier at row 29). Kernel PCA novelty detection (Hoffmann 2007) assumes an
+    // anomaly-free training set: the detector learns the normal manifold and then
+    // flags points that cannot be reconstructed from it. Fitting on the contaminated
+    // set instead lets the lone outlier dominate its own principal component and be
+    // reconstructed with ~zero residual — outside the method's scope.
+    private static Matrix<double> CreateCleanTrainingData()
+    {
+        int n = 29;
+        var data = new double[n, 3];
+        for (int i = 0; i < n; i++) FillNormalRow(data, i);
+        return new Matrix<double>(data);
+    }
+
+    /// <summary>Writes the three normal-row features for row <paramref name="i"/>.</summary>
+    /// <remarks>
+    /// ONE FORMULA, TWO GENERATORS. CreateCleanTrainingData is documented as "the 29 normal rows of
+    /// CreateTestData", and it used to be a COPY of those three lines with nothing enforcing the
+    /// claim. An edit to one left the other behind, and the novelty-detection premise the clean set
+    /// exists to satisfy -- an anomaly-free training set -- silently became false while both tests
+    /// carried on passing.
+    /// </remarks>
+    private static void FillNormalRow(double[,] data, int i)
+    {
+        data[i, 0] = 1.0 + 0.1 * (i % 5);
+        data[i, 1] = 2.0 + 0.1 * (i % 7);
+        data[i, 2] = 0.5 + 0.05 * (i % 3);
     }
 
     private static void AssertOutlierScoresHighest(Vector<double> scores, int outlierIdx)
@@ -174,11 +198,19 @@ public class LinearAnomalyDetectionTests
     [Fact(Timeout = 120000)]
     public async Task KernelPCA_OutlierGetsHighestScore()
     {
+        // HELD OUT, not in-sample. KPCA's novelty score is Hoffmann's feature-space reconstruction
+        // error, and an in-sample fitted point is reconstructed with near-zero residual whenever its
+        // own direction is retained by the decomposition -- so fitting on data that CONTAINS the
+        // extreme row and then asserting that row scores highest expects the documented failure mode
+        // to behave as the success path. The detector is fitted on the inliers alone and scored on a
+        // matrix whose last row is a genuinely new, extreme point.
         var detector = new KernelPCADetector<double>();
-        var data = CreateTestData();
-        detector.Fit(data);
-        var scores = detector.ScoreAnomalies(data);
-        Assert.Equal(data.Rows, scores.Length);
+        detector.Fit(CreateCleanTrainingData());
+
+        var scored = CreateTestData();
+        var scores = detector.ScoreAnomalies(scored);
+
+        Assert.Equal(scored.Rows, scores.Length);
         AssertOutlierScoresHighest(scores, OutlierIndex);
     }
 
@@ -186,8 +218,8 @@ public class LinearAnomalyDetectionTests
     public async Task KernelPCA_PredictClassifiesOutlierAsAnomaly()
     {
         var detector = new KernelPCADetector<double>();
+        detector.Fit(CreateCleanTrainingData());
         var data = CreateTestData();
-        detector.Fit(data);
         var predictions = detector.Predict(data);
         AssertPredictClassifiesCorrectly(predictions, OutlierIndex);
     }

@@ -52,7 +52,7 @@ namespace AiDotNet.Regression;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
     [ResearchPaper("PLS-Regression: A Basic Tool of Chemometrics", "https://doi.org/10.1016/S0169-7439(01)00155-1")]
-public class PartialLeastSquaresRegression<T> : RegressionBase<T>
+public partial class PartialLeastSquaresRegression<T> : RegressionBase<T>
 {
     /// <summary>
     /// Configuration options for the partial least squares regression model.
@@ -87,7 +87,7 @@ public class PartialLeastSquaresRegression<T> : RegressionBase<T>
     /// <value>
     /// A matrix where each column represents the weights for a component.
     /// </value>
-    private Matrix<T> _weights;
+    private Tensor<T> _weights;
 
     /// <summary>
     /// Y-loadings (c) from the NIPALS algorithm: c_k = t_k'*y / (t_k'*t_k).
@@ -108,6 +108,7 @@ public class PartialLeastSquaresRegression<T> : RegressionBase<T>
     /// <value>
     /// A vector containing the mean value of each predictor variable.
     /// </value>
+    [Buffer]
     private Vector<T> _xMean;
 
     /// <summary>
@@ -124,6 +125,7 @@ public class PartialLeastSquaresRegression<T> : RegressionBase<T>
     /// <value>
     /// A vector containing the standard deviation of each predictor variable.
     /// </value>
+    [Buffer]
     private Vector<T> _xStd;
 
     /// <summary>
@@ -148,7 +150,7 @@ public class PartialLeastSquaresRegression<T> : RegressionBase<T>
         _options = options ?? new PartialLeastSquaresRegressionOptions<T>();
         _loadings = new Matrix<T>(0, 0);
         _scores = new Matrix<T>(0, 0);
-        _weights = new Matrix<T>(0, 0);
+        _weights = new Tensor<T>([0, 0]);
         _yMean = NumOps.Zero;
         _xMean = new Vector<T>(0);
         _yStd = NumOps.Zero;
@@ -181,7 +183,14 @@ public class PartialLeastSquaresRegression<T> : RegressionBase<T>
     /// </para>
     /// </remarks>
     /// <summary>PLS doesn't benefit from optimizer parameter injection.</summary>
-    public override long ParameterCount => 0;
+        /// <remarks>
+    /// Expressed as a capability, not as a count. A zero ParameterCount also suppresses
+    /// injection -- that is why this was written that way -- but it overloads a COUNT to carry
+    /// a CAPABILITY: the model does have parameters (the base getter returns its coefficients
+    /// and intercept), so the count contradicted the vector and anything pairing the two by
+    /// length saw parameters the model claimed not to have.
+    /// </remarks>
+    public override bool SupportsParameterInitialization => false;
 
     public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
     {
@@ -194,20 +203,189 @@ public class PartialLeastSquaresRegression<T> : RegressionBase<T>
 
     public override IFullModel<T, Matrix<T>, Vector<T>> DeepCopy() => Clone();
 
+    /// <summary>
+    /// Fits the model with NIPALS, the algorithm PLS is defined by.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This used to run ordinary least squares -- its own comment said "Use OLS for reliable
+    /// predictions" -- and left every PLS-specific field at the 0x0 value the constructor gave it,
+    /// while still serializing, cloning and reporting them. CalculateFeatureImportances bailed on
+    /// <c>_scores.Rows == 0</c> and returned its fallback on every call.
+    /// </para>
+    /// <para>
+    /// PLS exists for the cases OLS cannot handle: collinear predictors, and more features than
+    /// samples. It regresses on a small number of latent components chosen for covariance with the
+    /// target rather than on the predictors directly. Producing OLS answers under this name gave
+    /// neither the algorithm nor its failure modes.
+    /// </para>
+    /// </remarks>
     public override void Train(Matrix<T> x, Vector<T> y)
     {
         ValidateInputs(x, y);
         TrainingFeatureCount = x.Columns;
 
-        // Use OLS for reliable predictions
-        var xWithInt = x.AddConstantColumn(NumOps.One);
-        var xTx = xWithInt.Transpose().Multiply(xWithInt);
-        var xTy = xWithInt.Transpose().Multiply(y);
-        for (int i = 0; i < xTx.Rows; i++)
-            xTx[i, i] = NumOps.Add(xTx[i, i], NumOps.FromDouble(1e-10));
-        var solution = SolveSystem(xTx, xTy);
-        Intercept = solution[0];
-        Coefficients = solution.Slice(1, x.Columns);
+        int n = x.Rows;
+        int p = x.Columns;
+        int components = Math.Max(1, Math.Min(_options.NumComponents, Math.Min(n - 1, p)));
+
+        // Centre X and y. PLS is defined on centred data: the components are directions of
+        // covariance, and an uncentred mean would dominate the first one.
+        _xMean = new Vector<T>(p);
+        for (int j = 0; j < p; j++)
+        {
+            T sum = NumOps.Zero;
+            for (int i = 0; i < n; i++) sum = NumOps.Add(sum, x[i, j]);
+            _xMean[j] = NumOps.Divide(sum, NumOps.FromDouble(n));
+        }
+
+        T ySum = NumOps.Zero;
+        for (int i = 0; i < n; i++) ySum = NumOps.Add(ySum, y[i]);
+        _yMean = NumOps.Divide(ySum, NumOps.FromDouble(n));
+
+        // Scaling is recorded so a caller can inspect it; the deflation below works on the centred
+        // residuals either way.
+        _xStd = new Vector<T>(p);
+        for (int j = 0; j < p; j++)
+        {
+            T ss = NumOps.Zero;
+            for (int i = 0; i < n; i++)
+            {
+                T d = NumOps.Subtract(x[i, j], _xMean[j]);
+                ss = NumOps.Add(ss, NumOps.Multiply(d, d));
+            }
+            T variance = NumOps.Divide(ss, NumOps.FromDouble(Math.Max(1, n - 1)));
+            T sd = NumOps.Sqrt(variance);
+            _xStd[j] = NumOps.LessThanOrEquals(sd, NumOps.FromDouble(1e-12)) ? NumOps.One : sd;
+        }
+        _yStd = NumOps.One;
+
+        var e = new Matrix<T>(n, p);
+        for (int i = 0; i < n; i++)
+        for (int j = 0; j < p; j++) e[i, j] = NumOps.Subtract(x[i, j], _xMean[j]);
+
+        var f = new Vector<T>(n);
+        for (int i = 0; i < n; i++) f[i] = NumOps.Subtract(y[i], _yMean);
+
+        var w = new Matrix<T>(p, components);   // weights
+        var t = new Matrix<T>(n, components);   // scores
+        var pl = new Matrix<T>(p, components);  // X-loadings
+        var c = new Vector<T>(components);      // y-loadings
+
+        for (int k = 0; k < components; k++)
+        {
+            // w_k = E'f, normalised
+            var wk = new Vector<T>(p);
+            T norm2 = NumOps.Zero;
+            for (int j = 0; j < p; j++)
+            {
+                T acc = NumOps.Zero;
+                for (int i = 0; i < n; i++) acc = NumOps.Add(acc, NumOps.Multiply(e[i, j], f[i]));
+                wk[j] = acc;
+                norm2 = NumOps.Add(norm2, NumOps.Multiply(acc, acc));
+            }
+            T norm = NumOps.Sqrt(norm2);
+            if (NumOps.LessThanOrEquals(norm, NumOps.FromDouble(1e-12)))
+            {
+                // No covariance left with the target: further components would be noise.
+                components = k;
+                break;
+            }
+            for (int j = 0; j < p; j++) wk[j] = NumOps.Divide(wk[j], norm);
+
+            // t_k = E w_k
+            var tk = new Vector<T>(n);
+            T tt = NumOps.Zero;
+            for (int i = 0; i < n; i++)
+            {
+                T acc = NumOps.Zero;
+                for (int j = 0; j < p; j++) acc = NumOps.Add(acc, NumOps.Multiply(e[i, j], wk[j]));
+                tk[i] = acc;
+                tt = NumOps.Add(tt, NumOps.Multiply(acc, acc));
+            }
+            if (NumOps.LessThanOrEquals(tt, NumOps.FromDouble(1e-12)))
+            {
+                components = k;
+                break;
+            }
+
+            // p_k = E't_k / (t_k't_k),  c_k = f't_k / (t_k't_k)
+            var pk = new Vector<T>(p);
+            for (int j = 0; j < p; j++)
+            {
+                T acc = NumOps.Zero;
+                for (int i = 0; i < n; i++) acc = NumOps.Add(acc, NumOps.Multiply(e[i, j], tk[i]));
+                pk[j] = NumOps.Divide(acc, tt);
+            }
+            T fc = NumOps.Zero;
+            for (int i = 0; i < n; i++) fc = NumOps.Add(fc, NumOps.Multiply(f[i], tk[i]));
+            T ck = NumOps.Divide(fc, tt);
+
+            // Deflate
+            for (int i = 0; i < n; i++)
+            {
+                for (int j = 0; j < p; j++)
+                    e[i, j] = NumOps.Subtract(e[i, j], NumOps.Multiply(tk[i], pk[j]));
+                f[i] = NumOps.Subtract(f[i], NumOps.Multiply(tk[i], ck));
+            }
+
+            for (int j = 0; j < p; j++) { w[j, k] = wk[j]; pl[j, k] = pk[j]; }
+            for (int i = 0; i < n; i++) t[i, k] = tk[i];
+            c[k] = ck;
+        }
+
+        // Trim to the components actually extracted -- an early break above means the rest are
+        // zero columns, and keeping them would report parameters that carry no information.
+        _weights = ToTensor(w, p, components);
+        _loadings = Submatrix(pl, p, components);
+        _scores = Submatrix(t, n, components);
+        _yLoadings = new Vector<T>(components);
+        for (int k = 0; k < components; k++) _yLoadings[k] = c[k];
+
+        // B = W (P'W)^-1 c, mapping back to the original variables.
+        var ptw = new Matrix<T>(components, components);
+        for (int a = 0; a < components; a++)
+        for (int b = 0; b < components; b++)
+        {
+            T acc = NumOps.Zero;
+            for (int j = 0; j < p; j++) acc = NumOps.Add(acc, NumOps.Multiply(pl[j, a], w[j, b]));
+            ptw[a, b] = acc;
+        }
+        for (int a = 0; a < components; a++)
+            ptw[a, a] = NumOps.Add(ptw[a, a], NumOps.FromDouble(1e-12));
+
+        var alpha = SolveSystem(ptw, _yLoadings);
+
+        var beta = new Vector<T>(p);
+        for (int j = 0; j < p; j++)
+        {
+            T acc = NumOps.Zero;
+            for (int a = 0; a < components; a++) acc = NumOps.Add(acc, NumOps.Multiply(w[j, a], alpha[a]));
+            beta[j] = acc;
+        }
+
+        Coefficients = beta;
+
+        T intercept = _yMean;
+        for (int j = 0; j < p; j++)
+            intercept = NumOps.Subtract(intercept, NumOps.Multiply(beta[j], _xMean[j]));
+        Intercept = intercept;
+    }
+
+    private static Matrix<T> Submatrix(Matrix<T> source, int rows, int cols)
+    {
+        var result = new Matrix<T>(rows, cols);
+        for (int i = 0; i < rows; i++)
+        for (int j = 0; j < cols; j++) result[i, j] = source[i, j];
+        return result;
+    }
+
+    private static Tensor<T> ToTensor(Matrix<T> source, int rows, int cols)
+    {
+        var result = new Tensor<T>([rows, cols]);
+        for (int i = 0; i < rows; i++)
+        for (int j = 0; j < cols; j++) result[i, j] = source[i, j];
+        return result;
     }
 
     /// <summary>
@@ -333,7 +511,7 @@ public class PartialLeastSquaresRegression<T> : RegressionBase<T>
     protected override Vector<T> CalculateFeatureImportances()
     {
         // When using OLS (no PLS decomposition), use absolute coefficient values
-        if (_scores.Rows == 0 || _weights.Rows == 0)
+        if (_scores.Rows == 0 || _weights.Shape[0] == 0)
         {
             var importance = new Vector<T>(Coefficients.Length);
             for (int j = 0; j < Coefficients.Length; j++)
@@ -397,7 +575,7 @@ public class PartialLeastSquaresRegression<T> : RegressionBase<T>
         writer.Write(_options.NumComponents);
         SerializationHelper<T>.SerializeMatrix(writer, _loadings);
         SerializationHelper<T>.SerializeMatrix(writer, _scores);
-        SerializationHelper<T>.SerializeMatrix(writer, _weights);
+        SerializationHelper<T>.SerializeTensor(writer, _weights);
         SerializationHelper<T>.WriteValue(writer, _yMean);
         SerializationHelper<T>.SerializeVector(writer, _xMean);
         SerializationHelper<T>.WriteValue(writer, _yStd);
@@ -434,7 +612,7 @@ public class PartialLeastSquaresRegression<T> : RegressionBase<T>
         _options.NumComponents = reader.ReadInt32();
         _loadings = SerializationHelper<T>.DeserializeMatrix(reader);
         _scores = SerializationHelper<T>.DeserializeMatrix(reader);
-        _weights = SerializationHelper<T>.DeserializeMatrix(reader);
+        _weights = SerializationHelper<T>.DeserializeTensor(reader);
         _yMean = SerializationHelper<T>.ReadValue(reader);
         _xMean = SerializationHelper<T>.DeserializeVector(reader);
         _yStd = SerializationHelper<T>.ReadValue(reader);

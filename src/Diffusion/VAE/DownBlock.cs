@@ -1,5 +1,8 @@
-using AiDotNet.ActivationFunctions;
+﻿using AiDotNet.ActivationFunctions;
 using AiDotNet.Engines;
+// File-level, deliberately: two Tensors namespaces in the project's global usings also define a
+// TensorLayout, so [TensorLayout(...)] only binds when this import shadows them from a nearer scope.
+using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks.Layers;
 
@@ -45,8 +48,54 @@ namespace AiDotNet.Diffusion.VAE;
 /// ```
 /// </para>
 /// </remarks>
-public class DownBlock<T> : LayerBase<T>
+// Roles from this block's own diagram above - input [B, C_in, H, W], output [B, C_out, H/2, W/2] -
+// and from what it is made of: every stage is a VAEResBlock, which declares rank 4 only, so this
+// block cannot accept less. Batch is NOT optional for the same reason it is not on VAEResBlock:
+// nothing here establishes that the inner GroupNorm and 3x3 convolutions take an unbatched [C,H,W].
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Output)]
+[AutoParameters]
+public partial class DownBlock<T> : LayerBase<T>, IShapeContract
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// Channels are <c>Fixed(_outChannels)</c>: the first <c>VAEResBlock</c> is constructed as
+    /// <c>(inChannels, outChannels, ...)</c> and every later one as <c>(outChannels, outChannels, ...)</c>,
+    /// so the width is settled by the constructor argument and never by the input.
+    /// </para>
+    /// <para>
+    /// The spatial relation is CONDITIONAL, and that is the whole reason this is hand-written rather
+    /// than probed: <c>ForwardTraced</c> applies <c>_downsample</c> only <c>if (_hasDownsample)</c>.
+    /// The res blocks are extent-preserving, so with downsampling off the block is exactly
+    /// <c>Same</c> on both axes - which is the configuration the last encoder block uses. With it on,
+    /// the relation is the <c>_downsample</c> convolution's own arguments,
+    /// <c>kernelSize: 3, stride: 2, padding: 1</c>, written as a <c>Window</c> rather than as
+    /// <c>Scaled(axis, 1, 2)</c>: the two agree on even extents but the window is what the code
+    /// actually computes, and it stays right on an odd one, where the halving would refuse.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        if (inputRank != 4 || _outChannels <= 0) return null;
+
+        // Mirrors the constructor's own comment on _downsample:
+        // "kernel=3, stride=2, padding=1 -> output_size = (input_size + 2*1 - 3) / 2 + 1 = input_size / 2".
+        AxisRelation Spatial(TensorAxis axis) => _hasDownsample
+            ? AxisRelation.Window(axis, kernel: 3, stride: 2, padding: 1)
+            : AxisRelation.Same(axis);
+
+        return new[]
+        {
+            new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+            new OutputAxisContract(TensorAxis.Channels, AxisRelation.Fixed(_outChannels)),
+            new OutputAxisContract(TensorAxis.Height, Spatial(TensorAxis.Height)),
+            new OutputAxisContract(TensorAxis.Width, Spatial(TensorAxis.Width)),
+        };
+    }
+
     /// <summary>
     /// Residual blocks in this down block.
     /// </summary>
@@ -216,7 +265,7 @@ public class DownBlock<T> : LayerBase<T>
     /// </summary>
     /// <param name="input">Input tensor with shape [batch, inChannels, H, W].</param>
     /// <returns>Output tensor with shape [batch, outChannels, H/2, W/2] if hasDownsample, else [batch, outChannels, H, W].</returns>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         _lastInput = input;
         var x = input;
@@ -256,49 +305,11 @@ public class DownBlock<T> : LayerBase<T>
         }
     }
 
-    /// <summary>
-    /// Gets all trainable parameters as a single vector.
-    /// </summary>
-    public override Vector<T> GetParameters()
-    {
-        var paramsList = new List<T>();
-
-        foreach (var block in _resBlocks)
-        {
-            AddParameters(paramsList, block.GetParameters());
-        }
-
-        if (_hasDownsample)
-        {
-            AddParameters(paramsList, _downsample.GetParameters());
-        }
-
-        return new Vector<T>(paramsList.ToArray());
-    }
-
     private static void AddParameters(List<T> list, Vector<T> parameters)
     {
         for (int i = 0; i < parameters.Length; i++)
         {
             list.Add(parameters[i]);
-        }
-    }
-
-    /// <summary>
-    /// Sets all trainable parameters from a single vector.
-    /// </summary>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int index = 0;
-
-        foreach (var block in _resBlocks)
-        {
-            SetLayerParams(block, parameters, ref index);
-        }
-
-        if (_hasDownsample)
-        {
-            SetLayerParams(_downsample, parameters, ref index);
         }
     }
 

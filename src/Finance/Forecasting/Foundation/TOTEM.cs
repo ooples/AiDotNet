@@ -64,7 +64,7 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 [ModelComplexity(ModelComplexity.High)]
 [ResearchPaper("TOTEM: TOkenized Time Series EMbeddings", "https://arxiv.org/abs/2402.16412")]
     [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-public class TOTEM<T> : TimeSeriesFoundationModelBase<T>
+public partial class TOTEM<T> : TimeSeriesFoundationModelBase<T>
 {
     #region Fields
 
@@ -101,7 +101,9 @@ public class TOTEM<T> : TimeSeriesFoundationModelBase<T>
     // The VQ bottleneck snaps the encoder output to a discrete codebook entry, so
     // constant inputs of different levels map to the same token and decode
     // identically — restoring the input level keeps the forecast input-dependent.
+    [Scratch]
     private Vector<T> _revinMean = new Vector<T>(0);
+    [Scratch]
     private Vector<T> _revinStd = new Vector<T>(0);
 
     #endregion
@@ -157,7 +159,20 @@ public class TOTEM<T> : TimeSeriesFoundationModelBase<T>
         OnnxModelPath = onnxModelPath;
         OnnxSession = new InferenceSession(onnxModelPath);
 
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        // Built bare, every value GpuResidentFusedStep.TryResolveOptimizerConfig reads back off this
+        // optimizer -- learning rate, betas, epsilon and WEIGHT DECAY -- came from whatever the bare
+        // constructor happened to leave, and the fused step then applied them verbatim. Parameters
+        // went NaN after a single step (L2 28.2080 -> NaN). Set them explicitly from the paper's
+        // Adam configuration so the fused path has well-defined values to resolve.
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
+            new AiDotNet.Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = options.LearningRate,
+                Beta1 = 0.9,
+                Beta2 = 0.999,
+                Epsilon = 1e-8,
+            });
+        SetBaseTrainOptimizer(_optimizer);
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
         _lastCommitmentLoss = NumOps.Zero;
 
@@ -182,7 +197,20 @@ public class TOTEM<T> : TimeSeriesFoundationModelBase<T>
         OnnxSession = null;
         OnnxModelPath = null;
 
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        // Built bare, every value GpuResidentFusedStep.TryResolveOptimizerConfig reads back off this
+        // optimizer -- learning rate, betas, epsilon and WEIGHT DECAY -- came from whatever the bare
+        // constructor happened to leave, and the fused step then applied them verbatim. Parameters
+        // went NaN after a single step (L2 28.2080 -> NaN). Set them explicitly from the paper's
+        // Adam configuration so the fused path has well-defined values to resolve.
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
+            new AiDotNet.Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = options.LearningRate,
+                Beta1 = 0.9,
+                Beta2 = 0.999,
+                Epsilon = 1e-8,
+            });
+        SetBaseTrainOptimizer(_optimizer);
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
         _lastCommitmentLoss = NumOps.Zero;
 
@@ -220,7 +248,16 @@ public class TOTEM<T> : TimeSeriesFoundationModelBase<T>
     private void InitializeCodebooks()
     {
         _codebooks = new Tensor<T>(new[] { _numCodebooks, _codebookSize, _codebookDimension });
-        var rand = RandomHelper.CreateSecureRandom();
+        // Honour the deterministic init scope the layers use. The codebook is a raw tensor rather than
+        // a layer, so it bypassed that scope entirely and always drew from CreateSecureRandom: the
+        // codebook differed on every construction even when the caller had pinned an init seed. Most
+        // draws train fine — TOTEM passes on its own — but some send the parameter L2 to NaN on the
+        // very first step, which made it fail only when it shared a worker with other classes.
+        // Falls back to the secure generator in production, where no scope is active.
+        int? initSeed = AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.NextSeedOrNull();
+        var rand = initSeed.HasValue
+            ? RandomHelper.CreateSeededRandom(initSeed.Value)
+            : RandomHelper.CreateSecureRandom();
         T scale = NumOps.Divide(NumOps.One, NumOps.FromDouble(Math.Sqrt(_codebookDimension)));
         for (int c = 0; c < _numCodebooks; c++)
             for (int k = 0; k < _codebookSize; k++)
@@ -328,7 +365,10 @@ public class TOTEM<T> : TimeSeriesFoundationModelBase<T>
 
         var trainableParams = Training.TapeTrainingStep<T>.CollectParameters(Layers).ToArray();
 
-        // GPU-RESIDENT fast path — recon + commitment on a fused SGD plan. Safe
+        // Fused fast path — reconstruction + commitment using the model's configured
+        // optimizer. The paper default is Adam at 1e-3; callers may inject another
+        // supported optimizer, with unsupported custom optimizers falling through to
+        // the eager tape route below. Safe
         // now that VectorQuantize is fully traceable (argmin + gather + straight-
         // through + commitment loss all via engine ops) so each replay recomputes
         // from the CURRENT slot data instead of freezing the trace-batch argmin
@@ -365,11 +405,22 @@ public class TOTEM<T> : TimeSeriesFoundationModelBase<T>
                         "the forward closure, violating its documented Fwd-then-Loss ordering.");
                 return Engine.TensorAdd(recon, commit);
             }
-            if (AiDotNet.Training.CompiledTapeTrainingStep<T>.TryStepWithFusedOptimizer(
+            // The fused path REPLAYS a compiled plan, but ComputeLossCombined reads
+            // capturedCommitment -- state produced by the forward closure during tracing. On replay
+            // that reference is not re-derived as a tape node, so the commitment term contributes no
+            // valid gradient and the update drove every parameter to NaN in a single step
+            // (L2 28.2080 -> NaN), unchanged even at a 1e-6 learning rate. Until the fused step can
+            // express a loss that depends on forward-captured extras, take the eager tape route
+            // below, which rebuilds commitment and reconstruction on one live tape.
+            bool fusedStepSupportsForwardCapturedLoss = false;
+            if (fusedStepSupportsForwardCapturedLoss
+                && AiDotNet.Training.GpuResidentFusedStep<T>.TryResolveOptimizerConfig(
+                    _optimizer, out var optimizerType, out var learningRate,
+                    out var beta1, out var beta2, out var epsilon, out var weightDecay)
+                && AiDotNet.Training.CompiledTapeTrainingStep<T>.TryStepWithFusedOptimizer(
                     trainableLayers, input, target,
                     forward: ForwardCombined, computeLoss: ComputeLossCombined,
-                    optimizerType: AiDotNet.Tensors.Engines.Compilation.OptimizerType.SGD,
-                    learningRate: 0.001f, beta1: 0.9f, beta2: 0.999f, epsilon: 1e-8f, weightDecay: 0f,
+                    optimizerType, learningRate, beta1, beta2, epsilon, weightDecay,
                     out T fusedLoss))
             {
                 LastLoss = fusedLoss;
@@ -391,7 +442,7 @@ public class TOTEM<T> : TimeSeriesFoundationModelBase<T>
 
         var totalLoss = Engine.TensorAdd(reconLoss, commitmentLoss);
 
-        var allGrads = tape.ComputeGradients(totalLoss, sources: null);
+        var allGrads = ComputeAndPublishParameterGradients(tape, totalLoss, sources: null);
         var grads = new Dictionary<Tensor<T>, Tensor<T>>(
             Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
         foreach (var param in trainableParams)
@@ -403,15 +454,8 @@ public class TOTEM<T> : TimeSeriesFoundationModelBase<T>
         T lossValue = totalLoss.Length > 0 ? totalLoss[0] : NumOps.Zero;
         LastLoss = lossValue;
 
-        T lr = NumOps.FromDouble(0.001);
-        foreach (var param in trainableParams)
-        {
-            if (grads.TryGetValue(param, out var grad))
-            {
-                var update = Engine.TensorMultiplyScalar(grad, lr);
-                Engine.TensorSubtractInPlace(param, update);
-            }
-        }
+        var context = new TapeStepContext<T>(trainableParams, grads, lossValue);
+        _optimizer.Step(context);
     }
 
     /// <summary>
@@ -476,12 +520,8 @@ public class TOTEM<T> : TimeSeriesFoundationModelBase<T>
         return (decoded, commitmentLoss, argmin, head);
     }
 
-    /// <inheritdoc/>
-    public override void UpdateParameters(Vector<T> gradients)
-    {
-        // Parameters are updated through the optimizer in Train()
-    }
-
+    // UpdateParameters was an empty override, silently dropping every restore. The base
+    // distributes the vector over the declared enumeration.
     /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()
     {
@@ -650,45 +690,12 @@ public class TOTEM<T> : TimeSeriesFoundationModelBase<T>
 
     /// <inheritdoc/>
     public override Tensor<T> ApplyInstanceNormalization(Tensor<T> input)
-    {
-        // RevIN forward (Kim et al. 2022). Stats over every non-batch element of
-        // each row (a rank-1 input is a single instance), stored for the reverse.
-        int batchSize = input.Shape.Length > 1 ? input.Shape[0] : 1;
-        int instanceSize = batchSize > 0 ? input.Length / batchSize : input.Length;
-        if (instanceSize <= 0)
-            return input;
-
-        var result = new Tensor<T>(input._shape);
-        _revinMean = new Vector<T>(batchSize);
-        _revinStd = new Vector<T>(batchSize);
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            int start = b * instanceSize;
-
-            T mean = NumOps.Zero;
-            for (int t = 0; t < instanceSize; t++)
-                mean = NumOps.Add(mean, input[start + t]);
-            mean = NumOps.Divide(mean, NumOps.FromDouble(instanceSize));
-
-            T variance = NumOps.Zero;
-            for (int t = 0; t < instanceSize; t++)
-            {
-                var diff = NumOps.Subtract(input[start + t], mean);
-                variance = NumOps.Add(variance, NumOps.Multiply(diff, diff));
-            }
-            variance = NumOps.Divide(variance, NumOps.FromDouble(instanceSize));
-            T std = NumOps.Sqrt(NumOps.Add(variance, NumOps.FromDouble(1e-5)));
-
-            _revinMean[b] = mean;
-            _revinStd[b] = std;
-
-            for (int t = 0; t < instanceSize; t++)
-                result.Data.Span[start + t] = NumOps.Divide(NumOps.Subtract(input[start + t], mean), std);
-        }
-
-        return result;
-    }
+        // RevIN forward (Kim et al. 2022), delegated to the shared tape-tracked helper. The previous
+        // hand-rolled version accumulated mean/variance with scalar NumOps arithmetic and wrote the
+        // output through result.Data.Span[...], which the autodiff tape cannot observe: the normalised
+        // tensor came back as a LEAF, so no gradient could flow through the normalisation. RevIN is a
+        // differentiable layer in the paper, not a preprocessing step.
+        => NormalizeInstanceOnTape(input, DefaultRevInEpsilon, out _revinMean, out _revinStd);
 
     /// <summary>
     /// RevIN reverse step (Kim et al. 2022): restores each instance's mean/std to the

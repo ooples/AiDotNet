@@ -65,7 +65,7 @@ namespace AiDotNet.Document.PixelToSequence;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("OCR-free Document Understanding Transformer", "https://doi.org/10.48550/arXiv.2111.15664", Year = 2022, Authors = "Geewook Kim, Teakgyu Hong, Moonbin Yim, JeongYeon Nam, Jinyoung Park, Jinyeong Yim, Wonseok Hwang, Sangdoo Yun, Dongyoon Han, Seunghyun Park")]
-public class Donut<T> : DocumentNeuralNetworkBase<T>, IOCRModel<T>, IDocumentQA<T>
+public partial class Donut<T> : DocumentNeuralNetworkBase<T>, IOCRModel<T>, IDocumentQA<T>
 {
     private readonly DonutOptions _options;
 
@@ -80,7 +80,7 @@ public class Donut<T> : DocumentNeuralNetworkBase<T>, IOCRModel<T>, IDocumentQA<
     private string? _onnxEncoderModelPath;
     private string? _onnxDecoderModelPath;
     private readonly ITokenizer _tokenizer;
-    private readonly IOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private int _embedDim;
     private int _decoderHiddenDim;
     private int[] _depths;
@@ -111,6 +111,7 @@ public class Donut<T> : DocumentNeuralNetworkBase<T>, IOCRModel<T>, IDocumentQA<
     private Tensor<T>? _decoderPositionEmbeddings;
 
     // Gradient storage
+    [Scratch]
     private Tensor<T>? _decoderPositionEmbeddingsGradients;
     private bool _nativeLayersInitialized;
     #pragma warning disable CS0414
@@ -201,7 +202,7 @@ public class Donut<T> : DocumentNeuralNetworkBase<T>, IOCRModel<T>, IDocumentQA<
         int numDecoderLayers = 4,
         int decoderHeads = 16,
         int vocabSize = 57522,
-        IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         DonutOptions? options = null)
         : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
@@ -294,7 +295,7 @@ public class Donut<T> : DocumentNeuralNetworkBase<T>, IOCRModel<T>, IDocumentQA<
         int numDecoderLayers = 4,
         int decoderHeads = 16,
         int vocabSize = 57522,
-        IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         DonutOptions? options = null)
         : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
@@ -1446,7 +1447,7 @@ public class Donut<T> : DocumentNeuralNetworkBase<T>, IOCRModel<T>, IDocumentQA<
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expectedOutput);
+            TrainWithTape(input, expectedOutput, _optimizer);
         }
         finally
         {
@@ -1454,38 +1455,18 @@ public class Donut<T> : DocumentNeuralNetworkBase<T>, IOCRModel<T>, IDocumentQA<
         }
     }
 
-    /// <inheritdoc/>
-    public override void UpdateParameters(Vector<T> gradients)
-    {
-        if (!_useNativeMode)
-        {
-            throw new NotSupportedException("Parameter updates are not supported in ONNX inference mode.");
-        }
+    // UpdateParameters applied a GRADIENT STEP, but its one-argument form is the value setter and every caller passes values -- the override corrupted the model. Removed under AIDN082.
 
-        EnsureNativeInitialized();
-        int expectedCount = ParameterCountHelper.ToFlatVectorSize(ParameterCount);
-        if (gradients.Length != expectedCount)
-        {
-            throw new ArgumentException(
-                $"Expected {expectedCount} gradients, but got {gradients.Length}",
-                nameof(gradients));
-        }
-
-        var currentParams = GetParameters();
-        if (_optimizer is GradientBasedOptimizerBase<T, Tensor<T>, Tensor<T>> gradientOptimizer)
-        {
-            var updatedParams = gradientOptimizer.UpdateParameters(currentParams, gradients);
-            SetParameters(updatedParams);
-            return;
-        }
-
-        var options = _optimizer?.GetOptions();
-        T learningRate = NumOps.FromDouble(options?.InitialLearningRate ?? 0.001);
-        currentParams = Engine.Subtract(currentParams, Engine.Multiply(gradients, learningRate));
-
-        SetParameters(currentParams);
-    }
-
+    /// <summary>
+    /// Parameters cannot be written while the model is backed by a loaded ONNX graph: the weights
+    /// belong to that graph, not to this instance.
+    /// </summary>
+    /// <remarks>
+    /// Replaces a hand-written throw that used to sit inside UpdateParameters. The base checks this
+    /// on every mutating entry point rather than the one member the throw happened to guard, and
+    /// reading -- ParameterCount and GetParameters -- stays available either way.
+    /// </remarks>
+    protected override bool SupportsParameterMutation => _useNativeMode;
     private void UpdateEmbeddingGradients(Tensor<T> gradient)
     {
         // Update decoder position embedding gradients

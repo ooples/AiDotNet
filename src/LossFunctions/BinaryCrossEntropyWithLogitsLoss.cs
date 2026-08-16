@@ -94,22 +94,11 @@ public class BinaryCrossEntropyWithLogitsLoss<T> : LossFunctionBase<T>
     /// <inheritdoc />
     public override Tensor<T> ComputeTapeLoss(Tensor<T> predicted, Tensor<T> target)
     {
-        // Numerically stable BCE-with-logits via Engine ops:
-        //   loss = max(x, 0) - x * y + log(1 + exp(-|x|))
-        //
-        // Engine.ReLU gives us max(x, 0) and the rest composes from elementary ops
-        // that the tape already tracks (used by other loss functions in this file).
-        var maxXZero = Engine.ReLU(predicted);
-
+        // BCE-with-logits is softplus(x) - x*y. The primitive keeps the smooth sigmoid
+        // derivative at zero; a ReLU/Abs expansion has ambiguous subgradients there.
+        var softplus = Engine.Softplus(predicted);
         var xy = Engine.TensorMultiply(predicted, target);
-
-        var absX = Engine.TensorAbs(predicted);
-        var negAbsX = Engine.TensorNegate(absX);
-        var expNegAbsX = Engine.TensorExp(negAbsX);
-        var onePlusExp = Engine.TensorAddScalar(expNegAbsX, NumOps.One);
-        var logTerm = Engine.TensorLog(onePlusExp);
-
-        var perElement = Engine.TensorAdd(Engine.TensorSubtract(maxXZero, xy), logTerm);
+        var perElement = Engine.TensorSubtract(softplus, xy);
         var allAxes = Enumerable.Range(0, perElement.Shape.Length).ToArray();
         return Engine.ReduceMean(perElement, allAxes, keepDims: false);
     }

@@ -52,7 +52,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     [ResearchPaper("Training Products of Experts by Minimizing Contrastive Divergence", "https://doi.org/10.1162/089976602760128018")]
-public class RestrictedBoltzmannMachine<T> : NeuralNetworkBase<T>
+public class RestrictedBoltzmannMachine<T> : VectorModelLayoutBase<T>
 {
     private readonly RestrictedBoltzmannMachineOptions _options;
 
@@ -122,7 +122,7 @@ public class RestrictedBoltzmannMachine<T> : NeuralNetworkBase<T>
     /// The weights matrix is where most of the learning happens - it's like the "knowledge" the RBM has about patterns in your data.
     /// </para>
     /// </remarks>
-    private Matrix<T> _weights { get; set; }
+    private Tensor<T> _weights { get; set; }
 
     /// <summary>
     /// Gets the number of neurons in the visible layer.
@@ -166,22 +166,6 @@ public class RestrictedBoltzmannMachine<T> : NeuralNetworkBase<T>
     /// </para>
     /// </remarks>
     public int HiddenSize { get; private set; }
-
-    /// <summary>
-    /// Gets the total number of parameters (weights and biases) in the RBM.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// The parameter count includes:
-    /// - Weights matrix: HiddenSize × VisibleSize parameters
-    /// - Visible biases: VisibleSize parameters
-    /// - Hidden biases: HiddenSize parameters
-    /// </para>
-    /// <para><b>For Beginners:</b> This tells you the total number of learnable values in the RBM.
-    /// More parameters means the RBM can learn more complex patterns, but also requires more data and computation.
-    /// </para>
-    /// </remarks>
-    public override long ParameterCount => (HiddenSize * VisibleSize) + VisibleSize + HiddenSize;
 
     /// <summary>
     /// Gets or sets the scalar activation function used in the RBM.
@@ -409,10 +393,10 @@ public class RestrictedBoltzmannMachine<T> : NeuralNetworkBase<T>
     /// Predict(input * 10) both returned all-ones because the pre-activation
     /// was already past sigmoid's saturation point.
     /// </summary>
-    private static Matrix<T> InitializeHintonWeights(int hiddenSize, int visibleSize)
+    private static Tensor<T> InitializeHintonWeights(int hiddenSize, int visibleSize)
     {
         var rng = RandomHelper.CreateSeededRandom(1);
-        var w = new Matrix<T>(hiddenSize, visibleSize);
+        var w = new Tensor<T>([hiddenSize, visibleSize]);
         for (int i = 0; i < hiddenSize; i++)
         {
             for (int j = 0; j < visibleSize; j++)
@@ -549,12 +533,12 @@ public class RestrictedBoltzmannMachine<T> : NeuralNetworkBase<T>
         else if (visibleLayer.Rank == 2)
         {
             // 2D tensor: transpose if needed to get [visibleSize, batchSize]
-            if (visibleLayer.Shape[0] == _weights.Columns)
+            if (visibleLayer.Shape[0] == _weights.Shape[1])
             {
                 // Already in correct orientation [visibleSize, batchSize]
                 visibleMatrix = visibleLayer.ToMatrix();
             }
-            else if (visibleLayer.Shape[1] == _weights.Columns)
+            else if (visibleLayer.Shape[1] == _weights.Shape[1])
             {
                 // Need to transpose from [batchSize, visibleSize] to [visibleSize, batchSize]
                 var temp = visibleLayer.ToMatrix();
@@ -562,7 +546,7 @@ public class RestrictedBoltzmannMachine<T> : NeuralNetworkBase<T>
             }
             else
             {
-                throw new ArgumentException($"Visible layer shape {string.Join(",", visibleLayer._shape)} is incompatible with weights shape [{_weights.Rows},{_weights.Columns}]");
+                throw new ArgumentException($"Visible layer shape {string.Join(",", visibleLayer._shape)} is incompatible with weights shape [{_weights.Shape[0]},{_weights.Shape[1]}]");
             }
         }
         else
@@ -571,7 +555,7 @@ public class RestrictedBoltzmannMachine<T> : NeuralNetworkBase<T>
         }
 
         // Use Engine for GPU/CPU accelerated matrix multiplication
-        var weightsTensor = Tensor<T>.FromMatrix(_weights);
+        var weightsTensor = _weights;
         var visibleTensor = Tensor<T>.FromMatrix(visibleMatrix);
         var product = Engine.TensorMatMul(weightsTensor, visibleTensor);
         var biasTensor = Tensor<T>.FromMatrix(_hiddenBiases.ToColumnMatrix());
@@ -592,127 +576,36 @@ public class RestrictedBoltzmannMachine<T> : NeuralNetworkBase<T>
     }
 
     /// <summary>
-    /// Updates the parameters of the RBM. This method is not typically used in RBMs and throws a NotImplementedException.
+    /// Declares the RBM's three parameter tensors, which live outside
+    /// <see cref="NeuralNetworkBase{T}.Layers"/>.
     /// </summary>
-    /// <param name="parameters">The vector of parameter updates to apply.</param>
-    /// <exception cref="NotImplementedException">Always thrown as this method is not implemented for RBMs.</exception>
     /// <remarks>
     /// <para>
-    /// RBMs typically use specialized training algorithms like Contrastive Divergence rather than the generic
-    /// parameter update approach used by other neural networks. This method throws a NotImplementedException
-    /// to indicate that RBMs should be trained using the Train method instead.
+    /// An RBM has no layer stack -- it is one weight matrix between the visible and hidden units
+    /// plus a bias per unit on each side. Declared in the order the old GetParameters concatenated
+    /// them (weights row-major over [HiddenSize, VisibleSize], then visible biases, then hidden
+    /// biases), so checkpoints written before this change still restore correctly.
     /// </para>
-    /// <para><b>For Beginners:</b> This method is not used in RBMs because they train differently.
-    /// 
-    /// While standard neural networks update their parameters based on error gradients:
-    /// - RBMs use a different approach called Contrastive Divergence
-    /// - They compare "reality" (input data) with "imagination" (reconstructions)
-    /// - They directly adjust weights based on this comparison
-    /// 
-    /// Instead of using this method, you should use the Train method to train an RBM.
+    /// <para>
+    /// This replaces FIVE hand-written members: ParameterCount as the formula
+    /// <c>(HiddenSize * VisibleSize) + VisibleSize + HiddenSize</c>, a GetParameters that copied
+    /// the three stores into a flat buffer element by element, a SetParameters that forwarded to
+    /// UpdateParameters, the UpdateParameters that unpacked them again, and a GetParameterChunks
+    /// that built a third copy. Five places that had to agree about one layout; now there is one.
+    /// </para>
+    /// <para>
+    /// <c>_weights</c> became a <c>Tensor&lt;T&gt;</c> for this: the base restores by writing
+    /// THROUGH the declared tensors, and <c>Tensor&lt;T&gt;.FromMatrix</c> hands back a copy, so a
+    /// declared matrix would have been restored into a temporary and discarded. The biases stay
+    /// <c>Vector&lt;T&gt;</c> -- a tensor built over a vector shares its storage, so writing through
+    /// these views lands in the fields themselves.
     /// </para>
     /// </remarks>
-    public override Vector<T> GetParameters()
+    protected override IEnumerable<Tensor<T>> GetExtraTrainableTensors()
     {
-        int weightCount = HiddenSize * VisibleSize;
-        int totalLength = weightCount + VisibleSize + HiddenSize;
-        var parameters = new Vector<T>(totalLength);
-
-        int paramIndex = 0;
-
-        // Extract weights (HiddenSize × VisibleSize)
-        for (int i = 0; i < HiddenSize; i++)
-        {
-            for (int j = 0; j < VisibleSize; j++)
-            {
-                parameters[paramIndex++] = _weights[i, j];
-            }
-        }
-
-        // Extract visible biases
-        for (int i = 0; i < VisibleSize; i++)
-        {
-            parameters[paramIndex++] = _visibleBiases[i];
-        }
-
-        // Extract hidden biases
-        for (int i = 0; i < HiddenSize; i++)
-        {
-            parameters[paramIndex++] = _hiddenBiases[i];
-        }
-
-        return parameters;
-    }
-
-    public override void SetParameters(Vector<T> parameters)
-    {
-        UpdateParameters(parameters);
-    }
-
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        int weightCount = HiddenSize * VisibleSize;
-        int expectedLength = weightCount + VisibleSize + HiddenSize;
-
-        if (parameters.Length != expectedLength)
-        {
-            throw new ArgumentException($"Parameter vector length mismatch. Expected {expectedLength} parameters but got {parameters.Length}.", nameof(parameters));
-        }
-
-        int paramIndex = 0;
-
-        for (int i = 0; i < HiddenSize; i++)
-        {
-            for (int j = 0; j < VisibleSize; j++)
-            {
-                _weights[i, j] = parameters[paramIndex++];
-            }
-        }
-
-        for (int i = 0; i < VisibleSize; i++)
-        {
-            _visibleBiases[i] = parameters[paramIndex++];
-        }
-
-        for (int i = 0; i < HiddenSize; i++)
-        {
-            _hiddenBiases[i] = parameters[paramIndex++];
-        }
-    }
-
-    /// <summary>
-    /// Yields the RBM's trainable parameters (weights matrix and the two bias
-    /// vectors) as <see cref="Tensor{T}"/> chunks so test infrastructure that
-    /// walks <see cref="NeuralNetworkBase{T}.GetParameterChunks"/> can observe
-    /// post-train parameter changes. Without this override the base implementation
-    /// walks only <c>Layers</c> — and RBM stores all of its parameters in
-    /// network-level fields per Hinton 2006 §3.3 (CD-k operates directly on the
-    /// W matrix and two bias vectors, not through ILayer sublayers), so the
-    /// invariant tests would see no parameters and falsely report "Parameters
-    /// did not change after training" / "gradients may all be zero".
-    /// </summary>
-    public override IEnumerable<Tensor<T>> GetParameterChunks()
-    {
-        int paramIndex = 0;
-        var weightsTensor = new Tensor<T>(new[] { HiddenSize, VisibleSize });
-        for (int i = 0; i < HiddenSize; i++)
-        {
-            for (int j = 0; j < VisibleSize; j++)
-            {
-                weightsTensor[paramIndex++] = _weights[i, j];
-            }
-        }
-        yield return weightsTensor;
-
-        var visibleBiasesTensor = new Tensor<T>(new[] { VisibleSize });
-        for (int i = 0; i < VisibleSize; i++)
-            visibleBiasesTensor[i] = _visibleBiases[i];
-        yield return visibleBiasesTensor;
-
-        var hiddenBiasesTensor = new Tensor<T>(new[] { HiddenSize });
-        for (int i = 0; i < HiddenSize; i++)
-            hiddenBiasesTensor[i] = _hiddenBiases[i];
-        yield return hiddenBiasesTensor;
+        yield return _weights;
+        yield return new Tensor<T>([_visibleBiases.Length], _visibleBiases);
+        yield return new Tensor<T>([_hiddenBiases.Length], _hiddenBiases);
     }
 
     /// <summary>
@@ -840,7 +733,7 @@ public class RestrictedBoltzmannMachine<T> : NeuralNetworkBase<T>
         // Convert input tensor to a column matrix for matrix multiplication
         // Input shape: [hiddenSize] or [batchSize, hiddenSize] -> need [hiddenSize, 1] or [hiddenSize, batchSize]
         Matrix<T> hiddenMatrix;
-        int hiddenSize = _weights.Rows; // weights is [hiddenSize, visibleSize]
+        int hiddenSize = _weights.Shape[0]; // weights is [hiddenSize, visibleSize]
 
         if (hiddenLayer.Rank == 1)
         {
@@ -876,7 +769,7 @@ public class RestrictedBoltzmannMachine<T> : NeuralNetworkBase<T>
         }
 
         // Use Engine for GPU/CPU accelerated reverse propagation: W^T * hidden + bias
-        var weightsTensor = Tensor<T>.FromMatrix(_weights);
+        var weightsTensor = _weights;
         var weightsTransposed = Engine.TensorTranspose(weightsTensor);
         var hiddenTensor = Tensor<T>.FromMatrix(hiddenMatrix);
         var product = Engine.TensorMatMul(weightsTransposed, hiddenTensor);
@@ -1028,6 +921,32 @@ public class RestrictedBoltzmannMachine<T> : NeuralNetworkBase<T>
         // Apply updates, normalized by batch size
         T batchNormalization = NumOps.FromDouble(1.0 / batchSize);
         T learningFactor = NumOps.Multiply(_learningRate, batchNormalization);
+
+        // Contrastive divergence computes an ascent direction (positive phase minus negative
+        // phase). Publish the equivalent loss gradient in the exact parameter order so the update
+        // below is W -= learningRate * gradient and callers observe the signal actually applied.
+        var publishedGradients = new Vector<T>(
+            HiddenSize * VisibleSize + VisibleSize + HiddenSize);
+        int gradientOffset = 0;
+        for (int i = 0; i < HiddenSize; i++)
+        {
+            for (int j = 0; j < VisibleSize; j++)
+            {
+                publishedGradients[gradientOffset++] = NumOps.Negate(
+                    NumOps.Multiply(weightUpdates[i, j], batchNormalization));
+            }
+        }
+        for (int i = 0; i < VisibleSize; i++)
+        {
+            publishedGradients[gradientOffset++] = NumOps.Negate(
+                NumOps.Multiply(visibleBiasUpdates[i], batchNormalization));
+        }
+        for (int i = 0; i < HiddenSize; i++)
+        {
+            publishedGradients[gradientOffset++] = NumOps.Negate(
+                NumOps.Multiply(hiddenBiasUpdates[i], batchNormalization));
+        }
+        PublishFlatParameterGradients(publishedGradients);
 
         // Update weights
         for (int i = 0; i < HiddenSize; i++)

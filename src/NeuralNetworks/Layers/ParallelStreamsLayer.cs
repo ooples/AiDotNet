@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 
@@ -54,8 +54,95 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </remarks>
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, Cost = ComputeCost.High)]
-public class ParallelStreamsLayer<T> : LayerBase<T>
+// A TWO-STREAM decorator. ForwardTraced slices the last axis in half, runs each half through its own
+// sub-layer list, and returns "Engine.TensorConcatenate([outputA, outputB], axis: rank - 1)" - so the
+// leading axes are the input's untouched and the trailing axis is the SUM of the two streams' widths.
+//
+// THE WIDTHS ARE READ FROM THE STREAMS, NEVER FROM THE CONSTRUCTOR. streamAOutputSize and
+// streamBOutputSize only reach base(...) as the declared output shape; ForwardTraced validates the
+// INPUT feature size against _splitSize and never checks either output size, so a stream whose last
+// layer disagrees with the number it was constructed with produces the layer's real width and the
+// constructor argument is simply stale. Declaring Fixed off those arguments would be right for one
+// configuration and wrong for the layer - the same defect SequenceLastLayer was carrying.
+//
+// Rank 1 and rank 2 are declared because those are the forms the forward documents and handles
+// ("[batch, features] or [features]"). Higher ranks run too, but the leading roles would have to be
+// invented, so they decline.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features,
+    BatchOptional = true, Direction = TensorLayoutDirection.Input,
+    Note = "The trailing axis must equal _splitSize * 2; the forward rejects anything else.")]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features,
+    BatchOptional = true, Direction = TensorLayoutDirection.Output,
+    Note = "Trailing width is stream A's output width plus stream B's.")]
+[AutoParameters]
+public partial class ParallelStreamsLayer<T> : LayerBase<T>, IShapeContract
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// Composed from BOTH streams, because the concatenation's joined axis is the sum of what each
+    /// produced - <c>AxisRelation.SumOf</c> is the form for exactly that. Each term is the trailing
+    /// relation of the LAST layer of its stream, asked at this layer's rank, because the slice
+    /// preserves rank and each stream is run to completion before the join.
+    /// </para>
+    /// <para>
+    /// A term is accepted ONLY when it is <c>Fixed</c>. A stream ending in a shape-preserving layer
+    /// reports its trailing axis as <c>Same(Features)</c>, and that would be resolved against the WHOLE
+    /// input's feature count - twice what the stream actually saw, since the input was halved before
+    /// the stream ever ran. Half of a contract that is right and half that is off by a factor of two is
+    /// not a contract, so this declines instead.
+    /// </para>
+    /// <para>
+    /// Only expressible because <c>OutputAxesFor</c> is an INSTANCE method: the widths belong to the
+    /// sub-networks this layer was handed, and no type-level attribute could see them.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        // Only the two forms the forward documents; the leading roles above cover no other rank.
+        if (inputRank is not (1 or 2)) return null;
+
+        var widthA = TrailingWidthOf(_streamA, inputRank);
+        var widthB = TrailingWidthOf(_streamB, inputRank);
+        if (widthA is null || widthB is null) return null;
+
+        var features = new OutputAxisContract(
+            TensorAxis.Features, AxisRelation.SumOf(widthA, widthB));
+
+        return inputRank == 1
+            ? new[] { features }
+            : new[]
+            {
+                // The slice and the concatenation both act on the LAST axis only, so the batch axis
+                // arrives and leaves untouched.
+                new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+                features,
+            };
+    }
+
+    /// <summary>
+    /// The width one stream contributes to the concatenation, or <c>null</c> when it cannot be stated.
+    /// </summary>
+    /// <remarks>
+    /// Read off the stream's LAST layer, which is what <c>RunStream</c> returns. Anything other than a
+    /// <c>Fixed</c> trailing relation is refused: a relation that reads an input axis would be resolved
+    /// against this layer's input rather than the halved slice the stream was given.
+    /// </remarks>
+    private static AxisRelation? TrailingWidthOf(List<ILayer<T>> stream, int inputRank)
+    {
+        if (stream.Count == 0) return null;
+
+        var axes = (stream[stream.Count - 1] as IShapeContract)?.OutputAxesFor(inputRank);
+
+        // A stream that changes rank invalidates the question: the trailing relation would then be
+        // answering about a differently shaped tensor than the one being concatenated at rank - 1.
+        if (axes is null || axes.Count != inputRank) return null;
+
+        var trailing = axes[axes.Count - 1].Relation;
+
+        return trailing.Kind == AxisRelation.Form.Fixed ? trailing : null;
+    }
+
     /// <summary>
     /// The layers that process the first half of the input features.
     /// </summary>
@@ -158,19 +245,6 @@ public class ParallelStreamsLayer<T> : LayerBase<T>
     public override bool SupportsTraining => _streamA.Any(l => l.SupportsTraining) || _streamB.Any(l => l.SupportsTraining);
 
     /// <summary>
-    /// Gets the total number of trainable parameters across both streams.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> This is the sum of all learnable weights and biases in both Stream A
-    /// and Stream B. For example, if Stream A has 1000 parameters and Stream B has 2000, this
-    /// returns 3000.
-    /// </para>
-    /// </remarks>
-    public override long ParameterCount =>
-        (int)_streamA.Sum(l => l.ParameterCount) + (int)_streamB.Sum(l => l.ParameterCount);
-
-    /// <summary>
     /// Performs the forward pass: splits input, runs both streams, and concatenates outputs.
     /// </summary>
     /// <param name="input">The input tensor with shape <c>[batch, features]</c> or <c>[features]</c>.
@@ -189,7 +263,7 @@ public class ParallelStreamsLayer<T> : LayerBase<T>
     /// backpropagation will correctly compute gradients for both streams.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         if (input is null)
             throw new ArgumentNullException(nameof(input));
@@ -234,74 +308,6 @@ public class ParallelStreamsLayer<T> : LayerBase<T>
 
         // Concatenate along last axis (tape-tracked)
         return Engine.TensorConcatenate([outputA, outputB], axis: rank - 1);
-    }
-
-    /// <summary>
-    /// Collects all trainable parameters from both streams into a single vector.
-    /// </summary>
-    /// <returns>A vector containing all parameters from Stream A followed by all parameters
-    /// from Stream B.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> This flattens all the weights and biases from both streams into a
-    /// single list of numbers. The optimizer uses this to update all parameters at once.
-    /// Stream A's parameters come first, then Stream B's.
-    /// </para>
-    /// </remarks>
-    public override Vector<T> GetParameters()
-    {
-        var parts = new List<Vector<T>>();
-        foreach (var layer in _streamA) parts.Add(layer.GetParameters());
-        foreach (var layer in _streamB) parts.Add(layer.GetParameters());
-        return Vector<T>.Concatenate(parts.ToArray());
-    }
-
-    /// <summary>
-    /// Sets all trainable parameters for both streams from a single parameter vector.
-    /// </summary>
-    /// <param name="parameters">A vector containing parameters for Stream A followed by Stream B.
-    /// Must have exactly <see cref="ParameterCount"/> elements.</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> This is the reverse of GetParameters — it takes a flat list of numbers
-    /// and distributes them to the correct layers in both streams. The optimizer calls this after
-    /// computing updated parameter values.
-    /// </para>
-    /// </remarks>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (parameters is null)
-            throw new ArgumentNullException(nameof(parameters));
-        // Enforce the documented contract that the vector has exactly ParameterCount
-        // elements. Without this check, a too-short vector would NRE deep in a sub-layer
-        // and a too-long vector would silently ignore tail values — both mask upstream
-        // optimizer bugs.
-        if (parameters.Length != ParameterCount)
-        {
-            throw new ArgumentException(
-                $"Expected parameter vector length {ParameterCount}, but got {parameters.Length}.",
-                nameof(parameters));
-        }
-
-        int offset = 0;
-        foreach (var layer in _streamA)
-        {
-            int count = checked((int)layer.ParameterCount);
-            if (count > 0)
-            {
-                layer.SetParameters(parameters.GetSubVector(offset, count));
-                offset += count;
-            }
-        }
-        foreach (var layer in _streamB)
-        {
-            int count = checked((int)layer.ParameterCount);
-            if (count > 0)
-            {
-                layer.SetParameters(parameters.GetSubVector(offset, count));
-                offset += count;
-            }
-        }
     }
 
     /// <summary>

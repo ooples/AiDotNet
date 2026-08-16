@@ -57,42 +57,34 @@ namespace AiDotNet.ComputerVision.Segmentation.Video;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("UniVS: Unified and Universal Video Segmentation with Prompts as Queries", "https://arxiv.org/abs/2402.18115", Year = 2024, Authors = "Li et al.")]
-public class UniVS<T> : NeuralNetworkBase<T>, IVideoSegmentation<T>
+public class UniVS<T> : Common.VideoSegmentationBase<T>
 {
     private readonly UniVSOptions _options;
     public override ModelOptions GetOptions() => _options;
 
     #region Fields
-    private readonly int _height, _width, _channels, _numClasses;
+    // Only UniVS's OWN configuration lives here. _height, _width, _channels, _numClasses,
+    // _useNativeMode, _onnxModelPath, _onnxSession, _optimizer, _disposed and _encoderLayerEnd all
+    // come from VideoSegmentationBase -> SegmentationModelBase. _optimizer in particular still holds
+    // EXACTLY what the caller passed (the base never defaults it eagerly), which is what
+    // GetOrCreateBaseOptimizer below relies on.
     private readonly UniVSModelSize _modelSize;
     private readonly int[] _channelDims;
     private readonly int _decoderDim;
     private readonly int[] _depths;
     private readonly double _dropRate;
-    private readonly bool _useNativeMode;
-    private readonly string? _onnxModelPath;
-    private InferenceSession? _onnxSession;
-    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private readonly bool _hasUserSuppliedOptimizer;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _baseTapeOptimizer;
-    private bool _disposed;
     private bool _lazyShapesWarmed;
-    private int _encoderLayerEnd;
     #endregion
 
     #region Properties
-    /// <summary>
-    /// Gets whether this UniVS instance supports training.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Returns <c>true</c> in native mode, <c>false</c> in ONNX mode.
-    /// </para>
-    /// </remarks>
-    public override bool SupportsTraining => _useNativeMode;
+    // SupportsTraining, NumClasses, MaxTrackedObjects and SupportsStreaming are all inherited:
+    // SegmentationModelBase supplies the first two, and VideoSegmentationBase supplies the tracking
+    // limit (256, passed to its constructor below) and the streaming flag, which already defaults
+    // to true - exactly what the explicit interface implementations used to return.
     internal bool UseNativeMode => _useNativeMode;
     internal UniVSModelSize ModelSize => _modelSize;
-    internal int NumClasses => _numClasses;
     #endregion
 
     #region Constructors
@@ -116,16 +108,15 @@ public class UniVS<T> : NeuralNetworkBase<T>, IVideoSegmentation<T>
         ILossFunction<T>? lossFunction = null, int numClasses = 80,
         UniVSModelSize modelSize = UniVSModelSize.R50, double dropRate = 0.1,
         UniVSOptions? options = null)
-        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>())
+        // `optimizer` is passed straight through INCLUDING null, exactly as before: UniVS must NOT
+        // get a defaulted AdamW, because GetOrCreateBaseOptimizer below installs its own tuned
+        // warmup Adam whenever the caller supplied nothing. The base stores the argument verbatim
+        // and only ever defaults it lazily through the Optimizer property, which UniVS never reads.
+        : base(architecture, optimizer, lossFunction, numClasses, maxTrackedObjects: 256)
     {
         _options = options ?? new UniVSOptions(); Options = _options;
-        _height = architecture.InputHeight > 0 ? architecture.InputHeight : 480;
-        _width = architecture.InputWidth > 0 ? architecture.InputWidth : 480;
-        _channels = architecture.InputDepth > 0 ? architecture.InputDepth : 3;
-        _numClasses = numClasses; _modelSize = modelSize; _dropRate = dropRate;
-        _useNativeMode = true; _onnxModelPath = null;
+        _modelSize = modelSize; _dropRate = dropRate;
         _hasUserSuppliedOptimizer = optimizer is not null;
-        _optimizer = optimizer;
         (_channelDims, _depths, _decoderDim) = GetModelConfig(modelSize);
         InitializeLayers();
         // Materialize every lazy conv/BN layer up front (one real eval-mode forward). DeepCopy /
@@ -155,21 +146,11 @@ public class UniVS<T> : NeuralNetworkBase<T>, IVideoSegmentation<T>
     public UniVS(NeuralNetworkArchitecture<T> architecture, string onnxModelPath,
         int numClasses = 80, UniVSModelSize modelSize = UniVSModelSize.R50,
         UniVSOptions? options = null)
-        : base(architecture, new CrossEntropyWithLogitsLoss<T>())
+        : base(architecture, onnxModelPath, numClasses, maxTrackedObjects: 256)
     {
         _options = options ?? new UniVSOptions(); Options = _options;
-        if (string.IsNullOrWhiteSpace(onnxModelPath))
-            throw new ArgumentException("ONNX model path cannot be null or empty.", nameof(onnxModelPath));
-        if (!File.Exists(onnxModelPath))
-            throw new FileNotFoundException($"UniVS ONNX model not found: {onnxModelPath}");
-        _height = architecture.InputHeight > 0 ? architecture.InputHeight : 480;
-        _width = architecture.InputWidth > 0 ? architecture.InputWidth : 480;
-        _channels = architecture.InputDepth > 0 ? architecture.InputDepth : 3;
-        _numClasses = numClasses; _modelSize = modelSize; _dropRate = 0.1;
-        _useNativeMode = false; _onnxModelPath = onnxModelPath; _optimizer = null;
+        _modelSize = modelSize; _dropRate = 0.1;
         (_channelDims, _depths, _decoderDim) = GetModelConfig(modelSize);
-        try { _onnxSession = new InferenceSession(onnxModelPath); }
-        catch (Exception ex) { throw new InvalidOperationException($"Failed to load UniVS ONNX model: {ex.Message}", ex); }
         InitializeLayers();
     }
     #endregion
@@ -294,7 +275,7 @@ public class UniVS<T> : NeuralNetworkBase<T>, IVideoSegmentation<T>
         _ => ([256, 512, 1024, 2048], [3, 4, 6, 3], 256)
     };
 
-    private Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> Forward(Tensor<T> input)
     {
         bool hasBatch = input.Rank == 4; if (!hasBatch) input = AddBatchDimension(input);
         var features = input;
@@ -303,7 +284,7 @@ public class UniVS<T> : NeuralNetworkBase<T>, IVideoSegmentation<T>
         if (!hasBatch) features = RemoveBatchDimension(features); return features;
     }
 
-    private Tensor<T> PredictOnnx(Tensor<T> input)
+    protected override Tensor<T> PredictOnnx(Tensor<T> input)
     {
         if (_onnxSession is null) throw new InvalidOperationException("ONNX session is not initialized.");
         bool hasBatch = input.Rank == 4; if (!hasBatch) input = AddBatchDimension(input);
@@ -320,11 +301,6 @@ public class UniVS<T> : NeuralNetworkBase<T>, IVideoSegmentation<T>
         if (!hasBatch) result = RemoveBatchDimension(result); return result;
     }
 
-    private Tensor<T> AddBatchDimension(Tensor<T> tensor)
-    { var result = new Tensor<T>([1, tensor.Shape[0], tensor.Shape[1], tensor.Shape[2]]); tensor.Data.Span.CopyTo(result.Data.Span); return result; }
-
-    private Tensor<T> RemoveBatchDimension(Tensor<T> tensor)
-    { int[] s = new int[tensor.Shape.Length - 1]; for (int i = 0; i < s.Length; i++) s[i] = tensor.Shape[i + 1]; var r = new Tensor<T>(s); tensor.Data.Span.CopyTo(r.Data.Span); return r; }
     #endregion
 
     #region Abstract Implementation
@@ -352,18 +328,8 @@ public class UniVS<T> : NeuralNetworkBase<T>, IVideoSegmentation<T>
         }
     }
 
-    /// <summary>
-    /// Updates all trainable parameters from a flat parameter vector.
-    /// </summary>
-    /// <param name="parameters">Flat vector of all model parameters.</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Replaces all model weights with new values.
-    /// </para>
-    /// </remarks>
-    public override void UpdateParameters(Vector<T> parameters)
-    { int o = 0; foreach (var l in Layers) { var p = l.GetParameters(); int c = p.Length; if (o + c <= parameters.Length) { var n = new Vector<T>(c); for (int i = 0; i < c; i++) n[i] = parameters[o + i]; l.UpdateParameters(n); o += c; } } }
-
+    // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
+    // exactly the same enumeration, so this said nothing the base does not already say.
     /// <summary>
     /// Collects metadata describing this model's configuration.
     /// </summary>
@@ -417,47 +383,35 @@ public class UniVS<T> : NeuralNetworkBase<T>, IVideoSegmentation<T>
         : new UniVS<T>(Architecture, _onnxModelPath ?? throw new InvalidOperationException("ONNX model path not initialized."), _numClasses, _modelSize, _options);
 
 
-    /// <summary>
-    /// Releases managed resources including the ONNX inference session.
-    /// </summary>
-    /// <param name="disposing">True when called from Dispose().</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Frees memory used by the ONNX runtime.
-    /// </para>
-    /// </remarks>
-    protected override void Dispose(bool disposing)
-    { if (!_disposed) { if (disposing) { _onnxSession?.Dispose(); _onnxSession = null; } _disposed = true; } base.Dispose(disposing); }
     #endregion
 
     #region IVideoSegmentation Implementation
+    // Tracking memory that is genuinely UniVS's own. The frame counter, the tracked-id list, the
+    // initialized flag and the object-count validation now live on VideoSegmentationBase, which
+    // wraps each of these Internal hooks.
+    [Scratch]
     private Tensor<T>? _trackingFeatures;
+    [Scratch]
     private Tensor<T>? _trackingMasks;
-    private int[]? _trackedObjectIds;
-    private int _frameIndex;
+    private int[]? _trackedIds;
+    [Scratch]
     private readonly Dictionary<int, Tensor<T>> _corrections = [];
-    int ISegmentationModel<T>.NumClasses => _numClasses;
-    int ISegmentationModel<T>.InputHeight => _height;
-    int ISegmentationModel<T>.InputWidth => _width;
-    bool ISegmentationModel<T>.IsOnnxMode => !_useNativeMode;
-    Tensor<T> ISegmentationModel<T>.Segment(Tensor<T> image) => Predict(image);
-    int IVideoSegmentation<T>.MaxTrackedObjects => 256;
-    bool IVideoSegmentation<T>.SupportsStreaming => true;
-    void IVideoSegmentation<T>.InitializeTracking(Tensor<T> frame, Tensor<T> masks, int[]? objectIds)
+
+    /// <inheritdoc/>
+    protected override void InitializeTrackingInternal(Tensor<T> frame, Tensor<T> masks, int[] objectIds)
     {
         _trackingFeatures = Common.SegmentationTensorOps.EnsureUnbatched(Predict(frame));
         _trackingMasks = masks;
-        int numObj = masks.Rank >= 3 ? masks.Shape[0] : 1;
-        _trackedObjectIds = objectIds ?? Enumerable.Range(1, numObj).ToArray();
-        _frameIndex = 0;
+        _trackedIds = objectIds;
         _corrections.Clear();
     }
-    VideoSegmentationResult<T> IVideoSegmentation<T>.PropagateToFrame(Tensor<T> frame)
+
+    /// <inheritdoc/>
+    protected override VideoSegmentationResult<T> PropagateToFrameInternal(Tensor<T> frame, int frameIndex)
     {
-        _frameIndex++;
         var currentFeatures = Common.SegmentationTensorOps.EnsureUnbatched(Predict(frame));
         int h = currentFeatures.Shape[1], w = currentFeatures.Shape[2];
-        var ids = _trackedObjectIds ?? [1];
+        var ids = _trackedIds ?? [1];
         int numObj = ids.Length;
         Tensor<T> masks;
         if (_trackingFeatures != null && _trackingMasks != null && _trackingMasks.Rank == 3)
@@ -500,17 +454,21 @@ public class UniVS<T> : NeuralNetworkBase<T>, IVideoSegmentation<T>
         return new VideoSegmentationResult<T>
         {
             Masks = masks, ObjectIds = ids, Confidences = confidences,
-            FrameIndex = _frameIndex, IsVisible = isVisible
+            FrameIndex = frameIndex, IsVisible = isVisible
         };
     }
-    void IVideoSegmentation<T>.AddCorrection(int objectId, Tensor<T> correctionMask)
+
+    /// <inheritdoc/>
+    public override void AddCorrection(int objectId, Tensor<T> correctionMask)
     {
         _corrections[objectId] = correctionMask;
     }
-    void IVideoSegmentation<T>.ResetTracking()
+
+    /// <inheritdoc/>
+    protected override void ResetTrackingInternal()
     {
-        _trackingFeatures = null; _trackingMasks = null; _trackedObjectIds = null;
-        _frameIndex = 0; _corrections.Clear();
+        _trackingFeatures = null; _trackingMasks = null; _trackedIds = null;
+        _corrections.Clear();
     }
     #endregion
 }

@@ -53,7 +53,7 @@ namespace AiDotNet.VisionLanguage.Encoders;
     Year = 2023,
     Authors = "Liu et al."
 )]
-public class RemoteCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageModel<T>
+public partial class RemoteCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageModel<T>
 {
     private readonly RemoteCLIPOptions _options;
 
@@ -109,7 +109,13 @@ public class RemoteCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLangu
         _options = options ?? new RemoteCLIPOptions();
         SyncImageSizeWithArchitecture();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate,
+                WeightDecay = _options.WeightDecay,
+            });
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.VisionEmbeddingDim;
@@ -193,7 +199,13 @@ public class RemoteCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLangu
             return;
         }
 
-        int patchSize = Math.Max(1, _options.ImageSize / 16);
+        int patchSize = _options.PatchSize;
+        if (patchSize <= 0)
+            throw new ArgumentOutOfRangeException(nameof(_options.PatchSize), "PatchSize must be positive.");
+        if (patchSize > _options.ImageSize)
+            throw new ArgumentOutOfRangeException(nameof(_options.PatchSize), "PatchSize cannot exceed ImageSize.");
+        if (_options.ImageSize % patchSize != 0)
+            throw new ArgumentException("ImageSize must be evenly divisible by PatchSize.", nameof(_options.PatchSize));
         Layers.Add(
             new PatchEmbeddingLayer<T>(
                 patchSize,
@@ -238,7 +250,7 @@ public class RemoteCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLangu
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(PreprocessImage(input), expected);
+            TrainWithTape(PreprocessImage(input), expected, _optimizer);
         }
         finally
         {
@@ -246,33 +258,8 @@ public class RemoteCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLangu
         }
     }
 
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        if (!_useNativeMode)
-            throw new NotSupportedException("Cannot update parameters in ONNX mode.");
-        int idx = 0;
-        foreach (var l in Layers)
-        {
-            int c = (int)l.ParameterCount;
-            l.UpdateParameters(parameters.Slice(idx, c));
-            idx += c;
-        }
-        // Sync the text-encoder stream too — see CLIPA.UpdateParameters
-        // for full rationale (dual-stream split, GetExtraTrainableLayers
-        // widens ParameterCount to include TextEncoderLayers, so a
-        // flat-vector writeback that only walks Layers leaves the text
-        // encoder on stale weights and the streams de-sync).
-        foreach (var l in TextEncoderLayers)
-        {
-            int c = (int)l.ParameterCount;
-            l.UpdateParameters(parameters.Slice(idx, c));
-            idx += c;
-        }
-    }
-
-    /// <inheritdoc />
-    protected override IEnumerable<LayerBase<T>?> GetExtraTrainableLayers() =>
-        EnumerateTextEncoderTrainableLayers();
+    // This forwarded to a helper the base now calls from its own
+    // GetExtraTrainableLayers, so the override restated it. Removed under AIDN082.
 
     protected override Tensor<T> PreprocessImage(Tensor<T> image) =>
         NormalizeImage(image, _options.ImageMean, _options.ImageStd);
@@ -336,8 +323,8 @@ public class RemoteCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLangu
             && _options.ImageEncoderModelPath is { } mp
             && !string.IsNullOrEmpty(mp)
         )
-            return new RemoteCLIP<T>(Architecture, mp, _options);
-        return new RemoteCLIP<T>(Architecture, _options);
+            return new RemoteCLIP<T>(Architecture, mp, new RemoteCLIPOptions(_options));
+        return new RemoteCLIP<T>(Architecture, new RemoteCLIPOptions(_options));
     }
 
     private Tensor<T> TokenizeText(string text)

@@ -51,8 +51,18 @@ namespace AiDotNet.Diffusion.Control;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     [ResearchPaper("Adding Conditional Control to Text-to-Image Diffusion Models", "https://arxiv.org/abs/2302.05543")]
-public class ControlNetTileModel<T> : LatentDiffusionModelBase<T>
+public partial class ControlNetTileModel<T> : LatentDiffusionModelBase<T>
 {
+    /// <inheritdoc />
+    /// <remarks>Registration order is serialization order, and matches the
+    /// concatenation the previous hand-written GetParameters performed.</remarks>
+    protected override void RegisterComponents()
+    {
+        RegisterParameterComponent(_baseUNet);
+        RegisterParameterComponent(_controlEncoder);
+        RegisterParameterComponent(_vae);
+    }
+
     private const int LATENT_CHANNELS = 4;
 
     private UNetNoisePredictor<T> _baseUNet;
@@ -69,7 +79,6 @@ public class ControlNetTileModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override int LatentChannels => LATENT_CHANNELS;
     /// <inheritdoc />
-    public override long ParameterCount => _baseUNet.ParameterCount + _controlEncoder.ParameterCount + _vae.ParameterCount;
 
     public ControlNetTileModel(
         NeuralNetworkArchitecture<T>? architecture = null,
@@ -105,35 +114,7 @@ public class ControlNetTileModel<T> : LatentDiffusionModelBase<T>
             inputChannels: 3, baseChannels: 320, channelMultipliers: new[] { 1, 2, 4, 4 }, seed: seed);
     }
 
-    /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        var all = new List<T>();
-        var p1 = _baseUNet.GetParameters(); for (int i = 0; i < p1.Length; i++) all.Add(p1[i]);
-        var p2 = _controlEncoder.GetParameters(); for (int i = 0; i < p2.Length; i++) all.Add(p2[i]);
-        var p3 = _vae.GetParameters(); for (int i = 0; i < p3.Length; i++) all.Add(p3[i]);
-        return new Vector<T>(all.ToArray());
-    }
 
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int c1 = checked((int)_baseUNet.ParameterCount);
-        int c2 = checked((int)_controlEncoder.ParameterCount);
-        int c3 = checked((int)_vae.ParameterCount);
-        long expectedTotal = (long)c1 + c2 + c3;
-        if (parameters.Length != expectedTotal)
-        {
-            throw new ArgumentException(
-                $"Expected {expectedTotal} parameters, got {parameters.Length}.",
-                nameof(parameters));
-        }
-
-        int o = 0;
-        var a1 = new T[c1]; for (int i = 0; i < c1; i++) a1[i] = parameters[o + i]; _baseUNet.SetParameters(new Vector<T>(a1)); o += c1;
-        var a2 = new T[c2]; for (int i = 0; i < c2; i++) a2[i] = parameters[o + i]; _controlEncoder.SetParameters(new Vector<T>(a2)); o += c2;
-        var a3 = new T[c3]; for (int i = 0; i < c3; i++) a3[i] = parameters[o + i]; _vae.SetParameters(new Vector<T>(a3));
-    }
 
     /// <inheritdoc />
     public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy() => Clone();

@@ -47,7 +47,7 @@ namespace AiDotNet.TimeSeries;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("Time Series Analysis: Forecasting and Control", "https://doi.org/10.1002/9781118619193", Year = 1970, Authors = "George E. P. Box, Gwilym M. Jenkins")]
-public class InterventionAnalysisModel<T> : TimeSeriesModelBase<T>
+public partial class InterventionAnalysisModel<T> : TimeSeriesModelBase<T>
 {
     /// <summary>
     /// The configuration options for the intervention analysis model.
@@ -155,6 +155,7 @@ public class InterventionAnalysisModel<T> : TimeSeriesModelBase<T>
     /// If residuals look random (no pattern), the model is doing a good job.
     /// </para>
     /// </remarks>
+    [Buffer]
     private Vector<T> _residuals;
 
     /// <summary>
@@ -176,6 +177,7 @@ public class InterventionAnalysisModel<T> : TimeSeriesModelBase<T>
     /// the model would have predicted history if we had used it in the past.
     /// </para>
     /// </remarks>
+    [Scratch]
     private Vector<T> _fitted;
 
     /// <summary>
@@ -218,6 +220,7 @@ public class InterventionAnalysisModel<T> : TimeSeriesModelBase<T>
     /// This is the ground truth that the model compares its predictions against.
     /// </para>
     /// </remarks>
+    [Buffer]
     private Vector<T> _y;
 
     /// <summary>
@@ -673,6 +676,8 @@ public class InterventionAnalysisModel<T> : TimeSeriesModelBase<T>
             SerializationHelper<T>.SerializeVector(writer, _y);
         else
             writer.Write(0);
+
+        SerializationHelper<T>.SerializeVector(writer, _residuals);
     }
 
     /// <summary>
@@ -728,10 +733,12 @@ public class InterventionAnalysisModel<T> : TimeSeriesModelBase<T>
         try
         {
             _y = SerializationHelper<T>.DeserializeVector(reader);
+            _residuals = SerializationHelper<T>.DeserializeVector(reader);
         }
         catch (EndOfStreamException)
         {
             // Older models don't include training series
+            _residuals = Vector<T>.Empty();
         }
     }
 

@@ -1,4 +1,5 @@
 using AiDotNet.NeuralNetworks;
+using AiDotNet.LossFunctions;
 
 namespace AiDotNet.Audio.Classification;
 
@@ -41,8 +42,13 @@ public abstract class AudioClassifierBase<T> : AudioNeuralNetworkBase<T>
     /// Initializes a new instance of the AudioClassifierBase class.
     /// </summary>
     /// <param name="architecture">The neural network architecture.</param>
-    protected AudioClassifierBase(NeuralNetworkArchitecture<T> architecture)
-        : base(architecture)
+    /// <param name="lossFunction">Optional loss function. When omitted, the audio-network MSE default is used.</param>
+    /// <param name="maxGradNorm">Maximum gradient norm used for clipping.</param>
+    protected AudioClassifierBase(
+        NeuralNetworkArchitecture<T> architecture,
+        ILossFunction<T>? lossFunction = null,
+        double maxGradNorm = 1.0)
+        : base(architecture, lossFunction, maxGradNorm)
     {
     }
 

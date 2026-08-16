@@ -1,4 +1,14 @@
 using AiDotNet.Interfaces;
+using System;
+using System.Collections.Generic;
+// AiDotNet.Attributes is REQUIRED for [TensorLayout] to bind to the right type: two other Tensors
+// namespaces declare a TensorLayout, and without this using the attribute silently resolves to one
+// of those and the contract is never seen.
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
+using AiDotNet.Models.Options;
+using AiDotNet.Optimizers;
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
@@ -29,8 +39,48 @@ namespace AiDotNet.Video;
 /// This is useful for video stabilization, frame interpolation, action recognition, and more.
 /// </para>
 /// </remarks>
-public abstract class OpticalFlowBase<T> : VideoNeuralNetworkBase<T>
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Input,
+    Note = "A frame PAIR stacked on the channel axis, so this axis is 2*channels. PredictCore "
+         + "rejects an odd channel count for exactly that reason.")]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Output,
+    Note = "A flow field: two channels, dx and dy, at the input resolution.")]
+public abstract class OpticalFlowBase<T> : VideoNeuralNetworkBase<T>, IShapeContract
 {
+    /// <summary>
+    /// The optical-flow family's law: <c>[Batch, 2, Height, Width]</c>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Read from <see cref="PredictCore"/> rather than probed. It requires rank 4
+    /// <c>[batch, 2*channels, height, width]</c> - two frames stacked on the channel axis, which is
+    /// why it rejects an odd channel count - and returns one flow field per sample at the input
+    /// resolution.
+    /// </para>
+    /// <para>
+    /// The channel axis is <c>Fixed(2)</c> and NOT derived from the input's, which is the whole point
+    /// of stating it: the input channel axis is <c>2*channels</c> for an arbitrary channel count, and
+    /// the output is always exactly two - dx and dy. A relation that carried the input channel axis
+    /// through would be wrong for every input except a stacked pair of single-channel frames.
+    /// </para>
+    /// <para>
+    /// The spatial axes are <c>Same</c>: flow is estimated per pixel, so a model that downsampled
+    /// internally still returns the field at the resolution it was given.
+    /// </para>
+    /// </remarks>
+    public virtual IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        if (inputRank != 4) return null;
+        return
+        [
+            new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+            new OutputAxisContract(TensorAxis.Channels, AxisRelation.Fixed(2)),
+            new OutputAxisContract(TensorAxis.Height, AxisRelation.Same(TensorAxis.Height)),
+            new OutputAxisContract(TensorAxis.Width, AxisRelation.Same(TensorAxis.Width)),
+        ];
+    }
+
     /// <summary>
     /// Gets the number of iterative refinement steps.
     /// </summary>
@@ -70,6 +120,71 @@ public abstract class OpticalFlowBase<T> : VideoNeuralNetworkBase<T>
     }
 
     /// <summary>
+    /// Number of linear warm-up steps before the optimizer reaches its full learning rate.
+    /// </summary>
+    /// <remarks>
+    /// RAFT (Teed and Deng 2020) and everything built on its recipe — SEA-RAFT, NeuFlowV2, RoMa —
+    /// train with <c>OneCycleLR(..., pct_start=0.05, anneal_strategy='linear')</c>, so the first
+    /// 5% of training is a linear ramp INTO the peak rate rather than the peak applied from step
+    /// zero. Override per model where a paper specifies a different fraction.
+    /// </remarks>
+    protected virtual int WarmupSteps => 5;
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// Applies the ramp described on <see cref="WarmupSteps"/>. Without it these models take the
+    /// peak learning rate on step one, and the first two updates overshoot violently before the
+    /// trajectory recovers — measured evaluation loss for SEA-RAFT on a fixed pair went 0.404
+    /// untrained, then 38.6 and 100.2, before damping to 0.111 by step 15. Gradient clipping was
+    /// already at RAFT's <c>clip_grad_norm_(1.0)</c> and does not prevent it, because the issue is
+    /// step SIZE and not gradient magnitude.
+    /// </para>
+    /// <para>
+    /// Decay is held constant after the ramp rather than following OneCycle's cosine tail: the
+    /// tail is defined against a total step count a library model does not know, and every horizon
+    /// exercised here ends long before it would matter. This mirrors the same reasoning already
+    /// applied to SAM's warm-up.
+    /// </para>
+    /// <para>
+    /// This deliberately bypasses the base optimizer's 8-bit / BF16 moment-compression ladder.
+    /// That ladder trades update fidelity for resident memory and only engages for models large
+    /// enough to need it; optical flow models in this library are far below that threshold, and
+    /// pinning a paper-faithful schedule matters more here than moment-buffer width.
+    /// </para>
+    /// </remarks>
+    protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> GetOrCreateBaseOptimizer()
+    {
+        if (_flowOptimizer is not null) return _flowOptimizer;
+
+        double peakLearningRate = 1e-4;
+        int warmupSteps = Math.Max(1, WarmupSteps);
+
+        return _flowOptimizer = new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = peakLearningRate,
+                UseAdaptiveLearningRate = false,
+                UseAdaptiveBetas = false,
+                LearningRateScheduler = new LinearWarmupScheduler(
+                    baseLearningRate: peakLearningRate,
+                    warmupSteps: warmupSteps,
+                    totalSteps: 0,
+                    // Start at one step's worth of the peak, not 0: a 0 start makes the first
+                    // update a no-op and leaves parameters bit-identical after one Train call,
+                    // which reads as "no gradient flow". Equivalent to PyTorch's LinearLR with
+                    // start_factor = 1/warmup_steps.
+                    warmupInitLr: peakLearningRate / warmupSteps,
+                    decayMode: LinearWarmupScheduler.DecayMode.Constant),
+                // The ramp is defined per optimizer step, so the schedule must advance per batch.
+                SchedulerStepMode = SchedulerStepMode.StepPerBatch,
+            });
+    }
+
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _flowOptimizer;
+
+    /// <summary>
     /// Estimates optical flow between two frames.
     /// </summary>
     /// <param name="frame0">First (reference) frame [channels, height, width].</param>
@@ -83,6 +198,26 @@ public abstract class OpticalFlowBase<T> : VideoNeuralNetworkBase<T>
     /// </para>
     /// </remarks>
     public abstract Tensor<T> EstimateFlow(Tensor<T> frame0, Tensor<T> frame1);
+
+    /// <summary>
+    /// Gets whether <see cref="EstimateFlow"/> accepts a BATCHED frame pair
+    /// (<c>[batch, channels, height, width]</c>) and returns <c>[batch, 2, height, width]</c>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Defaults to <c>false</c>, matching the documented rank-3 contract above. When a derived model
+    /// genuinely handles a batch dimension, overriding this to <c>true</c> lets
+    /// <see cref="PredictCore"/> estimate the whole batch in ONE forward pass instead of looping over
+    /// samples — the loop runs the entire flow network once per sample, which dominates the cost of a
+    /// batched prediction.
+    /// </para>
+    /// <para>
+    /// Only override this after confirming the implementation really is batch-correct. Claiming batch
+    /// support that does not exist produces silently wrong flow rather than an error, because a
+    /// rank-3-only implementation will happily interpret the batch axis as channels.
+    /// </para>
+    /// </remarks>
+    protected virtual bool SupportsBatchedEstimateFlow => false;
 
     /// <summary>
     /// Estimates optical flow at multiple scales for handling large motions.
@@ -201,15 +336,57 @@ public abstract class OpticalFlowBase<T> : VideoNeuralNetworkBase<T>
         int height = input.Shape[2];
         int width = input.Shape[3];
 
-        var frame0 = new Tensor<T>([channels, height, width]);
-        var frame1 = new Tensor<T>([channels, height, width]);
+        // Split the stacked pair along the CHANNEL axis with recorded narrows.
+        //
+        // This previously allocated two fresh tensors and copied element-by-element through
+        // Data.Span, which had three defects. (1) A raw buffer write is not a recorded operation, so
+        // the frames arrived as tape leaves and no gradient could reach the caller's input — which is
+        // precisely what an optical-flow term in a loss needs, since it differentiates the flow with
+        // respect to the frames. (2) It indexed the flat buffer as [0, halfSize) and
+        // [halfSize, 2*halfSize), which is only the correct channel split when batch == 1; for any
+        // larger batch it silently mixed sample 0's channels with sample 1's data. (3) It allocated
+        // per call and looped per element where one narrow suffices.
+        var frames0 = Engine.TensorNarrow(input, 1, 0, channels);        // [B, C, H, W]
+        var frames1 = Engine.TensorNarrow(input, 1, channels, channels); // [B, C, H, W]
 
-        int halfSize = channels * height * width;
-        for (int i = 0; i < halfSize; i++)
+        if (batch > 1 && SupportsBatchedEstimateFlow)
         {
-            frame0.Data.Span[i] = input.Data.Span[i];
-            frame1.Data.Span[i] = input.Data.Span[halfSize + i];
+            // One forward pass for the whole batch. Estimating per sample would run the entire flow
+            // network `batch` times, which is the dominant cost of this method — enough to push
+            // training tests over their time budget under parallel load.
+            var batchedFlow = EstimateFlow(frames0, frames1);
+            return batchedFlow.Rank == 3
+                ? Engine.Reshape(
+                    batchedFlow,
+                    [1, batchedFlow.Shape[0], batchedFlow.Shape[1], batchedFlow.Shape[2]])
+                : batchedFlow;
         }
+
+        if (batch > 1)
+        {
+            // EstimateFlow is defined for a single frame pair, so estimate per sample and stack the
+            // results rather than conflating samples. Correct but `batch` times the work; models that
+            // accept a batched pair should opt into the fast path above.
+            var perSample = new Tensor<T>[batch];
+            for (int b = 0; b < batch; b++)
+            {
+                var f0 = Engine.Reshape(
+                    Engine.TensorNarrow(frames0, 0, b, 1), [channels, height, width]);
+                var f1 = Engine.Reshape(
+                    Engine.TensorNarrow(frames1, 0, b, 1), [channels, height, width]);
+                var sampleFlow = EstimateFlow(f0, f1);
+                perSample[b] = sampleFlow.Rank == 3
+                    ? Engine.Reshape(
+                        sampleFlow,
+                        [1, sampleFlow.Shape[0], sampleFlow.Shape[1], sampleFlow.Shape[2]])
+                    : sampleFlow;
+            }
+
+            return Engine.Concat(perSample, 0);
+        }
+
+        var frame0 = Engine.Reshape(frames0, [channels, height, width]);
+        var frame1 = Engine.Reshape(frames1, [channels, height, width]);
 
         // EstimateFlow returns rank-3 [2, H, W] (single frame-pair flow field
         // per the public API contract). Promote to rank-4 [B, 2, H, W] so

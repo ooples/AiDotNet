@@ -15,13 +15,32 @@ namespace AiDotNet.Tests.ModelFamilyTests.Base;
 /// Multi-label classifiers use Matrix output (one column per label), so they cannot
 /// extend ClassificationModelTestBase which expects Vector output.
 /// </remarks>
-public abstract class MultiLabelClassifierTestBase
+public abstract class MultiLabelClassifierTestBase<T>
 {
-    protected abstract IFullModel<double, Matrix<double>, Matrix<double>> CreateModel();
+    protected static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+    protected static T ToT(double value) => NumOps.FromDouble(value);
+    protected static double ToD(T value) => Convert.ToDouble(value);
+
+    protected abstract IFullModel<T, Matrix<T>, Matrix<T>> CreateModel();
 
     protected virtual int TrainSamples => 80;
     protected virtual int Features => 3;
     protected virtual int NumLabels => 3;
+
+    private (Matrix<T> X, Matrix<T> Y) CreateTrainingData(Random rng)
+    {
+        var x = new Matrix<T>(TrainSamples, Features);
+        var y = new Matrix<T>(TrainSamples, NumLabels);
+        for (int i = 0; i < TrainSamples; i++)
+        {
+            for (int j = 0; j < Features; j++)
+                x[i, j] = ToT(rng.NextDouble() * 5.0);
+            for (int j = 0; j < NumLabels; j++)
+                y[i, j] = ToT(rng.NextDouble() > 0.5 ? 1.0 : 0.0);
+        }
+
+        return (x, y);
+    }
 
     [Fact(Timeout = 60000)]
     public async Task Predictions_ShouldBeFinite()
@@ -31,15 +50,7 @@ public abstract class MultiLabelClassifierTestBase
         var rng = ModelTestHelpers.CreateSeededRandom();
         using var model = CreateModel();
 
-        var x = new Matrix<double>(TrainSamples, Features);
-        var y = new Matrix<double>(TrainSamples, NumLabels);
-        for (int i = 0; i < TrainSamples; i++)
-        {
-            for (int j = 0; j < Features; j++)
-                x[i, j] = rng.NextDouble() * 5.0;
-            for (int j = 0; j < NumLabels; j++)
-                y[i, j] = rng.NextDouble() > 0.5 ? 1.0 : 0.0;
-        }
+        var (x, y) = CreateTrainingData(rng);
 
         model.Train(x, y);
         var predictions = model.Predict(x);
@@ -47,7 +58,7 @@ public abstract class MultiLabelClassifierTestBase
         for (int i = 0; i < predictions.Rows; i++)
             for (int j = 0; j < predictions.Columns; j++)
             {
-                Assert.False(double.IsNaN(predictions[i, j]),
+                Assert.False(double.IsNaN(ToD(predictions[i, j])),
                     $"Multi-label prediction[{i},{j}] is NaN.");
             }
     }
@@ -60,15 +71,7 @@ public abstract class MultiLabelClassifierTestBase
         var rng = ModelTestHelpers.CreateSeededRandom();
         using var model = CreateModel();
 
-        var x = new Matrix<double>(TrainSamples, Features);
-        var y = new Matrix<double>(TrainSamples, NumLabels);
-        for (int i = 0; i < TrainSamples; i++)
-        {
-            for (int j = 0; j < Features; j++)
-                x[i, j] = rng.NextDouble() * 5.0;
-            for (int j = 0; j < NumLabels; j++)
-                y[i, j] = rng.NextDouble() > 0.5 ? 1.0 : 0.0;
-        }
+        var (x, y) = CreateTrainingData(rng);
 
         model.Train(x, y);
         var pred1 = model.Predict(x);
@@ -89,18 +92,13 @@ public abstract class MultiLabelClassifierTestBase
         var rng = ModelTestHelpers.CreateSeededRandom();
         using var model = CreateModel();
 
-        var x = new Matrix<double>(TrainSamples, Features);
-        var y = new Matrix<double>(TrainSamples, NumLabels);
-        for (int i = 0; i < TrainSamples; i++)
-        {
-            for (int j = 0; j < Features; j++)
-                x[i, j] = rng.NextDouble() * 5.0;
-            for (int j = 0; j < NumLabels; j++)
-                y[i, j] = rng.NextDouble() > 0.5 ? 1.0 : 0.0;
-        }
+        var (x, y) = CreateTrainingData(rng);
 
         model.Train(x, y);
         var predictions = model.Predict(x);
         Assert.Equal(TrainSamples, predictions.Rows);
     }
 }
+
+/// <summary>Default-precision alias for existing hand-written fixtures.</summary>
+public abstract class MultiLabelClassifierTestBase : MultiLabelClassifierTestBase<double> { }

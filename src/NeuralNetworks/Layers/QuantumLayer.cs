@@ -36,8 +36,47 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Other)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = true, SupportsBackpropagation = false, ChangesShape = true, TestInputShape = "1, 4", TestConstructorArgs = "4, 4, 2")]
-public partial class QuantumLayer<T> : LayerBase<T>
+// Rank 2 only. ForwardTraced accepts rank 1 and higher ranks too, but it collapses them into a batch and
+// never restores the original rank - it always returns the rank-2 TensorTranspose(probabilitiesT). A
+// declaration for those ranks would have to say "rank 1 in, rank 2 out", which is a shape the callers of
+// a layer contract should not be routed into silently; rank 2 is the form the layer round-trips.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
+[AutoParameters]
+public partial class QuantumLayer<T> : LayerBase<T>, IShapeContract
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// The output width is the quantum state dimension <c>1 &lt;&lt; _numQubits</c>, taken from
+    /// <c>ForwardTraced</c>'s own <c>int dimension = 1 &lt;&lt; _numQubits;</c> - the returned tensor is
+    /// <c>[batch, dimension]</c>, the measured probability distribution over all 2^n basis states.
+    /// </para>
+    /// <para>
+    /// DELIBERATELY NOT <c>Fixed(_outputSize)</c>, even though that field exists and the base constructor
+    /// was handed it. The forward never uses it: the input is padded or sliced to <c>dimension</c>
+    /// (<c>TensorSetSlice</c> when narrower, <c>TensorSlice</c> when wider) and the result is one
+    /// probability per basis state. With the layer's own test arguments <c>(4, 4, 2)</c> the two happen to
+    /// agree - <c>2^2 == 4</c> - which is exactly the coincidence that would make a wrong contract look
+    /// right. Derived from the arithmetic, not from the declared field.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        if (inputRank != 2 || _numQubits <= 0 || _numQubits >= 31) return null;
+
+        return new[]
+        {
+            new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+            new OutputAxisContract(TensorAxis.Features, AxisRelation.Fixed(1 << _numQubits)),
+        };
+    }
+
+    /// <summary>Construction state, retained so the layer can be rebuilt exactly rather than inferred from its shape.</summary>
+    private readonly int _outputSize;
+
+    /// <summary>Construction state, retained so the layer can be rebuilt exactly rather than inferred from its shape.</summary>
+    private readonly int _inputSize;
     private readonly int _numQubits;
     private Tensor<Complex<T>> _quantumCircuit;
     [TrainableParameter(Role = PersistentTensorRole.Weights)]
@@ -63,30 +102,6 @@ public partial class QuantumLayer<T> : LayerBase<T>
     private Tensor<T>? _lastResultImag;
     private readonly INumericOperations<Complex<T>> _complexOps;
 
-    /// <summary>
-    /// Gets a value indicating whether this layer supports training.
-    /// </summary>
-    /// <value>
-    /// <c>true</c> indicating that this layer can be trained through backpropagation.
-    /// </value>
-    /// <remarks>
-    /// <para>
-    /// This property indicates that the QuantumLayer has parameters (rotation angles) that
-    /// can be optimized during the training process using backpropagation. The gradients of
-    /// these parameters are calculated during the backward pass and used to update the parameters.
-    /// </para>
-    /// <para><b>For Beginners:</b> This property tells you if the layer can learn from data.
-    /// 
-    /// A value of true means:
-    /// - The layer has values (rotation angles) that can be adjusted during training
-    /// - It will improve its performance as it sees more data
-    /// - It participates in the learning process of the neural network
-    /// 
-    /// When you train a neural network containing this layer, the rotation angles will 
-    /// automatically adjust to better process your specific data.
-    /// </para>
-    /// </remarks>
-    public override long ParameterCount => _rotationAngles.Length;
     public override bool SupportsTraining => true;
 
     /// <summary>
@@ -121,8 +136,13 @@ public partial class QuantumLayer<T> : LayerBase<T>
     /// which is what gives quantum computing its potential power.
     /// </para>
     /// </remarks>
-    public QuantumLayer(int inputSize, int outputSize, int numQubits) : base([inputSize], [outputSize])
+    public QuantumLayer(
+        [LayerState] int inputSize,
+        [LayerState] int outputSize,
+        [LayerState] int numQubits) : base([inputSize], [outputSize])
     {
+        _outputSize = outputSize;
+        _inputSize = inputSize;
         _numQubits = numQubits;
         _complexOps = MathHelper.GetNumericOperations<Complex<T>>();
 
@@ -167,7 +187,7 @@ public partial class QuantumLayer<T> : LayerBase<T>
     /// The layer saves the input for later use during training.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // Store original shape for any-rank tensor support
         _originalInputShape = input._shape;
@@ -491,35 +511,6 @@ public partial class QuantumLayer<T> : LayerBase<T>
         _angleGradients.Fill(NumOps.Zero);
     }
 
-    /// <summary>
-    /// Gets all trainable parameters of the quantum layer as a single vector.
-    /// </summary>
-    /// <returns>A vector containing all trainable parameters (rotation angles).</returns>
-    /// <remarks>
-    /// <para>
-    /// This method retrieves all trainable parameters (rotation angles) of the quantum layer as a
-    /// single vector. This is useful for optimization algorithms that operate on all parameters at once,
-    /// or for saving and loading model weights.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method collects all the learnable values from the quantum layer.
-    /// 
-    /// The parameters:
-    /// - Are the rotation angles that the quantum layer learns during training
-    /// - Control how the quantum circuit processes information
-    /// - Are returned as a single list (vector)
-    /// 
-    /// This is useful for:
-    /// - Saving the model to disk
-    /// - Loading parameters from a previously trained model
-    /// - Advanced optimization techniques that need access to all parameters
-    /// </para>
-    /// </remarks>
-    public override Vector<T> GetParameters()
-    {
-        // Return rotation angles as a Vector<T>
-        return new Vector<T>(_rotationAngles.ToArray());
-    }
-
     public override Vector<T> GetParameterGradients()
     {
         return new Vector<T>(_angleGradients.ToArray());
@@ -529,62 +520,6 @@ public partial class QuantumLayer<T> : LayerBase<T>
     {
         _angleGradients = new Tensor<T>([_numQubits]);
         _angleGradients.Fill(NumOps.Zero);
-    }
-
-    /// <summary>
-    /// Sets the trainable parameters of the quantum layer.
-    /// </summary>
-    /// <param name="parameters">A vector containing all parameters (rotation angles) to set.</param>
-    /// <exception cref="ArgumentException">Thrown when the parameters vector has incorrect length.</exception>
-    /// <remarks>
-    /// <para>
-    /// This method sets the trainable parameters (rotation angles) of the quantum layer from a single vector.
-    /// The quantum circuit is reset and reconstructed with the new rotation angles. This is useful for loading
-    /// saved model weights or for implementing optimization algorithms that operate on all parameters at once.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method updates all the rotation angles in the quantum layer.
-    /// 
-    /// When setting parameters:
-    /// - The input must be a vector with the correct length (equal to the number of qubits)
-    /// - The quantum circuit is reset to its starting state
-    /// - New rotation angles are applied to rebuild the circuit
-    /// 
-    /// This is useful for:
-    /// - Loading a previously saved model
-    /// - Transferring parameters from another model
-    /// - Testing different parameter values
-    /// 
-    /// An error is thrown if the input vector doesn't have the expected number of parameters.
-    /// </para>
-    /// </remarks>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (parameters.Length != _numQubits)
-        {
-            throw new ArgumentException($"Expected {_numQubits} parameters, but got {parameters.Length}");
-        }
-
-        // Reset the quantum circuit to identity
-        ResetQuantumCircuit();
-
-        // Set new rotation angles using tensor ctor (no conversion hot path)
-        _rotationAngles = new Tensor<T>([parameters.Length], parameters);
-
-        for (int i = 0; i < _numQubits; i++)
-        {
-            ApplyRotation(i, _rotationAngles[i]);
-        }
-
-        // Rebuild circuit tensors from updated _quantumCircuit for Forward to use
-        int dim = 1 << _numQubits;
-        for (int i = 0; i < dim; i++)
-        {
-            for (int j = 0; j < dim; j++)
-            {
-                _circuitReal[i, j] = _quantumCircuit[i, j].Real;
-                _circuitImag[i, j] = _quantumCircuit[i, j].Imaginary;
-            }
-        }
     }
 
     /// <summary>

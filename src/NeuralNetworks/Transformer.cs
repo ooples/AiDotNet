@@ -56,7 +56,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Attention Is All You Need", "https://arxiv.org/abs/1706.03762", Year = 2017, Authors = "Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N. Gomez, Lukasz Kaiser, Illia Polosukhin")]
-public class Transformer<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>, AiDotNet.Interfaces.ILanguageModel<T>
+public class Transformer<T> : TokenLanguageModelLayoutBase<T>, IAuxiliaryLossLayer<T>, AiDotNet.Interfaces.ILanguageModel<T>
 {
     private readonly TransformerOptions _options;
 
@@ -394,6 +394,31 @@ public class Transformer<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>, AiDo
     }
 
     /// <summary>
+    /// Returns the runtime input shape seen by the default token-embedding stack.
+    /// </summary>
+    /// <remarks>
+    /// A token Transformer consumes <c>[batch, sequence]</c>. The generic two-dimensional
+    /// architecture reports the per-sample shape as <c>[1, sequence]</c>; letting the base
+    /// hook prepend its batch axis turns that into <c>[1, 1, sequence]</c>. If a later lazy
+    /// layer rejects the shape walk, that rank-3 value becomes the resolver's fallback and
+    /// <see cref="SequenceTokenSliceLayer{T}"/> incorrectly binds its hidden width to the
+    /// sequence length. Publish the actual rank-2 token tensor here so the slice remains lazy
+    /// until it sees <c>[batch, sequence, d_model]</c> and resolves to <c>[d_model]</c>, as the
+    /// Transformer representation contract requires. Custom layer stacks retain the base hook
+    /// because they may intentionally preprocess a different architecture shape.
+    /// </remarks>
+    protected override int[]? TryGetArchitectureInputShape()
+    {
+        bool usesDefaultTokenStack = _transformerArchitecture.VocabularySize > 0
+            && (Architecture.Layers is null || Architecture.Layers.Count == 0);
+        if (!usesDefaultTokenStack)
+            return base.TryGetArchitectureInputShape();
+
+        int sequenceLength = _transformerArchitecture.InputSize;
+        return sequenceLength > 0 ? [1, sequenceLength] : null;
+    }
+
+    /// <summary>
     /// True when the output head emits raw LOGITS (the final Softmax activation layer was dropped
     /// for the opt-in <see cref="LossFunctions.CrossEntropyWithLogitsLoss{T}"/> training path).
     /// Inference (<see cref="PredictCore"/>) re-applies softmax so Predict() output is unchanged.
@@ -584,41 +609,8 @@ public class Transformer<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>, AiDo
         return diagnostics;
     }
 
-    /// <summary>
-    /// Updates the parameters of all layers in the Transformer network.
-    /// </summary>
-    /// <param name="parameters">A vector containing all parameters for the network.</param>
-    /// <remarks>
-    /// <para>
-    /// This method distributes the parameters to each layer based on their parameter counts.
-    /// It's typically used during training when applying gradient updates.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method updates the Transformer's internal values during training.
-    /// 
-    /// Think of parameters as the "settings" of the Transformer:
-    /// - Each layer needs a certain number of parameters to function
-    /// - During training, these parameters are constantly adjusted to improve performance
-    /// - This method takes a big list of new parameter values and gives each layer its share
-    /// 
-    /// It's like distributing updated parts to each section of a machine so it works better.
-    /// Each layer gets exactly the number of parameters it needs.
-    /// </para>
-    /// </remarks>
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        int startIndex = 0;
-        foreach (var layer in Layers)
-        {
-            int layerParameterCount = checked((int)layer.ParameterCount);
-            if (layerParameterCount > 0)
-            {
-                Vector<T> layerParameters = parameters.SubVector(startIndex, layerParameterCount);
-                layer.UpdateParameters(layerParameters);
-                startIndex += layerParameterCount;
-            }
-        }
-    }
-
+    // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
+    // exactly the same enumeration, so this said nothing the base does not already say.
     /// <summary>
     /// Performs a forward pass through the Transformer network to generate predictions.
     /// </summary>

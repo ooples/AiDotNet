@@ -48,7 +48,7 @@ namespace AiDotNet.Safety.Watermarking;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("SynthID-Image: Scalable Watermarking for Identifying AI-Generated Images",
+[ResearchPaper("SynthID-Image: Image watermarking at internet scale",
     "https://arxiv.org/abs/2510.09263",
     Year = 2025,
     Authors = "Google DeepMind")]

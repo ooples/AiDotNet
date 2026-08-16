@@ -37,8 +37,27 @@ namespace AiDotNet.NeuralNetworks.SyntheticData;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+// Citation URL corrected. arXiv 1401.0939 is "The NINJA-2 project: Detecting and characterizing
+// gravitational waveforms modelled using numerical binary black hole simulations" — an unrelated
+// gravitational-wave paper. PrivBayes was never on arXiv; it appeared at SIGMOD 2014 with an extended
+// TODS 2017 version, so the canonical DOI is used instead of an invented preprint id.
+//
+// This class previously implemented only a GENERIC Bayesian-network synthesizer (BIC-scored structure
+// search, Laplace-SMOOTHED CPTs) with no epsilon and no privacy guarantee at all — Laplace smoothing
+// being a prior, not a privacy mechanism. Both of PrivBayes' defining phases are now implemented:
+//
+//   Phase 1 (GreedyBayes): each (attribute, parent-set) pair is chosen with the EXPONENTIAL MECHANISM
+//   over a mutual-information score, calibrated by that score's sensitivity, instead of by arg-max.
+//   Parents are drawn only from already-attached attributes, so acyclicity holds by construction.
+//
+//   Phase 2: Laplace NOISE is injected into each marginal (sensitivity 2/n per marginal, shared across
+//   d-k marginals) before conditionals are derived, then negatives are clipped and the distribution
+//   renormalized.
+//
+// The budget splits evenly between the phases per the paper, and epsilon, the split and an opt-out all
+// live in BayesianNetworkSynthOptions with the paper's defaults.
 [ResearchPaper("PrivBayes: Private Data Release via Bayesian Networks",
-    "https://arxiv.org/abs/1401.0939",
+    "https://doi.org/10.1145/3134428",
     Year = 2017,
     Authors = "Jun Zhang, Graham Cormode, Cecilia M. Procopiuc, Divesh Srivastava, Xiaokui Xiao")]
 public class BayesianNetworkSynthGenerator<T> : SyntheticTabularGeneratorBase<T>
@@ -150,6 +169,254 @@ public class BayesianNetworkSynthGenerator<T> : SyntheticTabularGeneratorBase<T>
     /// Tries adding edges that improve BIC, respecting MaxParents and acyclicity.
     /// </summary>
     private List<int>[] LearnStructure(int[][] discretized)
+    {
+        if (_options.EnableDifferentialPrivacy)
+        {
+            return LearnStructureGreedyBayes(discretized);
+        }
+
+        return LearnStructureBIC(discretized);
+    }
+
+    /// <summary>
+    /// PrivBayes phase 1 (GreedyBayes): builds the k-degree Bayesian network by sampling each
+    /// (attribute, parent-set) pair with the EXPONENTIAL MECHANISM instead of taking the arg-max.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Taking the highest-scoring parent set — as plain BIC structure learning does — leaks
+    /// information: the winning edge is a deterministic function of the data, so one individual's
+    /// record can change which edge appears and the released network reveals that. The exponential
+    /// mechanism instead samples candidate <c>c</c> with probability proportional to
+    /// <c>exp(eps' * score(c) / (2 * sensitivity))</c>, which makes high-scoring candidates likely
+    /// without making any of them certain, and that is what buys the privacy guarantee.
+    /// </para>
+    /// <para>
+    /// The score is mutual information <c>I(X; Pi)</c> between an attribute and a candidate parent
+    /// set — the paper's measure of how much a parent set explains an attribute. Its sensitivity over
+    /// a dataset of n rows is <c>(1/n)*log2(n) + ((n-1)/n)*log2(n/(n-1))</c>, which is what calibrates
+    /// the mechanism.
+    /// </para>
+    /// <para>
+    /// The structure budget is divided evenly across the d-1 selection steps, so the whole phase
+    /// consumes exactly <see cref="BayesianNetworkSynthOptions{T}.StructureBudgetFraction"/> of the
+    /// total epsilon; phase 2 spends the remainder.
+    /// </para>
+    /// </remarks>
+    private List<int>[] LearnStructureGreedyBayes(int[][] discretized)
+    {
+        int d = _numFeatures;
+        int n = discretized.Length;
+        int k = Math.Max(1, _options.MaxParents);
+
+        var parents = new List<int>[d];
+        for (int j = 0; j < d; j++) parents[j] = new List<int>();
+
+        if (d <= 1) return parents;
+
+        double structureBudget = _options.PrivacyBudget * _options.StructureBudgetFraction;
+
+        // Budget per selection step: d-1 attributes are attached after the first seed node.
+        double stepBudget = structureBudget / (d - 1);
+        double sensitivity = MutualInformationSensitivity(n);
+
+        // The first node is chosen uniformly at random and has no parents; a uniform choice consumes
+        // no budget because it does not depend on the data at all.
+        var attached = new List<int> { Random.Next(d) };
+        var remaining = new List<int>();
+        for (int j = 0; j < d; j++)
+        {
+            if (j != attached[0]) remaining.Add(j);
+        }
+
+        while (remaining.Count > 0)
+        {
+            // Candidate set: every unattached attribute paired with every parent subset (size <= k)
+            // drawn from the already-attached attributes. Restricting parents to attached nodes is
+            // what keeps the result acyclic by construction, so no cycle check is needed.
+            var candidates = new List<(int Child, List<int> Parents, double Score)>();
+            foreach (int child in remaining)
+            {
+                foreach (var parentSet in EnumerateParentSets(attached, k))
+                {
+                    double mi = ComputeMutualInformation(discretized, child, parentSet);
+                    candidates.Add((child, parentSet, mi));
+                }
+            }
+
+            if (candidates.Count == 0) break;
+
+            var chosen = SampleExponentialMechanism(candidates, stepBudget, sensitivity);
+            parents[chosen.Child] = chosen.Parents;
+            attached.Add(chosen.Child);
+            remaining.Remove(chosen.Child);
+        }
+
+        return parents;
+    }
+
+    /// <summary>
+    /// Enumerates every subset of <paramref name="pool"/> with size from 0 to
+    /// <paramref name="maxSize"/>, which is the candidate parent-set space for one attribute.
+    /// </summary>
+    private static IEnumerable<List<int>> EnumerateParentSets(List<int> pool, int maxSize)
+    {
+        yield return new List<int>();
+
+        int limit = Math.Min(maxSize, pool.Count);
+        var current = new List<int>();
+
+        IEnumerable<List<int>> Build(int start, int depth)
+        {
+            for (int i = start; i < pool.Count; i++)
+            {
+                current.Add(pool[i]);
+                yield return new List<int>(current);
+                if (depth + 1 < limit)
+                {
+                    foreach (var deeper in Build(i + 1, depth + 1)) yield return deeper;
+                }
+
+                current.RemoveAt(current.Count - 1);
+            }
+        }
+
+        if (limit > 0)
+        {
+            foreach (var set in Build(0, 0)) yield return set;
+        }
+    }
+
+    /// <summary>
+    /// Sensitivity of mutual information for a dataset of <paramref name="n"/> rows:
+    /// <c>(1/n)*log2(n) + ((n-1)/n)*log2(n/(n-1))</c>.
+    /// </summary>
+    /// <remarks>
+    /// This is how much the score can change when one individual's record is added or removed, and it
+    /// is what the exponential mechanism must be calibrated against. It shrinks as n grows, so larger
+    /// datasets need proportionally less distortion for the same guarantee.
+    /// </remarks>
+    private static double MutualInformationSensitivity(int n)
+    {
+        if (n <= 1) return 1.0;
+
+        double log2N = Math.Log(n, 2);
+        return (1.0 / n) * log2N + ((n - 1.0) / n) * Math.Log(n / (n - 1.0), 2);
+    }
+
+    /// <summary>
+    /// Mutual information <c>I(X; Pi)</c> in bits between attribute <paramref name="child"/> and the
+    /// joint of <paramref name="parentList"/>, estimated from the empirical distribution.
+    /// </summary>
+    private double ComputeMutualInformation(int[][] data, int child, List<int> parentList)
+    {
+        int n = data.Length;
+        if (n == 0) return 0.0;
+
+        // An empty parent set explains nothing, so the mutual information is zero by definition.
+        if (parentList.Count == 0) return 0.0;
+
+        int numBins = _options.NumBins;
+        var joint = new Dictionary<string, int[]>();
+        var childCounts = new int[numBins];
+        var parentTotals = new Dictionary<string, int>();
+
+        for (int i = 0; i < n; i++)
+        {
+            int bin = data[i][child];
+            if (bin < 0 || bin >= numBins) continue;
+
+            string key = GetParentKey(data[i], parentList);
+            if (!joint.TryGetValue(key, out var row))
+            {
+                row = new int[numBins];
+                joint[key] = row;
+            }
+
+            row[bin]++;
+            childCounts[bin]++;
+            parentTotals[key] = parentTotals.TryGetValue(key, out int t) ? t + 1 : 1;
+        }
+
+        double mi = 0.0;
+        foreach (var kvp in joint)
+        {
+            double pParent = parentTotals[kvp.Key] / (double)n;
+            for (int b = 0; b < numBins; b++)
+            {
+                int c = kvp.Value[b];
+                if (c == 0) continue;
+
+                double pJoint = c / (double)n;
+                double pChild = childCounts[b] / (double)n;
+                if (pChild <= 0 || pParent <= 0) continue;
+
+                mi += pJoint * Math.Log(pJoint / (pParent * pChild), 2);
+            }
+        }
+
+        return mi < 0 ? 0 : mi;
+    }
+
+    /// <summary>
+    /// Samples one candidate with probability proportional to
+    /// <c>exp(epsilon * score / (2 * sensitivity))</c>.
+    /// </summary>
+    /// <remarks>
+    /// Weights are computed relative to the maximum score before exponentiating. Exponentiating the
+    /// raw scores directly overflows to infinity as soon as the exponent is large, which would collapse
+    /// the distribution onto a single candidate and silently destroy the privacy guarantee this
+    /// mechanism exists to provide.
+    /// </remarks>
+    private (int Child, List<int> Parents, double Score) SampleExponentialMechanism(
+        List<(int Child, List<int> Parents, double Score)> candidates,
+        double epsilon,
+        double sensitivity)
+    {
+        if (candidates.Count == 1 || epsilon <= 0 || sensitivity <= 0)
+        {
+            // A non-positive budget cannot fund a data-dependent choice, so fall back to a uniform
+            // draw rather than leaking the arg-max.
+            return candidates[Random.Next(candidates.Count)];
+        }
+
+        double scale = epsilon / (2.0 * sensitivity);
+
+        double maxScore = double.NegativeInfinity;
+        foreach (var c in candidates)
+        {
+            if (c.Score > maxScore) maxScore = c.Score;
+        }
+
+        var weights = new double[candidates.Count];
+        double total = 0.0;
+        for (int i = 0; i < candidates.Count; i++)
+        {
+            weights[i] = Math.Exp(scale * (candidates[i].Score - maxScore));
+            total += weights[i];
+        }
+
+        if (total <= 0 || double.IsNaN(total) || double.IsInfinity(total))
+        {
+            return candidates[Random.Next(candidates.Count)];
+        }
+
+        double u = Random.NextDouble() * total;
+        double cum = 0.0;
+        for (int i = 0; i < candidates.Count; i++)
+        {
+            cum += weights[i];
+            if (u <= cum) return candidates[i];
+        }
+
+        return candidates[candidates.Count - 1];
+    }
+
+    /// <summary>
+    /// Non-private BIC structure search, used only when
+    /// <see cref="BayesianNetworkSynthOptions{T}.EnableDifferentialPrivacy"/> is false.
+    /// </summary>
+    private List<int>[] LearnStructureBIC(int[][] discretized)
     {
         var parents = new List<int>[_numFeatures];
         for (int j = 0; j < _numFeatures; j++)
@@ -323,15 +590,69 @@ public class BayesianNetworkSynthGenerator<T> : SyntheticTabularGeneratorBase<T>
                     counts[key][bin]++;
             }
 
-            // Convert counts to probabilities with Laplace smoothing
-            foreach (var kvp in counts)
+            // PrivBayes phase 2: inject Laplace NOISE into the marginal before deriving conditionals.
+            //
+            // This is the step that makes the released distributions differentially private, and it is
+            // distinct from LaplaceSmoothing above (a prior that merely avoids zero probabilities and
+            // provides no guarantee). The noise is added to the marginal expressed as FRACTIONS of n:
+            // one individual can move a joint cell by 1/n in each of two cells, so the per-marginal
+            // sensitivity is 2/n. The (d - k) noisy marginals share the remaining budget, giving a
+            // scale of 2*(d-k)/(n*eps2).
+            //
+            // Noise can push cells negative, which is not a distribution, so the standard
+            // post-processing applies: clamp negatives to zero and renormalize. Post-processing a
+            // differentially private release cannot weaken its guarantee.
+            if (_options.EnableDifferentialPrivacy)
             {
-                double total = 0;
-                for (int b = 0; b < numBins; b++) total += kvp.Value[b] + smooth;
-                var probs = new double[numBins];
-                for (int b = 0; b < numBins; b++)
-                    probs[b] = (kvp.Value[b] + smooth) / total;
-                cpts[j][kvp.Key] = probs;
+                double eps2 = _options.PrivacyBudget * (1.0 - _options.StructureBudgetFraction);
+                int marginalCount = Math.Max(1, _numFeatures - Math.Max(1, _options.MaxParents));
+                int n = discretized.Length;
+                double noiseScale = n > 0 && eps2 > 0
+                    ? 2.0 * marginalCount / (n * eps2)
+                    : 0.0;
+
+                foreach (var kvp in counts)
+                {
+                    var noisy = new double[numBins];
+                    for (int b = 0; b < numBins; b++)
+                    {
+                        double fraction = n > 0 ? kvp.Value[b] / (double)n : 0.0;
+                        double perturbed = fraction + SampleLaplace(noiseScale);
+                        noisy[b] = perturbed > 0 ? perturbed : 0.0;
+                    }
+
+                    double total = 0;
+                    for (int b = 0; b < numBins; b++) total += noisy[b];
+
+                    var probs = new double[numBins];
+                    if (total > 0)
+                    {
+                        for (int b = 0; b < numBins; b++) probs[b] = noisy[b] / total;
+                    }
+                    else
+                    {
+                        // Every cell was clipped away, which happens when the true marginal is tiny
+                        // relative to the noise. Uniform is the maximum-entropy fallback and, being
+                        // data-independent, costs no additional budget.
+                        double p = 1.0 / numBins;
+                        for (int b = 0; b < numBins; b++) probs[b] = p;
+                    }
+
+                    cpts[j][kvp.Key] = probs;
+                }
+            }
+            else
+            {
+                // Convert counts to probabilities with Laplace smoothing (no privacy guarantee).
+                foreach (var kvp in counts)
+                {
+                    double total = 0;
+                    for (int b = 0; b < numBins; b++) total += kvp.Value[b] + smooth;
+                    var probs = new double[numBins];
+                    for (int b = 0; b < numBins; b++)
+                        probs[b] = (kvp.Value[b] + smooth) / total;
+                    cpts[j][kvp.Key] = probs;
+                }
             }
 
             // Default CPT for unseen parent configurations
@@ -388,6 +709,28 @@ public class BayesianNetworkSynthGenerator<T> : SyntheticTabularGeneratorBase<T>
         }
 
         return result;
+    }
+
+    /// <summary>
+    /// Draws a sample from the zero-mean Laplace distribution with the given scale <c>b</c>.
+    /// </summary>
+    /// <remarks>
+    /// Uses inverse transform sampling on <c>u ~ Uniform(-0.5, 0.5)</c>:
+    /// <c>-b * sign(u) * ln(1 - 2|u|)</c>. Drawing from the seeded <see cref="Random"/> keeps
+    /// generation reproducible for a given seed, which matters because a synthesizer whose output
+    /// cannot be reproduced cannot be tested.
+    /// </remarks>
+    private double SampleLaplace(double scale)
+    {
+        if (scale <= 0) return 0.0;
+
+        double u = Random.NextDouble() - 0.5;
+
+        // Guard the logarithm: |u| = 0.5 would give ln(0).
+        double magnitude = 1.0 - 2.0 * Math.Abs(u);
+        if (magnitude <= 0) magnitude = double.Epsilon;
+
+        return -scale * Math.Sign(u) * Math.Log(magnitude);
     }
 
     /// <summary>

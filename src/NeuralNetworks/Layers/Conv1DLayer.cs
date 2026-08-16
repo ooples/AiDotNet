@@ -1,4 +1,4 @@
-using AiDotNet.Helpers;
+﻿using AiDotNet.Helpers;
 using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
@@ -37,7 +37,17 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerTask(LayerTask.SpatialProcessing)]
 [LayerProperty(NormalizesInput = true, IsTrainable = true, ChangesShape = true, ExpectedInputRank = 3, Cost = ComputeCost.Medium, TestInputShape = "1, 2, 8", TestConstructorArgs = "4, 3, 1, 1, 1, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
-public partial class Conv1DLayer<T> : LayerBase<T>
+// Rank 3 ONLY, and that is enforced rather than assumed: OnFirstForward throws
+// "Conv1DLayer requires rank-3 [B, C, T] input" for any other rank, so no other layout is declared.
+// The axis names are this layer's own - the class summary says "[B, C_in, T]" in and "[B, C_out, T_out]" out.
+// OutputAxesFor is hand-written because every one of the three relations depends on constructor
+// arguments (output channels, kernel, stride, padding, dilation) that no attribute can see.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Time,
+    Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Time,
+    Direction = TensorLayoutDirection.Output)]
+[AutoParameters]
+public partial class Conv1DLayer<T> : LayerBase<T>, IShapeContract
 {
     private int _inputChannels;
     private readonly int _outputChannels;
@@ -50,25 +60,50 @@ public partial class Conv1DLayer<T> : LayerBase<T>
     private Tensor<T> _biases;
     private int[]? _originalInputShape;
 
-    /// <summary>
-    /// Live parameter count. Returns the eventual <c>(C_out·C_in·K) + C_out</c>
-    /// formula once <see cref="OnFirstForward"/> has resolved input
-    /// channels; before that, falls back to <c>(C_out·1·K) + C_out</c>
-    /// (assumes a 1-channel input until proven otherwise) so a
-    /// freshly-constructed model still reports a non-zero
-    /// <c>ParameterCount</c> for the
-    /// <see cref="AiDotNet.Tests.ModelFamilyTests.Base.NeuralNetworkModelTestBase.Parameters_ShouldBeNonEmpty"/>
-    /// invariant — without locking the lazy shape resolution to a wrong
-    /// input channel count.
-    /// </summary>
-    public override long ParameterCount
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// Taken straight from this layer's own length arithmetic in <see cref="OnFirstForward"/>:
+    /// <c>tOut = (tIn + 2*_padding - _dilation*(_kernelSize - 1) - 1) / _stride + 1</c>, which is
+    /// exactly what <c>AxisRelation.Window</c> evaluates. Channels are set by configuration
+    /// (<c>_outputChannels</c>), not by the input, and the batch axis is carried through - the forward
+    /// reshapes to <c>[B, C, 1, T]</c>, convolves, and reshapes back with <c>activated.Shape[0]</c>
+    /// untouched.
+    /// </para>
+    /// <para>
+    /// Note that <see cref="OnFirstForward"/> deliberately publishes <c>LayerShape.Dynamic</c> for the
+    /// output length rather than a resolved number, precisely because the length follows the input.
+    /// A relation is the right home for that: it says HOW the length follows instead of freezing one
+    /// value that goes stale the moment a different sequence arrives.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
     {
-        get
+        if (inputRank != 3 || _outputChannels <= 0 || _kernelSize <= 0 || _stride <= 0
+            || _padding < 0 || _dilation <= 0)
         {
-            int effectiveInputChannels = _inputChannels > 0 ? _inputChannels : 1;
-            return ((long)_outputChannels * effectiveInputChannels * _kernelSize) + _outputChannels;
+            return null;
         }
+
+        return new[]
+        {
+            new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+            new OutputAxisContract(TensorAxis.Channels, AxisRelation.Fixed(_outputChannels)),
+            new OutputAxisContract(
+                TensorAxis.Time,
+                AxisRelation.Window(TensorAxis.Time, _kernelSize, _stride, _padding, _dilation)),
+        };
     }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Paired with <see cref="ParameterCount"/> and <see cref="GetParameters"/>, which both report
+    /// nothing until the input channel count arrives. Without this the layer said "I have no
+    /// parameters" AND "nothing is pending" at once -- both false, since it certainly gains weights
+    /// on the first forward. The model-family non-empty invariant accepts either a positive count
+    /// or a pending flag, so MusicSourceSeparator failed it the moment the count became honest.
+    /// </remarks>
+    public override bool HasUninitializedParameters => !IsShapeResolved;
 
     public override bool SupportsTraining => true;
 
@@ -131,12 +166,24 @@ public partial class Conv1DLayer<T> : LayerBase<T>
     /// breaks Clone-via-SetParameters round-trips.
     /// </summary>
     public Conv1DLayer(
-        int inputChannels,
-        int outputChannels,
-        int kernelSize,
-        int dilation = 1,
-        int stride = 1,
-        int? padding = null,
+        [LayerState] int inputChannels,
+        [LayerState] int outputChannels,
+        [LayerState] int kernelSize,
+        [LayerState] int dilation = 1,
+        [LayerState] int stride = 1,
+        // MUST be persisted. Padding is not recoverable from any saved tensor: the kernel shape
+        // carries outputChannels/inputChannels/kernelSize, but padding only shifts WHERE the
+        // kernel lands, so a rebuild that omits it produces a layer with byte-identical weights
+        // that computes a different convolution. Left unmarked, this parameter was merely
+        // "optional" to the LayerStateGenerator, which silently rebuilt every Conv1DLayer with
+        // padding = null => (kernelSize-1)*dilation/2. MusicSourceSeparator's Demucs encoder
+        // passes kernel 8 / stride 4 / padding 2 (chosen so encoder and decoder lengths stay
+        // aligned for the skip-add), and the fallback yields 3 — with L=64 both give output
+        // length 16, so the mismatch cleared every shape assertion and surfaced only as clone
+        // output diverging by ~2.7e-01 with provably identical parameters.
+        // LayerStateGenerator strips Nullable<T> to match the int _padding field, so what
+        // round-trips is the EFFECTIVE padding, which reproduces either spelling exactly.
+        [LayerState(Key = "Padding")] int? padding = null,
         IActivationFunction<T>? activation = null,
         IInitializationStrategy<T>? initializationStrategy = null)
         : base(new[] { inputChannels, -1 }, new[] { outputChannels, -1 },
@@ -165,13 +212,13 @@ public partial class Conv1DLayer<T> : LayerBase<T>
         RegisterTrainableParameter(_kernels, PersistentTensorRole.Weights);
         RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);
 
-        // Resolve output shape against a placeholder T = required minimum
-        // for the dilated kernel to fit; the real T is bound on first
-        // Forward via EnsureInitializedFromInput and doesn't change the
-        // parameter count (Conv1D is translation-invariant in T).
+        // Resolve against a placeholder T = required minimum for the dilated kernel to fit; the
+        // real T is bound on first Forward via EnsureInitializedFromInput and doesn't change the
+        // parameter count (Conv1D is translation-invariant in T). The OUTPUT length must stay
+        // dynamic: publishing the placeholder's length made the layer advertise
+        // [outputChannels, 5] and then produce [outputChannels, 32].
         int minTime = _dilation * (_kernelSize - 1) + 1;
-        int outTime = (minTime + 2 * _padding - _dilation * (_kernelSize - 1) - 1) / _stride + 1;
-        ResolveShapes(new[] { inputChannels, minTime }, new[] { outputChannels, outTime });
+        ResolveShapes(new[] { inputChannels, minTime }, new[] { outputChannels, LayerShape.Dynamic });
     }
 
     /// <inheritdoc/>
@@ -212,11 +259,24 @@ public partial class Conv1DLayer<T> : LayerBase<T>
             RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);
         }
 
-        ResolveShapes(new[] { cIn, tIn }, new[] { _outputChannels, tOut });
+        // Apply any parameters handed to SetParameters before the shape was known. This is the second
+        // half of the deferral: geometry is now resolved from the REAL input, so the restored weights
+        // land on exactly the tensors the original had, and a clone reproduces the original bit-for-bit.
+        if (_pendingParameters is not null)
+        {
+            var pending = _pendingParameters;
+            _pendingParameters = null;
+            ApplyResolvedParameters(pending);
+        }
+
+        // Same reasoning as the lazy constructor: the output length follows the input length, so
+        // it is not part of this layer's contract and must not be frozen into the declaration.
+        _ = tOut;
+        ResolveShapes(new[] { cIn, tIn }, new[] { _outputChannels, LayerShape.Dynamic });
     }
 
     /// <inheritdoc/>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         EnsureInitializedFromInput(input);
         _originalInputShape = input._shape;
@@ -244,62 +304,12 @@ public partial class Conv1DLayer<T> : LayerBase<T>
             new[] { activated.Shape[0], activated.Shape[1], activated.Shape[3] });
     }
 
-    /// <inheritdoc/>
-    public override void UpdateParameters(T learningRate)
-    {
-        // Tape-based autodiff drives parameter updates through the
-        // engine's optimizer integration; manual UpdateParameters is a
-        // legacy hook kept only for API completeness. No-op here — the
-        // tape's Backward pass already accumulated and applied gradients
-        // to _kernels / _biases via the registered trainable parameters.
-    }
+    /// <summary>Parameters handed to <see cref="SetParameters"/> before the shape was known.</summary>
+    private Vector<T>? _pendingParameters;
 
-    /// <inheritdoc/>
-    public override Vector<T> GetParameters()
+    /// <summary>Applies a parameter vector to the already-resolved kernel and bias tensors.</summary>
+    private void ApplyResolvedParameters(Vector<T> parameters)
     {
-        if (!IsShapeResolved)
-        {
-            // Caller asked for parameters before first Forward — return
-            // an empty vector that round-trips with SetParameters'
-            // pre-resolved branch below. This matches DenseLayer's
-            // pre-init contract.
-            return new Vector<T>(0);
-        }
-        return Vector<T>.Concatenate(
-            new Vector<T>(_kernels.ToArray()),
-            new Vector<T>(_biases.ToArray()));
-    }
-
-    /// <inheritdoc/>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        // Infer input channels from the parameter layout when the layer
-        // hasn't seen a Forward yet — needed for Clone() paths that
-        // SetParameters(GetParameters()) on a fresh clone before
-        // PredictNoise has run. (C_out * C_in * K) + C_out = params.Length,
-        // solve for C_in.
-        if (!IsShapeResolved)
-        {
-            int candidateInputChannels = (parameters.Length - _outputChannels) /
-                                         (_outputChannels * _kernelSize);
-            if (candidateInputChannels <= 0
-                || candidateInputChannels * _outputChannels * _kernelSize + _outputChannels != parameters.Length)
-            {
-                throw new ArgumentException(
-                    $"Cannot infer inputChannels for Conv1DLayer from {parameters.Length} parameters " +
-                    $"(outputChannels={_outputChannels}, kernelSize={_kernelSize}).");
-            }
-            _inputChannels = candidateInputChannels;
-            // Conv2D needs T >= dilation*(K-1)+1 for the dummy shape
-            // check; use that as the placeholder spatial dim.
-            int minSpatial = _dilation * (_kernelSize - 1) + 1;
-            ResolveFromShape(new[] { candidateInputChannels, minSpatial });
-            _kernels = AllocateLazyWeight([_outputChannels, candidateInputChannels, 1, _kernelSize]);
-            _biases = AllocateLazyWeight([_outputChannels]);
-            RegisterTrainableParameter(_kernels, PersistentTensorRole.Weights);
-            RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);
-        }
-
         int expectedLength = _kernels.Length + _biases.Length;
         if (parameters.Length != expectedLength)
         {

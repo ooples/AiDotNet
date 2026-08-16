@@ -355,11 +355,7 @@ public class ConstantQTransform<T> : ModelBase<T, Tensor<T>, Tensor<T>>
     /// <inheritdoc />
     public override ILossFunction<T> DefaultLossFunction => new MeanSquaredErrorLoss<T>();
 
-    /// <inheritdoc />
-    public override Tensors.LinearAlgebra.Vector<T> GetParameters() => new Tensors.LinearAlgebra.Vector<T>(0);
 
-    /// <inheritdoc />
-    public override void SetParameters(Tensors.LinearAlgebra.Vector<T> parameters) { }
 
     /// <inheritdoc />
     public override IFullModel<T, Tensor<T>, Tensor<T>> WithParameters(Tensors.LinearAlgebra.Vector<T> parameters)

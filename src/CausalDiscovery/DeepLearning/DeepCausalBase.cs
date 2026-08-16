@@ -124,33 +124,6 @@ public abstract class DeepCausalBase<T> : CausalDiscoveryBase<T>
     }
 
     /// <summary>
-    /// Z-scores each column (zero mean, unit variance) so causal discovery is invariant to per-variable
-    /// scaling — multiplying any column by a constant leaves the standardized data (and therefore the
-    /// discovered structure) unchanged — and so the optimizer sees a consistent unit-variance signal
-    /// instead of one dominated by whichever variable happens to have the largest raw magnitude. Columns
-    /// with ~zero variance are centered with a unit divisor to avoid division by zero.
-    /// </summary>
-    protected Matrix<T> StandardizeColumns(Matrix<T> data)
-    {
-        int n = data.Rows, d = data.Columns;
-        var result = new Matrix<T>(n, d);
-        for (int j = 0; j < d; j++)
-        {
-            double mean = 0;
-            for (int i = 0; i < n; i++) mean += NumOps.ToDouble(data[i, j]);
-            mean /= Math.Max(1, n);
-            double variance = 0;
-            for (int i = 0; i < n; i++) { double c = NumOps.ToDouble(data[i, j]) - mean; variance += c * c; }
-            variance /= Math.Max(1, n - 1);
-            double std = Math.Sqrt(variance);
-            double inv = std > 1e-10 ? 1.0 / std : 1.0;
-            for (int i = 0; i < n; i++)
-                result[i, j] = NumOps.FromDouble((NumOps.ToDouble(data[i, j]) - mean) * inv);
-        }
-        return result;
-    }
-
-    /// <summary>
     /// Projects a learned (possibly cyclic) edge-probability matrix onto a DAG by zeroing every edge that
     /// disagrees with a node ordering. Nodes are ordered by net out-flow (Σ_j P[i,j] − P[j,i]) — the most
     /// "source-like" first — and an edge i→j is kept only when i precedes j in that order, which guarantees

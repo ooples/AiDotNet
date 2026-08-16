@@ -53,7 +53,7 @@ namespace AiDotNet.TimeSeries;
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("Time Series Analysis: Forecasting and Control", "https://doi.org/10.1002/9781118619193", Year = 1970, Authors = "George E. P. Box, Gwilym M. Jenkins")]
-public class ARMAModel<T> : TimeSeriesModelBase<T>
+public partial class ARMAModel<T> : TimeSeriesModelBase<T>
 {
     /// <summary>
     /// Initializes a new instance with default settings.
@@ -167,11 +167,13 @@ public class ARMAModel<T> : TimeSeriesModelBase<T>
     /// <summary>
     /// The time series values used during training. Stored for producing in-sample predictions.
     /// </summary>
+    [Buffer]
     private Vector<T> _trainedSeries;
 
     /// <summary>
     /// The residuals (prediction errors) from training. Stored for the MA component during prediction.
     /// </summary>
+    [Buffer]
     private Vector<T> _trainedResiduals;
 
     /// <summary>

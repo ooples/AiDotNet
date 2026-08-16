@@ -67,7 +67,14 @@ namespace AiDotNet.NeuralNetworks.Layers.SSM;
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerTask(LayerTask.AttentionComputation)]
 [LayerProperty(IsTrainable = true, IsStateful = true, Cost = ComputeCost.High, TestInputShape = "4, 256", TestConstructorArgs = "4")]
-public partial class HedgehogLayer<T> : LayerBase<T>
+// Shape-preserving. Relations discovered by probing; roles read from the forward - this folder's
+// convention is seqLen = Shape[rank-2], modelDim = Shape[rank-1], so rank 2 is [Time, Features].
+[TensorLayout(TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
+[AutoParameters]
+public partial class HedgehogLayer<T> : LayerBase<T>, IShapeContract
 {
     private readonly int _modelDimension;
     private readonly int _numHeads;
@@ -162,16 +169,6 @@ public partial class HedgehogLayer<T> : LayerBase<T>
     /// Gets the hidden dimension of the feature map MLP.
     /// </summary>
     public int FeatureMapHiddenDim => _featureMapHiddenDim;
-
-    /// <summary>
-    /// Gets the total number of trainable parameters.
-    /// </summary>
-    public override long ParameterCount =>
-        _queryWeights.Length + _keyWeights.Length + _valueWeights.Length +
-        _featureMapW1.Length + _featureMapB1.Length +
-        _featureMapW2.Length + _featureMapB2.Length +
-        _outputGateWeights.Length + _outputGateBias.Length +
-        _outputProjectionWeights.Length + _outputProjectionBias.Length;
 
     /// <summary>
     /// Creates a new Hedgehog layer with trainable feature maps for linear attention.
@@ -311,7 +308,7 @@ public partial class HedgehogLayer<T> : LayerBase<T>
     }
 
     /// <inheritdoc />
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         _originalInputShape = input._shape;
 
@@ -339,57 +336,10 @@ public partial class HedgehogLayer<T> : LayerBase<T>
         _lastKey = k;
         _lastValue = v;
 
-        // Step 2: Apply trainable feature map to Q and K
-        var phiQ = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
-        var phiK = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
-        var phiQHidden = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _numHeads, _featureMapHiddenDim });
-        var phiKHidden = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _numHeads, _featureMapHiddenDim });
-        var phiQPreAct = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _numHeads, _featureMapHiddenDim });
-        var phiKPreAct = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _numHeads, _featureMapHiddenDim });
-
-        var headVec = new T[_headDimension];
-        var featureOut = new T[_headDimension];
-        var preAct = new T[_featureMapHiddenDim];
-        var hiddenOut = new T[_featureMapHiddenDim];
-
-        for (int bi = 0; bi < batchSize; bi++)
-        {
-            for (int t = 0; t < seqLen; t++)
-            {
-                for (int hi = 0; hi < _numHeads; hi++)
-                {
-                    int dimStart = hi * _headDimension;
-
-                    // Apply feature map to Q
-                    for (int d = 0; d < _headDimension; d++)
-                        headVec[d] = q[new[] { bi, t, dimStart + d }];
-
-                    ApplyFeatureMap(headVec, hi, featureOut, preAct, hiddenOut);
-
-                    for (int d = 0; d < _headDimension; d++)
-                        phiQ[new[] { bi, t, dimStart + d }] = featureOut[d];
-                    for (int fi = 0; fi < _featureMapHiddenDim; fi++)
-                    {
-                        phiQHidden[new[] { bi, t, hi, fi }] = hiddenOut[fi];
-                        phiQPreAct[new[] { bi, t, hi, fi }] = preAct[fi];
-                    }
-
-                    // Apply feature map to K
-                    for (int d = 0; d < _headDimension; d++)
-                        headVec[d] = k[new[] { bi, t, dimStart + d }];
-
-                    ApplyFeatureMap(headVec, hi, featureOut, preAct, hiddenOut);
-
-                    for (int d = 0; d < _headDimension; d++)
-                        phiK[new[] { bi, t, dimStart + d }] = featureOut[d];
-                    for (int fi = 0; fi < _featureMapHiddenDim; fi++)
-                    {
-                        phiKHidden[new[] { bi, t, hi, fi }] = hiddenOut[fi];
-                        phiKPreAct[new[] { bi, t, hi, fi }] = preAct[fi];
-                    }
-                }
-            }
-        }
+        // Step 2: Apply the learned per-head feature MLP with batched matrix multiplies. The
+        // previous scalar extraction/fill path detached Q/K and all four feature-map parameters.
+        var (phiQ, phiQPreAct, phiQHidden) = ApplyFeatureMap(q, batchSize, seqLen);
+        var (phiK, phiKPreAct, phiKHidden) = ApplyFeatureMap(k, batchSize, seqLen);
 
         _lastPhiQ = phiQ;
         _lastPhiK = phiK;
@@ -407,7 +357,8 @@ public partial class HedgehogLayer<T> : LayerBase<T>
         _lastGate = gate;
 
         // Step 4: Causal linear attention with learned features
-        var attnOutput = LinearAttentionForward(phiQ, phiK, v, batchSize, seqLen);
+        var attnOutput = CausalLinearAttention.Normalized(
+            Engine, phiQ, phiK, v, _numHeads, NumOps.FromDouble(1e-6));
         _lastAttnOutput = attnOutput;
 
         // Step 5: Gated output
@@ -432,6 +383,61 @@ public partial class HedgehogLayer<T> : LayerBase<T>
         outputShape[rank - 2] = seqLen;
         outputShape[rank - 1] = _modelDimension;
         return Engine.Reshape(result, outputShape);
+    }
+
+    private (Tensor<T> Output, Tensor<T> PreActivation, Tensor<T> Hidden) ApplyFeatureMap(
+        Tensor<T> input, int batchSize, int seqLen)
+    {
+        int tokens = batchSize * seqLen;
+        int headBatch = tokens * _numHeads;
+        var heads = Engine.Reshape(
+            input,
+            new[] { headBatch, 1, _headDimension });
+        var w1 = Engine.Reshape(
+            Engine.TensorBroadcastTo(
+                Engine.Reshape(
+                    _featureMapW1,
+                    new[] { 1, _numHeads, _headDimension, _featureMapHiddenDim }),
+                new[] { tokens, _numHeads, _headDimension, _featureMapHiddenDim }),
+            new[] { headBatch, _headDimension, _featureMapHiddenDim });
+        var preActivation = Engine.Reshape(
+            Engine.TensorBroadcastAdd(
+                Engine.BatchMatMul(heads, w1),
+                Engine.Reshape(
+                    Engine.TensorBroadcastTo(
+                        Engine.Reshape(
+                            _featureMapB1,
+                            new[] { 1, _numHeads, 1, _featureMapHiddenDim }),
+                        new[] { tokens, _numHeads, 1, _featureMapHiddenDim }),
+                    new[] { headBatch, 1, _featureMapHiddenDim })),
+            new[] { headBatch, 1, _featureMapHiddenDim });
+        var hidden = Engine.TensorMultiply(
+            preActivation,
+            Engine.Sigmoid(
+                Engine.TensorMultiplyScalar(preActivation, NumOps.FromDouble(1.702))));
+        var w2 = Engine.Reshape(
+            Engine.TensorBroadcastTo(
+                Engine.Reshape(
+                    _featureMapW2,
+                    new[] { 1, _numHeads, _featureMapHiddenDim, _headDimension }),
+                new[] { tokens, _numHeads, _featureMapHiddenDim, _headDimension }),
+            new[] { headBatch, _featureMapHiddenDim, _headDimension });
+        var output = Engine.TensorBroadcastAdd(
+            Engine.BatchMatMul(hidden, w2),
+            Engine.Reshape(
+                Engine.TensorBroadcastTo(
+                    Engine.Reshape(
+                        _featureMapB2,
+                        new[] { 1, _numHeads, 1, _headDimension }),
+                    new[] { tokens, _numHeads, 1, _headDimension }),
+                new[] { headBatch, 1, _headDimension }));
+
+        return (
+            Engine.Reshape(output, new[] { batchSize, seqLen, _modelDimension }),
+            Engine.Reshape(preActivation,
+                new[] { batchSize, seqLen, _numHeads, _featureMapHiddenDim }),
+            Engine.Reshape(hidden,
+                new[] { batchSize, seqLen, _numHeads, _featureMapHiddenDim }));
     }
 
     /// <summary>
@@ -544,28 +550,6 @@ public partial class HedgehogLayer<T> : LayerBase<T>
         RegisterTrainableParameter(_outputProjectionWeights, PersistentTensorRole.Weights);
         RegisterTrainableParameter(_outputProjectionBias, PersistentTensorRole.Biases);
 
-    }
-
-    /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        var parameters = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
-        int index = 0;
-        foreach (var tensor in GetAllTensors())
-            for (int i = 0; i < tensor.Length; i++)
-                parameters[index++] = tensor[i];
-        return parameters;
-    }
-
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (parameters.Length != ParameterCount)
-            throw new ArgumentException($"Expected {ParameterCount} parameters, got {parameters.Length}");
-        int index = 0;
-        foreach (var tensor in GetAllTensors())
-            for (int i = 0; i < tensor.Length; i++)
-                tensor[i] = parameters[index++];
     }
 
     private Tensor<T>[] GetAllTensors() =>

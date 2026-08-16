@@ -1,4 +1,4 @@
-using AiDotNet.Interfaces;
+﻿using AiDotNet.Interfaces;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -37,9 +37,12 @@ namespace AiDotNet.SelfSupervisedLearning.Losses;
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Emerging Properties in Self-Supervised Vision Transformers", "https://arxiv.org/abs/2104.14294", Year = 2021, Authors = "Mathilde Caron, Hugo Touvron, Ishan Misra, Hervé Jégou, Julien Mairal, Piotr Bojanowski, Armand Joulin")]
-public class DINOLoss<T> : IContrastiveLoss<T>
+public class DINOLoss<T> : ContrastiveLossBase<T>
 {
-    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+
+
+    // Engine and NumOps come from ContrastiveLossBase; redeclaring them here shadows the base
+    // members rather than adding anything.
 
     private readonly double _studentTemperature;
     private readonly double _teacherTemperature;
@@ -357,12 +360,91 @@ public class DINOLoss<T> : IContrastiveLoss<T>
 
         return new Tensor<T>(result, [batchSize, dim]);
     }
-
     /// <summary>
-    /// IContrastiveLoss implementation — delegates to ComputeLoss with default center update.
+    /// Differentiable DINO cross-entropy: -sum(P_teacher * log P_student).
     /// </summary>
-    T IContrastiveLoss<T>.ComputeLoss(Tensor<T> view1, Tensor<T> view2)
+    /// <param name="view1">Student output [batch, dim].</param>
+    /// <param name="view2">Teacher output [batch, dim].</param>
+    /// <param name="updateCenter">
+    /// Whether to advance the teacher EMA center. Pass <c>false</c> to MEASURE the loss without
+    /// changing state.
+    /// </param>
+    /// <remarks>
+    /// <para>
+    /// The teacher is centered and sharpened at its own temperature and is treated as a CONSTANT
+    /// target (DINO stops the gradient through the teacher branch, Caron et al. 2021), so only the
+    /// student path carries tape history. log P_student uses the stable log-softmax rather than
+    /// log(softmax(x) + eps), which both loses precision and biases the loss.
+    /// </para>
+    /// <para>
+    /// COMPUTING THE LOSS IS NOT SUPPOSED TO TRAIN THE TEACHER. <see cref="UpdateCenter"/> advances
+    /// an EMA, so every call shifts the targets subsequent calls are scored against. Evaluating for
+    /// validation or logging through a path that always updates makes a run depend on how many times
+    /// the loss happened to be measured, which is not reproducible. The scalar three-argument
+    /// <see cref="ComputeLoss(Tensor{T}, Tensor{T}, bool)"/> already exposed this control; the
+    /// differentiable path now does too.
+    /// </para>
+    /// <para>
+    /// It is a separate name rather than a <c>bool</c> overload because a
+    /// <c>ComputeLoss(Tensor, Tensor, bool)</c> returning <c>Tensor&lt;T&gt;</c> would collide with
+    /// the existing scalar overload of that exact signature -- same parameters, different return
+    /// type, which C# rejects.
+    /// </para>
+    /// </remarks>
+    public Tensor<T> ComputeDifferentiableLoss(Tensor<T> view1, Tensor<T> view2, bool updateCenter = true)
     {
-        return ComputeLoss(view1, view2);
+        if (view1 is null) throw new ArgumentNullException(nameof(view1));
+        if (view2 is null) throw new ArgumentNullException(nameof(view2));
+
+        ContrastiveTapeOps<T>.RequireMatchingRank2(
+            view1, view2, "DINO", nameof(view1), nameof(view2));
+
+        // The output width is checked against the CONFIGURED one too: a mismatch would otherwise
+        // surface as an engine broadcast error that never mentions the DINO output dimension the
+        // caller actually got wrong.
+        if (view2.Shape[1] != _outputDim)
+        {
+            throw new ArgumentException(
+                $"DINO was configured for an output dimension of {_outputDim}, but the logits are "
+                + $"{view2.Shape[1]} wide.", nameof(view2));
+        }
+
+        int batchSize = view1.Shape[0];
+
+        // TEACHER DETACHED, NOT MERELY DOCUMENTED. The teacher is an EMA copy updated outside the
+        // optimizer and its centre is a running statistic, so neither is differentiated -- but the
+        // remarks saying so do not enforce it. ApplyCenter, TensorMultiplyScalar and Softmax all
+        // record, so any tape history view2 arrived with leaks a gradient path into the teacher
+        // branch. StopGradient blocks it at the boundary.
+        var teacherSource = Engine.StopGradient(view2);
+
+        var centeredTeacher = ApplyCenter(teacherSource);
+        var teacherLogits = Engine.TensorMultiplyScalar(
+            centeredTeacher, NumOps.FromDouble(1.0 / _teacherTemperature));
+        var teacherProbs = Engine.Softmax(teacherLogits, axis: -1);
+
+        var studentLogits = Engine.TensorMultiplyScalar(
+            view1, NumOps.FromDouble(1.0 / _studentTemperature));
+        var studentLogProbs = ObjectiveOps.LogSoftmax(studentLogits, axis: studentLogits.Shape.Length - 1);
+
+        var crossEntropy = Engine.ReduceSum(
+            Engine.TensorMultiply(teacherProbs, studentLogProbs), null, keepDims: false);
+
+        if (updateCenter)
+        {
+            UpdateCenter(view2);
+        }
+
+        return Engine.TensorNegate(
+            Engine.TensorDivideScalar(crossEntropy, NumOps.FromDouble(batchSize)));
     }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Updates the teacher EMA center, matching the training-path default. Call
+    /// <see cref="ComputeDifferentiableLoss"/> with <c>updateCenter: false</c> to measure the loss
+    /// without advancing it.
+    /// </remarks>
+    public override Tensor<T> ComputeLoss(Tensor<T> view1, Tensor<T> view2)
+        => ComputeDifferentiableLoss(view1, view2, updateCenter: true);
 }

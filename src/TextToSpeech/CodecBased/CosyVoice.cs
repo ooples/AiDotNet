@@ -191,7 +191,8 @@ public class CosyVoice<T> : TtsModelBase<T>, ICodecTts<T>
                     _options.NumEncoderLayers,
                     _options.NumLLMLayers,
                     _options.NumHeads,
-                    _options.DropoutRate
+                    _options.DropoutRate,
+                    _options.VocabSize
                 )
             );
     }
@@ -202,11 +203,11 @@ public class CosyVoice<T> : TtsModelBase<T>, ICodecTts<T>
         ThrowIfDisposed();
         if (IsOnnxMode && OnnxModel is not null)
             return OnnxModel.Run(input);
-        SetTrainingMode(false);
-        var c = input;
-        foreach (var l in Layers)
-            c = l.Forward(c);
-        return c;
+
+        // Native CosyVoice is the ordinary sequential Layers graph. Use the
+        // canonical executor so inference gets deterministic eval mode,
+        // streaming materialize/release, and per-layer scratch recycling.
+        return base.PredictCore(input);
     }
 
     /// <inheritdoc />
@@ -217,7 +218,10 @@ public class CosyVoice<T> : TtsModelBase<T>, ICodecTts<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expected);
+            // Honor the optimizer selected by the public constructor. The
+            // optimizer-less overload falls back to NeuralNetworkBase's
+            // generic default and silently discards CosyVoice's AdamW choice.
+            TrainWithTape(input, expected, _optimizer);
         }
         finally
         {
@@ -226,19 +230,10 @@ public class CosyVoice<T> : TtsModelBase<T>, ICodecTts<T>
     }
 
     /// <inheritdoc />
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        if (!_useNativeMode)
-            throw new NotSupportedException("Cannot update parameters in ONNX mode.");
-        int idx = 0;
-        foreach (var l in Layers)
-        {
-            int c = checked((int)l.ParameterCount);
-            l.UpdateParameters(parameters.Slice(idx, c));
-            idx += c;
-        }
-    }
-
+    /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
+    /// write on every parameter surface, so the guard is stated once here instead of being
+    /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
+    protected override bool SupportsParameterMutation => _useNativeMode;
     /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
@@ -305,9 +300,10 @@ public class CosyVoice<T> : TtsModelBase<T>, ICodecTts<T>
     /// <inheritdoc />
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
+        var cloneOptions = new CosyVoiceOptions(_options);
         if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new CosyVoice<T>(Architecture, mp, _options);
-        return new CosyVoice<T>(Architecture, _options);
+            return new CosyVoice<T>(Architecture, mp, cloneOptions);
+        return new CosyVoice<T>(Architecture, cloneOptions);
     }
 
     private void ThrowIfDisposed()

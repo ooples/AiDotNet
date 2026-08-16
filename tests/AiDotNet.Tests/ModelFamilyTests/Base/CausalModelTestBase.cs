@@ -11,26 +11,30 @@ namespace AiDotNet.Tests.ModelFamilyTests.Base;
 /// Tests mathematical invariants: finite treatment effects, zero-treatment baseline,
 /// determinism, and effect recovery on synthetic data.
 /// </summary>
-public abstract class CausalModelTestBase
+public abstract class CausalModelTestBase<T>
 {
-    protected abstract IFullModel<double, Matrix<double>, Vector<double>> CreateModel();
+    protected static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+    protected static T ToT(double value) => NumOps.FromDouble(value);
+    protected static double ToD(T value) => Convert.ToDouble(value);
+
+    protected abstract IFullModel<T, Matrix<T>, Vector<T>> CreateModel();
 
     protected virtual int TrainSamples => 100;
     protected virtual int Features => 3;
 
-    private (Matrix<double> X, Vector<double> Y) GenerateCausalData(Random rng, double treatmentEffect)
+    private (Matrix<T> X, Vector<T> Y) GenerateCausalData(Random rng, double treatmentEffect)
     {
-        var x = new Matrix<double>(TrainSamples, Features);
-        var y = new Vector<double>(TrainSamples);
+        var x = new Matrix<T>(TrainSamples, Features);
+        var y = new Vector<T>(TrainSamples);
         for (int i = 0; i < TrainSamples; i++)
         {
             // Feature 0 is treatment indicator (0 or 1)
             double treatment = rng.NextDouble() > 0.5 ? 1.0 : 0.0;
-            x[i, 0] = treatment;
+            x[i, 0] = ToT(treatment);
             for (int j = 1; j < Features; j++)
-                x[i, j] = rng.NextDouble() * 5.0;
+                x[i, j] = ToT(rng.NextDouble() * 5.0);
             // Outcome = baseline + treatment effect + noise
-            y[i] = 2.0 + treatment * treatmentEffect + ModelTestHelpers.NextGaussian(rng) * 0.5;
+            y[i] = ToT(2.0 + treatment * treatmentEffect + ModelTestHelpers.NextGaussian(rng) * 0.5);
         }
         return (x, y);
     }
@@ -48,8 +52,9 @@ public abstract class CausalModelTestBase
 
         for (int i = 0; i < predictions.Length; i++)
         {
-            Assert.False(double.IsNaN(predictions[i]), $"Causal prediction[{i}] is NaN.");
-            Assert.False(double.IsInfinity(predictions[i]), $"Causal prediction[{i}] is Infinity.");
+            double prediction = ToD(predictions[i]);
+            Assert.False(double.IsNaN(prediction), $"Causal prediction[{i}] is NaN.");
+            Assert.False(double.IsInfinity(prediction), $"Causal prediction[{i}] is Infinity.");
         }
     }
 
@@ -117,6 +122,9 @@ public abstract class CausalModelTestBase
         using var model = CreateModel();
         var (trainX, trainY) = GenerateCausalData(rng, 3.0);
         model.Train(trainX, trainY);
-        Assert.True(((IParameterizable<double, Matrix<double>, Vector<double>>)model).GetParameters().Length > 0, "Trained causal model should have parameters.");
+        Assert.True(((IParameterizable<T, Matrix<T>, Vector<T>>)model).GetParameters().Length > 0, "Trained causal model should have parameters.");
     }
 }
+
+/// <summary>Default-precision alias for existing hand-written fixtures.</summary>
+public abstract class CausalModelTestBase : CausalModelTestBase<double> { }

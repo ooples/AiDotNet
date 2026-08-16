@@ -43,13 +43,24 @@ namespace AiDotNet.Audio.Enhancement;
 [ResearchPaper("MP-SENet: A Speech Enhancement Model with Parallel Denoising of Magnitude and Phase Spectra", "https://doi.org/10.48550/arXiv.2305.13686", Year = 2023, Authors = "Ye-Xin Lu, Yang Ai, Zhen-Hua Ling")]
 public class MPSENet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// Measured on <c>PredictCore</c>, a plain fold over <c>Layers</c> that does NOT call
+    /// <c>PostprocessOutput</c> (the inverse STFT runs only inside <c>Enhance</c>). The last layer of
+    /// <c>CreateDefaultMPSENetLayers</c> is the joint head <c>DenseLayer&lt;T&gt;(numFreqBins * 2)</c>
+    /// - magnitude mask plus phase correction - supplied from <c>_options.NumFreqBins</c>.
+    /// </remarks>
+    protected override int OutputFeatureWidth => _options.NumFreqBins * 2;
+
     #region Fields
 
     private readonly MPSENetOptions _options;
     public override ModelOptions GetOptions() => _options;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private ShortTimeFourierTransform<T> _stft;
+    [Scratch]
     private Tensor<T>? _lastPhase;
+    [Buffer]
     private Tensor<T>? _noiseProfile;
     private bool _useNativeMode;
     private bool _disposed;
@@ -184,7 +195,7 @@ public class MPSENet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expected);
+            TrainWithTape(input, expected, _optimizer);
         }
         finally
         {
@@ -192,12 +203,11 @@ public class MPSENet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
         }
     }
 
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        if (!_useNativeMode) throw new NotSupportedException("ONNX mode.");
-        int idx = 0; foreach (var l in Layers) { int c = (int)l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; }
-    }
-
+    /// <inheritdoc />
+    /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
+    /// write on every parameter surface, so the guard is stated once here instead of being
+    /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
+    protected override bool SupportsParameterMutation => _useNativeMode;
     protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio)
     {
         _stft.MagnitudeAndPhase(rawAudio, out var magnitude, out var phase);

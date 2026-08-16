@@ -43,7 +43,7 @@ namespace AiDotNet.AnomalyDetection.Probabilistic;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
     [ResearchPaper("Pattern Recognition and Machine Learning", "https://www.springer.com/gp/book/9780387310732")]
-public class GMMDetector<T> : AnomalyDetectorBase<T>
+public partial class GMMDetector<T> : AnomalyDetectorBase<T>
 {
     private readonly int _nComponents;
     private readonly int _maxIterations;
@@ -51,6 +51,7 @@ public class GMMDetector<T> : AnomalyDetectorBase<T>
     private Matrix<T>[] _covariances = Array.Empty<Matrix<T>>();
     private Vector<T> _weights = new Vector<T>(0);
     private int _nFeatures;
+    [Buffer]
     private Vector<T> _globalVariance = new Vector<T>(0);
 
     /// <summary>

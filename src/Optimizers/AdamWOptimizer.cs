@@ -1,4 +1,4 @@
-using AiDotNet.Tensors.Engines.DirectGpu;
+﻿using AiDotNet.Tensors.Engines.DirectGpu;
 using System.Collections.Concurrent;
 using AiDotNet.Tensors.Engines.Autodiff;
 using Newtonsoft.Json;
@@ -377,7 +377,14 @@ public class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
     /// <returns>The updated parameter vector.</returns>
     public override Vector<T> UpdateParameters(Vector<T> parameters, Vector<T> gradient)
     {
-        if (_m == null || _v == null || _m.Length != parameters.Length)
+        if (parameters.Length != gradient.Length)
+        {
+            throw new ArgumentException(
+                $"Parameter vector length ({parameters.Length}) must match gradient vector length ({gradient.Length}).",
+                nameof(gradient));
+        }
+
+        if (_m == null || _v == null || _m.Length != parameters.Length || _v.Length != parameters.Length)
         {
             _m = new Vector<T>(parameters.Length);
             _v = new Vector<T>(parameters.Length);
@@ -389,16 +396,28 @@ public class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
             _previousV = new Vector<T>(parameters.Length);
             _t = 0;
         }
-
-        // Save pre-update state for accurate reverse updates
-        if (_previousM == null || _previousV == null)
+        if (_options.UseAMSGrad && (_vMax is null || _vMax.Length != parameters.Length))
         {
-            _previousM = new Vector<T>(parameters.Length);
-            _previousV = new Vector<T>(parameters.Length);
+            _vMax = new Vector<T>(parameters.Length);
         }
 
-        _previousM = new Vector<T>(_m);
-        _previousV = new Vector<T>(_v);
+        // Save pre-update state for accurate reverse updates. Allocated once, then copied into IN
+        // PLACE -- same fix as AdamOptimizer. `new Vector<T>(_m)` ran per step and allocated two
+        // FULL-LENGTH vectors each time (measured: 32 MB/step of the 48.98 MB AdamW was spending at
+        // 2,000,000 parameters), and it binds to Vector(IEnumerable<T>), so the copy went through an
+        // enumerator one element at a time instead of a memmove. The allocations in the guard were
+        // dead too: overwritten by the next two lines before anything could read them.
+        if (_previousM == null || _previousM.Length != _m.Length)
+        {
+            _previousM = new Vector<T>(_m.Length, skipZeroInit: true);
+        }
+        if (_previousV == null || _previousV.Length != _v.Length)
+        {
+            _previousV = new Vector<T>(_v.Length, skipZeroInit: true);
+        }
+
+        _m.AsSpan().CopyTo(_previousM.AsWritableSpan());
+        _v.AsSpan().CopyTo(_previousV.AsWritableSpan());
         _previousT = _t;
 
         _t++;
@@ -413,51 +432,59 @@ public class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
         T weightDecay = NumOps.FromDouble(_options.WeightDecay);
 
         // Update biased first moment: m = beta1 * m + (1 - beta1) * gradient
-        var mScaled = (Vector<T>)Engine.Multiply(_m, beta1);
-        var gradScaled = (Vector<T>)Engine.Multiply(gradient, oneMinusBeta1);
-        _m = (Vector<T>)Engine.Add(mScaled, gradScaled);
+        // ONE FUSED IN-PLACE PASS -- the same rewrite as AdamOptimizer, for the same reason.
+        //
+        // What this replaces: ~19 Engine.Multiply/Add/Divide/Sqrt/Subtract calls, each RETURNING a
+        // fresh full-length vector, plus a Vector<T>.CreateDefault that broadcast the scalar epsilon
+        // into a full-length constant vector purely so it could be passed to a vector-vector Add.
+        // Measured on Adam's near-identical chain at 2,000,000 double parameters: 701.9 MB
+        // allocated per step and ~290 ms/step, against 15.3 MB and 17.0 ms for the fused loop.
+        //
+        // Per-element operand and association order is preserved exactly, including AdamW's
+        // DECOUPLED weight decay -- applied to the parameters rather than folded into the gradient
+        // (Loshchilov & Hutter 2019) -- and its order relative to the Adam step:
+        //   out = (p - (mHat / (sqrt(vHat) + eps)) * lr) - ((p * wd) * lr)
+        // The decay term uses the ORIGINAL p, not the post-Adam value, exactly as before.
+        var updatedParameters = new Vector<T>(parameters.Length, skipZeroInit: true);
 
-        // Update biased second moment: v = beta2 * v + (1 - beta2) * gradient^2
-        var gradSquared = (Vector<T>)Engine.Multiply(gradient, gradient);
-        var vScaled = (Vector<T>)Engine.Multiply(_v, beta2);
-        var gradSquaredScaled = (Vector<T>)Engine.Multiply(gradSquared, oneMinusBeta2);
-        _v = (Vector<T>)Engine.Add(vScaled, gradSquaredScaled);
+        var pSpan = parameters.AsSpan();
+        var gSpan = gradient.AsSpan();
+        var mSpan = _m.AsWritableSpan();
+        var vSpan = _v.AsWritableSpan();
+        var outSpan = updatedParameters.AsWritableSpan();
+        bool amsGrad = _options.UseAMSGrad && _vMax != null;
+        var vMaxSpan = amsGrad ? _vMax!.AsWritableSpan() : default;
+        T learningRate = CurrentLearningRate;
 
-        // Compute bias-corrected first moment: mHat = m / (1 - beta1^t)
-        var mHat = (Vector<T>)Engine.Divide(_m, biasCorrection1);
-
-        // Compute bias-corrected second moment: vHat = v / (1 - beta2^t)
-        var vHat = (Vector<T>)Engine.Divide(_v, biasCorrection2);
-
-        // Handle AMSGrad variant using vectorized max operation
-        Vector<T> vHatEffective;
-        if (_options.UseAMSGrad && _vMax != null)
+        for (int i = 0; i < pSpan.Length; i++)
         {
-            // Update vMax = max(vMax, vHat) using vectorized operation
-            _vMax = (Vector<T>)Engine.Max(_vMax, vHat);
-            vHatEffective = _vMax;
+            T g = gSpan[i];
+            T p = pSpan[i];
+
+            T m = NumOps.Add(NumOps.Multiply(mSpan[i], beta1), NumOps.Multiply(g, oneMinusBeta1));
+            mSpan[i] = m;
+
+            T v = NumOps.Add(
+                NumOps.Multiply(vSpan[i], beta2),
+                NumOps.Multiply(NumOps.Multiply(g, g), oneMinusBeta2));
+            vSpan[i] = v;
+
+            T mHat = NumOps.Divide(m, biasCorrection1);
+            T vHat = NumOps.Divide(v, biasCorrection2);
+
+            if (amsGrad)
+            {
+                // Preserve Engine.Max(vMax, vHat) operand order, including its NaN behavior.
+                vHat = NumOps.GreaterThan(vMaxSpan[i], vHat) ? vMaxSpan[i] : vHat;
+                vMaxSpan[i] = vHat;
+            }
+
+            T adamUpdate = NumOps.Divide(mHat, NumOps.Add(NumOps.Sqrt(vHat), epsilon));
+            T afterAdam = NumOps.Subtract(p, NumOps.Multiply(adamUpdate, learningRate));
+            outSpan[i] = NumOps.Subtract(
+                afterAdam,
+                NumOps.Multiply(NumOps.Multiply(p, weightDecay), learningRate));
         }
-        else
-        {
-            vHatEffective = vHat;
-        }
-
-        // Compute Adam update: update = mHat / (sqrt(vHat) + epsilon)
-        var vHatSqrt = (Vector<T>)Engine.Sqrt(vHatEffective);
-        var epsilonVec = Vector<T>.CreateDefault(vHatSqrt.Length, epsilon);
-        var denominator = (Vector<T>)Engine.Add(vHatSqrt, epsilonVec);
-        var adamUpdate = (Vector<T>)Engine.Divide(mHat, denominator);
-
-        // Scale Adam update by learning rate
-        var scaledAdamUpdate = (Vector<T>)Engine.Multiply(adamUpdate, CurrentLearningRate);
-
-        // DECOUPLED WEIGHT DECAY: Apply weight decay directly to parameters
-        var weightDecayTerm = (Vector<T>)Engine.Multiply(parameters, weightDecay);
-        var scaledWeightDecay = (Vector<T>)Engine.Multiply(weightDecayTerm, CurrentLearningRate);
-
-        // Combine: parameters = parameters - scaledAdamUpdate - scaledWeightDecay
-        var afterAdamUpdate = (Vector<T>)Engine.Subtract(parameters, scaledAdamUpdate);
-        var updatedParameters = (Vector<T>)Engine.Subtract(afterAdamUpdate, scaledWeightDecay);
 
         return updatedParameters;
     }

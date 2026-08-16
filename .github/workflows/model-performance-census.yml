@@ -1,0 +1,307 @@
+name: Model Performance Census
+
+# Fixture-native performance coverage for every neural-network model scaffold. Correctness tests
+# establish model semantics; this lane records construction, cold/steady forward, taped forward,
+# backward, optimizer-step, allocations, GC and projections without hiding slow models behind a
+# best-effort HeavyTimeout allowlist.
+
+on:
+  pull_request:
+    paths:
+      # Every model family lives under src/, not only src/NeuralNetworks/. Audio, finance,
+      # vision-language and TTS regressions were previously able to bypass the census entirely.
+      - 'src/**'
+      - 'tests/AiDotNet.Tests/ModelFamilyTests/**'
+      - 'tools/ModelPerfFixtureRunner/**'
+      - 'tools/ModelPerfProbe/**'
+      - '.github/workflows/model-performance-census.yml'
+  schedule:
+    - cron: '0 6 * * *'
+  workflow_dispatch: {}
+
+concurrency:
+  group: model-performance-census-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  PERF_SHARD_COUNT: 32
+  PERF_MODEL_TIMEOUT_SECONDS: 180
+
+jobs:
+  prepare:
+    name: Build and Inventory Model Fixtures
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
+        with:
+          persist-credentials: false
+
+      - name: Setup .NET 10.0
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Restore fixture assembly
+        shell: pwsh
+        run: dotnet restore tests/AiDotNet.Tests/AiDotNetTests.csproj
+
+      - name: Build fixture assembly once
+        shell: pwsh
+        run: |
+          dotnet build tests/AiDotNet.Tests/AiDotNetTests.csproj -c Release `
+            --framework net10.0 --no-restore
+
+      - name: Build exact-fixture performance host
+        shell: pwsh
+        run: |
+          dotnet restore tools/ModelPerfFixtureRunner/ModelPerfFixtureRunner.csproj
+          dotnet build tools/ModelPerfFixtureRunner/ModelPerfFixtureRunner.csproj -c Release `
+            --framework net10.0 --no-restore
+
+      - name: Create Linux test dependency bundle
+        shell: pwsh
+        run: |
+          $source = Join-Path $env:GITHUB_WORKSPACE 'tools/ModelPerfFixtureRunner/bin/Release/net10.0'
+          $bundle = Join-Path $env:GITHUB_WORKSPACE 'artifacts/model-performance/test-bundle'
+          New-Item -ItemType Directory -Force -Path $bundle | Out-Null
+
+          # The unfiltered output is about 2.6 GiB because NuGet copies native assets for every
+          # supported OS and architecture. Ship the managed dependency closure plus linux-x64
+          # native assets instead, so 32 workers consume one immutable, runner-correct build.
+          $depsPath = Join-Path $source 'ModelPerfFixtureRunner.deps.json'
+          $deps = Get-Content $depsPath -Raw | ConvertFrom-Json -AsHashtable
+          $target = $deps.targets[$deps.runtimeTarget.name]
+          $managedNames = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::OrdinalIgnoreCase)
+          foreach ($library in $target.Values) {
+            if ($library.runtime) {
+              foreach ($asset in $library.runtime.Keys) {
+                [void]$managedNames.Add([IO.Path]::GetFileName($asset))
+              }
+            }
+          }
+
+          Copy-Item -LiteralPath 'tools/ModelPerfProbe/Invoke-ModelPerfShard.ps1' -Destination $bundle
+
+          foreach ($name in $managedNames) {
+            $candidate = Join-Path $source $name
+            if (Test-Path -LiteralPath $candidate) {
+              Copy-Item -LiteralPath $candidate -Destination $bundle
+            }
+          }
+
+          $runnerFiles = @(
+            'ModelPerfFixtureRunner.dll',
+            'ModelPerfFixtureRunner.deps.json',
+            'ModelPerfFixtureRunner.runtimeconfig.json'
+          )
+          foreach ($name in $runnerFiles) {
+            $candidate = Join-Path $source $name
+            if (-not (Test-Path -LiteralPath $candidate)) {
+              throw "Required test bundle file is missing: $candidate"
+            }
+            Copy-Item -LiteralPath $candidate -Destination $bundle -Force
+          }
+
+          foreach ($library in $target.Values) {
+            if (-not $library.runtimeTargets) { continue }
+            foreach ($asset in $library.runtimeTargets.GetEnumerator()) {
+              if ($asset.Value.rid -ne 'linux-x64') { continue }
+              $candidate = Join-Path $source $asset.Key
+              if (-not (Test-Path -LiteralPath $candidate)) {
+                throw "Required linux-x64 runtime asset is missing: $candidate"
+              }
+              $destination = Join-Path $bundle $asset.Key
+              New-Item -ItemType Directory -Force -Path ([IO.Path]::GetDirectoryName($destination)) | Out-Null
+              Copy-Item -LiteralPath $candidate -Destination $destination
+            }
+          }
+
+      - name: Record and verify expected fixture inventory
+        shell: pwsh
+        run: |
+          $inventory = Join-Path $env:GITHUB_WORKSPACE 'artifacts/model-performance/inventory'
+          New-Item -ItemType Directory -Force -Path $inventory | Out-Null
+          $arguments = @(
+            'vstest', 'tests/AiDotNet.Tests/bin/Release/net10.0/AiDotNetTests.dll',
+            '--ListTests',
+            '--TestCaseFilter:Category=ModelPerformanceCensus')
+          & dotnet @arguments | Set-Content (Join-Path $inventory 'test-list.txt')
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $count = (Select-String -Path (Join-Path $inventory 'test-list.txt') `
+            -Pattern '\.ModelPerformanceCensus$').Count
+          if ($count -le 0) { throw 'No ModelPerformanceCensus fixtures were discovered.' }
+          dotnet tools/ModelPerfFixtureRunner/bin/Release/net10.0/ModelPerfFixtureRunner.dll `
+            --validate-inventory (Join-Path $inventory 'test-list.txt')
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Copy-Item -LiteralPath (Join-Path $inventory 'test-list.txt') `
+            -Destination 'artifacts/model-performance/test-bundle/test-list.txt'
+          Write-Host "Discovered $count model performance fixtures."
+
+      - name: Upload immutable test bundle
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4
+        with:
+          name: perf-test-bundle
+          path: artifacts/model-performance/test-bundle
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: Upload fixture inventory
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4
+        with:
+          name: model-performance-inventory
+          path: artifacts/model-performance/inventory
+          if-no-files-found: error
+
+  census:
+    name: Census ${{ matrix.shard }}
+    needs: prepare
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15,
+                16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31]
+    steps:
+      - name: Setup .NET 10.0
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Download immutable test bundle
+        uses: actions/download-artifact@95815c38cf2ff2164869cbab79da8d1f422bc89e # v4
+        with:
+          name: perf-test-bundle
+          path: test-bundle
+
+      - name: Run assigned model fixtures serially
+        shell: pwsh
+        env:
+          AIDOTNET_MODEL_PERF_DIR: ${{ github.workspace }}/artifacts/model-performance/shard-${{ matrix.shard }}
+          AIDOTNET_LICENSE_KEY: ${{ secrets.AIDOTNET_LICENSE_KEY }}
+          DOTNET_gcServer: '0'
+        run: |
+          & test-bundle/Invoke-ModelPerfShard.ps1 `
+            -Runner test-bundle/ModelPerfFixtureRunner.dll `
+            -Inventory test-bundle/test-list.txt `
+            -OutputDirectory $env:AIDOTNET_MODEL_PERF_DIR `
+            -ShardIndex ${{ matrix.shard }} `
+            -ShardCount $env:PERF_SHARD_COUNT `
+            -TimeoutSeconds $env:PERF_MODEL_TIMEOUT_SECONDS
+
+      - name: Upload shard records
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4
+        with:
+          name: model-performance-${{ matrix.shard }}
+          path: artifacts/model-performance/shard-${{ matrix.shard }}
+          if-no-files-found: error
+
+  verify:
+    name: Model Performance Coverage and Regressions
+    needs: [prepare, census]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
+        with:
+          persist-credentials: false
+
+      - name: Setup .NET 10.0
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Download all shard records
+        uses: actions/download-artifact@95815c38cf2ff2164869cbab79da8d1f422bc89e # v4
+        with:
+          pattern: model-performance-*
+          path: artifacts/model-performance/all
+          merge-multiple: true
+
+      - name: Restore and build verifier
+        run: |
+          dotnet restore tools/ModelPerfProbe/ModelPerfProbe.csproj
+          dotnet build tools/ModelPerfProbe/ModelPerfProbe.csproj -c Release --no-restore
+
+      - name: Count expected fixture inventory
+        id: inventory
+        shell: pwsh
+        run: |
+          $list = 'artifacts/model-performance/all/test-list.txt'
+          if (-not (Test-Path $list)) { throw "Fixture inventory is missing: $list" }
+          $count = (Select-String -Path $list -Pattern '\.ModelPerformanceCensus$').Count
+          if ($count -le 0) { throw 'No ModelPerformanceCensus fixtures were discovered.' }
+          "count=$count" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+
+      - name: Download latest default-branch baseline
+        id: baseline
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $runs = gh run list --workflow model-performance-census.yml --branch master --status success --limit 1 --json databaseId | ConvertFrom-Json
+          if ($runs.Count -eq 0) {
+            'present=false' | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+            exit 0
+          }
+          New-Item -ItemType Directory -Force -Path artifacts/model-performance/prior | Out-Null
+          gh run download $runs[0].databaseId --name model-performance-baseline --dir artifacts/model-performance/prior
+          $path = 'artifacts/model-performance/prior/baseline.json'
+          if (Test-Path $path) {
+            'present=true' | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+            "path=$path" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          } else {
+            'present=false' | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          }
+
+      - name: Enforce coverage, ceilings and environment-qualified baseline
+        shell: pwsh
+        run: |
+          $arguments = @(
+            'run', '--project', 'tools/ModelPerfProbe/ModelPerfProbe.csproj',
+            '-c', 'Release', '--no-build', '--',
+            '--results', 'artifacts/model-performance/all',
+            '--output', 'artifacts/model-performance/summary.json',
+            '--write-baseline', 'artifacts/model-performance/baseline.json',
+            '--expected-count', '${{ steps.inventory.outputs.count }}',
+            '--max-regression-ratio', '1.25',
+            '--max-train-step-ms', '120000',
+            '--max-steady-forward-p95-ms', '30000',
+            '--max-fixture-wall-ms', '120000',
+            # Ordinary models must stay below roughly half of a 16 GiB runner. Foundation models
+            # additionally receive at most 32 bytes per trainable fp32 parameter (8x the weight
+            # payload) for weights, gradients, optimizer state and execution packs. The baseline
+            # comparison still rejects any environment-matched metric regression above 25%.
+            '--max-peak-working-set-bytes', '8589934592',
+            '--max-peak-private-memory-bytes', '9663676416',
+            '--max-peak-bytes-per-parameter', '32',
+            '--max-correctness-probe-ms', '120000')
+          if ('${{ steps.baseline.outputs.present }}' -eq 'true') {
+            $arguments += @('--baseline', '${{ steps.baseline.outputs.path }}')
+          }
+          & dotnet @arguments
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Upload summary
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4
+        with:
+          name: model-performance-summary
+          path: artifacts/model-performance
+          if-no-files-found: error
+
+      - name: Upload environment-qualified baseline
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4
+        with:
+          name: model-performance-baseline
+          path: artifacts/model-performance/baseline.json
+          if-no-files-found: error

@@ -87,7 +87,7 @@ namespace AiDotNet.NeuralNetworks.SyntheticData;
     "https://arxiv.org/abs/1607.00133",
     Year = 2016,
     Authors = "Martin Abadi, Andy Chu, Ian Goodfellow, H. Brendan McMahan, Ilya Mironov, Kunal Talwar, Li Zhang")]
-public class DPCTGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerator<T>
+public partial class DPCTGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>, ISyntheticTabularGenerator<T>
 {
     private readonly DPCTGANOptions<T> _options;
     // Separate G/D optimizers (see CTGANGenerator for the divergence rationale).
@@ -113,7 +113,9 @@ public class DPCTGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenera
     private readonly List<(int InputSize, int OutputSize)> _discLayerDims = new();
 
     // Cached pre-activations for proper backward passes
+    [Scratch]
     private readonly List<Tensor<T>> _genPreActivations = new();
+    [Scratch]
     private readonly List<Tensor<T>> _discPreActivations = new();
 
     // Whether custom layers are being used (disables residual connection logic)
@@ -124,16 +126,27 @@ public class DPCTGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenera
     private double _cumulativeEpsilon;
 
     // Pre-allocated training buffers to avoid per-row GC pressure
+    [Scratch]
     private Tensor<T>? _oneGrad;
+    [Scratch]
     private Tensor<T>? _negOneGrad;
+    [Scratch]
     private Vector<T>? _packedRealBuf;
+    [Scratch]
     private Vector<T>? _packedFakeBuf;
+    [Scratch]
     private Vector<T>? _noiseBuf;
+    [Scratch]
     private Vector<T>? _genInputBuf;
+    [Scratch]
     private Vector<T>? _realSingleBuf;
+    [Scratch]
     private Vector<T>? _fakeSingleBuf;
+    [Scratch]
     private Vector<T>? _realRowBuf;
+    [Scratch]
     private Vector<T>? _fakeRowBuf;
+    [Scratch]
     private Tensor<T>? _sampleGradBuf;
 
     /// <summary>
@@ -233,7 +246,12 @@ public class DPCTGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenera
             _genBNLayers.Clear();
             foreach (int dim in _options.GeneratorDimensions)
             {
-                _genBNLayers.Add(new BatchNormalizationLayer<T>());
+                // The residual generator knows each hidden width at construction time. Leaving
+                // BatchNorm deferred lets the model-wide shape walk resolve this auxiliary list
+                // against the raw architecture input instead (10 for the default fixture), after
+                // which the first 256-wide hidden activation cannot be normalized. Bind the
+                // explicit per-feature contract just as the dense layer contract is bound above.
+                _genBNLayers.Add(new BatchNormalizationLayer<T>(dim));
             }
             _usingCustomLayers = false;
         }
@@ -250,7 +268,7 @@ public class DPCTGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenera
             _genBNLayers.Clear();
             foreach (int dim in _options.GeneratorDimensions)
             {
-                _genBNLayers.Add(new BatchNormalizationLayer<T>());
+                _genBNLayers.Add(new BatchNormalizationLayer<T>(dim));
             }
         }
 
@@ -317,22 +335,8 @@ public class DPCTGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenera
         _generatorOptimizer.UpdateParameters(Layers);
     }
 
-    /// <inheritdoc />
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        int startIndex = 0;
-        foreach (var layer in Layers)
-        {
-            int layerParameterCount = checked((int)layer.ParameterCount);
-            if (layerParameterCount > 0)
-            {
-                Vector<T> layerParameters = parameters.SubVector(startIndex, layerParameterCount);
-                layer.UpdateParameters(layerParameters);
-                startIndex += layerParameterCount;
-            }
-        }
-    }
-
+    // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
+    // exactly the same enumeration, so this said nothing the base does not already say.
     #endregion
 
     #region ISyntheticTabularGenerator<T> Implementation

@@ -68,7 +68,7 @@ namespace AiDotNet.Classification.Meta;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
     [ResearchPaper("The Strength of Weak Learnability", "https://doi.org/10.1007/BF00116037")]
-public class VotingClassifier<T> : MetaClassifierBase<T>
+public partial class VotingClassifier<T> : MetaClassifierBase<T>
 {
     /// <summary>
     /// Initializes a new instance with default settings using Gaussian Naive Bayes estimators.

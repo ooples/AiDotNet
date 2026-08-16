@@ -1,8 +1,11 @@
-using System.Collections;
+﻿using System.Collections;
 using System.Collections.Generic;
+using System.Linq;
 using System.Reflection;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.NeuralNetworks;
+using AiDotNet.Training;
 
 namespace AiDotNet.Helpers;
 
@@ -46,21 +49,34 @@ internal static class CopyOnWriteCloneHelper
         // mutating anything, so we never leave a half-shared clone and never rebind a shape-incompatible
         // tensor. A count-only check would let a same-count but differently-shaped graph (e.g. a custom
         // source whose predictor/VAE was built with different channel widths than the clone's defaults)
-        // pass, share, and silently corrupt the clone; a shape mismatch must instead fall back to the
-        // eager copy. A freshly-constructed clone whose lazy layers aren't resolved yet shows up here as
-        // a zero-/mismatched-shape tensor and also falls back.
+        // pass, share, and silently corrupt the clone. A shape-resolved lazy destination is the one safe
+        // exception: its generated declarations prove the exact shapes even though its current tensors
+        // are still zero-sized placeholders. Validate against those declarations instead of forcing a
+        // throwaway forward merely to allocate destination storage that will immediately be replaced.
         for (int i = 0; i < srcLayers.Count; i++)
         {
-            var sps = srcLayers[i].GetTrainableParameters();
-            var dps = dstLayers[i].GetTrainableParameters();
-            if (sps.Count != dps.Count) return false;
-            for (int p = 0; p < sps.Count; p++)
-                if (!ShapesEqual(sps[p], dps[p])) return false;
+            var sps = GetAuthoritativeSourceValues(srcLayers[i]);
+            var dps = GetWithoutMaterialization(dstLayers[i]);
+            bool currentShapesMatch = sps.Count == dps.Count;
+            if (currentShapesMatch)
+            {
+                for (int p = 0; p < sps.Count; p++)
+                {
+                    if (ShapesEqual(sps[p], dps[p])) continue;
+                    currentShapesMatch = false;
+                    break;
+                }
+            }
+
+            if (currentShapesMatch) continue;
+            if (dstLayers[i] is not AiDotNet.NeuralNetworks.Layers.LayerBase<T> destinationBase
+                || !destinationBase.CanAdoptTrainableParametersWithoutMaterialization(sps))
+                return false;
         }
 
         for (int i = 0; i < srcLayers.Count; i++)
         {
-            var sp = srcLayers[i].GetTrainableParameters();
+            var sp = GetAuthoritativeSourceValues(srcLayers[i]);
             if (sp.Count == 0) continue;
             var shared = new Tensor<T>[sp.Count];
             for (int p = 0; p < sp.Count; p++)
@@ -70,6 +86,16 @@ internal static class CopyOnWriteCloneHelper
 
         return true;
     }
+
+    private static IReadOnlyList<Tensor<T>> GetWithoutMaterialization<T>(ITrainableLayer<T> layer) =>
+        layer is AiDotNet.NeuralNetworks.Layers.LayerBase<T> layerBase
+            ? layerBase.GetTrainableParametersWithoutMaterialization()
+            : layer.GetTrainableParameters();
+
+    private static IReadOnlyList<Tensor<T>> GetAuthoritativeSourceValues<T>(ITrainableLayer<T> layer) =>
+        layer is AiDotNet.NeuralNetworks.Layers.LayerBase<T> layerBase
+            ? layerBase.GetOwnTrainableParameterValueTensors()
+            : layer.GetTrainableParameters();
 
     private static bool ShapesEqual<T>(Tensor<T> a, Tensor<T> b)
     {
@@ -90,6 +116,33 @@ internal static class CopyOnWriteCloneHelper
     /// </summary>
     internal static List<ITrainableLayer<T>> CollectTrainableLayers<T>(IFullModel<T, Tensor<T>, Tensor<T>> root)
     {
+        // NeuralNetworkBase owns an explicit module graph: top-level Layers plus
+        // each LayerBase's registered sub-layers. Walk that graph directly, just
+        // as training does. Reflection over only the concrete model type cannot
+        // see NeuralNetworkBase's private _layers field; that made ordinary
+        // sequential models appear empty and forced the lossy eager fallback.
+        // More importantly, a reflective object-graph walk also wandered through
+        // optimizers/options/caches, which are not modules and can differ between
+        // a trained source and a fresh destination. The registered layer graph is
+        // the stable, PyTorch-style ownership boundary for cloning.
+        if (root is NeuralNetworkBase<T> neuralNetwork)
+        {
+            // `Layers` IS the registered graph, and it is what NeuralNetworkBase itself passes to this
+            // same walk. This used to call a GetCopyOnWriteLayerRoots() that exists nowhere in the
+            // repository -- a call that survived review because NeuralNetworkBase is an error type
+            // while the #1789 split is mid-flight (its declaration depends on types slice 01 has not
+            // landed yet), and Roslyn suppresses member lookup on an error type to avoid cascading
+            // diagnostics. So the compiler could not report it and a search could not find it; it
+            // would have failed the moment the branch built cleanly.
+            //
+            // structureVersion -1 keeps the caching disabled: a clone walks a graph the version
+            // counter has never seen, so a cached answer would describe the wrong model.
+            return new List<ITrainableLayer<T>>(
+                TapeTrainingStep<T>.CollectTrainableLayers(
+                    neuralNetwork.Layers,
+                    structureVersion: -1));
+        }
+
         var layers = new List<ITrainableLayer<T>>();
         // CollectInto walks arbitrary instance fields, so it is necessarily typed `object?` internally;
         // the public entry point constrains the root to a model so callers can't pass an unrelated graph.
@@ -135,15 +188,26 @@ internal static class CopyOnWriteCloneHelper
         if (obj is ITrainableLayer<T> trainable) layers.Add(trainable);
 
         var type = obj.GetType();
-        if (type.IsPrimitive || type == typeof(string) || type.IsEnum) return;
+        if (IsLeafType<T>(type)) return;
 
-        foreach (var field in type.GetFields(
-            BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public))
+        // Walk the FULL inheritance chain with DeclaredOnly. Type.GetFields(Instance|NonPublic)
+        // does NOT return a base class's PRIVATE fields, so a concrete-type-only enumeration could
+        // never see NeuralNetworkBase<T>._layers (private readonly) or LayerBase<T>._registeredTensors
+        // — making the walk return 0 layers for every model that keeps its layers in the base list
+        // (i.e. most models) and silently disabling the COW clone fast path, so every Clone() fell
+        // back to a full serialize/deserialize round-trip. DeclaredOnly also means each FieldInfo is
+        // yielded exactly ONCE across the chain (no inherited-public duplicates, and a derived field
+        // that shadows a base field is a distinct FieldInfo still visited once), so no double-visiting
+        // is introduced. Order is derived-first then base — deterministic for a given runtime type,
+        // which is what the src/dst pairing and the caller's parameter-coverage guard rely on.
+        for (var t = type; t is not null && t != typeof(object); t = t.BaseType)
+        {
+        foreach (var field in t.GetFields(
+            BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.DeclaredOnly))
         {
             // Tensor fields are leaves (their owning layer already exposed them via
             // GetTrainableParameters); skip primitives/strings/enums that can't hold a layer.
-            if (field.FieldType.IsPrimitive || field.FieldType.IsEnum ||
-                field.FieldType == typeof(string) || field.FieldType == typeof(Tensor<T>))
+            if (IsLeafType<T>(field.FieldType))
                 continue;
 
             // Skip unmanaged pointer fields (void*, byte*, T*, ...). Reflecting a pointer field via
@@ -168,6 +232,12 @@ internal static class CopyOnWriteCloneHelper
 
             if (val is IEnumerable enumerable && val is not string)
             {
+                // Only enumerate sequences whose ELEMENTS could be a layer. Tensor<T>, Vector<T>,
+                // Matrix<T> and T[]/int[]/List<double> are all IEnumerable over primitives: iterating
+                // them boxes every scalar into the visited set (millions of allocations for a real
+                // weight tensor). Critical now that the BaseType walk above reaches
+                // LayerBase<T>._registeredTensors (List<Tensor<T>>) and every weight buffer behind it.
+                if (!CanHoldLayers<T>(val.GetType())) continue;
                 foreach (var item in enumerable)
                     CollectInto(item, layers, visited, depth + 1);
             }
@@ -176,5 +246,40 @@ internal static class CopyOnWriteCloneHelper
                 CollectInto(val, layers, visited, depth + 1);
             }
         }
+        }
+    }
+
+    /// <summary>
+    /// Types that can never transitively hold an <see cref="ITrainableLayer{T}"/>, so the walk stops.
+    /// Includes the whole AiDotNet.Tensors assembly (Tensor/Vector/Matrix/ParameterBuffer/engines):
+    /// that assembly does not reference AiDotNet, so no layer type can live inside one of its objects.
+    /// Being wrong here is fail-safe: a missed layer only makes the caller fall back to the eager copy.
+    /// </summary>
+    private static bool IsLeafType<T>(Type t) =>
+        t.IsPrimitive || t.IsEnum || t.IsPointer
+        || t == typeof(string) || t == typeof(decimal)
+        || t == typeof(IntPtr) || t == typeof(UIntPtr)
+        || t.Assembly == typeof(Tensor<T>).Assembly;
+
+    /// <summary>
+    /// True when a sequence's element type could contain a trainable layer. Unknown (non-generic
+    /// IEnumerable) is treated as walkable so nothing is lost silently.
+    /// </summary>
+    private static bool CanHoldLayers<T>(Type sequenceType)
+    {
+        if (sequenceType.IsArray)
+        {
+            var el = sequenceType.GetElementType();
+            return el is null || !IsLeafType<T>(el);
+        }
+
+        bool sawGeneric = false;
+        foreach (var iface in sequenceType.GetInterfaces()
+                     .Where(i => i.IsGenericType && i.GetGenericTypeDefinition() == typeof(IEnumerable<>)))
+        {
+            sawGeneric = true;
+            if (!IsLeafType<T>(iface.GetGenericArguments()[0])) return true;
+        }
+        return !sawGeneric;
     }
 }

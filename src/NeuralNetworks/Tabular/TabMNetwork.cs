@@ -59,7 +59,7 @@ namespace AiDotNet.NeuralNetworks.Tabular;
     "https://arxiv.org/abs/2410.24210",
     Year = 2024,
     Authors = "Yury Gorishniy, Akim Kotelnikov, Artem Babenko")]
-public class TabMNetwork<T> : NeuralNetworkBase<T>
+public class TabMNetwork<T> : TabularNeuralNetworkBase<T>
 {
     private readonly TabMOptions<T> _options;
 
@@ -163,22 +163,8 @@ public class TabMNetwork<T> : NeuralNetworkBase<T>
         }
     }
 
-    /// <inheritdoc/>
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        int startIndex = 0;
-        foreach (var layer in Layers)
-        {
-            int layerParameterCount = checked((int)layer.ParameterCount);
-            if (layerParameterCount > 0)
-            {
-                Vector<T> layerParameters = parameters.SubVector(startIndex, layerParameterCount);
-                layer.UpdateParameters(layerParameters);
-                startIndex += layerParameterCount;
-            }
-        }
-    }
-
+    // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
+    // exactly the same enumeration, so this said nothing the base does not already say.
     /// <inheritdoc/>
     public override Dictionary<string, T> GetFeatureImportance()
     {

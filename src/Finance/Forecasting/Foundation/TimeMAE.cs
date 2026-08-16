@@ -140,7 +140,7 @@ public class TimeMAE<T> : TimeSeriesFoundationModelBase<T>
         OnnxModelPath = onnxModelPath;
         OnnxSession = new InferenceSession(onnxModelPath);
 
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? CreateDefaultOptimizer(options);
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
 
         CopyOptionsToFields(options);
@@ -164,7 +164,7 @@ public class TimeMAE<T> : TimeSeriesFoundationModelBase<T>
         OnnxSession = null;
         OnnxModelPath = null;
 
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? CreateDefaultOptimizer(options);
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
 
         CopyOptionsToFields(options);
@@ -195,6 +195,19 @@ public class TimeMAE<T> : TimeSeriesFoundationModelBase<T>
         _dropout = options.DropoutRate;
     }
 
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreateDefaultOptimizer(
+        TimeMAEOptions<T> options)
+    {
+        return new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = options.LearningRate,
+                EnableGradientClipping = true,
+                MaxGradientNorm = 1.0
+            });
+    }
+
     #endregion
 
     #region Initialization
@@ -222,6 +235,9 @@ public class TimeMAE<T> : TimeSeriesFoundationModelBase<T>
     public override bool SupportsTraining => _useNativeMode;
 
     /// <inheritdoc/>
+    protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? TrainingOptimizer => _optimizer;
+
+    /// <inheritdoc/>
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         return _useNativeMode ? ForwardNative(input) : ForecastOnnx(input);
@@ -244,12 +260,8 @@ public class TimeMAE<T> : TimeSeriesFoundationModelBase<T>
         base.Train(input, target);
     }
 
-    /// <inheritdoc/>
-    public override void UpdateParameters(Vector<T> gradients)
-    {
-        // Parameters are updated through the optimizer in Train()
-    }
-
+    // UpdateParameters was an empty override, silently dropping every restore. The base
+    // distributes the vector over the declared enumeration.
     /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()
     {
@@ -285,7 +297,8 @@ public class TimeMAE<T> : TimeSeriesFoundationModelBase<T>
             NumDecoderLayers = _numDecoderLayers,
             NumHeads = _numHeads,
             MaskRatio = _maskRatio,
-            DropoutRate = _dropout
+            DropoutRate = _dropout,
+            LearningRate = _options.LearningRate
         };
 
         // Preserve ONNX mode if the original instance was created with an ONNX model
@@ -387,48 +400,12 @@ public class TimeMAE<T> : TimeSeriesFoundationModelBase<T>
 
     /// <inheritdoc/>
     public override Tensor<T> ApplyInstanceNormalization(Tensor<T> input)
-    {
-        if (input.Length == 0)
-            return new Tensor<T>(input._shape);
-
-        int batchSize = input.Rank > 1 ? input.Shape[0] : 1;
-        int seqLen = input.Rank > 1 ? input.Shape[1] : input.Length;
-        var result = new Tensor<T>(input._shape);
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            T mean = NumOps.Zero;
-            for (int t = 0; t < seqLen; t++)
-            {
-                int idx = b * seqLen + t;
-                if (idx < input.Length)
-                    mean = NumOps.Add(mean, input[idx]);
-            }
-            mean = NumOps.Divide(mean, NumOps.FromDouble(seqLen));
-
-            T variance = NumOps.Zero;
-            for (int t = 0; t < seqLen; t++)
-            {
-                int idx = b * seqLen + t;
-                if (idx < input.Length)
-                {
-                    var diff = NumOps.Subtract(input[idx], mean);
-                    variance = NumOps.Add(variance, NumOps.Multiply(diff, diff));
-                }
-            }
-            variance = NumOps.Divide(variance, NumOps.FromDouble(seqLen));
-            T std = NumOps.Sqrt(NumOps.Add(variance, NumOps.FromDouble(1e-5)));
-
-            for (int t = 0; t < seqLen; t++)
-            {
-                int idx = b * seqLen + t;
-                if (idx < input.Length && idx < result.Length)
-                    result.Data.Span[idx] = NumOps.Divide(NumOps.Subtract(input[idx], mean), std);
-            }
-        }
-
-        return result;
-    }
+        // RevIN forward (Kim et al. 2022), delegated to the shared tape-tracked helper. The previous
+        // hand-rolled version accumulated mean/variance with scalar NumOps arithmetic and wrote the
+        // output through result.Data.Span[...], which the autodiff tape cannot observe: the normalised
+        // tensor came back as a LEAF, so no gradient could flow through the normalisation. RevIN is a
+        // differentiable layer in the paper, not a preprocessing step.
+        => NormalizeInstanceOnTape(input, DefaultRevInEpsilon, out _, out _);
 
     /// <inheritdoc/>
     public override Dictionary<string, T> GetFinancialMetrics()

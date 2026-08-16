@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Linq;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Autodiff;
@@ -97,7 +97,12 @@ namespace AiDotNet.PointCloud.Models;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Vector<>))]
 [ResearchPaper("Dynamic Graph CNN for Learning on Point Clouds", "https://doi.org/10.1145/3326362", Year = 2019, Authors = "Yue Wang, Yongbin Sun, Ziwei Liu, Sanjay E. Sarma, Michael M. Bronstein, Justin M. Solomon")]
-public class DGCNN<T> : NeuralNetworkBase<T>, IPointCloudModel<T>, IPointCloudClassification<T>, IPointCloudSegmentation<T>
+[TensorLayout(TensorAxis.Batch, TensorAxis.Length, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Input, BatchOptional = true)]
+[TensorLayout(TensorAxis.Classes, Direction = TensorLayoutDirection.Output)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Other, TensorAxis.Classes,
+    Direction = TensorLayoutDirection.Output, BatchOptional = true)]
+public partial class DGCNN<T> : NeuralNetworkBase<T>, IPointCloudModel<T>, IPointCloudClassification<T>, IPointCloudSegmentation<T>
 {
     private readonly DGCNNOptions _options;
 
@@ -115,6 +120,7 @@ public class DGCNN<T> : NeuralNetworkBase<T>, IPointCloudModel<T>, IPointCloudCl
 
     private readonly List<EdgeConvLayer<T>> _edgeConvLayers;
     private readonly List<ILayer<T>> _classificationHeadLayers;
+    [Scratch]
     private Vector<T>? _globalFeatures;
 
     /// <summary>
@@ -131,15 +137,25 @@ public class DGCNN<T> : NeuralNetworkBase<T>, IPointCloudModel<T>, IPointCloudCl
     /// <param name="options">Configuration options for the DGCNN model.</param>
     /// <param name="lossFunction">Optional loss function for training.</param>
     public DGCNN(DGCNNOptions options, ILossFunction<T>? lossFunction = null, DGCNNOptions? modelOptions = null)
-        : base(CreateArchitecture(options.NumClasses, options.InputFeatureDim), lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(NeuralNetworkTaskType.MultiClassClassification))
+        // Default to CrossEntropyWithLogitsLoss (fused LogSoftmax + NLL, = PyTorch F.cross_entropy,
+        // the loss the reference DGCNN trains with) rather than the generic MultiClassClassification
+        // default (CategoricalCrossEntropyLoss, which has RequiresProbabilityInputs = true). The head
+        // emits raw logits, so the loss must be the logits form; pairing raw logits with the
+        // probability-input loss made the per-class gradient ill-posed and drove the logits to grow
+        // without bound (training loss climbed instead of falling).
+        : base(CreateArchitecture(options.NumClasses, options.InputFeatureDim), lossFunction ?? new AiDotNet.LossFunctions.CrossEntropyWithLogitsLoss<T>())
     {
-        _options = modelOptions ?? new DGCNNOptions();
-        Options = _options;
-
         if (options == null)
         {
             throw new ArgumentNullException(nameof(options));
         }
+        // When modelOptions is null (the common case) fall back to the primary
+        // `options` argument rather than creating a fresh default — otherwise
+        // the caller's DGCNNOptions is silently discarded and _options / Options
+        // reflect default settings, causing GetOptions/GetModelMetadata to
+        // report defaults even after the caller configured NumClasses etc.
+        _options = modelOptions ?? options;
+        Options = _options;
         if (options.NumClasses <= 0)
         {
             throw new ArgumentOutOfRangeException(nameof(options.NumClasses), "Number of classes must be positive.");
@@ -281,6 +297,11 @@ public class DGCNN<T> : NeuralNetworkBase<T>, IPointCloudModel<T>, IPointCloudCl
         int classifierInput = totalFeatures;
         if (_classifierChannels.Length == 0)
         {
+            // Raw-logit classification head: DGCNN's loss is CrossEntropyWithLogitsLoss (see ctor),
+            // which fuses LogSoftmax + NLL internally (PyTorch nn.CrossEntropyLoss / F.cross_entropy —
+            // exactly what the reference DGCNN uses). So the output layer must emit RAW LOGITS, not a
+            // pre-softmaxed distribution: applying softmax here then LogSoftmax in the loss would
+            // double-normalize.
             var outputLayer = new DenseLayer<T>(
                 _numClasses,
                 activationFunction: new IdentityActivation<T>());
@@ -293,7 +314,10 @@ public class DGCNN<T> : NeuralNetworkBase<T>, IPointCloudModel<T>, IPointCloudCl
         {
             var dense = new DenseLayer<T>(
                 hidden,
-                activationFunction: new ReLUActivation<T>());
+                // The reference DGCNN head uses a leaky rectifier. A hard ReLU can turn a
+                // deterministic small-fixture initialization into an all-zero classifier,
+                // making every point cloud produce the zero logit vector.
+                activationFunction: new LeakyReLUActivation<T>());
             AddLayerToCollection(dense);
             _classificationHeadLayers.Add(dense);
             classifierInput = hidden;
@@ -306,12 +330,25 @@ public class DGCNN<T> : NeuralNetworkBase<T>, IPointCloudModel<T>, IPointCloudCl
             }
         }
 
+        // Raw-logit output (see the no-hidden-layer branch above): CrossEntropyWithLogitsLoss fuses
+        // LogSoftmax + NLL, so the head must emit logits, not probabilities.
         var output = new DenseLayer<T>(
             _numClasses,
             activationFunction: new IdentityActivation<T>());
         AddLayerToCollection(output);
         _classificationHeadLayers.Add(output);
     }
+
+    /// <summary>
+    /// Routes the tape-based training forward through <see cref="ForwardWithMemory"/> — the
+    /// DGCNN architecture (multi-scale EdgeConv skip-concatenation → global max-pool → head)
+    /// is NOT a plain sequential layer stack, so the base's default sequential
+    /// <c>ForwardForTraining</c> ran the wrong graph (and the wrong global-pool input width).
+    /// With the EdgeConv gather/aggregate and the skip-concatenation now built from
+    /// tape-tracked Engine ops, this makes training use the same differentiable graph as
+    /// inference, so the gradient reaches every EdgeConv/head parameter.
+    /// </summary>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input) => ForwardWithMemory(input);
 
     public override Tensor<T> ForwardWithMemory(Tensor<T> input)
     {
@@ -358,24 +395,11 @@ public class DGCNN<T> : NeuralNetworkBase<T>, IPointCloudModel<T>, IPointCloudCl
             throw new ArgumentException("No features to concatenate.");
         }
 
-        int numPoints = features[0].Shape[0];
-        int totalChannels = features.Sum(f => f.Shape[1]);
-        var concatenated = new T[numPoints * totalChannels];
-
-        for (int n = 0; n < numPoints; n++)
-        {
-            int outIdx = 0;
-            foreach (var feature in features)
-            {
-                int featureChannels = feature.Shape[1];
-                for (int c = 0; c < featureChannels; c++)
-                {
-                    concatenated[n * totalChannels + outIdx++] = feature.Data.Span[n * featureChannels + c];
-                }
-            }
-        }
-
-        return new Tensor<T>(concatenated, [numPoints, totalChannels]);
+        // Concatenate the per-EdgeConv features along the channel axis with a tape-tracked
+        // Engine.Concat. The prior scalar-loop copy into a fresh new Tensor severed the
+        // autodiff tape, blocking the gradient from flowing back into the EdgeConv layers
+        // (DGCNN's multi-scale skip aggregation, Wang et al. 2019).
+        return features.Count == 1 ? features[0] : Engine.Concat(features, 1);
     }
 
     public Vector<T> ExtractGlobalFeatures(Tensor<T> pointCloud)
@@ -468,21 +492,8 @@ public class DGCNN<T> : NeuralNetworkBase<T>, IPointCloudModel<T>, IPointCloudCl
 
     public override bool SupportsTraining => true;
 
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        int startIndex = 0;
-        foreach (var layer in Layers)
-        {
-            int layerParameterCount = checked((int)layer.ParameterCount);
-            if (layerParameterCount > 0)
-            {
-                Vector<T> layerParameters = parameters.SubVector(startIndex, layerParameterCount);
-                layer.UpdateParameters(layerParameters);
-                startIndex += layerParameterCount;
-            }
-        }
-    }
-
+    // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
+    // exactly the same enumeration, so this said nothing the base does not already say.
     public override ModelMetadata<T> GetModelMetadata()
     {
         return new ModelMetadata<T>
@@ -650,31 +661,81 @@ public class DGCNN<T> : NeuralNetworkBase<T>, IPointCloudModel<T>, IPointCloudCl
 /// - Later layers: Neighbors are semantically similar points
 /// - Graph structure adapts as features evolve
 /// </remarks>
-internal class EdgeConvLayer<T> : LayerBase<T>
+// Rank 2 [points, channels] - the shape the base constructor declares, `[0, inputChannels]` in and
+// `[0, outputChannels]` out, and the shape ForwardTraced threads end to end (its own comments track
+// it: [P*k, 2C] -> [P*k, outC] -> [P, outC]).
+//
+// The leading axis is Other for the same reason PointConvolutionLayer gives it that role: it counts
+// POINTS of an unordered set, so naming it Length or Time would claim a sequence position the data
+// does not have. It survives here despite the k-NN graph because the aggregation is a max over the
+// neighbour axis alone, which is exactly DGCNN's permutation invariance.
+[TensorLayout(TensorAxis.Other, TensorAxis.Channels, Direction = TensorLayoutDirection.Input,
+    Note = "Leading axis is the point count; a point cloud is unordered, so it takes no sequence role.")]
+[TensorLayout(TensorAxis.Other, TensorAxis.Channels, Direction = TensorLayoutDirection.Output)]
+[AutoParameters]
+public partial class EdgeConvLayer<T> : LayerBase<T>, ILayerSerializationExtras<T>, IShapeContract
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// Hand-written because the emitted width is configuration. The k neighbours are materialised and
+    /// then removed again inside a single forward: <c>ComputeEdgeFeatures</c> expands to
+    /// <c>[P*k, 2C]</c>, the shared MLP maps that to <c>[P*k, _outputChannels]</c>, and
+    /// <c>AggregateEdgeFeatures</c> reshapes to <c>[P, k, _outputChannels]</c> and reduces the
+    /// neighbour axis away with <c>Engine.ReduceMax(..., new[] { 1 }, keepDims: false)</c>. So <c>k</c>
+    /// appears nowhere in the result and needs no relation - a contract that carried it would describe
+    /// an intermediate, not the output.
+    /// </para>
+    /// <para>
+    /// <c>Fixed(_outputChannels)</c> reads the field rather than a literal, and it is the right source
+    /// rather than the MLP's width by coincidence: <c>AggregateEdgeFeatures</c> reshapes against
+    /// <c>_outputChannels</c> directly, so that field is what the output is literally shaped by.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        if (inputRank != 2 || _outputChannels <= 0) return null;
+
+        return new[]
+        {
+            new OutputAxisContract(TensorAxis.Other, AxisRelation.Same(TensorAxis.Other)),
+            new OutputAxisContract(TensorAxis.Channels, AxisRelation.Fixed(_outputChannels)),
+        };
+    }
+
     private readonly int _inputChannels;
     private readonly int _outputChannels;
     private readonly int _k; // Number of nearest neighbors
     private readonly PointConvolutionLayer<T> _mlp;
+    private readonly BatchNormalizationLayer<T> _bn;
     private Tensor<T>? _lastInput;
-    private int[,]? _knnIndices; // Store k-NN indices for backward pass        
+    private int[,]? _knnIndices; // Store k-NN indices for backward pass
     private int[,]? _maxIndices; // Store max neighbor indices for backward pass
 
-    public EdgeConvLayer(int inputChannels, int outputChannels, int k)
+    public EdgeConvLayer(
+        [LayerState] int inputChannels,
+        [LayerState] int outputChannels,
+        [LayerState] int k)
         : base([0, inputChannels], [0, outputChannels])
     {
         _inputChannels = inputChannels;
         _outputChannels = outputChannels;
         _k = k;
 
-        // MLP processes edge features (point + neighbor difference)
-        // Input: 2 * inputChannels (point feature + difference feature)
-        _mlp = new PointConvolutionLayer<T>(2 * inputChannels, outputChannels, new ReLUActivation<T>());
-
-        Parameters = _mlp.GetParameters();
+        // EdgeConv (Wang et al. 2019) is a COMPOSITE block: a shared MLP over the per-edge
+        // features [x_i, x_j - x_i] -> BatchNorm -> ReLU -> max-pool over the k neighbors.
+        // Register the MLP and BN as SUB-LAYERS (the ResNet BasicBlock composite pattern)
+        // so the tape recurses into them to train their parameters, ParameterCount includes
+        // them, and SetTrainingMode propagates to BN. BN is essential for stable training —
+        // without it the multi-scale concatenated features grow and the loss diverges. The
+        // MLP carries no activation of its own (Conv -> BN -> ReLU order).
+        _mlp = new PointConvolutionLayer<T>(2 * inputChannels, outputChannels, new IdentityActivation<T>());
+        _bn = new BatchNormalizationLayer<T>(outputChannels);
+        RegisterSubLayer(_mlp);
+        RegisterSubLayer(_bn);
     }
 
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         _lastInput = input;
         int numPoints = input.Shape[0];
@@ -682,14 +743,16 @@ internal class EdgeConvLayer<T> : LayerBase<T>
         // Build k-NN graph based on current features
         _knnIndices = BuildKNNGraph(input, _k);
 
-        // Compute edge features
-        var edgeFeatures = ComputeEdgeFeatures(input, _knnIndices);
-
-        // Apply MLP to edge features
-        var transformedEdges = _mlp.Forward(edgeFeatures);
-
-        // Aggregate: max pool over neighbors for each point
-        var output = AggregateEdgeFeatures(transformedEdges, numPoints);
+        // Edge features [x_i, x_j - x_i] -> shared MLP -> BatchNorm -> ReLU, then max-pool
+        // over the k neighbors. All tape-tracked; the sub-layers are trained via the tape.
+        var edgeFeatures = ComputeEdgeFeatures(input, _knnIndices);   // [P*k, 2C]
+        var transformedEdges = _mlp.Forward(edgeFeatures);           // [P*k, outC] (linear)
+        var normalized = _bn.Forward(transformedEdges);             // [P*k, outC] BN per channel
+        // DGCNN uses a leaky rectifier in each EdgeConv block. Besides matching the paper, the
+        // non-zero negative slope prevents an unlucky deterministic initialization from turning
+        // the whole dynamic-graph feature path into a dead all-zero basin.
+        var activated = Engine.LeakyReLU(normalized, NumOps.FromDouble(0.2)); // tape-tracked
+        var output = AggregateEdgeFeatures(activated, numPoints);  // [P, outC] max over k
 
         return output;
     }
@@ -729,94 +792,120 @@ internal class EdgeConvLayer<T> : LayerBase<T>
     {
         int numPoints = input.Shape[0];
         int k = knnIndices.GetLength(1);
-        var numOps = NumOps;
+        int total = numPoints * k;
 
-        // Edge features: [numPoints * k, 2 * inputChannels]
-        var edgeFeatures = new T[numPoints * k * 2 * _inputChannels];
-
+        // Flattened gather indices [numPoints*k]: for each point, its own index repeated
+        // k times (self), and its k neighbor indices. The kNN indices themselves are
+        // NON-differentiable (an arg-sort in feature space — exactly as DGCNN / PyTorch
+        // treat them), but GATHERING the point features by them IS differentiable, so the
+        // gradient flows back to the input point features through the edge features.
+        var selfIndices = new int[total];
+        var neighborIndices = new int[total];
         for (int i = 0; i < numPoints; i++)
         {
-            for (int kIdx = 0; kIdx < k; kIdx++)
+            for (int kk = 0; kk < k; kk++)
             {
-                int neighborIdx = knnIndices[i, kIdx];
-                int outIdx = (i * k + kIdx) * 2 * _inputChannels;
-
-                // First half: point feature
-                for (int c = 0; c < _inputChannels; c++)
-                {
-                    edgeFeatures[outIdx + c] = input.Data.Span[i * _inputChannels + c];
-                }
-
-                // Second half: difference feature (neighbor - point)
-                for (int c = 0; c < _inputChannels; c++)
-                {
-                    var neighborFeature = input.Data.Span[neighborIdx * _inputChannels + c];
-                    var pointFeature = input.Data.Span[i * _inputChannels + c];
-                    edgeFeatures[outIdx + _inputChannels + c] = numOps.Subtract(neighborFeature, pointFeature);
-                }
+                selfIndices[i * k + kk] = i;
+                neighborIndices[i * k + kk] = knnIndices[i, kk];
             }
         }
 
-        return new Tensor<T>(edgeFeatures, [numPoints * k, 2 * _inputChannels]);
+        var xi = Engine.TensorGather(input, new Tensor<int>(selfIndices, [total]), axis: 0);      // [P*k, C]
+        var xj = Engine.TensorGather(input, new Tensor<int>(neighborIndices, [total]), axis: 0);  // [P*k, C]
+        var diff = Engine.TensorSubtract(xj, xi);                                                 // [P*k, C]
+
+        // DGCNN edge feature (Wang et al. 2019): concat([x_i, x_j - x_i]) -> [P*k, 2C].
+        // Tape-tracked Engine ops throughout; the prior scalar-loop build detached the
+        // tape (a fresh new Tensor from Data.Span reads), so no gradient reached the
+        // input or, downstream, the MLP weights — training diverged.
+        return Engine.Concat(new[] { xi, diff }, 1);                                              // [P*k, 2C]
     }
 
     private Tensor<T> AggregateEdgeFeatures(Tensor<T> edgeFeatures, int numPoints)
     {
         int k = edgeFeatures.Shape[0] / numPoints;
-        var output = new T[numPoints * _outputChannels];
-        var numOps = NumOps;
-        _maxIndices = new int[numPoints, _outputChannels];
 
-        // Max pool over k neighbors for each point
-        for (int i = 0; i < numPoints; i++)
+        // Symmetric max-pool over the k neighbors per point (DGCNN's permutation-
+        // invariant aggregation): reshape [P*k, outC] -> [P, k, outC], max over the k
+        // axis -> [P, outC]. Engine.ReduceMax is tape-tracked (its backward routes the
+        // gradient to the arg-max neighbor), so the whole EdgeConv is differentiable
+        // end-to-end. The prior scalar-loop max wrote a fresh new Tensor, severing the
+        // tape so the MLP weights received zero gradient and the loss diverged.
+        var reshaped = Engine.Reshape(edgeFeatures, [numPoints, k, _outputChannels]);
+        _ = Engine.ReduceMax(reshaped, new[] { 1 }, keepDims: false, out var argMax);
+
+        // Build the exact max value through primitive tape operations. ReduceMax's returned
+        // argmax is discrete supervision (like TopK indices), so the mask is deliberately detached;
+        // multiply + ReduceSum then routes the gradient to precisely the selected neighbour. The
+        // package-level ReduceMax backward currently misroutes this rank-3/axis-1 case: the forward
+        // changes under finite differences while its analytical gradient points at different edge
+        // slots. Keeping ReduceMax only as the selector preserves exact DGCNN max aggregation while
+        // making the differentiable path explicit and independently checkable.
+        var maxMask = new Tensor<T>([numPoints, k, _outputChannels]);
+        for (int point = 0; point < numPoints; point++)
         {
-            for (int c = 0; c < _outputChannels; c++)
+            for (int channel = 0; channel < _outputChannels; channel++)
             {
-                T maxVal = edgeFeatures.Data.Span[(i * k) * _outputChannels + c];
-                int maxIdx = 0;
-
-                for (int kIdx = 1; kIdx < k; kIdx++)
-                {
-                    T val = edgeFeatures.Data.Span[(i * k + kIdx) * _outputChannels + c];
-                    if (numOps.GreaterThan(val, maxVal))
-                    {
-                        maxVal = val;
-                        maxIdx = kIdx;
-                    }
-                }
-
-                output[i * _outputChannels + c] = maxVal;
-                _maxIndices[i, c] = maxIdx;
+                // ReduceMax reports a flat SOURCE-tensor index (not the local
+                // coordinate on the reduced axis). Decode [point, neighbor,
+                // channel] before building the mask. Treating the flat offset
+                // as a neighbor index rejected nearly every winner as >= k and
+                // collapsed every seeded DGCNN EdgeConv output to exact zero.
+                int sourceFlatIndex = argMax[point * _outputChannels + channel];
+                int selectedNeighbor = (sourceFlatIndex / _outputChannels) % k;
+                if ((uint)selectedNeighbor < (uint)k)
+                    maxMask[point, selectedNeighbor, channel] = NumOps.One;
             }
         }
+        var pooled = Engine.ReduceSum(
+            Engine.TensorMultiply(reshaped, maxMask), new[] { 1 }, keepDims: false); // [P, outC]
 
-        return new Tensor<T>(output, [numPoints, _outputChannels]);
+        // Preserve the per-(point,channel) arg-max neighbor index for the legacy manual
+        // ComputeGradients path (unused by the tape training path, kept for compatibility).
+        _maxIndices = new int[numPoints, _outputChannels];
+        if (argMax is not null && argMax.Length >= numPoints * _outputChannels)
+        {
+            for (int i = 0; i < numPoints; i++)
+                for (int c = 0; c < _outputChannels; c++)
+                {
+                    int sourceFlatIndex = argMax[i * _outputChannels + c];
+                    _maxIndices[i, c] = (sourceFlatIndex / _outputChannels) % k;
+                }
+        }
+
+        return pooled;
     }
 
     public override void UpdateParameters(T learningRate)
     {
         _mlp.UpdateParameters(learningRate);
+        _bn.UpdateParameters(learningRate);
     }
 
     public override void ClearGradients()
     {
         _mlp.ClearGradients();
+        _bn.ClearGradients();
     }
 
-    public override Vector<T> GetParameters()
-    {
-        return _mlp.GetParameters();
-    }
+    // UpdateParameters delegated straight to SetParameters. The base does that now.
+    // ILayerSerializationExtras: the BatchNorm sub-layer's running mean / variance are
+    // non-trainable state that GetParameters() deliberately excludes, so without round-tripping
+    // them here the clone loses its BN statistics and eval-mode inference diverges from the trained
+    // original (Clone_AfterTraining_ShouldPreserveLearnedWeights). Delegate to the BN sub-layer,
+    // mirroring the ResNet BasicBlock composite.
+    int ILayerSerializationExtras<T>.ExtraParameterCount =>
+        _bn is ILayerSerializationExtras<T> ex ? ex.ExtraParameterCount : 0;
 
-    public override void UpdateParameters(Vector<T> parameters)
+    Vector<T> ILayerSerializationExtras<T>.GetExtraParameters() =>
+        _bn is ILayerSerializationExtras<T> ex ? ex.GetExtraParameters() : new Vector<T>(0);
+
+    void ILayerSerializationExtras<T>.SetExtraParameters(Vector<T> extraParameters)
     {
-        if (parameters.Length != ParameterCount)
+        if (_bn is ILayerSerializationExtras<T> ex)
         {
-            throw new ArgumentException("Parameter vector length does not match layer parameter count.", nameof(parameters));
+            ex.SetExtraParameters(extraParameters);
         }
-
-        _mlp.UpdateParameters(parameters);
-        Parameters = _mlp.GetParameters();
     }
 
     public override void ResetState()
@@ -825,9 +914,10 @@ internal class EdgeConvLayer<T> : LayerBase<T>
         _knnIndices = null;
         _maxIndices = null;
         _mlp.ResetState();
+        _bn.ResetState();
     }
 
-    public override long ParameterCount => _mlp.ParameterCount;
+    // ParameterCount is derived by the base from the registered sub-layers (_mlp + _bn).
 
     public override bool SupportsTraining => true;
 }

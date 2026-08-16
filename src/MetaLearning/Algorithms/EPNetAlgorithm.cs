@@ -83,13 +83,16 @@ namespace AiDotNet.MetaLearning.Algorithms;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+// Citation URL corrected: the correct arXiv id for this title is 2003.04151 (ECCV 2020). The recorded
+// 2003.04557 is "Spin detection via parametric frequency conversion in a membrane resonator", an
+// unrelated physics paper. Title, authors and year were already right.
 [ResearchPaper("Embedding Propagation: Smoother Manifold for Few-Shot Classification",
-    "https://arxiv.org/abs/2003.04557",
+    "https://arxiv.org/abs/2003.04151",
     Year = 2020,
     Authors = "Pau Rodriguez, Issam Laradji, Alexandre Drouin, Alexandre Lacoste")]
 [ComponentType(ComponentType.MetaLearner)]
 [PipelineStage(PipelineStage.Training)]
-public class EPNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
+public partial class EPNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
     private IParameterizable<T, TInput, TOutput>? _cachedParamModel;
     private IParameterizable<T, TInput, TOutput> ParamModel => _cachedParamModel ??= InterfaceGuard.Parameterizable(MetaModel);

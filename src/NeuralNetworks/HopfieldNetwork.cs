@@ -51,7 +51,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Neural Networks and Physical Systems with Emergent Collective Computational Abilities", "https://www.pnas.org/doi/10.1073/pnas.79.8.2554", Year = 1982, Authors = "John J. Hopfield")]
-public class HopfieldNetwork<T> : NeuralNetworkBase<T>
+public partial class HopfieldNetwork<T> : VectorModelLayoutBase<T>
 {
     private readonly HopfieldNetworkOptions _options;
 
@@ -78,7 +78,7 @@ public class HopfieldNetwork<T> : NeuralNetworkBase<T>
     /// These connection strengths are what allow the network to store and recall patterns.
     /// </para>
     /// </remarks>
-    private Matrix<T> _weights;
+    private Tensor<T> _weights;
 
     /// <summary>
     /// Gets or sets the size of the network, which is the number of neurons.
@@ -168,7 +168,7 @@ public class HopfieldNetwork<T> : NeuralNetworkBase<T>
         _options = options ?? new HopfieldNetworkOptions();
         Options = _options;
         _size = size;
-        _weights = new Matrix<T>(size, size);
+        _weights = new Tensor<T>([size, size]);
         _activationFunction = new SignActivation<T>();
 
         InitializeWeights();
@@ -302,7 +302,7 @@ public class HopfieldNetwork<T> : NeuralNetworkBase<T>
     {
         var current = input;
         // Convert weights to Tensor for Engine-accelerated MatMul
-        var weightsTensor = Tensor<T>.FromMatrix(_weights);
+        var weightsTensor = _weights;
 
         for (int iteration = 0; iteration < maxIterations; iteration++)
         {
@@ -328,56 +328,8 @@ public class HopfieldNetwork<T> : NeuralNetworkBase<T>
         return current;
     }
 
-    /// <summary>
-    /// Not implemented for Hopfield networks, as they don't use gradient-based parameter updates.
-    /// </summary>
-    /// <param name="parameters">A vector containing parameters to update.</param>
-    /// <exception cref="NotImplementedException">Always thrown, as this method is not applicable to Hopfield networks.</exception>
-    /// <remarks>
-    /// <para>
-    /// This method is required by the NeuralNetworkBase class but is not implemented for Hopfield networks.
-    /// Hopfield networks use a different training approach (Hebbian learning) that directly sets the weights
-    /// rather than using gradient-based updates as in most neural networks.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method is not used in Hopfield networks.
-    /// 
-    /// Most neural networks learn by:
-    /// - Making small adjustments to weights based on error gradients
-    /// - Updating parameters gradually over many training iterations
-    /// 
-    /// Hopfield networks are different:
-    /// - They learn using the Hebbian rule ("neurons that fire together, wire together")
-    /// - Training happens in one pass through the Train method
-    /// - They don't use gradient-based updates at all
-    /// 
-    /// This method exists only because the base neural network class requires it,
-    /// but it will throw an error if called.
-    /// </para>
-    /// </remarks>
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        // Number of off-diagonal entries in a symmetric NxN matrix
-        int expectedLength = (_size * (_size - 1)) / 2;
-
-        if (parameters.Length != expectedLength)
-        {
-            throw new ArgumentException($"Parameter vector length mismatch. Expected {expectedLength} parameters but got {parameters.Length}.", nameof(parameters));
-        }
-
-        int paramIndex = 0;
-        // Fill upper triangle and mirror to lower triangle; keep diagonal zero
-        for (int i = 0; i < _size; i++)
-        {
-            _weights[i, i] = NumOps.Zero;
-            for (int j = i + 1; j < _size; j++)
-            {
-                var w = parameters[paramIndex++];
-                _weights[i, j] = w;
-                _weights[j, i] = w;
-            }
-        }
-    }
-
+    // UpdateParameters restated a fold the base now derives from generated component registration.
+    // Removed under AIDN082.
     /// <summary>
     /// Initializes the layers of the neural network.
     /// </summary>
@@ -443,27 +395,34 @@ public class HopfieldNetwork<T> : NeuralNetworkBase<T>
         var output = Predict(input);
         return new Dictionary<string, Tensor<T>>
         {
-            ["WeightMatrix"] = Tensor<T>.FromMatrix(_weights),
+            ["WeightMatrix"] = _weights,
             ["Output"] = output
         };
     }
 
-    /// <inheritdoc/>
-    public override long ParameterCount => _size * _size;
-
-    /// <inheritdoc/>
-    public override Vector<T> GetParameters()
+    /// <summary>
+    /// Declares the single recurrent weight matrix, which the base cannot otherwise find.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The base walks <c>Layers</c>, and a Hopfield network has none -- it is one symmetric weight
+    /// matrix, not a stack. Declaring it here is the whole parameter surface: count, vector,
+    /// restore and chunks all fold this one enumeration, so they cannot describe different tensors.
+    /// </para>
+    /// <para>
+    /// This replaces four hand-written members -- <c>ParameterCount</c> as the formula
+    /// <c>_size * _size</c>, a <c>GetParameters</c> flattening the matrix, a <c>SetParameters</c>
+    /// filling it back element by element, and a <c>GetParameterChunks</c> that yielded
+    /// <c>Tensor&lt;T&gt;.FromMatrix(_weights)</c>. That last one is why <c>_weights</c> is now a
+    /// <c>Tensor&lt;T&gt;</c> rather than a <c>Matrix&lt;T&gt;</c>: <c>FromMatrix</c> COPIES, so a
+    /// restore driven through the declared tensor would have written into a temporary and been
+    /// discarded, leaving the model on its old weights while reporting the new ones. Yielding the
+    /// field itself is what makes the automatic restore actually land.
+    /// </para>
+    /// </remarks>
+    protected override IEnumerable<Tensor<T>> GetExtraTrainableTensors()
     {
-        return _weights.ToVector();
-    }
-
-    /// <inheritdoc/>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int idx = 0;
-        for (int i = 0; i < _size; i++)
-            for (int j = 0; j < _size; j++)
-                _weights[i, j] = parameters[idx++];
+        yield return _weights;
     }
 
     protected override Tensor<T> PredictCore(Tensor<T> input)
@@ -623,7 +582,7 @@ public class HopfieldNetwork<T> : NeuralNetworkBase<T>
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "Size", _size },
-                { "WeightMatrixShape", $"{_weights.Rows}x{_weights.Columns}" }
+                { "WeightMatrixShape", $"{_weights.Shape[0]}x{_weights.Shape[1]}" }
             },
             ModelData = SerializeForMetadata()
         };
@@ -655,12 +614,12 @@ public class HopfieldNetwork<T> : NeuralNetworkBase<T>
         writer.Write(_size);
 
         // Write weight matrix
-        writer.Write(_weights.Rows);
-        writer.Write(_weights.Columns);
+        writer.Write(_weights.Shape[0]);
+        writer.Write(_weights.Shape[1]);
 
-        for (int i = 0; i < _weights.Rows; i++)
+        for (int i = 0; i < _weights.Shape[0]; i++)
         {
-            for (int j = 0; j < _weights.Columns; j++)
+            for (int j = 0; j < _weights.Shape[1]; j++)
             {
                 writer.Write(Convert.ToDouble(_weights[i, j]));
             }
@@ -697,7 +656,7 @@ public class HopfieldNetwork<T> : NeuralNetworkBase<T>
         int columns = reader.ReadInt32();
 
         // Initialize weight matrix
-        _weights = new Matrix<T>(rows, columns);
+        _weights = new Tensor<T>([rows, columns]);
 
         // Read weight values
         for (int i = 0; i < rows; i++)

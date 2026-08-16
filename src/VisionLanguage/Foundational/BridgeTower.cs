@@ -50,7 +50,7 @@ namespace AiDotNet.VisionLanguage.Foundational;
     Year = 2023,
     Authors = "Xu et al."
 )]
-public class BridgeTower<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionModel<T>
+public partial class BridgeTower<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionModel<T>
 {
     private readonly BridgeTowerOptions _options;
 
@@ -194,10 +194,10 @@ public class BridgeTower<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionM
                 ? Math.Max(1, _options.NumVisionLayers / Math.Max(1, _options.NumBridgeLayers))
                 : 1;
         int numVisionBridges =
-            _options.NumVisionLayers > 0 ? (_options.NumVisionLayers / bridgeInterval) : 0;
+            _options.NumVisionLayers > 1 ? ((_options.NumVisionLayers - 1) / bridgeInterval) : 0;
         int bridgeCrossAttnLayers = _options.DropoutRate > 0 ? 3 : 2; // MHA + LN + optional Dropout
         int visionLayerEnd =
-            1
+            2
             + _options.NumVisionLayers * blockSize
             + numVisionBridges * bridgeCrossAttnLayers
             + (_options.VisionDim != _options.FusionDim ? 1 : 0);
@@ -210,7 +210,8 @@ public class BridgeTower<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionM
             _options.NumTextLayers,
             _options.NumBridgeLayers,
             _options.NumHeads,
-            _options.DropoutRate
+            _options.DropoutRate,
+            _options.PatchSize
         );
 
         int idx = 0;
@@ -271,34 +272,8 @@ public class BridgeTower<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionM
         }
     }
 
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        if (!_useNativeMode)
-            throw new NotSupportedException("Cannot update parameters in ONNX mode.");
-        int idx = 0;
-        foreach (var l in Layers)
-        {
-            int c = (int)l.ParameterCount;
-            l.UpdateParameters(parameters.Slice(idx, c));
-            idx += c;
-        }
-        // Bridge-fusion stream is part of the trainable graph (registered via
-        // RegisterAuxiliaryEncoderStream in InitializeLayers and surfaced
-        // through GetExtraTrainableLayers), so its parameter slices live
-        // alongside the vision encoder's in the flat parameter vector. Walk
-        // it here so the writeback covers every trainable parameter the
-        // model exposes.
-        foreach (var l in _bridgeFusionLayers)
-        {
-            int c = (int)l.ParameterCount;
-            l.UpdateParameters(parameters.Slice(idx, c));
-            idx += c;
-        }
-    }
-
-    /// <inheritdoc />
-    protected override IEnumerable<LayerBase<T>?> GetExtraTrainableLayers() =>
-        EnumerateAuxiliaryStreamTrainableLayers();
+    // This forwarded to a helper the base now calls from its own
+    // GetExtraTrainableLayers, so the override restated it. Removed under AIDN082.
 
     protected override Tensor<T> PreprocessImage(Tensor<T> image) =>
         NormalizeImage(image, _options.ImageMean, _options.ImageStd);
@@ -355,9 +330,10 @@ public class BridgeTower<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionM
 
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
+        var cloneOptions = new BridgeTowerOptions(_options);
         if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new BridgeTower<T>(Architecture, mp, _options);
-        return new BridgeTower<T>(Architecture, _options);
+            return new BridgeTower<T>(Architecture, mp, cloneOptions);
+        return new BridgeTower<T>(Architecture, cloneOptions);
     }
 
     private void ThrowIfDisposed()

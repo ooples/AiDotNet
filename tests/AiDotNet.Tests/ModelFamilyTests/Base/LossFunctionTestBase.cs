@@ -7,14 +7,29 @@ using AiDotNet.Tensors.Helpers;
 namespace AiDotNet.Tests.ModelFamilyTests.Base;
 
 /// <summary>
-/// Base test class for ILossFunction&lt;double&gt; implementations.
+/// Base test class for ILossFunction&lt;T&gt; implementations.
 /// Tests mathematical invariants that every loss function must satisfy:
 /// non-negativity, zero loss for identical inputs, derivative correctness,
 /// and numerical stability.
 /// </summary>
-public abstract class LossFunctionTestBase
+public abstract class LossFunctionTestBase<T>
 {
-    protected abstract ILossFunction<double> CreateLoss();
+    protected static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+
+    protected static T ToT(double value) => NumOps.FromDouble(value);
+
+    protected static double ToD(T value) => Convert.ToDouble(value);
+
+    protected static Vector<T> ToVector(double[] values)
+    {
+        var result = new Vector<T>(values.Length);
+        for (int i = 0; i < values.Length; i++) result[i] = ToT(values[i]);
+        return result;
+    }
+
+    protected abstract ILossFunction<T> CreateLoss();
+
+    protected virtual double Tolerance => typeof(T) == typeof(float) ? 1e-6 : 1e-10;
 
     /// <summary>
     /// Whether the loss is always non-negative. True for most losses (MSE, MAE, CE).
@@ -89,10 +104,10 @@ public abstract class LossFunctionTestBase
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var loss = CreateLoss();
-        var predicted = new Vector<double>(TestPredicted);
-        var actual = new Vector<double>(TestActual);
+        var predicted = ToVector(TestPredicted);
+        var actual = ToVector(TestActual);
 
-        double value = loss.CalculateLoss(predicted, actual);
+        double value = ToD(loss.CalculateLoss(predicted, actual));
 
         Assert.False(double.IsNaN(value), "Loss returned NaN.");
         Assert.False(double.IsInfinity(value), "Loss returned Infinity.");
@@ -110,11 +125,11 @@ public abstract class LossFunctionTestBase
         if (!IsNonNegative) return;
 
         var loss = CreateLoss();
-        var predicted = new Vector<double>(TestPredicted);
-        var actual = new Vector<double>(TestActual);
+        var predicted = ToVector(TestPredicted);
+        var actual = ToVector(TestActual);
 
-        double value = loss.CalculateLoss(predicted, actual);
-        Assert.True(value >= -1e-10, $"Loss should be non-negative but got {value}.");
+        double value = ToD(loss.CalculateLoss(predicted, actual));
+        Assert.True(value >= -Tolerance, $"Loss should be non-negative but got {value}.");
     }
 
     // =========================================================================
@@ -129,10 +144,10 @@ public abstract class LossFunctionTestBase
         if (!ZeroLossForIdentical) return;
 
         var loss = CreateLoss();
-        var values = new Vector<double>(new[] { 0.3, 0.5, 0.7 });
+        var values = ToVector([0.3, 0.5, 0.7]);
 
-        double value = loss.CalculateLoss(values, values);
-        Assert.True(Math.Abs(value) < 1e-10,
+        double value = ToD(loss.CalculateLoss(values, values));
+        Assert.True(Math.Abs(value) < Tolerance,
             $"Loss for identical vectors should be ≈0 but got {value}.");
     }
 
@@ -150,14 +165,14 @@ public abstract class LossFunctionTestBase
         if (!IsNonNegative) return;
 
         var loss = CreateLoss();
-        var actual = new Vector<double>(ErrorTestActual);
-        var smallError = new Vector<double>(SmallErrorPredicted);
-        var largeError = new Vector<double>(LargeErrorPredicted);
+        var actual = ToVector(ErrorTestActual);
+        var smallError = ToVector(SmallErrorPredicted);
+        var largeError = ToVector(LargeErrorPredicted);
 
-        double smallLoss = loss.CalculateLoss(smallError, actual);
-        double largeLoss = loss.CalculateLoss(largeError, actual);
+        double smallLoss = ToD(loss.CalculateLoss(smallError, actual));
+        double largeLoss = ToD(loss.CalculateLoss(largeError, actual));
 
-        Assert.True(largeLoss >= smallLoss - 1e-10,
+        Assert.True(largeLoss >= smallLoss - Tolerance,
             $"Larger error should produce larger loss: small={smallLoss}, large={largeLoss}.");
     }
 
@@ -171,17 +186,17 @@ public abstract class LossFunctionTestBase
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var loss = CreateLoss();
-        var predicted = new Vector<double>(TestPredicted);
-        var actual = new Vector<double>(TestActual);
+        var predicted = ToVector(TestPredicted);
+        var actual = ToVector(TestActual);
 
         var derivative = loss.ComputeGradient(predicted, actual);
 
         Assert.Equal(predicted.Length, derivative.Length);
         for (int i = 0; i < derivative.Length; i++)
         {
-            Assert.False(double.IsNaN(derivative[i]),
+            Assert.False(double.IsNaN(ToD(derivative[i])),
                 $"Derivative[{i}] is NaN.");
-            Assert.False(double.IsInfinity(derivative[i]),
+            Assert.False(double.IsInfinity(ToD(derivative[i])),
                 $"Derivative[{i}] is Infinity.");
         }
     }
@@ -198,13 +213,13 @@ public abstract class LossFunctionTestBase
         if (!ZeroDerivativeForIdentical) return;
 
         var loss = CreateLoss();
-        var values = new Vector<double>(new[] { 0.3, 0.5, 0.7 });
+        var values = ToVector([0.3, 0.5, 0.7]);
 
         var derivative = loss.ComputeGradient(values, values);
 
         for (int i = 0; i < derivative.Length; i++)
         {
-            Assert.True(Math.Abs(derivative[i]) < 1e-8,
+            Assert.True(Math.Abs(ToD(derivative[i])) < Tolerance,
                 $"Derivative[{i}] should be ≈0 for identical inputs but got {derivative[i]}.");
         }
     }
@@ -221,9 +236,9 @@ public abstract class LossFunctionTestBase
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var loss = CreateLoss();
-        var predicted = new Vector<double>(TestPredicted);
-        var actual = new Vector<double>(TestActual);
-        double epsilon = 1e-5;
+        var predicted = ToVector(TestPredicted);
+        var actual = ToVector(TestActual);
+        double epsilon = typeof(T) == typeof(float) ? 1e-3 : 1e-5;
 
         var analyticalGrad = loss.ComputeGradient(predicted, actual);
 
@@ -231,21 +246,31 @@ public abstract class LossFunctionTestBase
         {
             var predictedPlus = predicted.Clone();
             var predictedMinus = predicted.Clone();
-            predictedPlus[i] += epsilon;
-            predictedMinus[i] -= epsilon;
+            double original = ToD(predicted[i]);
+            double plusValue = ToD(ToT(original + epsilon));
+            double minusValue = ToD(ToT(original - epsilon));
+            if (plusValue == minusValue) continue;
+            predictedPlus[i] = ToT(plusValue);
+            predictedMinus[i] = ToT(minusValue);
 
-            double lossPlus = loss.CalculateLoss(predictedPlus, actual);
-            double lossMinus = loss.CalculateLoss(predictedMinus, actual);
-            double numericalGrad = (lossPlus - lossMinus) / (2 * epsilon);
+            double lossPlus = ToD(loss.CalculateLoss(predictedPlus, actual));
+            double lossMinus = ToD(loss.CalculateLoss(predictedMinus, actual));
+            double numericalGrad = (lossPlus - lossMinus) / (plusValue - minusValue);
 
-            double absMax = Math.Max(Math.Abs(analyticalGrad[i]), Math.Abs(numericalGrad));
+            double analyticalValue = ToD(analyticalGrad[i]);
+            double absMax = Math.Max(Math.Abs(analyticalValue), Math.Abs(numericalGrad));
             if (absMax < 1e-7) continue; // Both near zero
 
-            double relError = Math.Abs(analyticalGrad[i] - numericalGrad) / (absMax + 1e-8);
-            Assert.True(relError < 0.02,
+            double absError = Math.Abs(analyticalValue - numericalGrad);
+            double relError = absError / (absMax + 1e-8);
+            // A float-valued loss loses several significant bits when two nearby
+            // O(1) loss values are subtracted. Keep the relative criterion for
+            // ordinary gradients, but accept a genuinely tiny absolute residual.
+            double absoluteTolerance = typeof(T) == typeof(float) ? 1e-4 : 0.0;
+            Assert.True(absError < absoluteTolerance || relError < 0.02,
                 $"Gradient check failed at index {i}: " +
-                $"analytical={analyticalGrad[i]:G10}, numerical={numericalGrad:G10}, " +
-                $"relError={relError:G6}.");
+                $"analytical={analyticalValue:G10}, numerical={numericalGrad:G10}, " +
+                $"absError={absError:G6}, relError={relError:G6}.");
         }
     }
 
@@ -263,14 +288,15 @@ public abstract class LossFunctionTestBase
         if (!HasStandardGradientSign) return;
 
         var loss = CreateLoss();
-        var predicted = new Vector<double>(SignTestPredicted);
-        var actual = new Vector<double>(SignTestActual);
+        var predicted = ToVector(SignTestPredicted);
+        var actual = ToVector(SignTestActual);
 
         var derivative = loss.ComputeGradient(predicted, actual);
 
         // For standard regression losses, positive error → positive gradient
-        Assert.True(derivative[0] > -1e-10,
-            $"When predicted > actual, derivative should be >= 0 but got {derivative[0]}.");
+        double derivativeValue = ToD(derivative[0]);
+        Assert.True(derivativeValue > -Tolerance,
+            $"When predicted > actual, derivative should be >= 0 but got {derivativeValue}.");
     }
 
     // =========================================================================
@@ -289,16 +315,19 @@ public abstract class LossFunctionTestBase
         if (!HasStandardGradientSign) return;
 
         var loss = CreateLoss();
-        var actual = new Vector<double>(new[] { 0.5 });
-        var overPredict = new Vector<double>(new[] { 0.8 });
-        var underPredict = new Vector<double>(new[] { 0.2 });
+        var actual = ToVector([0.5]);
+        var overPredict = ToVector([0.8]);
+        var underPredict = ToVector([0.2]);
 
-        double overLoss = loss.CalculateLoss(overPredict, actual);
-        double underLoss = loss.CalculateLoss(underPredict, actual);
+        double overLoss = ToD(loss.CalculateLoss(overPredict, actual));
+        double underLoss = ToD(loss.CalculateLoss(underPredict, actual));
 
         // Allow 50% relative difference (some losses are asymmetric)
-        double ratio = Math.Max(overLoss, underLoss) / (Math.Min(overLoss, underLoss) + 1e-10);
+        double ratio = Math.Max(overLoss, underLoss) / (Math.Min(overLoss, underLoss) + Tolerance);
         Assert.True(ratio < 10.0,
             $"Loss asymmetry too large: overPredict loss={overLoss}, underPredict loss={underLoss}.");
     }
 }
+
+/// <summary>Default-precision alias for existing hand-written fixtures.</summary>
+public abstract class LossFunctionTestBase : LossFunctionTestBase<double> { }

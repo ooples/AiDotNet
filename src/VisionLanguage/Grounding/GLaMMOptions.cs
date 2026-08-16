@@ -28,10 +28,10 @@ public class GLaMMOptions : GroundingVLMOptions
         MaxGenerationLength = other.MaxGenerationLength;
         DropoutRate = other.DropoutRate;
         ArchitectureType = other.ArchitectureType;
-        ImageMean = other.ImageMean;
-        ImageStd = other.ImageStd;
+        ImageMean = [.. other.ImageMean];
+        ImageStd = [.. other.ImageStd];
         ModelPath = other.ModelPath;
-        OnnxOptions = other.OnnxOptions;
+        OnnxOptions = new AiDotNet.Onnx.OnnxModelOptions(other.OnnxOptions);
         LearningRate = other.LearningRate;
         WeightDecay = other.WeightDecay;
         MaxDetections = other.MaxDetections;
@@ -40,6 +40,10 @@ public class GLaMMOptions : GroundingVLMOptions
         BoxDimension = other.BoxDimension;
         EnablePixelGrounding = other.EnablePixelGrounding;
         MaskDim = other.MaskDim;
+        TextEmbeddingDim = other.TextEmbeddingDim;
+        FusionDim = other.FusionDim;
+        NumFusionLayers = other.NumFusionLayers;
+        NumDetectionLayers = other.NumDetectionLayers;
     }
 
     public GLaMMOptions()
@@ -52,6 +56,8 @@ public class GLaMMOptions : GroundingVLMOptions
         ImageSize = 448;
         MaxDetections = 100;
         VocabSize = 32000;
+        LearningRate = 3e-4;
+        WeightDecay = 0.0;
     }
 
     /// <summary>Gets or sets whether to produce pixel-level grounding masks.</summary>
@@ -59,4 +65,16 @@ public class GLaMMOptions : GroundingVLMOptions
 
     /// <summary>Gets or sets the segmentation mask feature dimension.</summary>
     public int MaskDim { get; set; } = 256;
+
+    /// <summary>Gets or sets the text-encoder feature width used by grounding fusion.</summary>
+    public int TextEmbeddingDim { get; set; } = 768;
+
+    /// <summary>Gets or sets the cross-modal grounding fusion width.</summary>
+    public int FusionDim { get; set; } = 1024;
+
+    /// <summary>Gets or sets the number of cross-modal grounding fusion layers.</summary>
+    public int NumFusionLayers { get; set; } = 6;
+
+    /// <summary>Gets or sets the number of grounding detection-decoder layers.</summary>
+    public int NumDetectionLayers { get; set; } = 6;
 }

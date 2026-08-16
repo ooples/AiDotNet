@@ -90,8 +90,16 @@ namespace AiDotNet.Diffusion.FastGeneration;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Consistency Models", "https://arxiv.org/abs/2303.01469", Year = 2023, Authors = "Song et al.")]
-public class ConsistencyModel<T> : LatentDiffusionModelBase<T>
+public partial class ConsistencyModel<T> : LatentDiffusionModelBase<T>
 {
+    /// <inheritdoc />
+    /// <remarks>Registration order is serialization order, and matches the
+    /// concatenation the previous hand-written GetParameters performed.</remarks>
+    protected override void RegisterComponents()
+    {
+        RegisterParameterComponent(_noisePredictor);
+    }
+
     #region Constants
 
     /// <summary>
@@ -184,8 +192,6 @@ public class ConsistencyModel<T> : LatentDiffusionModelBase<T>
     public override int LatentChannels => CM_LATENT_CHANNELS;
 
     /// <inheritdoc />
-    public override long ParameterCount =>
-        _noisePredictor.ParameterCount + _vae.Value.ParameterCount;
 
     /// <summary>
     /// Gets the minimum sigma value used by this model.
@@ -616,46 +622,7 @@ public class ConsistencyModel<T> : LatentDiffusionModelBase<T>
 
     #region IParameterizable Implementation
 
-    /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        var noisePredParams = _noisePredictor.GetParameters();
-        var vae = _vae.Value;
-        var vaeParams = vae.GetParameters();
-        int totalLength = noisePredParams.Length + vaeParams.Length;
-        var combined = new Vector<T>(totalLength);
-        for (int i = 0; i < noisePredParams.Length; i++)
-            combined[i] = noisePredParams[i];
-        for (int i = 0; i < vaeParams.Length; i++)
-            combined[noisePredParams.Length + i] = vaeParams[i];
-        return combined;
-    }
 
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        var vae = _vae.Value;
-        int expectedCount = (int)(_noisePredictor.ParameterCount + vae.ParameterCount);
-        if (parameters.Length != expectedCount)
-        {
-            throw new ArgumentException(
-                $"Expected {expectedCount} parameters (noise predictor: {_noisePredictor.ParameterCount}, " +
-                $"VAE: {vae.ParameterCount}), got {parameters.Length}.",
-                nameof(parameters));
-        }
-
-        int npCount = checked((int)_noisePredictor.ParameterCount);
-        var noisePredParams = new Vector<T>(npCount);
-        for (int i = 0; i < npCount; i++)
-            noisePredParams[i] = parameters[i];
-        _noisePredictor.SetParameters(noisePredParams);
-
-        int vaeCount = checked((int)vae.ParameterCount);
-        var vaeParams = new Vector<T>(vaeCount);
-        for (int i = 0; i < vaeCount; i++)
-            vaeParams[i] = parameters[npCount + i];
-        vae.SetParameters(vaeParams);
-    }
 
     #endregion
 

@@ -1,4 +1,4 @@
-global using AiDotNet.NeuralNetworks.Layers;
+﻿global using AiDotNet.NeuralNetworks.Layers;
 
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
@@ -46,7 +46,16 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     [ResearchPaper("Siamese Neural Networks for One-shot Image Recognition", "https://www.cs.cmu.edu/~rsalakhu/oneshot/papers/Siamese%20Neural%20Networks%20for%20One-Shot%20Image%20Recognition.pdf")]
-public class SiameseNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
+[TensorLayout(TensorAxis.Batch, TensorAxis.Other, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Other, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Classes, Direction = TensorLayoutDirection.Output)]
+[PreprocessesInput("PredictCore slices each [batch, pair, ...] input into one sample before the shared subnetwork runs.")]
+[StackInputLayout(TensorAxis.Batch, TensorAxis.Features, BatchOptional = true)]
+[StackInputLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    BatchOptional = true)]
+public partial class SiameseNetwork<T> : DeclaredModelLayoutBase<T>, IAuxiliaryLossLayer<T>
 {
     private readonly SiameseNetworkOptions _options;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
@@ -407,37 +416,8 @@ public class SiameseNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
         return diagnostics;
     }
 
-    /// <summary>
-    /// Updates the network parameters with new values.
-    /// </summary>
-    /// <param name="parameters">The vector containing all parameters for the network.</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> This method updates the internal values (weights and biases) of the neural network
-    /// during training.
-    /// 
-    /// The parameters vector contains all the numbers that define how the network processes inputs.
-    /// These parameters are split into two parts:
-    /// 1. Parameters for the shared subnetwork (which processes each input)
-    /// 2. Parameters for the output layer (which compares the embeddings)
-    /// 
-    /// During training, these parameters are gradually adjusted to make the network better at
-    /// determining whether two inputs are similar or different.
-    /// 
-    /// You typically won't call this method directly - it's used by the training algorithms
-    /// that optimize the network.
-    /// </para>
-    /// </remarks>
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        int subnetworkParameterCount = checked((int)_subnetwork.ParameterCount);
-        Vector<T> subnetworkParameters = parameters.SubVector(0, subnetworkParameterCount);
-        _subnetwork.UpdateParameters(subnetworkParameters);
-
-        Vector<T> outputLayerParameters = parameters.SubVector(subnetworkParameterCount, (int)_outputLayer.ParameterCount);
-        _outputLayer.UpdateParameters(outputLayerParameters);
-    }
-
+    // UpdateParameters restated a fold the base now derives from generated component registration.
+    // Removed under AIDN082.
     /// <summary>
     /// Gets the total number of trainable parameters in the Siamese network.
     /// </summary>
@@ -465,13 +445,14 @@ public class SiameseNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
     /// - Determine if you have enough training data (typically you want many times more examples than parameters)
     /// </para>
     /// </remarks>
-    public override long ParameterCount
-    {
-        get
-        {
-            return _subnetwork.ParameterCount + _outputLayer.ParameterCount;
-        }
-    }
+    /// <remarks>
+    /// Deliberately NOT overridden. Summing <c>_subnetwork.ParameterCount + _outputLayer</c>
+    /// reported 16,576 while <c>GetParameters()</c> -- which walks <c>Layers</c> -- returned
+    /// 16,641, a 65-parameter gap that would mis-slice every saved checkpoint. The layers in
+    /// <c>Layers</c> are individually self-consistent (their own counts and vectors agree), so
+    /// the second, hand-rolled sum over field references was simply the wrong source. The base
+    /// folds the count over exactly the list the getter walks.
+    /// </remarks>
 
     /// <summary>
     /// Makes a prediction using the Siamese network to compare the similarity between inputs.

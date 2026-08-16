@@ -4,6 +4,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
 using AiDotNet.NeuralNetworks.Options;
+using AiDotNet.Optimizers;
 
 namespace AiDotNet.NeuralNetworks;
 
@@ -36,7 +37,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Gated Linear Attention Transformers with Hardware-Efficient Training", "https://arxiv.org/abs/2312.06635", Year = 2024, Authors = "Songlin Yang, Bailin Wang, Yikang Shen, Rameswar Panda, Yoon Kim")]
-public class GLALanguageModel<T> : NeuralNetworkBase<T>
+public class GLALanguageModel<T> : TokenLanguageModelLayoutBase<T>
 {
     private readonly GLAOptions _options;
     private readonly int _vocabSize;
@@ -44,6 +45,7 @@ public class GLALanguageModel<T> : NeuralNetworkBase<T>
     private readonly int _numLayers;
     private readonly int _numHeads;
     private readonly int _maxSeqLength;
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
 
     /// <inheritdoc />
     public override bool SupportsTraining => true;
@@ -70,9 +72,10 @@ public class GLALanguageModel<T> : NeuralNetworkBase<T>
         int numHeads = 8,
         int maxSeqLength = 512,
         ILossFunction<T>? lossFunction = null,
-        GLAOptions? options = null)
+        GLAOptions? options = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
         : base(architecture,
-            lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(NeuralNetworkTaskType.TextGeneration))
+            lossFunction ?? new AiDotNet.LossFunctions.CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new GLAOptions();
         Options = _options;
@@ -81,6 +84,15 @@ public class GLALanguageModel<T> : NeuralNetworkBase<T>
         _numLayers = numLayers;
         _numHeads = numHeads;
         _maxSeqLength = maxSeqLength;
+        // THE PAPER'S RATE, NOT THE LIBRARY DEFAULT. Constructing AdamWOptimizer with no options
+        // silently trained at InitialLearningRate = 1e-3, which is neither the published rate nor
+        // something the caller could change short of building the whole optimizer themselves.
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate,
+            });
         InitializeLayers();
     }
 
@@ -105,6 +117,21 @@ public class GLALanguageModel<T> : NeuralNetworkBase<T>
 
     #region NeuralNetworkBase Overrides
 
+    /// <summary>
+    /// GLA carries a per-head state matrix through a timestep recurrence --
+    /// <c>S_t = G_t * S_{t-1} + K_t^T * V_t</c>, with the output read as <c>O_t = Q_t * S_t</c>.
+    /// That data-dependent loop is not a static op graph, so it cannot be captured once and
+    /// safely replayed by the fused compiled-training plan; the eager tape re-runs the true
+    /// recurrence every step, so AdamW receives the real gradients. Same reason as the sibling
+    /// recurrent models (<see cref="GriffinLanguageModel{T}"/>, <see cref="HawkLanguageModel{T}"/>)
+    /// and the same root cause documented on <c>NeuralNetworkBase.SupportsFusedCompiledTraining</c>
+    /// (#1643). This is a structural property of the architecture, not a temporary restriction.
+    /// </summary>
+    protected override bool SupportsFusedCompiledTraining => false;
+
+    protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> GetOrCreateBaseOptimizer()
+        => _optimizer;
+
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         SetTrainingMode(false);
@@ -119,20 +146,11 @@ public class GLALanguageModel<T> : NeuralNetworkBase<T>
         });
     }
 
-    public override void UpdateParameters(Vector<T> gradients)
-    {
-        if (gradients.Length != ParameterCount)
-        {
-            throw new ArgumentException(
-                $"Expected {ParameterCount} gradients, but got {gradients.Length}",
-                nameof(gradients));
-        }
-
-        var currentParams = GetParameters();
-        T learningRate = NumOps.FromDouble(0.001);
-        currentParams = Engine.Subtract(currentParams, Engine.Multiply(gradients, learningRate));
-        SetParameters(currentParams);
-    }
+    // UpdateParameters validated the length and distributed the vector across Layers. The base does
+    // both. Its trailing "did the loop consume the whole vector" guard is not lost either -- it
+    // protected against sum(layer.ParameterCount) drifting from ParameterCount, and the base derives
+    // the count and the distribution from ONE enumeration, so they cannot drift apart. Removed under
+    // AIDN082.
 
     public override ModelMetadata<T> GetModelMetadata()
     {
@@ -172,9 +190,14 @@ public class GLALanguageModel<T> : NeuralNetworkBase<T>
 
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
+        var cloneOptimizer = _optimizer.GetOptions() is AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>> optimizerOptions
+            ? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+                null,
+                new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>(optimizerOptions))
+            : null;
         return new GLALanguageModel<T>(
             Architecture, _vocabSize, _modelDimension, _numLayers, _numHeads,
-            _maxSeqLength, LossFunction, _options);
+            _maxSeqLength, LossFunction, new GLAOptions(_options), cloneOptimizer);
     }
 
     #endregion

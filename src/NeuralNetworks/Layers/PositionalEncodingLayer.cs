@@ -38,7 +38,16 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Positional)]
 [LayerTask(LayerTask.PositionalEncoding)]
 [LayerProperty(IsTrainable = false, TestInputShape = "16, 8", TestConstructorArgs = "16, 8")]
-public class PositionalEncodingLayer<T> : LayerBase<T>
+// Adds position signals to a sequence: shape-preserving, but NOT rank-agnostic - it needs a real
+// sequence axis, so it declares [Batch, Time, Features] rather than claiming any rank.
+// Rank 2 comes from this layer's own [LayerProperty(TestInputShape = "16, 8")] - 16 positions of an
+// 8-wide embedding, so [Time, Features]. ADNSHAPE005 caught the rank-3-only declaration.
+[TensorLayout(TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
+[AutoParameters]
+public partial class PositionalEncodingLayer<T> : LayerBase<T>, IShapeContract
 {
     /// <summary>
     /// The maximum sequence length that this layer can handle.
@@ -64,6 +73,10 @@ public class PositionalEncodingLayer<T> : LayerBase<T>
     /// up to maxSequenceLength. The encodings are calculated once during initialization
     /// and reused for all forward passes.
     /// </remarks>
+    // Deterministic derived state: it is rebuilt from maxSequenceLength/embeddingSize and may
+    // grow at runtime. Treating it as a parameter makes a forward pass change ParameterCount and
+    // checkpoint layout even though there is nothing for an optimizer to learn or restore.
+    [Scratch]
     private Tensor<T> encodings;
 
     private readonly object _encodingLock = new();
@@ -122,8 +135,10 @@ public class PositionalEncodingLayer<T> : LayerBase<T>
     /// position that the model can learn to recognize.
     /// </para>
     /// </remarks>
-    public PositionalEncodingLayer(int maxSequenceLength, int embeddingSize)
-        : base([maxSequenceLength, embeddingSize], [maxSequenceLength, embeddingSize])
+    public PositionalEncodingLayer(
+        [LayerState] int maxSequenceLength,
+        [LayerState] int embeddingSize)
+        : base([-1, embeddingSize], [-1, embeddingSize])
     {
         this.maxSequenceLength = maxSequenceLength;
         this.embeddingSize = embeddingSize;
@@ -247,7 +262,20 @@ public class PositionalEncodingLayer<T> : LayerBase<T>
     /// which position in the sentence it occupies.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    /// <inheritdoc/>
+    /// <remarks>
+    /// Positional encodings are ADDED to the input, so the output has exactly the input's shape.
+    ///
+    /// The declared shape used to be [maxSequenceLength, embeddingSize] -- the layer's CAPACITY,
+    /// not what it produces. maxSequenceLength sizes the encoding table and is an upper bound on
+    /// the sequence this layer can handle; a forward over 64 frames still emits 64. Declaring the
+    /// bound made every consumer that reads the declaration believe the sequence was
+    /// maxSequenceLength long, and chain resolution propagated that into the following attention
+    /// layer, which then reported an output of [1000, 256] while producing [64, 256].
+    /// </remarks>
+    protected override bool IsShapePreserving => true;
+
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // Handle 1D input by treating it as [1, embed] (single position with embedding)
         bool was1D = input.Shape.Length == 1;
@@ -365,57 +393,6 @@ public class PositionalEncodingLayer<T> : LayerBase<T>
         }
 
         return result;
-    }
-
-    /// <summary>
-    /// Updates the parameters of the positional encoding layer using the calculated gradients.
-    /// </summary>
-    /// <param name="learningRate">The learning rate to use for the parameter updates.</param>
-    /// <remarks>
-    /// <para>
-    /// This method is part of the training process, but since PositionalEncodingLayer has no trainable parameters,
-    /// this method does nothing. The positional encodings are fixed and do not change during training.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method would normally update a layer's internal values during training.
-    /// 
-    /// However, since PositionalEncodingLayer uses fixed encodings that are calculated once at initialization
-    /// and don't change during training, this method is empty.
-    /// 
-    /// This is different from layers like Dense or Convolutional layers, which have weights and biases
-    /// that get updated during training. The positional encodings are based on a mathematical formula
-    /// rather than learned from data.
-    /// </para>
-    /// </remarks>
-    public override void UpdateParameters(T learningRate)
-    {
-        // No parameters to update in this layer
-    }
-
-    /// <summary>
-    /// Gets all trainable parameters from the positional encoding layer as a single vector.
-    /// </summary>
-    /// <returns>An empty vector since PositionalEncodingLayer has no trainable parameters.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method retrieves all trainable parameters from the layer as a single vector. Since PositionalEncodingLayer
-    /// has no trainable parameters, it returns an empty vector. The positional encodings are fixed values
-    /// determined by a mathematical formula, not learnable parameters.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method returns all the learnable values in the layer.
-    /// 
-    /// Since PositionalEncodingLayer:
-    /// - Uses fixed encodings based on a mathematical formula
-    /// - Has no weights, biases, or other learnable parameters
-    /// - The method returns an empty list
-    /// 
-    /// This is different from layers like Dense layers, which would return their weights and biases.
-    /// The positional encodings are fixed by design and don't need to be learned from data.
-    /// </para>
-    /// </remarks>
-    public override Vector<T> GetParameters()
-    {
-        // PositionalEncodingLayer has no trainable parameters
-        return Vector<T>.Empty();
     }
 
     /// <summary>

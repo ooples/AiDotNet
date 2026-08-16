@@ -149,10 +149,16 @@ public class FocalLoss<T> : LossFunctionBase<T>
         var logPt = Engine.TensorLog(pt);
         var oneMinusPt = Engine.ScalarMinusTensor(NumOps.One, pt);
         var focalWeight = Engine.TensorPower(oneMinusPt, _gamma);
-        var weighted = Engine.TensorMultiply(focalWeight, logPt);
-        var scaled = Engine.TensorMultiplyScalar(weighted, _alpha);
-        var allAxes = Enumerable.Range(0, scaled.Shape.Length).ToArray();
-        var mean = Engine.ReduceMean(scaled, allAxes, keepDims: false);
+
+        // Match CalculateLoss's class-balanced alpha exactly. Applying _alpha to every element
+        // silently underweights negative examples by (1 - alpha) / alpha (3x at the defaults),
+        // so the tape gradient disagreed with the public forward loss for every zero target.
+        var alphaT = Engine.TensorAdd(
+            Engine.TensorMultiplyScalar(target, _alpha),
+            Engine.TensorMultiplyScalar(oneMinusT, NumOps.Subtract(NumOps.One, _alpha)));
+        var weighted = Engine.TensorMultiply(Engine.TensorMultiply(focalWeight, logPt), alphaT);
+        var allAxes = Enumerable.Range(0, weighted.Shape.Length).ToArray();
+        var mean = Engine.ReduceMean(weighted, allAxes, keepDims: false);
         return Engine.TensorNegate(mean);
     }
 }

@@ -39,16 +39,19 @@ public class SparseGaussianProcess<T> : GaussianProcessBase<T>
     /// <summary>
     /// The training input data matrix.
     /// </summary>
+    [Buffer]
     private Matrix<T> _X;
 
     /// <summary>
     /// The training output data vector.
     /// </summary>
+    [Buffer]
     private Vector<T> _y;
 
     /// <summary>
     /// A subset of training points used to approximate the full Gaussian Process.
     /// </summary>
+    [Buffer]
     private Matrix<T> _inducingPoints;
 
     /// <summary>
@@ -59,26 +62,31 @@ public class SparseGaussianProcess<T> : GaussianProcessBase<T>
     /// <summary>
     /// The kernel matrix of inducing points (with jitter), used for prediction.
     /// </summary>
+    [Buffer]
     private Matrix<T> _Kuu;
 
     /// <summary>
     /// The lower triangular matrix from Cholesky decomposition of the kernel matrix.
     /// </summary>
+    [Buffer]
     private Matrix<T> _L;
 
     /// <summary>
     /// Intermediate matrix used for efficient predictions.
     /// </summary>
+    [Buffer]
     private Matrix<T> _V;
 
     /// <summary>
     /// Diagonal elements used in the sparse approximation.
     /// </summary>
+    [Buffer]
     private Vector<T> _D;
 
     /// <summary>
     /// Weights vector used for mean prediction.
     /// </summary>
+    [Buffer]
     private Vector<T> _alpha;
 
     /// <summary>

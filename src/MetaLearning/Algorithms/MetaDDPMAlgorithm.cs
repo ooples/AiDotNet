@@ -62,7 +62,7 @@ namespace AiDotNet.MetaLearning.Algorithms;
     Authors = "Jonathan Ho, Ajay Jain, Pieter Abbeel")]
 [ComponentType(ComponentType.MetaLearner)]
 [PipelineStage(PipelineStage.Training)]
-public class MetaDDPMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
+public partial class MetaDDPMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
     private IParameterizable<T, TInput, TOutput>? _cachedParamModel;
     private IParameterizable<T, TInput, TOutput> ParamModel => _cachedParamModel ??= InterfaceGuard.Parameterizable(MetaModel);
@@ -80,6 +80,7 @@ public class MetaDDPMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, 
     private Vector<T> _denoiserParams;
 
     /// <summary>EMA copy of denoiser parameters for stable generation.</summary>
+    [Buffer]
     private Vector<T> _denoiserEma;
 
     /// <summary>Task encoder parameters.</summary>

@@ -1,6 +1,8 @@
 using System.Reflection;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Interfaces;
+using AiDotNet.NeuralNetworks;
+using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.Autodiff;
@@ -32,7 +34,7 @@ public enum GradientCheckLossStrategy
 }
 
 /// <summary>
-/// Base test class for ILayer&lt;double&gt; implementations.
+/// Base test class for ILayer&lt;T&gt; implementations.
 /// Tests mathematical invariants that every layer must satisfy:
 /// finite forward output, backward gradient flow, parameter consistency,
 /// serialization roundtrip, input sensitivity, and gradient correctness.
@@ -44,12 +46,20 @@ public enum GradientCheckLossStrategy
 /// bugs hidden by specific gradient alignments. Activation functions are auto-discovered
 /// via reflection so new activations are automatically tested.
 /// </summary>
-public abstract class LayerTestBase
+public abstract class LayerTestBase<T>
 {
+    protected static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+
+    /// <summary>Converts a double literal into the fixture's numeric type.</summary>
+    protected static T ToT(double value) => NumOps.FromDouble(value);
+
+    /// <summary>Converts a fixture value to double for diagnostic calculations and assertions.</summary>
+    protected static double ToD(T value) => Convert.ToDouble(value);
+
     /// <summary>
     /// Factory method — create a fresh instance of the layer under test.
     /// </summary>
-    protected abstract ILayer<double> CreateLayer();
+    protected abstract ILayer<T> CreateLayer();
 
     /// <summary>
     /// Shape of the tensor to feed into Forward. Override for layers that need
@@ -77,7 +87,7 @@ public abstract class LayerTestBase
     /// Tolerance for numerical comparisons. Layers with stochastic behavior
     /// (dropout, noise) may need higher tolerance.
     /// </summary>
-    protected virtual double Tolerance => 1e-12;
+    protected virtual double Tolerance => typeof(T) == typeof(float) ? 1e-6 : 1e-12;
 
     /// <summary>
     /// Loss strategy for the basic gradient check (Invariant 12).
@@ -117,7 +127,7 @@ public abstract class LayerTestBase
     /// Override for layers that accept activation parameters in their options.
     /// Default: returns CreateLayer() (ignoring the activation parameter).
     /// </summary>
-    protected virtual ILayer<double> CreateLayerWithActivation(ActivationFunctionBase<double> activation)
+    protected virtual ILayer<T> CreateLayerWithActivation(ActivationFunctionBase<T> activation)
         => CreateLayer();
 
 
@@ -131,7 +141,7 @@ public abstract class LayerTestBase
         new(DiscoverScalarActivationTypes);
 
     /// <summary>
-    /// Discovers all concrete ActivationFunctionBase&lt;double&gt; implementations that support
+    /// Discovers all concrete ActivationFunctionBase&lt;T&gt; implementations that support
     /// scalar operations. Vector-only activations (Squash, Softmax, etc.) are excluded.
     /// Results are cached — discovery only runs once per test session.
     /// </summary>
@@ -164,14 +174,14 @@ public abstract class LayerTestBase
 
                 try
                 {
-                    var closedType = type.MakeGenericType(typeof(double));
-                    if (Activator.CreateInstance(closedType) is not ActivationFunctionBase<double> instance)
+                    var closedType = type.MakeGenericType(typeof(T));
+                    if (Activator.CreateInstance(closedType) is not ActivationFunctionBase<T> instance)
                         continue;
 
                     // Test scalar support by trying Activate — vector-only activations throw
                     try
                     {
-                        instance.Activate(0.5);
+                        instance.Activate(ToT(0.5));
                         results.Add((type.Name.Replace("`1", ""), closedType));
                     }
                     catch (NotSupportedException) { }
@@ -218,7 +228,7 @@ public abstract class LayerTestBase
     /// <summary>
     /// Computes a scalar loss value from the output tensor using the specified strategy.
     /// </summary>
-    private static double ComputeStrategyLoss(Tensor<double> output, GradientCheckLossStrategy strategy)
+    private static double ComputeStrategyLoss(Tensor<T> output, GradientCheckLossStrategy strategy)
     {
         switch (strategy)
         {
@@ -226,7 +236,10 @@ public abstract class LayerTestBase
             {
                 double loss = 0;
                 for (int i = 0; i < output.Length; i++)
-                    loss += output[i] * output[i];
+                {
+                    double value = ToD(output[i]);
+                    loss += value * value;
+                }
                 return loss / 2.0;
             }
             case GradientCheckLossStrategy.RandomProjection:
@@ -234,7 +247,7 @@ public abstract class LayerTestBase
                 var rng = RandomHelper.CreateSeededRandom(12345);
                 double loss = 0;
                 for (int i = 0; i < output.Length; i++)
-                    loss += (rng.NextDouble() * 2.0 - 1.0) * output[i];
+                    loss += (rng.NextDouble() * 2.0 - 1.0) * ToD(output[i]);
                 return loss;
             }
             case GradientCheckLossStrategy.Huber:
@@ -242,8 +255,9 @@ public abstract class LayerTestBase
                 double loss = 0;
                 for (int i = 0; i < output.Length; i++)
                 {
-                    double absVal = Math.Abs(output[i]);
-                    loss += absVal < 1.0 ? 0.5 * output[i] * output[i] : absVal - 0.5;
+                    double value = ToD(output[i]);
+                    double absVal = Math.Abs(value);
+                    loss += absVal < 1.0 ? 0.5 * value * value : absVal - 0.5;
                 }
                 return loss;
             }
@@ -255,9 +269,9 @@ public abstract class LayerTestBase
     /// <summary>
     /// Computes the gradient dL/dOutput for the specified loss strategy.
     /// </summary>
-    private static Tensor<double> ComputeStrategyGradient(Tensor<double> output, GradientCheckLossStrategy strategy)
+    private static Tensor<T> ComputeStrategyGradient(Tensor<T> output, GradientCheckLossStrategy strategy)
     {
-        var grad = new Tensor<double>(output.Shape.ToArray());
+        var grad = new Tensor<T>(output.Shape.ToArray());
         switch (strategy)
         {
             case GradientCheckLossStrategy.MSE:
@@ -268,12 +282,15 @@ public abstract class LayerTestBase
             {
                 var rng = RandomHelper.CreateSeededRandom(12345);
                 for (int i = 0; i < output.Length; i++)
-                    grad[i] = rng.NextDouble() * 2.0 - 1.0;
+                    grad[i] = ToT(rng.NextDouble() * 2.0 - 1.0);
                 break;
             }
             case GradientCheckLossStrategy.Huber:
                 for (int i = 0; i < output.Length; i++)
-                    grad[i] = Math.Abs(output[i]) < 1.0 ? output[i] : Math.Sign(output[i]);
+                {
+                    double value = ToD(output[i]);
+                    grad[i] = Math.Abs(value) < 1.0 ? output[i] : ToT(Math.Sign(value));
+                }
                 break;
             default:
                 throw new ArgumentOutOfRangeException(nameof(strategy), strategy, "Unknown loss strategy");
@@ -286,21 +303,40 @@ public abstract class LayerTestBase
     // Tensor helpers
     // =========================================================================
 
-    protected static Tensor<double> CreateRandomTensor(int[] shape, int seed = 42)
+    protected static Tensor<T> CreateRandomTensor(int[] shape, int seed = 42)
     {
         var rng = RandomHelper.CreateSeededRandom(seed);
-        var tensor = new Tensor<double>(shape);
+        var tensor = new Tensor<T>(shape);
         for (int i = 0; i < tensor.Length; i++)
-            tensor[i] = rng.NextDouble() * 2.0 - 1.0; // [-1, 1]
+            tensor[i] = ToT(rng.NextDouble() * 2.0 - 1.0); // [-1, 1]
         return tensor;
     }
 
-    protected static Tensor<double> CreateConstantTensor(int[] shape, double value)
+    protected static Tensor<T> CreateConstantTensor(int[] shape, double value)
     {
-        var tensor = new Tensor<double>(shape);
+        var tensor = new Tensor<T>(shape);
         for (int i = 0; i < tensor.Length; i++)
-            tensor[i] = value;
+            tensor[i] = ToT(value);
         return tensor;
+    }
+
+    /// <summary>
+    /// Creates deterministic test data from the layer's declared value-domain contract.
+    /// Index consumers receive legal, varied integer IDs; all other layers retain the
+    /// continuous random input used by the original conformance suite.
+    /// </summary>
+    protected static Tensor<T> CreateConformingInput(
+        ILayer<T> layer, int[] shape, int seed = 42)
+    {
+        if (layer is not LayerBase<T> layerBase)
+            return CreateRandomTensor(shape, seed);
+
+        var contract = layerBase.BindInputContract(shape);
+        contract.RequireReady();
+        return InputContractTensorFactory.CreateValid<T>(
+            shape,
+            contract.PrimaryInput.ValueDomain,
+            RandomHelper.CreateSeededRandom(seed));
     }
 
 
@@ -315,7 +351,7 @@ public abstract class LayerTestBase
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var layer = CreateLayer();
-        var input = CreateRandomTensor(InputShape);
+        var input = CreateConformingInput(layer, InputShape);
 
         var output = layer.Forward(input);
 
@@ -323,13 +359,229 @@ public abstract class LayerTestBase
         bool checkFinite = ExpectsFiniteOutput;
         for (int i = 0; i < output.Length; i++)
         {
-            Assert.False(double.IsNaN(output[i]),
+            Assert.False(double.IsNaN(ToD(output[i])),
                 $"Output[{i}] is NaN — numerical instability in Forward.");
             if (checkFinite)
             {
-                Assert.False(double.IsInfinity(output[i]),
+                Assert.False(double.IsInfinity(ToD(output[i])),
                     $"Output[{i}] is Infinity — overflow in Forward.");
             }
+        }
+    }
+
+    // =========================================================================
+    // INVARIANT 1b: A layer either HANDLES a nearby input shape or REJECTS it
+    //               deliberately — it never crashes from the inside.
+    // =========================================================================
+
+    /// <summary>
+    /// Feeds the layer input shapes one step away from its declared one, and requires every outcome to be
+    /// either a real output or a deliberate rejection.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// THE DISTINCTION IS THE WHOLE TEST. A layer is entitled to require a specific input shape — a patch
+    /// embedding needs its extent divisible by the patch size, and saying so is correct behaviour. What a
+    /// layer is not entitled to do is ASSUME a shape silently and then fail from inside a kernel with
+    /// <c>IndexOutOfRangeException</c> or <c>NullReferenceException</c>. Those name no constraint, point
+    /// at no caller mistake, and are indistinguishable from an engine defect; every one of them is a
+    /// hard-coded assumption that was never written down.
+    /// </para>
+    /// <para>
+    /// This is what makes shape support real rather than declared. A layer that works at 16x16 and
+    /// crashes at 17x16 passes every other invariant in this file, because they all run at exactly one
+    /// shape — which is precisely how such an assumption survives.
+    /// </para>
+    /// <para>
+    /// The recovered shape relation is reported alongside any failure, because "what did this layer
+    /// actually do to the shapes it accepted" is the first question after such a crash.
+    /// </para>
+    /// </remarks>
+    [Fact(Timeout = 60000)]
+    public async Task Forward_NearbyShapes_AreHandledOrDeliberatelyRejected()
+    {
+        await Task.Yield();
+
+        // NO OPT-OUT. There used to be a ShapeRobustnessApplicable hook, and an override to false
+        // returned from this test having asserted NOTHING -- so the layers most likely to need this
+        // invariant were the ones most likely to be excused from it, silently and permanently.
+        // Every layer can participate, because the invariant already accepts an explicit rejection:
+        // a layer whose input shape is genuinely fixed satisfies it by REFUSING nearby shapes with a
+        // validation exception that names the constraint, which is the correct behaviour anyway.
+        using var _arena = TensorArena.Create();
+
+        var probes = AiDotNet.NeuralNetworks.ShapeRelationDiscovery.ProbeShapes(InputShape);
+        var observations = new List<(int[] Input, int[] Output)>();
+        var crashes = new List<string>();
+
+        foreach (var shape in probes)
+        {
+            try
+            {
+                var candidateLayer = CreateLayer();
+                var output = candidateLayer.Forward(CreateConformingInput(candidateLayer, shape));
+                var outShape = output.Shape.ToArray();
+
+                Assert.True(
+                    outShape.Length > 0 && System.Array.TrueForAll(outShape, d => d > 0),
+                    $"Input [{string.Join(",", shape)}] was accepted but produced the degenerate output "
+                    + $"shape [{string.Join(",", outShape)}]. Accepting a shape and then emitting nothing "
+                    + "is worse than rejecting it, because the caller gets no signal at all.");
+
+                observations.Add((shape, outShape));
+            }
+            catch (Xunit.Sdk.XunitException)
+            {
+                throw;
+            }
+            catch (System.Exception ex) when (IsResourceExhaustion(ex))
+            {
+                // NOT a shape assumption. Running out of memory says the probe was too big for this
+                // machine right now, which is a statement about the runner and not about the layer;
+                // recording it as a hard-coded-shape defect would send the reader hunting for an
+                // assumption that is not there. Rethrown so it surfaces as the resource failure it is.
+                throw;
+            }
+            catch (System.Exception ex) when (IsDeliberateShapeRejection(ex))
+            {
+                // A stated constraint. Correct behaviour, and the caller is told what is wrong.
+            }
+            catch (System.Exception ex)
+            {
+                crashes.Add(
+                    $"  input [{string.Join(",", shape)}] -> {ex.GetType().Name}: "
+                    + $"{ex.Message.Split('\n')[0]}");
+            }
+        }
+
+        if (crashes.Count > 0)
+        {
+            string relation = DescribeDiscoveredRelation(observations);
+            Assert.Fail(
+                $"{CreateLayer().GetType().Name} crashed from the INSIDE on input shapes one step away "
+                + $"from its declared [{string.Join(",", InputShape)}]:\n"
+                + string.Join("\n", crashes)
+                + "\n\nThese are not shape validations — they name no constraint and point at no caller "
+                + "mistake, so they read as engine defects. Either accept these shapes, or reject them "
+                + "with an ArgumentException that says what this layer requires.\n"
+                + $"Shape relation recovered from the shapes it DID accept: {relation}");
+        }
+    }
+
+    /// <summary>Environmental failure - the machine, not the layer.</summary>
+    private static bool IsResourceExhaustion(System.Exception ex)
+        => ex is System.OutOfMemoryException or System.InsufficientExecutionStackException
+            or System.OperationCanceledException;
+
+    /// <summary>An exception that STATES a shape constraint, as opposed to one that leaks an assumption.</summary>
+    /// <remarks>
+    /// The AiDotNet.Exceptions shape family is listed FIRST because it is the best possible answer
+    /// here, not a grudging allowance: a layer that throws TensorShapeMismatchException has not merely
+    /// avoided crashing, it has named the exact constraint in a type built to carry it. A generic
+    /// ArgumentException also passes, since stating the constraint in prose is still stating it.
+    /// <para>
+    /// THREE TYPES WERE REMOVED BECAUSE THEY SWALLOW THE DEFECT THIS INVARIANT HUNTS. The target is a
+    /// layer that ASSUMES a shape silently and then fails from inside a kernel; accepting the generic
+    /// failure modes as "deliberate rejection" meant exactly that failure counted as a pass:
+    /// </para>
+    /// <list type="bullet">
+    /// <item>InvalidOperationException is accepted only when its message explicitly names a shape
+    /// constraint. A generic kernel-state failure remains a crash.</item>
+    /// <item>NotSupportedException and NotImplementedException say the layer does not do this at all.
+    /// That is a gap in the layer, and marking it as a well-stated shape constraint hides it.</item>
+    /// </list>
+    /// <para>
+    /// A layer that genuinely means to reject a shape has five precise types and ArgumentException
+    /// available, all of which state the constraint.
+    /// </para>
+    /// </remarks>
+    /// <summary>Whether an exception is the layer deliberately refusing a shape.</summary>
+    /// <remarks>
+    /// <para>
+    /// The dedicated exception types are self-evidently shape rejections and are accepted outright.
+    /// A bare <see cref="System.ArgumentException"/> is not: it is also what an internal argument
+    /// failure throws, so accepting every one of them let a defect that names no shape constraint
+    /// pass as correct behaviour -- which is the exact distinction this invariant exists to draw.
+    /// </para>
+    /// <para>
+    /// So a generic ArgumentException has to SAY something about shape. The vocabulary below is the
+    /// language layer validation actually uses; a message drawn from none of it is treated as a
+    /// crash and reported, which is the safe direction: a real rejection worded outside this
+    /// vocabulary shows up as a failure asking for a clearer message, whereas the old behaviour hid
+    /// real defects.
+    /// </para>
+    /// </remarks>
+    private static bool IsDeliberateShapeRejection(System.Exception ex)
+    {
+        if (ex is AiDotNet.Exceptions.TensorShapeMismatchException
+            or AiDotNet.Exceptions.TensorDimensionException
+            or AiDotNet.Exceptions.TensorRankException
+            or AiDotNet.Exceptions.InvalidInputDimensionException
+            or AiDotNet.Exceptions.VectorLengthMismatchException
+            or System.RankException)
+        {
+            return true;
+        }
+
+        if (ex is not (System.ArgumentException or System.InvalidOperationException)) return false;
+
+        return NamesAShapeConstraint(ex.Message);
+    }
+
+    /// <summary>The words a shape validation message uses when it states a constraint.</summary>
+    /// <remarks>
+    /// SHAPE-SPECIFIC ONLY. Generic words such as "expected", "size", "must be", "must have" and
+    /// "mismatch" are intentionally absent. The phrases below name tensor axes/extents used by real
+    /// layer validation, while bracketed B/C/H/W-style signatures are recognized separately.
+    /// </remarks>
+    private static readonly string[] ShapeConstraintVocabulary =
+    {
+        "shape", "dimension", "dimensions", "rank", "axis", "axes",
+        "height", "width", "channel", "channels", "batch", "divisible", "spatial",
+        "feature size", "feature dim", "input size", "inputdim", "modeldim", "encoderdim",
+        "hiddensize", "head", "querylen", "keylen", "token", "octonion",
+    };
+
+    private static bool NamesAShapeConstraint(string? message)
+    {
+        if (string.IsNullOrWhiteSpace(message)) return false;
+
+        foreach (var word in ShapeConstraintVocabulary)
+        {
+            if (message!.IndexOf(word, System.StringComparison.OrdinalIgnoreCase) >= 0) return true;
+        }
+
+        // Several image/video validators state their contract as an explicit tensor signature,
+        // e.g. "Expected [B,F,3,8,8], got ...". The bracket is what makes this shape-specific;
+        // plain "expected" remains insufficient and cannot hide an arbitrary argument failure.
+        return message!.IndexOf("expected [", System.StringComparison.OrdinalIgnoreCase) >= 0
+            || message.IndexOf("expects [", System.StringComparison.OrdinalIgnoreCase) >= 0;
+    }
+
+    /// <summary>Best-effort symbolic summary of what the layer did to the shapes it accepted.</summary>
+    private static string DescribeDiscoveredRelation(List<(int[] Input, int[] Output)> observations)
+    {
+        if (observations.Count < 2) return "(too few accepted shapes to recover one)";
+
+        int inRank = observations[0].Input.Length;
+        int outRank = observations[0].Output.Length;
+        if (observations.Any(o => o.Input.Length != inRank || o.Output.Length != outRank))
+            return "(the accepted shapes do not share a rank, so no single relation describes them)";
+
+        // Positional placeholders: this sweep runs on layers that mostly carry no axis-role annotation,
+        // and inventing roles for them would be a claim the layer never made.
+        var inAxes = Enumerable.Range(0, inRank).Select(i => (AiDotNet.Enums.TensorAxis)i).ToArray();
+        var outAxes = Enumerable.Range(0, outRank).Select(i => (AiDotNet.Enums.TensorAxis)i).ToArray();
+
+        try
+        {
+            var findings = AiDotNet.NeuralNetworks.ShapeRelationDiscovery.Fit(inAxes, outAxes, observations);
+            return string.Join(
+                ", ", findings.Select((f, i) => $"out[{i}] = {f.Relation?.ToString() ?? "?"}"));
+        }
+        catch
+        {
+            return "(relation recovery failed)";
         }
     }
 
@@ -346,7 +598,7 @@ public abstract class LayerTestBase
         using var _arena = TensorArena.Create();
         var layer = CreateLayer();
         layer.SetTrainingMode(false); // Disable dropout/stochastic behavior
-        var input = CreateRandomTensor(InputShape);
+        var input = CreateConformingInput(layer, InputShape);
 
         var out1 = layer.Forward(input);
         layer.ResetState(); // Reset any recurrent state
@@ -375,26 +627,46 @@ public abstract class LayerTestBase
         var layer = CreateLayer();
         layer.SetTrainingMode(false);
 
-        var input1 = CreateConstantTensor(InputShape, 0.1);
-        var input2 = CreateConstantTensor(InputShape, 0.9);
-
-        layer.ResetState();
-        var output1 = layer.Forward(input1);
-        layer.ResetState();
-        var output2 = layer.Forward(input2);
+        // A singleton index domain has only one legal value, so no conforming
+        // second input exists with which to test value sensitivity.
+        if (layer is LayerBase<T> layerBase)
+        {
+            var domain = layerBase.GetInputDomain(InputShape);
+            if (domain.IsIndices && domain.MaxExclusive - domain.MinInclusive <= 1)
+                return;
+        }
 
         bool anyDifferent = false;
-        int minLen = Math.Min(output1.Length, output2.Length);
-        for (int i = 0; i < minLen; i++)
+        // A single pair is probabilistic for randomly initialized networks with
+        // saturating activations: two distinct inputs can both land in the same
+        // dead ReLU region even though the implementation uses its input. Several
+        // deterministic pairs keep the invariant strict for input-ignoring layers
+        // without making a chance activation collision fail the whole family.
+        for (int attempt = 0; attempt < 4 && !anyDifferent; attempt++)
         {
-            if (Math.Abs(output1[i] - output2[i]) > Tolerance)
+            int seed = 17 + attempt * 11;
+            var input1 = CreateConformingInput(layer, InputShape, seed);
+            // Adjacent offsets guarantee a different legal ID for every index
+            // cardinality greater than one (unlike arbitrary seeds that can alias modulo N).
+            var input2 = CreateConformingInput(layer, InputShape, seed + 1);
+
+            layer.ResetState();
+            var output1 = layer.Forward(input1);
+            layer.ResetState();
+            var output2 = layer.Forward(input2);
+
+            int minLen = Math.Min(output1.Length, output2.Length);
+            for (int i = 0; i < minLen; i++)
             {
-                anyDifferent = true;
-                break;
+                if (Math.Abs(ToD(output1[i]) - ToD(output2[i])) > Tolerance)
+                {
+                    anyDifferent = true;
+                    break;
+                }
             }
         }
         Assert.True(anyDifferent,
-            "Layer produces identical output for inputs [0.1,...] and [0.9,...]. " +
+            "Layer produces identical output for several distinct inputs that conform to its declared value domain. " +
             "Forward pass may ignore input values.");
     }
 
@@ -409,7 +681,7 @@ public abstract class LayerTestBase
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var layer = CreateLayer();
-        var input = CreateRandomTensor(InputShape);
+        var input = CreateConformingInput(layer, InputShape);
 
         var output = layer.Forward(input);
         var declaredShape = layer.GetOutputShape();
@@ -451,16 +723,8 @@ public abstract class LayerTestBase
         // the invariant we're testing (count == GetParameters().Length
         // and >0 for trainable) requires the layer to be in its
         // "post first forward" state to be meaningful.
-        using (var probeInput = new Tensor<double>(InputShape))
+        using (var probeInput = CreateConformingInput(layer, InputShape, seed: 17))
         {
-            // Fill with non-zero values — some layer Forward paths take
-            // shortcuts on all-zero input (e.g. attention with zero
-            // weights producing NaN softmax) that prevent OnFirstForward
-            // from running. A small deterministic ramp avoids those
-            // shortcuts without coupling to RNG state.
-            for (int i = 0; i < probeInput.Length; i++)
-                probeInput[i] = 0.01 * (i + 1);
-
             try { layer.Forward(probeInput); }
             catch
             {
@@ -474,7 +738,7 @@ public abstract class LayerTestBase
                 {
                     var paramsForward = layer.GetType().GetMethod(
                         "Forward",
-                        new[] { typeof(Tensor<double>[]) });
+                        new[] { typeof(Tensor<T>[]) });
                     paramsForward?.Invoke(layer, new object[] { new[] { probeInput, probeInput } });
                 }
                 catch
@@ -489,7 +753,7 @@ public abstract class LayerTestBase
         }
 
         // ParameterCount widened to long in #1244; cast for comparison
-        // against Vector<double>.Length which is int-bounded.
+        // against Vector<T>.Length which is int-bounded.
         int count = (int)layer.ParameterCount;
         var parameters = layer.GetParameters();
 
@@ -519,19 +783,17 @@ public abstract class LayerTestBase
         // Without this, lazy layers (#1209) report ParameterCount = 0 and the
         // roundtrip below would skip — which is correct lazy semantics, but
         // the invariant we're testing only has meaning post-resolution.
-        using (var probeInput = new Tensor<double>(InputShape))
+        using (var probeInput = CreateConformingInput(layer, InputShape, seed: 17))
         {
-            for (int i = 0; i < probeInput.Length; i++)
-                probeInput[i] = 0.01 * (i + 1);
             try { layer.Forward(probeInput); } catch { }
         }
 
         if (layer.ParameterCount == 0) return; // Genuinely non-trainable layers.
 
         var original = layer.GetParameters();
-        var modified = new Vector<double>(original.Length);
+        var modified = new Vector<T>(original.Length);
         for (int i = 0; i < original.Length; i++)
-            modified[i] = original[i] + 0.001; // Small perturbation
+            modified[i] = NumOps.Add(original[i], ToT(0.001)); // Small perturbation
 
         layer.SetParameters(modified);
         var retrieved = layer.GetParameters();
@@ -539,7 +801,7 @@ public abstract class LayerTestBase
         Assert.Equal(modified.Length, retrieved.Length);
         for (int i = 0; i < modified.Length; i++)
         {
-            Assert.Equal(modified[i], retrieved[i], 1e-15);
+            Assert.Equal(modified[i], retrieved[i]);
         }
     }
 
@@ -559,9 +821,14 @@ public abstract class LayerTestBase
         using var _arena = TensorArena.Create();
         var layer = CreateLayer();
         layer.SetTrainingMode(false);
-        var input = CreateRandomTensor(InputShape);
+        var input = CreateConformingInput(layer, InputShape);
 
-        var originalOutput = layer.Forward(input);
+        // Keep the reference result outside the arena's reusable activation storage. Deep
+        // composite forwards may legitimately recycle an earlier activation buffer during the
+        // second layer's run; comparing a live arena view would then compare the restored output
+        // with memory that the restored forward just overwrote, not with the original value.
+        var originalOutput = layer.Forward(input).Clone();
+        var originalParameters = layer.GetParameters();
 
         // Serialize
         using var ms = new MemoryStream();
@@ -578,6 +845,47 @@ public abstract class LayerTestBase
             layer2.Deserialize(reader);
         }
 
+        var restoredParameters = layer2.GetParameters();
+        Assert.Equal(originalParameters.Length, restoredParameters.Length);
+        for (int i = 0; i < originalParameters.Length; i++)
+        {
+            double originalParameter = ToD(originalParameters[i]);
+            double restoredParameter = ToD(restoredParameters[i]);
+            Assert.True(EqualityComparer<T>.Default.Equals(originalParameters[i], restoredParameters[i]),
+                $"Parameter[{i}] differs after serialization roundtrip: " +
+                $"original={originalParameter:G17}, deserialized={restoredParameter:G17}");
+        }
+
+        var originalTensors = AiDotNet.Training.TapeTrainingStep<T>
+            .CollectParameters(new[] { layer }, structureVersion: -1);
+        var restoredTensors = AiDotNet.Training.TapeTrainingStep<T>
+            .CollectParameters(new[] { layer2 }, structureVersion: -1);
+        Assert.Equal(originalTensors.Count, restoredTensors.Count);
+        for (int tensorIndex = 0; tensorIndex < originalTensors.Count; tensorIndex++)
+        {
+            var originalTensor = originalTensors[tensorIndex];
+            var restoredTensor = restoredTensors[tensorIndex];
+            Assert.Equal(originalTensor.Shape.ToArray(), restoredTensor.Shape.ToArray());
+            for (int i = 0; i < originalTensor.Length; i++)
+            {
+                double originalValue = ToD(originalTensor[i]);
+                double restoredValue = ToD(restoredTensor[i]);
+                Assert.True(EqualityComparer<T>.Default.Equals(originalTensor[i], restoredTensor[i]),
+                    $"Trainable tensor {tensorIndex}[{i}] differs after serialization roundtrip: " +
+                    $"original={originalValue:G17}, deserialized={restoredValue:G17}");
+            }
+        }
+
+        var originalReplay = layer.Forward(input).Clone();
+        for (int i = 0; i < originalOutput.Length; i++)
+        {
+            double originalValue = ToD(originalOutput[i]);
+            double replayValue = ToD(originalReplay[i]);
+            Assert.True(Math.Abs(originalValue - replayValue) < 1e-12,
+                $"Serializing the layer changed its own output at [{i}]: " +
+                $"before={originalValue:G17}, after={replayValue:G17}");
+        }
+
         layer2.SetTrainingMode(false);
         layer2.ResetState();
         var deserializedOutput = layer2.Forward(input);
@@ -591,13 +899,15 @@ public abstract class LayerTestBase
             // direct comparison still requires bit-exact roundtrip because serialization
             // is lossless — fall back to the 1e-12 tolerance check only if they aren't
             // bit-equal so legacy near-equal serialization formats remain accepted.
-            if (originalOutput[i] == deserializedOutput[i])
+            if (EqualityComparer<T>.Default.Equals(originalOutput[i], deserializedOutput[i]))
             {
                 continue;
             }
-            Assert.True(Math.Abs(originalOutput[i] - deserializedOutput[i]) < 1e-12,
+            double originalValue = ToD(originalOutput[i]);
+            double deserializedValue = ToD(deserializedOutput[i]);
+            Assert.True(Math.Abs(originalValue - deserializedValue) < Tolerance,
                 $"Output[{i}] differs after serialization roundtrip: " +
-                $"original={originalOutput[i]:G17}, deserialized={deserializedOutput[i]:G17}");
+                $"original={originalValue:G17}, deserialized={deserializedValue:G17}");
         }
     }
 
@@ -612,7 +922,7 @@ public abstract class LayerTestBase
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var layer = CreateLayer();
-        var input = CreateRandomTensor(InputShape);
+        var input = CreateConformingInput(layer, InputShape);
 
         // Forward once to populate state
         layer.Forward(input);
@@ -625,7 +935,7 @@ public abstract class LayerTestBase
         Assert.True(output.Length > 0, "Output should not be empty after ResetState.");
         for (int i = 0; i < output.Length; i++)
         {
-            Assert.False(double.IsNaN(output[i]),
+            Assert.False(double.IsNaN(ToD(output[i])),
                 $"Output[{i}] is NaN after ResetState + Forward.");
         }
     }
@@ -650,25 +960,20 @@ public abstract class LayerTestBase
 
         using var _arena = TensorArena.Create();
         var layer = CreateLayer();
-        layer.SetTrainingMode(true);
-        var input = CreateRandomTensor(InputShape);
+        // Numerical derivatives require a deterministic function. Eval mode disables stochastic
+        // masks/running-stat updates while preserving the differentiable layer transform.
+        layer.SetTrainingMode(false);
+        var input = CreateConformingInput(layer, InputShape);
 
-        // ITrainableLayer<double> exposes the per-tensor trainable references
-        // the source generator emits from [TrainableParameter] fields. If
-        // the layer doesn't implement it, the layer truly has nothing to
-        // train and the invariant is vacuously satisfied.
-        if (layer is not AiDotNet.Interfaces.ITrainableLayer<double> trainable) return;
-
-        using var tape = new GradientTape<double>();
+        using var tape = new GradientTape<T>();
         var output = layer.Forward(input);
 
-        // Collect trainable parameters AFTER Forward — lazy-init layers
-        // (RMSNorm, DenseLayer with `[-1, -1]` input shape, etc.) reassign
-        // their internal Tensor<T> fields inside OnFirstForward, so the
-        // pre-Forward references are stale [0]-shape placeholders the
-        // tape never sees. Production code at NeuralNetworkBase.ComputeGradients
-        // (line 7319) follows the same Forward-then-collect ordering.
-        var trainableParams = trainable.GetTrainableParameters();
+        // Use the production recursive collector, not only this layer's own tensor list. Composite
+        // layers often own no tensors directly—their parameters live entirely in registered child
+        // layers—so a local-only lookup made their generated gradient tests pass vacuously.
+        // Collect AFTER Forward because lazy layers may replace zero-length placeholders.
+        var trainableParams = AiDotNet.Training.TapeTrainingStep<T>.CollectParameters(
+            new[] { layer }, structureVersion: -1);
         if (trainableParams.Count == 0) return;
 
         // Tape-tracked random-projection loss: L = Σᵢ (output[i] · r[i]).
@@ -694,7 +999,7 @@ public abstract class LayerTestBase
             if (grad is null) continue;
             for (int i = 0; i < grad.Length; i++)
             {
-                if (Math.Abs(grad[i]) > Tolerance)
+                if (Math.Abs(ToD(grad[i])) > Tolerance)
                 {
                     foundNonZeroGrad = true;
                     break;
@@ -734,17 +1039,18 @@ public abstract class LayerTestBase
 
         using var _arena = TensorArena.Create();
         var layer = CreateLayer();
-        layer.SetTrainingMode(true);
-        var input = CreateRandomTensor(InputShape);
-
-        if (layer is not AiDotNet.Interfaces.ITrainableLayer<double> trainable) return;
+        // Numerical derivatives require a deterministic eval-mode function. This also matches the
+        // generated model gradcheck, so fused/eval operator paths cannot escape layer-level coverage.
+        layer.SetTrainingMode(false);
+        var input = CreateConformingInput(layer, InputShape);
 
         // --- Analytical gradient via tape ---
-        using var tape = new GradientTape<double>();
+        using var tape = new GradientTape<T>();
         var output = layer.Forward(input);
-        // Lazy-init layers reassign their trainable tensor refs inside
-        // Forward, so always collect AFTER Forward.
-        var trainableParams = trainable.GetTrainableParameters();
+        // Match the production training gateway's recursive ownership walk. A composite whose
+        // tensors all live in children must be checked, not treated as parameter-free.
+        var trainableParams = AiDotNet.Training.TapeTrainingStep<T>.CollectParameters(
+            new[] { layer }, structureVersion: -1);
         if (trainableParams.Count == 0) return;
         // Fix the projection BEFORE both gradient computations so the
         // analytical and numerical paths see the same loss surface.
@@ -755,15 +1061,25 @@ public abstract class LayerTestBase
         var allAxes = new int[elementwise.Shape.Length];
         for (int i = 0; i < allAxes.Length; i++) allAxes[i] = i;
         var lossTensor = AiDotNetEngine.Current.ReduceSum(elementwise, allAxes, keepDims: false);
-        var analyticalGrads = tape.ComputeGradients(lossTensor, trainableParams);
+        // The generated/runtime input contract is the source of truth for differentiability.
+        // Do not infer it from marker interfaces or per-fixture overrides: BERT/FastText/Layout
+        // embedding front ends all consume integer IDs without implementing ITokenEmbedding,
+        // while every ordinary continuous layer must retain a complete VJP to its input.
+        var boundInput = ((LayerBase<T>)layer).BindInputContract(input.Shape.ToArray());
+        boundInput.RequireReady();
+        bool checkInputGradient =
+            boundInput.PrimaryInput.ValueDomain.Kind == LayerInputDomainKind.Continuous;
+        var gradientSources = new List<Tensor<T>>(trainableParams);
+        if (checkInputGradient) gradientSources.Add(input);
+        var analyticalGrads = tape.ComputeGradients(lossTensor, gradientSources);
 
         // --- Numerical gradient via central differences ---
         // Sample a small number of (param, index) pairs to keep the test
         // wall-time reasonable. A layer with broken backward will fail this
         // check on most sampled coordinates, so the sample doesn't need to
         // be exhaustive — it just needs to hit *some* trainable scalar.
-        const double Eps = 1e-5;
-        const double NumericalTolerance = 1e-3;
+        double eps = typeof(T) == typeof(float) ? 1e-3 : 1e-5;
+        double numericalTolerance = typeof(T) == typeof(float) ? 5e-2 : 1e-3;
         const int MaxSampledPerParam = 6;
 
         int paramsChecked = 0;
@@ -772,31 +1088,104 @@ public abstract class LayerTestBase
 
         var rng = RandomHelper.CreateSeededRandom(7777);
 
+        // SPARSE parameters (SparseLinearLayer's SparseTensor<T> weights) mirror
+        // torch.autograd.gradcheck's "masked" semantics: it walks a sparse tensor's STORED (nnz)
+        // entries via indices()/values() and perturbs only those, never densifying. Two reasons
+        // this matters here rather than being a style choice:
+        //   1. Flat indexing a SparseTensor throws outright — "GetFlat is not supported on sparse
+        //      tensors. Use SparseTensor-specific APIs or call ToDense() first." — so the check
+        //      cannot even run against one.
+        //   2. Densifying would be WORSE than the crash: it would perturb STRUCTURAL ZEROS, which
+        //      are not trainable parameters and therefore have no analytical gradient, producing
+        //      false mismatches and an inflated parameter count. SparseLinearLayer's own
+        //      ParameterCount is NonZeroCount + OutputFeatures, confirming the stored values are
+        //      the trainable set.
+        // Dense parameters keep the exact previous behaviour (flat index over Length).
+        // Access the sparse payload through DataVector.AsSpan(), NOT through the Values property:
+        // `public T[] Values => DataVector.ToArray()` allocates a FRESH COPY on every access, so the
+        // earlier `sp.Values[i] = v` wrote into a throwaway array and never perturbed the parameter.
+        // Both finite-difference evaluations therefore saw identical weights, making the numerical
+        // gradient exactly 0 for every sparse entry while the analytical gradient was non-zero —
+        // which is what produced "disagrees ... on 5/12 sampled trainable scalars" (the entries that
+        // "agreed" were simply the ones whose analytical gradient was also ~0). Same copy-versus-view
+        // trap as Tensor<T>.ToVector(); AsSpan() is the documented zero-copy path.
+        static int TrainableScalarCount(Tensor<T> p) =>
+            p is SparseTensor<T> sp ? sp.NonZeroCount : p.Length;
+        static double ReadScalar(Tensor<T> p, int i) =>
+            ToD(p is SparseTensor<T> sp ? sp.DataVector[i] : p[i]);
+        static void WriteScalar(Tensor<T> p, int i, double v)
+        {
+            if (p is SparseTensor<T> sp) sp.DataVector[i] = ToT(v);
+            else p[i] = ToT(v);
+        }
+        // The analytical gradient of a SPARSE parameter is not necessarily sparse. When it comes back
+        // DENSE, index i (a position in the sparse nnz payload) addresses a completely different
+        // matrix entry in a dense flat buffer, so comparing them positionally checks unrelated
+        // numbers. Map through the COO coordinates instead. A sparse gradient shares the parameter's
+        // payload layout, so it is read directly.
+        // THE PUBLIC SPARSE API, NOT THE INTERNAL PAYLOAD. This read the backing DataVector of
+        // the very type under test, so a change to that payload's layout would silently change
+        // what the gradient check compares -- the helper would keep returning a number and the
+        // number would mean something else. SparseTensor<T> exposes Values / RowIndices /
+        // ColumnIndices, which is what the SparseTensor suites themselves assert against.
+        //
+        // COO construction is rank-2, so the column stride is Shape[1]; a non-rank-2 sparse
+        // tensor has no COO reading and is refused rather than indexed on a guess.
+        static double ReadAnalyticalScalar(Tensor<T> grad, Tensor<T> param, int i)
+        {
+            if (grad is SparseTensor<T> gsp)
+            {
+                return i >= 0 && i < gsp.Values.Length ? ToD(gsp.Values[i]) : 0.0;
+            }
+
+            if (param is SparseTensor<T> psp)
+            {
+                Assert.True(psp.Shape.Length == 2,
+                    $"SparseTensor COO indices are rank-2; got rank {psp.Shape.Length}, so " +
+                    "RowIndices/ColumnIndices cannot be mapped to a flat gradient index.");
+                if (i < 0 || i >= psp.RowIndices.Length) return 0.0;
+
+                int cols = psp.Shape[1];
+                int flat = (psp.RowIndices[i] * cols) + psp.ColumnIndices[i];
+                return flat >= 0 && flat < grad.Length ? ToD(grad[flat]) : 0.0;
+            }
+
+            return ToD(grad[i]);
+        }
+
         foreach (var param in trainableParams)
         {
-            if (param is null || param.Length == 0) continue;
+            if (param is null || TrainableScalarCount(param) == 0) continue;
             if (!analyticalGrads.TryGetValue(param, out var analyticalGrad) || analyticalGrad is null)
                 continue;
 
-            int sampleCount = Math.Min(MaxSampledPerParam, param.Length);
+            int trainableCount = TrainableScalarCount(param);
+            int sampleCount = Math.Min(MaxSampledPerParam, trainableCount);
             for (int s = 0; s < sampleCount; s++)
             {
-                int idx = rng.Next(0, param.Length);
+                int idx = rng.Next(0, trainableCount);
 
-                double original = param[idx];
-                param[idx] = original + Eps;
+                double original = ReadScalar(param, idx);
+                double plusValue = ToD(ToT(original + eps));
+                double minusValue = ToD(ToT(original - eps));
+                if (plusValue == minusValue) continue;
+
+                WriteScalar(param, idx, plusValue);
                 var lossPlus = ComputeProjectionLossScalar(layer.Forward(input), projection);
-                param[idx] = original - Eps;
+                WriteScalar(param, idx, minusValue);
                 var lossMinus = ComputeProjectionLossScalar(layer.Forward(input), projection);
-                param[idx] = original;
+                WriteScalar(param, idx, original);
 
-                double numerical = (lossPlus - lossMinus) / (2.0 * Eps);
-                double analytical = analyticalGrad[idx];
+                // Divide by the ACTUAL representable perturbation. For float, original ± eps
+                // can round asymmetrically (or together); pretending the denominator is exactly
+                // 2*eps manufactures a gradient error in the test harness itself.
+                double numerical = (lossPlus - lossMinus) / (plusValue - minusValue);
+                double analytical = ReadAnalyticalScalar(analyticalGrad, param, idx);
                 double absDiff = Math.Abs(numerical - analytical);
                 double scale = Math.Max(Math.Max(Math.Abs(numerical), Math.Abs(analytical)), 1.0);
 
                 paramsChecked++;
-                if (absDiff / scale < NumericalTolerance)
+                if (absDiff / scale < numericalTolerance)
                 {
                     paramsAgreed++;
                 }
@@ -805,6 +1194,61 @@ public abstract class LayerTestBase
                     deltas.Append($"  idx={idx} numerical={numerical:G6} analytical={analytical:G6} reldiff={absDiff / scale:G3}\n");
                 }
             }
+        }
+
+        // A layer's VJP has two equally important consumers: its own parameters and every layer
+        // before it. Parameter-only gradchecks allowed a broken input derivative to remain invisible
+        // until a full model happened to place the operator downstream. Validate a deterministic
+        // sample of the continuous input here so every generated layer fixture covers both halves of
+        // the reverse-mode contract automatically.
+        if (checkInputGradient)
+        {
+            Assert.True(analyticalGrads.TryGetValue(input, out var inputGradient) && inputGradient is not null,
+                "The layer exposes trainable tape gradients but its continuous input is disconnected " +
+                "from the reverse-mode graph. Mark a genuinely discrete/control input explicitly; do " +
+                "not let a missing input VJP silently pass parameter-only conformance.");
+
+            int inputSamples = Math.Min(12, input.Length);
+            int inputAgreed = 0;
+            var inputDeltas = new System.Text.StringBuilder();
+            for (int sample = 0; sample < inputSamples; sample++)
+            {
+                int index = inputSamples == input.Length
+                    ? sample
+                    : (sample * Math.Max(1, input.Length / inputSamples)) % input.Length;
+                double original = ToD(input[index]);
+                double plusValue = ToD(ToT(original + eps));
+                double minusValue = ToD(ToT(original - eps));
+                if (plusValue == minusValue) continue;
+
+                input[index] = ToT(plusValue);
+                double lossPlus = ComputeProjectionLossScalar(layer.Forward(input), projection);
+                input[index] = ToT(minusValue);
+                double lossMinus = ComputeProjectionLossScalar(layer.Forward(input), projection);
+                input[index] = ToT(original);
+
+                double numerical = (lossPlus - lossMinus) / (plusValue - minusValue);
+                double analytical = ToD(inputGradient[index]);
+                double difference = Math.Abs(numerical - analytical);
+                double scale = Math.Max(Math.Max(Math.Abs(numerical), Math.Abs(analytical)), 1.0);
+                if (difference / scale < numericalTolerance)
+                {
+                    inputAgreed++;
+                }
+                else if (inputDeltas.Length < 1000)
+                {
+                    inputDeltas.Append(
+                        $"  input[{index}] numerical={numerical:G6} analytical={analytical:G6} " +
+                        $"reldiff={difference / scale:G3}\n");
+                }
+            }
+
+            Assert.True(inputAgreed * 3 >= inputSamples * 2,
+                $"Tape-based input VJP disagrees with finite differences on " +
+                $"{inputSamples - inputAgreed}/{inputSamples} sampled input scalars. First mismatches:\n" +
+                inputDeltas +
+                "The layer may compute its own parameter gradients correctly while propagating an " +
+                "incorrect gradient to every preceding layer.");
         }
 
         if (paramsChecked == 0) return; // no comparable parameter scalars
@@ -820,6 +1264,78 @@ public abstract class LayerTestBase
             "Likely the layer's Forward composition records the wrong derivative " +
             "for some Engine op, OR a non-tape-tracked op is silently used as " +
             "an identity for the gradient.");
+
+        // Cover every registered trainable tensor in one normalized direction. Coordinate sampling
+        // localizes defects cheaply; this complementary JVP-style check prevents an entire parameter
+        // slot from escaping merely because none of its scalar indices happened to be sampled.
+        var direction = new List<(Tensor<T> Parameter, Tensor<T> Gradient, int Index, double Sign)>();
+        for (int parameterIndex = 0; parameterIndex < trainableParams.Count; parameterIndex++)
+        {
+            var parameter = trainableParams[parameterIndex];
+            if (parameter is null || TrainableScalarCount(parameter) == 0 ||
+                !analyticalGrads.TryGetValue(parameter, out var gradient) || gradient is null)
+                continue;
+
+            int count = TrainableScalarCount(parameter);
+            int index = (parameterIndex * 7919 + 17) % count;
+            direction.Add((parameter, gradient, index, (parameterIndex & 1) == 0 ? 1.0 : -1.0));
+        }
+        if (direction.Count == 0) return;
+
+        double directionScale = 1.0 / Math.Sqrt(direction.Count);
+        double directionalStep = eps / directionScale;
+        double analyticalDirection = 0.0;
+        foreach (var coordinate in direction)
+        {
+            analyticalDirection += ReadAnalyticalScalar(
+                coordinate.Gradient,
+                coordinate.Parameter,
+                coordinate.Index) * coordinate.Sign * directionScale;
+        }
+
+        double EvaluateDirection(double step, double sign)
+        {
+            try
+            {
+                foreach (var coordinate in direction)
+                {
+                    double original = ReadScalar(coordinate.Parameter, coordinate.Index);
+                    WriteScalar(
+                        coordinate.Parameter,
+                        coordinate.Index,
+                        original + (sign * step * directionScale * coordinate.Sign));
+                }
+                return ComputeProjectionLossScalar(layer.Forward(input), projection);
+            }
+            finally
+            {
+                // Each evaluation starts from the exact same parameter state.
+                foreach (var coordinate in direction)
+                {
+                    double perturbed = ReadScalar(coordinate.Parameter, coordinate.Index);
+                    WriteScalar(
+                        coordinate.Parameter,
+                        coordinate.Index,
+                        perturbed - (sign * step * directionScale * coordinate.Sign));
+                }
+            }
+        }
+
+        double plus = EvaluateDirection(directionalStep, +1.0);
+        double minus = EvaluateDirection(directionalStep, -1.0);
+        double plusWide = EvaluateDirection(directionalStep * 2.0, +1.0);
+        double minusWide = EvaluateDirection(directionalStep * 2.0, -1.0);
+        double atH = (plus - minus) / (2.0 * directionalStep);
+        double at2H = (plusWide - minusWide) / (4.0 * directionalStep);
+        double numericalDirection = ((4.0 * atH) - at2H) / 3.0;
+        double directionScaleDenom = Math.Max(
+            Math.Max(Math.Abs(numericalDirection), Math.Abs(analyticalDirection)),
+            1.0);
+        double directionRelativeError = Math.Abs(numericalDirection - analyticalDirection) / directionScaleDenom;
+        Assert.True(directionRelativeError < numericalTolerance * 2.0,
+            $"Directional gradient across {direction.Count} trainable parameter tensors disagrees: " +
+            $"numerical={numericalDirection:G8}, analytical={analyticalDirection:G8}, " +
+            $"relative error={directionRelativeError:G4}.");
     }
 
     /// <summary>
@@ -828,11 +1344,14 @@ public abstract class LayerTestBase
     /// Engine.TensorMultiply + Engine.TensorSum, but on detached output
     /// (no tape recording — we just want the scalar value for L(w±ε)).
     /// </summary>
-    private static double ComputeProjectionLossScalar(Tensor<double> output, Tensor<double> projection)
+    private static double ComputeProjectionLossScalar(Tensor<T> output, Tensor<T> projection)
     {
         double sum = 0;
         int len = Math.Min(output.Length, projection.Length);
-        for (int i = 0; i < len; i++) sum += output[i] * projection[i];
+        for (int i = 0; i < len; i++) sum += ToD(output[i]) * ToD(projection[i]);
         return sum;
     }
 }
+
+/// <summary>Default-precision alias for existing hand-written fixtures.</summary>
+public abstract class LayerTestBase : LayerTestBase<double> { }

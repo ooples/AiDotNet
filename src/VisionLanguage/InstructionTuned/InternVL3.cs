@@ -106,7 +106,17 @@ public class InternVL3<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
         _options = options ?? new InternVL3Options();
         _options.ValidateVisualSizing();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        if (_options.LearningRate <= 0.0)
+            throw new ArgumentOutOfRangeException(nameof(options), "InternVL3 learning rate must be positive.");
+        if (_options.WeightDecay < 0.0)
+            throw new ArgumentOutOfRangeException(nameof(options), "InternVL3 weight decay cannot be negative.");
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate,
+                WeightDecay = _options.WeightDecay
+            });
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.DecoderDim;
@@ -267,23 +277,21 @@ public class InternVL3<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
         if (IsOnnxMode)
             throw new NotSupportedException("Training is not supported in ONNX mode.");
         SetTrainingMode(true);
-        TrainWithTape(input, expected);
-        SetTrainingMode(false);
-    }
-
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        if (!_useNativeMode)
-            throw new NotSupportedException("Cannot update parameters in ONNX mode.");
-        int idx = 0;
-        foreach (var l in Layers)
+        try
         {
-            int c = (int)l.ParameterCount;
-            l.UpdateParameters(parameters.Slice(idx, c));
-            idx += c;
+            TrainWithTape(input, expected, _optimizer);
+        }
+        finally
+        {
+            SetTrainingMode(false);
         }
     }
 
+    /// <inheritdoc />
+    /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
+    /// write on every parameter surface, so the guard is stated once here instead of being
+    /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
+    protected override bool SupportsParameterMutation => _useNativeMode;
     protected override Tensor<T> PreprocessImage(Tensor<T> image) =>
         NormalizeImage(image, _options.ImageMean, _options.ImageStd);
 
@@ -343,8 +351,8 @@ public class InternVL3<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
         if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new InternVL3<T>(Architecture, mp, _options);
-        return new InternVL3<T>(Architecture, _options);
+            return new InternVL3<T>(Architecture, mp, new InternVL3Options(_options));
+        return new InternVL3<T>(Architecture, new InternVL3Options(_options));
     }
 
     private void ThrowIfDisposed()

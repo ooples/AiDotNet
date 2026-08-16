@@ -24,7 +24,7 @@ namespace AiDotNet.SelfSupervisedLearning;
 /// </list>
 /// </remarks>
 [AiDotNet.Configuration.YamlConfigurable("ProjectorHead")]
-public interface IProjectorHead<T>
+public interface IProjectorHead<T> : AiDotNet.Interfaces.IParameterSource<T>
 {
     /// <summary>
     /// Gets the input dimension expected by this projector.
@@ -67,18 +67,6 @@ public interface IProjectorHead<T>
     // Backward removed — tape-based autodiff handles projector gradients.
 
     /// <summary>
-    /// Gets all trainable parameters of the projector.
-    /// </summary>
-    /// <returns>A vector containing all parameters.</returns>
-    Vector<T> GetParameters();
-
-    /// <summary>
-    /// Sets the parameters of the projector.
-    /// </summary>
-    /// <param name="parameters">The parameter vector to load.</param>
-    void SetParameters(Vector<T> parameters);
-
-    /// <summary>
     /// Gets the gradients computed during the last backward pass.
     /// </summary>
     /// <returns>A vector containing gradients for all parameters.</returns>
@@ -88,12 +76,6 @@ public interface IProjectorHead<T>
     /// Clears accumulated gradients.
     /// </summary>
     void ClearGradients();
-
-    /// <summary>
-    /// Gets the total number of trainable parameters. Long for foundation-scale
-    /// models per #1237.
-    /// </summary>
-    long ParameterCount { get; }
 
     /// <summary>
     /// Sets training or evaluation mode.

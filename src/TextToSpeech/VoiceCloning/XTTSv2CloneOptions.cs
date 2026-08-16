@@ -6,12 +6,43 @@ namespace AiDotNet.TextToSpeech.VoiceCloning;
 /// </remarks>
 public class XTTSv2CloneOptions : VoiceCloningOptions
 {
+    /// <summary>Initializes a copy of an XTTS v2 voice-cloning configuration.</summary>
+    public XTTSv2CloneOptions(XTTSv2CloneOptions other)
+        : base(other)
+    {
+        AdamBeta1 = other.AdamBeta1;
+        AdamBeta2 = other.AdamBeta2;
+        AdamEpsilon = other.AdamEpsilon;
+    }
+
     public XTTSv2CloneOptions()
     {
+        SampleRate = 24000;
         MinReferenceDurationSec = 6.0;
-        NumEncoderLayers = 6;
-        NumLLMLayers = 12;
-        NumHeads = 8;
+        NumCodebooks = 1;
+        CodebookSize = 1024;
+        CodecFrameRate = 22;
+        TextEncoderDim = 1024;
+        NumEncoderLayers = 0;
+        LLMDim = 1024;
+        NumLLMLayers = 30;
+        NumHeads = 16;
+        SpeakerEmbeddingDim = 512;
+        // XTTS v2's reference fine-tuning recipe (Casanova et al., "XTTS: a Massively Multilingual
+        // Zero-Shot Text-to-Speech Model", 2024) trains the GPT conditioning stack at 5e-6, far below
+        // the generic TTS default. Inherited from TtsModelOptions, so callers can still override it.
+        LearningRate = 5e-6;
+        WeightDecay = 1e-2;
         DropoutRate = 0.1;
+        LanguageModelName = "GPT-2";
     }
+
+    /// <summary>Gets or sets AdamW's first-moment coefficient.</summary>
+    public double AdamBeta1 { get; set; } = 0.9;
+
+    /// <summary>Gets or sets AdamW's second-moment coefficient.</summary>
+    public double AdamBeta2 { get; set; } = 0.96;
+
+    /// <summary>Gets or sets AdamW's numerical-stability epsilon.</summary>
+    public double AdamEpsilon { get; set; } = 1e-8;
 }

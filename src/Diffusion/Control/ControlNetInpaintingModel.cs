@@ -51,8 +51,18 @@ namespace AiDotNet.Diffusion.Control;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     [ResearchPaper("Adding Conditional Control to Text-to-Image Diffusion Models", "https://arxiv.org/abs/2302.05543")]
-public class ControlNetInpaintingModel<T> : LatentDiffusionModelBase<T>
+public partial class ControlNetInpaintingModel<T> : LatentDiffusionModelBase<T>
 {
+    /// <inheritdoc />
+    /// <remarks>Registration order is serialization order, and matches the
+    /// concatenation the previous hand-written GetParameters performed.</remarks>
+    protected override void RegisterComponents()
+    {
+        RegisterParameterComponent(_baseUNet);
+        RegisterParameterComponent(_vae);
+        RegisterParameterComponent(_controlEncoder);
+    }
+
     private const int LATENT_CHANNELS = 4;
     private const int INPAINT_EXTRA_CHANNELS = 5; // 4 latent + 1 mask
 
@@ -71,8 +81,6 @@ public class ControlNetInpaintingModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override int LatentChannels => LATENT_CHANNELS;
     /// <inheritdoc />
-    public override long ParameterCount =>
-        _baseUNet.ParameterCount + _vae.ParameterCount + _controlEncoder.ParameterCount;
 
     public ControlNetInpaintingModel(
         NeuralNetworkArchitecture<T>? architecture = null,
@@ -110,45 +118,7 @@ public class ControlNetInpaintingModel<T> : LatentDiffusionModelBase<T>
             inputChannels: 3, baseChannels: 320, channelMultipliers: new[] { 1, 2, 4, 4 }, seed: seed);
     }
 
-    /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        // Pre-allocate to avoid the List<T> doubling + ToArray triple-copy
-        // that OOMs on real-scale checkpoints. Counts are checked() so a
-        // narrowing overflow throws here rather than silently truncating.
-        int c1 = checked((int)_baseUNet.ParameterCount);
-        int c2 = checked((int)_vae.ParameterCount);
-        int c3 = checked((int)_controlEncoder.ParameterCount);
-        long expectedTotal = (long)c1 + c2 + c3;
-        var result = new Vector<T>(checked((int)expectedTotal));
-        var p1 = _baseUNet.GetParameters();
-        for (int i = 0; i < p1.Length; i++) result[i] = p1[i];
-        var p2 = _vae.GetParameters();
-        for (int i = 0; i < p2.Length; i++) result[c1 + i] = p2[i];
-        var p3 = _controlEncoder.GetParameters();
-        for (int i = 0; i < p3.Length; i++) result[c1 + c2 + i] = p3[i];
-        return result;
-    }
 
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int c1 = checked((int)_baseUNet.ParameterCount);
-        int c2 = checked((int)_vae.ParameterCount);
-        int c3 = checked((int)_controlEncoder.ParameterCount);
-        long expectedTotal = (long)c1 + c2 + c3;
-        if (parameters.Length != expectedTotal)
-        {
-            throw new ArgumentException(
-                $"Expected {expectedTotal} parameters, got {parameters.Length}.",
-                nameof(parameters));
-        }
-
-        int o = 0;
-        var a1 = new T[c1]; for (int i = 0; i < c1; i++) a1[i] = parameters[o + i]; _baseUNet.SetParameters(new Vector<T>(a1)); o += c1;
-        var a2 = new T[c2]; for (int i = 0; i < c2; i++) a2[i] = parameters[o + i]; _vae.SetParameters(new Vector<T>(a2)); o += c2;
-        var a3 = new T[c3]; for (int i = 0; i < c3; i++) a3[i] = parameters[o + i]; _controlEncoder.SetParameters(new Vector<T>(a3));
-    }
 
     /// <inheritdoc />
     public override IEnumerable<Tensor<T>> GetParameterChunks()

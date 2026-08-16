@@ -46,6 +46,7 @@ namespace AiDotNet.AnomalyDetection.AngleBased;
 public class FastABODDetector<T> : AnomalyDetectorBase<T>
 {
     private readonly int _k;
+    [Buffer]
     private Matrix<T>? _trainingData;
 
     /// <summary>

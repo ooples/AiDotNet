@@ -58,7 +58,7 @@ namespace AiDotNet.TimeSeries;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("Predicting the Present with Bayesian Structural Time Series", "https://doi.org/10.1214/14-AOAS788", Year = 2015, Authors = "Steven L. Scott, Hal R. Varian")]
-public class BayesianStructuralTimeSeriesModel<T> : TimeSeriesModelBase<T>
+public partial class BayesianStructuralTimeSeriesModel<T> : TimeSeriesModelBase<T>
 {
     /// <summary>
     /// Configuration options for the Bayesian Structural Time Series model.
@@ -109,6 +109,7 @@ public class BayesianStructuralTimeSeriesModel<T> : TimeSeriesModelBase<T>
     /// Each seasonal component represents a different cycle length (daily, weekly, yearly, etc.).
     /// The model learns these patterns from your data and uses them to make better predictions.
     /// </remarks>
+    [Buffer]
     private List<Vector<T>> _seasonalComponents;
 
     /// <summary>
@@ -123,9 +124,11 @@ public class BayesianStructuralTimeSeriesModel<T> : TimeSeriesModelBase<T>
     /// Think of it like error bars around the model's internal estimates - they tend to
     /// get smaller as more data confirms the patterns.
     /// </remarks>
+    [Buffer]
     private Matrix<T> _stateCovariance;
 
     /// <summary>Stored training series for in-sample predictions.</summary>
+    [Buffer]
     private Vector<T> _trainingSeries = Vector<T>.Empty();
 
     /// <summary>
@@ -156,7 +159,7 @@ public class BayesianStructuralTimeSeriesModel<T> : TimeSeriesModelBase<T>
     /// Each coefficient quantifies the effect of one external variable. The model
     /// learns these coefficients from your data to improve predictions.
     /// </remarks>
-    private Vector<T>? _regression;
+    private Vector<T> _regression;
 
     /// <summary>
     /// Creates a new Bayesian Structural Time Series model with the specified options.
@@ -195,8 +198,13 @@ public class BayesianStructuralTimeSeriesModel<T> : TimeSeriesModelBase<T>
         // Initialize regression component if included
         if (_bayesianOptions.IncludeRegression)
         {
-            // We'll initialize the regression vector later when we have the actual input data
-            _regression = null;
+            // The feature count is unknown until training, but an empty vector represents that
+            // allocation-free state without making the whole checkpoint manifest shape-deferred.
+            _regression = Vector<T>.Empty();
+        }
+        else
+        {
+            _regression = Vector<T>.Empty();
         }
     }
 
@@ -1241,6 +1249,8 @@ public class BayesianStructuralTimeSeriesModel<T> : TimeSeriesModelBase<T>
         writer.Write(_trainingSeries.Length);
         for (int i = 0; i < _trainingSeries.Length; i++)
             writer.Write(Convert.ToDouble(_trainingSeries[i]));
+
+        SerializationHelper<T>.SerializeVector(writer, _regression);
     }
 
     /// <summary>
@@ -1309,10 +1319,13 @@ public class BayesianStructuralTimeSeriesModel<T> : TimeSeriesModelBase<T>
             _trainingSeries = new Vector<T>(tsLen);
             for (int i = 0; i < tsLen; i++)
                 _trainingSeries[i] = NumOps.FromDouble(reader.ReadDouble());
+
+            _regression = SerializationHelper<T>.DeserializeVector(reader);
         }
         catch (EndOfStreamException)
         {
             _trainingSeries = Vector<T>.Empty();
+            _regression = Vector<T>.Empty();
         }
     }
 

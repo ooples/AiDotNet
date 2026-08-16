@@ -50,7 +50,8 @@ namespace AiDotNet.NeuralNetworks
     [ModelTask(ModelTask.Ranking)]
     [ModelComplexity(ModelComplexity.High)]
     [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-    [ResearchPaper("C-Pack: Packaged Resources To Advance General Chinese Embedding", "https://arxiv.org/abs/2309.07597", Year = 2023, Authors = "Shitao Xiao, Zheng Liu, Peitian Zhang, Niklas Muennighoff")]
+    [ResearchPaper(// Title corrected to the published form; the arXiv id was already right.
+    "C-Pack: Packed Resources For General Chinese Embeddings", "https://arxiv.org/abs/2309.07597", Year = 2023, Authors = "Shitao Xiao, Zheng Liu, Peitian Zhang, Niklas Muennighoff")]
     public class BGE<T> : TransformerEmbeddingNetwork<T>
     {
         private readonly BGEOptions _options;

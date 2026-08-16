@@ -44,6 +44,15 @@ namespace AiDotNet.Audio.MusicAnalysis;
 [ResearchPaper("Transformer-based Tag Prediction for Music Auto-tagging", "https://doi.org/10.48550/arXiv.2106.02072", Year = 2021, Authors = "Minz Won, Keunwoo Choi, Xavier Serra")]
 public class MusicTaggingTransformer<T> : AudioNeuralNetworkBase<T>
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// Traced from output construction: PredictCore folds over Layers, and the last layer
+    /// CreateDefaultMusicTaggingTransformerLayers emits is the multi-label classification head
+    /// <c>DenseLayer&lt;T&gt;(numTags)</c>, wired from <c>_options.NumTags</c> (50). A tag count -
+    /// not FeedForwardDim (1024) or HiddenDim (256), both of which are interior widths.
+    /// </remarks>
+    protected override int OutputFeatureWidth => _options.NumTags;
+
     #region Fields
 
     private readonly MusicTaggingTransformerOptions _options;
@@ -221,7 +230,7 @@ public class MusicTaggingTransformer<T> : AudioNeuralNetworkBase<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expected);
+            TrainWithTape(input, expected, _optimizer);
         }
         finally
         {
@@ -229,12 +238,11 @@ public class MusicTaggingTransformer<T> : AudioNeuralNetworkBase<T>
         }
     }
 
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        if (!_useNativeMode) throw new NotSupportedException("ONNX mode.");
-        int idx = 0; foreach (var l in Layers) { int c = (int)l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; }
-    }
-
+    /// <inheritdoc />
+    /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
+    /// write on every parameter surface, so the guard is stated once here instead of being
+    /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
+    protected override bool SupportsParameterMutation => _useNativeMode;
     protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio)
     {
         if (MelSpec is not null) return MelSpec.Forward(rawAudio);

@@ -46,9 +46,11 @@ namespace AiDotNet.SelfSupervisedLearning;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Momentum Contrast for Unsupervised Visual Representation Learning", "https://arxiv.org/abs/1911.05722", Year = 2020, Authors = "Kaiming He, Haoqi Fan, Yuxin Wu, Saining Xie, Ross Girshick")]
-public class MoCo<T> : SelfSupervisedLearningMethodBase<T>
+public partial class MoCo<T> : SelfSupervisedLearningMethodBase<T>
 {
+    [FrozenParameter]
     private readonly IMomentumEncoder<T> _momentumEncoder;
+    [FrozenParameter(Availability = AiDotNet.Models.Parameters.ParameterAvailability.Conditional)]
     private readonly IProjectorHead<T>? _momentumProjector;
     private readonly IMemoryBank<T> _memoryBank;
     private readonly InfoNCELoss<T> _loss;
@@ -160,30 +162,4 @@ public class MoCo<T> : SelfSupervisedLearningMethodBase<T>
         _memoryBank.Clear();
     }
 
-    /// <inheritdoc />
-    protected override long GetAdditionalParameterCount()
-    {
-        return _momentumEncoder.GetParameters().Length +
-               (_momentumProjector?.ParameterCount ?? 0);
-    }
-
-    /// <inheritdoc />
-    protected override Vector<T>? GetAdditionalParameters()
-    {
-        var momentumParams = _momentumEncoder.GetParameters();
-        var projParams = _momentumProjector?.GetParameters();
-
-        if (projParams is null)
-            return momentumParams;
-
-        var combined = new T[momentumParams.Length + projParams.Length];
-        for (int i = 0; i < momentumParams.Length; i++)
-            combined[i] = momentumParams[i];
-        for (int i = 0; i < projParams.Length; i++)
-            combined[momentumParams.Length + i] = projParams[i];
-
-        return new Vector<T>(combined);
-    
-
-}
 }

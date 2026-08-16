@@ -1,4 +1,7 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Finance.Interfaces;
+using AiDotNet.Interfaces;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
@@ -11,8 +14,31 @@ namespace AiDotNet.Finance.Base;
 /// Base class for all financial NLP models, implementing the dual-mode pattern.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-public abstract class FinancialNLPModelBase<T> : FinancialModelBase<T>, IFinancialNLPModel<T>
+[TensorLayout(TensorAxis.Time, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Time, TensorAxis.Classes, Direction = TensorLayoutDirection.Output)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Classes,
+    Direction = TensorLayoutDirection.Output)]
+public abstract class FinancialNLPModelBase<T> : FinancialModelBase<T>, IFinancialNLPModel<T>, IShapeContract
 {
+    /// <inheritdoc />
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+        => inputRank switch
+        {
+            1 =>
+            [
+                new OutputAxisContract(TensorAxis.Time, AxisRelation.Same(TensorAxis.Time)),
+                new OutputAxisContract(TensorAxis.Classes, AxisRelation.Fixed(_baseNumSentimentClasses)),
+            ],
+            2 =>
+            [
+                new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+                new OutputAxisContract(TensorAxis.Time, AxisRelation.Same(TensorAxis.Time)),
+                new OutputAxisContract(TensorAxis.Classes, AxisRelation.Fixed(_baseNumSentimentClasses)),
+            ],
+            _ => null,
+        };
+
     protected readonly int _baseMaxSequenceLength;
     protected readonly int _baseVocabularySize;
     protected readonly int _baseHiddenDimension;

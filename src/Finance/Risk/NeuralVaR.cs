@@ -239,25 +239,8 @@ public class NeuralVaR<T> : RiskModelBase<T>
         base.Train(input, target);
     }
 
-    /// <summary>
-    /// Executes UpdateParameters for the NeuralVaR.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the NeuralVaR model, UpdateParameters updates internal parameters or state. This keeps the NeuralVaR architecture aligned with the latest values.
-    /// </para>
-    /// </remarks>
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        int offset = 0;
-        foreach (var layer in Layers)
-        {
-            var layerParams = layer.GetParameters();
-            layer.SetParameters(parameters.Slice(offset, layerParams.Length));
-            offset += layerParams.Length;
-        }
-    }
-
+    // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
+    // exactly the same enumeration, so this said nothing the base does not already say.
     /// <summary>
     /// Executes GetModelMetadata for the NeuralVaR.
     /// </summary>

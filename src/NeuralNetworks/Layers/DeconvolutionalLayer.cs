@@ -41,7 +41,16 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.UpSampling)]
 [LayerTask(LayerTask.SpatialProcessing)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 3, Cost = ComputeCost.High, TestInputShape = "1, 1, 4, 4", TestConstructorArgs = "2, 3, 1, 0, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
-public partial class DeconvolutionalLayer<T> : LayerBase<T>
+// Roles read straight off OnFirstForward, which accepts BOTH forms explicitly: "rank == 4" is
+// [B,C,H,W] and "rank == 3" is [C,H,W], anything else throws. One declaration with
+// BatchOptional = true is therefore exactly the layer's own guard - and it has to cover both,
+// because this layer's [LayerProperty] names rank 3 while its TestInputShape is rank 4.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    BatchOptional = true, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    BatchOptional = true, Direction = TensorLayoutDirection.Output)]
+[AutoParameters]
+public partial class DeconvolutionalLayer<T> : LayerBase<T>, IShapeContract
 {
     /// <summary>
     /// The collection of filter kernels used for the deconvolution operation.
@@ -63,7 +72,7 @@ public partial class DeconvolutionalLayer<T> : LayerBase<T>
     /// are what actually get updated when the network learns.
     /// </para>
     /// </remarks>
-    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+    [TrainableParameter(Role = PersistentTensorRole.Weights, Shape = "InputDepth, OutputDepth, KernelSize, KernelSize")]
 
     private Tensor<T> _kernels;
 
@@ -86,7 +95,7 @@ public partial class DeconvolutionalLayer<T> : LayerBase<T>
     /// or brightness levels.
     /// </para>
     /// </remarks>
-    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+    [TrainableParameter(Role = PersistentTensorRole.Biases, Shape = "OutputDepth")]
 
     private Tensor<T> _biases;
 
@@ -303,19 +312,19 @@ public partial class DeconvolutionalLayer<T> : LayerBase<T>
     /// - It will improve its upsampling abilities as it processes more data
     /// </para>
     /// </remarks>
-    public override long ParameterCount => _kernels.Length > 0
-        ? _kernels.Length + _biases.Length
-        // Deferred-shape mode: weights aren't materialised yet (e.g. resolved via
-        // ResolveShapesOnly so a parent can read ParameterCount without allocating
-        // the kernel). Once the shape is resolved InputDepth is known, so report the
-        // exact count from dims — kernel layout is [InputDepth, OutputDepth,
-        // KernelSize, KernelSize] plus an OutputDepth-length bias. This equals the
-        // materialised _kernels.Length + _biases.Length, so ParameterCount stays
-        // consistent with GetParameters().Length. Returns 0 only while InputDepth is
-        // still the unresolved -1 sentinel.
-        : InputDepth > 0
-            ? (long)InputDepth * OutputDepth * KernelSize * KernelSize + OutputDepth
-            : 0;
+    /// <inheritdoc />
+    /// <remarks>
+    /// Paired with <see cref="ParameterCount"/> and <see cref="GetParameters"/>, which both report
+    /// nothing until the input width is known. Without this, a deferred layer said "I have no
+    /// parameters" (count 0, empty vector) AND "nothing is pending" -- three surfaces agreeing on a
+    /// statement that is false, since the layer certainly will have weights once it sees an input.
+    /// Callers asking "does this model have learnable parameters?" got a flat no and had no way to
+    /// tell it apart from a genuinely parameterless layer. Mirrors
+    /// <see cref="ConvolutionalLayer{T}.HasUninitializedParameters"/> and PyTorch's
+    /// <c>LazyModuleMixin.has_uninitialized_params()</c>.
+    /// </remarks>
+    public override bool HasUninitializedParameters => !IsShapeResolved;
+
     public override bool SupportsTraining => true;
 
     /// <summary>
@@ -374,6 +383,32 @@ public partial class DeconvolutionalLayer<T> : LayerBase<T>
     }
 
     /// <summary>
+    /// Creates an allocation-free transposed convolution whose channel dimensions are known at
+    /// construction time.
+    /// </summary>
+    /// <remarks>
+    /// Spatial dimensions remain lazy because they do not affect the parameter layout. This is the
+    /// transposed-convolution counterpart to <see cref="ConvolutionalLayer{T}.WithInputDepth"/> and
+    /// lets metadata/checkpoint code inspect the structural manifest without allocating kernels.
+    /// </remarks>
+    public static DeconvolutionalLayer<T> WithInputDepth(
+        int inputDepth,
+        int outputDepth,
+        int kernelSize,
+        int stride = 1,
+        int padding = 0,
+        IActivationFunction<T>? activationFunction = null)
+    {
+        if (inputDepth <= 0)
+            throw new ArgumentOutOfRangeException(nameof(inputDepth), "inputDepth must be positive.");
+
+        var layer = new DeconvolutionalLayer<T>(
+            outputDepth, kernelSize, stride, padding, activationFunction);
+        layer.InputDepth = inputDepth;
+        return layer;
+    }
+
+    /// <summary>
     /// Resolves input shape on first forward (PyTorch ConvTranspose2d-style).
     /// Output spatial dim per axis: (input - 1) * stride - 2 * padding + kernelSize.
     /// </summary>
@@ -402,6 +437,54 @@ public partial class DeconvolutionalLayer<T> : LayerBase<T>
         }
 
         ResolveShapes(new[] { c, h, w }, new[] { OutputDepth, outH, outW });
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// Hand-written from the two lines directly above: <c>outH = (h - 1) * Stride - 2 * Padding +
+    /// KernelSize</c>, and the same for width. That is the INVERSE of a sliding window, so
+    /// <c>Window</c> cannot carry it - a transposed convolution grows its spatial axes by roughly
+    /// <c>Stride</c>, where <c>Window</c> only ever shrinks them.
+    /// </para>
+    /// <para>
+    /// Regrouping as <c>outH = h * Stride + (KernelSize - Stride - 2 * Padding)</c> isolates the one
+    /// case the vocabulary does cover: when that constant is zero the layer is exactly
+    /// <c>Scaled(Height, Stride)</c>. That is the standard "exact upsampling" configuration
+    /// (<c>KernelSize = Stride</c> with no padding, or <c>KernelSize = Stride + 2*Padding</c>), which
+    /// is what generators and decoders are built from, so those stacks resolve precisely. Any other
+    /// configuration leaves an affine offset that no relation expresses, and it is declared Unknown
+    /// with the offset named rather than approximated by a nearby scale.
+    /// </para>
+    /// <para>
+    /// The channel axis is <c>Fixed(OutputDepth)</c> - the constructor argument <c>ResolveShapes</c>
+    /// publishes as the first output dimension. It is independent of the input depth, which this
+    /// layer instead absorbs into the kernel it allocates on first forward.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        // Ranks 3 and 4 only - exactly the two OnFirstForward accepts before it throws.
+        if (inputRank is not (3 or 4) || KernelSize <= 0 || Stride <= 0) return null;
+
+        int offset = KernelSize - Stride - 2 * Padding;
+        AxisRelation Spatial(TensorAxis axis) => offset == 0
+            ? AxisRelation.Scaled(axis, Stride)
+            : AxisRelation.Unknown(
+                $"Transposed-convolution extent is in*{Stride} + {offset}; an affine offset on a "
+                + "scaled axis is not in the relation vocabulary.");
+
+        var channels = new OutputAxisContract(TensorAxis.Channels, AxisRelation.Fixed(OutputDepth));
+        var height = new OutputAxisContract(TensorAxis.Height, Spatial(TensorAxis.Height));
+        var width = new OutputAxisContract(TensorAxis.Width, Spatial(TensorAxis.Width));
+
+        return inputRank == 3
+            ? new[] { channels, height, width }
+            : new[]
+            {
+                new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+                channels, height, width,
+            };
     }
 
     /// <summary>
@@ -479,7 +562,24 @@ public partial class DeconvolutionalLayer<T> : LayerBase<T>
     /// </remarks>
     private void InitializeParameters()
     {
-        InitializeLayerWeights(_kernels, InputDepth, OutputDepth);
+        // Fans must include the RECEPTIVE FIELD, not just the channel counts. Passing bare
+        // InputDepth/OutputDepth under-counted fan-in by KernelSize^2 (9x for a 3x3 kernel), and since
+        // initialization std scales as 1/sqrt(fan) that inflated every deconv's initial weights.
+        //
+        // Measured consequence before this fix: each upsampling deconv multiplied activation meanAbs by
+        // ~1.7x, so a StandardVAE decoder's three deconvs compounded ~5.4x (latent meanAbs 1.32 ->
+        // 7.66) and drove the decoder's output tanh into saturation — 47.2% of outputs pinned at
+        // exactly +/-1, making an untrained decode information-free (two latents differing by maxAbs
+        // 0.673 decoded to byte-identical images). ConvolutionalLayer never had this bug; it computes
+        // fanIn = KernelInChannels * KernelSize * KernelSize explicitly.
+        //
+        // Orientation follows PyTorch's _calculate_fan_in_and_fan_out for a transposed convolution:
+        // this kernel is laid out [inputDepth, outputDepth, K, K], and for ConvTranspose the fan-in is
+        // taken from the SECOND weight axis. So fan-in is OutputDepth * K * K and fan-out is
+        // InputDepth * K * K — the reverse of a forward convolution, because a transposed convolution
+        // scatters each input over the output rather than gathering.
+        int receptiveField = KernelSize * KernelSize;
+        InitializeLayerWeights(_kernels, OutputDepth * receptiveField, InputDepth * receptiveField);
         InitializeLayerBiases(_biases);
     }
 
@@ -506,7 +606,7 @@ public partial class DeconvolutionalLayer<T> : LayerBase<T>
     /// where each stamp design comes from your pattern generators (kernels).
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // Shape-inference mode: resolve dims + return a placeholder, no kernel allocation.
         if (IsInferringShapes) return ShapeInferenceOutput(input);
@@ -734,40 +834,6 @@ public partial class DeconvolutionalLayer<T> : LayerBase<T>
     }
 
     /// <summary>
-    /// Gets all trainable parameters of the layer as a single vector.
-    /// </summary>
-    /// <returns>A vector containing all kernel weights and biases.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method extracts all trainable parameters (kernel weights and biases) from the layer
-    /// and returns them as a single vector. This is useful for optimization algorithms that operate
-    /// on all parameters at once, or for saving and loading model weights.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method gathers all the learned values from the layer.
-    /// 
-    /// The parameters include:
-    /// - All values from all pattern generators (kernels)
-    /// - All bias values
-    /// 
-    /// These are combined into a single long list (vector), which can be used for:
-    /// - Saving the model
-    /// - Sharing parameters between layers
-    /// - Advanced optimization techniques
-    /// 
-    /// This provides access to all the "knowledge" the layer has learned.
-    /// </para>
-    /// </remarks>
-    public override Vector<T> GetParameters()
-    {
-        // Deferred-shape layer cloned before its first Forward has empty
-        // _kernels/_biases placeholders. Return an empty vector so Clone
-        // can roundtrip via SetParameters; the cloned layer materialises
-        // its real weights when its first Forward fires.
-        if (!IsShapeResolved) return new Vector<T>(0);
-        return Vector<T>.Concatenate(new Vector<T>(_kernels.ToArray()), new Vector<T>(_biases.ToArray()));
-    }
-
-    /// <summary>
     /// Sets all trainable parameters of the layer from a single vector.
     /// </summary>
     /// <param name="parameters">A vector containing all parameters to set.</param>
@@ -802,42 +868,6 @@ public partial class DeconvolutionalLayer<T> : LayerBase<T>
     {
         _kernelsGradient = null;
         _biasesGradient = null;
-    }
-
-    public override void SetParameters(Vector<T> parameters)
-    {
-        // Round-trip from saved parameters: derive inputDepth from vector length.
-        // Layout: kernels [inputDepth, outputDepth, K, K] + biases [outputDepth].
-        if (!IsShapeResolved)
-        {
-            if (parameters.Length == 0) return;
-            int kernelArea = OutputDepth * KernelSize * KernelSize;
-            if (OutputDepth <= 0 || kernelArea <= 0)
-                throw new InvalidOperationException(
-                    "Cannot SetParameters on deferred-shape DeconvolutionalLayer before OutputDepth/KernelSize are known.");
-            int candidateInputDepth = (parameters.Length - OutputDepth) / kernelArea;
-            if (candidateInputDepth <= 0
-                || candidateInputDepth * kernelArea + OutputDepth != parameters.Length)
-                throw new ArgumentException(
-                    $"Cannot infer inputDepth for DeconvolutionalLayer from {parameters.Length} parameters.");
-            ResolveFromShape(new[] { candidateInputDepth, 1, 1 });
-        }
-
-        int expectedLength = _kernels.Length + _biases.Length;
-        if (parameters.Length != expectedLength)
-        {
-            throw new ArgumentException($"Expected {expectedLength} parameters, but got {parameters.Length}");
-        }
-
-        var kernelVec = parameters.Slice(0, _kernels.Length);
-        var biasVec = parameters.Slice(_kernels.Length, _biases.Length);
-
-        _kernels = new Tensor<T>([InputDepth, OutputDepth, KernelSize, KernelSize], kernelVec);
-        _biases = new Tensor<T>([OutputDepth], biasVec);
-
-        // Invalidate GPU cache after parameter update
-        Engine.InvalidatePersistentTensor(_kernels);
-        Engine.InvalidatePersistentTensor(_biases);
     }
 
     /// <summary>

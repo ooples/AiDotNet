@@ -13,9 +13,14 @@ namespace AiDotNet.Tests.ModelFamilyTests.Base;
 /// target logits (Vector) and noise logits (Matrix).
 /// Tests mathematical invariants: non-negativity, finiteness, and gradient correctness.
 /// </summary>
-public abstract class ContrastiveLossTestBase
+public abstract class ContrastiveLossTestBase<T>
 {
-    protected abstract NoiseContrastiveEstimationLoss<double> CreateLoss();
+    protected static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+    protected static T ToT(double value) => NumOps.FromDouble(value);
+    protected static double ToD(T value) => Convert.ToDouble(value);
+    protected virtual double Tolerance => typeof(T) == typeof(float) ? 1e-6 : 1e-10;
+
+    protected abstract NoiseContrastiveEstimationLoss<T> CreateLoss();
 
     /// <summary>The number of noise samples configured for this loss instance.</summary>
     protected virtual int NumNoiseSamples => 10;
@@ -31,20 +36,20 @@ public abstract class ContrastiveLossTestBase
         using var _arena = TensorArena.Create();
         var loss = CreateLoss();
         int batchSize = 3;
-        var targetLogits = new Vector<double>(batchSize);
-        var noiseLogits = new Matrix<double>(batchSize, NumNoiseSamples);
+        var targetLogits = new Vector<T>(batchSize);
+        var noiseLogits = new Matrix<T>(batchSize, NumNoiseSamples);
 
         // Fill with reasonable values
         for (int i = 0; i < batchSize; i++)
         {
-            targetLogits[i] = 1.0 + i * 0.5;
+            targetLogits[i] = ToT(1.0 + i * 0.5);
             for (int j = 0; j < NumNoiseSamples; j++)
             {
-                noiseLogits[i, j] = -0.5 + j * 0.1;
+                noiseLogits[i, j] = ToT(-0.5 + j * 0.1);
             }
         }
 
-        double value = loss.Calculate(targetLogits, noiseLogits);
+        double value = ToD(loss.Calculate(targetLogits, noiseLogits));
 
         Assert.False(double.IsNaN(value), "Loss returned NaN.");
         Assert.False(double.IsInfinity(value), "Loss returned Infinity.");
@@ -61,20 +66,20 @@ public abstract class ContrastiveLossTestBase
         using var _arena = TensorArena.Create();
         var loss = CreateLoss();
         int batchSize = 3;
-        var targetLogits = new Vector<double>(batchSize);
-        var noiseLogits = new Matrix<double>(batchSize, NumNoiseSamples);
+        var targetLogits = new Vector<T>(batchSize);
+        var noiseLogits = new Matrix<T>(batchSize, NumNoiseSamples);
 
         for (int i = 0; i < batchSize; i++)
         {
-            targetLogits[i] = 2.0;
+            targetLogits[i] = ToT(2.0);
             for (int j = 0; j < NumNoiseSamples; j++)
             {
-                noiseLogits[i, j] = -1.0;
+                noiseLogits[i, j] = ToT(-1.0);
             }
         }
 
-        double value = loss.Calculate(targetLogits, noiseLogits);
-        Assert.True(value >= -1e-10, $"NCE loss should be non-negative but got {value}.");
+        double value = ToD(loss.Calculate(targetLogits, noiseLogits));
+        Assert.True(value >= -Tolerance, $"NCE loss should be non-negative but got {value}.");
     }
 
     // =========================================================================
@@ -88,18 +93,18 @@ public abstract class ContrastiveLossTestBase
         using var _arena = TensorArena.Create();
         var loss = CreateLoss();
         int batchSize = 2;
-        var noiseLogits = new Matrix<double>(batchSize, NumNoiseSamples);
+        var noiseLogits = new Matrix<T>(batchSize, NumNoiseSamples);
         for (int i = 0; i < batchSize; i++)
             for (int j = 0; j < NumNoiseSamples; j++)
-                noiseLogits[i, j] = -1.0;
+                noiseLogits[i, j] = ToT(-1.0);
 
-        var lowTarget = new Vector<double>(new[] { 0.5, 0.5 });
-        var highTarget = new Vector<double>(new[] { 5.0, 5.0 });
+        var lowTarget = new Vector<T>(new[] { ToT(0.5), ToT(0.5) });
+        var highTarget = new Vector<T>(new[] { ToT(5.0), ToT(5.0) });
 
-        double lowLoss = loss.Calculate(lowTarget, noiseLogits);
-        double highLoss = loss.Calculate(highTarget, noiseLogits);
+        double lowLoss = ToD(loss.Calculate(lowTarget, noiseLogits));
+        double highLoss = ToD(loss.Calculate(highTarget, noiseLogits));
 
-        Assert.True(highLoss <= lowLoss + 1e-10,
+        Assert.True(highLoss <= lowLoss + Tolerance,
             $"Higher target logits should reduce loss: low={lowLoss}, high={highLoss}.");
     }
 
@@ -114,22 +119,22 @@ public abstract class ContrastiveLossTestBase
         using var _arena = TensorArena.Create();
         var loss = CreateLoss();
         int batchSize = 3;
-        var targetLogits = new Vector<double>(batchSize);
-        var noiseLogits = new Matrix<double>(batchSize, NumNoiseSamples);
+        var targetLogits = new Vector<T>(batchSize);
+        var noiseLogits = new Matrix<T>(batchSize, NumNoiseSamples);
 
         for (int i = 0; i < batchSize; i++)
         {
-            targetLogits[i] = 1.0;
+            targetLogits[i] = ToT(1.0);
             for (int j = 0; j < NumNoiseSamples; j++)
-                noiseLogits[i, j] = -0.5;
+                noiseLogits[i, j] = ToT(-0.5);
         }
 
         // NCE's tape forward already takes the target logits and the noise-logit matrix, so the
         // two gradients come straight off one backward pass.
-        using var tape = new GradientTape<double>();
+        using var tape = new GradientTape<T>();
 
-        var targetT = Tensor<double>.FromVector(targetLogits);
-        var noiseT = Tensor<double>.FromMatrix(noiseLogits);
+        var targetT = Tensor<T>.FromVector(targetLogits);
+        var noiseT = Tensor<T>.FromMatrix(noiseLogits);
 
         var scalar = loss.ComputeTapeLoss(targetT, noiseT);
         var gradients = tape.ComputeGradients(scalar, new[] { targetT, noiseT });
@@ -139,12 +144,12 @@ public abstract class ContrastiveLossTestBase
 
         for (int i = 0; i < batchSize; i++)
         {
-            Assert.False(double.IsNaN(targetGrad[i]), $"Target gradient[{i}] is NaN.");
-            Assert.False(double.IsInfinity(targetGrad[i]), $"Target gradient[{i}] is Infinity.");
+            Assert.False(double.IsNaN(ToD(targetGrad[i])), $"Target gradient[{i}] is NaN.");
+            Assert.False(double.IsInfinity(ToD(targetGrad[i])), $"Target gradient[{i}] is Infinity.");
             for (int j = 0; j < NumNoiseSamples; j++)
             {
-                Assert.False(double.IsNaN(noiseGrad[i, j]), $"Noise gradient[{i},{j}] is NaN.");
-                Assert.False(double.IsInfinity(noiseGrad[i, j]), $"Noise gradient[{i},{j}] is Infinity.");
+                Assert.False(double.IsNaN(ToD(noiseGrad[i, j])), $"Noise gradient[{i},{j}] is NaN.");
+                Assert.False(double.IsInfinity(ToD(noiseGrad[i, j])), $"Noise gradient[{i},{j}] is Infinity.");
             }
         }
     }
@@ -159,9 +164,12 @@ public abstract class ContrastiveLossTestBase
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var loss = CreateLoss();
-        var targetLogits = new Vector<double>(3);
-        var noiseLogits = new Matrix<double>(2, NumNoiseSamples); // wrong rows
+        var targetLogits = new Vector<T>(3);
+        var noiseLogits = new Matrix<T>(2, NumNoiseSamples); // wrong rows
 
         Assert.Throws<ArgumentException>(() => loss.Calculate(targetLogits, noiseLogits));
     }
 }
+
+/// <summary>Default-precision alias for existing hand-written fixtures.</summary>
+public abstract class ContrastiveLossTestBase : ContrastiveLossTestBase<double> { }

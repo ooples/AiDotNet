@@ -36,7 +36,11 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Residual)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = false, TestInputShape = "1, 4", TestConstructorArgs = "(AiDotNet.Interfaces.ILayer<double>?)null, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
-public class ResidualLayer<T> : LayerBase<T>
+// Adds the input back to the inner layer's output; both have the same shape, so shape is carried
+// through unchanged at any rank.
+[ElementWiseShape(Note = "Adds the skip connection element-wise; shape is unchanged.")]
+[AutoParameters]
+public partial class ResidualLayer<T> : LayerBase<T>, IShapeContract
 {
     /// <summary>
     /// The inner layer that transforms the input before being added back to the original input.
@@ -457,7 +461,7 @@ public class ResidualLayer<T> : LayerBase<T>
     /// flow directly from the input to the output, making it easier to train deep networks.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         EnsureInitializedFromInput(input);
         // #1668: gate backward caches; forward uses the local innerOutput (chained).
@@ -577,29 +581,22 @@ public class ResidualLayer<T> : LayerBase<T>
             // DenseLayer still deserialize via the fallback path below.
             metadata["InnerLayerType"] = _innerLayer.GetType().AssemblyQualifiedName ?? _innerLayer.GetType().FullName ?? string.Empty;
             metadata["InnerInputSize"] = _innerLayer.GetInputShape()[0].ToString();
-            metadata["InnerOutputSize"] = _innerLayer.GetOutputShape()[0].ToString();
+            var innerOutputShape = _innerLayer.GetOutputLayerShape();
+            if (innerOutputShape.Rank > 0 && innerOutputShape[0] > 0)
+            {
+                // This legacy field represents only axis 0. Requiring every trailing axis
+                // to be concrete rejects valid lazy spatial layers such as [64, ?, ?], even
+                // though the scalar value needed by the old Dense-only fallback is known.
+                metadata["InnerOutputSize"] = innerOutputShape[0].ToString(System.Globalization.CultureInfo.InvariantCulture);
+            }
         }
         return metadata;
     }
 
     /// <inheritdoc/>
-    public override long ParameterCount => _innerLayer?.ParameterCount ?? 0;
-
-    /// <inheritdoc/>
     public override Vector<T> GetParameterGradients()
     {
         return _innerLayer?.GetParameterGradients() ?? new Vector<T>(0);
-    }
-
-    public override Vector<T> GetParameters()
-    {
-        return _innerLayer?.GetParameters() ?? Vector<T>.Empty();
-    }
-
-    /// <inheritdoc/>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        _innerLayer?.SetParameters(parameters);
     }
 
     /// <summary>

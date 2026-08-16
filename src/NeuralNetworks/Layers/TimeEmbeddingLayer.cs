@@ -37,8 +37,49 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.PositionalEncoding)]
 [LayerTask(LayerTask.TemporalProcessing)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, TestInputShape = "1, 1", TestConstructorArgs = "8, 16")]
-public partial class TimeEmbeddingLayer<T> : LayerBase<T>
+// Two INPUT forms, both handled explicitly by ForwardTraced: a bare vector of timesteps [batch]
+// (`input.Rank == 1 ? input : ...`) and the column form [batch, 1] which it reshapes to [batch].
+// The second axis of the rank-2 form is the scalar timestep itself, so it is a Features axis of
+// width 1 rather than a sequence.
+//
+// The OUTPUT is rank 2 in BOTH cases - nothing reshapes it back - so a rank-1 input produces a
+// rank-2 output. That is why OutputAxesFor below is hand-written: the generator derives axes by
+// matching input roles at the SAME rank, which cannot express a rank change.
+[TensorLayout(TensorAxis.Batch, Direction = TensorLayoutDirection.Input,
+    Note = "Bare timestep vector; ForwardTraced takes the input.Rank == 1 branch.")]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features, Direction = TensorLayoutDirection.Input,
+    Note = "Column form [batch, 1]; the trailing axis is the scalar timestep.")]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
+[AutoParameters]
+public partial class TimeEmbeddingLayer<T> : LayerBase<T>, IShapeContract
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// The embedding width is the layer's own <c>_outputDim</c> constructor argument, and the forward
+    /// pass enforces it rather than merely passing it along: the MLP allocates
+    /// <c>new Tensor&lt;T&gt;([batch, _outputDim])</c> and the second linear projection is
+    /// <c>[outputDim, outputDim]</c>, so no input width can survive to the output.
+    /// </para>
+    /// <para>
+    /// The sinusoidal encoding's <c>_embeddingDim</c> is deliberately NOT in this contract. It sizes an
+    /// intermediate only - sin/cos are concatenated to <c>_embeddingDim</c> features and then consumed
+    /// by <c>_linear1Weights: [embeddingDim, outputDim]</c> - so it is invisible from outside the layer.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        if (_outputDim <= 0 || inputRank is not (1 or 2)) return null;
+
+        // Identical for both accepted input ranks, because both funnel through the same
+        // [batch] -> sinusoidal -> MLP path and neither restores the original rank.
+        return new[]
+        {
+            new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+            new OutputAxisContract(TensorAxis.Features, AxisRelation.Fixed(_outputDim)),
+        };
+    }
+
     /// <summary>
     /// The dimension of the sinusoidal embedding before MLP projection.
     /// </summary>
@@ -115,10 +156,6 @@ public partial class TimeEmbeddingLayer<T> : LayerBase<T>
     private Tensor<T>? _gpuPreActivation;
     private int[]? _gpuInputShape;
 
-    /// <summary>
-    /// Gets a value indicating whether this layer supports training.
-    /// </summary>
-    public override long ParameterCount => _linear1Weights.Length + _linear1Bias.Length + _linear2Weights.Length + _linear2Bias.Length;
     public override bool SupportsTraining => true;
 
     public override Vector<T> GetParameterGradients()
@@ -184,9 +221,7 @@ public partial class TimeEmbeddingLayer<T> : LayerBase<T>
     protected override bool SupportsGpuExecution => true;
 
     [TrainableParameter(Role = PersistentTensorRole.Constant)]
-
-
-    private Tensor<T> _frequencies = new Tensor<T>([1, 1]);
+    private Tensor<T> _frequencies;
 
     /// <inheritdoc/>
     public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
@@ -196,19 +231,6 @@ public partial class TimeEmbeddingLayer<T> : LayerBase<T>
 
         if (Engine is not DirectGpuTensorEngine gpuEngine)
             throw new InvalidOperationException("ForwardGpu requires DirectGpuTensorEngine.");
-
-        if (_frequencies == null)
-        {
-            int halfDim = _embeddingDim / 2;
-            double logMax = Math.Log(10000.0);
-            _frequencies = new Tensor<T>([halfDim, 1]);
-            for (int i = 0; i < halfDim; i++)
-            {
-                double freq = Math.Exp(-logMax * i / halfDim);
-                _frequencies[i, 0] = NumOps.FromDouble(freq);
-            }
-            RegisterTrainableParameter(_frequencies, PersistentTensorRole.Constant);
-        }
 
         int batch = input.Shape[0];
         Tensor<T> timesteps = input.Shape.Length == 1
@@ -291,6 +313,16 @@ public partial class TimeEmbeddingLayer<T> : LayerBase<T>
         _linear2Weights = new Tensor<T>([outputDim, outputDim]);
         _linear2Bias = Tensor<T>.CreateDefault([outputDim], NumOps.Zero);
 
+        // Frequencies are deterministic, persistent model state rather than trainable weights.
+        // Initialize the real shape here for both execution paths. The old [1, 1] field initializer
+        // made ForwardGpu's null-guard unreachable and silently reduced every GPU embedding to one
+        // sin/cos frequency regardless of embeddingDim.
+        int halfDim = embeddingDim / 2;
+        double logMax = Math.Log(10000.0);
+        _frequencies = new Tensor<T>([halfDim, 1]);
+        for (int i = 0; i < halfDim; i++)
+            _frequencies[i, 0] = NumOps.FromDouble(Math.Exp(-logMax * i / halfDim));
+
         // Initialize weights with Xavier/Glorot
         for (int i = 0; i < embeddingDim; i++)
         {
@@ -313,6 +345,7 @@ public partial class TimeEmbeddingLayer<T> : LayerBase<T>
         RegisterTrainableParameter(_linear1Bias, PersistentTensorRole.Biases);
         RegisterTrainableParameter(_linear2Weights, PersistentTensorRole.Weights);
         RegisterTrainableParameter(_linear2Bias, PersistentTensorRole.Biases);
+        RegisterTrainableParameter(_frequencies, PersistentTensorRole.Constant);
     }
 
     /// <summary>
@@ -323,52 +356,23 @@ public partial class TimeEmbeddingLayer<T> : LayerBase<T>
     private Tensor<T> ComputeSinusoidalEmbedding(Tensor<T> timesteps)
     {
         int batch = timesteps.Shape[0];
-        int halfDim = _embeddingDim / 2;
+        var timestepColumn = Engine.Reshape(timesteps, [batch, 1]);
+        var angles = Engine.TensorMatMul(
+            timestepColumn,
+            Engine.TensorTranspose(_frequencies));
+        var embedding = Engine.TensorConcatenate(
+            [Engine.TensorSin(angles), Engine.TensorCos(angles)],
+            axis: 1);
 
-        // Compute frequency scaling factors: exp(-log(10000) * i / halfDim)
-        // These create logarithmically spaced frequencies from 1 to 1/10000
-        double logMax = Math.Log(10000.0);
-
-        var embedding = new Tensor<T>([batch, _embeddingDim]);
-
-        for (int b = 0; b < batch; b++)
+        // For odd embedding widths, retain the historical zero-valued final feature while keeping
+        // every timestep-dependent feature on the IEngine graph.
+        if (embedding.Shape[1] != _embeddingDim)
         {
-            double t = NumOps.ToDouble(timesteps[b]);
-
-            for (int i = 0; i < halfDim; i++)
-            {
-                double freq = Math.Exp(-logMax * i / halfDim);
-                double angle = t * freq;
-
-                // Sin component
-                embedding[b, i] = NumOps.FromDouble(Math.Sin(angle));
-                // Cos component
-                embedding[b, i + halfDim] = NumOps.FromDouble(Math.Cos(angle));
-            }
+            var zeroColumn = Tensor<T>.CreateDefault([batch, 1], NumOps.Zero);
+            embedding = Engine.TensorConcatenate([embedding, zeroColumn], axis: 1);
         }
 
         return embedding;
-    }
-
-    /// <summary>
-    /// Applies the SiLU (Swish) activation function: x * sigmoid(x).
-    /// </summary>
-    private T SiLU(T x)
-    {
-        double xd = NumOps.ToDouble(x);
-        double sigmoid = 1.0 / (1.0 + Math.Exp(-xd));
-        return NumOps.FromDouble(xd * sigmoid);
-    }
-
-    /// <summary>
-    /// Computes the derivative of SiLU activation.
-    /// </summary>
-    private T SiLUDerivative(T x)
-    {
-        double xd = NumOps.ToDouble(x);
-        double sigmoid = 1.0 / (1.0 + Math.Exp(-xd));
-        // d/dx [x * sigmoid(x)] = sigmoid(x) + x * sigmoid(x) * (1 - sigmoid(x))
-        return NumOps.FromDouble(sigmoid + xd * sigmoid * (1 - sigmoid));
     }
 
     /// <summary>
@@ -376,7 +380,7 @@ public partial class TimeEmbeddingLayer<T> : LayerBase<T>
     /// </summary>
     /// <param name="input">Input tensor containing timesteps. Shape: [batch] or [batch, 1].</param>
     /// <returns>Time embedding tensor with shape [batch, outputDim].</returns>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         _lastInput = input;
         int batch = input.Shape[0];
@@ -394,15 +398,8 @@ public partial class TimeEmbeddingLayer<T> : LayerBase<T>
         var bias1Broadcast = Engine.Reshape(_linear1Bias, [1, _outputDim]);
         preActivation = Engine.TensorBroadcastAdd(preActivation, bias1Broadcast);
 
-        // Apply SiLU element-wise (no tensor op available for SiLU)
-        var hidden = new Tensor<T>([batch, _outputDim]);
-        for (int b = 0; b < batch; b++)
-        {
-            for (int j = 0; j < _outputDim; j++)
-            {
-                hidden[b, j] = SiLU(preActivation[b, j]);
-            }
-        }
+        // Swish is the SiLU activation and records its VJP through IEngine.
+        var hidden = Engine.Swish(preActivation);
         _lastHidden = hidden;
 
         // Step 3: Second linear layer
@@ -428,47 +425,6 @@ public partial class TimeEmbeddingLayer<T> : LayerBase<T>
         _linear1Bias = Engine.TensorSubtract(_linear1Bias, Engine.TensorMultiplyScalar(_linear1BiasGradient, learningRate));
         _linear2Weights = Engine.TensorSubtract(_linear2Weights, Engine.TensorMultiplyScalar(_linear2WeightsGradient, learningRate));
         _linear2Bias = Engine.TensorSubtract(_linear2Bias, Engine.TensorMultiplyScalar(_linear2BiasGradient, learningRate));
-
-        // Notify GPU that tensor data has changed
-        Engine.InvalidatePersistentTensor(_linear1Weights);
-        Engine.InvalidatePersistentTensor(_linear1Bias);
-        Engine.InvalidatePersistentTensor(_linear2Weights);
-        Engine.InvalidatePersistentTensor(_linear2Bias);
-    }
-
-    /// <summary>
-    /// Gets all trainable parameters of the layer as a single vector.
-    /// </summary>
-    public override Vector<T> GetParameters()
-    {
-        var parts = new Vector<T>[]
-        {
-            _linear1Weights.ToVector(),
-            _linear1Bias.ToVector(),
-            _linear2Weights.ToVector(),
-            _linear2Bias.ToVector()
-        };
-        return Vector<T>.Concatenate(parts);
-    }
-
-    /// <summary>
-    /// Sets all trainable parameters of the layer from a vector.
-    /// </summary>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int offset = 0;
-        int size1 = _embeddingDim * _outputDim;
-        int size2 = _outputDim;
-        int size3 = _outputDim * _outputDim;
-        int size4 = _outputDim;
-
-        _linear1Weights = Tensor<T>.FromVector(parameters.Slice(offset, size1), [_embeddingDim, _outputDim]);
-        offset += size1;
-        _linear1Bias = Tensor<T>.FromVector(parameters.Slice(offset, size2), [_outputDim]);
-        offset += size2;
-        _linear2Weights = Tensor<T>.FromVector(parameters.Slice(offset, size3), [_outputDim, _outputDim]);
-        offset += size3;
-        _linear2Bias = Tensor<T>.FromVector(parameters.Slice(offset, size4), [_outputDim]);
 
         // Notify GPU that tensor data has changed
         Engine.InvalidatePersistentTensor(_linear1Weights);

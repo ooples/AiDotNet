@@ -32,7 +32,8 @@ namespace AiDotNet.ReinforcementLearning.Agents;
 /// their own unique learning logic while sharing common functionality.
 /// </para>
 /// </remarks>
-public abstract class ReinforcementLearningAgentBase<T> : IRLAgent<T>, IConfigurableModel<T>, IModelShape, IDisposable
+public abstract class ReinforcementLearningAgentBase<T> : IRLAgent<T>, IConfigurableModel<T>, IModelShape, IDisposable,
+    AiDotNet.Models.Parameters.IParameterManifestProvider
 {
     /// <summary>
     /// Numeric operations provider for type T.
@@ -306,12 +307,108 @@ public abstract class ReinforcementLearningAgentBase<T> : IRLAgent<T>, IConfigur
     /// <summary>
     /// Gets the agent's parameters.
     /// </summary>
-    public abstract Vector<T> GetParameters();
+    /// <summary>
+    /// The components this agent's parameters live in, in registration order, which is also the
+    /// serialization order.
+    /// </summary>
+    private readonly AiDotNet.Models.Parameters.ParameterComponentRegistry<T> _parameterRegistry = new();
+    private bool _componentsRegistered;
+
+    /// <summary>
+    /// Declares a component whose parameters belong to this agent's surface. Registration order is
+    /// serialization order, so keep it stable.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Register only what is TRAINED. A target network is a periodically-refreshed copy of an
+    /// online network, not an independent parameter: registering one doubles the count and hands an
+    /// optimizer weights that are only ever meant to be copied into. The agents disagreed about
+    /// this -- DQNAgent excluded its target network from GetParameters while RainbowDQNAgent
+    /// included its own -- which is the drift a single registration point removes.
+    /// </para>
+    /// <para>Null is tolerated, so an agent may register a component a configuration did not build,
+    /// and registration is idempotent by reference.</para>
+    /// </remarks>
+    protected void RegisterParameterComponent(
+        IParameterSource<T>? component,
+        [System.Runtime.CompilerServices.CallerArgumentExpression(nameof(component))] string? componentExpression = null,
+        [System.Runtime.CompilerServices.CallerMemberName] string? memberName = null)
+        => _parameterRegistry.RegisterLegacy(GetType().FullName ?? GetType().Name,
+            memberName, componentExpression, component);
+
+    protected void RegisterParameterComponent(string stableId, IParameterSource<T>? component,
+        AiDotNet.Models.Parameters.ParameterSlotRole role = AiDotNet.Models.Parameters.ParameterSlotRole.Trainable)
+        => _parameterRegistry.Register(stableId, component, role);
+
+    /// <summary>
+    /// Declare this agent's trainable components here with <see cref="RegisterParameterComponent"/>.
+    /// Called once, lazily, so it runs after the constructor has built the networks.
+    /// </summary>
+    protected virtual void RegisterComponents()
+    {
+    }
+
+    protected virtual void RegisterGeneratedParameterComponents(
+        AiDotNet.Models.Parameters.ParameterComponentRegistry<T> registry)
+    {
+    }
+
+    /// <summary>
+    /// Runs after <see cref="SetParameters"/> has distributed values into the components. Override
+    /// to refresh anything DERIVED from them.
+    /// </summary>
+    /// <remarks>
+    /// Target-network syncs live here. DQNAgent, DoubleDQNAgent, DDPGAgent and SACAgent each copied
+    /// the online weights into a target network at the end of SetParameters. Dropping that would
+    /// fail no test -- the agent would simply train against a stale target and diverge quietly.
+    /// </remarks>
+    protected virtual void OnParametersRestored()
+    {
+    }
+
+    private IReadOnlyList<IParameterSource<T>> Components
+    {
+        get
+        {
+            if (!_componentsRegistered)
+            {
+                RegisterGeneratedParameterComponents(_parameterRegistry);
+                RegisterComponents();
+                _componentsRegistered = true;
+            }
+            return _parameterRegistry.Components;
+        }
+    }
+
+    public AiDotNet.Models.Parameters.ParameterLayoutSnapshot ParameterLayout
+    {
+        get { _ = Components; return _parameterRegistry.ParameterLayout; }
+    }
+
+    /// <inheritdoc />
+    /// <remarks>Concatenates the registered components in registration order, so the length is
+    /// <see cref="ParameterCount"/> by construction rather than by agreement.</remarks>
+    public virtual Vector<T> GetParameters()
+    {
+        _ = Components;
+        return _parameterRegistry.GetParameters();
+    }
 
     /// <summary>
     /// Sets the agent's parameters.
     /// </summary>
-    public abstract void SetParameters(Vector<T> parameters);
+    /// <inheritdoc />
+    /// <remarks>The inverse of <see cref="GetParameters"/>: each component takes back the slice it
+    /// contributed, then <see cref="OnParametersRestored"/> refreshes whatever derives from them.
+    /// </remarks>
+    public virtual void SetParameters(Vector<T> parameters)
+    {
+        if (parameters is null) throw new ArgumentNullException(nameof(parameters));
+
+        _ = Components;
+        _parameterRegistry.SetParameters(parameters);
+        OnParametersRestored();
+    }
 
     /// <summary>
     /// Gets the number of parameters in the agent.
@@ -320,7 +417,12 @@ public abstract class ReinforcementLearningAgentBase<T> : IRLAgent<T>, IConfigur
     /// Deep RL agents return parameter counts from neural networks.
     /// Classical RL agents (tabular, linear) may have different implementations.
     /// </remarks>
-    public abstract long ParameterCount { get; }
+    /// <inheritdoc />
+    /// <remarks>Sums the same components the vector concatenates, so the two cannot drift.</remarks>
+    public virtual long ParameterCount
+    {
+        get { _ = Components; return _parameterRegistry.ParameterCount; }
+    }
 
     /// <inheritdoc/>
     public virtual bool SupportsParameterInitialization => ParameterCount > 0;

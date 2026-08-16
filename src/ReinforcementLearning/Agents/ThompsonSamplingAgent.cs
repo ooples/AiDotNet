@@ -7,6 +7,8 @@ using AiDotNet.Models.Options;
 using Newtonsoft.Json;
 using AiDotNet.Validation;
 
+using AiDotNet.ReinforcementLearning.Parameters;
+
 namespace AiDotNet.ReinforcementLearning.Agents.Bandits;
 
 /// <summary>
@@ -44,6 +46,13 @@ namespace AiDotNet.ReinforcementLearning.Agents.Bandits;
     Authors = "Thompson, W. R.")]
 public class ThompsonSamplingAgent<T> : ReinforcementLearningAgentBase<T>
 {
+
+    /// <inheritdoc />
+    /// <remarks>The Beta posterior per arm, as the interleaved (success, failure) pairs the hand-written surface emitted. Interleaved rather than concatenated is load-bearing: it is this agent's serialization order.</remarks>
+    protected override void RegisterComponents()
+    {
+        RegisterParameterComponent(new InterleavedCountParameterSource<T>(_successCounts, _failureCounts, _options.NumArms));
+    }
     private ThompsonSamplingOptions<T> _options;
 
     /// <inheritdoc/>
@@ -200,7 +209,6 @@ public class ThompsonSamplingAgent<T> : ReinforcementLearningAgentBase<T>
     public Task<Vector<T>> PredictAsync(Vector<T> input) => Task.FromResult(Predict(input));
     public Task TrainAsync() { Train(); return Task.CompletedTask; }
     public override ModelMetadata<T> GetModelMetadata() => new ModelMetadata<T> { FeatureCount = this.FeatureCount, Complexity = ParameterCount };
-    public override long ParameterCount => _options.NumArms * 2;
     public override int FeatureCount => 1;
     public override byte[] Serialize()
     {
@@ -238,19 +246,6 @@ public class ThompsonSamplingAgent<T> : ReinforcementLearningAgentBase<T>
             _failureCounts[i] = reader.ReadInt32();
         }
     }
-    public override Vector<T> GetParameters()
-    {
-        int paramCount = _options.NumArms * 2; // success and failure counts for each arm
-        var v = new Vector<T>(paramCount);
-        int idx = 0;
-        for (int i = 0; i < _options.NumArms; i++)
-        {
-            v[idx++] = NumOps.FromDouble(_successCounts[i]);
-            v[idx++] = NumOps.FromDouble(_failureCounts[i]);
-        }
-        return v;
-    }
-    public override void SetParameters(Vector<T> parameters) { int idx = 0; for (int i = 0; i < _options.NumArms && idx + 1 < parameters.Length; i++) { _successCounts[i] = (int)NumOps.ToDouble(parameters[idx++]); _failureCounts[i] = (int)NumOps.ToDouble(parameters[idx++]); } }
     public override IFullModel<T, Vector<T>, Vector<T>> Clone()
     {
         var clone = new ThompsonSamplingAgent<T>(_options);

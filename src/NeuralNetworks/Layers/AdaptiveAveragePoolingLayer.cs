@@ -36,7 +36,17 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.DownSampling)]
 [LayerTask(LayerTask.SpatialProcessing)]
 [LayerProperty(IsTrainable = false, ChangesShape = true, ExpectedInputRank = 3, TestInputShape = "1, 4, 4", TestConstructorArgs = "2, 2")]
-public class AdaptiveAveragePoolingLayer<T> : LayerBase<T>
+// Roles from this layer's own guard - "requires rank>=3 [...,C,H,W]" in OnFirstForward - which reads
+// Shape[rank-3], Shape[rank-2], Shape[rank-1] as channels, height and width. Batch is marked optional
+// rather than declared as a second layout because the leading axis is genuinely absent at the rank the
+// layer is tested at ([LayerProperty(TestInputShape = "1, 4, 4")]) and genuinely present one rank up;
+// both forms run the same code, which carries every leading axis through untouched.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    BatchOptional = true, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    BatchOptional = true, Direction = TensorLayoutDirection.Output)]
+[AutoParameters]
+public partial class AdaptiveAveragePoolingLayer<T> : LayerBase<T>, IShapeContract
 {
     private readonly int _outputHeight;
     private readonly int _outputWidth;
@@ -101,6 +111,41 @@ public class AdaptiveAveragePoolingLayer<T> : LayerBase<T>
         _outputWidth = outputWidth;
     }
 
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// Hand-written rather than generated, because the whole point of ADAPTIVE pooling is that the two
+    /// spatial extents are set by configuration and not by the input: <c>OnFirstForward</c> resolves
+    /// <c>ResolveShapes(new[] { c, h, w }, new[] { c, _outputHeight, _outputWidth })</c>. That is
+    /// <c>Fixed</c> on both spatial axes, read off the constructor arguments, and <c>Same</c> on channels.
+    /// </para>
+    /// <para>
+    /// This is exactly the case where a window relation would be WRONG. A fixed pooling window shrinks
+    /// its axis by a ratio the caller chose; this layer instead picks whatever window makes the output
+    /// come out at <c>_outputHeight</c> x <c>_outputWidth</c>, so the output extent is independent of the
+    /// input extent - a 14x14 and a 56x56 feature map both leave as <c>outH</c> x <c>outW</c>.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        // Ranks 3 and 4 only: rank 3 is the [C,H,W] form the layer is tested at, rank 4 the batched one.
+        // Higher ranks run too - the guard is rank>=3 - but each extra leading axis would need a DISTINCT
+        // role to be referred to by a relation, and there is no second batch-like role to give it.
+        if (inputRank is not (3 or 4)) return null;
+
+        var channels = new OutputAxisContract(TensorAxis.Channels, AxisRelation.Same(TensorAxis.Channels));
+        var height = new OutputAxisContract(TensorAxis.Height, AxisRelation.Fixed(_outputHeight));
+        var width = new OutputAxisContract(TensorAxis.Width, AxisRelation.Fixed(_outputWidth));
+
+        return inputRank == 3
+            ? new[] { channels, height, width }
+            : new[]
+            {
+                new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+                channels, height, width,
+            };
+    }
+
     /// <summary>
     /// Creates a global average pooling layer that pools to 1x1.
     /// </summary>
@@ -134,7 +179,7 @@ public class AdaptiveAveragePoolingLayer<T> : LayerBase<T>
     /// </summary>
     /// <param name="input">The input tensor of any rank >= 3. Last 3 dims are [C, H, W].</param>
     /// <returns>The pooled output tensor with same leading dims, [C, outH, outW].</returns>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         if (input.Shape.Length < 3)
             throw new ArgumentException("Input must have at least 3 dimensions (channels, height, width).");
@@ -364,24 +409,6 @@ public class AdaptiveAveragePoolingLayer<T> : LayerBase<T>
         }
 
         return GpuTensorHelper.UploadToGpu<T>(backend, outputBuffer, outputShape, GpuTensorRole.Activation, ownsBuffer: true);
-    }
-
-    /// <summary>
-    /// Updates the parameters. Pooling layers have no trainable parameters.
-    /// </summary>
-    /// <param name="learningRate">The learning rate (unused).</param>
-    public override void UpdateParameters(T learningRate)
-    {
-        // No trainable parameters
-    }
-
-    /// <summary>
-    /// Gets all trainable parameters. Returns empty for pooling layers.
-    /// </summary>
-    /// <returns>An empty vector.</returns>
-    public override Vector<T> GetParameters()
-    {
-        return Vector<T>.Empty();
     }
 
     /// <summary>

@@ -164,9 +164,6 @@ public class MMDiTNoisePredictor<T> : NoisePredictorBase<T>
     /// </summary>
     public int PatchSize => _patchSize;
 
-    /// <inheritdoc />
-    public override long ParameterCount => CalculateParameterCount();
-
     #endregion
 
     #region Constructor
@@ -1011,78 +1008,6 @@ public class MMDiTNoisePredictor<T> : NoisePredictorBase<T>
 
     #region Parameter Management
 
-    private long CalculateParameterCount()
-    {
-        // #1237: long accumulator. SD3.5 Large (HiddenDim 4096 × 38 layers
-        // joint + single blocks) sums to ~7.6 B parameters, overflowing
-        // int.MaxValue. Per-layer ParameterCount stays int (single-tensor
-        // < 2.1 B); the cross-layer sum is long.
-        long count = 0;
-
-        count += _patchEmbed.ParameterCount;
-        count += _timeEmbed1.ParameterCount;
-        count += _timeEmbed2.ParameterCount;
-        count += _contextProj.ParameterCount;
-
-        foreach (var block in _jointBlocks)
-        {
-            count += block.ImageNorm1.ParameterCount + block.ImageNorm2.ParameterCount;
-            count += block.ImageMLP1.ParameterCount + block.ImageMLP2.ParameterCount;
-            count += block.ImageAdaLN.ParameterCount;
-            count += block.ImageQProj.ParameterCount + block.ImageKProj.ParameterCount;
-            count += block.ImageVProj.ParameterCount + block.ImageOutProj.ParameterCount;
-            count += block.TextNorm1.ParameterCount + block.TextNorm2.ParameterCount;
-            count += block.TextMLP1.ParameterCount + block.TextMLP2.ParameterCount;
-            count += block.TextAdaLN.ParameterCount;
-            count += block.TextQProj.ParameterCount + block.TextKProj.ParameterCount;
-            count += block.TextVProj.ParameterCount + block.TextOutProj.ParameterCount;
-        }
-
-        foreach (var block in _singleBlocks)
-        {
-            count += block.Norm.ParameterCount;
-            count += block.QProj.ParameterCount + block.KProj.ParameterCount;
-            count += block.VProj.ParameterCount + block.OutProj.ParameterCount;
-            count += block.MLP1.ParameterCount + block.MLP2.ParameterCount;
-            count += block.AdaLN.ParameterCount;
-        }
-
-        count += _finalNorm.ParameterCount;
-        count += _adalnModulation.ParameterCount;
-        count += _outputProj.ParameterCount;
-
-        return count;
-    }
-
-    /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        // Pre-size and write each layer's parameters in place — mirrors DiTNoisePredictor.GetParameters.
-        // The old List<T> + ToArray() + new Vector<T>(IEnumerable) (which calls ToArray AGAIN) held up to
-        // 3× the flat parameter size in transient copies and OOM'd CI test hosts at MMDiT/EMMDiT scale
-        // (#1715: a 12-block × 1024-hidden EMMDiT is ~450 M params ≈ 3.6 GB as doubles, so the triple-copy
-        // peaked near 11 GB and OOM'd the 16 GB runner once two predictors were resident). Iterating
-        // MMDiTLayerSequence — the SAME sequence GetParameterChunks walks — keeps the flat vector and the
-        // chunk concatenation index-identical BY CONSTRUCTION (no parallel hand-maintained layer list to
-        // drift out of order).
-        long count = ParameterCount;
-        if (count > int.MaxValue)
-            throw new InvalidOperationException(
-                $"MMDiTNoisePredictor.GetParameters: {count} parameters overflow a flat Vector<T> " +
-                "(int-indexed). Use GetParameterChunks for foundation-scale (>2.1B-param) predictors.");
-
-        var result = new Vector<T>((int)count);
-        int offset = 0;
-        foreach (var layer in MMDiTLayerSequence())
-            WriteLayerParams(result, ref offset, layer);
-
-        if (offset != (int)count)
-            throw new InvalidOperationException(
-                $"MMDiTNoisePredictor.GetParameters wrote {offset} elements but ParameterCount reported " +
-                $"{count} — a layer's GetParameters().Length disagreed with its ParameterCount (likely a " +
-                "lazy layer that materialized weights between the count and the write).");
-        return result;
-    }
 
     private static void WriteLayerParams(Vector<T> dst, ref int offset, ILayer<T> layer)
     {
@@ -1094,55 +1019,6 @@ public class MMDiTNoisePredictor<T> : NoisePredictorBase<T>
         for (int i = 0; i < p.Length; i++)
             dst[offset + i] = p[i];
         offset += p.Length;
-    }
-
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int offset = 0;
-
-        offset = SetLayerParams(_patchEmbed, parameters, offset);
-        offset = SetLayerParams(_timeEmbed1, parameters, offset);
-        offset = SetLayerParams(_timeEmbed2, parameters, offset);
-        offset = SetLayerParams(_contextProj, parameters, offset);
-
-        foreach (var block in _jointBlocks)
-        {
-            offset = SetLayerParams(block.ImageNorm1, parameters, offset);
-            offset = SetLayerParams(block.ImageQProj, parameters, offset);
-            offset = SetLayerParams(block.ImageKProj, parameters, offset);
-            offset = SetLayerParams(block.ImageVProj, parameters, offset);
-            offset = SetLayerParams(block.ImageOutProj, parameters, offset);
-            offset = SetLayerParams(block.ImageNorm2, parameters, offset);
-            offset = SetLayerParams(block.ImageMLP1, parameters, offset);
-            offset = SetLayerParams(block.ImageMLP2, parameters, offset);
-            offset = SetLayerParams(block.ImageAdaLN, parameters, offset);
-            offset = SetLayerParams(block.TextNorm1, parameters, offset);
-            offset = SetLayerParams(block.TextQProj, parameters, offset);
-            offset = SetLayerParams(block.TextKProj, parameters, offset);
-            offset = SetLayerParams(block.TextVProj, parameters, offset);
-            offset = SetLayerParams(block.TextOutProj, parameters, offset);
-            offset = SetLayerParams(block.TextNorm2, parameters, offset);
-            offset = SetLayerParams(block.TextMLP1, parameters, offset);
-            offset = SetLayerParams(block.TextMLP2, parameters, offset);
-            offset = SetLayerParams(block.TextAdaLN, parameters, offset);
-        }
-
-        foreach (var block in _singleBlocks)
-        {
-            offset = SetLayerParams(block.Norm, parameters, offset);
-            offset = SetLayerParams(block.QProj, parameters, offset);
-            offset = SetLayerParams(block.KProj, parameters, offset);
-            offset = SetLayerParams(block.VProj, parameters, offset);
-            offset = SetLayerParams(block.OutProj, parameters, offset);
-            offset = SetLayerParams(block.MLP1, parameters, offset);
-            offset = SetLayerParams(block.MLP2, parameters, offset);
-            offset = SetLayerParams(block.AdaLN, parameters, offset);
-        }
-
-        offset = SetLayerParams(_finalNorm, parameters, offset);
-        offset = SetLayerParams(_adalnModulation, parameters, offset);
-        SetLayerParams(_outputProj, parameters, offset);
     }
 
     /// <summary>
@@ -1202,66 +1078,6 @@ public class MMDiTNoisePredictor<T> : NoisePredictorBase<T>
     /// stay lazy. Internal: this is clone/streaming materialization plumbing, not public model behavior.
     /// </summary>
     internal bool WeightsMaterialized => _patchEmbed.IsInitialized;
-
-    /// <inheritdoc />
-    public override IEnumerable<Tensor<T>> GetParameterChunks()
-    {
-        // Foundation-scale (#1715): engage weight streaming before materializing — at FLUX/MMDiT scale
-        // (billions of params) the per-layer MaterializeParameters below otherwise routes to
-        // TensorAllocator.RentPinned and accumulates the full ~25 GB weight set in the pinned heap → OOM.
-        // Streaming flags the layers so AllocateLazyWeight pre-evicts to disk (bounded resident set).
-        // No-op below the param-count/memory threshold, so smaller MMDiT predictors stay resident.
-        MaybeEngageWeightStreaming();
-
-        // #1624 zero-copy: materialize each layer's lazy weights, then yield its resident trainable
-        // tensors BY REFERENCE — one chunk per tensor, in canonical MMDiTLayerSequence × GetTrainable
-        // order — instead of concatenating each layer's params into a transient multi-GB Vector<T>
-        // (which GC-thrashes/OOMs at >2.1B FLUX/MMDiT scale). Consumers (Clone, LatentDiffusionModelBase)
-        // pair Get/SetParameterChunks and count chunks dynamically, so per-tensor framing is consistent.
-        foreach (var layer in MMDiTLayerSequence())
-        {
-            if (layer is not LayerBase<T> lb) continue;
-            lb.MaterializeParameters();
-            foreach (var t in lb.GetTrainableParameters())
-                if (t.Length > 0) yield return t;
-        }
-    }
-
-    /// <inheritdoc />
-    public override void SetParameterChunks(IEnumerable<Tensor<T>> chunks)
-    {
-        // Foundation-scale (#1715): engage streaming before materializing weights — see GetParameterChunks.
-        MaybeEngageWeightStreaming();
-
-        using var e = chunks.GetEnumerator();
-        foreach (var layer in MMDiTLayerSequence())
-        {
-            if (layer is not LayerBase<T> lb) continue;
-            lb.MaterializeParameters();
-            var dst = lb.GetTrainableParameters();
-            // Pull one chunk per non-empty trainable tensor and copy the values IN PLACE
-            // (CopyTrainableParametersFrom: no rebinding — which would alias clone↔source — and no flat
-            // aggregate). Empty slots stay aligned to keep the per-tensor index identical to the getter.
-            bool anyNonEmpty = false;
-            foreach (var t in dst) if (t.Length > 0) { anyNonEmpty = true; break; }
-            if (!anyNonEmpty) continue;
-            var incoming = new Tensor<T>[dst.Count];
-            for (int i = 0; i < dst.Count; i++)
-            {
-                if (dst[i].Length == 0) { incoming[i] = dst[i]; continue; }
-                if (!e.MoveNext())
-                    throw new System.ArgumentException(
-                        "SetParameterChunks received fewer chunks than MMDiT has parameter tensors.",
-                        nameof(chunks));
-                incoming[i] = e.Current;
-            }
-            lb.CopyTrainableParametersFrom(incoming);
-        }
-        if (e.MoveNext())
-            throw new System.ArgumentException(
-                "SetParameterChunks received more chunks than MMDiT has parameter tensors.",
-                nameof(chunks));
-    }
 
     private int SetLayerParams(ILayer<T> layer, Vector<T> parameters, int offset)
     {

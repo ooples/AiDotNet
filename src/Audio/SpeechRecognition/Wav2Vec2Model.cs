@@ -1,4 +1,4 @@
-using AiDotNet.ActivationFunctions;
+﻿using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -69,7 +69,7 @@ namespace AiDotNet.Audio.SpeechRecognition;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("wav2vec 2.0: A Framework for Self-Supervised Learning of Speech Representations", "https://arxiv.org/abs/2006.11477", Year = 2020, Authors = "Alexei Baevski, Henry Zhou, Abdelrahman Mohamed, Michael Auli")]
-public class Wav2Vec2Model<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
+public partial class Wav2Vec2Model<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly Wav2Vec2ModelOptions _options;
 
@@ -102,6 +102,12 @@ public class Wav2Vec2Model<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
     private List<ILayer<T>> _featureEncoderLayers = [];
 
     /// <summary>
+    /// Convolutional positional-embedding layer (depthwise Conv1D over time). Sits between the feature
+    /// projection and the transformer; RunModel applies it as a residual: x = x + posConv(x).
+    /// </summary>
+    private ILayer<T>? _posConv;
+
+    /// <summary>
     /// Transformer encoder layers.
     /// </summary>
     private List<ILayer<T>> _transformerLayers = [];
@@ -118,7 +124,7 @@ public class Wav2Vec2Model<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
     /// <summary>
     /// Optimizer for training (unused in ONNX mode).
     /// </summary>
-    private IOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
 
     /// <summary>
     /// Loss function for training.
@@ -351,7 +357,7 @@ public class Wav2Vec2Model<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
         int numHeads = 12,
         int ffDim = 3072,
         string[]? vocabulary = null,
-        IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         Wav2Vec2ModelOptions? options = null)
         : base(architecture)
@@ -424,41 +430,68 @@ public class Wav2Vec2Model<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
         Layers.Clear();
         Layers.AddRange(layers);
 
-        // Feature encoder: 7 conv layers + 1 projection = 8
-        int featureEncoderCount = 8;
-        // Transformer layers: numTransformerLayers * 3 (selfAttn + ff + ffOut) + 1 CTC projection
-        int transformerCount = _numTransformerLayers * 3;
-        int expectedTotal = featureEncoderCount + transformerCount + 1;
+        // Feature encoder: 7 Conv1D + 1 feature-projection Dense + 1 feature-projection LayerNorm = 9
+        // (see CreateWav2Vec2Layers — the LayerNorm was added for paper-faithful feature projection).
+        int featureEncoderCount = 9;
+        // 1 convolutional positional-embedding layer (depthwise Conv1D) between projection and transformer.
+        int posConvCount = 1;
+        // Transformer layers: numTransformerLayers residual TransformerEncoderBlocks (one per layer;
+        // each block internally does MHA + FFN + the two LayerNorms), + 1 CTC projection.
+        int transformerCount = _numTransformerLayers;
+        int expectedTotal = featureEncoderCount + posConvCount + transformerCount + 1;
 
         if (Architecture.Layers != null && layers.Count != expectedTotal)
         {
             System.Diagnostics.Debug.WriteLine(
-                $"[Wav2Vec2] Warning: Expected {expectedTotal} layers (8 encoder + {transformerCount} transformer + 1 CTC), " +
+                $"[Wav2Vec2] Warning: Expected {expectedTotal} layers (9 encoder + 1 pos-conv + {transformerCount} transformer + 1 CTC), " +
                 $"but got {layers.Count}. Layer distribution may be incorrect.");
         }
 
         DistributeLayersToSubLists();
     }
 
-    // Re-links the typed forward-path sub-lists (_featureEncoderLayers / _transformerLayers /
+    // Re-links the typed forward-path sub-lists (_featureEncoderLayers / _posConv / _transformerLayers /
     // _ctcProjection) to the CURRENT contents of Layers. The forward reads these fields, NOT Layers,
     // so they must be rebuilt whenever Layers is replaced — critically after deserialization, where the
     // base clears Layers and adds freshly-deserialized (trained) layers. Without this, a cloned/loaded
     // model keeps its ctor's random-init sub-list layers and predicts as if untrained (#1221 class:
-    // Clone_AfterTraining). Distribution order matches CreateWav2Vec2Layers: [0..7]=feature encoder,
-    // [8..8+3N-1]=transformer, [^1]=CTC projection.
+    // Clone_AfterTraining). Distribution order matches CreateWav2Vec2Layers: [0..8]=feature encoder,
+    // [9]=positional conv, [10..10+N-1]=transformer (one residual TransformerEncoderBlock each),
+    // [^1]=CTC projection.
     private void DistributeLayersToSubLists()
     {
         _featureEncoderLayers.Clear();
         _transformerLayers.Clear();
+        _posConv = null;
 
-        int featureEncoderCount = 8;
-        int transformerCount = _numTransformerLayers * 3;
+        int featureEncoderCount = 9;
+        int transformerCount = _numTransformerLayers;
+
+        // CHECKED BEFORE DISTRIBUTING, because every loop below is bounded by `i < Layers.Count` and
+        // therefore cannot fail. With too few layers each loop simply stops early: _transformerLayers
+        // ends up short, _posConv stays null, and _ctcProjection is taken from Layers[^1] -- which is
+        // then a transformer block rather than the projection. Nothing throws. The model runs and
+        // produces logits from a stack that is missing pieces, and the only visible symptom is poor
+        // recognition. The expected count is the feature encoder, the positional convolution, the
+        // transformer blocks, and the CTC projection.
+        int expectedLayerCount = featureEncoderCount + 1 + transformerCount + 1;
+        if (Layers.Count != expectedLayerCount)
+        {
+            throw new InvalidOperationException(
+                $"Wav2Vec2 native mode expects exactly {expectedLayerCount} layers " +
+                $"({featureEncoderCount} feature encoder + 1 positional conv + {transformerCount} " +
+                $"transformer + 1 CTC projection) but found {Layers.Count}. Distributing them anyway " +
+                "would bind a partial stack and degrade recognition with no error.");
+        }
 
         for (int i = 0; i < featureEncoderCount && i < Layers.Count; i++)
             _featureEncoderLayers.Add(Layers[i]);
 
-        int transformerStart = featureEncoderCount;
+        int posConvIndex = featureEncoderCount;
+        if (posConvIndex < Layers.Count)
+            _posConv = Layers[posConvIndex];
+
+        int transformerStart = featureEncoderCount + 1; // +1 for the positional conv
         for (int i = 0; i < transformerCount && transformerStart + i < Layers.Count; i++)
             _transformerLayers.Add(Layers[transformerStart + i]);
 
@@ -673,7 +706,18 @@ public class Wav2Vec2Model<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
         for (int i = convCount; i < _featureEncoderLayers.Count; i++)
             x = _featureEncoderLayers[i].Forward(x);
 
-        // Transformer encoder (MHA + FFN blocks, walked in order as they were emitted).
+        // Convolutional positional embedding (Baevski et al. 2020 §2), added as a residual so the
+        // otherwise position-agnostic self-attention sees relative position: x = x + GELU(conv(x)).
+        // _posConv is a depthwise Conv1D over time and consumes [B, C, T], so transpose in and out.
+        if (_posConv is not null)
+        {
+            var xt = Engine.TensorPermute(x, new[] { 0, 2, 1 });   // [1, hidden, T'] channels-major
+            var pos = _posConv.Forward(xt);                        // depthwise conv + GELU -> [1, hidden, T']
+            pos = Engine.TensorPermute(pos, new[] { 0, 2, 1 });    // [1, T', hidden]
+            x = Engine.TensorAdd(x, pos);
+        }
+
+        // Transformer encoder (residual TransformerEncoderBlocks, walked in order as they were emitted).
         foreach (var layer in _transformerLayers)
             x = layer.Forward(x);
 
@@ -720,6 +764,14 @@ public class Wav2Vec2Model<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
             x = _featureEncoderLayers[i].Forward(x);
             activations[$"Layer_{idx++}_{_featureEncoderLayers[i].GetType().Name}"] = x.Clone();
         }
+        // Convolutional positional embedding residual (matches RunModel): x = x + posConv(x).
+        if (_posConv is not null)
+        {
+            var xt = Engine.TensorPermute(x, new[] { 0, 2, 1 });
+            var pos = Engine.TensorPermute(_posConv.Forward(xt), new[] { 0, 2, 1 });
+            x = Engine.TensorAdd(x, pos);
+            activations[$"Layer_{idx++}_{_posConv.GetType().Name}"] = x.Clone();
+        }
         foreach (var layer in _transformerLayers)
         {
             x = layer.Forward(x);
@@ -733,25 +785,10 @@ public class Wav2Vec2Model<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
         return activations;
     }
 
-    /// <summary>
-    /// Updates model parameters by applying gradient descent.
-    /// </summary>
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        if (!_useNativeMode)
-        {
-            throw new NotSupportedException("Cannot update parameters in ONNX inference mode.");
-        }
-
-        // NeuralNetworkBase.UpdateParameters contract: caller passes NEW
-        // parameter values (post-optimizer-step), NOT raw gradients. The
-        // previous body computed `current − lr · input` then SetParameters,
-        // which on top of Adam's own update produced a double-step that
-        // destabilised training. Forward straight to SetParameters per the
-        // contract — Adam already produced the correct new values.
-        SetParameters(parameters);
-    }
-
+    /// <inheritdoc />
+    /// <remarks>The weights belong to the loaded graph in this mode. The base refuses
+    /// the write on every parameter surface, so the guard is stated once, here.</remarks>
+    protected override bool SupportsParameterMutation => _useNativeMode;
     /// <summary>
     /// Trains the model on a single batch.
     /// </summary>
@@ -778,14 +815,14 @@ public class Wav2Vec2Model<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
             // instead of silently dropping into the default-optimizer
             // fallback (would mask intent and produce mysteriously-different
             // training trajectories). PR #1404 review (CodeRabbit).
-            var gradientOptimizer = _optimizer as IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>
+            var gradientOptimizer = _optimizer
                 ?? throw new InvalidOperationException(
                     "Wav2Vec2Model training requires an optimizer implementing IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>.");
             // Train on the SAME preprocessed feature stream inference runs on (PredictCore ->
             // PreprocessAudio -> Forward). Feeding raw input straight to the tape produced a
             // different-shaped forward than Predict ([1,64,34] vs the preprocessed [.,34]), so the
             // MSE loss shape-mismatched and every training-based invariant failed.
-            TrainWithTape(PreprocessAudio(input), expectedOutput, gradientOptimizer);
+            TrainWithTape(input, expectedOutput, gradientOptimizer);
         }
         finally
         {

@@ -8,6 +8,7 @@ using AiDotNet.Tensors.Helpers;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 
+using AiDotNet.Models.Parameters;
 namespace AiDotNet.Classification.SemiSupervised;
 
 /// <summary>
@@ -70,6 +71,20 @@ namespace AiDotNet.Classification.SemiSupervised;
 [ResearchPaper("Learning with Local and Global Consistency", "https://proceedings.neurips.cc/paper/2003/hash/87682805257e619d49b8e0dfdc14affa-Abstract.html", Year = 2003, Authors = "Dengyong Zhou, Olivier Bousquet, Thomas N. Lal, Jason Weston, Bernhard Scholkopf")]
 public class LabelSpreading<T> : SemiSupervisedClassifierBase<T>
 {
+
+    /// <inheritdoc />
+    /// <remarks>The spread label distributions, as LabelPropagation. PackParameters and UnpackParameters ARE the previous
+    /// GetParameters and SetParameters, renamed rather than rewritten, so the layout is
+    /// byte-for-byte unchanged. What changes is that the COUNT now folds this same
+    /// component instead of ClassifierBase's NumFeatures * NumClasses formula, which
+    /// described the classifier's shape rather than what it serializes.</remarks>
+    protected override void RegisterComponents()
+    {
+        RegisterParameterComponent(new VariableLengthParameterSource<T>(
+            () => PackParameters().Length,
+            PackParameters,
+            UnpackParameters));
+    }
     #region Fields
 
     /// <summary>
@@ -1104,7 +1119,7 @@ public class LabelSpreading<T> : SemiSupervisedClassifierBase<T>
     /// prediction time, so there are no "learned" parameters in the traditional sense.
     /// </para>
     /// </remarks>
-    public Vector<T> GetParameters()
+    private Vector<T> PackParameters()
     {
         // Label Spreading is non-parametric - it stores training data, not learned weights
         return new Vector<T>(0);
@@ -1121,7 +1136,7 @@ public class LabelSpreading<T> : SemiSupervisedClassifierBase<T>
     /// this just creates a new instance with the same configuration.
     /// </para>
     /// </remarks>
-    public IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
+    public override IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
     {
         return new LabelSpreading<T>(_kernel, _maxIterations, _tolerance, _alpha, _random.Next());
     }
@@ -1136,7 +1151,7 @@ public class LabelSpreading<T> : SemiSupervisedClassifierBase<T>
     /// this method does nothing.
     /// </para>
     /// </remarks>
-    public void SetParameters(Vector<T> parameters)
+    private void UnpackParameters(Vector<T> parameters)
     {
         // Non-parametric model - no parameters to set
     }

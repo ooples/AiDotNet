@@ -57,7 +57,7 @@ namespace AiDotNet.Classification.NaiveBayes;
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
     [ResearchPaper("A Comparison of Event Models for Naive Bayes Text Classification", "https://www.cs.cmu.edu/~knigam/papers/multinomial-aaaiws98.pdf")]
-public class CategoricalNaiveBayes<T> : NaiveBayesBase<T>
+public partial class CategoricalNaiveBayes<T> : NaiveBayesBase<T>
 {
     /// <summary>
     /// Number of categories per feature.

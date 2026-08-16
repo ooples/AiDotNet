@@ -359,6 +359,23 @@ public class EmbeddingLayersIntegrationTests
         Assert.Equal(0, parameters.Length);
     }
 
+    [Fact(Timeout = 120000)]
+    public async Task PositionalEncodingLayer_DynamicResize_DoesNotChangeParameterSurface()
+    {
+        // Arrange - both dimensions exceed the constructor capacity so Forward replaces the
+        // deterministic encoding cache. That replacement must not alter checkpoint identity.
+        var layer = new PositionalEncodingLayer<float>(maxSequenceLength: 4, embeddingSize: 6);
+        var input = CreateRandomTensor<float>([7, 8]);
+
+        // Act
+        var output = layer.Forward(input);
+
+        // Assert
+        Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
+        Assert.Equal(0, layer.ParameterCount);
+        Assert.Equal(0, layer.GetParameters().Length);
+    }
+
     #endregion
 
     #region Edge Cases

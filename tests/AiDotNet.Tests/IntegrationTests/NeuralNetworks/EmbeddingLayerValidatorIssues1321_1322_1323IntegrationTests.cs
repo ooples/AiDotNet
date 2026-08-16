@@ -1,4 +1,5 @@
 using AiDotNet.ActivationFunctions;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.FitDetectors;
 using AiDotNet.Helpers;
@@ -573,7 +574,9 @@ public class EmbeddingLayerValidatorIssues1321_1322_1323IntegrationTests
     /// review on PR #1324) is what's recognising it — not the
     /// category-based path.
     /// </summary>
-    private sealed class NameOnlyEmbeddingLayer : LayerBase<float>
+    [TensorLayout(TensorAxis.Time, Direction = TensorLayoutDirection.Input)]
+    [TensorLayout(TensorAxis.Classes, Direction = TensorLayoutDirection.Output)]
+    private sealed class NameOnlyEmbeddingLayer : LayerBase<float>, IShapeContract
     {
         private readonly int _vocabSize;
 
@@ -590,7 +593,12 @@ public class EmbeddingLayerValidatorIssues1321_1322_1323IntegrationTests
         // this layer would fail #1321's outer-input-size validation.
         public override LayerCategory GetLayerCategory() => LayerCategory.Other;
 
-        public override Tensor<float> Forward(Tensor<float> input)
+        public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank) =>
+            inputRank == 1
+                ? [new OutputAxisContract(TensorAxis.Classes, AxisRelation.Fixed(_vocabSize))]
+                : null;
+
+        protected override Tensor<float> ForwardTraced(Tensor<float> input)
             => new Tensor<float>([_vocabSize]);
 
         public override void UpdateParameters(float learningRate) { }
@@ -616,6 +624,10 @@ public class EmbeddingLayerValidatorIssues1321_1322_1323IntegrationTests
 
         public int[] GetInputShape() => [1];
         public int[] GetOutputShape() => [_vocabSize];
+
+        /// <inheritdoc/>
+        public AiDotNet.NeuralNetworks.Layers.LayerShape GetOutputLayerShape()
+            => new AiDotNet.NeuralNetworks.Layers.LayerShape(GetOutputShape());
         public bool IsShapeResolved => true;
         public Tensor<float>? GetWeights() => null;
         public Tensor<float>? GetBiases() => null;
@@ -687,7 +699,12 @@ public class EmbeddingLayerValidatorIssues1321_1322_1323IntegrationTests
         }
     }
 
-    private sealed class CustomTokenEmbeddingLayer : LayerBase<float>
+    [TensorLayout(TensorAxis.Time, Direction = TensorLayoutDirection.Input)]
+    [TensorLayout(TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
+    [TensorLayout(TensorAxis.Batch, TensorAxis.Time, Direction = TensorLayoutDirection.Input)]
+    [TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+        Direction = TensorLayoutDirection.Output)]
+    private sealed class CustomTokenEmbeddingLayer : LayerBase<float>, IShapeContract
     {
         private readonly int _vocabSize;
         private readonly int _embeddingDim;
@@ -703,7 +720,23 @@ public class EmbeddingLayerValidatorIssues1321_1322_1323IntegrationTests
 
         public override LayerCategory GetLayerCategory() => LayerCategory.Embedding;
 
-        public override Tensor<float> Forward(Tensor<float> input)
+        public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank) => inputRank switch
+        {
+            1 =>
+            [
+                new OutputAxisContract(TensorAxis.Time, AxisRelation.Same(TensorAxis.Time)),
+                new OutputAxisContract(TensorAxis.Features, AxisRelation.Fixed(_embeddingDim))
+            ],
+            2 =>
+            [
+                new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+                new OutputAxisContract(TensorAxis.Time, AxisRelation.Same(TensorAxis.Time)),
+                new OutputAxisContract(TensorAxis.Features, AxisRelation.Fixed(_embeddingDim))
+            ],
+            _ => null
+        };
+
+        protected override Tensor<float> ForwardTraced(Tensor<float> input)
         {
             // Stub forward: return zeros of the per-token embedding shape
             // for any-rank input. Test cares about validator passthrough,

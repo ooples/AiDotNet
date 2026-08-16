@@ -47,6 +47,15 @@ namespace AiDotNet.Audio.Generation;
 [ResearchPaper("Neural Codec Language Models are Zero-Shot Text to Speech Synthesizers", "https://arxiv.org/abs/2301.02111", Year = 2023, Authors = "Chengyi Wang, Sanyuan Chen, Yu Wu, Ziqiang Zhang, Long Zhou, Shujie Liu, Zhuo Chen, Yanqing Liu, Huaming Wang, Jinyu Li, Lei He, Sheng Zhao, Furu Wei")]
 public class VALLE<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// Traced from output construction: PredictCore folds over Layers, and the last layer
+    /// CreateDefaultVALLELayers emits is the projection to the first codebook,
+    /// <c>FullyConnectedLayer&lt;T&gt;(codebookSize)</c>, wired from <c>_options.CodebookSize</c> (1024).
+    /// Not PhonemeVocabSize (512) - phonemes are the input side of the AR stage.
+    /// </remarks>
+    protected override int OutputFeatureWidth => _options.CodebookSize;
+
     #region Fields
 
     private readonly VALLEOptions _options;
@@ -259,7 +268,11 @@ public class VALLE<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expected);
+            // Pass the configured optimizer through. The two-argument overload left _optimizer
+            // assigned and never read, so training silently used the framework default and any
+            // caller-supplied optimizer was discarded. Same dead-dependency shape already fixed on
+            // MegaTTS, LiteDVDNet, LLMTime and InstructBLIP.
+            TrainWithTape(input, expected, _optimizer);
         }
         finally
         {
@@ -267,12 +280,11 @@ public class VALLE<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
         }
     }
 
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        if (!_useNativeMode) throw new NotSupportedException("ONNX mode.");
-        int idx = 0; foreach (var l in Layers) { int c = (int)l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; }
-    }
-
+    /// <inheritdoc />
+    /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
+    /// write on every parameter surface, so the guard is stated once here instead of being
+    /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
+    protected override bool SupportsParameterMutation => _useNativeMode;
     protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio) => rawAudio;
     protected override Tensor<T> PostprocessOutput(Tensor<T> o) => o;
 

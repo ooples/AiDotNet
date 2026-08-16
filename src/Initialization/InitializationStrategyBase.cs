@@ -93,7 +93,7 @@ public abstract class InitializationStrategyBase<T> : IInitializationStrategy<T>
     protected void XavierUniformInitialize(Tensor<T> weights, int fanIn, int fanOut)
     {
         var limit = Math.Sqrt(6.0 / (fanIn + fanOut));
-        var span = weights.Data.Span;
+        var span = weights.AsWritableSpan();
         var rng = Random;
 
         // Fast path: avoid NumOps.FromDouble virtual dispatch for double/float
@@ -141,19 +141,28 @@ public abstract class InitializationStrategyBase<T> : IInitializationStrategy<T>
     {
         var stddev = Math.Sqrt(2.0 / (fanIn + fanOut));
         var clipBound = 2.0 * stddev;
-        var span = weights.Data.Span;
+        var span = weights.AsWritableSpan();
 
         if (typeof(T) == typeof(double))
         {
-            var rawArr = (double[])(object)weights.GetDataArray();
+            // GetDataArray() may materialize a COPY for an ArrayPool-padded tensor.
+            // Prefer the actual zero-offset live backing so foundation-scale
+            // initialization keeps its parallel array fill without allocating a
+            // second model-sized buffer. Views fall back to a temporary followed
+            // by the tensor's stride-aware CopyFromArray contract.
+            var rawArr = (double[]?)(object?)weights.GetLiveBackingArrayAllowingPaddingOrNull()
+                ?? new double[weights.Length];
             XavierFillDouble(rawArr, 0, weights.Length, stddev, clipBound);
+            CopyDoubleToTensorIfDetached(rawArr, weights);
             return;
         }
 
         if (typeof(T) == typeof(float))
         {
-            var rawArr = (float[])(object)weights.GetDataArray();
+            var rawArr = (float[]?)(object?)weights.GetLiveBackingArrayAllowingPaddingOrNull()
+                ?? new float[weights.Length];
             XavierFillFloat(rawArr, 0, weights.Length, stddev, clipBound);
+            CopyFloatToTensorIfDetached(rawArr, weights);
             return;
         }
 
@@ -186,21 +195,25 @@ public abstract class InitializationStrategyBase<T> : IInitializationStrategy<T>
 
         if (typeof(T) == typeof(double))
         {
-            var rawArr = (double[])(object)weights.GetDataArray();
+            var rawArr = (double[]?)(object?)weights.GetLiveBackingArrayAllowingPaddingOrNull()
+                ?? new double[weights.Length];
             UniformFillDouble(rawArr, 0, weights.Length, limit);
+            CopyDoubleToTensorIfDetached(rawArr, weights);
             return;
         }
 
         if (typeof(T) == typeof(float))
         {
-            var rawArr = (float[])(object)weights.GetDataArray();
+            var rawArr = (float[]?)(object?)weights.GetLiveBackingArrayAllowingPaddingOrNull()
+                ?? new float[weights.Length];
             UniformFillFloat(rawArr, 0, weights.Length, limit);
+            CopyFloatToTensorIfDetached(rawArr, weights);
             return;
         }
 
         // Generic-T fallback (rare — only hit for custom T like Half / Decimal).
         // Single-threaded but still through the (locked) shared Random.
-        var span = weights.Data.Span;
+        var span = weights.AsWritableSpan();
         var rng = Random;
         for (int i = 0; i < span.Length; i++)
             span[i] = NumOps.FromDouble(rng.NextDouble() * 2 * limit - limit);
@@ -233,20 +246,24 @@ public abstract class InitializationStrategyBase<T> : IInitializationStrategy<T>
 
         if (typeof(T) == typeof(double))
         {
-            var rawArr = (double[])(object)weights.GetDataArray();
+            var rawArr = (double[]?)(object?)weights.GetLiveBackingArrayAllowingPaddingOrNull()
+                ?? new double[weights.Length];
             XavierFillDouble(rawArr, 0, weights.Length, stddev, clipBound);
+            CopyDoubleToTensorIfDetached(rawArr, weights);
             return;
         }
 
         if (typeof(T) == typeof(float))
         {
-            var rawArr = (float[])(object)weights.GetDataArray();
+            var rawArr = (float[]?)(object?)weights.GetLiveBackingArrayAllowingPaddingOrNull()
+                ?? new float[weights.Length];
             XavierFillFloat(rawArr, 0, weights.Length, stddev, clipBound);
+            CopyFloatToTensorIfDetached(rawArr, weights);
             return;
         }
 
         // Generic-T fallback — single-threaded sequential Box-Muller.
-        var span = weights.Data.Span;
+        var span = weights.AsWritableSpan();
         for (int i = 0; i < span.Length; i++)
             span[i] = NumOps.FromDouble(SampleGaussian(0, stddev));
     }
@@ -258,6 +275,20 @@ public abstract class InitializationStrategyBase<T> : IInitializationStrategy<T>
     protected void ZeroInitializeBiases(Tensor<T> biases)
     {
         biases.AsWritableSpan().Clear();
+    }
+
+    private static void CopyDoubleToTensorIfDetached(double[] source, Tensor<T> destination)
+    {
+        var live = destination.GetLiveBackingArrayAllowingPaddingOrNull();
+        if (live is not null && ReferenceEquals(source, live)) return;
+        destination.CopyFromArray((T[])(object)source);
+    }
+
+    private static void CopyFloatToTensorIfDetached(float[] source, Tensor<T> destination)
+    {
+        var live = destination.GetLiveBackingArrayAllowingPaddingOrNull();
+        if (live is not null && ReferenceEquals(source, live)) return;
+        destination.CopyFromArray((T[])(object)source);
     }
 
     /// <summary>

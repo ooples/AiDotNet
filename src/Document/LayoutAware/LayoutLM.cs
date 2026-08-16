@@ -53,7 +53,7 @@ namespace AiDotNet.Document.LayoutAware;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("LayoutLM: Pre-training of Text and Layout for Document Image Understanding", "https://doi.org/10.1145/3394486.3403172", Year = 2020, Authors = "Yiheng Xu, Minghao Li, Lei Cui, Shaohan Huang, Furu Wei, Ming Zhou")]
-public class LayoutLM<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>
+public partial class LayoutLM<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>
 {
     private readonly LayoutLMOptions _options;
 
@@ -65,7 +65,7 @@ public class LayoutLM<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>
     private readonly bool _useNativeMode;
     private readonly InferenceSession? _onnxSession;
     private readonly ITokenizer _tokenizer;
-    private readonly IOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private readonly int _hiddenDim;
     private readonly int _numLayers;
     private readonly int _numHeads;
@@ -78,13 +78,9 @@ public class LayoutLM<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>
     private readonly List<ILayer<T>> _transformerLayers = [];
     private readonly List<ILayer<T>> _classificationLayers = [];
 
-    // Learnable embeddings
-    private Tensor<T>? _wordEmbeddings;
-    private Tensor<T>? _positionEmbeddings;
-    private Tensor<T>? _position2DXEmbeddings;
-    private Tensor<T>? _position2DYEmbeddings;
-    private Tensor<T>? _position2DWEmbeddings;
-    private Tensor<T>? _position2DHEmbeddings;
+    // The word / 1D-position / 2D-layout embedding tables used to be six model fields here. They
+    // are now inside the LayoutEmbeddingLayer at the front of the stack, where the forward pass
+    // actually reads them -- see LayerHelper.CreateDefaultLayoutLMLayers.
 
     #endregion
 
@@ -140,7 +136,7 @@ public class LayoutLM<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>
         int numHeads = 12,
         int vocabSize = 30522,
         int maxPosition2D = 1024,
-        IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         LayoutLMOptions? options = null)
         : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
@@ -210,7 +206,7 @@ public class LayoutLM<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>
         int numHeads = 12,
         int vocabSize = 30522,
         int maxPosition2D = 1024,
-        IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         LayoutLMOptions? options = null)
         : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
@@ -238,7 +234,6 @@ public class LayoutLM<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>
         _tokenizer = tokenizer ?? LanguageModelTokenizerFactory.CreateForBackbone(LanguageModelBackbone.OPT);
 
         InitializeLayers();
-        InitializeEmbeddings();
     }
 
     #endregion
@@ -266,37 +261,8 @@ public class LayoutLM<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>
             numHeads: _numHeads,
             vocabSize: _vocabSize,
             maxSequenceLength: MaxSequenceLength,
-            numClasses: _numClasses));
-    }
-
-    private void InitializeEmbeddings()
-    {
-        var random = RandomHelper.CreateSeededRandom(42);
-
-        _wordEmbeddings = Tensor<T>.CreateDefault([_vocabSize, _hiddenDim], NumOps.Zero);
-        _positionEmbeddings = Tensor<T>.CreateDefault([MaxSequenceLength, _hiddenDim], NumOps.Zero);
-        _position2DXEmbeddings = Tensor<T>.CreateDefault([_maxPosition2D, _hiddenDim], NumOps.Zero);
-        _position2DYEmbeddings = Tensor<T>.CreateDefault([_maxPosition2D, _hiddenDim], NumOps.Zero);
-        _position2DWEmbeddings = Tensor<T>.CreateDefault([_maxPosition2D, _hiddenDim], NumOps.Zero);
-        _position2DHEmbeddings = Tensor<T>.CreateDefault([_maxPosition2D, _hiddenDim], NumOps.Zero);
-
-        InitializeWithSmallRandomValues(_wordEmbeddings, random, 0.02);
-        InitializeWithSmallRandomValues(_positionEmbeddings, random, 0.02);
-        InitializeWithSmallRandomValues(_position2DXEmbeddings, random, 0.02);
-        InitializeWithSmallRandomValues(_position2DYEmbeddings, random, 0.02);
-        InitializeWithSmallRandomValues(_position2DWEmbeddings, random, 0.02);
-        InitializeWithSmallRandomValues(_position2DHEmbeddings, random, 0.02);
-    }
-
-    private void InitializeWithSmallRandomValues(Tensor<T> tensor, Random random, double stdDev)
-    {
-        for (int i = 0; i < tensor.Data.Length; i++)
-        {
-            double u1 = 1.0 - random.NextDouble();
-            double u2 = 1.0 - random.NextDouble();
-            double randStdNormal = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Sin(2.0 * Math.PI * u2);
-            tensor.Data.Span[i] = NumOps.FromDouble(randStdNormal * stdDev);
-        }
+            numClasses: _numClasses,
+            maxPosition2D: _maxPosition2D));
     }
 
     #endregion
@@ -549,7 +515,7 @@ public class LayoutLM<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>
             // instead of silently dropping into the default-optimizer
             // fallback (would mask intent and produce mysteriously-different
             // training trajectories). PR #1404 review (CodeRabbit).
-            var gradientOptimizer = _optimizer as IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>
+            var gradientOptimizer = _optimizer
                 ?? throw new InvalidOperationException(
                     "LayoutLM training requires an optimizer implementing IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>.");
             TrainWithTape(input, expectedOutput, gradientOptimizer);
@@ -560,21 +526,18 @@ public class LayoutLM<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>
         }
     }
 
-    /// <inheritdoc/>
-    public override void UpdateParameters(Vector<T> gradients)
-    {
-        if (!_useNativeMode)
-            throw new NotSupportedException("Parameter updates not supported in ONNX mode.");
+    // UpdateParameters applied a GRADIENT STEP, but its one-argument form is the value setter and every caller passes values -- the override corrupted the model. Removed under AIDN082.
 
-        var currentParams = GetParameters();
-        T lr = NumOps.FromDouble(0.00005);
-
-        
-        currentParams = Engine.Subtract(currentParams, Engine.Multiply(gradients, lr));
-
-        SetParameters(currentParams);
-    }
-
+    /// <summary>
+    /// Parameters cannot be written while the model is backed by a loaded ONNX graph: the weights
+    /// belong to that graph, not to this instance.
+    /// </summary>
+    /// <remarks>
+    /// Replaces a hand-written throw that used to sit inside UpdateParameters. The base checks this
+    /// on every mutating entry point rather than the one member the throw happened to guard, and
+    /// reading -- ParameterCount and GetParameters -- stays available either way.
+    /// </remarks>
+    protected override bool SupportsParameterMutation => _useNativeMode;
     private Vector<T> CollectGradients()
     {
         var grads = new List<T>();

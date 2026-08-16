@@ -65,7 +65,7 @@ namespace AiDotNet.Finance.Forecasting.Neural;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("N-BEATS: Neural Basis Expansion Analysis for Interpretable Time Series Forecasting", "https://arxiv.org/abs/1905.10437", Year = 2020, Authors = "Boris N. Oreshkin, Dmitri Carpov, Nicolas Chapados, Yoshua Bengio")]
-public class NBEATSFinance<T> : ForecastingModelBase<T>
+public partial class NBEATSFinance<T> : ForecastingModelBase<T>
 {
     #region Execution Mode
 
@@ -107,6 +107,7 @@ public class NBEATSFinance<T> : ForecastingModelBase<T>
     /// backcast and forecast heads.
     /// </para>
     /// </remarks>
+    [Scratch]
     private List<Tensor<T>> _cachedBlockHiddenOutputs = [];
 
     /// <summary>
@@ -226,7 +227,7 @@ public class NBEATSFinance<T> : ForecastingModelBase<T>
         NBEATSModelOptions<T>? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null)
-        : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>(), 1.0)
+        : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>(), options?.GradientClipNorm ?? 1.0)
     {
         if (string.IsNullOrWhiteSpace(onnxModelPath))
             throw new ArgumentException("ONNX model path cannot be null or empty.", nameof(onnxModelPath));
@@ -242,7 +243,7 @@ public class NBEATSFinance<T> : ForecastingModelBase<T>
         OnnxSession = new InferenceSession(onnxModelPath);
         OnnxModelPath = onnxModelPath;
 
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? CreateDefaultOptimizer();
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
 
         _lookbackWindow = options.LookbackWindow;
@@ -277,7 +278,7 @@ public class NBEATSFinance<T> : ForecastingModelBase<T>
         NBEATSModelOptions<T>? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null)
-        : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>(), 1.0)
+        : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>(), options?.GradientClipNorm ?? 1.0)
     {
         options ??= new NBEATSModelOptions<T>();
         _options = options;
@@ -288,7 +289,7 @@ public class NBEATSFinance<T> : ForecastingModelBase<T>
         OnnxSession = null;
         OnnxModelPath = null;
 
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? CreateDefaultOptimizer();
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
 
         _lookbackWindow = options.LookbackWindow;
@@ -457,31 +458,114 @@ public class NBEATSFinance<T> : ForecastingModelBase<T>
         if (!_useNativeMode)
             throw new InvalidOperationException("Training is only supported in native mode.");
 
-        base.Train(input, target);
+        SetTrainingMode(true);
+        try
+        {
+            TrainWithTape(input, target, _optimizer);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
     }
 
     /// <summary>
-    /// Training-mode forward: calls <see cref="Forward"/> directly so
-    /// block-level dropout in N-BEATS fully-connected stacks stays
-    /// active during backprop. Default path goes through
-    /// <c>ForecastNative</c>, which disables training-mode behavior.
+    /// Training-mode forward that keeps the residual subtraction and forecast
+    /// accumulation connected to the autodiff tape. The inference path uses
+    /// span-based helpers for those operations, which intentionally avoid tape
+    /// allocation but cannot be used while training.
     /// </summary>
     protected override Tensor<T> ForwardNativeForTraining(Tensor<T> input)
     {
-        return Forward(input);
+        if (input.Rank < 1)
+            throw new ArgumentException("Input tensor cannot be empty.", nameof(input));
+
+        var normalizedInput = input;
+        if (input.Rank == 1)
+        {
+            normalizedInput = Engine.Reshape(input, new[] { 1, input.Shape[0] });
+        }
+        else if (input.Rank == 3 && input.Shape[2] == 1)
+        {
+            normalizedInput = Engine.Reshape(input, new[] { input.Shape[0], input.Shape[1] });
+        }
+        else if (input.Rank == 3)
+        {
+            throw new ArgumentException(
+                $"Expected univariate input with feature dimension 1, but got {input.Shape[2]}.",
+                nameof(input));
+        }
+        else if (input.Rank > 3)
+        {
+            if (input.Shape[0] == 0)
+                throw new ArgumentException("Input tensor cannot have zero batch size.", nameof(input));
+
+            normalizedInput = Engine.Reshape(
+                input,
+                new[] { input.Shape[0], input.Length / input.Shape[0] });
+        }
+
+        if (normalizedInput.Length == 0 || normalizedInput.Shape[0] == 0)
+            throw new ArgumentException("Input tensor cannot be empty.", nameof(input));
+        if (normalizedInput.Shape[1] != _lookbackWindow)
+            throw new ArgumentException(
+                $"Expected lookback window of {_lookbackWindow}, but got {normalizedInput.Shape[1]}.",
+                nameof(input));
+
+        _cachedBlockHiddenOutputs.Clear();
+        var residual = normalizedInput;
+        Tensor<T>? totalForecast = null;
+
+        foreach (var blockLayers in _blocks)
+        {
+            if (blockLayers.Count == 0)
+            {
+                _cachedBlockHiddenOutputs.Add(new Tensor<T>(new[] { 1 }));
+                continue;
+            }
+
+            var current = residual;
+            int numHidden = blockLayers.Count - 2;
+            for (int i = 0; i < numHidden && i < blockLayers.Count; i++)
+                current = blockLayers[i].Forward(current);
+
+            _cachedBlockHiddenOutputs.Add(current);
+            Tensor<T>? backcast = numHidden < blockLayers.Count
+                ? blockLayers[numHidden].Forward(current)
+                : null;
+            Tensor<T>? forecast = numHidden + 1 < blockLayers.Count
+                ? blockLayers[numHidden + 1].Forward(current)
+                : null;
+
+            if (backcast is not null)
+            {
+                if (!residual._shape.SequenceEqual(backcast._shape) && residual.Length == backcast.Length)
+                    backcast = Engine.Reshape(backcast, residual._shape);
+                residual = Engine.TensorSubtract(residual, backcast);
+            }
+
+            if (forecast is not null)
+            {
+                if (totalForecast is null)
+                {
+                    totalForecast = forecast;
+                }
+                else
+                {
+                    if (!totalForecast._shape.SequenceEqual(forecast._shape) && totalForecast.Length == forecast.Length)
+                        forecast = Engine.Reshape(forecast, totalForecast._shape);
+                    totalForecast = Engine.TensorAdd(totalForecast, forecast);
+                }
+            }
+        }
+
+        totalForecast ??= new Tensor<T>(new[] { normalizedInput.Shape[0], _forecastHorizon });
+        if (_outputProjection is not null)
+            totalForecast = _outputProjection.Forward(totalForecast);
+        return totalForecast;
     }
 
-    /// <inheritdoc/>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the NBEATSFinance model, UpdateParameters updates internal parameters or state. This keeps the NBEATSFinance architecture aligned with the latest values.
-    /// </para>
-    /// </remarks>
-    public override void UpdateParameters(Vector<T> gradients)
-    {
-        // Parameters are updated through the optimizer in Train method
-    }
-
+    // UpdateParameters folded one enumeration the base already folds. Removed under AIDN082.
     /// <inheritdoc/>
     /// <remarks>
     /// <para>
@@ -520,20 +604,27 @@ public class NBEATSFinance<T> : ForecastingModelBase<T>
     /// </remarks>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
-        var options = new NBEATSModelOptions<T>
-        {
-            LookbackWindow = _lookbackWindow,
-            ForecastHorizon = _forecastHorizon,
-            NumStacks = _numStacks,
-            NumBlocksPerStack = _numBlocksPerStack,
-            HiddenLayerSize = _hiddenSize,
-            NumHiddenLayers = _numHiddenLayers,
-            PolynomialDegree = _polynomialDegree,
-            UseInterpretableBasis = _useInterpretableBasis,
-            ShareWeightsInStack = _shareWeightsInStack
-        };
+        return new NBEATSFinance<T>(Architecture, new NBEATSModelOptions<T>(_options));
+    }
 
-        return new NBEATSFinance<T>(Architecture, options);
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreateDefaultOptimizer()
+    {
+        bool clipGradients = _options.GradientClipNorm > 0.0;
+        return new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                BatchSize = _options.BatchSize,
+                InitialLearningRate = _options.LearningRate,
+                Beta1 = _options.OptimizerBeta1,
+                Beta2 = _options.OptimizerBeta2,
+                Epsilon = _options.OptimizerEpsilon,
+                UseAdaptiveLearningRate = false,
+                UseAdaptiveBetas = false,
+                UseAMSGrad = false,
+                EnableGradientClipping = clipGradients,
+                MaxGradientNorm = _options.GradientClipNorm,
+            });
     }
 
     /// <summary>

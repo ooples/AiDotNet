@@ -37,7 +37,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Samba: Simple Hybrid State Space Models for Efficient Unlimited Context Language Modeling", "https://arxiv.org/abs/2406.07522", Year = 2024, Authors = "Liliang Ren, Yang Liu, Yadong Lu, Yelong Shen, Chen Liang, Weizhu Chen")]
-public class SambaLanguageModel<T> : NeuralNetworkBase<T>
+public class SambaLanguageModel<T> : TokenLanguageModelLayoutBase<T>
 {
     private readonly SambaOptions _options;
     private readonly int _vocabSize;
@@ -75,7 +75,17 @@ public class SambaLanguageModel<T> : NeuralNetworkBase<T>
         ILossFunction<T>? lossFunction = null,
         SambaOptions? options = null)
         : base(architecture,
-            lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(NeuralNetworkTaskType.TextGeneration))
+            // Samba's LM head emits RAW LOGITS (DenseLayer with no activation, see
+            // LayerHelper.CreateSambaLayers), so the loss must be cross-entropy-with-logits (fused
+            // log-softmax + NLL, == PyTorch nn.CrossEntropyLoss) — the same pairing
+            // RWKV4LanguageModel already uses. The TextGeneration DEFAULT is CategoricalCrossEntropy,
+            // which expects softmax PROBABILITIES and takes log(predicted); fed un-normalized logits
+            // it drives training in a degenerate direction, because the only way to reduce
+            // -sum(target*log(clamp(logit,1e-7,1))) is to push every logit past the clamp CEILING.
+            // Measured on the Generated Q-S shard before this fix: the dense-target probe "descended"
+            // from 17677.87 to -0.0000 — i.e. it hit log(1)=0 by saturating the clamp rather than by
+            // learning a distribution. With this pairing the same probe descends legitimately.
+            lossFunction ?? new AiDotNet.LossFunctions.CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new SambaOptions();
         Options = _options;
@@ -123,21 +133,7 @@ public class SambaLanguageModel<T> : NeuralNetworkBase<T>
         });
     }
 
-    public override void UpdateParameters(Vector<T> gradients)
-    {
-        if (gradients.Length != ParameterCount)
-        {
-            throw new ArgumentException(
-                $"Expected {ParameterCount} gradients, but got {gradients.Length}",
-                nameof(gradients));
-        }
-
-        var currentParams = GetParameters();
-        T learningRate = NumOps.FromDouble(0.001);
-        currentParams = Engine.Subtract(currentParams, Engine.Multiply(gradients, learningRate));
-        SetParameters(currentParams);
-    }
-
+    // UpdateParameters applied a GRADIENT STEP, but its one-argument form is the value setter and every caller passes values -- the override corrupted the model. Removed under AIDN082.
     public override ModelMetadata<T> GetModelMetadata()
     {
         return new ModelMetadata<T>

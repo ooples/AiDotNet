@@ -63,8 +63,19 @@ namespace AiDotNet.Audio.LanguageIdentification;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("ECAPA-TDNN: Emphasized Channel Attention, Propagation and Aggregation in TDNN Based Speaker Verification", "https://arxiv.org/abs/2005.07143", Year = 2020, Authors = "Brecht Desplanques, Jenthe Thienpondt, Kris Demuynck")]
-public class ECAPATDNNLanguageIdentifier<T> : AudioNeuralNetworkBase<T>, ILanguageIdentifier<T>
+public partial class ECAPATDNNLanguageIdentifier<T> : AudioNeuralNetworkBase<T>, ILanguageIdentifier<T>
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// Traced from output construction: PredictCore returns ForwardNative, whose last step is
+    /// <c>_classifierLayer.Forward(...)</c>. That layer is built in InitializeNativeLayers as
+    /// <c>new DenseLayer&lt;T&gt;(numLanguages)</c>, and numLanguages is the size of the language
+    /// mapping - the same count InitializeLayers passes as <c>numLanguages</c> to the LayerHelper
+    /// stack. A class count, not an embedding size: EmbeddingDimension is the pooling width one
+    /// layer earlier.
+    /// </remarks>
+    protected override int OutputFeatureWidth => _languageIdToCode.Count;
+
     #region Fields
 
     private readonly INumericOperations<T> _numOps;
@@ -87,6 +98,7 @@ public class ECAPATDNNLanguageIdentifier<T> : AudioNeuralNetworkBase<T>, ILangua
 
     // Cached values for proper gradient flow in MFA
     private readonly List<int> _blockOutputLengths = [];
+    [Scratch]
     private Tensor<T>? _lastTdnnOutput;
 
     // Language mapping
@@ -436,24 +448,7 @@ public class ECAPATDNNLanguageIdentifier<T> : AudioNeuralNetworkBase<T>, ILangua
         SetTrainingMode(false);
     }
 
-    /// <inheritdoc/>
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        int offset = 0;
-        foreach (var layer in GetAllLayers())
-        {
-            var layerParams = layer.GetParameters();
-            var newParams = parameters.Slice(offset, layerParams.Length);
-            // Apply actual parameter updates from optimizer
-            for (int i = 0; i < layerParams.Length; i++)
-            {
-                layerParams[i] = newParams[i];
-            }
-            layer.SetParameters(layerParams);
-            offset += layerParams.Length;
-        }
-    }
-
+    // UpdateParameters restated the base verbatim; ModelBase routes it to SetParameters.
     /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()
     {

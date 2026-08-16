@@ -4,6 +4,7 @@ using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using Newtonsoft.Json;
 
+using AiDotNet.Models.Parameters;
 namespace AiDotNet.SurvivalAnalysis;
 
 /// <summary>
@@ -53,6 +54,29 @@ namespace AiDotNet.SurvivalAnalysis;
 [ResearchPaper("Survival Analysis: Techniques for Censored and Truncated Data", "https://doi.org/10.1007/978-1-4757-3294-8")]
 public class WeibullAFT<T> : SurvivalModelBase<T>
 {
+
+    /// <inheritdoc />
+    /// <remarks>Intercept, scale, then the covariate coefficients -- the layout the hand-written pair used. The coefficients are registered LAST because they are the piece whose width the data decides: a fresh model has none and reports just the two scalars, and a restore sizes them from whatever follows those two.</remarks>
+    protected override void RegisterComponents()
+    {
+        RegisterParameterComponent(
+            "parameters/00000000-intercept",
+            new ScalarParameterSource<T>(() => Intercept, v => Intercept = v),
+            ParameterSlotRole.LearnedState,
+            ParameterAvailability.Fit);
+        RegisterParameterComponent(
+            "parameters/00000001-scale",
+            new ScalarParameterSource<T>(() => Scale, v => Scale = v),
+            ParameterSlotRole.LearnedState,
+            ParameterAvailability.Fit);
+        RegisterParameterComponent(
+            "parameters/00000002-coefficients",
+            new VectorFieldParameterSource<T>(
+                () => Coefficients,
+                value => Coefficients = value),
+            ParameterSlotRole.LearnedState,
+            ParameterAvailability.Fit);
+    }
     /// <summary>
     /// Gets the regression coefficients (β).
     /// </summary>
@@ -374,37 +398,6 @@ public class WeibullAFT<T> : SurvivalModelBase<T>
         }
 
         return result;
-    }
-
-    /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        if (Coefficients is null)
-            return new Vector<T>(2); // Just intercept and scale
-
-        var parameters = new Vector<T>(Coefficients.Length + 2);
-        parameters[0] = Intercept;
-        parameters[1] = Scale;
-        for (int i = 0; i < Coefficients.Length; i++)
-            parameters[i + 2] = Coefficients[i];
-
-        return parameters;
-    }
-
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (parameters.Length < 2) return;
-
-        Intercept = parameters[0];
-        Scale = parameters[1];
-
-        if (parameters.Length > 2)
-        {
-            Coefficients = new Vector<T>(parameters.Length - 2);
-            for (int i = 0; i < Coefficients.Length; i++)
-                Coefficients[i] = parameters[i + 2];
-        }
     }
 
     /// <inheritdoc />

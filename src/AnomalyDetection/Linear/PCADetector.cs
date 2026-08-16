@@ -43,7 +43,7 @@ namespace AiDotNet.AnomalyDetection.Linear;
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
     [ResearchPaper("A Geometric Framework for Unsupervised Anomaly Detection", "https://doi.org/10.1007/978-1-4615-0755-0")]
-public class PCADetector<T> : AnomalyDetectorBase<T>
+public partial class PCADetector<T> : AnomalyDetectorBase<T>
 {
     /// <summary>Eigenvalues below this threshold are treated as zero to avoid division by near-zero values in Mahalanobis distance.</summary>
     private const double EigenvalueFloor = 1e-10;
@@ -51,10 +51,12 @@ public class PCADetector<T> : AnomalyDetectorBase<T>
     private readonly int? _nComponents;
     private readonly double _varianceThreshold;
     private int _fittedComponents;
+    [Buffer]
     private Vector<T>? _mean;
     private Vector<T> FittedMean => _mean ?? throw new InvalidOperationException("PCADetector not fitted. Call Fit() first.");
     private Matrix<T>? _components;
     private Matrix<T> FittedComponents => _components ?? throw new InvalidOperationException("PCADetector not fitted. Call Fit() first.");
+    [Buffer]
     private Vector<T>? _explainedVariance;
     private Vector<T> FittedExplainedVariance => _explainedVariance ?? throw new InvalidOperationException("PCADetector not fitted. Call Fit() first.");
 

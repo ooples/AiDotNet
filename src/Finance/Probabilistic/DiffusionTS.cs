@@ -80,8 +80,8 @@ namespace AiDotNet.Finance.Probabilistic;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.VeryHigh)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("Diffusion-TS: Interpretable Diffusion for General Time Series Generation", "https://arxiv.org/abs/2303.01164", Year = 2024, Authors = "Xinyu Yuan, Yan Qiao")]
-public class DiffusionTS<T> : ForecastingModelBase<T>
+[ResearchPaper("Diffusion-TS: Interpretable Diffusion for General Time Series Generation", "https://arxiv.org/abs/2403.01742", Year = 2024, Authors = "Xinyu Yuan, Yan Qiao")]
+public partial class DiffusionTS<T> : ForecastingModelBase<T>
 {
     #region Execution Mode
     private readonly bool _useNativeMode;
@@ -557,20 +557,8 @@ public class DiffusionTS<T> : ForecastingModelBase<T>
         return x;
     }
 
-    /// <summary>
-    /// Updates parameters using the provided gradients.
-    /// </summary>
-    /// <param name="gradients">Gradient vector for parameter updates.</param>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Parameters are updated through the optimizer in the
-    /// base Train() → TrainWithTape path. This method exists for interface compliance.
-    /// </para>
-    /// </remarks>
-    public override void UpdateParameters(Vector<T> gradients)
-    {
-        // Parameters are updated through the optimizer in the base Train() → TrainWithTape path.
-    }
-
+    // UpdateParameters was an empty override, silently dropping every restore. The base
+    // distributes the vector over the declared enumeration.
     /// <summary>
     /// Gets metadata about the DiffusionTS model.
     /// </summary>

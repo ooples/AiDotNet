@@ -103,7 +103,16 @@ public class VinVL<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionModel<T
     {
         _options = options ?? new VinVLOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        // VinVL trains Oscar+'s BERT-style single-stream fusion encoder with
+        // AdamW at transformer-scale hyperparameters. Honor the public options
+        // instead of AdamW's generic 1e-3 default.
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate,
+                WeightDecay = _options.WeightDecay,
+            });
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.FusionDim;
@@ -205,27 +214,23 @@ public class VinVL<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionModel<T
         }
     }
 
-    private static Tensor<T> MeanPoolOverTokens(Tensor<T> input)
+    /// <summary>
+    /// Mean-pools token embeddings [tokens, dim] down to a single [dim] vector for the task head.
+    /// </summary>
+    /// <remarks>
+    /// This must be a RECORDED reduction. Accumulating the mean element by element produced a tensor
+    /// with no history on the autodiff tape, and because this sits between the encoder stack and the
+    /// task head it cut the backward pass in half: only the head received gradients while every
+    /// encoder layer stayed frozen. The head then optimized against features that could never adapt,
+    /// so training pushed the loss UP by an amount proportional to the learning rate (0.000946 at
+    /// 5e-5, 0.009497 at 5e-4) and no step size could fix it.
+    /// </remarks>
+    private Tensor<T> MeanPoolOverTokens(Tensor<T> input)
     {
-        int rank = input.Shape.Length;
-        if (rank != 2)
+        if (input.Shape.Length != 2)
             return input;
-        int n = input.Shape[0];
-        int d = input.Shape[1];
-        var output = new Tensor<T>([d]);
-        T invN = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>().FromDouble(1.0 / n);
-        for (int i = 0; i < d; i++)
-        {
-            T sum = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>().Zero;
-            for (int j = 0; j < n; j++)
-                sum = AiDotNet
-                    .Tensors.Helpers.MathHelper.GetNumericOperations<T>()
-                    .Add(sum, input[j, i]);
-            output[i] = AiDotNet
-                .Tensors.Helpers.MathHelper.GetNumericOperations<T>()
-                .Multiply(sum, invN);
-        }
-        return output;
+
+        return Engine.ReduceMean(input, new[] { 0 }, keepDims: false);
     }
 
     private Tensor<T> RunStream(Tensor<T> input)
@@ -271,23 +276,25 @@ public class VinVL<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionModel<T
         if (IsOnnxMode)
             throw new NotSupportedException("Training is not supported in ONNX mode.");
         SetTrainingMode(true);
-        TrainWithTape(input, expected);
-        SetTrainingMode(false);
-    }
-
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        if (!_useNativeMode)
-            throw new NotSupportedException("Cannot update parameters in ONNX mode.");
-        int idx = 0;
-        foreach (var l in Layers)
+        try
         {
-            int c = (int)l.ParameterCount;
-            l.UpdateParameters(parameters.Slice(idx, c));
-            idx += c;
+            // Passing no optimizer here silently selects NeuralNetworkBase's
+            // generic Adam at 1e-3 and ignores VinVLOptions. That rate is 20x
+            // the official VinVL/Oscar+ recipe and can make the first FP32
+            // update non-finite on the 12-layer encoder.
+            TrainWithTape(input, expected, _optimizer);
+        }
+        finally
+        {
+            SetTrainingMode(false);
         }
     }
 
+    /// <inheritdoc />
+    /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
+    /// write on every parameter surface, so the guard is stated once here instead of being
+    /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
+    protected override bool SupportsParameterMutation => _useNativeMode;
     protected override Tensor<T> PreprocessImage(Tensor<T> image) =>
         NormalizeImage(image, _options.ImageMean, _options.ImageStd);
 

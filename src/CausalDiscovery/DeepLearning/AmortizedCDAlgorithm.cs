@@ -63,7 +63,7 @@ public class AmortizedCDAlgorithm<T> : DeepCausalBase<T>
         int h = HiddenUnits;
         if (n < 3 || d < 2) return new Matrix<T>(d, d);
 
-        // Standardize columns so the discovered structure is invariant to per-variable scaling.
+        // Standardize columns so the learned probabilities are invariant to per-variable scaling.
         data = StandardizeColumns(data);
 
         var rng = Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
@@ -233,7 +233,10 @@ public class AmortizedCDAlgorithm<T> : DeepCausalBase<T>
                 learnedP[i, j] = Sigmoid(NumOps.ToDouble(logit));
             }
 
-        return BuildFinalAdjacency(learnedP, cov, d);
+        // Pairwise direction tie-breaks rule out only 2-cycles; project the asymmetric learned
+        // probabilities through their net out-flow ordering to guarantee a DAG without assuming
+        // that raw marginal variance determines causal direction.
+        return BuildFinalAdjacency(ProjectToDag(learnedP, d), cov, d);
     }
 
     private static double Sigmoid(double x) =>

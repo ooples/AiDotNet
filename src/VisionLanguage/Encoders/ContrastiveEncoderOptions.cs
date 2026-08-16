@@ -52,11 +52,11 @@ public class ContrastiveEncoderOptions : ModelOptions
         ProjectionDim = other.ProjectionDim;
         Temperature = other.Temperature;
         DropoutRate = other.DropoutRate;
-        ImageMean = other.ImageMean;
-        ImageStd = other.ImageStd;
+        ImageMean = other.ImageMean.ToArray();
+        ImageStd = other.ImageStd.ToArray();
         ImageEncoderModelPath = other.ImageEncoderModelPath;
         TextEncoderModelPath = other.TextEncoderModelPath;
-        OnnxOptions = other.OnnxOptions;
+        OnnxOptions = new OnnxModelOptions(other.OnnxOptions);
         LearningRate = other.LearningRate;
         WeightDecay = other.WeightDecay;
         WarmUpSteps = other.WarmUpSteps;

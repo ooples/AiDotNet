@@ -71,7 +71,7 @@ namespace AiDotNet.Finance.Forecasting.Transformers;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("ETSformer: Exponential Smoothing Transformers for Time-series Forecasting", "https://arxiv.org/abs/2202.01381", Year = 2022, Authors = "Gerald Woo, Chenghao Liu, Doyen Sahoo, Akshat Kumar, Steven Hoi")]
-public class ETSformer<T> : ForecastingModelBase<T>
+public partial class ETSformer<T> : ForecastingModelBase<T>
 {
     #region Execution Mode
 
@@ -108,11 +108,13 @@ public class ETSformer<T> : ForecastingModelBase<T>
     /// <summary>
     /// Instance normalization mean (for RevIN).
     /// </summary>
+    [Scratch]
     private Tensor<T>? _instanceMean;
 
     /// <summary>
     /// Instance normalization standard deviation (for RevIN).
     /// </summary>
+    [Scratch]
     private Tensor<T>? _instanceStd;
 
     #endregion
@@ -443,21 +445,8 @@ public class ETSformer<T> : ForecastingModelBase<T>
         base.Train(input, target);
     }
 
-    /// <summary>
-    /// Updates the model parameters using the provided gradient vector.
-    /// </summary>
-    /// <param name="gradients">The gradient vector for parameter updates.</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Parameters are updated through the optimizer in the Train method,
-    /// so this method is intentionally empty for this model.
-    /// </para>
-    /// </remarks>
-    public override void UpdateParameters(Vector<T> gradients)
-    {
-        // Parameters are updated through the optimizer in Train method
-    }
-
+    // UpdateParameters was an empty override, silently dropping every restore. The base
+    // distributes the vector over the declared enumeration.
     /// <summary>
     /// Gets metadata describing the model.
     /// </summary>

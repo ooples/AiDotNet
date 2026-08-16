@@ -53,5 +53,14 @@ public enum LossApiShape
     /// Paired embedding CalculateLoss(Vector, Vector, T) with two embedding vectors and a similarity label.
     /// Used by ContrastiveLoss.
     /// </summary>
-    PairedEmbedding
+    PairedEmbedding,
+
+    /// <summary>
+    /// Sequence loss over log-probabilities and label sequences of unknown alignment. Its
+    /// <c>CalculateLoss(Vector, Vector)</c> overload requires a batch/sequence encoding in the
+    /// <c>actual</c> vector (batch size, per-item target length + labels), not a pointwise target,
+    /// so the standard pointwise invariant suite (L(x,x)==0, error-direction sign, symmetry) does
+    /// not apply. Used by CTCLoss; exercised by dedicated sequence-API integration tests instead.
+    /// </summary>
+    Sequence
 }

@@ -62,7 +62,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     [ResearchPaper("Audio-Visual Event Localization in Unconstrained Videos", "https://arxiv.org/abs/1803.08842")]
-public class AudioVisualEventLocalizationNetwork<T> : NeuralNetworkBase<T>, IAudioVisualEventLocalizationModel<T>
+public partial class AudioVisualEventLocalizationNetwork<T> : MultimodalModelLayoutBase<T>, IAudioVisualEventLocalizationModel<T>
 {
     private readonly AudioVisualEventLocalizationOptions _options;
 
@@ -1356,27 +1356,7 @@ public class AudioVisualEventLocalizationNetwork<T> : NeuralNetworkBase<T>, IAud
         }
     }
 
-    /// <inheritdoc/>
-    public override void UpdateParameters(Vector<T> gradients)
-    {
-        if (gradients.Length != ParameterCount)
-        {
-            throw new ArgumentException(
-                $"Gradient vector length ({gradients.Length}) must match parameter count ({ParameterCount}).",
-                nameof(gradients));
-        }
-
-        // Get current parameters
-        var currentParams = GetParameters();
-
-        // Apply gradient descent update: params = params - learning_rate * gradients
-        T learningRate = NumOps.FromDouble(_options.LearningRate);
-        currentParams = Engine.Subtract(currentParams, Engine.Multiply(gradients, learningRate));
-
-        // Set the updated parameters
-        SetParameters(currentParams);
-    }
-
+    // UpdateParameters applied a GRADIENT STEP, but its one-argument form is the value setter and every caller passes values -- the override corrupted the model. Removed under AIDN082.
     /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()
     {
@@ -1457,112 +1437,6 @@ public class AudioVisualEventLocalizationNetwork<T> : NeuralNetworkBase<T>, IAud
             _temporalResolution,
             _numEncoderLayers,
             _supportedCategories);
-    }
-
-    /// <inheritdoc/>
-    public override Vector<T> GetParameters()
-    {
-        var allParams = new List<T>();
-
-        void AddLayerParams(ILayer<T> layer)
-        {
-            var p = layer.GetParameters();
-            for (int i = 0; i < p.Length; i++)
-            {
-                allParams.Add(p[i]);
-            }
-        }
-
-        AddLayerParams(_audioInputProjection);
-        foreach (var layer in _audioEncoderLayers) AddLayerParams(layer);
-        AddLayerParams(_audioOutputProjection);
-
-        AddLayerParams(_visualInputProjection);
-        foreach (var layer in _visualEncoderLayers) AddLayerParams(layer);
-        AddLayerParams(_visualOutputProjection);
-
-        foreach (var layer in _temporalAttentionLayers) AddLayerParams(layer);
-        AddLayerParams(_temporalProposalHead);
-
-        foreach (var layer in _crossModalAttentionLayers) AddLayerParams(layer);
-        AddLayerParams(_eventClassificationHead);
-        AddLayerParams(_temporalBoundaryHead);
-        AddLayerParams(_spatialLocalizationHead);
-        AddLayerParams(_anomalyDetectionHead);
-
-        var result = new Vector<T>(allParams.Count);
-        for (int i = 0; i < allParams.Count; i++)
-        {
-            result[i] = allParams[i];
-        }
-
-        return result;
-    }
-
-    /// <inheritdoc/>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        var offset = 0;
-
-        void SetLayerParams(ILayer<T> layer)
-        {
-            int count = checked((int)layer.ParameterCount);
-            var p = new Vector<T>(count);
-            for (int i = 0; i < count; i++)
-            {
-                if (offset + i < parameters.Length)
-                {
-                    p[i] = parameters[offset + i];
-                }
-            }
-            layer.SetParameters(p);
-            offset += count;
-        }
-
-        SetLayerParams(_audioInputProjection);
-        foreach (var layer in _audioEncoderLayers) SetLayerParams(layer);
-        SetLayerParams(_audioOutputProjection);
-
-        SetLayerParams(_visualInputProjection);
-        foreach (var layer in _visualEncoderLayers) SetLayerParams(layer);
-        SetLayerParams(_visualOutputProjection);
-
-        foreach (var layer in _temporalAttentionLayers) SetLayerParams(layer);
-        SetLayerParams(_temporalProposalHead);
-
-        foreach (var layer in _crossModalAttentionLayers) SetLayerParams(layer);
-        SetLayerParams(_eventClassificationHead);
-        SetLayerParams(_temporalBoundaryHead);
-        SetLayerParams(_spatialLocalizationHead);
-        SetLayerParams(_anomalyDetectionHead);
-    }
-
-    /// <inheritdoc/>
-    public override long ParameterCount
-    {
-        get
-        {
-            var count = 0;
-
-            count += (int)_audioInputProjection.ParameterCount;
-            foreach (var layer in _audioEncoderLayers) count += (int)layer.ParameterCount;
-            count += (int)_audioOutputProjection.ParameterCount;
-
-            count += (int)_visualInputProjection.ParameterCount;
-            foreach (var layer in _visualEncoderLayers) count += (int)layer.ParameterCount;
-            count += (int)_visualOutputProjection.ParameterCount;
-
-            foreach (var layer in _temporalAttentionLayers) count += (int)layer.ParameterCount;
-            count += (int)_temporalProposalHead.ParameterCount;
-
-            foreach (var layer in _crossModalAttentionLayers) count += (int)layer.ParameterCount;
-            count += (int)_eventClassificationHead.ParameterCount;
-            count += (int)_temporalBoundaryHead.ParameterCount;
-            count += (int)_spatialLocalizationHead.ParameterCount;
-            count += (int)_anomalyDetectionHead.ParameterCount;
-
-            return count;
-        }
     }
 
     /// <inheritdoc/>

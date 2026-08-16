@@ -62,31 +62,37 @@ public class HeteroscedasticGaussianProcess<T> : GaussianProcessBase<T>
     /// <summary>
     /// Training input data.
     /// </summary>
+    [Buffer]
     private Matrix<T>? _X;
 
     /// <summary>
     /// Training target values.
     /// </summary>
+    [Buffer]
     private Vector<T>? _y;
 
     /// <summary>
     /// Cholesky decomposition of mean GP covariance matrix.
     /// </summary>
+    [Buffer]
     private Matrix<T>? _L;
 
     /// <summary>
     /// Alpha coefficients for mean predictions.
     /// </summary>
+    [Buffer]
     private Vector<T>? _alpha;
 
     /// <summary>
     /// Learned noise variances at training points.
     /// </summary>
+    [Buffer]
     private Vector<T>? _noiseVariances;
 
     /// <summary>
     /// Noise GP latent values (log noise variance).
     /// </summary>
+    [Buffer]
     private Vector<T>? _noiseLatentValues;
 
     /// <summary>

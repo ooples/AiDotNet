@@ -145,7 +145,7 @@ public sealed class MambaCausalLanguageModel<T> : IIncrementalCausalLanguageMode
 
     private Vector<T> ExtractLastPositionLogits(Tensor<T> output)
     {
-        var shape = output.Shape.ToArray();
+        var shape = output._shape;
         var vocab = shape[shape.Length - 1];
         if (vocab != VocabularySize)
         {

@@ -294,7 +294,7 @@ public class OnnxSymbolicAxisRuntimeTests
     /// #1269.xZd- (the prior Dense-based stub had a 2D-warmup vs
     /// 4D-export mismatch that produced a non-runnable ONNX graph).
     /// </summary>
-    private sealed class TinyVisionNet : NeuralNetworkBase<float>
+    private sealed class TinyVisionNet : ImageClassifierModelLayoutBase<float>
     {
         public TinyVisionNet()
             : base(NeuralNetworkArchitecture<float>.CreateDynamicSpatial(
@@ -438,7 +438,7 @@ public class OnnxSymbolicAxisRuntimeTests
     /// Tensor&lt;T&gt; shape-walking branch when emitting the initializer
     /// protos.
     /// </summary>
-    private sealed class TinyDenseNet : NeuralNetworkBase<float>
+    private sealed class TinyDenseNet : VectorModelLayoutBase<float>
     {
         public TinyDenseNet()
             : base(new NeuralNetworkArchitecture<float>(

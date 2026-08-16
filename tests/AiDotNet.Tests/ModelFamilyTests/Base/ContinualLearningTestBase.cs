@@ -13,18 +13,23 @@ namespace AiDotNet.Tests.ModelFamilyTests.Base;
 /// Tests deep mathematical invariants: regularization monotonicity with parameter deviation,
 /// Fisher information properties, gradient projection correctness, and multi-task consistency.
 /// </summary>
-public abstract class ContinualLearningTestBase
+public abstract class ContinualLearningTestBase<T>
 {
+    protected static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+    protected static T ToT(double value) => NumOps.FromDouble(value);
+    protected static double ToD(T value) => Convert.ToDouble(value);
+    protected virtual double Tolerance => typeof(T) == typeof(float) ? 1e-6 : 1e-10;
+
     /// <summary>Factory method — subclasses return their concrete strategy instance.</summary>
-    protected abstract IContinualLearningStrategy<double> CreateStrategy();
+    protected abstract IContinualLearningStrategy<T> CreateStrategy();
 
     /// <summary>Creates a mock neural network for testing.</summary>
-    protected virtual INeuralNetwork<double> CreateMockNetwork()
+    protected virtual INeuralNetwork<T> CreateMockNetwork()
     {
         // Architecture must match CreateTestTaskData's [8, 4] shape so the
         // tape-based ComputeGradients path doesn't trip on a predicted/target
         // mismatch when AfterTask runs a forward pass.
-        return new FeedForwardNeuralNetwork<double>(new NeuralNetworkArchitecture<double>(
+        return new FeedForwardNeuralNetwork<T>(new NeuralNetworkArchitecture<T>(
             inputType: AiDotNet.Enums.InputType.OneDimensional,
             taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression,
             inputSize: 4,
@@ -92,9 +97,9 @@ public abstract class ContinualLearningTestBase
         strategy.BeforeTask(network, 0);
         strategy.AfterTask(network, taskData, 0);
 
-        double loss = strategy.ComputeLoss(network);
+        double loss = ToD(strategy.ComputeLoss(network));
 
-        Assert.True(loss >= -1e-10,
+        Assert.True(loss >= -Tolerance,
             $"Regularization loss should be non-negative but got {loss}. " +
             "EWC/MAS regularization is a sum of non-negative terms: λ * Σ F_i * (θ_i - θ*_i)².");
     }
@@ -115,7 +120,7 @@ public abstract class ContinualLearningTestBase
         strategy.BeforeTask(network, 0);
         strategy.AfterTask(network, taskData, 0);
 
-        double loss = strategy.ComputeLoss(network);
+        double loss = ToD(strategy.ComputeLoss(network));
 
         Assert.False(double.IsNaN(loss), "Regularization loss is NaN.");
         Assert.False(double.IsInfinity(loss), "Regularization loss is Infinity.");
@@ -141,18 +146,18 @@ public abstract class ContinualLearningTestBase
         strategy.AfterTask(network, taskData, 0);
 
         // Record loss with current parameters (should be near zero — no deviation yet)
-        double lossNoChange = strategy.ComputeLoss(network);
+        double lossNoChange = ToD(strategy.ComputeLoss(network));
 
         // Now perturb the parameters away from reference
         var params0 = network.GetParameters();
-        var perturbedParams = new Vector<double>(params0.Length);
+        var perturbedParams = new Vector<T>(params0.Length);
         for (int i = 0; i < params0.Length; i++)
-            perturbedParams[i] = params0[i] + 0.5; // Add significant perturbation
+            perturbedParams[i] = NumOps.Add(params0[i], ToT(0.5)); // Add significant perturbation
 
         network.SetParameters(perturbedParams);
-        double lossPerturbed = strategy.ComputeLoss(network);
+        double lossPerturbed = ToD(strategy.ComputeLoss(network));
 
-        Assert.True(lossPerturbed >= lossNoChange - 1e-10,
+        Assert.True(lossPerturbed >= lossNoChange - Tolerance,
             $"Loss should increase with parameter deviation: " +
             $"no change={lossNoChange:E4}, perturbed={lossPerturbed:E4}. " +
             "Quadratic regularization penalizes deviation from reference parameters.");
@@ -188,9 +193,9 @@ public abstract class ContinualLearningTestBase
         // ~2.0 because importance(net1) ≠ importance(net2)). Clone
         // network1 → network2 so the only differing axis is Lambda.
         var network1 = CreateMockNetwork();
-        INeuralNetwork<double> network2;
-        if (network1 is AiDotNet.NeuralNetworks.NeuralNetworkBase<double> nn1)
-            network2 = (INeuralNetwork<double>)nn1.Clone();
+        INeuralNetwork<T> network2;
+        if (network1 is AiDotNet.NeuralNetworks.NeuralNetworkBase<T> nn1)
+            network2 = (INeuralNetwork<T>)nn1.Clone();
         else
             throw new System.InvalidOperationException(
                 "ComputeLoss_ScalesWithLambda requires a NeuralNetworkBase-derived "
@@ -209,15 +214,15 @@ public abstract class ContinualLearningTestBase
 
         // Perturb both networks identically
         var params1 = network1.GetParameters();
-        var perturbed = new Vector<double>(params1.Length);
+        var perturbed = new Vector<T>(params1.Length);
         for (int i = 0; i < params1.Length; i++)
-            perturbed[i] = params1[i] + 0.3;
+            perturbed[i] = NumOps.Add(params1[i], ToT(0.3));
 
         network1.SetParameters(perturbed);
         network2.SetParameters(perturbed);
 
-        double loss1 = strategy1.ComputeLoss(network1);
-        double loss2 = strategy2.ComputeLoss(network2);
+        double loss1 = ToD(strategy1.ComputeLoss(network1));
+        double loss2 = ToD(strategy2.ComputeLoss(network2));
 
         if (loss1 < 1e-10) return; // Can't test ratio with near-zero values
 
@@ -246,9 +251,9 @@ public abstract class ContinualLearningTestBase
         strategy.BeforeTask(network, 0);
         strategy.AfterTask(network, taskData, 0);
 
-        var gradients = new Vector<double>(NumParameters);
+        var gradients = new Vector<T>(NumParameters);
         for (int i = 0; i < NumParameters; i++)
-            gradients[i] = 0.1 * (i + 1);
+            gradients[i] = ToT(0.1 * (i + 1));
 
         var modified = strategy.ModifyGradients(network, gradients);
 
@@ -271,16 +276,17 @@ public abstract class ContinualLearningTestBase
         strategy.BeforeTask(network, 0);
         strategy.AfterTask(network, taskData, 0);
 
-        var gradients = new Vector<double>(NumParameters);
+        var gradients = new Vector<T>(NumParameters);
         for (int i = 0; i < NumParameters; i++)
-            gradients[i] = 0.1 * (i + 1);
+            gradients[i] = ToT(0.1 * (i + 1));
 
         var modified = strategy.ModifyGradients(network, gradients);
 
         for (int i = 0; i < modified.Length; i++)
         {
-            Assert.False(double.IsNaN(modified[i]), $"Modified gradient[{i}] is NaN.");
-            Assert.False(double.IsInfinity(modified[i]), $"Modified gradient[{i}] is Infinity.");
+            double value = ToD(modified[i]);
+            Assert.False(double.IsNaN(value), $"Modified gradient[{i}] is NaN.");
+            Assert.False(double.IsInfinity(value), $"Modified gradient[{i}] is Infinity.");
         }
     }
 
@@ -301,17 +307,19 @@ public abstract class ContinualLearningTestBase
         strategy.BeforeTask(network, 0);
         strategy.AfterTask(network, taskData, 0);
 
-        var gradients = new Vector<double>(NumParameters);
+        var gradients = new Vector<T>(NumParameters);
         for (int i = 0; i < NumParameters; i++)
-            gradients[i] = 0.5 * (i % 3 == 0 ? 1 : -1);
+            gradients[i] = ToT(0.5 * (i % 3 == 0 ? 1 : -1));
 
         var modified = strategy.ModifyGradients(network, gradients);
 
         double origNorm = 0, modifiedNorm = 0;
         for (int i = 0; i < NumParameters; i++)
         {
-            origNorm += gradients[i] * gradients[i];
-            modifiedNorm += modified[i] * modified[i];
+            double originalValue = ToD(gradients[i]);
+            double modifiedValue = ToD(modified[i]);
+            origNorm += originalValue * originalValue;
+            modifiedNorm += modifiedValue * modifiedValue;
         }
 
         origNorm = Math.Sqrt(origNorm);
@@ -350,12 +358,12 @@ public abstract class ContinualLearningTestBase
 
         // Perturb parameters
         var params0 = network.GetParameters();
-        var perturbed = new Vector<double>(params0.Length);
+        var perturbed = new Vector<T>(params0.Length);
         for (int i = 0; i < params0.Length; i++)
-            perturbed[i] = params0[i] + 0.3;
+            perturbed[i] = NumOps.Add(params0[i], ToT(0.3));
         network.SetParameters(perturbed);
 
-        double lossAfterTask0 = strategy.ComputeLoss(network);
+        double lossAfterTask0 = ToD(strategy.ComputeLoss(network));
 
         // Task 1
         network.SetParameters(params0); // Reset
@@ -364,10 +372,10 @@ public abstract class ContinualLearningTestBase
 
         // Same perturbation
         network.SetParameters(perturbed);
-        double lossAfterTask1 = strategy.ComputeLoss(network);
+        double lossAfterTask1 = ToD(strategy.ComputeLoss(network));
 
         // With 2 tasks, regularization should be at least as strong as with 1
-        Assert.True(lossAfterTask1 >= lossAfterTask0 - 1e-10,
+        Assert.True(lossAfterTask1 >= lossAfterTask0 - Tolerance,
             $"Loss after 2 tasks ({lossAfterTask1:E4}) should be >= " +
             $"loss after 1 task ({lossAfterTask0:E4}). " +
             "More tasks to protect means stronger regularization.");
@@ -405,28 +413,31 @@ public abstract class ContinualLearningTestBase
         strategy.Reset();
 
         // After reset, loss should be near-zero (no tasks to protect)
-        double lossAfterReset = strategy.ComputeLoss(network);
+        double lossAfterReset = ToD(strategy.ComputeLoss(network));
         Assert.True(lossAfterReset < 1e-6,
             $"After reset, regularization loss should be near-zero but got {lossAfterReset:E4}.");
     }
 
     /// <summary>Creates synthetic task training data.</summary>
-    protected virtual (Tensor<double> inputs, Tensor<double> targets) CreateTestTaskData()
+    protected virtual (Tensor<T> inputs, Tensor<T> targets) CreateTestTaskData()
     {
         var rng = new Random(42);
         int batchSize = 8;
         int dim = 4;
-        var inputData = new double[batchSize * dim];
-        var targetData = new double[batchSize * dim];
+        var inputData = new T[batchSize * dim];
+        var targetData = new T[batchSize * dim];
         for (int i = 0; i < inputData.Length; i++)
         {
-            inputData[i] = rng.NextDouble() * 2.0 - 1.0;
-            targetData[i] = rng.NextDouble() * 2.0 - 1.0;
+            inputData[i] = ToT(rng.NextDouble() * 2.0 - 1.0);
+            targetData[i] = ToT(rng.NextDouble() * 2.0 - 1.0);
         }
 
         return (
-            new Tensor<double>(inputData, new[] { batchSize, dim }),
-            new Tensor<double>(targetData, new[] { batchSize, dim })
+            new Tensor<T>(inputData, new[] { batchSize, dim }),
+            new Tensor<T>(targetData, new[] { batchSize, dim })
         );
     }
 }
+
+/// <summary>Default-precision alias for existing hand-written fixtures.</summary>
+public abstract class ContinualLearningTestBase : ContinualLearningTestBase<double> { }

@@ -46,7 +46,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     [ResearchPaper("Parameterized Quantum Circuits as Machine Learning Models", "https://arxiv.org/abs/1906.07682")]
-public class QuantumNeuralNetwork<T> : NeuralNetworkBase<T>
+public class QuantumNeuralNetwork<T> : VectorModelLayoutBase<T>
 {
     private readonly QuantumNeuralNetworkOptions _options;
 
@@ -173,46 +173,8 @@ public class QuantumNeuralNetwork<T> : NeuralNetworkBase<T>
         }
     }
 
-    /// <summary>
-    /// Updates the parameters of the quantum neural network layers.
-    /// </summary>
-    /// <param name="parameters">The vector of parameter updates to apply.</param>
-    /// <remarks>
-    /// <para>
-    /// This method updates the parameters of each layer in the quantum neural network based on the provided parameter
-    /// updates. The parameters vector is divided into segments corresponding to each layer's parameter count,
-    /// and each segment is applied to its respective layer.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method updates how the quantum neural network makes decisions based on training.
-    /// 
-    /// During training:
-    /// - The network learns by adjusting its internal parameters
-    /// - This method applies those adjustments
-    /// - It takes a vector of parameter updates and distributes them to the correct layers
-    /// - Each layer gets the portion of updates meant specifically for it
-    /// 
-    /// For a quantum neural network, these parameters might control operations like quantum rotations,
-    /// entanglement settings, or other quantum-inspired transformations.
-    /// 
-    /// This process allows the quantum neural network to improve its performance over time
-    /// by adjusting how it processes information.
-    /// </para>
-    /// </remarks>
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        int startIndex = 0;
-        foreach (var layer in Layers)
-        {
-            int layerParameterCount = checked((int)layer.ParameterCount);
-            if (layerParameterCount > 0)
-            {
-                Vector<T> layerParameters = parameters.SubVector(startIndex, layerParameterCount);
-                layer.UpdateParameters(layerParameters);
-                startIndex += layerParameterCount;
-            }
-        }
-    }
-
+    // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
+    // exactly the same enumeration, so this said nothing the base does not already say.
     /// <summary>
     /// Makes a prediction using the quantum neural network for the given input.
     /// </summary>

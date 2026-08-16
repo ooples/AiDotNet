@@ -61,7 +61,7 @@ namespace AiDotNet.ProgramSynthesis.Engines;
     "https://arxiv.org/abs/2108.13643",
     Year = 2021,
     Authors = "Dweep Trivedi, Jesse Zhang, Shao-Hua Sun, Joseph J. Lim")]
-public class NeuralProgramSynthesizer<T> : NeuralNetworkBase<T>, IProgramSynthesizer<T>
+public partial class NeuralProgramSynthesizer<T> : TokenLanguageModelLayoutBase<T>, IProgramSynthesizer<T>
 {
     private readonly NeuralProgramSynthesizerOptions _options;
 
@@ -642,29 +642,14 @@ public class NeuralProgramSynthesizer<T> : NeuralNetworkBase<T>, IProgramSynthes
         return output;
     }
 
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        int index = 0;
-        foreach (var layer in Layers)
-        {
-            int layerParameterCount = checked((int)layer.ParameterCount);
-            if (layerParameterCount <= 0)
-            {
-                continue;
-            }
-
-            var layerParameters = parameters.Slice(index, layerParameterCount);
-            layer.UpdateParameters(layerParameters);
-            index += layerParameterCount;
-        }
-    }
-
+    // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
+    // exactly the same enumeration, so this said nothing the base does not already say.
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expectedOutput);
+            TrainWithTape(input, expectedOutput, _optimizer);
         }
         finally
         {

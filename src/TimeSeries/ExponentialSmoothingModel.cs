@@ -48,7 +48,7 @@ namespace AiDotNet.TimeSeries;
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("Forecasting Methods and Applications", "https://doi.org/10.1002/9781118619193", Year = 1998, Authors = "Spyros Makridakis, Steven C. Wheelwright, Rob J. Hyndman")]
-public class ExponentialSmoothingModel<T> : TimeSeriesModelBase<T>
+public partial class ExponentialSmoothingModel<T> : TimeSeriesModelBase<T>
 {
     /// <summary>
     /// Initializes a new instance with default settings.
@@ -174,6 +174,7 @@ public class ExponentialSmoothingModel<T> : TimeSeriesModelBase<T>
     /// The seasonal factors at the end of training, used as the starting point for forecasting.
     /// </summary>
     private Vector<T> _trainedSeasonalFactors;
+    [Buffer]
     private Vector<T> _fittedValues = Vector<T>.Empty();
 
     /// <summary>

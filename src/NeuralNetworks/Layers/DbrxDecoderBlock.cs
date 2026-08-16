@@ -13,7 +13,23 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Attention)]
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerProperty(IsTrainable = false, HasTrainingMode = false, TestInputShape = "1, 4, 8", TestConstructorArgs = "")]
-public partial class DbrxDecoderBlock<T> : LayerBase<T>
+// SHAPE-PRESERVING, and structurally so: ForwardTraced is two residual adds,
+// "Engine.TensorAdd(input, attnOut)" then "Engine.TensorAdd(afterAttn, moeOut)". Neither add can even
+// be formed unless the sublayer handed back exactly the shape it was given, so this block cannot
+// change a shape whatever its sublayers do. Matching input/output layouts let the generator derive
+// Same for every axis.
+//
+// NOT [ElementWiseShape], which would generate the identity at EVERY rank. This block imposes no rank
+// limit of its own, but its attention sublayer is injected (a bare LayerBase<T>) and its accepted ranks
+// are therefore unknowable from here. Rank 3 is the rank the block is exercised at
+// ([LayerProperty(TestInputShape = "1, 4, 8")]) and the one the roles below are named for; claiming
+// more would be claiming on the injected sublayer's behalf.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Output)]
+[AutoParameters]
+public partial class DbrxDecoderBlock<T> : LayerBase<T>, IShapeContract
 {
     private readonly LayerNormalizationLayer<T> _norm1;
     private readonly LayerBase<T> _attention;
@@ -61,7 +77,7 @@ public partial class DbrxDecoderBlock<T> : LayerBase<T>
     }
 
     /// <inheritdoc/>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         var normed1 = _norm1.Forward(input);
         var attnOut = _attention.Forward(normed1);
@@ -78,36 +94,6 @@ public partial class DbrxDecoderBlock<T> : LayerBase<T>
         yield return _attention;
         yield return _norm2;
         yield return _moe;
-    }
-
-    /// <inheritdoc/>
-    public override long ParameterCount
-    {
-        get { long total = 0; foreach (var l in SubLayers()) total += l.ParameterCount; return total; }
-    }
-
-    /// <inheritdoc/>
-    public override Vector<T> GetParameters()
-    {
-        Vector<T> acc = new Vector<T>(0);
-        foreach (var l in SubLayers()) acc = Vector<T>.Concatenate(acc, l.GetParameters());
-        return acc;
-    }
-
-    /// <inheritdoc/>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        long expected = ParameterCount;
-        if (parameters.Length != expected)
-            throw new System.ArgumentException($"Expected {expected} parameters, got {parameters.Length}.");
-        int offset = 0;
-        foreach (var l in SubLayers())
-        {
-            int count = (int)l.ParameterCount;
-            if (count == 0) continue;
-            l.SetParameters(parameters.Slice(offset, count));
-            offset += count;
-        }
     }
 
     /// <inheritdoc/>

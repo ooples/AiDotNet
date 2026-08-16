@@ -71,6 +71,10 @@ namespace AiDotNet.PhysicsInformed.PINNs
     [ModelComplexity(ModelComplexity.High)]
     [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     [ResearchPaper("Physics-informed neural networks: A deep learning framework for solving forward and inverse problems involving nonlinear partial differential equations", "https://doi.org/10.1016/j.jcp.2018.10.045", Year = 2019, Authors = "M. Raissi, P. Perdikaris, G.E. Karniadakis")]
+    [TensorLayout(TensorAxis.Batch, TensorAxis.Features,
+        Direction = TensorLayoutDirection.Input, BatchOptional = true)]
+    [TensorLayout(TensorAxis.Batch, TensorAxis.Features,
+        Direction = TensorLayoutDirection.Output, BatchOptional = true)]
     public class InverseProblemPINN<T> : NeuralNetworkBase<T>
     {
         private readonly IInverseProblem<T> _inverseProblem;
@@ -720,7 +724,7 @@ namespace AiDotNet.PhysicsInformed.PINNs
             }
 
             SetTrainingMode(true);
-            try { TrainWithTape(input, expectedOutput); }
+            try { TrainWithTape(input, expectedOutput, _optimizer); }
             finally { SetTrainingMode(false); }
         }
 
@@ -735,49 +739,13 @@ namespace AiDotNet.PhysicsInformed.PINNs
             return Predict(input);
         }
 
-        /// <inheritdoc/>
-        public override void UpdateParameters(Vector<T> parameters)
-        {
-            int offset = 0;
-            foreach (var layer in Layers)
-            {
-                int paramCount = checked((int)layer.ParameterCount);
-                if (paramCount > 0)
-                {
-                    var subParams = parameters.GetSubVector(offset, paramCount);
-                    layer.UpdateParameters(subParams);
-                    offset += paramCount;
-                }
-            }
-
-            // Update inverse problem parameters
-            for (int i = 0; i < _parameters.Length; i++)
-            {
-                _parameters[i] = parameters[offset + i];
-            }
-
-            UpdatePDE();
-        }
-
-        /// <inheritdoc/>
-        public override Vector<T> GetParameters()
-        {
-            var allParams = new List<T>();
-
-            foreach (var layer in Layers)
-            {
-                var layerParams = layer.GetParameters();
-                for (int i = 0; i < layerParams.Length; i++)
-                {
-                    allParams.Add(layerParams[i]);
-                }
-            }
-
-            // Add inverse problem parameters
-            allParams.AddRange(_parameters);
-
-            return new Vector<T>(allParams.ToArray());
-        }
+        // ParameterCount, GetParameters and UpdateParameters were all overridden here and are all
+        // gone. Each walked Layers by hand and then appended or wrote _parameters; the base does
+        // exactly that walk, and the GetExtraTrainableTensors below declares _parameters as part of
+        // it -- layers first, then the coefficients, the same order GetGradients still uses.
+        // Restoring the coefficients is now SetParameters' job, which is what serialization calls --
+        // the deleted UpdateParameters was the only path that handled them, so a saved model came
+        // back with its physical coefficients silently reset to their initial guesses.
 
         /// <inheritdoc/>
         public override Vector<T> GetGradients()
@@ -809,9 +777,40 @@ namespace AiDotNet.PhysicsInformed.PINNs
             return new Vector<T>(allGradients.ToArray());
         }
 
-        /// <inheritdoc/>
-        public override long ParameterCount =>
-            (int)Layers.Sum(l => l.ParameterCount) + _inverseProblem.NumberOfParameters;
+        /// <inheritdoc />
+        /// <remarks>
+        /// The unknown physical coefficients this PINN is solving for. They are weights like any
+        /// other -- gradient descent updates them alongside the network's -- so the base folds them
+        /// into the count, the vector, the restore and the chunks from this one declaration.
+        /// <para>
+        /// A FRESH view every call, deliberately: the training step REPLACES <c>_parameters</c>
+        /// (<c>_parameters = Engine.Subtract(...)</c>) rather than writing into it, and a cached
+        /// view would still alias the vector from before the last step. A <c>Tensor&lt;T&gt;</c>
+        /// built over a <c>Vector&lt;T&gt;</c> shares its storage, so writes through this land in
+        /// the field itself; the field stays a <c>Vector&lt;T&gt;</c> because
+        /// <c>IInverseProblem&lt;T&gt;.CreateParameterizedPDE</c> takes one.
+        /// </para>
+        /// </remarks>
+        protected override IEnumerable<Tensor<T>> GetExtraTrainableTensors()
+        {
+            yield return new Tensor<T>([_parameters.Length], _parameters);
+        }
+
+        /// <inheritdoc />
+        /// <remarks>
+        /// The PDE is BUILT from the coefficients rather than reading them live, so restoring them
+        /// without rebuilding it leaves the model computing with the old physics while reporting
+        /// the new weights.
+        /// <para>
+        /// This used to live in an <c>UpdateParameters</c> override that reimplemented restore in
+        /// full -- re-slicing the vector per layer, writing <c>_parameters</c> by hand, then
+        /// rebuilding. <c>SetParameters</c>, which is what serialization actually calls, had no
+        /// override at all: it walked only <c>Layers</c>, so a round-trip silently dropped every
+        /// coefficient and left the PDE stale. One declaration above and this one rebuild replace
+        /// all of it, and both restore paths now do the same thing because there is only one.
+        /// </para>
+        /// </remarks>
+        protected override void OnParametersRestored() => UpdatePDE();
 
         /// <inheritdoc/>
         public override ModelMetadata<T> GetModelMetadata()

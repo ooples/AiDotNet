@@ -225,7 +225,9 @@ public class NaturalSpeech2<T> : TtsModelBase<T>, IEndToEndTts<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expected);
+            // Honor the optimizer selected by the native constructor. The two-argument
+            // overload creates a generic fallback and silently ignores _optimizer.
+            TrainWithTape(input, expected, _optimizer);
         }
         finally
         {
@@ -233,21 +235,22 @@ public class NaturalSpeech2<T> : TtsModelBase<T>, IEndToEndTts<T>
         }
     }
 
-    /// <inheritdoc />
-    public override void UpdateParameters(Vector<T> parameters)
+    /// <summary>
+    /// Refuses parameter work on a disposed model, on every entry point rather than one.
+    /// </summary>
+    /// <remarks>
+    /// This check used to live inside UpdateParameters, which meant ParameterCount, GetParameters
+    /// and SetParameters reached a disposed model unguarded. The base calls this hook from all of
+    /// them, so moving it here widens the guard and lets the hand-written UpdateParameters -- whose
+    /// only other content was a walk the base already performs -- be deleted.
+    /// </remarks>
+    protected override void EnsureParametersReady()
     {
         ThrowIfDisposed();
-        if (!_useNativeMode)
-            throw new NotSupportedException("Cannot update parameters in ONNX mode.");
-        int idx = 0;
-        foreach (var l in Layers)
-        {
-            int c = checked((int)l.ParameterCount);
-            l.UpdateParameters(parameters.Slice(idx, c));
-            idx += c;
-        }
+        base.EnsureParametersReady();
     }
 
+    // UpdateParameters folded one enumeration the base already folds. Removed under AIDN082.
     /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
@@ -311,9 +314,10 @@ public class NaturalSpeech2<T> : TtsModelBase<T>, IEndToEndTts<T>
     /// <inheritdoc />
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
+        var options = new NaturalSpeech2Options(_options);
         if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new NaturalSpeech2<T>(Architecture, mp, _options);
-        return new NaturalSpeech2<T>(Architecture, _options, _optimizer);
+            return new NaturalSpeech2<T>(Architecture, mp, options);
+        return new NaturalSpeech2<T>(Architecture, options);
     }
 
     private void ThrowIfDisposed()

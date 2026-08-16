@@ -62,7 +62,7 @@ namespace AiDotNet.VisionLanguage.Generative;
     Year = 2023,
     Authors = "Chen et al."
 )]
-public class PaLI3<T> : VisionLanguageModelBase<T>, IGenerativeVisionLanguageModel<T>
+public partial class PaLI3<T> : VisionLanguageModelBase<T>, IGenerativeVisionLanguageModel<T>
 {
     private readonly PaLI3Options _options;
 
@@ -266,15 +266,8 @@ public class PaLI3<T> : VisionLanguageModelBase<T>, IGenerativeVisionLanguageMod
         }
     }
 
-    /// <summary>
-    /// Surfaces _patchEmbed (which lives outside Layers) to the base
-    /// weight-registry walker so its trainable tensors land in the
-    /// streaming pool when ConfigureWeightLifetime is called.
-    /// </summary>
-    protected override IEnumerable<LayerBase<T>?> GetExtraTrainableLayers()
-    {
-        yield return _patchEmbed;
-    }
+    // _patchEmbed is discovered as a single-layer member and surfaced automatically.
+    // Removed under AIDN082.
 
     /// <summary>
     /// Lazily creates _patchEmbed when the incoming parameter vector is
@@ -296,86 +289,14 @@ public class PaLI3<T> : VisionLanguageModelBase<T>, IGenerativeVisionLanguageMod
         TokenizeIfNCHW(probe);
     }
 
-    // _patchEmbed lives outside Layers but is trainable in native mode. Override
-    // ParameterCount / GetParameters / SetParameters / UpdateParameters together
-    // so all four agree on the layout: _patchEmbed slice first, then Layers in
-    // order. Without this, the optimizer reads N params via GetParameters and
-    // hands back N to UpdateParameters — but UpdateParameters consumes
-    // _patchEmbed.ParameterCount extra slots from the front, shifting every
-    // Layer's slice and corrupting weights.
-    public override long ParameterCount =>
-        (_patchEmbed?.ParameterCount ?? 0) + (int)Layers.Sum(l => l.ParameterCount);
-
-    public override Vector<T> GetParameters()
-    {
-        var perLayer = Layers.Select(l => l.GetParameters()).ToList();
-        int patchLen = (int)(_patchEmbed?.ParameterCount ?? 0);
-        int total = patchLen + perLayer.Sum(p => p.Length);
-        var result = new Vector<T>(total);
-        int idx = 0;
-        if (patchLen > 0)
-        {
-            var patchParams = _patchEmbed!.GetParameters();
-            for (int i = 0; i < patchParams.Length; i++)
-                result[idx++] = patchParams[i];
-        }
-        foreach (var p in perLayer)
-        {
-            for (int i = 0; i < p.Length; i++)
-                result[idx++] = p[i];
-        }
-        return result;
-    }
-
-    public override void SetParameters(Vector<T> parameters)
-    {
-        // If the saved parameter vector includes patch-embed weights but
-        // this instance hasn't seen an image yet, lazy-create _patchEmbed
-        // so the slice layout matches the saved vector. Otherwise the
-        // patch-embed slice silently drops.
-        EnsurePatchEmbedForParameterVector(parameters.Length);
-
-        int idx = 0;
-        if (_patchEmbed is not null)
-        {
-            int pc = checked((int)_patchEmbed.ParameterCount);
-            if (pc > 0)
-            {
-                _patchEmbed.SetParameters(parameters.Slice(idx, pc));
-                idx += pc;
-            }
-        }
-        foreach (var l in Layers)
-        {
-            int c = checked((int)l.ParameterCount);
-            l.SetParameters(parameters.Slice(idx, c));
-            idx += c;
-        }
-    }
-
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        if (!_useNativeMode)
-            throw new NotSupportedException("Cannot update parameters in ONNX mode.");
-        EnsurePatchEmbedForParameterVector(parameters.Length);
-        int idx = 0;
-        if (_patchEmbed is not null)
-        {
-            int pc = checked((int)_patchEmbed.ParameterCount);
-            if (pc > 0)
-            {
-                _patchEmbed.UpdateParameters(parameters.Slice(idx, pc));
-                idx += pc;
-            }
-        }
-        foreach (var l in Layers)
-        {
-            int c = (int)l.ParameterCount;
-            l.UpdateParameters(parameters.Slice(idx, c));
-            idx += c;
-        }
-    }
-
+    // ParameterCount restated a fold the base now derives from generated component registration.
+    // Removed under AIDN082.
+    // GetParameters restated a fold the base now derives from generated component registration.
+    // Removed under AIDN082.
+    // SetParameters restated a fold the base now derives from generated component registration.
+    // Removed under AIDN082.
+    // UpdateParameters restated a fold the base now derives from generated component registration.
+    // Removed under AIDN082.
     protected override Tensor<T> PreprocessImage(Tensor<T> image) =>
         NormalizeImage(image, _options.ImageMean, _options.ImageStd);
 
