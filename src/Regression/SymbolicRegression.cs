@@ -418,9 +418,10 @@ public class SymbolicRegression<T> : NonLinearRegressionBase<T>
             // the caller's feature columns shifted by one.
             var parameters = InterfaceGuard.Parameterizable(_bestModel).GetParameters();
             var active = new List<int>();
+            T activeTolerance = NumOps.FromDouble(_options.ActiveCoefficientTolerance);
             for (int i = 1; i < parameters.Length; i++)
             {
-                if (!NumOps.Equals(parameters[i], NumOps.Zero)) active.Add(i - 1);
+                if (NumOps.GreaterThan(NumOps.Abs(parameters[i]), activeTolerance)) active.Add(i - 1);
             }
 
             if (active.Count > 0) return active;
@@ -552,7 +553,10 @@ public class SymbolicRegression<T> : NonLinearRegressionBase<T>
             return predictions;
         }
 
-        return _bestModel?.Predict(X.AddConstantColumn(NumOps.One)) ?? Vector<T>.Empty();
+        Matrix<T> predictionInput = _preprocessingPipeline is null
+            ? X
+            : _preprocessingPipeline.Transform(X);
+        return _bestModel?.Predict(predictionInput.AddConstantColumn(NumOps.One)) ?? Vector<T>.Empty();
     }
 
     /// <summary>
@@ -563,13 +567,13 @@ public class SymbolicRegression<T> : NonLinearRegressionBase<T>
     /// <remarks>
     /// <para>
     /// This method implements prediction for a single input sample. It:
-    /// 1. Applies regularization to the input vector
-    /// 2. Evaluates the best symbolic model with the regularized input
+    /// 1. Applies the fitted preprocessing pipeline, when configured
+    /// 2. Evaluates the best symbolic model with the transformed input
     /// </para>
     /// <para><b>For Beginners:</b> This method predicts a value for a single data point.
     /// 
     /// Think of it like this:
-    /// 1. It first applies regularization to your input (which helps ensure stable predictions)
+    /// 1. It first applies the same preprocessing used during training
     /// 2. It then plugs the values into your discovered formula
     /// 3. It calculates and returns the result
     /// 
@@ -593,9 +597,13 @@ public class SymbolicRegression<T> : NonLinearRegressionBase<T>
             throw new InvalidOperationException("The model has not been optimized yet. Please call OptimizeModel first.");
         }
 
-        Vector<T> regularizedInput = Regularization.Regularize(input);
-        return _bestModel.Predict(
-            Matrix<T>.FromVector(regularizedInput).AddConstantColumn(NumOps.One))[0];
+        Matrix<T> predictionInput = Matrix<T>.FromVector(input);
+        if (_preprocessingPipeline is not null)
+        {
+            predictionInput = _preprocessingPipeline.Transform(predictionInput);
+        }
+
+        return _bestModel.Predict(predictionInput.AddConstantColumn(NumOps.One))[0];
     }
 
     /// <summary>

@@ -3,8 +3,26 @@ namespace AiDotNet.Models.Options;
 /// <summary>
 /// Configuration for the branch-and-bound integer-programming solver.
 /// </summary>
-public class BranchAndBoundSolverOptions
+/// <remarks>
+/// <para><b>Reference:</b> Land and Doig, “An Automatic Method of Solving Discrete Programming
+/// Problems” (1960).</para>
+/// <para><b>For Beginners:</b> The solver divides a whole-number problem into smaller branches,
+/// discarding any branch that cannot beat the best answer already found.</para>
+/// </remarks>
+public class BranchAndBoundSolverOptions : ModelOptions
 {
+    public BranchAndBoundSolverOptions() { }
+
+    public BranchAndBoundSolverOptions(BranchAndBoundSolverOptions other)
+    {
+        if (other is null) throw new ArgumentNullException(nameof(other));
+        Seed = other.Seed;
+        MaxNodes = other.MaxNodes;
+        IntegralityTolerance = other.IntegralityTolerance;
+        MinimumImprovement = other.MinimumImprovement;
+        RelaxationOptions = new SimplexSolverOptions(other.RelaxationOptions);
+    }
+
     /// <summary>
     /// Gets or sets the maximum number of search-tree nodes explored.
     /// </summary>
@@ -57,6 +75,7 @@ public class BranchAndBoundSolverOptions
     /// <summary>
     /// Gets or sets the options used for each linear-programming relaxation solved at a node.
     /// </summary>
+    /// <value>A separately owned copy of the inner simplex-solver settings.</value>
     /// <remarks>
     /// <para><b>For Beginners:</b> Every node of the search solves an ordinary linear program.
     /// These are the settings for those inner solves.

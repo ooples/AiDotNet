@@ -1,4 +1,4 @@
-﻿using AiDotNet.Helpers;
+using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
@@ -53,7 +53,7 @@ public abstract class RegressionModelTestBase<T> : System.IDisposable
     /// <summary>
     /// Reclaim memory between tests (shared model-family teardown). xUnit constructs a fresh
     /// test-class instance per test and calls Dispose() afterward, so this clears the
-    /// InferenceWeightCache and compacts the LOH between model classes â€” keeping committed memory
+    /// InferenceWeightCache and compacts the LOH between model classes — keeping committed memory
     /// from accumulating across a shard. Pure hygiene; no test-observable behavior change.
     /// </summary>
     public virtual void Dispose()
@@ -101,7 +101,7 @@ public abstract class RegressionModelTestBase<T> : System.IDisposable
     /// <remarks>
     /// These assume the model can be fitted meaningfully to the generic continuous linear data this
     /// base class generates. That is not true for a model whose required configuration is degenerate
-    /// against that data â€” a mixed model, for instance, must be given a grouping column, and the
+    /// against that data — a mixed model, for instance, must be given a grouping column, and the
     /// harness only has continuous features to offer, so every observation becomes its own group.
     /// The random effects then absorb all the variance, held-out predictions collapse, and the
     /// failure measures the harness's data rather than the estimator. Override to <c>false</c> with
@@ -223,7 +223,7 @@ public abstract class RegressionModelTestBase<T> : System.IDisposable
     }
 
     // =====================================================
-    // MATHEMATICAL INVARIANT: Training Error â‰¤ Test Error
+    // MATHEMATICAL INVARIANT: Training Error ≤ Test Error
     // On average, the model should fit training data at least as well as unseen test data.
     // Violation indicates a bug in Train or Predict.
     // =====================================================
@@ -248,7 +248,7 @@ public abstract class RegressionModelTestBase<T> : System.IDisposable
             double trainMSE = ModelTestHelpers.CalculateMSE(trainY, trainPred);
             double testMSE = ModelTestHelpers.CalculateMSE(testY, testPred);
 
-            // Training MSE should generally be â‰¤ test MSE (allow 2x slack for variance)
+            // Training MSE should generally be ≤ test MSE (allow 2x slack for variance)
             Assert.True(trainMSE <= testMSE * 2.0 + 1e-10,
                 $"Training MSE ({trainMSE:F4}) is much higher than test MSE ({testMSE:F4}). " +
                 "This suggests the model is not actually fitting the training data.");
@@ -256,8 +256,8 @@ public abstract class RegressionModelTestBase<T> : System.IDisposable
     }
 
     // =====================================================
-    // MATHEMATICAL INVARIANT: More Data â†’ Better or Equal Fit
-    // Doubling training data should not make RÂ² worse by more than noise.
+    // MATHEMATICAL INVARIANT: More Data → Better or Equal Fit
+    // Doubling training data should not make R² worse by more than noise.
     // =====================================================
 
     [Fact(Timeout = 60000)]
@@ -290,7 +290,7 @@ public abstract class RegressionModelTestBase<T> : System.IDisposable
 
             // Model with 4x data should be at least as good (allow 0.15 margin for stochasticity)
             Assert.True(r2Large >= r2Small - 0.15,
-                $"4x more data made RÂ² worse: RÂ²(30)={r2Small:F4}, RÂ²(120)={r2Large:F4}. " +
+                $"4x more data made R² worse: R²(30)={r2Small:F4}, R²(120)={r2Large:F4}. " +
                 "Model may not be correctly learning from additional data.");
         }
     }
@@ -348,9 +348,9 @@ public abstract class RegressionModelTestBase<T> : System.IDisposable
             double r2Real = ModelTestHelpers.CalculateR2(testY, pred1);
             double r2Noisy = ModelTestHelpers.CalculateR2(testY, pred2);
 
-            // Adding noise feature should not improve RÂ² substantially
+            // Adding noise feature should not improve R² substantially
             Assert.True(r2Noisy <= r2Real + 0.15,
-                $"Adding irrelevant noise feature improved RÂ²: clean={r2Real:F4}, noisy={r2Noisy:F4}. " +
+                $"Adding irrelevant noise feature improved R²: clean={r2Real:F4}, noisy={r2Noisy:F4}. " +
                 "Model may be overfitting to noise.");
         }
     }
@@ -401,7 +401,7 @@ public abstract class RegressionModelTestBase<T> : System.IDisposable
     }
 
     // =====================================================
-    // MATHEMATICAL INVARIANT: Residual Mean â‰ˆ 0
+    // MATHEMATICAL INVARIANT: Residual Mean ≈ 0
     // For unbiased estimators, the mean of residuals should be near zero.
     // Large residual mean indicates systematic bias in the model.
     // =====================================================
@@ -556,9 +556,9 @@ public abstract class RegressionModelTestBase<T> : System.IDisposable
     }
 
     // =====================================================
-    // MATHEMATICAL INVARIANT: RÂ² > 0 on Linear Data
+    // MATHEMATICAL INVARIANT: R² > 0 on Linear Data
     // Any regression model should outperform the mean baseline on data
-    // that is actually linear. RÂ²â‰¤0 means the model is worse than guessing the mean.
+    // that is actually linear. R²≤0 means the model is worse than guessing the mean.
     // =====================================================
 
     [Fact(Timeout = 60000)]
@@ -581,7 +581,7 @@ public abstract class RegressionModelTestBase<T> : System.IDisposable
         {
             double r2 = ModelTestHelpers.CalculateR2(testY, predictions);
             Assert.True(r2 > 0.0,
-                $"RÂ² = {r2:F4} on linear data â€” model is worse than predicting the mean. " +
+                $"R² = {r2:F4} on linear data — model is worse than predicting the mean. " +
                 "Either the model is not learning, or Train/Predict has a bug.");
         }
     }
@@ -608,9 +608,9 @@ public abstract class RegressionModelTestBase<T> : System.IDisposable
         for (int i = 0; i < predictions.Length; i++)
         {
             Assert.False(double.IsNaN(predictions[i]),
-                $"Prediction[{i}] is NaN â€” numerical instability in model.");
+                $"Prediction[{i}] is NaN — numerical instability in model.");
             Assert.False(double.IsInfinity(predictions[i]),
-                $"Prediction[{i}] is Infinity â€” overflow in model computation.");
+                $"Prediction[{i}] is Infinity — overflow in model computation.");
         }
     }
 
@@ -639,7 +639,7 @@ public abstract class RegressionModelTestBase<T> : System.IDisposable
 
     // =====================================================
     // MATHEMATICAL INVARIANT: Output Dimension
-    // Predict(NÃ—F matrix) must return length-N vector.
+    // Predict(N×F matrix) must return length-N vector.
     // =====================================================
 
     [Fact(Timeout = 60000)]
@@ -719,7 +719,7 @@ public abstract class RegressionModelTestBase<T> : System.IDisposable
         model.Train(ToT(trainX), ToT(trainY));
         if (model is not IParameterizable<T, Matrix<T>, Vector<T>> paramModel)
         {
-            // Tree/ensemble models don't implement IParameterizable â€” skip
+            // Tree/ensemble models don't implement IParameterizable — skip
             return;
         }
         var parameters = paramModel.GetParameters();
@@ -742,7 +742,7 @@ public abstract class RegressionModelTestBase<T> : System.IDisposable
         model.Train(ToT(trainX), ToT(trainY));
         if (model is not IFeatureAware featureAware)
         {
-            // Tree/ensemble models don't implement IFeatureAware â€” skip
+            // Tree/ensemble models don't implement IFeatureAware — skip
             return;
         }
         var activeFeatures = featureAware.GetActiveFeatureIndices().ToList();
@@ -826,7 +826,7 @@ public abstract class RegressionModelTestBase<T> : System.IDisposable
         for (int i = 0; i < predictions.Length; i++)
         {
             Assert.False(double.IsNaN(predictions[i]),
-                $"Prediction[{i}] is NaN with collinear features â€” numerical instability.");
+                $"Prediction[{i}] is NaN with collinear features — numerical instability.");
             Assert.False(double.IsInfinity(predictions[i]),
                 $"Prediction[{i}] is Infinity with collinear features.");
         }
@@ -910,7 +910,7 @@ public abstract class RegressionModelTestBase<T> : System.IDisposable
         var predictions = ToD(result.Predict(ToT(testX)));
         double r2 = ModelTestHelpers.CalculateR2(testY, predictions);
         Assert.True(r2 > 0.0,
-            $"Builder pipeline RÂ² = {r2:F4} â€” should be positive on linear data.");
+            $"Builder pipeline R² = {r2:F4} — should be positive on linear data.");
     }
 }
 

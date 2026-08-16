@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Models.Options;
 
@@ -825,7 +825,7 @@ public partial class LinearMixedModel<T> : RegressionBase<T>
     {
         if (_useOLS)
         {
-            // Manual clone for OLS path â€” copy coefficients directly
+            // Manual clone for OLS path — copy coefficients directly
             var clone = new LinearMixedModel<T>(_options, Regularization);
             clone._useOLS = true;
             clone.Coefficients = new Vector<T>(Coefficients);

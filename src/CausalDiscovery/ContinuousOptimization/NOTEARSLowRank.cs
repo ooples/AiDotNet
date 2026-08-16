@@ -6,7 +6,7 @@ using AiDotNet.Models.Options;
 namespace AiDotNet.CausalDiscovery.ContinuousOptimization;
 
 /// <summary>
-/// NOTEARS Low-Rank â€” DAG learning with low-rank parameterization for scalability.
+/// NOTEARS Low-Rank — DAG learning with low-rank parameterization for scalability.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -164,7 +164,7 @@ public class NOTEARSLowRank<T> : ContinuousOptimizationBase<T>
         // The library's L-BFGS optimizer, used here purely as a function minimizer (no model), so
         // the inner solver and the model-training path share one implementation of the two-loop
         // recursion and the Armijo line search.
-        var optimizer = new Optimizers.LBFGSOptimizer<T, Tensor<T>, Tensor<T>>();
+        var optimizer = Optimizers.LBFGSOptimizer<T, Tensor<T>, Tensor<T>>.CreateForFunction();
         int paramLen = 2 * d * rank;
 
         for (int outerIter = 0; outerIter < MaxIterations; outerIter++)
@@ -188,11 +188,11 @@ public class NOTEARSLowRank<T> : ContinuousOptimizationBase<T>
                     var W = ReconstructW(localA, localB, d, rank);
 
                     // Guard against non-finite W from an overshooting line-search
-                    // step: tr(exp(Wâˆ˜W)) overflows for large |W|, the Inf/NaN then
+                    // step: tr(exp(W∘W)) overflows for large |W|, the Inf/NaN then
                     // propagates through the gradient into A/B, and Math.Sign(NaN)
                     // below throws ArithmeticException. Returning a large finite
                     // objective with a zero gradient makes the line search treat
-                    // the step as a failure and backtrack â€” the standard handling
+                    // the step as a failure and backtrack — the standard handling
                     // in NOTEARS-style augmented-Lagrangian solvers.
                     bool wFinite = true;
                     for (int i = 0; i < d && wFinite; i++)
@@ -216,7 +216,7 @@ public class NOTEARSLowRank<T> : ContinuousOptimizationBase<T>
                         + NumOps.ToDouble(currentAlpha) * h
                         + 0.5 * NumOps.ToDouble(currentRho) * h * h);
 
-                    // Chain rule to parameter space: âˆ‚L/âˆ‚A, âˆ‚L/âˆ‚B
+                    // Chain rule to parameter space: ∂L/∂A, ∂L/∂B
                     var grad = new Vector<T>(paramLen);
                     for (int i = 0; i < d; i++)
                         for (int r = 0; r < rank; r++)

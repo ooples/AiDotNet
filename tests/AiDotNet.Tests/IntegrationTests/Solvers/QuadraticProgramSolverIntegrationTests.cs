@@ -120,16 +120,16 @@ public class QuadraticProgramSolverIntegrationTests
     }
 
     /// <summary>
-    /// Non-negative least squares, the shape SuperLearner's meta-learner and NMF both need.
-    /// Fitting y = (1, 1) with the single feature column (1, −1) has unconstrained solution
-    /// w = (1·1 + 1·(−1)) / 2 = 0, and the non-negativity constraint is satisfied at exactly 0.
-    /// Fitting y = (−1, 1) instead gives unconstrained w = −1, which the constraint clips to 0.
+    /// Non-negative least squares, the shape SuperLearner's meta-learner and NMF both need. With
+    /// X = (1, −1), the unconstrained optimum is (y₀ − y₁) / 2. Thus y = (−1, 1)
+    /// gives −1 and is clipped to 0, while y = (2, −2) gives 2 and remains unchanged.
     /// </summary>
     [Theory]
     [InlineData(-1.0, 1.0, 0.0)]     // unconstrained optimum is negative -> clipped to the bound
     [InlineData(2.0, -2.0, 2.0)]     // unconstrained optimum is positive -> unchanged
-    public void Solve_NonNegativeLeastSquares_RespectsBound(double y0, double y1, double expected)
+    public async Task Solve_NonNegativeLeastSquares_RespectsBound(double y0, double y1, double expected)
     {
+        await Task.Yield();
         // Q = XᵀX, c = -Xᵀy for X = [[1], [-1]].
         double xtx = 2.0;
         double xty = y0 - y1;

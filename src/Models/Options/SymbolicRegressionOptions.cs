@@ -43,6 +43,16 @@ namespace AiDotNet.Models.Options;
 public class SymbolicRegressionOptions : NonLinearRegressionOptions
 {
     /// <summary>
+    /// Absolute coefficient magnitude below which an evolved feature is reported as inactive.
+    /// Default: 1e-8.
+    /// </summary>
+    /// <remarks>
+    /// This affects feature reporting only; it does not change the evolved model's predictions.
+    /// Increase it to produce a sparser feature-importance view for noisy searches.
+    /// </remarks>
+    public double ActiveCoefficientTolerance { get; set; } = 1e-8;
+
+    /// <summary>
     /// Gets or sets the size of the population in the genetic algorithm.
     /// </summary>
     /// <value>A positive integer, defaulting to 100.</value>

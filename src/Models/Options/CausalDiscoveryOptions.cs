@@ -54,6 +54,7 @@ public class CausalDiscoveryOptions : ModelOptions
         UseForFeatureSelection = other.UseForFeatureSelection;
         LossType = other.LossType;
         LearningRate = other.LearningRate;
+        TCdfAttentionLearningRateMultiplier = other.TCdfAttentionLearningRateMultiplier;
         MaxLag = other.MaxLag;
         HiddenUnits = other.HiddenUnits;
         InnerIterations = other.InnerIterations;
@@ -210,6 +211,20 @@ public class CausalDiscoveryOptions : ModelOptions
     /// (DAG-GNN, GraN-DAG, DECI, CGNN, CausalVAE, etc.).</para>
     /// </remarks>
     public double? LearningRate { get; set; }
+
+    /// <summary>
+    /// Multiplier applied to TCDF's attention-logit learning rate after its dimension-squared
+    /// Jacobian compensation. Default: null (100).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// TCDF's sigmoid-plus-softmax attention path has substantially smaller gradients than its
+    /// convolution filters. Increase this value when attention remains diffuse, or decrease it
+    /// when attention updates oscillate. The caller-configured <see cref="LearningRate"/> is always
+    /// used as the unmodified base learning rate.
+    /// </para>
+    /// </remarks>
+    public double? TCdfAttentionLearningRateMultiplier { get; set; }
 
     /// <summary>
     /// Maximum lag order for time-series causal discovery methods. Default: null (3).

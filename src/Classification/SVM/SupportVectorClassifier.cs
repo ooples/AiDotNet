@@ -1,4 +1,4 @@
-﻿using System.Text;
+using System.Text;
 using AiDotNet.Attributes;
 using AiDotNet.Classification;
 using AiDotNet.Enums;
@@ -218,13 +218,16 @@ public partial class SupportVectorClassifier<T> : SVMBase<T>
             upperBounds[i] = penalty;
         }
 
+        int solverIterationBudget = Options.MaxIterations <= 0
+            ? 1_000_000
+            : (int)Math.Min((long)Options.MaxIterations * n, int.MaxValue);
+
         var solver = new AiDotNet.Solvers.QuadraticProgramming.SequentialMinimalOptimizationSolver<T>(
             new SequentialMinimalOptimizationOptions
             {
-                MaxIterations = Options.MaxIterations < 0 ? 1000000 : Options.MaxIterations * n,
+                MaxIterations = solverIterationBudget,
                 Tolerance = Options.Tolerance,
-            },
-            _random);
+            });
 
         var (alphas, bias, _) = solver.Solve(
             ComputeKernelCached, _yTrain, linear, upperBounds);
@@ -248,13 +251,13 @@ public partial class SupportVectorClassifier<T> : SVMBase<T>
         }
         // Reuse the cached row array for sample i and route through the
         // array-based decision path so the inner kernel loop stays on plain
-        // memory access â€” see TrainSMO for why.
+        // memory access — see TrainSMO for why.
         T prediction = ComputeDecisionFromArray(_xTrainRows[i]);
         return NumOps.Subtract(prediction, _yTrainArr[i]);
     }
 
     /// <summary>
-    /// Computes the decision value for a sample (Vector overload â€” used by
+    /// Computes the decision value for a sample (Vector overload — used by
     /// Predict on user-supplied inputs).
     /// </summary>
     private T ComputeDecision(Vector<T> x)
@@ -332,11 +335,11 @@ public partial class SupportVectorClassifier<T> : SVMBase<T>
     /// </summary>
     private T ComputeKernelCached(int i, int j)
     {
-        if (_xTrain is null)
+        if (_xTrainRows is null)
         {
             throw new InvalidOperationException("Model has not been trained.");
         }
-        return ComputeKernel(GetRow(_xTrain, i), GetRow(_xTrain, j));
+        return ComputeKernelFromArrays(_xTrainRows[i], _xTrainRows[j]);
     }
 
     /// <summary>

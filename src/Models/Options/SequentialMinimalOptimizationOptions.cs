@@ -4,8 +4,26 @@ namespace AiDotNet.Models.Options;
 /// Configuration for the Sequential Minimal Optimization solver used to train support-vector
 /// machines.
 /// </summary>
-public class SequentialMinimalOptimizationOptions
+/// <remarks>
+/// <para><b>Reference:</b> Platt, “Sequential Minimal Optimization: A Fast Algorithm for Training
+/// Support Vector Machines” (1998).</para>
+/// <para><b>For Beginners:</b> SMO trains an SVM by repeatedly fixing the two multipliers that are
+/// furthest from satisfying the optimality rules.</para>
+/// </remarks>
+public class SequentialMinimalOptimizationOptions : ModelOptions
 {
+    public SequentialMinimalOptimizationOptions() { }
+
+    public SequentialMinimalOptimizationOptions(SequentialMinimalOptimizationOptions other)
+    {
+        if (other is null) throw new ArgumentNullException(nameof(other));
+        Seed = other.Seed;
+        MaxIterations = other.MaxIterations;
+        Tolerance = other.Tolerance;
+        StepEpsilon = other.StepEpsilon;
+        RestrictPairsToSameLabel = other.RestrictPairsToSameLabel;
+    }
+
     /// <summary>
     /// Gets or sets the maximum number of multiplier pairs optimized.
     /// </summary>
@@ -17,6 +35,8 @@ public class SequentialMinimalOptimizationOptions
     /// stopping early leaves multipliers that still violate the KKT conditions, which shows up as a
     /// silently worse decision boundary rather than an error.
     /// </para>
+    /// <para><b>For Beginners:</b> This is a safety ceiling on how many two-variable corrections
+    /// training may perform.</para>
     /// </remarks>
     public int MaxIterations { get; set; } = 1000000;
 
@@ -48,6 +68,8 @@ public class SequentialMinimalOptimizationOptions
     /// looping forever on steps that are pure floating-point noise. It also decides ties when the
     /// objective's curvature along the segment is non-positive.
     /// </para>
+    /// <para><b>For Beginners:</b> Changes smaller than this are treated as numerical noise, which
+    /// prevents endless microscopic updates.</para>
     /// </remarks>
     public double StepEpsilon { get; set; } = 1e-12;
 

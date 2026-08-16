@@ -468,5 +468,5 @@ public sealed class AugmentedLagrangianSolver<T>
     }
 
     private static IFunctionOptimizer<T> CreateDefaultInnerOptimizer()
-        => new LBFGSOptimizer<T, Tensor<T>, Tensor<T>>();
+        => LBFGSOptimizer<T, Tensor<T>, Tensor<T>>.CreateForFunction();
 }

@@ -64,15 +64,9 @@ public sealed class SequentialMinimalOptimizationSolver<T>
     /// Solver configuration. When omitted, the documented defaults on
     /// <see cref="SequentialMinimalOptimizationOptions"/> are used.
     /// </param>
-    /// <param name="random">
-    /// Retained for source compatibility and no longer used: maximal-violating-pair selection is
-    /// deterministic, so training is reproducible without a random source.
-    /// </param>
-    public SequentialMinimalOptimizationSolver(
-        SequentialMinimalOptimizationOptions? options = null, Random? random = null)
+    public SequentialMinimalOptimizationSolver(SequentialMinimalOptimizationOptions? options = null)
     {
         _options = options ?? new SequentialMinimalOptimizationOptions();
-        _ = random;
     }
 
     /// <summary>
@@ -124,6 +118,15 @@ public sealed class SequentialMinimalOptimizationSolver<T>
         {
             throw new ArgumentException(
                 "labels, linear and upperBounds must all have the same length.", nameof(linear));
+        }
+        for (int i = 0; i < n; i++)
+        {
+            if (!NumOps.Equals(labels[i], NumOps.One) &&
+                !NumOps.Equals(labels[i], NumOps.Negate(NumOps.One)))
+            {
+                throw new ArgumentException(
+                    $"labels[{i}] must be exactly +1 or -1.", nameof(labels));
+            }
         }
 
         kernelIndex ??= static i => i;

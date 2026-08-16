@@ -1,3 +1,5 @@
+using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
 using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.Solvers.LinearProgramming;
@@ -136,6 +138,27 @@ public sealed class LinearProgram<T>
         ValidateBounds(lowerBounds, objective.Length, nameof(lowerBounds));
         ValidateBounds(upperBounds, objective.Length, nameof(upperBounds));
 
+        var numOps = MathHelper.GetNumericOperations<T>();
+        ValidateFiniteVector(objective, nameof(objective), allowInfinity: false, numOps);
+        ValidateFiniteConstraintBlock(
+            inequalityMatrix, inequalityBounds, nameof(inequalityMatrix), nameof(inequalityBounds), numOps);
+        ValidateFiniteConstraintBlock(
+            equalityMatrix, equalityBounds, nameof(equalityMatrix), nameof(equalityBounds), numOps);
+        ValidateFiniteVector(lowerBounds, nameof(lowerBounds), allowInfinity: true, numOps);
+        ValidateFiniteVector(upperBounds, nameof(upperBounds), allowInfinity: true, numOps);
+        if (lowerBounds is not null && upperBounds is not null)
+        {
+            for (int i = 0; i < objective.Length; i++)
+            {
+                if (numOps.GreaterThan(lowerBounds[i], upperBounds[i]))
+                {
+                    throw new ArgumentException(
+                        $"Lower bound at index {i} exceeds the corresponding upper bound.",
+                        nameof(lowerBounds));
+                }
+            }
+        }
+
         Objective = objective;
         InequalityMatrix = inequalityMatrix;
         InequalityBounds = inequalityBounds;
@@ -185,6 +208,49 @@ public sealed class LinearProgram<T>
         {
             throw new ArgumentException(
                 $"{name} has {bounds.Length} entries but there are {variableCount} variables.", name);
+        }
+    }
+
+    private static void ValidateFiniteConstraintBlock(
+        Matrix<T>? matrix,
+        Vector<T>? bounds,
+        string matrixName,
+        string boundsName,
+        INumericOperations<T> numOps)
+    {
+        if (matrix is not null)
+        {
+            for (int r = 0; r < matrix.Rows; r++)
+            {
+                for (int c = 0; c < matrix.Columns; c++)
+                {
+                    double value = numOps.ToDouble(matrix[r, c]);
+                    if (double.IsNaN(value) || double.IsInfinity(value))
+                    {
+                        throw new ArgumentException(
+                            $"{matrixName}[{r}, {c}] must be finite.", matrixName);
+                    }
+                }
+            }
+        }
+
+        ValidateFiniteVector(bounds, boundsName, allowInfinity: false, numOps);
+    }
+
+    private static void ValidateFiniteVector(
+        Vector<T>? vector,
+        string name,
+        bool allowInfinity,
+        INumericOperations<T> numOps)
+    {
+        if (vector is null) return;
+        for (int i = 0; i < vector.Length; i++)
+        {
+            double value = numOps.ToDouble(vector[i]);
+            if (double.IsNaN(value) || (!allowInfinity && double.IsInfinity(value)))
+            {
+                throw new ArgumentException($"{name}[{i}] has an invalid value {value}.", name);
+            }
         }
     }
 }

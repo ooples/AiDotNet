@@ -1,11 +1,11 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Models.Options;
 
 namespace AiDotNet.CausalDiscovery.ContinuousOptimization;
 
 /// <summary>
-/// CORL â€” Causal Ordering via Reinforcement Learning.
+/// CORL — Causal Ordering via Reinforcement Learning.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -54,7 +54,7 @@ public class CORLAlgorithm<T> : ContinuousOptimizationBase<T>
     private readonly double _learningRate;
     private readonly int _numEpisodes;
     private readonly int _maxParents;
-    private readonly int? _seed;
+    private readonly int _seed;
 
     /// <summary>
     /// Seed used when the caller does not supply one, so that a run is reproducible by default.
@@ -108,9 +108,7 @@ public class CORLAlgorithm<T> : ContinuousOptimizationBase<T>
 
         // Initialize position scores: scores[i,j] = preference for variable i at position j
         var scores = new Matrix<T>(d, d);
-        var rng = _seed.HasValue
-            ? Tensors.Helpers.RandomHelper.CreateSeededRandom(_seed.Value)
-            : Tensors.Helpers.RandomHelper.CreateSecureRandom();
+        var rng = Tensors.Helpers.RandomHelper.CreateSeededRandom(_seed);
 
         int[] bestOrdering = Enumerable.Range(0, d).ToArray();
         double bestReward = double.NegativeInfinity;
