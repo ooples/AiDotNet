@@ -152,4 +152,102 @@ public class FusedSpecMatchesEagerBehaviourTests
         Assert.False(TryGetConfig(optimizer, out _),
             "MomentumOptimizer fused despite adapting its momentum, which the plan bakes in at build time.");
     }
+
+    // ── CoordinateDescent → SGDMomentum ──────────────────────────────────────
+
+    /// <summary>
+    /// CoordinateDescent reports SGDMomentum, carrying the momentum in beta1.
+    /// </summary>
+    [Fact]
+    public void CoordinateDescent_ReportsSgdMomentum_CarryingMomentumInBeta1()
+    {
+        var options = new CoordinateDescentOptimizerOptions<double, Matrix<double>, Vector<double>>
+        {
+            InitialLearningRate = 0.05,
+            InitialMomentum = 0.7,
+            UseAdaptiveLearningRate = false,
+        };
+        var optimizer = new CoordinateDescentOptimizer<double, Matrix<double>, Vector<double>>(null, options);
+
+        Assert.True(TryGetConfig(optimizer, out var config));
+        Assert.Equal(Tensors.Engines.Compilation.OptimizerType.SGDMomentum, config.Type);
+        Assert.Equal(0.05f, config.LearningRate, 6);
+        Assert.Equal(0.7f, config.Beta1, 6);
+    }
+
+    /// <summary>
+    /// The mapping claims to be EXACT, not approximate, so this reproduces the kernel's recurrence
+    /// independently and demands agreement step for step.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// CoordinateDescent applies <c>u_t = lr*g_t + m*u_{t-1}; x -= u_t</c>. The SGDMomentum kernel applies
+    /// <c>v_t = m*v_{t-1} + g_t; x -= lr*v_t</c>. Substituting <c>u = lr*v</c> turns the first into the
+    /// second, so the two are the same update with the stored state scaled differently — and both start it
+    /// at zero.
+    /// </para>
+    /// <para>
+    /// This is the assertion that would catch the mapping being merely plausible. A spec that named
+    /// SGDMomentum while the eager sweep did something subtly different would still train, and would still
+    /// pass the type check above.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public void CoordinateDescent_MatchesTheSgdMomentumRecurrenceExactly()
+    {
+        const double lr = 0.05, m = 0.7;
+        var options = new CoordinateDescentOptimizerOptions<double, Matrix<double>, Vector<double>>
+        {
+            InitialLearningRate = lr,
+            InitialMomentum = m,
+            UseAdaptiveLearningRate = false,
+        };
+        var optimizer = new CoordinateDescentOptimizer<double, Matrix<double>, Vector<double>>(null, options);
+
+        var gradients = new[]
+        {
+            new[] { 0.4, -0.8 },
+            new[] { 0.2, 0.6 },
+            new[] { -0.1, 0.3 },
+            new[] { 0.5, -0.2 },
+        };
+
+        var actual = new Vector<double>(new[] { 1.0, -2.0 });
+        // Independent SGDMomentum reference: v = m*v + g; x -= lr*v.
+        var reference = new[] { 1.0, -2.0 };
+        var v = new[] { 0.0, 0.0 };
+
+        foreach (var g in gradients)
+        {
+            actual = optimizer.UpdateParameters(actual, new Vector<double>((double[])g.Clone()));
+            for (int i = 0; i < reference.Length; i++)
+            {
+                v[i] = m * v[i] + g[i];
+                reference[i] -= lr * v[i];
+            }
+
+            for (int i = 0; i < reference.Length; i++)
+                Assert.Equal(reference[i], actual[i], 12);
+        }
+    }
+
+    /// <summary>
+    /// A non-constant schedule breaks the <c>u = lr*v</c> identity the mapping rests on, so the spec must
+    /// decline rather than fuse into a silently different trajectory.
+    /// </summary>
+    [Fact]
+    public void CoordinateDescent_DeclinesOnANonConstantSchedule()
+    {
+        var options = new CoordinateDescentOptimizerOptions<double, Matrix<double>, Vector<double>>
+        {
+            InitialLearningRate = 0.05,
+            InitialMomentum = 0.7,
+            UseAdaptiveLearningRate = false,
+            LearningRateScheduler = new AiDotNet.LearningRateSchedulers.ExponentialLRScheduler(0.05, 0.95),
+        };
+        var optimizer = new CoordinateDescentOptimizer<double, Matrix<double>, Vector<double>>(null, options);
+
+        Assert.False(TryGetConfig(optimizer, out _),
+            "CoordinateDescent fused under a moving learning rate; the u = lr*v identity only holds while lr is fixed.");
+    }
 }
