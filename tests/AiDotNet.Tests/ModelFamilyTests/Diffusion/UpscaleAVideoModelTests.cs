@@ -44,6 +44,75 @@ public class UpscaleAVideoModelTests : DiffusionModelTestBase<float>
             noiseLevel: 20);
     }
 
+    protected override Tensor<float> PredictModel(
+        IDiffusionModel<float> model,
+        Tensor<float> input)
+    {
+        var upscale = Assert.IsType<UpscaleAVideoModel<float>>(model);
+        return upscale.Upscale(
+            input,
+            prompt: "test clip",
+            numInferenceSteps: 1,
+            guidanceScale: 1.0,
+            seed: 42,
+            noiseLevel: 20,
+            temporalWindowSize: 1,
+            temporalWindowOverlap: 0);
+    }
+
+    [Fact(Timeout = 120000)]
+    public override async Task Training_ShouldReducePredictionError()
+    {
+        await Task.Yield();
+        using var model = Assert.IsType<UpscaleAVideoModel<float>>(CreateModel());
+        var predictor = Assert.IsType<VideoUNetPredictor<float>>(model.NoisePredictor);
+        predictor.ActivationCheckpointingEnabled = true;
+
+        var lowResolution = new Tensor<float>(InputShape);
+        for (int i = 0; i < lowResolution.Length; i++)
+            lowResolution[i] = -0.2f + (i * 0.01f);
+        var highResolution = EnsureFourTimesTarget(
+            lowResolution,
+            new Tensor<float>([1]));
+        var before = FingerprintTemporalParameters(predictor);
+
+        model.TrainConditioned(
+            lowResolution,
+            highResolution,
+            "test clip",
+            noiseLevel: 20);
+
+        var after = FingerprintTemporalParameters(predictor);
+        Assert.True(after.Finite, "Temporal fine-tuning produced a non-finite parameter.");
+        Assert.Equal(before.Count, after.Count);
+        Assert.NotEqual(before.Hash, after.Hash);
+
+        var output = PredictModel(model, lowResolution);
+        Assert.All(output.AsSpan().ToArray(), value => Assert.True(float.IsFinite(value)));
+    }
+
+    private static (ulong Hash, int Count, bool Finite) FingerprintTemporalParameters(
+        VideoUNetPredictor<float> predictor)
+    {
+        const ulong offset = 14695981039346656037UL;
+        const ulong prime = 1099511628211UL;
+        ulong hash = offset;
+        int count = 0;
+        bool finite = true;
+
+        foreach (var layer in predictor.TemporalTrainingLayers)
+        foreach (float value in layer.GetParameters().AsSpan())
+        {
+            finite &= float.IsFinite(value);
+            hash ^= unchecked((uint)BitConverter.SingleToInt32Bits(value));
+            hash *= prime;
+            count++;
+        }
+
+        Assert.True(count > 0, "Upscale-A-Video exposed no temporal fine-tuning parameters.");
+        return (hash, count, finite);
+    }
+
     private static Tensor<float> EnsureFourTimesTarget(
         Tensor<float> input,
         Tensor<float> expectedOutput)

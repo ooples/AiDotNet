@@ -266,6 +266,16 @@ public abstract class DiffusionModelTestBase<TNum> : IAsyncLifetime
         => model.Train(input, expectedOutput);
 
     /// <summary>
+    /// Runs the model's public inference contract. Conditional translation and super-resolution
+    /// fixtures override this boundary because their input is a condition, not an already-noisy
+    /// sample that can be passed to <see cref="IDiffusionModel{T}.Predict"/> generically.
+    /// </summary>
+    protected virtual Tensor<TNum> PredictModel(
+        IDiffusionModel<TNum> model,
+        Tensor<TNum> input)
+        => model.Predict(input);
+
+    /// <summary>
     /// Gets the model-specific metadata name that must remain stable across a training step.
     /// Concrete fixtures can override this with a paper-defined literal when it differs from the
     /// model's construction-time contract.
@@ -314,7 +324,7 @@ public abstract class DiffusionModelTestBase<TNum> : IAsyncLifetime
     // =====================================================
 
     [Fact(Timeout = 120000)]
-    public async Task Training_ShouldReducePredictionError()
+    public virtual async Task Training_ShouldReducePredictionError()
     {
         await Task.Yield();
         using var _arena = TensorArena.Create();
@@ -408,8 +418,8 @@ public abstract class DiffusionModelTestBase<TNum> : IAsyncLifetime
         var input1 = CreateConstantTensor(InputShape, 0.1);
         var input2 = CreateConstantTensor(InputShape, 0.9);
 
-        var output1 = model.Predict(input1);
-        var output2 = model.Predict(input2);
+        var output1 = PredictModel(model, input1);
+        var output2 = PredictModel(model, input2);
 
         bool anyDifferent = false;
         int minLen = Math.Min(output1.Length, output2.Length);
@@ -443,8 +453,8 @@ public abstract class DiffusionModelTestBase<TNum> : IAsyncLifetime
         for (int i = 0; i < input.Length; i++)
             scaledInput[i] = _numOps.FromDouble(ToDouble(input[i]) * 10.0);
 
-        var output1 = model.Predict(input);
-        var output2 = model.Predict(scaledInput);
+        var output1 = PredictModel(model, input);
+        var output2 = PredictModel(model, scaledInput);
 
         bool anyDifferent = false;
         int minLen = Math.Min(output1.Length, output2.Length);
@@ -475,8 +485,9 @@ public abstract class DiffusionModelTestBase<TNum> : IAsyncLifetime
         using var model = CreateModel();
         var input = CreateRandomTensor(InputShape, rng);
 
-        var output = model.Predict(input);
-        Assert.Equal(input.Length, output.Length);
+        var output = PredictModel(model, input);
+        int expectedLength = OutputShape.Aggregate(1, (product, dimension) => product * dimension);
+        Assert.Equal(expectedLength, output.Length);
     }
 
     // =====================================================
@@ -491,7 +502,7 @@ public abstract class DiffusionModelTestBase<TNum> : IAsyncLifetime
         var rng = ModelTestHelpers.CreateSeededRandom();
         using var model = CreateModel();
         var input = CreateRandomTensor(InputShape, rng);
-        var output = model.Predict(input);
+        var output = PredictModel(model, input);
 
         Assert.True(output.Length > 0, "Output should not be empty.");
         for (int i = 0; i < output.Length; i++)
@@ -518,7 +529,7 @@ public abstract class DiffusionModelTestBase<TNum> : IAsyncLifetime
         for (int i = 0; i < finiteCheckIters; i++)
             TrainModel(model, input, target);
 
-        var output = model.Predict(input);
+        var output = PredictModel(model, input);
         for (int i = 0; i < output.Length; i++)
         {
             var v = ToDouble(output[i]);
@@ -587,7 +598,7 @@ public abstract class DiffusionModelTestBase<TNum> : IAsyncLifetime
         using var model = CreateModel();
         var input = CreateRandomTensor(InputShape, rng);
 
-        var output = model.Predict(input);
+        var output = PredictModel(model, input);
 
         for (int i = 0; i < output.Length; i++)
         {
@@ -611,8 +622,8 @@ public abstract class DiffusionModelTestBase<TNum> : IAsyncLifetime
         using var model = CreateModel();
         var input = CreateRandomTensor(InputShape, rng);
 
-        var out1 = model.Predict(input);
-        var out2 = model.Predict(input);
+        var out1 = PredictModel(model, input);
+        var out2 = PredictModel(model, input);
 
         for (int i = 0; i < out1.Length; i++)
             Assert.Equal(ToDouble(out1[i]), ToDouble(out2[i]), 12); // Tensors 0.16.0 deterministic BLAS — exact match expected
@@ -627,9 +638,10 @@ public abstract class DiffusionModelTestBase<TNum> : IAsyncLifetime
         using var model = CreateModel();
         var input = CreateRandomTensor(InputShape, rng);
 
-        var original = model.Predict(input);
+        var original = PredictModel(model, input);
         var cloned = model.Clone();
-        var clonedOutput = cloned.Predict(input);
+        var clonedDiffusion = Assert.IsAssignableFrom<IDiffusionModel<TNum>>(cloned);
+        var clonedOutput = PredictModel(clonedDiffusion, input);
 
         Assert.Equal(original.Length, clonedOutput.Length);
         // EVERY ELEMENT AGAINST ITS OWN TOLERANCE. Tracking only the LARGEST difference and
