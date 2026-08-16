@@ -1015,7 +1015,55 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     /// all follow from that one answer.
     /// </para>
     /// </remarks>
-    protected virtual bool ParametersAreConstructionSized => false;
+    protected virtual bool ParametersAreConstructionSized => DeclaredShapesAreFullyConcrete();
+
+    /// <summary>
+    /// True when every declared parameter axis is already a positive size, i.e. nothing this layer
+    /// declares depends on an input that has not arrived.
+    /// </summary>
+    /// <returns>Whether the declared shapes can be allocated right now.</returns>
+    /// <remarks>
+    /// <para>
+    /// This is the default answer to <see cref="ParametersAreConstructionSized"/>, derived rather
+    /// than written per layer. Seven layer types declared that override by hand out of roughly 321;
+    /// every other layer whose weights are sized entirely by its constructor had the same latent
+    /// bug, and it surfaced as a short count on restore: a composite materialized only the children
+    /// that happened to carry the override, so <c>TransformerEncoderBlock</c> counted its attention
+    /// weights and silently omitted its two norms and both FFN projections, then rejected the saved
+    /// vector as "Expected 4256 parameters, but got 12608".
+    /// </para>
+    /// <para>
+    /// Derived at RUNTIME from the generated declarations rather than syntactically in the
+    /// generator, because the axis grammar cannot answer it alone: an axis written as a plain
+    /// constructor expression still reads back as the -1 lazy sentinel until the layer resolves,
+    /// and <c>*</c> / <c>*(binding)</c> become -2. Asking the shapes what they currently are covers
+    /// all three without a table of special cases.
+    /// </para>
+    /// <para>
+    /// A layer that declares nothing answers false, exactly as before: silence is not a claim that
+    /// the weights are construction-sized, and treating it as one would have every legacy layer
+    /// allocate against an unknown shape.
+    /// </para>
+    /// </remarks>
+    private bool DeclaredShapesAreFullyConcrete()
+    {
+        var declared = DeclaredParameterShapes();
+        if (declared is null || declared.Count == 0) return false;
+
+        for (int i = 0; i < declared.Count; i++)
+        {
+            var expected = declared[i].Expected;
+            if (expected.Length == 0) return false;
+
+            for (int axis = 0; axis < expected.Length; axis++)
+            {
+                // <= 0 covers both sentinels: -1 "not resolved yet" and -2 "adaptive".
+                if (expected[axis] <= 0) return false;
+            }
+        }
+
+        return true;
+    }
 
     /// <summary>
     /// Forces lazy weight allocation now (the same materialization the first <c>Forward</c> performs),
