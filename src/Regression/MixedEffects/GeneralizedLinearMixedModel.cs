@@ -260,9 +260,23 @@ public class GeneralizedLinearMixedModel<T> : RegressionBase<T>
         // Compute variance decomposition
         _varianceDecomposition = ComputeVarianceDecomposition();
 
-        // Set base class coefficients for prediction
-        Coefficients = _fixedEffects ?? new Vector<T>(_nFixedParams);
-        Intercept = NumOps.Zero;
+        // Surface the fitted parameters on the base class. The fixed-effects vector carries the
+        // intercept as its LAST entry (see ExtractFixedEffectsMatrix), so split it out rather than
+        // reporting an intercept of zero alongside a coefficient vector that secretly contains one.
+        if (_fixedEffects is not null && _fixedEffects.Length > 0)
+        {
+            int featureCount = _fixedEffects.Length - 1;
+            var coefficients = new Vector<T>(featureCount);
+            for (int j = 0; j < featureCount; j++) coefficients[j] = _fixedEffects[j];
+
+            Coefficients = coefficients;
+            Intercept = _fixedEffects[featureCount];
+        }
+        else
+        {
+            Coefficients = new Vector<T>(Math.Max(0, _nFixedParams - 1));
+            Intercept = NumOps.Zero;
+        }
     }
 
     /// <summary>
@@ -799,8 +813,16 @@ public class GeneralizedLinearMixedModel<T> : RegressionBase<T>
             groupCols.Add(re.GroupColumnIndex);
         }
 
+        // One extra column holds a constant 1, giving the model an INTERCEPT. Without it the linear
+        // predictor is forced through the origin, so a constant response could only be reproduced
+        // when the features happened to span the constant direction: fitting y = 7.5 under a log
+        // link returned exp(0) = 1 for every row. Every standard mixed-model implementation (lme4,
+        // statsmodels) includes an intercept by default.
+        //
+        // The constant is appended LAST rather than prepended so the existing column indices —
+        // which RandomSlopeColumns refers to — keep their meaning.
         int nCols = x.Columns - groupCols.Count;
-        var fixedX = new Matrix<T>(x.Rows, nCols);
+        var fixedX = new Matrix<T>(x.Rows, nCols + 1);
 
         int colIdx = 0;
         for (int j = 0; j < x.Columns; j++)
@@ -813,6 +835,11 @@ public class GeneralizedLinearMixedModel<T> : RegressionBase<T>
                 }
                 colIdx++;
             }
+        }
+
+        for (int i = 0; i < x.Rows; i++)
+        {
+            fixedX[i, nCols] = NumOps.One;
         }
 
         return fixedX;
