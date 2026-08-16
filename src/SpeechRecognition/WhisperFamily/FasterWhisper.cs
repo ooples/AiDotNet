@@ -46,8 +46,19 @@ namespace AiDotNet.SpeechRecognition.WhisperFamily;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Robust Speech Recognition via Large-Scale Weak Supervision", "https://arxiv.org/abs/2212.04356", Year = 2023, Authors = "Radford et al.")]
-public class FasterWhisper<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
+public partial class FasterWhisper<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// Measured from this model's own output construction, not from a name. <c>PredictCore</c> folds
+    /// every layer in <c>Layers</c>, and <c>InitializeLayers</c> fills <c>Layers</c> from
+    /// <c>LayerHelper&lt;T&gt;.CreateDefaultWhisperEncoderDecoderLayers(..., vocabSize: _options.VocabSize, ...)</c>,
+    /// whose LAST emitted layer is the vocabulary projection
+    /// <c>new DenseLayer&lt;T&gt;(vocabSize, identity)</c> - the decoder's own <c>decoderDim</c> is the
+    /// width one layer earlier, not the final one. <c>PostprocessOutput</c> is the identity.
+    /// </remarks>
+    protected override int OutputFeatureWidth => _options.VocabSize;
+
     private readonly FasterWhisperOptions _options; public override ModelOptions GetOptions() => _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer; private bool _useNativeMode; private bool _disposed;
     public IReadOnlyList<string> SupportedLanguages { get; }
@@ -102,8 +113,12 @@ public class FasterWhisper<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 
     protected override void InitializeLayers() { if (!_useNativeMode) return; if (Architecture.Layers is not null && Architecture.Layers.Count > 0) Layers.AddRange(Architecture.Layers); else Layers.AddRange(LayerHelper<T>.CreateDefaultWhisperEncoderDecoderLayers(encoderDim: _options.EncoderDim, decoderDim: _options.DecoderDim, numEncoderLayers: _options.NumEncoderLayers, numDecoderLayers: _options.NumDecoderLayers, numAttentionHeads: _options.NumAttentionHeads, feedForwardDim: _options.EncoderDim * 4, numMels: _options.NumMels, vocabSize: _options.VocabSize, dropoutRate: _options.DropoutRate)); }
     protected override Tensor<T> PredictCore(Tensor<T> input) { ThrowIfDisposed(); if (IsOnnxMode && OnnxEncoder is not null) return OnnxEncoder.Run(input); var c = input; foreach (var l in Layers) c = l.Forward(c); return c; }
-    public override void Train(Tensor<T> input, Tensor<T> expected) { if (IsOnnxMode) throw new NotSupportedException("Training not supported in ONNX mode."); SetTrainingMode(true); try { TrainWithTape(input, expected); } finally { SetTrainingMode(false); } }
-    public override void UpdateParameters(Vector<T> parameters) { if (!_useNativeMode) throw new NotSupportedException("ONNX mode."); int idx = 0; foreach (var l in Layers) { int c = (int)l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; } }
+    public override void Train(Tensor<T> input, Tensor<T> expected) { if (IsOnnxMode) throw new NotSupportedException("Training not supported in ONNX mode."); SetTrainingMode(true); try { TrainWithTape(input, expected, _optimizer); } finally { SetTrainingMode(false); } }
+    /// <inheritdoc />
+    /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
+    /// write on every parameter surface, so the guard is stated once here instead of being
+    /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
+    protected override bool SupportsParameterMutation => _useNativeMode;
     protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio) { if (MelSpec is not null) return MelSpec.Forward(rawAudio); return rawAudio; }
     protected override Tensor<T> PostprocessOutput(Tensor<T> o) => o;
     public override ModelMetadata<T> GetModelMetadata() => new() { Name = _useNativeMode ? "FasterWhisper-Native" : "FasterWhisper-ONNX", Description = "Faster-Whisper: CTranslate2-optimized Whisper with int8 quantization (SYSTRAN, 2023)", FeatureCount = _options.NumMels, Complexity = _options.NumEncoderLayers + _options.NumDecoderLayers, AdditionalInfo = new Dictionary<string, object> { { "ModelName", "FasterWhisper" }, { "Mode", _useNativeMode ? "Native" : "ONNX" }, { "SampleRate", _options.SampleRate }, { "NumMels", _options.NumMels }, { "EncoderDim", _options.EncoderDim }, { "DecoderDim", _options.DecoderDim }, { "NumEncoderLayers", _options.NumEncoderLayers }, { "NumDecoderLayers", _options.NumDecoderLayers }, { "NumAttentionHeads", _options.NumAttentionHeads }, { "VocabSize", _options.VocabSize }, { "ComputeType", _options.ComputeType }, { "BeamSize", _options.BeamSize } }, ModelData = SerializeForMetadata() };

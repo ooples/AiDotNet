@@ -109,7 +109,11 @@ public class VFIMamba<T> : FrameInterpolationBase<T>
     {
         _options = options ?? new VFIMambaOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
+            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate
+            });
         SupportsArbitraryTimestep = true;
         InitializeLayers();
     }
@@ -163,7 +167,7 @@ public class VFIMamba<T> : FrameInterpolationBase<T>
         SetTrainingMode(true);
         try
         {
-        TrainWithTape(input, expected);
+        TrainWithTape(input, expected, _optimizer);
         }
         finally
         {
@@ -171,24 +175,7 @@ public class VFIMamba<T> : FrameInterpolationBase<T>
         }
     }
 
-    /// <inheritdoc/>
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        int required = 0;
-        foreach (var layer in Layers) required += layer.GetParameters().Length;
-        if (parameters.Length < required)
-            throw new ArgumentException($"Parameter vector length {parameters.Length} is less than required {required}.", nameof(parameters));
-        int offset = 0;
-        foreach (var layer in Layers)
-        {
-            var p = layer.GetParameters();
-            var sub = new Vector<T>(p.Length);
-            for (int i = 0; i < p.Length; i++) sub[i] = parameters[offset + i];
-            layer.SetParameters(sub);
-            offset += p.Length;
-        }
-    }
-
+    // UpdateParameters restated the base verbatim; ModelBase routes it to SetParameters.
     /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()
     {

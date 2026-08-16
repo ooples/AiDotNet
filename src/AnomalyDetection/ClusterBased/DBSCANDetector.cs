@@ -51,6 +51,7 @@ public class DBSCANDetector<T> : AnomalyDetectorBase<T>
     private T _fittedEpsilon;
     private int _fittedMinPts;
     private int[]? _clusterLabels;
+    [Buffer]
     private Matrix<T>? _trainingData;
 
     /// <summary>

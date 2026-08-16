@@ -49,7 +49,7 @@ namespace AiDotNet.Video.Motion;
     "https://arxiv.org/abs/2211.05783",
     Year = 2023,
     Authors = "Haofei Xu, Jing Zhang, Jianfei Cai, Hamid Rezatofighi, Fisher Yu, Dacheng Tao, Andreas Geiger")]
-public class UniMatch<T> : OpticalFlowBase<T>
+public partial class UniMatch<T> : OpticalFlowBase<T>
 {
     private readonly UniMatchOptions _options;
 
@@ -161,17 +161,24 @@ public class UniMatch<T> : OpticalFlowBase<T>
         }
         var rawFlow = _outputConv.Forward(feat);
 
-        // Extract 2-channel flow field; warn if shapes differ which may indicate misconfiguration
-        var flow = new Tensor<T>([2, height, width]);
-        if (rawFlow.Length != flow.Length)
-            System.Diagnostics.Debug.WriteLine(
-                $"UniMatch: flow output length {rawFlow.Length} differs from expected {flow.Length} (2x{height}x{width}). Check layer configuration.");
-        for (int i = 0; i < Math.Min(rawFlow.Length, flow.Length); i++)
+        // The output convolution already emits exactly 2 channels at the input resolution
+        // (ConvolutionalLayer(2, kernel 3, stride 1, padding 1)), so rawFlow IS the flow field. The
+        // element-by-element Data.Span copy this replaced was a numeric no-op that severed the
+        // autodiff tape at the end of the forward pass, discarding the gradient path for the whole
+        // network behind it. Returning the tensor directly is bit-identical.
+        //
+        // The misconfiguration check is promoted from a Debug.WriteLine to a real exception: a
+        // wrong-shaped flow field is a bug, and a debug-only trace is invisible in release builds,
+        // where the old code silently returned a partly-zero field instead.
+        int expectedLength = 2 * height * width;
+        if (rawFlow.Length != expectedLength)
         {
-            flow.Data.Span[i] = rawFlow.Data.Span[i];
+            throw new InvalidOperationException(
+                $"UniMatch flow output length {rawFlow.Length} differs from the expected " +
+                $"{expectedLength} (2x{height}x{width}). Check layer configuration.");
         }
 
-        return flow;
+        return rawFlow;
     }
 
     /// <inheritdoc/>
@@ -188,44 +195,7 @@ public class UniMatch<T> : OpticalFlowBase<T>
         }
     }
 
-    /// <inheritdoc/>
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        int offset = 0;
-        if (_featureExtract is not null)
-        {
-            var p = _featureExtract.GetParameters();
-            if (offset + p.Length <= parameters.Length)
-            {
-                var sub = new Vector<T>(p.Length);
-                for (int i = 0; i < p.Length; i++) sub[i] = parameters[offset + i];
-                _featureExtract.SetParameters(sub);
-                offset += p.Length;
-            }
-        }
-        foreach (var block in _processingBlocks)
-        {
-            var p = block.GetParameters();
-            if (offset + p.Length <= parameters.Length)
-            {
-                var sub = new Vector<T>(p.Length);
-                for (int i = 0; i < p.Length; i++) sub[i] = parameters[offset + i];
-                block.SetParameters(sub);
-                offset += p.Length;
-            }
-        }
-        if (_outputConv is not null)
-        {
-            var p = _outputConv.GetParameters();
-            if (offset + p.Length <= parameters.Length)
-            {
-                var sub = new Vector<T>(p.Length);
-                for (int i = 0; i < p.Length; i++) sub[i] = parameters[offset + i];
-                _outputConv.SetParameters(sub);
-            }
-        }
-    }
-
+    // UpdateParameters restated the base verbatim; ModelBase routes it to SetParameters.
     /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()
     {

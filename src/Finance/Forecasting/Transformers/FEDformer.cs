@@ -65,7 +65,7 @@ namespace AiDotNet.Finance.Forecasting.Transformers;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("FEDformer: Frequency Enhanced Decomposed Transformer for Long-term Series Forecasting", "https://arxiv.org/abs/2201.12740", Year = 2022, Authors = "Tian Zhou, Ziqing Ma, Qingsong Wen, Xue Wang, Liang Sun, Rong Jin")]
-public class FEDformer<T> : ForecastingModelBase<T>
+public partial class FEDformer<T> : ForecastingModelBase<T>
 {
     #region Execution Mode
 
@@ -121,11 +121,13 @@ public class FEDformer<T> : ForecastingModelBase<T>
     /// <summary>
     /// Instance normalization mean (for RevIN).
     /// </summary>
+    [Scratch]
     private Tensor<T>? _instanceMean;
 
     /// <summary>
     /// Instance normalization standard deviation (for RevIN).
     /// </summary>
+    [Scratch]
     private Tensor<T>? _instanceStd;
 
     #endregion
@@ -562,27 +564,8 @@ public class FEDformer<T> : ForecastingModelBase<T>
         return Forward(input);
     }
 
-    /// <inheritdoc/>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the FEDformer model, UpdateParameters updates internal parameters or state. This keeps the FEDformer architecture aligned with the latest values.
-    /// </para>
-    /// </remarks>
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        if (parameters is null)
-            throw new ArgumentNullException(nameof(parameters));
-
-        int offset = 0;
-        foreach (var layer in Layers)
-        {
-            var layerParams = layer.GetParameters();
-            var newParams = parameters.Slice(offset, layerParams.Length);
-            layer.SetParameters(newParams);
-            offset += layerParams.Length;
-        }
-    }
-
+    // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
+    // exactly the same enumeration, so this said nothing the base does not already say.
     /// <inheritdoc/>
     /// <remarks>
     /// <para>

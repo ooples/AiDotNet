@@ -76,6 +76,11 @@ public class TapeGradientFiniteDifferenceTests
 
         // Logits: unrestricted, with the sigmoid/softmax applied inside the loss.
         yield return Case(new BinaryCrossEntropyWithLogitsLoss<double>(), scores, binary);
+        // Zero is the load-bearing point: the smooth derivative is sigmoid(0) - target.
+        yield return Case(
+            new BinaryCrossEntropyWithLogitsLoss<double>(),
+            new double[] { 0.0 },
+            new double[] { 0.75 });
 
         // Strictly positive predictions and targets.
         var positive = new double[] { 1.4, 0.6, 2.1, 0.9 };

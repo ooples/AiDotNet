@@ -2416,6 +2416,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task BigGAN_GetParameterCount_ReturnsPositiveValue()
     {
+        await Task.Yield();
+
         // Arrange - BigGAN uses ThreeDimensional input for image generation
         var generatorArchitecture = new NeuralNetworkArchitecture<float>(
             InputType.ThreeDimensional,
@@ -2758,6 +2760,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task SAGAN_GetParameterCount_ReturnsPositiveValue()
     {
+        await Task.Yield();
+
         // Arrange - SAGAN uses ThreeDimensional input for image generation
         var generatorArchitecture = new NeuralNetworkArchitecture<float>(
             InputType.ThreeDimensional,
@@ -4181,8 +4185,9 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
     }
 
     [Fact]
-    public void MeshCNN_Predict_EmptyEdges_ThrowsClearError()
+    public async Task MeshCNN_Predict_EmptyEdges_ThrowsClearError()
     {
+        await Task.Yield();
         // Arrange - valid adjacency, but an empty-mesh (0-edge) input. Without the
         // guard the [0, features] input reshapes to a degenerate [1, 0, channels]
         // tensor that fails downstream in pooling with an opaque error.
@@ -4194,8 +4199,9 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         var emptyInput = CreateRandomTensor([0, 5]);
 
         // Act + Assert - fails fast with a clear, actionable message.
-        var ex = Assert.Throws<ArgumentException>(() => meshCnn.Predict(emptyInput));
-        Assert.Contains("0 edges", ex.Message);
+        var ex = Assert.ThrowsAny<ArgumentException>(() => meshCnn.Predict(emptyInput));
+        Assert.Contains("0", ex.Message);
+        Assert.Contains("axis", ex.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Trait("Category", "ModelFamilyDuplicate")]

@@ -81,7 +81,7 @@ namespace AiDotNet.NeuralNetworks.SyntheticData;
     "https://arxiv.org/abs/2210.12007",
     Year = 2023,
     Authors = "Tennison Liu, Zhaozhi Qian, Jeroen Berrevoets, Mihaela van der Schaar")]
-public class GOGGLEGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerator<T>
+public partial class GOGGLEGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>, ISyntheticTabularGenerator<T>
 {
     private readonly GOGGLEOptions<T> _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
@@ -827,66 +827,8 @@ public class GOGGLEGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
         }
     }
 
-    /// <summary>
-    /// Total trainable parameter count = the layer parameters PLUS the learned
-    /// adjacency tensor (a registered extra trainable tensor). Overridden so the
-    /// flat-parameter contract (GetParameters / UpdateParameters / ParameterCount)
-    /// stays symmetric with <see cref="GetExtraTrainableTensors"/>.
-    /// </summary>
-    public override long ParameterCount
-    {
-        get
-        {
-            long total = base.ParameterCount;
-            if (_adjacency is not null && _adjacency.Length > 0)
-                total += _adjacency.Length;
-            return total;
-        }
-    }
-
-    /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        var layerParams = base.GetParameters();
-        if (_adjacency is null || _adjacency.Length == 0)
-            return layerParams;
-
-        // Append adjacency after the layer parameters; UpdateParameters consumes
-        // it in the identical order so the flat-parameter round-trip is lossless.
-        var combined = new Vector<T>(layerParams.Length + _adjacency.Length);
-        for (int i = 0; i < layerParams.Length; i++)
-            combined[i] = layerParams[i];
-        for (int i = 0; i < _adjacency.Length; i++)
-            combined[layerParams.Length + i] = _adjacency[i];
-        return combined;
-    }
-
-    /// <inheritdoc />
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        int startIndex = 0;
-        foreach (var layer in Layers)
-        {
-            int layerParameterCount = checked((int)layer.ParameterCount);
-            if (layerParameterCount > 0)
-            {
-                Vector<T> layerParameters = parameters.SubVector(startIndex, layerParameterCount);
-                layer.UpdateParameters(layerParameters);
-                startIndex += layerParameterCount;
-            }
-        }
-
-        // Consume the adjacency block appended by GetParameters() so any
-        // parameter-vector-based flow (clone-by-parameters, external optimizers)
-        // actually updates the learned graph instead of silently dropping it.
-        if (_adjacency is not null && _adjacency.Length > 0
-            && startIndex + _adjacency.Length <= parameters.Length)
-        {
-            for (int i = 0; i < _adjacency.Length; i++)
-                _adjacency[i] = parameters[startIndex + i];
-        }
-    }
-
+    // UpdateParameters restated a fold the base now derives from generated component registration.
+    // Removed under AIDN082.
     /// <inheritdoc />
     protected override void SerializeNetworkSpecificData(BinaryWriter writer)
     {

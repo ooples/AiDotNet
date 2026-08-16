@@ -249,13 +249,15 @@ public class VideoLLaVA<T> : VisionLanguageModelBase<T>, IVideoLanguageModel<T>
         }
         else
         {
+            // Video-LLaVA (Lin et al. 2024, arXiv:2311.10122) = LanguageBind pre-aligned vision
+            // encoder → shared LINEAR projection → LLM (alignment before projection; no separate
+            // temporal transformer). Residual ViT + LLM blocks (the old shared builder's
+            // non-residual stack collapsed to an input-independent output after training).
             Layers.AddRange(
-                LayerHelper<T>.CreateDefaultVideoTemporalVLMLayers(
-                    _options.VisionDim,
+                LayerHelper<T>.CreateDefaultVideoLinearProjectorVLMLayers(
                     _options.VisionDim,
                     _options.DecoderDim,
                     _options.NumVisionLayers,
-                    2,
                     _options.NumDecoderLayers,
                     _options.NumHeads,
                     _options.DropoutRate,
@@ -271,8 +273,12 @@ public class VideoLLaVA<T> : VisionLanguageModelBase<T>, IVideoLanguageModel<T>
 
     private void ComputeEncoderDecoderBoundary()
     {
-        int lpb = _options.DropoutRate > 0 ? 6 : 5;
-        _encoderLayerEnd = 2 + _options.NumVisionLayers * lpb + 2 * lpb + 2;
+        // Layout of CreateDefaultVideoLinearProjectorVLMLayers: PatchEmbedding(1) + LayerNorm(1)
+        // + numVisionLayers·(TransformerEncoderLayer(1) + optional Dropout) then the projection +
+        // LLM decoder. The vision-encoder segment (what EncodeImage runs to produce visual
+        // features, before the LLM projection) ends after the vision blocks.
+        int perBlock = _options.DropoutRate > 0 ? 2 : 1;
+        _encoderLayerEnd = 2 + _options.NumVisionLayers * perBlock;
     }
 
     private Tensor<T> TokenizeText(string text)
@@ -303,23 +309,15 @@ public class VideoLLaVA<T> : VisionLanguageModelBase<T>, IVideoLanguageModel<T>
         if (IsOnnxMode)
             throw new NotSupportedException("Training is not supported in ONNX mode.");
         SetTrainingMode(true);
-        TrainWithTape(input, expected);
+        TrainWithTape(input, expected, _optimizer);
         SetTrainingMode(false);
     }
 
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        if (!_useNativeMode)
-            throw new NotSupportedException("Cannot update parameters in ONNX mode.");
-        int idx = 0;
-        foreach (var l in Layers)
-        {
-            int c = (int)l.ParameterCount;
-            l.UpdateParameters(parameters.Slice(idx, c));
-            idx += c;
-        }
-    }
-
+    /// <inheritdoc />
+    /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
+    /// write on every parameter surface, so the guard is stated once here instead of being
+    /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
+    protected override bool SupportsParameterMutation => _useNativeMode;
     protected override Tensor<T> PreprocessImage(Tensor<T> image) =>
         NormalizeImage(image, _options.ImageMean, _options.ImageStd);
 

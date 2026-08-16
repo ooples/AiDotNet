@@ -52,6 +52,11 @@ namespace AiDotNet.NeuralNetworks.Tabular;
     Authors = "Yury Gorishniy, Akim Kotelnikov, Artem Babenko")]
 public class TabMRegression<T> : TabMBase<T>
 {
+
+    /// <inheritdoc />
+    /// <remarks>The task head. Everything else is the shared backbone, which the base folds ahead of it in every parameter surface.</remarks>
+    protected override IEnumerable<ILayer<T>> GetExtraTrainableLayers()
+        => new ILayer<T>[] { _regressionHead };
     private readonly int _outputDimension;
     private readonly BatchEnsembleLayer<T> _regressionHead;
 
@@ -64,11 +69,6 @@ public class TabMRegression<T> : TabMBase<T>
     /// Gets the output dimension.
     /// </summary>
     public int OutputDimension => _outputDimension;
-
-    /// <summary>
-    /// Gets the total number of trainable parameters.
-    /// </summary>
-    public override long ParameterCount => base.ParameterCount + _regressionHead.ParameterCount;
 
     /// <summary>
     /// Initializes a new instance of the TabMRegression class.
@@ -383,27 +383,6 @@ public class TabMRegression<T> : TabMBase<T>
     {
         base.UpdateParameters(learningRate);
         _regressionHead.UpdateParameters(learningRate);
-    }
-
-    /// <summary>
-    /// Gets all parameters including the regression head.
-    /// </summary>
-    public override Vector<T> GetParameters()
-    {
-        var baseParams = base.GetParameters();
-        var headParams = _regressionHead.GetParameters();
-
-        var allParams = new T[baseParams.Length + headParams.Length];
-        for (int i = 0; i < baseParams.Length; i++)
-        {
-            allParams[i] = baseParams[i];
-        }
-        for (int i = 0; i < headParams.Length; i++)
-        {
-            allParams[baseParams.Length + i] = headParams[i];
-        }
-
-        return new Vector<T>(allParams);
     }
 
     /// <summary>

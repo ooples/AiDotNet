@@ -47,13 +47,15 @@ namespace AiDotNet.AnomalyDetection.Ensemble;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("XGBOD: Improving Supervised Outlier Detection with Unsupervised Representation Learning", "https://doi.org/10.1109/IJCNN.2018.8489605", Year = 2018, Authors = "Yue Zhao, Maciej K. Hryniewicki")]
-public class XGBODDetector<T> : AnomalyDetectorBase<T>
+public partial class XGBODDetector<T> : AnomalyDetectorBase<T>
 {
     private readonly int _nEstimators;
     private readonly int _boostingRounds;
     private List<IAnomalyDetector<T>>? _baseDetectors;
     private Vector<T>? _weights; // Simplified boosting weights
+    [Buffer]
     private Vector<T>? _featureMean;
+    [Buffer]
     private Vector<T>? _featureStd;
     private int _nOriginalFeatures;
 

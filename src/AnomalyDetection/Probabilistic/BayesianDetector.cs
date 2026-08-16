@@ -49,8 +49,11 @@ namespace AiDotNet.AnomalyDetection.Probabilistic;
 public class BayesianDetector<T> : AnomalyDetectorBase<T>
 {
     private readonly double _priorStrength;
+    [Buffer]
     private Vector<T>? _posteriorMean;
+    [Buffer]
     private Matrix<T>? _posteriorCovariance;
+    [Buffer]
     private Matrix<T>? _posteriorPrecision;
     private int _nFeatures;
 

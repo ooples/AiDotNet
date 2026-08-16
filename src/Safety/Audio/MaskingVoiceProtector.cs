@@ -36,7 +36,7 @@ namespace AiDotNet.Safety.Audio;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("VocalCrypt: Pseudo-Timbre Jamming for Voice Protection",
+[ResearchPaper("VocalCrypt: Novel Active Defense Against Deepfake Voice Based on Masking Effect",
     "https://arxiv.org/abs/2502.10329",
     Year = 2025,
     Authors = "Various")]

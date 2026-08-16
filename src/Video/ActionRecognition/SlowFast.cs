@@ -59,7 +59,11 @@ namespace AiDotNet.Video.ActionRecognition;
     "https://arxiv.org/abs/1812.03982",
     Year = 2019,
     Authors = "Christoph Feichtenhofer, Haoqi Fan, Jitendra Malik, Kaiming He")]
-public class SlowFast<T> : NeuralNetworkBase<T>
+[TensorLayout(TensorAxis.Batch, TensorAxis.Frames, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Input, BatchOptional = true)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Classes,
+    Direction = TensorLayoutDirection.Output, BatchOptional = true)]
+public partial class SlowFast<T> : NeuralNetworkBase<T>
 {
     private readonly SlowFastOptions _options;
 
@@ -228,6 +232,7 @@ public class SlowFast<T> : NeuralNetworkBase<T>
 
         _lossFunction = lossFunction ?? new CrossEntropyWithLogitsLoss<T>();
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        SetBaseTrainOptimizer(_optimizer);
         _probabilityActivation = probabilityActivation ?? new SoftmaxActivation<T>();
         _customFastLayers = customFastLayers;
         _customFusionLayers = customFusionLayers;
@@ -528,7 +533,7 @@ public class SlowFast<T> : NeuralNetworkBase<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expectedOutput);
+            TrainWithTape(input, expectedOutput, _optimizer);
         }
         finally
         {
@@ -659,31 +664,7 @@ public class SlowFast<T> : NeuralNetworkBase<T>
 
     #region Serialization
 
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        if (!_useNativeMode)
-            throw new InvalidOperationException("Parameter updates are not supported in ONNX mode.");
-
-        int offset = 0;
-
-        // Layers now contains [slow... | fast... | fusion...] (see InitializeLayers).
-        // A single walk covers all three pathways in the same partition order
-        // base.GetParameters / TapeTrainingStep.CollectParameters use, so the
-        // serialized layout matches what the optimizer round-trips through.
-        foreach (var layer in Layers)
-        {
-            var layerParams = layer.GetParameters();
-            int paramCount = layerParams.Length;
-            if (paramCount > 0 && offset + paramCount <= parameters.Length)
-            {
-                var slice = new Vector<T>(paramCount);
-                for (int i = 0; i < paramCount; i++) slice[i] = parameters[offset + i];
-                layer.SetParameters(slice);
-                offset += paramCount;
-            }
-        }
-    }
-
+    // UpdateParameters restated the base verbatim; ModelBase routes it to SetParameters.
     /// <summary>
     /// Gets metadata about this model for serialization.
     /// </summary>
@@ -842,6 +823,7 @@ public class SlowFast<T> : NeuralNetworkBase<T>
         {
             _optimizer = new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
         }
+        SetBaseTrainOptimizer(_optimizer);
 
         // Clear custom layer references (not serialized)
         _customFastLayers = null;

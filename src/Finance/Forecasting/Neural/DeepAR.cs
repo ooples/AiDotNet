@@ -64,7 +64,7 @@ namespace AiDotNet.Finance.Forecasting.Neural;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("DeepAR: Probabilistic Forecasting with Autoregressive Recurrent Networks", "https://arxiv.org/abs/1704.04110", Year = 2020, Authors = "David Salinas, Valentin Flunkert, Jan Gasthaus, Tim Januschowski")]
-public class DeepAR<T> : ForecastingModelBase<T>
+public partial class DeepAR<T> : ForecastingModelBase<T>
 {
     #region Native Mode Fields
 
@@ -128,11 +128,13 @@ public class DeepAR<T> : ForecastingModelBase<T>
     /// rather than a hardcoded estimate.
     /// </para>
     /// </remarks>
+    [Scratch]
     private Tensor<T>? _lastSigma;
 
     /// <summary>
     /// Instance normalization scale for denormalization.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _scaleStd;
 
     #endregion
@@ -487,23 +489,8 @@ public class DeepAR<T> : ForecastingModelBase<T>
         }
     }
 
-    /// <summary>
-    /// Updates the model's parameters using the provided gradients.
-    /// </summary>
-    /// <param name="gradients">Vector of parameter gradients.</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> This method applies the calculated adjustments (gradients)
-    /// to the model's weights. In DeepAR, this update is handled by the optimizer
-    /// during the training step, so this specific override is a placeholder or used
-    /// for manual parameter manipulation.
-    /// </para>
-    /// </remarks>
-    public override void UpdateParameters(Vector<T> gradients)
-    {
-        // Parameters are updated through the optimizer in Train method
-    }
-
+    // UpdateParameters was an empty override, silently dropping every restore. The base
+    // distributes the vector over the declared enumeration.
     /// <summary>
     /// Gets metadata about the model for serialization and inspection.
     /// </summary>

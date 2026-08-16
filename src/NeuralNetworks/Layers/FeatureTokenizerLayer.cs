@@ -1,7 +1,10 @@
 using System;
+using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Helpers;
+
+using AiDotNet.Attributes;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -35,8 +38,57 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-public class FeatureTokenizerLayer<T> : LayerBase<T>
+// The RANK CHANGES here, which is the whole content of the declaration: this layer's own summary
+// says "Output is always a batched [batch, features, embedding] tensor", and ForwardTraced ends with
+// a broadcast add over a [batch, _numFeatures, _embeddingDim] shape. So a rank-2 table of feature
+// values leaves as a rank-3 token sequence.
+//
+// The output axes are named [Batch, Time, Features] rather than [Batch, Features, Channels] because
+// that is the form the downstream transformer encoder reads - one token per input feature along the
+// sequence axis, the embedding width last - and it is the same naming DenseLayer's rank-3 form uses,
+// so the two chain-validate against each other instead of disagreeing about which axis is which.
+//
+// Only rank 2 is declared. ForwardTraced accepts rank 1 and higher ranks too, but it collapses ALL
+// leading axes into the batch (batch = input.Length / features), so a rank-3 input's output batch is
+// a PRODUCT of two input axes and a rank-1 input's is the constant 1 - neither is a claim this
+// layer's configuration supports, so they are left undescribed rather than guessed at.
+[LayerCategory(LayerCategory.Embedding)]
+[LayerTask(LayerTask.FeatureExtraction)]
+[LayerProperty(IsTrainable = true, ChangesShape = true, TestInputShape = "1, 4", TestConstructorArgs = "4, 8")]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Output,
+    Note = "One token per input feature; the trailing axis is the per-token embedding width.")]
+[AutoParameters]
+public partial class FeatureTokenizerLayer<T> : LayerBase<T>, IShapeContract
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// Read off <c>ResolveShapes(new[] { _numFeatures }, new[] { _numFeatures, _embeddingDim })</c>
+    /// and the reshape in <c>ForwardTraced</c>. The token count is the input's own feature width -
+    /// <c>ForwardTraced</c> opens by taking <c>input.Shape[input.Rank - 1]</c> and RESIZES the weight
+    /// table to match ("The fed input width is authoritative"), so this is <c>Same</c>, not a
+    /// <c>Fixed(_numFeatures)</c>: <c>_numFeatures</c> is a cache of the last input, not a constraint
+    /// on the next one.
+    /// </para>
+    /// <para>
+    /// The embedding width is <c>Fixed(_embeddingDim)</c>, which IS a constructor argument and is the
+    /// only shape this layer decides for itself.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        if (inputRank != 2 || _embeddingDim <= 0) return null;
+
+        return new[]
+        {
+            new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+            new OutputAxisContract(TensorAxis.Time, AxisRelation.Same(TensorAxis.Features)),
+            new OutputAxisContract(TensorAxis.Features, AxisRelation.Fixed(_embeddingDim)),
+        };
+    }
+
     private int _numFeatures;
     private readonly int _embeddingDim;
     private Tensor<T> _weights = new Tensor<T>(new[] { 0, 0 }); // [numFeatures, embeddingDim]
@@ -61,7 +113,9 @@ public class FeatureTokenizerLayer<T> : LayerBase<T>
     /// </summary>
     /// <param name="numFeatures">Expected number of input features.</param>
     /// <param name="embeddingDim">Embedding dimension per feature token.</param>
-    public FeatureTokenizerLayer(int numFeatures, int embeddingDim)
+    public FeatureTokenizerLayer(
+        [LayerState] int numFeatures,
+        [LayerState] int embeddingDim)
         : this(embeddingDim)
     {
         if (numFeatures > 0)
@@ -73,9 +127,6 @@ public class FeatureTokenizerLayer<T> : LayerBase<T>
 
     /// <inheritdoc/>
     public override bool SupportsTraining => true;
-
-    /// <inheritdoc/>
-    public override long ParameterCount => _initialized ? 2L * _numFeatures * _embeddingDim : 0L;
 
     private void EnsureTokenizerInitialized()
     {
@@ -121,7 +172,7 @@ public class FeatureTokenizerLayer<T> : LayerBase<T>
     }
 
     /// <inheritdoc/>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         int features = input.Shape[input.Rank - 1];
         if (!_initialized || _numFeatures != features)
@@ -144,53 +195,6 @@ public class FeatureTokenizerLayer<T> : LayerBase<T>
 
         var scaled = Engine.TensorBroadcastMultiply(expanded, wB);
         return Engine.TensorBroadcastAdd(scaled, bB);
-    }
-
-    /// <inheritdoc/>
-    public override void UpdateParameters(T learningRate)
-    {
-        // This is a tape-trained layer: its weight/bias tensors are registered via
-        // RegisterTrainableParameter and updated in place by the gradient-tape optimizer
-        // (TrainWithTape), which is the path every model using this layer takes. There is no
-        // per-layer gradient state to drive an eager SGD step from here, so this override is
-        // intentionally empty rather than throwing — a generic optimizer walk that reaches it
-        // must not fault. (DenseLayer-style eager SGD is not applicable to tape-only layers.)
-    }
-
-    /// <inheritdoc/>
-    public override Vector<T> GetParameters()
-    {
-        if (!_initialized) return new Vector<T>(0);
-        return Vector<T>.Concatenate(
-            Vector<T>.FromMemory(_weights.Data),
-            Vector<T>.FromMemory(_biases.Data));
-    }
-
-    /// <inheritdoc/>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (!_initialized)
-        {
-            // Resolve the feature count from the parameter vector: length = 2 * F * E.
-            if (parameters.Length == 0) return;
-            int inferred = parameters.Length / (2 * _embeddingDim);
-            if (inferred <= 0 || inferred * 2 * _embeddingDim != parameters.Length)
-                throw new ArgumentException(
-                    $"Cannot infer feature count from {parameters.Length} parameters with embeddingDim {_embeddingDim}.",
-                    nameof(parameters));
-            _numFeatures = inferred;
-            EnsureTokenizerInitialized();
-        }
-
-        int wCount = _numFeatures * _embeddingDim;
-        if (parameters.Length != 2 * wCount)
-            throw new ArgumentException(
-                $"Expected {2 * wCount} parameters, got {parameters.Length}.", nameof(parameters));
-
-        var wSpan = _weights.Data.Span;
-        var bSpan = _biases.Data.Span;
-        for (int i = 0; i < wCount; i++) wSpan[i] = parameters[i];
-        for (int i = 0; i < wCount; i++) bSpan[i] = parameters[wCount + i];
     }
 
     /// <inheritdoc/>

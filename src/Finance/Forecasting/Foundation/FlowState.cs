@@ -61,7 +61,7 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 [ModelComplexity(ModelComplexity.High)]
 [ResearchPaper("Flow-Based Generative Models for Financial Time Series", "https://arxiv.org/abs/2312.01236")]
     [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-public class FlowState<T> : TimeSeriesFoundationModelBase<T>
+public partial class FlowState<T> : TimeSeriesFoundationModelBase<T>
 {
     #region Fields
 
@@ -90,7 +90,9 @@ public class FlowState<T> : TimeSeriesFoundationModelBase<T>
     // RevIN (reversible instance normalization, Kim et al. 2022) statistics.
     // FlowState normalizes each input series before the SSM; without restoring
     // the level the forecast ignores the input's magnitude.
+    [Scratch]
     private Vector<T> _revinMean = new Vector<T>(0);
+    [Scratch]
     private Vector<T> _revinStd = new Vector<T>(0);
 
     #endregion
@@ -260,12 +262,8 @@ public class FlowState<T> : TimeSeriesFoundationModelBase<T>
         base.Train(input, target);
     }
 
-    /// <inheritdoc/>
-    public override void UpdateParameters(Vector<T> gradients)
-    {
-        // Parameters are updated through the optimizer in Train()
-    }
-
+    // UpdateParameters was an empty override, silently dropping every restore. The base
+    // distributes the vector over the declared enumeration.
     /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()
     {
@@ -389,47 +387,12 @@ public class FlowState<T> : TimeSeriesFoundationModelBase<T>
 
     /// <inheritdoc/>
     public override Tensor<T> ApplyInstanceNormalization(Tensor<T> input)
-    {
-        // RevIN forward (Kim et al. 2022). A rank-1 input is a single instance
-        // (the old code read Shape[0] as the batch size, which for a bare
-        // [contextLength] vector was the sequence length); compute stats over
-        // every non-batch element of each row instead.
-        int batchSize = input.Shape.Length > 1 ? input.Shape[0] : 1;
-        int instanceSize = batchSize > 0 ? input.Length / batchSize : input.Length;
-        if (instanceSize <= 0)
-            return input;
-
-        var result = new Tensor<T>(input._shape);
-        _revinMean = new Vector<T>(batchSize);
-        _revinStd = new Vector<T>(batchSize);
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            int start = b * instanceSize;
-
-            T mean = NumOps.Zero;
-            for (int t = 0; t < instanceSize; t++)
-                mean = NumOps.Add(mean, input[start + t]);
-            mean = NumOps.Divide(mean, NumOps.FromDouble(instanceSize));
-
-            T variance = NumOps.Zero;
-            for (int t = 0; t < instanceSize; t++)
-            {
-                var diff = NumOps.Subtract(input[start + t], mean);
-                variance = NumOps.Add(variance, NumOps.Multiply(diff, diff));
-            }
-            variance = NumOps.Divide(variance, NumOps.FromDouble(instanceSize));
-            T std = NumOps.Sqrt(NumOps.Add(variance, NumOps.FromDouble(1e-5)));
-
-            _revinMean[b] = mean;
-            _revinStd[b] = std;
-
-            for (int t = 0; t < instanceSize; t++)
-                result.Data.Span[start + t] = NumOps.Divide(NumOps.Subtract(input[start + t], mean), std);
-        }
-
-        return result;
-    }
+        // RevIN forward (Kim et al. 2022), delegated to the shared tape-tracked helper. The previous
+        // hand-rolled version accumulated mean/variance with scalar NumOps arithmetic and wrote the
+        // output through result.Data.Span[...], which the autodiff tape cannot observe: the normalised
+        // tensor came back as a LEAF, so no gradient could flow through the normalisation. RevIN is a
+        // differentiable layer in the paper, not a preprocessing step.
+        => NormalizeInstanceOnTape(input, DefaultRevInEpsilon, out _revinMean, out _revinStd);
 
     /// <summary>
     /// RevIN reverse step (Kim et al. 2022): restores each instance's mean/std to the

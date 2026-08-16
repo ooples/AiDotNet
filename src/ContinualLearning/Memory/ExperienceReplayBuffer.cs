@@ -914,12 +914,6 @@ public class ExperienceReplayBuffer<T, TInput, TOutput> : ModelBase<T, TInput, T
     public override ILossFunction<T> DefaultLossFunction => new MeanSquaredErrorLoss<T>();
 
     /// <inheritdoc />
-    public override Vector<T> GetParameters() => new Vector<T>(0);
-
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters) { }
-
-    /// <inheritdoc />
     public override IFullModel<T, TInput, TOutput> WithParameters(Vector<T> parameters)
     {
         var copy = DeepCopy();

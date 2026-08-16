@@ -80,7 +80,7 @@ namespace AiDotNet.Finance.Forecasting.StateSpace;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Efficiently Modeling Long Sequences with Structured State Spaces", "https://arxiv.org/abs/2111.00396", Year = 2022, Authors = "Albert Gu, Karan Goel, Christopher Re")]
-public class S4<T> : ForecastingModelBase<T>
+public partial class S4<T> : ForecastingModelBase<T>
 {
     #region Execution Mode
     private bool _useNativeMode;
@@ -440,20 +440,8 @@ public class S4<T> : ForecastingModelBase<T>
         base.Train(input, target);
     }
 
-    /// <summary>
-    /// Updates the model parameters using the optimizer (required override).
-    /// </summary>
-    /// <param name="gradients">Gradient vector (not used - layers handle gradients internally).</param>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> This override is required by the base class.
-    /// Actual parameter updates happen through the optimizer in the Train method.
-    /// </para>
-    /// </remarks>
-    public override void UpdateParameters(Vector<T> gradients)
-    {
-        // Parameters are updated through the optimizer in Train()
-    }
-
+    // UpdateParameters was an empty override, silently dropping every restore. The base
+    // distributes the vector over the declared enumeration.
     /// <summary>
     /// Gets metadata about the S4 model.
     /// </summary>

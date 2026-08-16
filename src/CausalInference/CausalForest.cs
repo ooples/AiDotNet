@@ -4,6 +4,8 @@ using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Tensors.Helpers;
 
+using AiDotNet.Models.Parameters;
+
 namespace AiDotNet.CausalInference;
 
 #pragma warning disable CS8618 // Generic T properties use default(T) - always used with value types
@@ -60,6 +62,19 @@ namespace AiDotNet.CausalInference;
 [ResearchPaper("Estimation and Inference of Heterogeneous Treatment Effects using Random Forests", "https://doi.org/10.1080/01621459.2017.1319839", Year = 2018, Authors = "Stefan Wager, Susan Athey")]
 public class CausalForest<T> : CausalModelBase<T>
 {
+
+    /// <inheritdoc />
+    /// <remarks>The propensity-score coefficients. This also FIXES a measured mismatch: ParameterCount came from CausalModelBase as NumFeatures, which SetParameters set to length - 1 for the intercept, so the count reported 5 against a 6-element vector after any restore and a saved vector could not be reloaded. Count and vector now both fold this one source; NumFeatures keeps its old meaning for everything else that reads it.</remarks>
+    protected override void RegisterComponents()
+    {
+        RegisterParameterComponent(new VectorFieldParameterSource<T>(
+            () => _propensityCoefficients,
+            value =>
+            {
+                _propensityCoefficients = value;
+                NumFeatures = value.Length - 1;   // -1 for the intercept, as before
+            }));
+    }
     /// <summary>
     /// Number of trees in the forest.
     /// </summary>
@@ -878,27 +893,6 @@ public class CausalForest<T> : CausalModelBase<T>
     #region IFullModel Implementation
 
     /// <summary>
-    /// Gets all model parameters.
-    /// </summary>
-    public override Vector<T> GetParameters()
-    {
-        // For tree models, we return propensity coefficients
-        return _propensityCoefficients ?? new Vector<T>(0);
-    }
-
-    /// <summary>
-    /// Sets the model parameters.
-    /// </summary>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (parameters.Length > 0)
-        {
-            _propensityCoefficients = parameters;
-            NumFeatures = parameters.Length - 1;
-        }
-    }
-
-    /// <summary>
     /// Creates a new instance with specified parameters.
     /// </summary>
     public override IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
@@ -914,6 +908,64 @@ public class CausalForest<T> : CausalModelBase<T>
     protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
     {
         return new CausalForest<T>(_numTrees, _maxDepth, _minSamplesLeaf, _maxFeatures, _honest, _honestFraction);
+    }
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// A fitted causal forest's predictive state is its tree ensemble, not
+    /// merely the propensity-coefficient vector returned by
+    /// <see cref="GetParameters"/>. Copy that state explicitly so a clone
+    /// cannot be marked fitted while containing no trees.
+    /// </remarks>
+    public override IFullModel<T, Matrix<T>, Vector<T>> DeepCopy()
+    {
+        var copy = new CausalForest<T>(
+            _numTrees, _maxDepth, _minSamplesLeaf, _maxFeatures, _honest, _honestFraction)
+        {
+            NumFeatures = NumFeatures,
+            IsFitted = IsFitted,
+            FeatureNames = FeatureNames is null ? null : (string[])FeatureNames.Clone(),
+            _propensityCoefficients = CopyVector(_propensityCoefficients),
+            _cachedTreatment = CopyVector(_cachedTreatment),
+            _cachedOutcome = CopyVector(_cachedOutcome),
+            _cachedFeatures = CopyMatrix(_cachedFeatures),
+            _trees = _trees?.Select(CloneTree).ToList()
+        };
+
+        return copy;
+    }
+
+    private static CausalTree CloneTree(CausalTree source) =>
+        new()
+        {
+            IsLeaf = source.IsLeaf,
+            FeatureIndex = source.FeatureIndex,
+            Threshold = source.Threshold,
+            TreatmentEffect = source.TreatmentEffect,
+            NumSamples = source.NumSamples,
+            Left = source.Left is null ? null : CloneTree(source.Left),
+            Right = source.Right is null ? null : CloneTree(source.Right)
+        };
+
+    private static Vector<TValue>? CopyVector<TValue>(Vector<TValue>? source)
+    {
+        if (source is null) return null;
+        var copy = new Vector<TValue>(source.Length);
+        for (int i = 0; i < source.Length; i++)
+            copy[i] = source[i];
+        return copy;
+    }
+
+    private static Matrix<T>? CopyMatrix(Matrix<T>? source)
+    {
+        if (source is null) return null;
+        var copy = new Matrix<T>(source.Rows, source.Columns);
+        for (int row = 0; row < source.Rows; row++)
+        {
+            for (int column = 0; column < source.Columns; column++)
+                copy[row, column] = source[row, column];
+        }
+        return copy;
     }
 
     /// <summary>

@@ -8,6 +8,7 @@ using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
 using Newtonsoft.Json;
 
+using AiDotNet.Models.Parameters;
 namespace AiDotNet.CausalInference;
 
 /// <summary>
@@ -30,7 +31,7 @@ namespace AiDotNet.CausalInference;
 /// - Managing fitted model state
 /// </para>
 /// </remarks>
-public abstract class CausalModelBase<T> : ICausalModel<T>, IModelShape
+public abstract class CausalModelBase<T> : ICausalModel<T>, IModelShape, IParameterManifestProvider
 {
     /// <summary>
     /// Gets the hardware-accelerated computation engine for vectorized operations.
@@ -73,10 +74,90 @@ public abstract class CausalModelBase<T> : ICausalModel<T>, IModelShape
     public ILossFunction<T> DefaultLossFunction => _defaultLossFunction;
 
     /// <summary>
-    /// Gets the total number of parameters in the model.
+    /// The components the parameters of this model live in. Empty until the model registers
+    /// some, in which case the surfaces below fall back to what they always did.
     /// </summary>
-    public virtual long ParameterCount => NumFeatures;
+    private readonly ParameterComponentRegistry<T> _parameterRegistry = new();
+    private bool _componentsRegistered;
 
+    /// <summary>
+    /// Declares a component whose parameters belong to the surface of this model.
+    /// Registration
+    /// order is serialization order, so keep it stable.
+    /// </summary>
+    protected void RegisterParameterComponent(
+        IParameterSource<T>? component,
+        [System.Runtime.CompilerServices.CallerArgumentExpression(nameof(component))] string? componentExpression = null,
+        [System.Runtime.CompilerServices.CallerMemberName] string? memberName = null)
+        => _parameterRegistry.RegisterLegacy(GetType().FullName ?? GetType().Name,
+            memberName, componentExpression, component);
+
+    protected void RegisterParameterComponent(string stableId, IParameterSource<T>? component,
+        ParameterSlotRole role = ParameterSlotRole.Trainable)
+        => _parameterRegistry.Register(stableId, component, role);
+
+    /// <summary>
+    /// Declare the trainable components of this model here with
+    /// <see cref="RegisterParameterComponent"/>. Called once, lazily, so it runs after the
+    /// constructor has built them.
+    /// </summary>
+    protected virtual void RegisterComponents()
+    {
+    }
+
+    protected virtual void RegisterGeneratedParameterComponents(ParameterComponentRegistry<T> registry)
+    {
+    }
+
+    /// <summary>
+    /// Runs after <see cref="SetParameters"/> has distributed values into the components.
+    /// </summary>
+    protected virtual void OnParametersRestored()
+    {
+    }
+
+    private ParameterComponentRegistry<T> Registry
+    {
+        get
+        {
+            if (!_componentsRegistered)
+            {
+                RegisterGeneratedParameterComponents(_parameterRegistry);
+                RegisterComponents();
+                _componentsRegistered = true;
+            }
+            return _parameterRegistry;
+        }
+    }
+
+    public ParameterLayoutSnapshot ParameterLayout => Registry.ParameterLayout;
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// Virtual rather than abstract: a model that registers its components inherits all
+    /// three surfaces and writes no parameter plumbing. It was abstract, which FORCED every
+    /// descendant to hand-write the triple -- the same defect ModelBase and LayerBase had.
+    /// </remarks>
+    public virtual Vector<T> GetParameters()
+        => Registry.HasComponents ? Registry.GetParameters() : new Vector<T>(0);
+
+    /// <inheritdoc/>
+    public virtual void SetParameters(Vector<T> parameters)
+    {
+        if (parameters is null) throw new ArgumentNullException(nameof(parameters));
+        if (!Registry.HasComponents) return;
+        Registry.SetParameters(parameters);
+        OnParametersRestored();
+    }
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// Folds the same enumeration the vector does once components are registered. Models still
+    /// awaiting manifest conversion fall back to their concrete vector length, so the count cannot
+    /// invent values that their read/write surface does not own.
+    /// </remarks>
+    public virtual long ParameterCount
+        => Registry.HasComponents ? Registry.ParameterCount : GetParameters().Length;
     /// <inheritdoc/>
     public virtual Vector<T> SanitizeParameters(Vector<T> parameters) => parameters;
 
@@ -519,19 +600,9 @@ public abstract class CausalModelBase<T> : ICausalModel<T>, IModelShape
     public abstract Vector<T> Predict(Matrix<T> input);
 
     /// <summary>
-    /// Gets all model parameters as a single vector.
-    /// </summary>
-    public abstract Vector<T> GetParameters();
-
-    /// <summary>
     /// Creates a new instance of the model with specified parameters.
     /// </summary>
     public abstract IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters);
-
-    /// <summary>
-    /// Sets the parameters for this model.
-    /// </summary>
-    public abstract void SetParameters(Vector<T> parameters);
 
     /// <summary>
     /// Creates a new instance of the same type.

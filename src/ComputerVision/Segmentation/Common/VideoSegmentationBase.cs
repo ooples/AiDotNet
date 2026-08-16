@@ -19,7 +19,9 @@ namespace AiDotNet.ComputerVision.Segmentation.Common;
 /// </remarks>
 public abstract class VideoSegmentationBase<T> : SegmentationModelBase<T>, IVideoSegmentation<T>
 {
-    private readonly int _maxTrackedObjects;
+    // protected and mutable so a derived model can read it and restore it on deserialization - see
+    // PanopticSegmentationBase._numStuffClasses for why private/readonly makes a base unadoptable.
+    protected int _maxTrackedObjects;
 
     /// <summary>
     /// Current frame index in the video sequence.

@@ -289,7 +289,7 @@ public class QLoRAAdapter<T> : LoRAAdapterBase<T>
 
         // For Dense layers, parameters are stored as [weights..., biases...]
         int inputSize = GetInputShape()[0];
-        int outputSize = GetOutputShape()[0];
+        int outputSize = GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0];
         int weightCount = inputSize * outputSize;
 
         // Extract weights (skip biases)
@@ -516,7 +516,7 @@ public class QLoRAAdapter<T> : LoRAAdapterBase<T>
         }
 
         int inputSize = GetInputShape()[0];
-        int outputSize = GetOutputShape()[0];
+        int outputSize = GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0];
         int weightCount = inputSize * outputSize;
 
         T[] dequantized = new T[weightCount];
@@ -640,7 +640,7 @@ public class QLoRAAdapter<T> : LoRAAdapterBase<T>
     /// The decompression happens automatically - from the outside, it looks like a normal layer!
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // Dequantize weights if not cached
         if (_dequantizedWeights == null)
@@ -652,7 +652,7 @@ public class QLoRAAdapter<T> : LoRAAdapterBase<T>
         // We manually compute the dense layer forward pass to use our dequantized weights
         int batchSize = input.Shape[0];
         int inputSize = input.Shape.Length > 1 ? input.Shape[1] : input.Length;
-        int outputSize = GetOutputShape()[0];
+        int outputSize = GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0];
 
         // Convert input to matrix [batchSize, inputSize]
         Matrix<T> inputMatrix = new Matrix<T>(batchSize, inputSize);
@@ -749,7 +749,7 @@ public class QLoRAAdapter<T> : LoRAAdapterBase<T>
 
         // Merge: W_merged = W_base + W_lora
         int inputSize = GetInputShape()[0];
-        int outputSize = GetOutputShape()[0];
+        int outputSize = GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0];
 
         Vector<T> mergedParams = new Vector<T>((inputSize * outputSize) + outputSize);
 

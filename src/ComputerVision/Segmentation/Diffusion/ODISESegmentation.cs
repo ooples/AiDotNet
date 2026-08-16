@@ -56,38 +56,34 @@ namespace AiDotNet.ComputerVision.Segmentation.Diffusion;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Open-Vocabulary Panoptic Segmentation with Text-to-Image Diffusion Models", "https://arxiv.org/abs/2303.04803", Year = 2023, Authors = "Xu et al.")]
-public class ODISESegmentation<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
+public class ODISESegmentation<T> : Common.PanopticSegmentationBase<T>
 {
     private readonly ODISESegmentationOptions _options;
     public override ModelOptions GetOptions() => _options;
 
     #region Fields
-    private readonly int _height, _width, _channels, _numClasses;
+    // Only ODISE's OWN configuration lives here. _height, _width, _channels, _numClasses,
+    // _useNativeMode, _onnxModelPath, _onnxSession, _optimizer, _disposed and _encoderLayerEnd all
+    // come from PanopticSegmentationBase -> SegmentationModelBase.
     private readonly int[] _channelDims;
     private readonly int _decoderDim;
     private readonly int[] _depths;
     private readonly double _dropRate;
-    private readonly bool _useNativeMode;
-    private readonly string? _onnxModelPath;
-    private InferenceSession? _onnxSession;
-    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
-    private bool _disposed;
-    private int _encoderLayerEnd;
     #endregion
 
     #region Properties
     /// <summary>
-    /// Gets whether this ODISESegmentation instance supports training.
+    /// Gets whether using native mode (trainable) or ONNX mode (inference only).
     /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Returns <c>true</c> in native mode, <c>false</c> in ONNX mode.
-    /// </para>
-    /// </remarks>
-    public override bool SupportsTraining => _useNativeMode;
     internal bool UseNativeMode => _useNativeMode;
-    internal int NumClasses => _numClasses;
     #endregion
+
+    /// <summary>
+    /// ODISE's stuff/thing split: the first third of the class list is "stuff" (amorphous regions
+    /// like sky or road), the rest are countable "things". Kept as a static helper so both
+    /// constructors can hand the same split to the panoptic base before any field is assigned.
+    /// </summary>
+    private static int StuffClassCount(int numClasses) => Math.Max(1, numClasses / 3);
 
     #region Constructors
     /// <summary>
@@ -109,18 +105,15 @@ public class ODISESegmentation<T> : NeuralNetworkBase<T>, IPanopticSegmentation<
         ILossFunction<T>? lossFunction = null, int numClasses = 133,
         double dropRate = 0.1,
         ODISESegmentationOptions? options = null)
-        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>())
+        : base(architecture, optimizer, lossFunction, numClasses,
+               StuffClassCount(numClasses), numClasses - StuffClassCount(numClasses))
     {
         _options = options ?? new ODISESegmentationOptions(); Options = _options;
-        _height = architecture.InputHeight > 0 ? architecture.InputHeight : 512;
-        _width = architecture.InputWidth > 0 ? architecture.InputWidth : 512;
-        _channels = architecture.InputDepth > 0 ? architecture.InputDepth : 3;
-        _numClasses = numClasses; _dropRate = dropRate;
-        _useNativeMode = true; _onnxModelPath = null;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
-        _channelDims = [320, 640, 1280, 1280];
-        _depths = [2, 2, 2, 2];
-        _decoderDim = 256;
+        _dropRate = dropRate;
+        ValidateArchitectureOptions(_options);
+        _channelDims = (int[])_options.ChannelDimensions.Clone();
+        _depths = (int[])_options.StageDepths.Clone();
+        _decoderDim = _options.DecoderDimension;
         InitializeLayers();
     }
 
@@ -142,40 +135,20 @@ public class ODISESegmentation<T> : NeuralNetworkBase<T>, IPanopticSegmentation<
     public ODISESegmentation(NeuralNetworkArchitecture<T> architecture, string onnxModelPath,
         int numClasses = 133,
         ODISESegmentationOptions? options = null)
-        : base(architecture, new CrossEntropyWithLogitsLoss<T>())
+        : base(architecture, onnxModelPath, numClasses,
+               StuffClassCount(numClasses), numClasses - StuffClassCount(numClasses))
     {
         _options = options ?? new ODISESegmentationOptions(); Options = _options;
-        if (string.IsNullOrWhiteSpace(onnxModelPath))
-            throw new ArgumentException("ONNX model path cannot be null or empty.", nameof(onnxModelPath));
-        if (!File.Exists(onnxModelPath))
-            throw new FileNotFoundException($"ODISESegmentation ONNX model not found: {onnxModelPath}");
-        _height = architecture.InputHeight > 0 ? architecture.InputHeight : 512;
-        _width = architecture.InputWidth > 0 ? architecture.InputWidth : 512;
-        _channels = architecture.InputDepth > 0 ? architecture.InputDepth : 3;
-        _numClasses = numClasses; _dropRate = 0.1;
-        _useNativeMode = false; _onnxModelPath = onnxModelPath; _optimizer = null;
-        _channelDims = [320, 640, 1280, 1280];
-        _depths = [2, 2, 2, 2];
-        _decoderDim = 256;
-        try { _onnxSession = new InferenceSession(onnxModelPath); }
-        catch (Exception ex) { throw new InvalidOperationException($"Failed to load ODISESegmentation ONNX model: {ex.Message}", ex); }
+        _dropRate = 0.1;
+        ValidateArchitectureOptions(_options);
+        _channelDims = (int[])_options.ChannelDimensions.Clone();
+        _depths = (int[])_options.StageDepths.Clone();
+        _decoderDim = _options.DecoderDimension;
         InitializeLayers();
     }
     #endregion
 
     #region Public Methods
-    /// <summary>
-    /// Runs a forward pass to produce segmentation logits.
-    /// </summary>
-    /// <param name="input">The input tensor [C, H, W] or [B, C, H, W].</param>
-    /// <returns>Segmentation logits tensor.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Pass an image to get a per-pixel class prediction map.
-    /// </para>
-    /// </remarks>
-    protected override Tensor<T> PredictCore(Tensor<T> input) => _useNativeMode ? Forward(input) : PredictOnnx(input);
-
     /// <summary>
     /// Performs one training step.
     /// </summary>
@@ -193,7 +166,7 @@ public class ODISESegmentation<T> : NeuralNetworkBase<T>, IPanopticSegmentation<
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expectedOutput);
+            TrainWithTape(input, expectedOutput, Optimizer);
         }
         finally
         {
@@ -203,7 +176,30 @@ public class ODISESegmentation<T> : NeuralNetworkBase<T>, IPanopticSegmentation<
     #endregion
 
     #region Private Methods
-    private Tensor<T> Forward(Tensor<T> input)
+    private static void ValidateArchitectureOptions(ODISESegmentationOptions options)
+    {
+        if (options.ChannelDimensions is null)
+            throw new ArgumentNullException(nameof(options.ChannelDimensions));
+        if (options.StageDepths is null)
+            throw new ArgumentNullException(nameof(options.StageDepths));
+        if (options.ChannelDimensions.Length != 4 || options.StageDepths.Length != 4)
+        {
+            throw new ArgumentException(
+                "ODISE ChannelDimensions and StageDepths must each contain four stages.",
+                nameof(options));
+        }
+        if (options.ChannelDimensions.Any(value => value <= 0) ||
+            options.StageDepths.Any(value => value <= 0) ||
+            options.DecoderDimension <= 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(options),
+                "All ODISE channel dimensions, stage depths, and the decoder dimension must be positive.");
+        }
+    }
+
+    /// <inheritdoc />
+    protected override Tensor<T> Forward(Tensor<T> input)
     {
         bool hasBatch = input.Rank == 4; if (!hasBatch) input = AddBatchDimension(input);
         var features = input;
@@ -212,7 +208,8 @@ public class ODISESegmentation<T> : NeuralNetworkBase<T>, IPanopticSegmentation<
         if (!hasBatch) features = RemoveBatchDimension(features); return features;
     }
 
-    private Tensor<T> PredictOnnx(Tensor<T> input)
+    /// <inheritdoc />
+    protected override Tensor<T> PredictOnnx(Tensor<T> input)
     {
         if (_onnxSession is null) throw new InvalidOperationException("ONNX session is not initialized.");
         bool hasBatch = input.Rank == 4; if (!hasBatch) input = AddBatchDimension(input);
@@ -229,19 +226,7 @@ public class ODISESegmentation<T> : NeuralNetworkBase<T>, IPanopticSegmentation<
         if (!hasBatch) result = RemoveBatchDimension(result); return result;
     }
 
-    private Tensor<T> AddBatchDimension(Tensor<T> tensor)
-    { var result = new Tensor<T>([1, tensor.Shape[0], tensor.Shape[1], tensor.Shape[2]]); tensor.Data.Span.CopyTo(result.Data.Span); return result; }
-
-    private Tensor<T> RemoveBatchDimension(Tensor<T> tensor)
-    {
-        int[] s = new int[tensor.Shape.Length - 1];
-        for (int i = 0; i < s.Length; i++)
-            s[i] = tensor.Shape[i + 1];
-
-        var r = new Tensor<T>(s);
-        tensor.Data.Span.CopyTo(r.Data.Span);
-        return r;
-    }
+    // AddBatchDimension / RemoveBatchDimension are inherited from SegmentationModelBase.
     #endregion
 
     #region Abstract Implementation
@@ -269,34 +254,8 @@ public class ODISESegmentation<T> : NeuralNetworkBase<T>, IPanopticSegmentation<
         }
     }
 
-    /// <summary>
-    /// Updates all trainable parameters from a flat parameter vector.
-    /// </summary>
-    /// <param name="parameters">Flat vector of all model parameters.</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Replaces all model weights with new values.
-    /// </para>
-    /// </remarks>
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        int offset = 0;
-        foreach (var layer in Layers)
-        {
-            var p = layer.GetParameters();
-            int count = p.Length;
-            if (offset + count <= parameters.Length)
-            {
-                var slice = new Vector<T>(count);
-                for (int i = 0; i < count; i++)
-                    slice[i] = parameters[offset + i];
-
-                layer.UpdateParameters(slice);
-                offset += count;
-            }
-        }
-    }
-
+    // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
+    // exactly the same enumeration, so this said nothing the base does not already say.
     /// <summary>
     /// Collects metadata describing this model's configuration.
     /// </summary>
@@ -345,38 +304,32 @@ public class ODISESegmentation<T> : NeuralNetworkBase<T>, IPanopticSegmentation<
     /// <b>For Beginners:</b> Creates a copy for cross-validation or ensemble training.
     /// </para>
     /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() => _useNativeMode
-        ? new ODISESegmentation<T>(Architecture, _optimizer, LossFunction, _numClasses, _dropRate, _options)
-        : new ODISESegmentation<T>(Architecture, _onnxModelPath ?? throw new InvalidOperationException("ONNX model path not initialized."), _numClasses, _options);
+    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
+    {
+        var options = new ODISESegmentationOptions(_options);
+        return _useNativeMode
+            ? new ODISESegmentation<T>(Architecture, optimizer: null, lossFunction: LossFunction,
+                numClasses: _numClasses, dropRate: _dropRate, options: options)
+            : new ODISESegmentation<T>(Architecture,
+                _onnxModelPath ?? throw new InvalidOperationException("ONNX model path not initialized."),
+                _numClasses, options);
+    }
 
-    /// <summary>
-    /// Releases managed resources including the ONNX inference session.
-    /// </summary>
-    /// <param name="disposing">True when called from Dispose().</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Frees memory used by the ONNX runtime.
-    /// </para>
-    /// </remarks>
-    protected override void Dispose(bool disposing)
-    { if (!_disposed) { if (disposing) { _onnxSession?.Dispose(); _onnxSession = null; } _disposed = true; } base.Dispose(disposing); }
+    // Dispose of the ONNX session and the _disposed latch are handled by SegmentationModelBase.
     #endregion
 
     #region IPanopticSegmentation Implementation
-    int ISegmentationModel<T>.NumClasses => _numClasses;
-    int ISegmentationModel<T>.InputHeight => _height;
-    int ISegmentationModel<T>.InputWidth => _width;
-    bool ISegmentationModel<T>.IsOnnxMode => !_useNativeMode;
-    Tensor<T> ISegmentationModel<T>.Segment(Tensor<T> image) => Predict(image);
-    int IPanopticSegmentation<T>.NumStuffClasses => Math.Max(1, _numClasses / 3);
-    int IPanopticSegmentation<T>.NumThingClasses => _numClasses - Math.Max(1, _numClasses / 3);
-    PanopticSegmentationResult<T> IPanopticSegmentation<T>.SegmentPanoptic(Tensor<T> image)
+    // NumClasses / InputHeight / InputWidth / IsOnnxMode / Segment / NumStuffClasses /
+    // NumThingClasses all arrive from PanopticSegmentationBase.
+
+    /// <inheritdoc />
+    public override PanopticSegmentationResult<T> SegmentPanoptic(Tensor<T> image)
     {
         var logits = Common.SegmentationTensorOps.EnsureUnbatched(Predict(image));
         var probMap = Common.SegmentationTensorOps.SoftmaxAlongClassDim(logits);
         var semanticMap = Common.SegmentationTensorOps.ArgmaxAlongClassDim(logits);
         int h = semanticMap.Shape[0], w = semanticMap.Shape[1];
-        int numStuff = Math.Max(1, _numClasses / 3);
+        int numStuff = NumStuffClasses;
         var instanceMap = new Tensor<T>([h, w]);
         var panopticMap = new Tensor<T>([h, w]);
         var segments = new List<PanopticSegment<T>>();

@@ -515,6 +515,27 @@ public class SigLIP2<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguage
     }
 
     /// <inheritdoc />
+    public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input)
+    {
+        ThrowIfDisposed();
+        var activations = new Dictionary<string, Tensor<T>>();
+        var current = input;
+
+        // SigLIP2 stores the vision tower, text tower, caption decoder, and MIM
+        // decoder in one layer collection, but Predict/ForwardForTraining intentionally
+        // execute only the vision tower for an image tensor. Mirror that public forward
+        // contract here; chaining the image embedding into the text tower feeds the
+        // projection width into attention weights sized for TextEmbeddingDim.
+        for (int i = 0; i < _visionEncoderEnd && i < Layers.Count; i++)
+        {
+            current = Layers[i].Forward(current);
+            activations[$"Layer_{i}_{Layers[i].GetType().Name}"] = current.Clone();
+        }
+
+        return activations;
+    }
+
+    /// <inheritdoc />
     /// <remarks>
     /// Predict returns the VISION-ENCODER output (the first <c>_visionEncoderEnd</c>
     /// layers), not a sequential pass over the whole Layers list (which also
@@ -553,19 +574,10 @@ public class SigLIP2<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguage
     }
 
     /// <inheritdoc />
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        if (!_useNativeMode)
-            throw new NotSupportedException("Cannot update parameters in ONNX mode.");
-        int idx = 0;
-        foreach (var layer in Layers)
-        {
-            int count = checked((int)layer.ParameterCount);
-            layer.UpdateParameters(parameters.Slice(idx, count));
-            idx += count;
-        }
-    }
-
+    /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
+    /// write on every parameter surface, so the guard is stated once here instead of being
+    /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
+    protected override bool SupportsParameterMutation => _useNativeMode;
     /// <inheritdoc />
     protected override Tensor<T> PreprocessImage(Tensor<T> image) =>
         NormalizeImage(image, _options.ImageMean, _options.ImageStd);

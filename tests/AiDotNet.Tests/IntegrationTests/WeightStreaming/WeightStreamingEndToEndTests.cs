@@ -87,7 +87,7 @@ public sealed class WeightStreamingEndToEndTests : IDisposable
     /// per-layer prefetch + materialize-scope orchestration without
     /// needing real-world dimensions.
     /// </summary>
-    private sealed class SmallStreamableNetwork : NeuralNetworkBase<float>
+    private sealed class SmallStreamableNetwork : VectorModelLayoutBase<float>
     {
         public SmallStreamableNetwork()
             : base(lossFunction: new MeanSquaredErrorLoss<float>(), maxGradNorm: 1.0)
@@ -118,6 +118,84 @@ public sealed class WeightStreamingEndToEndTests : IDisposable
 
         protected override IFullModel<float, Tensor<float>, Tensor<float>> CreateNewInstance()
             => new SmallStreamableNetwork();
+    }
+
+    [AiDotNet.Attributes.TensorLayout(AiDotNet.Enums.TensorAxis.Batch, AiDotNet.Enums.TensorAxis.Time,
+        AiDotNet.Enums.TensorAxis.Features, Direction = AiDotNet.Attributes.TensorLayoutDirection.Input)]
+    [AiDotNet.Attributes.TensorLayout(AiDotNet.Enums.TensorAxis.Batch, AiDotNet.Enums.TensorAxis.Time,
+        AiDotNet.Enums.TensorAxis.Features, Direction = AiDotNet.Attributes.TensorLayoutDirection.Output)]
+    private sealed class ConstructionSizedStreamableNetwork : NeuralNetworkBase<float>
+    {
+        public ConstructionSizedStreamableNetwork()
+            : base(lossFunction: new MeanSquaredErrorLoss<float>(), maxGradNorm: 1.0)
+        {
+            Layers.Add(new MultiHeadAttentionLayer<float>(headCount: 4, headDimension: 16));
+        }
+
+        protected override void InitializeLayers() { }
+        public override ModelMetadata<float> GetModelMetadata() =>
+            new() { Name = "ConstructionSizedStreamableNetwork" };
+        protected override void SerializeNetworkSpecificData(BinaryWriter writer) { }
+        protected override void DeserializeNetworkSpecificData(BinaryReader reader) { }
+        protected override IFullModel<float, Tensor<float>, Tensor<float>> CreateNewInstance() =>
+            new ConstructionSizedStreamableNetwork();
+    }
+
+    [AiDotNet.Attributes.TensorLayout(AiDotNet.Enums.TensorAxis.Batch, AiDotNet.Enums.TensorAxis.Time,
+        AiDotNet.Enums.TensorAxis.Features, Direction = AiDotNet.Attributes.TensorLayoutDirection.Input)]
+    [AiDotNet.Attributes.TensorLayout(AiDotNet.Enums.TensorAxis.Batch, AiDotNet.Enums.TensorAxis.Time,
+        AiDotNet.Enums.TensorAxis.Features, Direction = AiDotNet.Attributes.TensorLayoutDirection.Output)]
+    private sealed class CompositeStreamableNetwork : NeuralNetworkBase<float>
+    {
+        public CompositeStreamableNetwork()
+            : base(lossFunction: new MeanSquaredErrorLoss<float>(), maxGradNorm: 1.0)
+        {
+            Layers.Add(new TransformerDecoderLayer<float>(numHeads: 4, feedForwardDim: 128, sequenceLength: 4));
+        }
+
+        protected override void InitializeLayers() { }
+        public override ModelMetadata<float> GetModelMetadata() => new() { Name = "CompositeStreamableNetwork" };
+        protected override void SerializeNetworkSpecificData(BinaryWriter writer) { }
+        protected override void DeserializeNetworkSpecificData(BinaryReader reader) { }
+        protected override IFullModel<float, Tensor<float>, Tensor<float>> CreateNewInstance() =>
+            new CompositeStreamableNetwork();
+    }
+
+    [AiDotNet.Attributes.TensorLayout(AiDotNet.Enums.TensorAxis.Batch, AiDotNet.Enums.TensorAxis.Time,
+        AiDotNet.Enums.TensorAxis.Features, Direction = AiDotNet.Attributes.TensorLayoutDirection.Input)]
+    [AiDotNet.Attributes.TensorLayout(AiDotNet.Enums.TensorAxis.Batch, AiDotNet.Enums.TensorAxis.Time,
+        AiDotNet.Enums.TensorAxis.Features, Direction = AiDotNet.Attributes.TensorLayoutDirection.Output)]
+    private sealed class ThrowBeforeLazyLayerNetwork : NeuralNetworkBase<float>
+    {
+        public ThrowBeforeLazyLayerNetwork()
+            : base(lossFunction: new MeanSquaredErrorLoss<float>(), maxGradNorm: 1.0)
+        {
+            Layers.Add(new ThrowingForwardLayer());
+            Layers.Add(new MultiHeadAttentionLayer<float>(headCount: 4, headDimension: 16));
+        }
+
+        protected override void InitializeLayers() { }
+        public override ModelMetadata<float> GetModelMetadata() => new() { Name = "ThrowBeforeLazyLayerNetwork" };
+        protected override void SerializeNetworkSpecificData(BinaryWriter writer) { }
+        protected override void DeserializeNetworkSpecificData(BinaryReader reader) { }
+        protected override IFullModel<float, Tensor<float>, Tensor<float>> CreateNewInstance() =>
+            new ThrowBeforeLazyLayerNetwork();
+    }
+
+    [AiDotNet.Attributes.ElementWiseShape]
+    private sealed class ThrowingForwardLayer : LayerBase<float>
+    {
+        public ThrowingForwardLayer() : base([4, 64], [4, 64]) { }
+        public override long ParameterCount => 0L;
+        public override bool SupportsTraining => false;
+        protected override Tensor<float> ForwardTraced(Tensor<float> input) =>
+            throw new InvalidOperationException("intentional preflight boundary");
+        public override void UpdateParameters(float learningRate) { }
+        public override Vector<float> GetParameters() => new(0);
+        public override void SetParameters(Vector<float> parameters) { }
+        public override Vector<float> GetParameterGradients() => new(0);
+        public override void ResetState() { }
+        public override LayerBase<float> Clone() => new ThrowingForwardLayer();
     }
 
     [Fact]
@@ -340,6 +418,74 @@ public sealed class WeightStreamingEndToEndTests : IDisposable
     }
 
     [Fact]
+    public void Streaming_Configuration_DoesNotMaterializeConstructionSizedLazyWeights()
+    {
+        var net = new ConstructionSizedStreamableNetwork();
+        var attention = Assert.IsType<MultiHeadAttentionLayer<float>>(Assert.Single(net.LayersForTest()));
+        Assert.Equal(0L, attention.MaterializedParameterScalarsForTest());
+
+        net.ConfigureWeightLifetimeForTest(new GpuOffloadOptions());
+
+        Assert.True(net.IsWeightStreamingActive);
+        Assert.True(attention.UseStreamingAllocatorForTest());
+        Assert.Equal(0L, attention.MaterializedParameterScalarsForTest());
+
+        var input = new Tensor<float>([1, 4, 64]);
+        _ = net.Predict(input);
+
+        Assert.True(attention.MaterializedParameterScalarsForTest() > 0L);
+        Assert.True(net.WeightStreamingResidentBytes > 0L);
+    }
+
+    [Fact]
+    public void Streaming_LazyAttentionDirectForward_CommitsWeightsWithoutNetworkWrapper()
+    {
+        var net = new ConstructionSizedStreamableNetwork();
+        var attention = Assert.IsType<MultiHeadAttentionLayer<float>>(Assert.Single(net.LayersForTest()));
+        const long budget = 32 * 1024L;
+        net.ConfigureWeightLifetimeForTest(new GpuOffloadOptions { StreamingPoolMaxResidentBytes = budget });
+
+        // Deliberately bypass net.Predict. Many VLMs own a custom PredictCore loop, so the layer's
+        // common initialization gate—not a network-specific post-forward sweep—must commit weights.
+        _ = attention.Forward(new Tensor<float>([1, 4, 64]));
+
+        var weights = attention.MaterializedParametersForTest();
+        Assert.NotEmpty(weights);
+        Assert.All(weights, tensor => Assert.True(tensor.StreamingPoolHandle >= 0));
+        Assert.True(net.WeightStreamingResidentBytes <= budget);
+    }
+
+    [Fact]
+    public void Streaming_LazyComposite_PropagatesModeToNewSubLayers()
+    {
+        var net = new CompositeStreamableNetwork();
+        var decoder = Assert.IsType<TransformerDecoderLayer<float>>(Assert.Single(net.LayersForTest()));
+        net.ConfigureWeightLifetimeForTest(new GpuOffloadOptions());
+
+        _ = decoder.Forward(new Tensor<float>([1, 4, 64]));
+
+        var children = decoder.GetSubLayers();
+        Assert.NotEmpty(children);
+        Assert.All(children, child =>
+        {
+            var layer = Assert.IsAssignableFrom<LayerBase<float>>(child);
+            Assert.True(layer.UseStreamingAllocatorForTest());
+        });
+    }
+
+    [Fact]
+    public void Streaming_Preflight_DoesNotMaterializeFutureLazyLayers()
+    {
+        var net = new ThrowBeforeLazyLayerNetwork();
+        var attention = Assert.IsType<MultiHeadAttentionLayer<float>>(net.LayersForTest()[1]);
+        net.ConfigureWeightLifetimeForTest(new GpuOffloadOptions());
+
+        Assert.Throws<InvalidOperationException>(() => net.Predict(new Tensor<float>([1, 4, 64])));
+
+        Assert.Equal(0L, attention.MaterializedParameterScalarsForTest());
+    }
+
+    [Fact]
     public void Streaming_ConfigureWeightLifetime_ActuallyTracksWeightsInPool()
     {
         // Pre-audit (commit 190801e1b and earlier), this test would have
@@ -469,6 +615,10 @@ internal static class StreamableNetworkTestHelpers
         => net.Layers;
     public static bool UseStreamingAllocatorForTest(this LayerBase<float> layer)
         => layer.UseStreamingAllocator;
+    public static long MaterializedParameterScalarsForTest(this LayerBase<float> layer)
+        => layer.GetTrainableParametersWithoutMaterialization().Sum(tensor => (long)tensor.Length);
+    public static IReadOnlyList<Tensor<float>> MaterializedParametersForTest(this LayerBase<float> layer)
+        => layer.GetTrainableParametersWithoutMaterialization();
     public static void ConfigureWeightLifetimeForTest(this NeuralNetworkBase<float> net, GpuOffloadOptions options)
     {
         net.ConfigureWeightLifetime(options);

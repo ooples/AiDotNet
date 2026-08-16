@@ -78,6 +78,12 @@ public abstract class NeckBase<T> : ModelBase<T, Tensor<T>, Tensor<T>>
         IsTrainingMode = training;
     }
 
+    // GetParameters and SetParameters are NOT overridden here. They used to throw
+    // NotSupportedException, saying necks do not expose a flat parameter vector -- which was
+    // true only because nothing could SEE their weights: a neck keeps them in bare
+    // List<Tensor<T>> fields, not layers. Each concrete neck now declares those lists through
+    // RegisterComponents, so ModelBase folds count, vector and restore from one enumeration.
+    // WriteParameters/ReadParameters stay as the binary path; they are no longer the ONLY path.
     /// <summary>
     /// Gets the total number of parameters in the neck.
     /// </summary>
@@ -342,30 +348,6 @@ public abstract class NeckBase<T> : ModelBase<T, Tensor<T>, Tensor<T>>
 
     /// <inheritdoc />
     public override ILossFunction<T> DefaultLossFunction => new MeanSquaredErrorLoss<T>();
-
-    /// <summary>
-    /// Neck parameters live inside per-stage Conv2D wrappers and are serialized via
-    /// <c>WriteParameters</c>/<c>ReadParameters</c> on the concrete neck subclass.
-    /// The flat-vector contract is not the right shape for neck parameters, so callers
-    /// should round-trip through binary streams instead.
-    /// </summary>
-    public override Vector<T> GetParameters()
-    {
-        throw new NotSupportedException(
-            $"{GetType().Name}: necks do not expose a flat parameter vector. " +
-            "Use the concrete neck's WriteParameters(BinaryWriter) / ReadParameters(BinaryReader) " +
-            "to round-trip weights, or train as part of a parent detection model.");
-    }
-
-    /// <summary>
-    /// See <see cref="GetParameters"/>.
-    /// </summary>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        throw new NotSupportedException(
-            $"{GetType().Name}: necks do not accept a flat parameter vector. " +
-            "Use the concrete neck's ReadParameters(BinaryReader) to load saved weights.");
-    }
 
     /// <summary>
     /// See <see cref="GetParameters"/>.

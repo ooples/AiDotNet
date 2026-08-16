@@ -18,7 +18,23 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Attention)]
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerProperty(IsTrainable = false, HasTrainingMode = false, TestInputShape = "1, 4, 8", TestConstructorArgs = "")]
-public partial class CohereDecoderBlock<T> : LayerBase<T>
+// Shape-preserving by CONSTRUCTION, not by coincidence. The last statement of ForwardTraced is
+// "Engine.TensorAdd(Engine.TensorAdd(input, attnOut), ffnOut)" -- a residual add against the untouched
+// input -- and the FFN branch is explicitly restored to the input's shape one line earlier
+// ("Engine.Reshape(down, input._shape)"). A residual block that resized anything could not add.
+//
+// Roles are the block's own: the trailing axis is the model width the class calls HiddenSize (the base
+// ctor declares [-1, hiddenSize] and ForwardTraced reads "featureDim = input.Shape[rank - 1]"), and the
+// axis before it is the decoder's sequence position. Batch is optional because the leading axis is
+// absent at rank 2 -- the form the base ctor declares -- and present at rank 3, the form
+// [LayerProperty(TestInputShape = "1, 4, 8")] exercises; ForwardTraced flattens every leading axis
+// into one before projecting, so both run the same code.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    BatchOptional = true, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    BatchOptional = true, Direction = TensorLayoutDirection.Output)]
+[AutoParameters]
+public partial class CohereDecoderBlock<T> : LayerBase<T>, IShapeContract
 {
     private readonly LayerNormalizationLayer<T> _norm;
     private readonly LayerBase<T> _attention;
@@ -68,7 +84,7 @@ public partial class CohereDecoderBlock<T> : LayerBase<T>
     }
 
     /// <inheritdoc/>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         var normed = _norm.Forward(input);
         var attnOut = _attention.Forward(normed);
@@ -96,36 +112,6 @@ public partial class CohereDecoderBlock<T> : LayerBase<T>
         yield return _ffnGate;
         yield return _ffnUp;
         yield return _ffnDown;
-    }
-
-    /// <inheritdoc/>
-    public override long ParameterCount
-    {
-        get { long total = 0; foreach (var l in SubLayers()) total += l.ParameterCount; return total; }
-    }
-
-    /// <inheritdoc/>
-    public override Vector<T> GetParameters()
-    {
-        Vector<T> acc = new Vector<T>(0);
-        foreach (var l in SubLayers()) acc = Vector<T>.Concatenate(acc, l.GetParameters());
-        return acc;
-    }
-
-    /// <inheritdoc/>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        long expected = ParameterCount;
-        if (parameters.Length != expected)
-            throw new System.ArgumentException($"Expected {expected} parameters, got {parameters.Length}.");
-        int offset = 0;
-        foreach (var l in SubLayers())
-        {
-            int count = (int)l.ParameterCount;
-            if (count == 0) continue;
-            l.SetParameters(parameters.Slice(offset, count));
-            offset += count;
-        }
     }
 
     /// <inheritdoc/>

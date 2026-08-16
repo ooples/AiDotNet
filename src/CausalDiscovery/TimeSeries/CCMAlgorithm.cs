@@ -55,16 +55,20 @@ public class CCMAlgorithm<T> : TimeSeriesCausalBase<T>
 
     private readonly double _convergenceThreshold;
     private readonly double _correlationThreshold;
+    private readonly double _directionalityAsymmetryThreshold;
 
     public CCMAlgorithm(CausalDiscoveryOptions? options = null)
     {
         ApplyTimeSeriesOptions(options);
         _convergenceThreshold = options?.EdgeThreshold ?? 0.05;
         _correlationThreshold = options?.CorrelationThreshold ?? 0.1;
+        _directionalityAsymmetryThreshold = options?.DirectionalityAsymmetryThreshold ?? 0.2;
         if (double.IsNaN(_convergenceThreshold) || _convergenceThreshold < 0 || _convergenceThreshold > 1)
             throw new ArgumentException("EdgeThreshold (convergence threshold) must be a finite number between 0 and 1.");
         if (double.IsNaN(_correlationThreshold) || _correlationThreshold < 0 || _correlationThreshold > 1)
             throw new ArgumentException("CorrelationThreshold must be a finite number between 0 and 1.");
+        if (double.IsNaN(_directionalityAsymmetryThreshold) || _directionalityAsymmetryThreshold < 0 || _directionalityAsymmetryThreshold > 1)
+            throw new ArgumentException("DirectionalityAsymmetryThreshold must be a finite number between 0 and 1.");
     }
 
     /// <inheritdoc/>
@@ -127,6 +131,28 @@ public class CCMAlgorithm<T> : TimeSeriesCausalBase<T>
 
                 if (convergent || saturatedConvergence)
                     result[i, j] = NumOps.FromDouble(rhoFull);
+            }
+
+        // CCM directionality (Sugihara et al. 2012, Science, "Detecting Causality in Complex
+        // Ecosystems"): causation is inferred from the ASYMMETRY of convergent cross-map skill — X
+        // drives Y when Y's reconstructed manifold cross-maps X better than the reverse. The loop
+        // above fills BOTH directions with their raw cross-map skill; convert those raw skills into an
+        // inferred causal graph by keeping only the DOMINANT direction of each clearly-asymmetric pair
+        // (the weaker reverse mapping is a reconstruction artifact, not a second causal link). Genuine
+        // bidirectional coupling — where the two skills are comparable — is left intact (the paper
+        // reports mutual causation in exactly that near-symmetric regime).
+        for (int i = 0; i < d; i++)
+            for (int j = i + 1; j < d; j++)
+            {
+                double fwd = Math.Abs(NumOps.ToDouble(result[i, j]));
+                double bwd = Math.Abs(NumOps.ToDouble(result[j, i]));
+                if (fwd <= 0 || bwd <= 0) continue;
+                double asymmetry = Math.Abs(fwd - bwd) / (Math.Max(fwd, bwd) + 1e-10);
+                if (asymmetry >= _directionalityAsymmetryThreshold)
+                {
+                    if (fwd >= bwd) result[j, i] = NumOps.Zero;
+                    else result[i, j] = NumOps.Zero;
+                }
             }
 
         return result;

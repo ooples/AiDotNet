@@ -68,7 +68,7 @@ namespace AiDotNet.Classification.NaiveBayes;
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("Tackling the Poor Assumptions of Naive Bayes Text Classifiers", "https://people.csail.mit.edu/jrennie/papers/icml03-nb.pdf", Year = 2003, Authors = "Jason D. Rennie, Lawrence Shih, Jaime Teevan, David R. Karger")]
-public class ComplementNaiveBayes<T> : NaiveBayesBase<T>
+public partial class ComplementNaiveBayes<T> : NaiveBayesBase<T>
 {
     /// <summary>
     /// Complement feature log-probabilities: log P(feature|NOT class).

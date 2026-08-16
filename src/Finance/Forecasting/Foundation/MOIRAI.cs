@@ -77,7 +77,7 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Unified Training of Universal Time Series Forecasting Transformers", "https://arxiv.org/abs/2402.02592", Year = 2024, Authors = "Gerald Woo, Chenghao Liu, Akshat Kumar, Caiming Xiong, Silvio Savarese, Doyen Sahoo")]
-public class MOIRAI<T> : TimeSeriesFoundationModelBase<T>
+public partial class MOIRAI<T> : TimeSeriesFoundationModelBase<T>
 {
     #region Execution Mode
 
@@ -204,6 +204,12 @@ public class MOIRAI<T> : TimeSeriesFoundationModelBase<T>
     /// Total number of patches across all scales.
     /// </summary>
     private int _totalPatches;
+
+    /// <summary>
+    /// Per-call counter that varies the masked-encoder pattern across training steps while keeping
+    /// the sequence reproducible. See <see cref="ApplyRandomMasking"/>.
+    /// </summary>
+    private int _maskStepCounter;
 
     /// <summary>
     /// Model size variant.
@@ -399,8 +405,14 @@ public class MOIRAI<T> : TimeSeriesFoundationModelBase<T>
         // Wire into the base train-optimizer slot so TrainWithTape uses our
         // configured Adam (initial lr=1e-6, ramping toward the paper's
         // headline lr=1e-3), not the framework default.
-        SetBaseTrainOptimizer(_optimizer as IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>);
+        SetBaseTrainOptimizer(_optimizer);
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
+        // Wire the loss into the base slot too. _lossFunction was assigned in both constructors
+        // and never read, so a caller-supplied lossFunction was silently discarded and training
+        // always used the framework default — the same dead-field shape as the optimizer above,
+        // which IS wired. (This does not change the default objective: the fallback here and the
+        // base default are both mean squared error.)
+        SetLossFunction(_lossFunction);
 
         _contextLength = options.ContextLength;
         _forecastHorizon = options.ForecastHorizon;
@@ -624,15 +636,56 @@ public class MOIRAI<T> : TimeSeriesFoundationModelBase<T>
         // decoder-only path returned the raw [B, seqLen, numMixtures*3] head and
         // the MSE training loss threw a shape mismatch against the
         // [B, forecastHorizon, 1] target (e.g. [1,8,30] vs [1,4,1]).
+        // Per-POSITION extraction. The previous body mean-pooled the sequence axis away and then
+        // tiled a single scalar across the horizon, so the training output was identical at every
+        // horizon step. That is not what MOIRAI does — Woo et al. 2024 emit a mixture distribution
+        // PER timestep — and it makes the model structurally unable to fit horizon-varying targets:
+        // a constant can only ever match the target's mean, so the loss floor is the target's
+        // variance. That is exactly what the memorization probe saw (step-1 loss 0.0883 against a
+        // uniform[0,1] target whose variance is 0.0833 — already at the floor on iteration one,
+        // with nowhere to descend).
         if (current.Rank == 3)
         {
-            current = Engine.ReduceMean(current, axes: new[] { 1 }, keepDims: false);
+            return ExtractPerPositionPointPredictionsTapeSafe(current, _forecastHorizon);
         }
         if (current.Rank == 2)
         {
             current = ExtractPointPredictionsTapeSafe(current, _forecastHorizon);
         }
         return current;
+    }
+
+    /// <summary>
+    /// Tape-safe per-position mixture-weighted-mean extraction: maps a rank-3
+    /// <c>[B, seqLen, numMixtures*3]</c> head output to <c>[B, horizon, 1]</c> point predictions
+    /// that VARY along the horizon, rather than one pooled scalar repeated.
+    /// </summary>
+    /// <remarks>
+    /// Keeps the per-timestep predictive distributions the paper's head produces. When seqLen and
+    /// the horizon differ the sequence is aligned by taking the most recent <c>horizon</c>
+    /// positions (the forecast is anchored at the end of the context), or by repeating and
+    /// trimming when the sequence is shorter than the horizon.
+    /// </remarks>
+    private Tensor<T> ExtractPerPositionPointPredictionsTapeSafe(Tensor<T> mixtureOutput, int horizon)
+    {
+        int b = mixtureOutput.Shape[0];
+        int s = mixtureOutput.Shape[1];
+
+        var reshaped = Engine.Reshape(mixtureOutput, new[] { b, s, _numMixtures, 3 });
+        var weights = Engine.TensorSliceAxis(reshaped, 3, 0);            // [B, S, M]
+        var means = Engine.TensorSliceAxis(reshaped, 3, 1);              // [B, S, M]
+        var probs = Engine.Softmax(weights, axis: 2);                    // [B, S, M]
+        var weighted = Engine.TensorMultiply(probs, means);              // [B, S, M]
+        var perPosition = Engine.ReduceSum(weighted, new[] { 2 }, keepDims: true); // [B, S, 1]
+
+        if (s == horizon)
+            return perPosition;
+        if (s > horizon)
+            return Engine.TensorNarrow(perPosition, dim: 1, start: s - horizon, length: horizon);
+
+        int repeats = (horizon + s - 1) / s;
+        var tiled = Engine.TensorTile(perPosition, new[] { 1, repeats, 1 });
+        return Engine.TensorNarrow(tiled, dim: 1, start: 0, length: horizon);
     }
 
     /// <summary>
@@ -723,25 +776,7 @@ public class MOIRAI<T> : TimeSeriesFoundationModelBase<T>
         base.Train(trainingInput, target);
     }
 
-    /// <inheritdoc/>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the MOIRAI model, UpdateParameters updates internal parameters or state. This keeps the MOIRAI architecture aligned with the latest values.
-    /// </para>
-    /// </remarks>
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        // NeuralNetworkBase.UpdateParameters contract: the caller passes the
-        // NEW parameter values (post-optimizer-step), NOT raw gradients. The
-        // previous body was an empty no-op with a comment claiming the optimizer
-        // updates parameters in Train() — but for optimizers that route through
-        // model.UpdateParameters(newParams) as part of their step, this
-        // discarded every update and Adam saw zero parameter motion. Forward
-        // to SetParameters so the layer-side weight tensors actually receive
-        // the new values.
-        SetParameters(parameters);
-    }
-
+    // UpdateParameters restated the base verbatim; ModelBase routes it to SetParameters.
     /// <inheritdoc/>
     /// <remarks>
     /// <para>
@@ -1235,7 +1270,21 @@ public class MOIRAI<T> : TimeSeriesFoundationModelBase<T>
     private Tensor<T> ApplyRandomMasking(Tensor<T> input)
     {
         var masked = new Tensor<T>(input._shape);
-        var rand = RandomHelper.CreateSecureRandom();
+        // Reproducible-but-varying mask per step: seed off the configured seed plus a per-call
+        // counter, so the mask sequence is deterministic across runs yet still sweeps different
+        // patches so the encoder learns the full masked objective. Mirrors MGTSD's train-step
+        // seeding in this same folder.
+        //
+        // This previously called RandomHelper.CreateSecureRandom(), which is UNSEEDED — so MOIRAI
+        // ignored its own Seed option entirely and no training run was reproducible. It also
+        // constructed a fresh cryptographic RNG on every Train call. The non-determinism surfaced
+        // on the J-M shard as LossStrictlyDecreasesOnMemorizationTask failing (step 1 = 0.088,
+        // step 20 = 0.161): the memorization probe trains repeatedly on ONE fixed pair, but a
+        // re-randomized mask each step means the model never sees the same input twice, so the
+        // loss wanders instead of descending.
+        int maskSeed = _options.Seed ?? Architecture?.RandomSeed ?? 12345;
+        var rand = RandomHelper.CreateSeededRandom(maskSeed + _maskStepCounter);
+        _maskStepCounter++;
 
         // Copy input data
         for (int i = 0; i < input.Length; i++)

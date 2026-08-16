@@ -12,7 +12,13 @@ namespace AiDotNet.Tests.ModelFamilyTests.Base;
 /// finite predictions, different inputs produce different outputs, output bounded,
 /// and zero input stability.
 /// </summary>
-public abstract class FinancialModelTestBase : NeuralNetworkModelTestBase
+/// <remarks>
+/// Generic over the numeric type <typeparamref name="T"/> (mirroring <see cref="NeuralNetworkModelTestBase{T}"/>)
+/// so heavy financial models can be scaffolded at &lt;float&gt; (2× faster, half the memory) via the Fp32
+/// float-selection path. A non-generic <c>FinancialModelTestBase</c> shim below preserves the &lt;double&gt;
+/// default.
+/// </remarks>
+public abstract class FinancialModelTestBase<T> : NeuralNetworkModelTestBase<T>
 {
     // =====================================================
     // FINANCIAL INVARIANT: Predictions Should Be Finite
@@ -33,9 +39,10 @@ public abstract class FinancialModelTestBase : NeuralNetworkModelTestBase
         Assert.True(output.Length > 0, "Financial model produced empty output.");
         for (int i = 0; i < output.Length; i++)
         {
-            Assert.False(double.IsNaN(output[i]),
+            double o = ConvertToDouble(output[i]);
+            Assert.False(double.IsNaN(o),
                 $"Financial prediction[{i}] is NaN — catastrophic for trading/risk systems.");
-            Assert.False(double.IsInfinity(output[i]),
+            Assert.False(double.IsInfinity(o),
                 $"Financial prediction[{i}] is Infinity — would cause unbounded positions.");
         }
     }
@@ -62,7 +69,7 @@ public abstract class FinancialModelTestBase : NeuralNetworkModelTestBase
         int minLen = Math.Min(predBull.Length, predBear.Length);
         for (int i = 0; i < minLen; i++)
         {
-            if (Math.Abs(predBull[i] - predBear[i]) > 1e-12)
+            if (Math.Abs(ConvertToDouble(predBull[i]) - ConvertToDouble(predBear[i])) > 1e-12)
             {
                 anyDifferent = true;
                 break;
@@ -91,8 +98,9 @@ public abstract class FinancialModelTestBase : NeuralNetworkModelTestBase
         var output = network.Predict(input);
         for (int i = 0; i < output.Length; i++)
         {
-            Assert.True(Math.Abs(output[i]) < 1e8,
-                $"Financial output[{i}] = {output[i]:E4} is unbounded. " +
+            double o = ConvertToDouble(output[i]);
+            Assert.True(Math.Abs(o) < 1e8,
+                $"Financial output[{i}] = {o:E4} is unbounded. " +
                 "Would cause extreme positions in a trading system.");
         }
     }
@@ -114,8 +122,12 @@ public abstract class FinancialModelTestBase : NeuralNetworkModelTestBase
         Assert.True(output.Length > 0, "Financial model produced empty output for zero input.");
         for (int i = 0; i < output.Length; i++)
         {
-            Assert.False(double.IsNaN(output[i]),
+            Assert.False(double.IsNaN(ConvertToDouble(output[i])),
                 $"Financial output[{i}] is NaN for zero market data.");
         }
     }
 }
+
+/// <summary>Non-generic &lt;double&gt; convenience base — the default for financial models that do not opt
+/// into &lt;float&gt; scaffolding. Mirrors the <see cref="NeuralNetworkModelTestBase"/> / &lt;double&gt; shim.</summary>
+public abstract class FinancialModelTestBase : FinancialModelTestBase<double> { }

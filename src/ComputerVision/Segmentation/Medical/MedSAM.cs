@@ -57,41 +57,53 @@ namespace AiDotNet.ComputerVision.Segmentation.Medical;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Segment Anything in Medical Images", "https://doi.org/10.1038/s41467-024-44824-z", Year = 2024, Authors = "Jun Ma, Yuting He, Feifei Li, Lin Han, Chenyu You, Bo Wang")]
-public class MedSAM<T> : NeuralNetworkBase<T>, IMedicalSegmentation<T>
+public class MedSAM<T> : Common.MedicalSegmentationBase<T>
 {
     private readonly MedSAMOptions _options;
     public override ModelOptions GetOptions() => _options;
 
     #region Fields
-    private readonly int _height, _width, _channels, _numClasses;
+    // Only MedSAM's OWN configuration lives here. _height, _width, _channels, _numClasses,
+    // _useNativeMode, _onnxModelPath, _onnxSession, _optimizer, _disposed and _encoderLayerEnd all
+    // come from MedicalSegmentationBase -> SegmentationModelBase, as do SupportedModalities and
+    // Supports2D.
     private readonly MedSAMModelSize _modelSize;
     private readonly int[] _channelDims;
     private readonly int _decoderDim;
     private readonly int[] _depths;
     private readonly double _dropRate;
-    private readonly bool _useNativeMode;
-    private readonly string? _onnxModelPath;
-    private InferenceSession? _onnxSession;
-    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
+
+    // MedSAM's own optimizer bookkeeping. NOTE: this model deliberately reads the base's raw
+    // _optimizer FIELD (the un-defaulted constructor argument) rather than the base's Optimizer
+    // PROPERTY. The property would lazily materialize CreateDefaultOptimizer(), and passing that
+    // non-null value into TrainWithTape would bypass GetOrCreateBaseOptimizer below - the exact
+    // path whose absence made this model diverge to NaN within ~10 steps.
     private readonly bool _hasUserSuppliedOptimizer;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _baseTapeOptimizer;
-    private bool _disposed;
-    private int _encoderLayerEnd;
+
+    /// <summary>
+    /// The imaging modalities MedSAM was trained on, passed to the base constructor.
+    /// </summary>
+    private static readonly string[] MedSAMModalities =
+        ["CT", "MRI_T1", "MRI_T2", "Xray", "Ultrasound", "Endoscopy", "Dermoscopy", "Fundus", "Microscopy", "PET"];
     #endregion
 
     #region Properties
+    // SupportsTraining, NumClasses, InputHeight, InputWidth and IsOnnxMode are inherited from
+    // SegmentationModelBase and say exactly the same thing.
+    internal bool UseNativeMode => _useNativeMode;
+    internal MedSAMModelSize ModelSize => _modelSize;
+
     /// <summary>
-    /// Gets whether this MedSAM instance supports training.
+    /// MedSAM is a 2D slice model; it does not process volumes natively.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// <b>For Beginners:</b> Returns <c>true</c> in native mode, <c>false</c> in ONNX mode.
+    /// Overrides MedicalSegmentationBase's <c>true</c> default. Supports2D and SupportsFewShot
+    /// already match the base's defaults and so are not re-declared.
     /// </para>
     /// </remarks>
-    public override bool SupportsTraining => _useNativeMode;
-    internal bool UseNativeMode => _useNativeMode;
-    internal MedSAMModelSize ModelSize => _modelSize;
-    internal int NumClasses => _numClasses;
+    public override bool Supports3D => false;
     #endregion
 
     #region Constructors
@@ -115,18 +127,36 @@ public class MedSAM<T> : NeuralNetworkBase<T>, IMedicalSegmentation<T>
         ILossFunction<T>? lossFunction = null, int numClasses = 1,
         MedSAMModelSize modelSize = MedSAMModelSize.ViTBase, double dropRate = 0,
         MedSAMOptions? options = null)
-        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>())
+        // The base resolves height/width/channels/numClasses/native-mode from the architecture,
+        // defaults the loss to CrossEntropyWithLogitsLoss and stores the modality list - exactly
+        // what the deleted lines did by hand. `optimizer` is passed straight through INCLUDING
+        // null, and the base stores it verbatim in _optimizer; MedSAM never asks for the base's
+        // lazy default, so a null here still routes training through GetOrCreateBaseOptimizer.
+        : base(architecture, optimizer, lossFunction, numClasses, MedSAMModalities)
     {
         _options = options ?? new MedSAMOptions(); Options = _options;
-        _height = architecture.InputHeight > 0 ? architecture.InputHeight : 1024;
-        _width = architecture.InputWidth > 0 ? architecture.InputWidth : 1024;
-        _channels = architecture.InputDepth > 0 ? architecture.InputDepth : 3;
-        _numClasses = numClasses; _modelSize = modelSize; _dropRate = dropRate;
-        _useNativeMode = true; _onnxModelPath = null;
+        ApplyMedSAMInputFallback(architecture);
+        _modelSize = modelSize; _dropRate = dropRate;
         _hasUserSuppliedOptimizer = optimizer is not null;
-        _optimizer = optimizer;
-        (_channelDims, _depths, _decoderDim) = GetModelConfig(modelSize);
+        (_channelDims, _depths, _decoderDim) = GetModelConfig(modelSize, _options);
         InitializeLayers();
+    }
+
+    /// <summary>
+    /// Re-applies MedSAM's 1024x1024 fallback for architectures that carry no input geometry.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// SegmentationModelBase falls back to 512x512 when the architecture supplies no input height
+    /// or width. MedSAM inherits SAM's 1024x1024 input resolution, so that fallback is restored
+    /// here for the unset case only - when the architecture does specify dimensions, the base's
+    /// value already matches and nothing changes.
+    /// </para>
+    /// </remarks>
+    private void ApplyMedSAMInputFallback(NeuralNetworkArchitecture<T> architecture)
+    {
+        if (architecture.InputHeight <= 0) _height = 1024;
+        if (architecture.InputWidth <= 0) _width = 1024;
     }
 
     /// <summary>
@@ -148,21 +178,15 @@ public class MedSAM<T> : NeuralNetworkBase<T>, IMedicalSegmentation<T>
     public MedSAM(NeuralNetworkArchitecture<T> architecture, string onnxModelPath,
         int numClasses = 1, MedSAMModelSize modelSize = MedSAMModelSize.ViTBase,
         MedSAMOptions? options = null)
-        : base(architecture, new CrossEntropyWithLogitsLoss<T>())
+        // The base's ONNX constructor already validates the path, sets ONNX mode, resolves the input
+        // geometry, stores the modality list and opens the InferenceSession - the same lines this
+        // used to repeat.
+        : base(architecture, onnxModelPath, numClasses, MedSAMModalities)
     {
         _options = options ?? new MedSAMOptions(); Options = _options;
-        if (string.IsNullOrWhiteSpace(onnxModelPath))
-            throw new ArgumentException("ONNX model path cannot be null or empty.", nameof(onnxModelPath));
-        if (!File.Exists(onnxModelPath))
-            throw new FileNotFoundException($"MedSAM ONNX model not found: {onnxModelPath}");
-        _height = architecture.InputHeight > 0 ? architecture.InputHeight : 1024;
-        _width = architecture.InputWidth > 0 ? architecture.InputWidth : 1024;
-        _channels = architecture.InputDepth > 0 ? architecture.InputDepth : 3;
-        _numClasses = numClasses; _modelSize = modelSize; _dropRate = 0;
-        _useNativeMode = false; _onnxModelPath = onnxModelPath; _optimizer = null;
-        (_channelDims, _depths, _decoderDim) = GetModelConfig(modelSize);
-        try { _onnxSession = new InferenceSession(onnxModelPath); }
-        catch (Exception ex) { throw new InvalidOperationException($"Failed to load MedSAM ONNX model: {ex.Message}", ex); }
+        ApplyMedSAMInputFallback(architecture);
+        _modelSize = modelSize; _dropRate = 0;
+        (_channelDims, _depths, _decoderDim) = GetModelConfig(modelSize, _options);
         InitializeLayers();
     }
     #endregion
@@ -238,7 +262,7 @@ public class MedSAM<T> : NeuralNetworkBase<T>, IMedicalSegmentation<T>
         try
         {
             SetTrainingMode(true);
-            TrainWithTape(input, expectedOutput, _optimizer);
+            TrainWithTape(input, expectedOutput);
         }
         finally
         {
@@ -248,13 +272,40 @@ public class MedSAM<T> : NeuralNetworkBase<T>, IMedicalSegmentation<T>
     #endregion
 
     #region Private Methods
-    private static (int[] ChannelDims, int[] Depths, int DecoderDim) GetModelConfig(MedSAMModelSize modelSize) => modelSize switch
+    /// <summary>
+    /// Resolves the encoder configuration, preferring explicit caller overrides over the paper preset.
+    /// </summary>
+    /// <remarks>
+    /// The preset below is the published ViT-Base encoder and remains the default in every case, so
+    /// production behaviour is unchanged. Previously it was the ONLY reachable configuration —
+    /// MedSAMModelSize declares just ViTBase — which meant no caller could construct MedSAM at a
+    /// smaller size for a bounded test or a memory-constrained deployment. Options.ChannelDims /
+    /// Depths / DecoderDim now allow that; leaving them null selects the preset exactly as before.
+    /// ChannelDims and Depths must agree in length, since each entry pairs a stage width with that
+    /// stage's block count.
+    /// </remarks>
+    private static (int[] ChannelDims, int[] Depths, int DecoderDim) GetModelConfig(
+        MedSAMModelSize modelSize, MedSAMOptions? options)
     {
-        MedSAMModelSize.ViTBase => ([64, 128, 320, 768], [2, 2, 4, 12], 256),
-        _ => ([64, 128, 320, 768], [2, 2, 4, 12], 256)
-    };
+        (int[] ChannelDims, int[] Depths, int DecoderDim) preset = modelSize switch
+        {
+            MedSAMModelSize.ViTBase => ([64, 128, 320, 768], [2, 2, 4, 12], 256),
+            _ => ([64, 128, 320, 768], [2, 2, 4, 12], 256)
+        };
 
-    private Tensor<T> Forward(Tensor<T> input)
+        int[] dims = options?.ChannelDims is { Length: > 0 } d ? d : preset.ChannelDims;
+        int[] depths = options?.Depths is { Length: > 0 } p ? p : preset.Depths;
+        if (dims.Length != depths.Length)
+        {
+            throw new ArgumentException(
+                $"MedSAMOptions.ChannelDims ({dims.Length}) and Depths ({depths.Length}) must have the " +
+                "same number of stages.", nameof(options));
+        }
+
+        return (dims, depths, options?.DecoderDim ?? preset.DecoderDim);
+    }
+
+    protected override Tensor<T> Forward(Tensor<T> input)
     {
         bool hasBatch = input.Rank == 4; if (!hasBatch) input = AddBatchDimension(input);
         var features = input;
@@ -263,7 +314,7 @@ public class MedSAM<T> : NeuralNetworkBase<T>, IMedicalSegmentation<T>
         if (!hasBatch) features = RemoveBatchDimension(features); return features;
     }
 
-    private Tensor<T> PredictOnnx(Tensor<T> input)
+    protected override Tensor<T> PredictOnnx(Tensor<T> input)
     {
         if (_onnxSession is null) throw new InvalidOperationException("ONNX session is not initialized.");
         bool hasBatch = input.Rank == 4; if (!hasBatch) input = AddBatchDimension(input);
@@ -280,11 +331,7 @@ public class MedSAM<T> : NeuralNetworkBase<T>, IMedicalSegmentation<T>
         if (!hasBatch) result = RemoveBatchDimension(result); return result;
     }
 
-    private Tensor<T> AddBatchDimension(Tensor<T> tensor)
-    { var result = new Tensor<T>([1, tensor.Shape[0], tensor.Shape[1], tensor.Shape[2]]); tensor.Data.Span.CopyTo(result.Data.Span); return result; }
-
-    private Tensor<T> RemoveBatchDimension(Tensor<T> tensor)
-    { int[] s = new int[tensor.Shape.Length - 1]; for (int i = 0; i < s.Length; i++) s[i] = tensor.Shape[i + 1]; var r = new Tensor<T>(s); tensor.Data.Span.CopyTo(r.Data.Span); return r; }
+    // AddBatchDimension and RemoveBatchDimension are inherited from SegmentationModelBase.
     #endregion
 
     #region Abstract Implementation
@@ -312,18 +359,8 @@ public class MedSAM<T> : NeuralNetworkBase<T>, IMedicalSegmentation<T>
         }
     }
 
-    /// <summary>
-    /// Updates all trainable parameters from a flat parameter vector.
-    /// </summary>
-    /// <param name="parameters">Flat vector of all model parameters.</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Replaces all model weights with new values.
-    /// </para>
-    /// </remarks>
-    public override void UpdateParameters(Vector<T> parameters)
-    { int o = 0; foreach (var l in Layers) { var p = l.GetParameters(); int c = p.Length; if (o + c <= parameters.Length) { var n = new Vector<T>(c); for (int i = 0; i < c; i++) n[i] = parameters[o + i]; l.UpdateParameters(n); o += c; } } }
-
+    // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
+    // exactly the same enumeration, so this said nothing the base does not already say.
     /// <summary>
     /// Collects metadata describing this model's configuration.
     /// </summary>
@@ -376,30 +413,18 @@ public class MedSAM<T> : NeuralNetworkBase<T>, IMedicalSegmentation<T>
         ? new MedSAM<T>(Architecture, _optimizer, LossFunction, _numClasses, _modelSize, _dropRate, _options)
         : new MedSAM<T>(Architecture, _onnxModelPath ?? throw new InvalidOperationException("ONNX model path not initialized."), _numClasses, _modelSize, _options);
 
-    /// <summary>
-    /// Releases managed resources including the ONNX inference session.
-    /// </summary>
-    /// <param name="disposing">True when called from Dispose().</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Frees memory used by the ONNX runtime.
-    /// </para>
-    /// </remarks>
-    protected override void Dispose(bool disposing)
-    { if (!_disposed) { if (disposing) { _onnxSession?.Dispose(); _onnxSession = null; } _disposed = true; } base.Dispose(disposing); }
+    // Dispose is inherited from SegmentationModelBase, which already disposes the ONNX session.
+    // MedSAM owns no further unmanaged resources.
     #endregion
 
     #region IMedicalSegmentation Implementation
-    int ISegmentationModel<T>.NumClasses => _numClasses;
-    int ISegmentationModel<T>.InputHeight => _height;
-    int ISegmentationModel<T>.InputWidth => _width;
-    bool ISegmentationModel<T>.IsOnnxMode => !_useNativeMode;
-    Tensor<T> ISegmentationModel<T>.Segment(Tensor<T> image) => Predict(image);
-    IReadOnlyList<string> IMedicalSegmentation<T>.SupportedModalities => ["CT", "MRI_T1", "MRI_T2", "Xray", "Ultrasound", "Endoscopy", "Dermoscopy", "Fundus", "Microscopy", "PET"];
-    bool IMedicalSegmentation<T>.Supports3D => false;
-    bool IMedicalSegmentation<T>.Supports2D => true;
-    bool IMedicalSegmentation<T>.SupportsFewShot => false;
-    MedicalSegmentationResult<T> IMedicalSegmentation<T>.SegmentSlice(Tensor<T> slice)
+    // NumClasses, InputHeight, InputWidth, IsOnnxMode and Segment come from SegmentationModelBase.
+    // SupportedModalities is supplied to the base constructor via MedSAMModalities; Supports2D
+    // (true) and SupportsFewShot (false) are MedicalSegmentationBase's defaults already, and
+    // Supports3D is overridden to false alongside the other properties above.
+
+    /// <inheritdoc/>
+    public override MedicalSegmentationResult<T> SegmentSlice(Tensor<T> slice)
     {
         var output = Predict(slice);
         var labels = Common.SegmentationTensorOps.ArgmaxAlongClassDim(output);
@@ -418,9 +443,22 @@ public class MedSAM<T> : NeuralNetworkBase<T>, IMedicalSegmentation<T>
         }
         return new MedicalSegmentationResult<T> { Labels = labels, Probabilities = probs, Structures = structures };
     }
-    MedicalSegmentationResult<T> IMedicalSegmentation<T>.SegmentVolume(Tensor<T> volume)
-        => ((IMedicalSegmentation<T>)this).SegmentSlice(volume);
-    MedicalSegmentationResult<T> IMedicalSegmentation<T>.SegmentFewShot(Tensor<T> queryImage, Tensor<T> supportImages, Tensor<T> supportMasks)
-        => ((IMedicalSegmentation<T>)this).SegmentSlice(queryImage);
+    /// <inheritdoc/>
+    public override MedicalSegmentationResult<T> SegmentVolume(Tensor<T> volume)
+        => SegmentSlice(volume);
+
+    /// <summary>
+    /// Segments a query image, ignoring the support set.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Overrides the base rather than inheriting it deliberately. MedicalSegmentationBase's
+    /// SegmentFewShot throws NotSupportedException whenever SupportsFewShot is false, which it is
+    /// for MedSAM; this model instead falls back to plain slice segmentation, and that behaviour
+    /// is preserved exactly as it was before re-parenting.
+    /// </para>
+    /// </remarks>
+    public override MedicalSegmentationResult<T> SegmentFewShot(Tensor<T> queryImage, Tensor<T> supportImages, Tensor<T> supportMasks)
+        => SegmentSlice(queryImage);
     #endregion
 }

@@ -12,13 +12,18 @@ namespace AiDotNet.Tests.ModelFamilyTests.Base;
 /// Tests deep mathematical invariants: selection validity, informativeness ordering,
 /// diversity properties, score monotonicity, and information-theoretic consistency.
 /// </summary>
-public abstract class ActiveLearningTestBase
+public abstract class ActiveLearningTestBase<T>
 {
+    protected static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+    protected static T ToT(double value) => NumOps.FromDouble(value);
+    protected static double ToD(T value) => Convert.ToDouble(value);
+    protected virtual double Tolerance => typeof(T) == typeof(float) ? 1e-6 : 1e-10;
+
     /// <summary>Factory method — subclasses return their concrete strategy instance.</summary>
-    protected abstract IActiveLearningStrategy<double> CreateStrategy();
+    protected abstract IActiveLearningStrategy<T> CreateStrategy();
 
     /// <summary>Creates a mock model for testing.</summary>
-    protected abstract IFullModel<double, Tensor<double>, Tensor<double>> CreateMockModel();
+    protected abstract IFullModel<T, Tensor<T>, Tensor<T>> CreateMockModel();
 
     /// <summary>Number of samples in the unlabeled pool.</summary>
     protected virtual int PoolSize => 20;
@@ -30,13 +35,13 @@ public abstract class ActiveLearningTestBase
     protected virtual int BatchSize => 5;
 
     /// <summary>Creates a synthetic unlabeled pool tensor [poolSize, featureDim].</summary>
-    protected virtual Tensor<double> CreateUnlabeledPool()
+    protected virtual Tensor<T> CreateUnlabeledPool()
     {
         var rng = new Random(42);
-        var data = new double[PoolSize * FeatureDim];
+        var data = new T[PoolSize * FeatureDim];
         for (int i = 0; i < data.Length; i++)
-            data[i] = rng.NextDouble() * 2.0 - 1.0;
-        return new Tensor<double>(data, new[] { PoolSize, FeatureDim });
+            data[i] = ToT(rng.NextDouble() * 2.0 - 1.0);
+        return new Tensor<T>(data, new[] { PoolSize, FeatureDim });
     }
 
     // =========================================================================
@@ -103,17 +108,17 @@ public abstract class ActiveLearningTestBase
         // Compute average score of ALL samples
         double totalScore = 0;
         for (int i = 0; i < scores.Length; i++)
-            totalScore += scores[i];
+            totalScore += ToD(scores[i]);
         double avgScore = totalScore / scores.Length;
 
         // Compute average score of SELECTED samples
         double selectedTotal = 0;
         foreach (var idx in selected)
-            selectedTotal += scores[idx];
+            selectedTotal += ToD(scores[idx]);
         double selectedAvg = selectedTotal / selected.Length;
 
         // Selected samples should have scores >= average (they're the "most informative")
-        Assert.True(selectedAvg >= avgScore - 1e-10,
+        Assert.True(selectedAvg >= avgScore - Tolerance,
             $"Selected samples' avg score ({selectedAvg:F6}) should be >= " +
             $"pool average ({avgScore:F6}). Active learning selects the MOST informative samples.");
     }
@@ -129,8 +134,9 @@ public abstract class ActiveLearningTestBase
 
         for (int i = 0; i < scores.Length; i++)
         {
-            Assert.True(scores[i] >= -1e-10,
-                $"Informativeness score at index {i} = {scores[i]:E4} is negative. " +
+            double score = ToD(scores[i]);
+            Assert.True(score >= -Tolerance,
+                $"Informativeness score at index {i} = {score:E4} is negative. " +
                 "Uncertainty/informativeness measures should be non-negative.");
         }
     }
@@ -147,8 +153,9 @@ public abstract class ActiveLearningTestBase
         Assert.Equal(PoolSize, scores.Length);
         for (int i = 0; i < scores.Length; i++)
         {
-            Assert.False(double.IsNaN(scores[i]), $"Score[{i}] is NaN.");
-            Assert.False(double.IsInfinity(scores[i]), $"Score[{i}] is Infinity.");
+            double score = ToD(scores[i]);
+            Assert.False(double.IsNaN(score), $"Score[{i}] is NaN.");
+            Assert.False(double.IsInfinity(score), $"Score[{i}] is Infinity.");
         }
     }
 
@@ -187,7 +194,8 @@ public abstract class ActiveLearningTestBase
                 double dist = 0;
                 for (int d = 0; d < FeatureDim; d++)
                 {
-                    double diff = pool[selected[a] * FeatureDim + d] - pool[selected[b] * FeatureDim + d];
+                    double diff = ToD(pool[selected[a] * FeatureDim + d]) -
+                        ToD(pool[selected[b] * FeatureDim + d]);
                     dist += diff * diff;
                 }
 
@@ -269,7 +277,7 @@ public abstract class ActiveLearningTestBase
         var strategy = CreateStrategy();
         var pool = CreateUnlabeledPool();
 
-        var original = new double[pool.Length];
+        var original = new T[pool.Length];
         for (int i = 0; i < pool.Length; i++)
             original[i] = pool[i];
 
@@ -277,8 +285,10 @@ public abstract class ActiveLearningTestBase
 
         for (int i = 0; i < pool.Length; i++)
         {
-            Assert.True(original[i] == pool[i],
-                $"Pool mutated at index {i}.");
+            Assert.Equal(original[i], pool[i]);
         }
     }
 }
+
+/// <summary>Default-precision alias for existing hand-written fixtures.</summary>
+public abstract class ActiveLearningTestBase : ActiveLearningTestBase<double> { }

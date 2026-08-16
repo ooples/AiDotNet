@@ -41,12 +41,13 @@ namespace AiDotNet.AnomalyDetection.Statistical;
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
     [ResearchPaper("Exploratory Data Analysis", "https://doi.org/10.1002/bimj.4710230408")]
-public class PercentileDetector<T> : AnomalyDetectorBase<T>
+public partial class PercentileDetector<T> : AnomalyDetectorBase<T>
 {
     private readonly double _lowPercentile;
     private readonly double _highPercentile;
     private Vector<T>? _lowThresholds;
     private Vector<T>? _highThresholds;
+    [Buffer]
     private Vector<T>? _ranges;
 
     /// <summary>

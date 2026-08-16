@@ -89,7 +89,7 @@ namespace AiDotNet.VisionLanguage.Encoders;
     Year = 2023,
     Authors = "Zhai et al."
 )]
-public class SigLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageModel<T>
+public partial class SigLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageModel<T>
 {
     #region Fields
 
@@ -161,7 +161,14 @@ public class SigLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageM
         _options = options ?? new SigLIPOptions();
         SyncImageSizeWithArchitecture();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate,
+                WeightDecay = _options.WeightDecay,
+                UseAdaptiveLearningRate = false,
+            });
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.VisionEmbeddingDim;
@@ -286,7 +293,14 @@ public class SigLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageM
         }
 
         // ViT patch embedding + dual-stream split (vision in Layers, text in TextEncoderLayers).
-        int patchSize = Math.Max(1, _options.ImageSize / 16);
+        // Honor the configured ViT patch size (16 for the paper default).
+        // The previous ImageSize/16 derivation ignored this public option and
+        // forced the same 256-token attention grid for every image size.
+        int patchSize = _options.PatchSize;
+        if (patchSize <= 0 || patchSize > _options.ImageSize || _options.ImageSize % patchSize != 0)
+            throw new ArgumentOutOfRangeException(
+                nameof(_options.PatchSize),
+                "PatchSize must be positive, no larger than ImageSize, and evenly divide ImageSize.");
         Layers.Add(
             new PatchEmbeddingLayer<T>(
                 patchSize: patchSize,
@@ -334,7 +348,7 @@ public class SigLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageM
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(PreprocessImage(input), expected);
+            TrainWithTape(PreprocessImage(input), expected, _optimizer);
         }
         finally
         {
@@ -342,24 +356,14 @@ public class SigLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageM
         }
     }
 
-    /// <inheritdoc />
-    protected override IEnumerable<LayerBase<T>?> GetExtraTrainableLayers() =>
-        EnumerateTextEncoderTrainableLayers();
+    // This forwarded to a helper the base now calls from its own
+    // GetExtraTrainableLayers, so the override restated it. Removed under AIDN082.
 
     /// <inheritdoc />
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        if (!_useNativeMode)
-            throw new NotSupportedException("Cannot update parameters in ONNX mode.");
-        int idx = 0;
-        foreach (var layer in Layers)
-        {
-            int count = checked((int)layer.ParameterCount);
-            layer.UpdateParameters(parameters.Slice(idx, count));
-            idx += count;
-        }
-    }
-
+    /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
+    /// write on every parameter surface, so the guard is stated once here instead of being
+    /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
+    protected override bool SupportsParameterMutation => _useNativeMode;
     /// <inheritdoc />
     protected override Tensor<T> PreprocessImage(Tensor<T> image) =>
         NormalizeImage(image, _options.ImageMean, _options.ImageStd);
@@ -443,13 +447,14 @@ public class SigLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageM
     /// <inheritdoc />
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
+        var options = new SigLIPOptions(_options);
         if (
             !_useNativeMode
             && _options.ImageEncoderModelPath is { } mp
             && !string.IsNullOrEmpty(mp)
         )
-            return new SigLIP<T>(Architecture, mp, _options);
-        return new SigLIP<T>(Architecture, _options);
+            return new SigLIP<T>(Architecture, mp, options);
+        return new SigLIP<T>(Architecture, options);
     }
 
     #endregion

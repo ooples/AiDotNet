@@ -47,7 +47,7 @@ namespace AiDotNet.TimeSeries;
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("Time Series Analysis: Forecasting and Control", "https://doi.org/10.1002/9781118619193", Year = 1970, Authors = "George E. P. Box, Gwilym M. Jenkins")]
-public class MAModel<T> : TimeSeriesModelBase<T>
+public partial class MAModel<T> : TimeSeriesModelBase<T>
 {
     /// <summary>
     /// Options specific to the MA model, including the order (q) parameter.
@@ -84,6 +84,7 @@ public class MAModel<T> : TimeSeriesModelBase<T>
     /// These are the differences between the model's recent predictions and the actual values.
     /// The model uses these errors to adjust future predictions.
     /// </remarks>
+    [Buffer]
     private Vector<T> _recentErrors;
 
     /// <summary>

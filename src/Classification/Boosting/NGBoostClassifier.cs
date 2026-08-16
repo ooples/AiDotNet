@@ -70,7 +70,7 @@ namespace AiDotNet.Classification.Boosting;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("NGBoost: Natural Gradient Boosting for Probabilistic Prediction", "https://arxiv.org/abs/1910.03225", Year = 2020, Authors = "Tony Duan, Avati Anand, Daisy Yi Ding, Khanh K. Thai, Sanjay Basu, Andrew Y. Ng, Alejandro Schuler")]
-public class NGBoostClassifier<T> : EnsembleClassifierBase<T>
+public partial class NGBoostClassifier<T> : EnsembleClassifierBase<T>
 {
     /// <summary>
     /// Base learners for each class's log-odds.

@@ -5,6 +5,8 @@ using AiDotNet.Tensors;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 
+using AiDotNet.Models.Parameters;
+
 namespace AiDotNet.ComputerVision.Detection.Necks;
 
 /// <summary>
@@ -35,6 +37,24 @@ namespace AiDotNet.ComputerVision.Detection.Necks;
     Authors = "Shu Liu, Lu Qi, Haifang Qin, Jianping Shi, Jiaya Jia")]
 public class PANet<T> : NeckBase<T>
 {
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Every weight and bias this neck holds, in the order the forward pass uses them. They live
+    /// in bare tensor lists rather than layers, which is why NeckBase used to refuse a flat
+    /// vector -- nothing could see them. Registering them means count, vector and restore all
+    /// fold this one declaration, and WriteParameters/ReadParameters remain as the binary path.
+    /// </remarks>
+    protected override void RegisterComponents()
+        => RegisterParameterComponent(new TensorListParameterSource<T>(
+            () => _lateralWeights,
+            () => _lateralBiases,
+            () => _topDownWeights,
+            () => _topDownBiases,
+            () => _bottomUpWeights,
+            () => _bottomUpBiases,
+            () => _downsampleWeights,
+            () => _downsampleBiases));
     private readonly int _outputChannels;
     private readonly int[] _inputChannels;
     private readonly int _numLevels;

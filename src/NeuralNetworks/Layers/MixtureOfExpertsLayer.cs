@@ -59,8 +59,64 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.Routing)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, Cost = ComputeCost.High, TestInputShape = "1, 4")]
-public partial class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
+// Feature-last, with batch optional: OnFirstForward treats the leading axis as batch and everything after
+// it as the per-sample shape it configures the router and experts against, and ForwardTraced restores a
+// rank-1 input to rank 1 before returning. Those two ranks are the ones whose behaviour is coherent, so
+// they are the ones declared - see the note on OutputAxesFor about rank 3.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features,
+    BatchOptional = true, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features,
+    BatchOptional = true, Direction = TensorLayoutDirection.Output,
+    Note = "Routing picks which experts run; the width is whatever the experts produce.")]
+[AutoParameters]
+public partial class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IShapeContract
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// The output width is read off <c>GetOutputShape()</c> rather than from a field, because this layer
+    /// does not choose it: <c>OnFirstForward</c> sets it with
+    /// <c>int[] resolvedOutputShape = _experts[0].GetOutputShape()</c>, i.e. it inherits whatever the
+    /// injected experts produce (all experts share one output shape by the MoE contract). That is
+    /// precisely the case <c>Fixed</c> is allowed to read the resolved shape for - the number is real
+    /// configuration, just configuration that lives in a sub-layer.
+    /// </para>
+    /// <para>
+    /// Batch is <c>Same</c>: routing selects WHICH experts run per row, never how many rows there are.
+    /// Neither the expert count nor <c>_topK</c> appears here - they size the routing weights, which are
+    /// consumed by <c>CombineExpertOutputs</c> and never surface on an output axis.
+    /// </para>
+    /// <para>
+    /// RANK 3 IS NOT DECLARED, and that is a real inconsistency in the layer rather than caution on my
+    /// part. For a rank-3 input <c>OnFirstForward</c> strips only the leading axis and configures the
+    /// experts against a per-sample shape of <c>[time, features]</c>, but <c>ForwardTraced</c> then
+    /// collapses the input to <c>[batch * time, features]</c> and feeds the experts rows of width
+    /// <c>features</c>. The two disagree, so there is no rank-3 contract to state honestly.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        // Lazy layers have no resolved expert output yet, and AxisRelation rejects a non-positive size.
+        var outputShape = GetOutputShape();
+        if (outputShape.Length == 0) return null;
+
+        int outputWidth = outputShape[outputShape.Length - 1];
+        if (outputWidth <= 0) return null;
+
+        var features = new OutputAxisContract(TensorAxis.Features, AxisRelation.Fixed(outputWidth));
+
+        return inputRank switch
+        {
+            1 => new[] { features },
+            2 => new[]
+            {
+                new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+                features,
+            },
+            _ => null,
+        };
+    }
+
     /// <summary>
     /// The collection of expert networks.
     /// </summary>
@@ -324,35 +380,6 @@ public partial class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLaye
     public override bool SupportsTraining => _router.SupportsTraining || _experts.Any(e => e.SupportsTraining);
 
     /// <summary>
-    /// Gets the total number of trainable parameters in the layer.
-    /// </summary>
-    /// <value>
-    /// The sum of the router's parameters and all experts' parameters.
-    /// </value>
-    /// <remarks>
-    /// <para>
-    /// This includes all parameters from the router and all experts combined. This gives you the
-    /// total model capacity and memory requirement for this layer.
-    /// </para>
-    /// <para><b>For Beginners:</b> The total count of all adjustable numbers in this layer.
-    ///
-    /// This includes:
-    /// - All weights and biases in the router
-    /// - All weights and biases in all experts
-    ///
-    /// For example, with:
-    /// - Router: 1000 parameters
-    /// - 8 experts with 5000 parameters each: 40,000 parameters
-    /// - Total: 41,000 parameters
-    ///
-    /// More parameters = more capacity to learn, but also more memory needed.
-    /// MoE shines because you can have huge capacity (many experts) but still only activate
-    /// a fraction of them per input with sparse routing.
-    /// </para>
-    /// </remarks>
-    public override long ParameterCount => _router.ParameterCount + (int)_experts.Sum(e => e.ParameterCount);
-
-    /// <summary>
     /// Gets the number of experts in this MoE layer.
     /// </summary>
     /// <value>
@@ -613,7 +640,7 @@ public partial class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLaye
     /// contributes based on its relevance to the specific input.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // Lazy-shape support: if the layer (or its sub-layers) wasn't
         // eagerly resolved at construction (caller passed [-1] or
@@ -813,49 +840,6 @@ public partial class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLaye
     }
 
     /// <summary>
-    /// Gets all trainable parameters as a single vector.
-    /// </summary>
-    /// <returns>A vector containing all parameters from the router and all experts.</returns>
-    /// <remarks>
-    /// <para>
-    /// Parameters are ordered as: [router parameters] [expert1 parameters] [expert2 parameters] ...
-    /// </para>
-    /// <para><b>For Beginners:</b> Collects all learned values into one list.
-    ///
-    /// The returned vector contains:
-    /// - First, all parameters from the router
-    /// - Then, all parameters from expert 1
-    /// - Then, all parameters from expert 2
-    /// - And so on
-    ///
-    /// This is useful for:
-    /// - Saving the entire MoE model to disk
-    /// - Implementing advanced optimization algorithms
-    /// - Analyzing the model's learned parameters
-    /// - Transferring knowledge to another model
-    /// </para>
-    /// </remarks>
-    public override Vector<T> GetParameters()
-    {
-        // Use Vector<T>.Concatenate for production-grade parameter collection
-        var paramVectors = new List<Vector<T>>();
-
-        // Add router parameters
-        if (_router.ParameterCount > 0)
-        {
-            paramVectors.Add(_router.GetParameters());
-        }
-
-        // Add expert parameters
-        foreach (var expert in _experts.Where(e => e.ParameterCount > 0))
-        {
-            paramVectors.Add(expert.GetParameters());
-        }
-
-        return paramVectors.Count > 0 ? Vector<T>.Concatenate(paramVectors.ToArray()) : new Vector<T>(0);
-    }
-
-    /// <summary>
     /// Sets all trainable parameters from a single vector.
     /// </summary>
     /// <param name="parameters">A vector containing parameters for the router and all experts.</param>
@@ -899,33 +883,6 @@ public partial class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLaye
         _router.ClearGradients();
         foreach (var expert in _experts)
             expert.ClearGradients();
-    }
-
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (parameters.Length != ParameterCount)
-        {
-            throw new ArgumentException(
-                $"Expected {ParameterCount} parameters, but got {parameters.Length}.",
-                nameof(parameters));
-        }
-
-        // Use Vector.Slice for production-grade parameter distribution
-        int offset = 0;
-
-        // Set router parameters
-        if (_router.ParameterCount > 0)
-        {
-            _router.SetParameters(parameters.Slice(offset, (int)_router.ParameterCount));
-            offset += (int)_router.ParameterCount;
-        }
-
-        // Set expert parameters
-        foreach (var expert in _experts.Where(e => e.ParameterCount > 0))
-        {
-            expert.SetParameters(parameters.Slice(offset, (int)expert.ParameterCount));
-            offset += (int)expert.ParameterCount;
-        }
     }
 
     /// <summary>

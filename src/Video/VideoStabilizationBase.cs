@@ -1,3 +1,6 @@
+using System.Collections.Generic;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
@@ -27,8 +30,24 @@ namespace AiDotNet.Video;
 /// stabilization), while advanced neural methods can fill in the missing edges.
 /// </para>
 /// </remarks>
-public abstract class VideoStabilizationBase<T> : VideoNeuralNetworkBase<T>
+[TensorLayout(TensorAxis.Frames, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Frames, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Output)]
+public abstract class VideoStabilizationBase<T> : VideoNeuralNetworkBase<T>, IShapeContract
 {
+    /// <inheritdoc />
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+        => inputRank == 4
+            ?
+            [
+                new OutputAxisContract(TensorAxis.Frames, AxisRelation.Same(TensorAxis.Frames)),
+                new OutputAxisContract(TensorAxis.Channels, AxisRelation.Same(TensorAxis.Channels)),
+                new OutputAxisContract(TensorAxis.Height, AxisRelation.Same(TensorAxis.Height)),
+                new OutputAxisContract(TensorAxis.Width, AxisRelation.Same(TensorAxis.Width)),
+            ]
+            : null;
+
     /// <summary>
     /// Gets the crop ratio used for stabilization (fraction of frame that may be cropped).
     /// </summary>

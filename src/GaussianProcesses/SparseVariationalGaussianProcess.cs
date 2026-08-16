@@ -45,7 +45,7 @@ namespace AiDotNet.GaussianProcesses;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("Scalable Variational Gaussian Process Classification", "https://doi.org/10.48550/arXiv.1411.2005", Year = 2015, Authors = "James Hensman, Alexander G. de G. Matthews, Zoubin Ghahramani")]
-public class SparseVariationalGaussianProcess<T> : GaussianProcessBase<T>
+public partial class SparseVariationalGaussianProcess<T> : GaussianProcessBase<T>
 {
     /// <summary>
     /// The kernel function that determines similarity between data points.
@@ -64,11 +64,13 @@ public class SparseVariationalGaussianProcess<T> : GaussianProcessBase<T>
     /// <summary>
     /// The matrix of input features from the training data.
     /// </summary>
+    [Buffer]
     private Matrix<T> _X;
 
     /// <summary>
     /// The vector of target values from the training data.
     /// </summary>
+    [Buffer]
     private Vector<T> _y;
 
     /// <summary>
@@ -88,6 +90,7 @@ public class SparseVariationalGaussianProcess<T> : GaussianProcessBase<T>
     /// - Optimized (learned during training to best summarize the data)
     /// </para>
     /// </remarks>
+    [Buffer]
     private Matrix<T> _inducingPoints;
 
     /// <summary>
@@ -168,11 +171,13 @@ public class SparseVariationalGaussianProcess<T> : GaussianProcessBase<T>
     /// <summary>
     /// Kernel matrix between inducing points (Kuu).
     /// </summary>
+    [Buffer]
     private Matrix<T> _Kuu;
 
     /// <summary>
     /// Cholesky factor of Kuu for efficient computation.
     /// </summary>
+    [Buffer]
     private Matrix<T> _LKuu;
 
     /// <summary>
@@ -291,6 +296,151 @@ public class SparseVariationalGaussianProcess<T> : GaussianProcessBase<T>
 
         // Optimize variational parameters
         OptimizeVariationalParameters();
+
+        // ...then the inducing point LOCATIONS, alternating with the closed form above.
+        OptimizeInducingPoints();
+    }
+
+    /// <summary>
+    /// Improves the inducing point locations by ascending the ELBO, re-solving the closed-form
+    /// variational parameters at each accepted step.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The locations used to be chosen once by <see cref="SelectInducingPoints"/> and never
+    /// revisited, which makes the model a sparse GP over a fixed subset rather than SVGP. In
+    /// Titsias (2009) the locations are variational parameters, optimized jointly with the mean and
+    /// covariance -- that is the approximation's whole point, because it lets a small number of
+    /// inducing points sit where the data actually needs them instead of where a subset selection
+    /// happened to land.
+    /// </para>
+    /// <para>
+    /// A finite-difference step is used rather than the analytic dELBO/dZ. The analytic form needs
+    /// derivatives of the kernel with respect to its INPUTS, which <c>IKernelFunction</c> does not
+    /// expose; a numerical step needs only evaluation, so this works for every kernel in the
+    /// library rather than the few that could supply a derivative.
+    /// </para>
+    /// <para>
+    /// Every proposal is accepted only if the ELBO improves, so the fit cannot end worse than the
+    /// fixed-subset result -- the guarantee matters more than the speed here, because the closed
+    /// form for m and S is already exact and this is refining where it is evaluated.
+    /// </para>
+    /// </remarks>
+    private void OptimizeInducingPoints()
+    {
+        if (_inducingPoints.Rows == 0 || _inducingPoints.Columns == 0) return;
+        if (_X.Rows == 0) return;
+
+        // Bounded: the ELBO is re-evaluated per coordinate, so this is the expensive part of the
+        // fit. A handful of sweeps captures nearly all of the gain; _maxIterations bounds it for a
+        // caller who wants more.
+        int sweeps = Math.Max(1, Math.Min(10, _maxIterations / 100));
+
+        // Step size from the spread of the data, so it is scale-free rather than tuned to one
+        // dataset's units.
+        double step = ComputeInducingStepScale();
+        if (step <= 0) return;
+
+        double best = Convert.ToDouble(_numOps.ToDouble(ComputeELBO()));
+
+        for (int sweep = 0; sweep < sweeps; sweep++)
+        {
+            bool improvedThisSweep = false;
+
+            for (int i = 0; i < _inducingPoints.Rows; i++)
+            {
+                for (int d = 0; d < _inducingPoints.Columns; d++)
+                {
+                    T original = _inducingPoints[i, d];
+
+                    foreach (double direction in new[] { step, -step })
+                    {
+                        _inducingPoints[i, d] =
+                            _numOps.Add(original, _numOps.FromDouble(direction));
+
+                        if (!TryRefitAtCurrentInducingPoints(out double candidate))
+                        {
+                            _inducingPoints[i, d] = original;
+                            continue;
+                        }
+
+                        if (candidate > best)
+                        {
+                            best = candidate;
+                            original = _inducingPoints[i, d];
+                            improvedThisSweep = true;
+                            break;
+                        }
+
+                        _inducingPoints[i, d] = original;
+                    }
+
+                    _inducingPoints[i, d] = original;
+                }
+            }
+
+            if (!improvedThisSweep)
+            {
+                // No coordinate helped at this step size; halve it and try once more, then stop.
+                step *= 0.5;
+                if (step < 1e-6) break;
+            }
+        }
+
+        // Leave the model consistent with whatever locations were kept.
+        TryRefitAtCurrentInducingPoints(out _);
+    }
+
+    /// <summary>
+    /// Recomputes Kuu, its Cholesky and the closed-form variational parameters for the current
+    /// inducing points, reporting the resulting ELBO. Returns false when the kernel matrix is not
+    /// usable at these locations.
+    /// </summary>
+    private bool TryRefitAtCurrentInducingPoints(out double elbo)
+    {
+        elbo = double.NegativeInfinity;
+        try
+        {
+            _Kuu = CalculateKernelMatrix(_inducingPoints, _inducingPoints);
+            ForceSymmetric(_Kuu);
+            AddJitter(_Kuu);
+
+            var chol = new CholeskyDecomposition<T>(_Kuu);
+            _LKuu = chol.L;
+
+            OptimizeVariationalParameters();
+
+            double value = Convert.ToDouble(_numOps.ToDouble(ComputeELBO()));
+            if (double.IsNaN(value) || double.IsInfinity(value)) return false;
+
+            elbo = value;
+            return true;
+        }
+        catch (Exception)
+        {
+            // Two inducing points can collide during the search and leave Kuu singular. That is a
+            // rejected proposal, not a failure of the fit.
+            return false;
+        }
+    }
+
+    /// <summary>A step size derived from the spread of the training inputs, so it is scale-free.</summary>
+    private double ComputeInducingStepScale()
+    {
+        double total = 0;
+        int dims = _X.Columns;
+        for (int d = 0; d < dims; d++)
+        {
+            double min = double.MaxValue, max = double.MinValue;
+            for (int i = 0; i < _X.Rows; i++)
+            {
+                double v = Convert.ToDouble(_numOps.ToDouble(_X[i, d]));
+                if (v < min) min = v;
+                if (v > max) max = v;
+            }
+            if (max > min) total += max - min;
+        }
+        return dims == 0 ? 0 : (total / dims) * 0.05;
     }
 
     /// <summary>

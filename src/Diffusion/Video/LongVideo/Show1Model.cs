@@ -51,8 +51,17 @@ namespace AiDotNet.Diffusion.Video.LongVideo;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Show-1: Marrying Pixel and Latent Diffusion Models for Text-to-Video Generation", "https://arxiv.org/abs/2309.15818", Year = 2023, Authors = "Zhang et al.")]
-public class Show1Model<T> : VideoDiffusionModelBase<T>
+public partial class Show1Model<T> : VideoDiffusionModelBase<T>
 {
+    /// <inheritdoc />
+    /// <remarks>Registration order is serialization order, and matches the
+    /// concatenation the previous hand-written GetParameters performed.</remarks>
+    protected override void RegisterComponents()
+    {
+        RegisterParameterComponent(_predictor);
+        RegisterParameterComponent(_temporalVAE);
+    }
+
     private const int LATENT_CHANNELS = 4;
     private const int CONTEXT_DIM = 768;
     private const int DEFAULT_NUM_FRAMES = 29;
@@ -70,7 +79,6 @@ public class Show1Model<T> : VideoDiffusionModelBase<T>
     public override bool SupportsImageToVideo => true;
     public override bool SupportsTextToVideo => true;
     public override bool SupportsVideoToVideo => false;
-    public override long ParameterCount => _predictor.ParameterCount + _temporalVAE.GetParameters().Length;
 
     /// <summary>
     /// Initializes a new instance of Show1Model with full customization support.
@@ -136,29 +144,7 @@ public class Show1Model<T> : VideoDiffusionModelBase<T>
         return _predictor.PredictNoise(latents, timestep, imageEmbedding);
     }
 
-    public override Vector<T> GetParameters()
-    {
-        var predParams = _predictor.GetParameters();
-        var vaeParams = _temporalVAE.GetParameters();
-        var combined = new Vector<T>(predParams.Length + vaeParams.Length);
-        for (int i = 0; i < predParams.Length; i++) combined[i] = predParams[i];
-        for (int i = 0; i < vaeParams.Length; i++) combined[predParams.Length + i] = vaeParams[i];
-        return combined;
-    }
 
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int predCount = checked((int)_predictor.ParameterCount);
-        var vaeCount = _temporalVAE.GetParameters().Length;
-        if (parameters.Length != predCount + vaeCount)
-            throw new ArgumentException($"Expected {predCount + vaeCount} parameters, got {parameters.Length}.", nameof(parameters));
-        var predParams = new Vector<T>(predCount);
-        var vaeParams = new Vector<T>(vaeCount);
-        for (int i = 0; i < predCount; i++) predParams[i] = parameters[i];
-        for (int i = 0; i < vaeCount; i++) vaeParams[i] = parameters[predCount + i];
-        _predictor.SetParameters(predParams);
-        _temporalVAE.SetParameters(vaeParams);
-    }
 
     public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy() => Clone();
 

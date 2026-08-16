@@ -53,7 +53,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     [ResearchPaper("Real-Time Computing Without Stable States", "https://doi.org/10.1162/089976602760407955")]
-public class LiquidStateMachine<T> : NeuralNetworkBase<T>
+public class LiquidStateMachine<T> : SequenceModelLayoutBase<T>
 {
     private readonly LiquidStateMachineOptions _options;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
@@ -309,48 +309,8 @@ public class LiquidStateMachine<T> : NeuralNetworkBase<T>
         }
     }
 
-    /// <summary>
-    /// Updates the parameters of all layers in the network using the provided parameter vector.
-    /// </summary>
-    /// <param name="parameters">A vector containing updated parameters for all layers.</param>
-    /// <remarks>
-    /// <para>
-    /// This method distributes the provided parameter values to each layer in the network. It extracts
-    /// the appropriate segment of the parameter vector for each layer based on the layer's parameter count.
-    /// In Liquid State Machines, typically only the readout layer's parameters are updated during training,
-    /// while the reservoir remains fixed after initialization.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method updates the changeable parts of your network.
-    /// 
-    /// In a Liquid State Machine:
-    /// - The reservoir connections are typically fixed after random initialization
-    /// - Only the readout layer (which interprets the reservoir state) is usually trained
-    /// 
-    /// This method:
-    /// 1. Takes a vector of parameter values
-    /// 2. Figures out which values belong to which layers
-    /// 3. Updates each layer with its corresponding parameters
-    /// 
-    /// The unique aspect of LSMs is that they maintain random, fixed connections in the reservoir,
-    /// which makes them simpler to train than many other recurrent neural networks. Only the
-    /// readout mechanism typically needs optimization, which happens through this method.
-    /// </para>
-    /// </remarks>
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        int startIndex = 0;
-        foreach (var layer in Layers)
-        {
-            int layerParameterCount = checked((int)layer.ParameterCount);
-            if (layerParameterCount > 0)
-            {
-                Vector<T> layerParameters = parameters.SubVector(startIndex, layerParameterCount);
-                layer.UpdateParameters(layerParameters);
-                startIndex += layerParameterCount;
-            }
-        }
-    }
-
+    // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
+    // exactly the same enumeration, so this said nothing the base does not already say.
     /// <summary>
     /// Performs a forward pass through the Liquid State Machine to make a prediction.
     /// </summary>

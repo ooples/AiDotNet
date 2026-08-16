@@ -63,8 +63,18 @@ namespace AiDotNet.ReinforcementLearning.Agents.MADDPG;
     "https://arxiv.org/abs/1706.02275",
     Year = 2017,
     Authors = "Lowe, R., Wu, Y., Tamar, A., Harb, J., Abbeel, P., & Mordatch, I.")]
-public class MADDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
+public partial class MADDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
 {
+
+    /// <inheritdoc />
+    /// <remarks>Actors, then critics, then TARGET actors, in the order the hand-written concatenation walked them. Including the target actors is unusual -- most agents treat a target as a derived copy and leave it out -- but it is what this agent serialized, and changing membership would change the vector length and invalidate its checkpoints.</remarks>
+    protected override void RegisterComponents()
+    {
+        foreach (var network in _actorNetworks) RegisterParameterComponent(network);
+        foreach (var network in _criticNetworks) RegisterParameterComponent(network);
+        foreach (var network in _targetActorNetworks) RegisterParameterComponent(network);
+        foreach (var network in _targetCriticNetworks) RegisterParameterComponent(network);
+    }
     private MADDPGOptions<T> _options;
 
     /// <inheritdoc/>
@@ -73,8 +83,10 @@ public class MADDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
 
     // Networks for each agent
     private List<INeuralNetwork<T>> _actorNetworks;
+    [Buffer]
     private List<INeuralNetwork<T>> _targetActorNetworks;
     private List<INeuralNetwork<T>> _criticNetworks;
+    [Buffer]
     private List<INeuralNetwork<T>> _targetCriticNetworks;
 
     private UniformReplayBuffer<T, Vector<T>, Vector<T>> _replayBuffer;
@@ -537,12 +549,6 @@ public class MADDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
         target.UpdateParameters(targetParams);
     }
 
-    private void CopyNetworkWeights(INeuralNetwork<T> source, INeuralNetwork<T> target)
-    {
-        var sourceParams = source.GetParameters();
-        target.UpdateParameters(sourceParams);
-    }
-
     private Vector<T> ConcatenateVectors(List<Vector<T>> vectors)
     {
         int totalSize = 0;
@@ -738,130 +744,6 @@ public class MADDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
         foreach (var network in _targetCriticNetworks)
         {
             ReadNetwork(network);
-        }
-    }
-
-    public override Vector<T> GetParameters()
-    {
-        var allParams = new List<T>();
-
-        // Collect actor network parameters
-        foreach (var network in _actorNetworks)
-        {
-            var netParams = network.GetParameters();
-            for (int i = 0; i < netParams.Length; i++)
-            {
-                allParams.Add(netParams[i]);
-            }
-        }
-
-        // Collect critic network parameters
-        foreach (var network in _criticNetworks)
-        {
-            var netParams = network.GetParameters();
-            for (int i = 0; i < netParams.Length; i++)
-            {
-                allParams.Add(netParams[i]);
-            }
-        }
-
-        // Collect target actor network parameters
-        foreach (var network in _targetActorNetworks)
-        {
-            var netParams = network.GetParameters();
-            for (int i = 0; i < netParams.Length; i++)
-            {
-                allParams.Add(netParams[i]);
-            }
-        }
-
-        // Collect target critic network parameters
-        foreach (var network in _targetCriticNetworks)
-        {
-            var netParams = network.GetParameters();
-            for (int i = 0; i < netParams.Length; i++)
-            {
-                allParams.Add(netParams[i]);
-            }
-        }
-
-        var paramVector = new Vector<T>(allParams.Count);
-        for (int i = 0; i < allParams.Count; i++)
-        {
-            paramVector[i] = allParams[i];
-        }
-
-        return paramVector;
-    }
-
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int offset = 0;
-
-        // Load actor network parameters
-        foreach (var network in _actorNetworks)
-        {
-            int paramCount = checked((int)network.ParameterCount);
-            var netParams = new Vector<T>(paramCount);
-            for (int i = 0; i < paramCount; i++)
-            {
-                netParams[i] = parameters[offset + i];
-            }
-            network.UpdateParameters(netParams);
-            offset += paramCount;
-        }
-
-        // Load critic network parameters
-        foreach (var network in _criticNetworks)
-        {
-            int paramCount = checked((int)network.ParameterCount);
-            var netParams = new Vector<T>(paramCount);
-            for (int i = 0; i < paramCount; i++)
-            {
-                netParams[i] = parameters[offset + i];
-            }
-            network.UpdateParameters(netParams);
-            offset += paramCount;
-        }
-
-        // Load target actor network parameters
-        foreach (var network in _targetActorNetworks)
-        {
-            int paramCount = checked((int)network.ParameterCount);
-            var netParams = new Vector<T>(paramCount);
-            for (int i = 0; i < paramCount; i++)
-            {
-                netParams[i] = parameters[offset + i];
-            }
-            network.UpdateParameters(netParams);
-            offset += paramCount;
-        }
-
-        // Load target critic network parameters
-        foreach (var network in _targetCriticNetworks)
-        {
-            int paramCount = checked((int)network.ParameterCount);
-            var netParams = new Vector<T>(paramCount);
-            for (int i = 0; i < paramCount; i++)
-            {
-                netParams[i] = parameters[offset + i];
-            }
-            network.UpdateParameters(netParams);
-            offset += paramCount;
-        }
-
-        // Synchronize target networks from main networks
-        // This ensures targets match main networks after loading
-        for (int i = 0; i < _actorNetworks.Count; i++)
-        {
-            var actorParams = _actorNetworks[i].GetParameters();
-            _targetActorNetworks[i].UpdateParameters(actorParams);
-        }
-
-        for (int i = 0; i < _criticNetworks.Count; i++)
-        {
-            var criticParams = _criticNetworks[i].GetParameters();
-            _targetCriticNetworks[i].UpdateParameters(criticParams);
         }
     }
 

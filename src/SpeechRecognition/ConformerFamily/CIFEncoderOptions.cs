@@ -1,4 +1,4 @@
-using AiDotNet.Models.Options;
+﻿using AiDotNet.Models.Options;
 using AiDotNet.Onnx;
 
 namespace AiDotNet.SpeechRecognition.ConformerFamily;
@@ -33,7 +33,13 @@ public class CIFEncoderOptions : ModelOptions
         OnnxOptions = new OnnxModelOptions(other.OnnxOptions);
         DropoutRate = other.DropoutRate;
         Language = other.Language;
-        Vocabulary = other.Vocabulary;
+        // A NEW ARRAY, NOT THE SAME ONE. Copying the reference left both models pointing at one
+        // string[], so editing a clone's vocabulary rewrote the original's decoder output too.
+        Vocabulary = (string[])other.Vocabulary.Clone();
+
+        // Inherited from ModelOptions and therefore absent from the property list above, which is why
+        // it was missed: a clone with a different seed initializes differently from its original.
+        Seed = other.Seed;
     }
 
     public int SampleRate { get; set; } = 16000;

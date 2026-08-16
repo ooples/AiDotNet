@@ -35,8 +35,69 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.DownSampling)]
 [LayerTask(LayerTask.VolumetricProcessing)]
 [LayerProperty(IsTrainable = false, ChangesShape = true, ExpectedInputRank = 4, TestInputShape = "1, 4, 4, 4", TestConstructorArgs = "2, 2")]
-public class MaxPool3DLayer<T> : LayerBase<T>
+// Roles from this layer's own OnFirstForward guard, which names both accepted forms verbatim:
+// "requires rank-4 [C,D,H,W] or rank-5 [B,C,D,H,W] input". Spelled out per rank rather than folded into
+// one BatchOptional declaration because ADNSHAPE005 compares [LayerProperty] against the raw AXIS COUNT
+// of each input layout and does not model the optional batch - a single 5-axis declaration would be
+// reported as contradicting this layer's ExpectedInputRank = 4 and its rank-4 TestInputShape.
+//
+// OutputAxesFor is HAND-WRITTEN: the window depends on PoolSize/Stride, which an attribute cannot carry.
+[TensorLayout(TensorAxis.Channels, TensorAxis.Depth, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Channels, TensorAxis.Depth, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Output)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Depth, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Depth, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Output,
+    Note = "Channels pass through; all three spatial axes take the same pooling window.")]
+[AutoParameters]
+public partial class MaxPool3DLayer<T> : LayerBase<T>, IShapeContract
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// The three spatial relations are one line of <c>OnFirstForward</c> each -
+    /// <c>outD = (d - PoolSize) / Stride + 1</c> and its H/W twins - which is exactly
+    /// <c>Window(kernel: PoolSize, stride: Stride, padding: 0)</c>. This layer exposes no padding
+    /// parameter, hence the 0.
+    /// </para>
+    /// <para>
+    /// Depth, Height and Width get three separate relations even though one square window is applied to
+    /// all of them, for the same reason <c>ConvolutionalLayer</c> splits H and W: the INPUTS differ, so a
+    /// 16x32x32 volume produces different extents per axis, and each relation resolves against its own
+    /// axis.
+    /// </para>
+    /// <para>
+    /// Rank 4 gets no batch axis. <c>ForwardTraced</c> reshapes the unbatched form to 5-D internally but
+    /// its restoration block explicitly unwraps it again for <c>_originalInputShape.Length == 4</c>, so
+    /// emitting a Batch axis at rank 4 would describe an intermediate rather than the returned tensor.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        if (PoolSize <= 0 || Stride <= 0) return null;
+
+        var channels = new OutputAxisContract(TensorAxis.Channels, AxisRelation.Same(TensorAxis.Channels));
+        var depth = new OutputAxisContract(
+            TensorAxis.Depth, AxisRelation.Window(TensorAxis.Depth, PoolSize, Stride, padding: 0));
+        var height = new OutputAxisContract(
+            TensorAxis.Height, AxisRelation.Window(TensorAxis.Height, PoolSize, Stride, padding: 0));
+        var width = new OutputAxisContract(
+            TensorAxis.Width, AxisRelation.Window(TensorAxis.Width, PoolSize, Stride, padding: 0));
+
+        return inputRank switch
+        {
+            4 => new[] { channels, depth, height, width },
+            5 => new[]
+            {
+                new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+                channels, depth, height, width,
+            },
+            _ => null,
+        };
+    }
+
     #region Properties
 
     /// <summary>
@@ -126,7 +187,9 @@ public class MaxPool3DLayer<T> : LayerBase<T>
     /// For example, with pool size 2 and stride 2, a 32x32x32 input becomes 16x16x16.
     /// </para>
     /// </remarks>
-    public MaxPool3DLayer(int poolSize, int stride = 0)
+    public MaxPool3DLayer(
+        [LayerState] int poolSize,
+        [LayerState] int stride = 0)
         : base(new[] { -1, -1, -1, -1 }, new[] { -1, -1, -1, -1 })
     {
         if (poolSize <= 0)
@@ -184,7 +247,7 @@ public class MaxPool3DLayer<T> : LayerBase<T>
     /// The max indices are cached for use in the backward pass.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         EnsureInitializedFromInput(input);
         _lastInput = ShouldCacheForBackward ? input : null; // #1668: skip in inference (arena safety)
@@ -324,15 +387,6 @@ public class MaxPool3DLayer<T> : LayerBase<T>
     #region Parameter Management
 
     /// <summary>
-    /// Updates parameters. Max pooling has no trainable parameters.
-    /// </summary>
-    /// <param name="learningRate">The learning rate (unused).</param>
-    public override void UpdateParameters(T learningRate)
-    {
-        // Max pooling has no trainable parameters - nothing to update
-    }
-
-    /// <summary>
     /// <summary>
     /// Returns layer-specific metadata for serialization (PoolSize, Stride).
     /// </summary>
@@ -342,11 +396,6 @@ public class MaxPool3DLayer<T> : LayerBase<T>
         metadata["PoolSize"] = PoolSize.ToString();
         metadata["Stride"] = Stride.ToString();
         return metadata;
-    }
-
-    public override Vector<T> GetParameters()
-    {
-        return Vector<T>.Empty();
     }
 
     #endregion

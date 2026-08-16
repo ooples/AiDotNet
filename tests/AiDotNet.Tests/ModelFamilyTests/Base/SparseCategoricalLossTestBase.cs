@@ -11,9 +11,21 @@ namespace AiDotNet.Tests.ModelFamilyTests.Base;
 /// have different lengths. Predicted = class probabilities (num_classes), actual = class indices (batch_size).
 /// Tests mathematical invariants: non-negativity, finiteness, gradient correctness.
 /// </summary>
-public abstract class SparseCategoricalLossTestBase
+public abstract class SparseCategoricalLossTestBase<T>
 {
-    protected abstract ILossFunction<double> CreateLoss();
+    protected static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+    protected static T ToT(double value) => NumOps.FromDouble(value);
+    protected static double ToD(T value) => Convert.ToDouble(value);
+    protected virtual double Tolerance => typeof(T) == typeof(float) ? 1e-6 : 1e-10;
+
+    protected static Vector<T> ToVector(params double[] values)
+    {
+        var result = new Vector<T>(values.Length);
+        for (int i = 0; i < values.Length; i++) result[i] = ToT(values[i]);
+        return result;
+    }
+
+    protected abstract ILossFunction<T> CreateLoss();
 
     // =========================================================================
     // INVARIANT 1: Loss is finite for valid inputs
@@ -26,10 +38,10 @@ public abstract class SparseCategoricalLossTestBase
         using var _arena = TensorArena.Create();
         var loss = CreateLoss();
         // 4-class problem, single sample with class index 2
-        var predicted = new Vector<double>(new[] { 0.1, 0.2, 0.6, 0.1 });
-        var actual = new Vector<double>(new[] { 2.0 });
+        var predicted = ToVector(0.1, 0.2, 0.6, 0.1);
+        var actual = ToVector(2.0);
 
-        double value = loss.CalculateLoss(predicted, actual);
+        double value = ToD(loss.CalculateLoss(predicted, actual));
 
         Assert.False(double.IsNaN(value), "Loss returned NaN.");
         Assert.False(double.IsInfinity(value), "Loss returned Infinity.");
@@ -45,11 +57,11 @@ public abstract class SparseCategoricalLossTestBase
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var loss = CreateLoss();
-        var predicted = new Vector<double>(new[] { 0.1, 0.2, 0.6, 0.1 });
-        var actual = new Vector<double>(new[] { 2.0 });
+        var predicted = ToVector(0.1, 0.2, 0.6, 0.1);
+        var actual = ToVector(2.0);
 
-        double value = loss.CalculateLoss(predicted, actual);
-        Assert.True(value >= -1e-10,
+        double value = ToD(loss.CalculateLoss(predicted, actual));
+        Assert.True(value >= -Tolerance,
             $"Sparse categorical cross-entropy should be non-negative but got {value}.");
     }
 
@@ -63,15 +75,15 @@ public abstract class SparseCategoricalLossTestBase
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var loss = CreateLoss();
-        var actual = new Vector<double>(new[] { 1.0 }); // class 1
+        var actual = ToVector(1.0); // class 1
 
-        var lowConfidence = new Vector<double>(new[] { 0.4, 0.3, 0.3 });
-        var highConfidence = new Vector<double>(new[] { 0.1, 0.8, 0.1 });
+        var lowConfidence = ToVector(0.4, 0.3, 0.3);
+        var highConfidence = ToVector(0.1, 0.8, 0.1);
 
-        double lowLoss = loss.CalculateLoss(lowConfidence, actual);
-        double highLoss = loss.CalculateLoss(highConfidence, actual);
+        double lowLoss = ToD(loss.CalculateLoss(lowConfidence, actual));
+        double highLoss = ToD(loss.CalculateLoss(highConfidence, actual));
 
-        Assert.True(highLoss < lowLoss + 1e-10,
+        Assert.True(highLoss < lowLoss + Tolerance,
             $"Higher confidence should produce lower loss: low={lowLoss}, high={highLoss}.");
     }
 
@@ -86,10 +98,10 @@ public abstract class SparseCategoricalLossTestBase
         using var _arena = TensorArena.Create();
         var loss = CreateLoss();
         // Near-perfect prediction (can't use exactly 1.0 due to log)
-        var predicted = new Vector<double>(new[] { 0.001, 0.998, 0.001 });
-        var actual = new Vector<double>(new[] { 1.0 }); // class 1
+        var predicted = ToVector(0.001, 0.998, 0.001);
+        var actual = ToVector(1.0); // class 1
 
-        double value = loss.CalculateLoss(predicted, actual);
+        double value = ToD(loss.CalculateLoss(predicted, actual));
         Assert.True(value < 0.01,
             $"Loss for near-perfect prediction should be near zero but got {value}.");
     }
@@ -104,16 +116,16 @@ public abstract class SparseCategoricalLossTestBase
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var loss = CreateLoss();
-        var predicted = new Vector<double>(new[] { 0.1, 0.2, 0.6, 0.1 });
-        var actual = new Vector<double>(new[] { 2.0 });
+        var predicted = ToVector(0.1, 0.2, 0.6, 0.1);
+        var actual = ToVector(2.0);
 
         var derivative = loss.ComputeGradient(predicted, actual);
 
         Assert.Equal(predicted.Length, derivative.Length);
         for (int i = 0; i < derivative.Length; i++)
         {
-            Assert.False(double.IsNaN(derivative[i]), $"Derivative[{i}] is NaN.");
-            Assert.False(double.IsInfinity(derivative[i]), $"Derivative[{i}] is Infinity.");
+            Assert.False(double.IsNaN(ToD(derivative[i])), $"Derivative[{i}] is NaN.");
+            Assert.False(double.IsInfinity(ToD(derivative[i])), $"Derivative[{i}] is Infinity.");
         }
     }
 
@@ -127,13 +139,13 @@ public abstract class SparseCategoricalLossTestBase
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var loss = CreateLoss();
-        var predicted = new Vector<double>(new[] { 0.3, 0.4, 0.3 });
-        var actual = new Vector<double>(new[] { 1.0 }); // class 1
+        var predicted = ToVector(0.3, 0.4, 0.3);
+        var actual = ToVector(1.0); // class 1
 
         var derivative = loss.ComputeGradient(predicted, actual);
 
         // Gradient at the correct class should be negative (to increase probability)
-        Assert.True(derivative[1] < 0,
+        Assert.True(ToD(derivative[1]) < 0,
             $"Gradient at correct class should be negative but got {derivative[1]}.");
     }
 
@@ -147,8 +159,8 @@ public abstract class SparseCategoricalLossTestBase
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var loss = CreateLoss();
-        var predicted = new Vector<double>(new[] { 0.5, 0.5 });
-        var actual = new Vector<double>(new[] { 5.0 }); // out of bounds
+        var predicted = ToVector(0.5, 0.5);
+        var actual = ToVector(5.0); // out of bounds
 
         Assert.Throws<ArgumentException>(() => loss.CalculateLoss(predicted, actual));
     }
@@ -163,12 +175,15 @@ public abstract class SparseCategoricalLossTestBase
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var loss = CreateLoss();
-        var predicted = new Vector<double>(new[] { 0.2, 0.3, 0.5 });
-        var actual = new Vector<double>(new[] { 0.0, 2.0, 1.0 }); // batch of 3 samples
+        var predicted = ToVector(0.2, 0.3, 0.5);
+        var actual = ToVector(0.0, 2.0, 1.0); // batch of 3 samples
 
-        double value = loss.CalculateLoss(predicted, actual);
+        double value = ToD(loss.CalculateLoss(predicted, actual));
 
         Assert.False(double.IsNaN(value), "Batch loss returned NaN.");
         Assert.False(double.IsInfinity(value), "Batch loss returned Infinity.");
     }
 }
+
+/// <summary>Default-precision alias for existing hand-written fixtures.</summary>
+public abstract class SparseCategoricalLossTestBase : SparseCategoricalLossTestBase<double> { }

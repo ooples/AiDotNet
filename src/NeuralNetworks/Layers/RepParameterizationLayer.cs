@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
@@ -41,7 +41,17 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Convolution)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = false, TestInputShape = "1, 4", TestConstructorArgs = "")]
-public class RepParameterizationLayer<T> : LayerBase<T>
+// VAE reparameterisation: samples from the distribution the input encodes. Shape-preserving at the
+// rank the sweep probed, but NOT rank-agnostic - it reads a specific feature layout, so the rank is
+// declared explicitly rather than claimed for all ranks.
+// Rank 2 comes from this layer's own [LayerProperty(TestInputShape = "1, 4")] - [Batch, Features].
+// ADNSHAPE005 caught the rank-3-only declaration.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
+[AutoParameters]
+public partial class RepParameterizationLayer<T> : LayerBase<T>, IShapeContract
 {
     /// <summary>
     /// Stores the mean values extracted from the input tensor during the forward pass.
@@ -149,6 +159,46 @@ public class RepParameterizationLayer<T> : LayerBase<T>
     {
     }
 
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// The input packs mean and log-variance side by side, so the latent the layer samples is HALF the
+    /// input width - see <c>ComputeOutputShape</c>, which is the same <c>[^1] / 2</c> this restates
+    /// symbolically. Every other axis is carried through untouched.
+    /// </para>
+    /// <para>
+    /// Written by hand to REPLACE the generated contract. Both declared layouts name the same axes at
+    /// the same rank, so the generator derived <c>Same(Features)</c> - a reasonable reading of the
+    /// attributes and a false statement about the layer. The conformance sweep caught it: contract
+    /// [3,8,9], forward [3,8,4].
+    /// </para>
+    /// <para>
+    /// <c>Window(kernel: 2, stride: 2, padding: 0)</c> is <c>floor(n / 2)</c> exactly, which is what
+    /// integer division does, and it stays right for an odd width where <see cref="AxisRelation.Scaled"/>
+    /// would refuse to divide. Third layer where the window form covered something that looked like it
+    /// needed new vocabulary.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank) => inputRank switch
+    {
+        2 => new[]
+        {
+            new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+            new OutputAxisContract(
+                TensorAxis.Features,
+                AxisRelation.Window(TensorAxis.Features, kernel: 2, stride: 2, padding: 0)),
+        },
+        3 => new[]
+        {
+            new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+            new OutputAxisContract(TensorAxis.Time, AxisRelation.Same(TensorAxis.Time)),
+            new OutputAxisContract(
+                TensorAxis.Features,
+                AxisRelation.Window(TensorAxis.Features, kernel: 2, stride: 2, padding: 0)),
+        },
+        _ => null,
+    };
+
     /// <summary>
     /// Resolves shape on first forward; output halves the last dim (mean+logvar split).
     /// </summary>
@@ -194,7 +244,7 @@ public class RepParameterizationLayer<T> : LayerBase<T>
     /// The layer saves all intermediate values for later use during training.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         EnsureInitializedFromInput(input);
         // Store original shape for any-rank tensor support
@@ -426,59 +476,6 @@ public class RepParameterizationLayer<T> : LayerBase<T>
         }
 
         return GpuTensorHelper.UploadToGpu<T>(backend, outputBuffer, outputShape, GpuTensorRole.Activation, ownsBuffer: true);
-    }
-
-    /// <summary>
-    /// Updates the parameters of the reparameterization layer.
-    /// </summary>
-    /// <param name="learningRate">The learning rate to use for the parameter updates.</param>
-    /// <remarks>
-    /// <para>
-    /// This method is required by the LayerBase class but does nothing in the RepParameterizationLayer
-    /// because this layer has no trainable parameters to update. The learning happens in the encoder
-    /// network that produces the means and log variances.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method is empty because the layer has no internal values to update.
-    /// 
-    /// Unlike most layers in a neural network, the reparameterization layer doesn't have any
-    /// weights or biases that need to be adjusted during training. It's more like a mathematical
-    /// operation that passes gradients through.
-    /// 
-    /// The actual learning happens in:
-    /// - The encoder network that produces the means and log variances
-    /// - The decoder network that processes the samples this layer produces
-    /// 
-    /// This method exists only because all layers in the network must implement it.
-    /// </para>
-    /// </remarks>
-    public override void UpdateParameters(T learningRate)
-    {
-        // No parameters to update in this layer
-    }
-
-    /// <summary>
-    /// Gets all trainable parameters of the reparameterization layer as a single vector.
-    /// </summary>
-    /// <returns>An empty vector since this layer has no trainable parameters.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method returns an empty vector because the RepParameterizationLayer has no trainable parameters.
-    /// The method is required by the LayerBase class but is essentially a no-op for this layer.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method returns an empty list because the layer has no learnable values.
-    /// 
-    /// As mentioned earlier, the reparameterization layer doesn't have any weights or biases
-    /// that it learns during training. It just performs the sampling operation and passes
-    /// gradients through.
-    /// 
-    /// This method returns an empty vector to indicate that there are no parameters to retrieve.
-    /// It exists only because all layers in the network must implement it.
-    /// </para>
-    /// </remarks>
-    public override Vector<T> GetParameters()
-    {
-        // This layer has no trainable parameters, so return an empty vector
-        return Vector<T>.Empty();
     }
 
     /// <summary>

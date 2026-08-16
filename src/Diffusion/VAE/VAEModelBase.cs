@@ -23,7 +23,9 @@ namespace AiDotNet.Diffusion.VAE;
 /// They are essential for efficient latent diffusion models like Stable Diffusion.
 /// </para>
 /// </remarks>
-public abstract class VAEModelBase<T> : IVAEModel<T>, IModelShape
+public abstract class VAEModelBase<T> : IVAEModel<T>, IModelShape,
+    AiDotNet.Models.Parameters.IParameterManifestProvider,
+    AiDotNet.Models.Parameters.IParameterSurfaceLifecycle
 {
     /// <summary>
     /// Provides access to the hardware-accelerated tensor engine.
@@ -80,13 +82,40 @@ public abstract class VAEModelBase<T> : IVAEModel<T>, IModelShape
     /// implementations should wrap their forward body with this helper.
     /// </summary>
     protected Tensor<T> EncodeCompiled(Tensor<T> image, Func<Tensor<T>> eagerEncode) =>
-        _encoderCompileHost.Predict(image, _vaeStructureVersion, eagerEncode);
+        DetachPlanOutput(_encoderCompileHost.Predict(image, _vaeStructureVersion, eagerEncode));
 
     /// <summary>
     /// Routes <paramref name="eagerDecode"/> through the decoder compile host.
     /// </summary>
     protected Tensor<T> DecodeCompiled(Tensor<T> latent, Func<Tensor<T>> eagerDecode) =>
-        _decoderCompileHost.Predict(latent, _vaeStructureVersion, eagerDecode);
+        DetachPlanOutput(_decoderCompileHost.Predict(latent, _vaeStructureVersion, eagerDecode));
+
+    /// <summary>
+    /// Returns a tensor the caller can safely RETAIN, copying when the compiled plan handed back its
+    /// own resident output buffer.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A compiled plan is reused across calls: <c>CompiledModelHost.Predict</c> does
+    /// <c>SetInputs(...)</c> then returns <c>plan.Execute()</c>, and that result IS the plan's resident
+    /// output tensor, overwritten on the next call. For plumbing that consumes the result immediately —
+    /// a diffusion denoiser's per-step forward — that is exactly right and a copy would be pure waste.
+    /// </para>
+    /// <para>
+    /// Encode and Decode are different: they are public API returning a tensor the caller keeps. Without
+    /// this copy, two decodes hand back THE SAME OBJECT, so a caller holding both holds one buffer twice.
+    /// Measured before this fix: <c>ReferenceEquals(Decode(a), Decode(b))</c> was true and two latents
+    /// differing by maxAbs 1.116 produced byte-identical images. That silently defeats any test that
+    /// decodes more than once, which is why an untrained VAE round trip appeared to be
+    /// information-free — it was aliasing, not the tanh saturation it was first attributed to.
+    /// </para>
+    /// <para>
+    /// The copy is taken at THIS boundary rather than inside <c>CompiledModelHost</c> deliberately, so
+    /// the per-step denoiser hot path keeps its zero-copy contract. Other
+    /// <c>CompiledModelHost.Predict</c> consumers that retain their result need the same treatment.
+    /// </para>
+    /// </remarks>
+    private static Tensor<T> DetachPlanOutput(Tensor<T> planOutput) => planOutput.Clone();
 
     /// <summary>
     /// Async overload of <see cref="EncodeCompiled"/>.
@@ -135,8 +164,79 @@ public abstract class VAEModelBase<T> : IVAEModel<T>, IModelShape
     /// <inheritdoc />
     public abstract double LatentScaleFactor { get; }
 
+    /// <summary>Components whose parameters belong to this VAE, in registration order.</summary>
+    private readonly AiDotNet.Models.Parameters.ParameterComponentRegistry<T> _parameterRegistry = new();
+
+    private bool _componentsRegistered;
+
+    /// <summary>
+    /// Declare this VAE's components here with <see cref="RegisterParameterComponent"/>.
+    /// </summary>
+    /// <remarks>
+    /// Same contract as <c>DiffusionModelBase.RegisterComponents</c>: a hook rather than
+    /// constructor code, so a component created late is still seen and field-initialisation order
+    /// stops being something the author has to reason about.
+    /// </remarks>
+    protected virtual void RegisterComponents()
+    {
+    }
+
+    protected virtual void RegisterGeneratedParameterComponents(
+        AiDotNet.Models.Parameters.ParameterComponentRegistry<T> registry)
+    {
+    }
+
+    private void EnsureComponentsRegistered()
+    {
+        if (_componentsRegistered) return;
+        _componentsRegistered = true;
+        RegisterGeneratedParameterComponents(_parameterRegistry);
+        RegisterComponents();
+    }
+
+    /// <summary>Declares a child component as part of this VAE's parameter surface.</summary>
+    /// <remarks>Identity-based and idempotent; null is ignored.</remarks>
+    protected void RegisterParameterComponent(
+        IParameterSource<T>? component,
+        [System.Runtime.CompilerServices.CallerArgumentExpression(nameof(component))] string? componentExpression = null,
+        [System.Runtime.CompilerServices.CallerMemberName] string? memberName = null)
+        => _parameterRegistry.RegisterLegacy(GetType().FullName ?? GetType().Name,
+            memberName, componentExpression, component);
+
+    protected void RegisterParameterComponent(string stableId, IParameterSource<T>? component,
+        AiDotNet.Models.Parameters.ParameterSlotRole role = AiDotNet.Models.Parameters.ParameterSlotRole.Trainable)
+        => _parameterRegistry.Register(stableId, component, role);
+
+    protected virtual void OnParametersRestored()
+    {
+    }
+
+    public AiDotNet.Models.Parameters.ParameterLayoutSnapshot ParameterLayout
+    {
+        get { EnsureComponentsRegistered(); return _parameterRegistry.ParameterLayout; }
+    }
+
     /// <inheritdoc />
-    public abstract long ParameterCount { get; }
+    void AiDotNet.Models.Parameters.IParameterSurfaceLifecycle.PrepareParameterSurface(
+        AiDotNet.Models.Parameters.ParameterSurfaceIntent intent)
+    {
+        EnsureComponentsRegistered();
+        _parameterRegistry.PrepareParameterSurface(intent);
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Derived from the registered components in the order <see cref="GetParameters"/> emits them,
+    /// so the count cannot disagree with the vector it describes.
+    /// </remarks>
+    public virtual long ParameterCount
+    {
+        get
+        {
+            EnsureComponentsRegistered();
+            return _parameterRegistry.ParameterCount;
+        }
+    }
 
     /// <summary>
     /// Streams the VAE's trainable weight tensors per-tensor without
@@ -324,10 +424,31 @@ public abstract class VAEModelBase<T> : IVAEModel<T>, IModelShape
     #region IParameterizable<T, Tensor<T>, Tensor<T>> Implementation
 
     /// <inheritdoc />
-    public abstract Vector<T> GetParameters();
+    /// <remarks>Concatenates the registered components in registration order.</remarks>
+    public virtual Vector<T> GetParameters()
+    {
+        EnsureComponentsRegistered();
+        return _parameterRegistry.GetParameters();
+    }
 
     /// <inheritdoc />
-    public abstract void SetParameters(Vector<T> parameters);
+    /// <remarks>The exact inverse of <see cref="GetParameters"/>, slicing by each component's own
+    /// vector length rather than by its count.</remarks>
+    public virtual void SetParameters(Vector<T> parameters)
+    {
+        if (parameters is null) throw new ArgumentNullException(nameof(parameters));
+        EnsureComponentsRegistered();
+        if (!_parameterRegistry.HasComponents)
+        {
+            if (parameters.Length == 0) return;
+            throw new ArgumentException(
+                $"{GetType().Name} has no registered parameter components, but was given " +
+                $"{parameters.Length} parameters.", nameof(parameters));
+        }
+
+        _parameterRegistry.SetParameters(parameters);
+        OnParametersRestored();
+    }
 
     /// <summary>
     /// COW clone lever (#1624): shares each trainable weight tensor's STORAGE with <paramref name="source"/>

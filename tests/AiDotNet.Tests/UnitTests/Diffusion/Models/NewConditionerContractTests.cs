@@ -80,7 +80,9 @@ public class NewConditionerContractTests : DiffusionUnitTestBase
         var predictor = new MMDiTXNoisePredictor<double>();
 
         Assert.NotNull(predictor);
+        Assert.False(predictor.WeightsMaterialized);
         Assert.True(predictor.ParameterCount > 0);
+        Assert.False(predictor.WeightsMaterialized);
     }
 
     [Fact(Timeout = 120000)]
@@ -89,7 +91,9 @@ public class NewConditionerContractTests : DiffusionUnitTestBase
         var predictor = new FluxDoubleStreamPredictor<double>();
 
         Assert.NotNull(predictor);
+        Assert.False(predictor.WeightsMaterialized);
         Assert.True(predictor.ParameterCount > 0);
+        Assert.False(predictor.WeightsMaterialized);
     }
 
     [Fact(Timeout = 120000)]
@@ -98,7 +102,9 @@ public class NewConditionerContractTests : DiffusionUnitTestBase
         var predictor = new SiTPredictor<double>();
 
         Assert.NotNull(predictor);
+        Assert.False(predictor.WeightsMaterialized);
         Assert.True(predictor.ParameterCount > 0);
+        Assert.False(predictor.WeightsMaterialized);
     }
 
     [Fact(Timeout = 120000)]
@@ -107,7 +113,9 @@ public class NewConditionerContractTests : DiffusionUnitTestBase
         var predictor = new EMMDiTPredictor<double>();
 
         Assert.NotNull(predictor);
+        Assert.False(predictor.WeightsMaterialized);
         Assert.True(predictor.ParameterCount > 0);
+        Assert.False(predictor.WeightsMaterialized);
     }
 
     #endregion

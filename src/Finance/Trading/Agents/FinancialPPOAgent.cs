@@ -52,8 +52,9 @@ namespace AiDotNet.Finance.Trading.Agents;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Proximal Policy Optimization Algorithms", "https://arxiv.org/abs/1707.06347", Year = 2017, Authors = "John Schulman, Filip Wolski, Prafulla Dhariwal, Alec Radford, Oleg Klimov")]
-public class FinancialPPOAgent<T> : TradingAgentBase<T>, IGradientComputable<T, Vector<T>, Vector<T>>
+public partial class FinancialPPOAgent<T> : TradingAgentBase<T>, IGradientComputable<T, Vector<T>, Vector<T>>
 {
+
     #region Fields
 
     private const string ObservationNormalizerMarker = "AiDotNet.FinancialPPOAgent.ObservationNormalizer.v1";
@@ -64,6 +65,7 @@ public class FinancialPPOAgent<T> : TradingAgentBase<T>, IGradientComputable<T, 
     private readonly INeuralNetwork<T> _actor;
     private readonly INeuralNetwork<T> _critic;
     private readonly Trajectory<T> _trajectory;
+    [Scratch]
     private readonly List<Vector<T>> _nextStates;
     private readonly Random _random;
     private readonly NeuralNetworkArchitecture<T> _actorArchitecture;
@@ -71,9 +73,13 @@ public class FinancialPPOAgent<T> : TradingAgentBase<T>, IGradientComputable<T, 
     private double[]? _observationMean;
     private double[]? _observationM2;
     private long _observationCount;
+    [Scratch]
     private Vector<T>? _lastActionRawState;
+    [Scratch]
     private Vector<T>? _lastActionNormalizedState;
+    [Scratch]
     private Vector<T>? _lastActionVector;
+    [Scratch]
     private Vector<T>? _lastStoredNextRawState;
     private T _lastActionLogProb = default!;
     private bool _hasLastActionLogProb;
@@ -87,9 +93,6 @@ public class FinancialPPOAgent<T> : TradingAgentBase<T>, IGradientComputable<T, 
 
     /// <inheritdoc/>
     public override int FeatureCount => TradingOptions.StateSize;
-
-    /// <inheritdoc/>
-    public override long ParameterCount => _actor.ParameterCount + _critic.ParameterCount;
 
     #endregion
 
@@ -853,44 +856,6 @@ public class FinancialPPOAgent<T> : TradingAgentBase<T>, IGradientComputable<T, 
         _observationCount = source._observationCount;
         _observationMean = source._observationMean is null ? null : (double[])source._observationMean.Clone();
         _observationM2 = source._observationM2 is null ? null : (double[])source._observationM2.Clone();
-    }
-
-    /// <summary>
-    /// Executes GetParameters for the FinancialPPOAgent.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the FinancialPPOAgent model, GetParameters performs a supporting step in the workflow. It keeps the FinancialPPOAgent architecture pipeline consistent.
-    /// </para>
-    /// </remarks>
-    public override Vector<T> GetParameters()
-    {
-        var actorParams = _actor.GetParameters();
-        var criticParams = _critic.GetParameters();
-        var combined = new Vector<T>(actorParams.Length + criticParams.Length);
-        
-        for (int i = 0; i < actorParams.Length; i++)
-            combined[i] = actorParams[i];
-            
-        for (int i = 0; i < criticParams.Length; i++)
-            combined[actorParams.Length + i] = criticParams[i];
-            
-        return combined;
-    }
-
-    /// <summary>
-    /// Executes SetParameters for the FinancialPPOAgent.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the FinancialPPOAgent model, SetParameters performs a supporting step in the workflow. It keeps the FinancialPPOAgent architecture pipeline consistent.
-    /// </para>
-    /// </remarks>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int actorCount = checked((int)_actor.ParameterCount);
-        _actor.SetParameters(parameters.Slice(0, actorCount));
-        _critic.SetParameters(parameters.Slice(actorCount, (int)_critic.ParameterCount));
     }
 
     #endregion

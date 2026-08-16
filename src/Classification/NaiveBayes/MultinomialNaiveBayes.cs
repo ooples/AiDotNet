@@ -74,6 +74,7 @@ public class MultinomialNaiveBayes<T> : NaiveBayesBase<T>
     /// Shape: [NumClasses, NumFeatures]
     /// Contains log P(feature | class) with Laplace smoothing.
     /// </summary>
+    [Buffer]
     private Matrix<T>? _logFeatureProbs;
     private T[]? _featureMinShift;
 

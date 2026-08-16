@@ -40,6 +40,9 @@ public class ViLTOptions : FoundationalVLMOptions
         OnnxOptions = other.OnnxOptions;
         LearningRate = other.LearningRate;
         WeightDecay = other.WeightDecay;
+        WarmupSteps = other.WarmupSteps;
+        TotalTrainingSteps = other.TotalTrainingSteps;
+        WarmupInitialLearningRate = other.WarmupInitialLearningRate;
         PatchSize = other.PatchSize;
         UseWholeWordMasking = other.UseWholeWordMasking;
         UseRandAugment = other.UseRandAugment;
@@ -54,6 +57,15 @@ public class ViLTOptions : FoundationalVLMOptions
     /// <summary>Gets or sets whether to use image augmentation during training.</summary>
     public bool UseRandAugment { get; set; } = true;
 
+    /// <summary>Gets or sets the number of linear learning-rate warmup steps.</summary>
+    public int WarmupSteps { get; set; } = 2500;
+
+    /// <summary>Gets or sets the training horizon used by the linear decay schedule.</summary>
+    public int TotalTrainingSteps { get; set; } = 25000;
+
+    /// <summary>Gets or sets the non-zero initial rate used at the start of warmup.</summary>
+    public double WarmupInitialLearningRate { get; set; } = 1e-5;
+
     public ViLTOptions()
     {
         FusionType = FusionType.SingleStream;
@@ -63,5 +75,7 @@ public class ViLTOptions : FoundationalVLMOptions
         FusionDim = 768;
         NumFusionLayers = 12;
         ImageSize = 384;
+        LearningRate = 1e-4;
+        WeightDecay = 0.01;
     }
 }

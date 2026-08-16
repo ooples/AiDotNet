@@ -83,7 +83,8 @@ public readonly struct FastFourierTransform<T>
     }
 
     /// <summary>
-    /// Internal recursive implementation of the FFT algorithm using the Cooley-Tukey method.
+    /// Internal FFT implementation. Power-of-two inputs use radix-2 Cooley-Tukey;
+    /// all other lengths use Bluestein's chirp-z reduction to a power-of-two convolution.
     /// </summary>
     /// <param name="input">The input vector of complex numbers.</param>
     /// <param name="inverse">Whether to perform the inverse transform.</param>
@@ -102,6 +103,21 @@ public readonly struct FastFourierTransform<T>
         int n = input.Length;
         if (n <= 1) return input;
 
+        return IsPowerOfTwo(n)
+            ? Radix2Transform(input, inverse)
+            : BluesteinTransform(input, inverse);
+    }
+
+    /// <summary>
+    /// Computes an FFT whose length is known to be a power of two.
+    /// The inverse transform is intentionally unnormalized; <see cref="Inverse"/>
+    /// applies the public 1/N normalization once at the end.
+    /// </summary>
+    private Vector<Complex<T>> Radix2Transform(Vector<Complex<T>> input, bool inverse)
+    {
+        int n = input.Length;
+        if (n <= 1) return input;
+
         var even = new Vector<Complex<T>>(n / 2);
         var odd = new Vector<Complex<T>>(n / 2);
 
@@ -111,8 +127,8 @@ public readonly struct FastFourierTransform<T>
             odd[i] = input[2 * i + 1];
         }
 
-        even = FFTInternal(even, inverse);
-        odd = FFTInternal(odd, inverse);
+        even = Radix2Transform(even, inverse);
+        odd = Radix2Transform(odd, inverse);
 
         var output = new Vector<Complex<T>>(n);
         T angleSign = inverse ? _numOps.One : _numOps.Negate(_numOps.One);
@@ -128,4 +144,97 @@ public readonly struct FastFourierTransform<T>
 
         return output;
     }
+
+    /// <summary>
+    /// Computes an arbitrary-length DFT with Bluestein's algorithm.
+    /// This preserves exact FFT sizes used by audio models such as Whisper's
+    /// 400-sample analysis window instead of silently padding them to 512.
+    /// </summary>
+    private Vector<Complex<T>> BluesteinTransform(Vector<Complex<T>> input, bool inverse)
+    {
+        int n = input.Length;
+        long requiredLength = (2L * n) - 1L;
+        const int maxPowerOfTwo = 1 << 30;
+        if (requiredLength > maxPowerOfTwo)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(input),
+                $"FFT length {n} is too large for Bluestein's convolution buffer.");
+        }
+
+        int convolutionLength = 1;
+        while (convolutionLength < requiredLength)
+            convolutionLength <<= 1;
+
+        var a = new Vector<Complex<T>>(convolutionLength);
+        var b = new Vector<Complex<T>>(convolutionLength);
+        var complexOps = MathHelper.GetNumericOperations<Complex<T>>();
+        double direction = inverse ? 1.0 : -1.0;
+
+        for (int i = 0; i < n; i++)
+        {
+            double phase = direction * Math.PI * ChirpExponent(i, n);
+            var inputChirp = Complex<T>.FromPolarCoordinates(_numOps.One, _numOps.FromDouble(phase));
+            var convolutionChirp = Complex<T>.FromPolarCoordinates(_numOps.One, _numOps.FromDouble(-phase));
+
+            a[i] = complexOps.Multiply(input[i], inputChirp);
+            b[i] = convolutionChirp;
+            if (i != 0)
+                b[convolutionLength - i] = convolutionChirp;
+        }
+
+        var spectrumA = Radix2Transform(a, inverse: false);
+        var spectrumB = Radix2Transform(b, inverse: false);
+        var product = new Vector<Complex<T>>(convolutionLength);
+        for (int i = 0; i < convolutionLength; i++)
+            product[i] = complexOps.Multiply(spectrumA[i], spectrumB[i]);
+
+        var convolution = Radix2Transform(product, inverse: true);
+        var scale = new Complex<T>(_numOps.FromDouble(convolutionLength), _numOps.Zero);
+        var output = new Vector<Complex<T>>(n);
+        for (int i = 0; i < n; i++)
+        {
+            double phase = direction * Math.PI * ChirpExponent(i, n);
+            var outputChirp = Complex<T>.FromPolarCoordinates(_numOps.One, _numOps.FromDouble(phase));
+            var normalized = complexOps.Divide(convolution[i], scale);
+            output[i] = complexOps.Multiply(normalized, outputChirp);
+        }
+
+        return output;
+    }
+    /// <summary>
+    /// The Bluestein chirp exponent <c>i^2 / n</c>, with <c>i^2</c> reduced modulo <c>2n</c> first.
+    /// </summary>
+    /// <remarks>
+    /// The reduction is what keeps a large transform accurate. Computing <c>(double)i * i / n</c>
+    /// directly overflows double's 53-bit exact integer range once <c>i^2</c> passes about 9.0e15
+    /// (i above roughly 9.5e7), and relative error grows well before that. Only the FRACTIONAL part
+    /// of <c>i^2 / n</c> matters here -- the chirp is periodic, and the integer part is discarded by
+    /// the multiply against Math.PI -- so the leading bits are thrown away anyway and every bit of
+    /// error they carried lands directly in the phase. Reducing <c>i^2</c> into <c>[0, 2n)</c> before
+    /// the division keeps the whole product exact for every representable n.
+    ///
+    /// Modulo 2n rather than n because the chirp has period 2n in this exponent: exp(i*pi*k/n)
+    /// repeats every 2n, not every n.
+    ///
+    /// Both chirp loops call this, which is also why it is a method: the two must stay identical,
+    /// and they previously repeated the expression.
+    /// </remarks>
+    private static double ChirpExponent(int i, int n)
+    {
+        // long is exact for i^2 at every int i (max ~4.6e18, well inside long's range).
+        long squared = (long)i * i;
+        long reduced = squared % (2L * n);
+        return (double)reduced / n;
+    }
+
+    /// <summary>
+    /// True when <paramref name="value"/> is a positive power of two.
+    /// </summary>
+    /// <remarks>
+    /// The positivity test is not redundant: <c>(0 &amp; -1) == 0</c>, so a bare bit-trick reports
+    /// zero as a power of two. The current call site is safe only because FFTInternal returns early
+    /// for <c>n &lt;= 1</c>, which makes this a trap for the next caller rather than a live bug.
+    /// </remarks>
+    private static bool IsPowerOfTwo(int value) => value > 0 && (value & (value - 1)) == 0;
 }

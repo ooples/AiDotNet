@@ -60,13 +60,26 @@ namespace AiDotNet.Audio.Enhancement;
 [ResearchPaper("TF-GridNet: Making Time-Frequency Domain Models Great Again for Monaural Speaker Separation", "https://arxiv.org/abs/2209.03952", Year = 2023, Authors = "Zhong-Qiu Wang, Samuele Cornell, Shukjae Choi, Younglo Lee, Byeong-Yeol Kim, Shinji Watanabe")]
 public class TFGridNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// Measured: <c>PredictCore</c> RMS-normalizes, folds <c>Layers</c>, then rescales by the same
+    /// scalar - <c>TensorMultiplyScalar</c> leaves the shape untouched - and <c>PostprocessOutput</c>
+    /// is the identity. The last layer of <c>CreateDefaultTFGridNetLayers</c> is
+    /// <c>DenseLayer&lt;T&gt;(numFreqBins * 2)</c>, the reconstructed complex STFT (real + imaginary
+    /// per bin), wired from <c>_options.NumFreqBins</c>. The helper's local <c>outDim</c> (the clamped
+    /// <c>embeddingDim * 4</c> grid width) is computed and then NOT used by that layer.
+    /// </remarks>
+    protected override int OutputFeatureWidth => _options.NumFreqBins * 2;
+
     #region Fields
 
     private readonly TFGridNetOptions _options;
     public override ModelOptions GetOptions() => _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private readonly ShortTimeFourierTransform<T> _stft;
+    [Scratch]
     private Tensor<T>? _lastPhase;
+    [Buffer]
     private Tensor<T>? _noiseProfile;
     private bool _useNativeMode;
     private bool _disposed;
@@ -244,9 +257,70 @@ public class TFGridNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
     {
         ThrowIfDisposed();
         if (IsOnnxMode && OnnxEncoder is not null) return OnnxEncoder.Run(input);
-        var c = input;
+
+        // Utterance-level scale normalization (Wang et al. 2023, "TF-GridNet"). The grid stack is
+        // LayerNorm-heavy and therefore scale-INVARIANT: without re-applying the input's overall
+        // magnitude the model erases it and returns an identical result for a quiet signal and the
+        // same signal 10x louder (ScaledInput_ShouldChangeOutput). Normalize the input by its RMS so
+        // the stack sees a stable scale, run the layers, then multiply the output by that same scale —
+        // making the enhancement front-end scale-EQUIVARIANT (louder in -> louder out), which a
+        // separation/enhancement model must be. TensorMultiplyScalar is a tape op, so the scale
+        // in/out threads gradients through for training; the RMS itself is a detached constant
+        // derived from the (supervision-free) input, so it does not disturb the backward graph.
+        double rms = ComputeRms(input);
+
+        // Silent/zero input: skip scaling to avoid div-by-zero; the stack still runs deterministically.
+        if (rms <= 1e-12)
+        {
+            var c0 = input;
+            foreach (var l in Layers) c0 = l.Forward(c0);
+            return c0;
+        }
+
+        T scale = NumOps.FromDouble(rms);
+        T invScale = NumOps.FromDouble(1.0 / rms);
+        var c = Engine.TensorMultiplyScalar(input, invScale);
         foreach (var l in Layers) c = l.Forward(c);
-        return c;
+        return Engine.TensorMultiplyScalar(c, scale);
+    }
+
+    /// <summary>
+    /// Mirrors <see cref="PredictCore"/>'s utterance-level RMS scale normalization on the TRAINING
+    /// forward path so training and inference see the same preprocessing. Without this, TrainWithTape
+    /// walks the (LayerNorm-heavy, scale-invariant) grid stack on the raw tensor while inference feeds
+    /// it an RMS-normalized tensor — a train/serve skew. Delegates the actual layer walk to
+    /// <c>base.ForwardForTraining</c> so the base's dropout seed-wiring is preserved; the RMS scale is
+    /// applied via tape ops (<see cref="Engine"/>.TensorMultiplyScalar), so it threads gradients, while
+    /// the RMS value itself is a detached constant derived from the (supervision-free) input.
+    /// </summary>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input)
+    {
+        double rms = ComputeRms(input);
+        if (rms <= 1e-12)
+            return base.ForwardForTraining(input);
+
+        T scale = NumOps.FromDouble(rms);
+        var normalized = Engine.TensorMultiplyScalar(input, NumOps.FromDouble(1.0 / rms));
+        var output = base.ForwardForTraining(normalized);
+        return Engine.TensorMultiplyScalar(output, scale);
+    }
+
+    /// <summary>
+    /// Root-mean-square magnitude of the input, used by both the inference (<see cref="PredictCore"/>)
+    /// and training (<see cref="ForwardForTraining"/>) paths for the shared utterance-level scale
+    /// normalization. Kept in one place so a future threshold/formula tweak can't drift between the two
+    /// paths and silently reintroduce train/serve skew.
+    /// </summary>
+    private double ComputeRms(Tensor<T> input)
+    {
+        double sumSq = 0.0;
+        int n = input.Length;
+        for (int i = 0; i < n; i++)
+        {
+            double v = NumOps.ToDouble(input[i]);
+            sumSq += v * v;
+        }
+        return n > 0 ? Math.Sqrt(sumSq / n) : 0.0;
     }
 
     public override void Train(Tensor<T> input, Tensor<T> expected)
@@ -255,7 +329,7 @@ public class TFGridNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expected);
+            TrainWithTape(input, expected, _optimizer);
         }
         finally
         {
@@ -263,13 +337,11 @@ public class TFGridNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
         }
     }
 
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        if (!_useNativeMode) throw new NotSupportedException("ONNX mode.");
-        int idx = 0;
-        foreach (var l in Layers) { int c = (int)l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; }
-    }
-
+    /// <inheritdoc />
+    /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
+    /// write on every parameter surface, so the guard is stated once here instead of being
+    /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
+    protected override bool SupportsParameterMutation => _useNativeMode;
     protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio) => ComputeSTFT(rawAudio);
     protected override Tensor<T> PostprocessOutput(Tensor<T> o) => o;
 

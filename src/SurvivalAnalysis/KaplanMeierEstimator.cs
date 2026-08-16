@@ -4,6 +4,8 @@ using AiDotNet.Enums;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Tensors.LinearAlgebra;
 
+using AiDotNet.Models.Parameters;
+
 namespace AiDotNet.SurvivalAnalysis;
 
 /// <summary>
@@ -61,6 +63,19 @@ namespace AiDotNet.SurvivalAnalysis;
 [ResearchPaper("Nonparametric Estimation from Incomplete Observations", "https://doi.org/10.2307/2281868", Year = 1958, Authors = "Edward L. Kaplan, Paul Meier")]
 public class KaplanMeierEstimator<T> : SurvivalModelBase<T>
 {
+
+    /// <inheritdoc />
+    /// <remarks>The estimated survival curve. Kaplan-Meier is non-parametric, so the curve IS the fitted state; the hand-written restore also refreshed BaselineSurvivalFunction from it, which is kept.</remarks>
+    protected override void RegisterComponents()
+    {
+        RegisterParameterComponent(new VectorFieldParameterSource<T>(
+            () => _survivalProbabilities,
+            value =>
+            {
+                _survivalProbabilities = value;
+                BaselineSurvivalFunction = value;
+            }));
+    }
     /// <summary>
     /// Stores the survival probability at each event time.
     /// </summary>
@@ -345,44 +360,6 @@ public class KaplanMeierEstimator<T> : SurvivalModelBase<T>
     #endregion
 
     #region IFullModel Implementation
-
-    /// <summary>
-    /// Gets all model parameters as a single vector.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Kaplan-Meier is non-parametric, meaning it doesn't have
-    /// traditional parameters like coefficients. This returns the survival probabilities
-    /// at each event time, which represent the "state" of the fitted model.
-    /// </para>
-    /// </remarks>
-    public override Vector<T> GetParameters()
-    {
-        if (_survivalProbabilities is null)
-        {
-            return new Vector<T>(0);
-        }
-
-        return _survivalProbabilities;
-    }
-
-    /// <summary>
-    /// Sets the parameters for this model.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> For Kaplan-Meier, this sets the survival probabilities.
-    /// This is mainly used during deserialization to restore a fitted model.
-    /// </para>
-    /// </remarks>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (parameters.Length > 0)
-        {
-            _survivalProbabilities = parameters;
-            BaselineSurvivalFunction = parameters;
-        }
-    }
 
     /// <summary>
     /// Creates a new instance of the model with specified parameters.

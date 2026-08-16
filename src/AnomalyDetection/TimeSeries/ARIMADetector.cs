@@ -51,7 +51,7 @@ namespace AiDotNet.AnomalyDetection.TimeSeries;
     "https://doi.org/10.1002/9781118619193",
     Year = 1970,
     Authors = "George E.P. Box, Gwilym M. Jenkins")]
-public class ARIMADetector<T> : AnomalyDetectorBase<T>
+public partial class ARIMADetector<T> : AnomalyDetectorBase<T>
 {
     private readonly int _p;
     private readonly int _d;

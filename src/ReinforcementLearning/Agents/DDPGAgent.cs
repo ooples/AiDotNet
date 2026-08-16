@@ -63,8 +63,27 @@ namespace AiDotNet.ReinforcementLearning.Agents.DDPG;
     "https://arxiv.org/abs/1509.02971",
     Year = 2016,
     Authors = "Lillicrap, T. P., Hunt, J. J., Pritzel, A., Heess, N., Erez, T., Tassa, Y., Silver, D., & Wierstra, D.")]
-public class DDPGAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradientComputable<T, Vector<T>, Vector<T>>
+public partial class DDPGAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradientComputable<T, Vector<T>, Vector<T>>
 {
+
+    /// <inheritdoc />
+    /// <remarks>The same components, in the same order, that the hand-written
+    /// GetParameters concatenated -- that order is the serialization order.</remarks>
+    protected override void RegisterComponents()
+    {
+        RegisterParameterComponent(_actorNetwork);
+        RegisterParameterComponent(_criticNetwork);
+    }
+
+    /// <inheritdoc />
+    /// <remarks>Refreshes what derives from the parameters. This ran at the end of the
+    /// hand-written SetParameters; losing it would not fail a test, it would just leave
+    /// the agent training against a stale target.</remarks>
+    protected override void OnParametersRestored()
+    {
+        CopyNetworkWeights(_actorNetwork, _actorTargetNetwork);
+        CopyNetworkWeights(_criticNetwork, _criticTargetNetwork);
+    }
     private DDPGOptions<T> _options;
 
     /// <inheritdoc/>
@@ -505,47 +524,27 @@ public class DDPGAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradientComp
     }
 
     /// <inheritdoc/>
-    public override Vector<T> GetParameters()
-    {
-        var actorParams = _actorNetwork.GetParameters();
-        var criticParams = _criticNetwork.GetParameters();
-
-        var total = actorParams.Length + criticParams.Length;
-        var vector = new Vector<T>(total);
-
-        int idx = 0;
-        foreach (var p in actorParams) vector[idx++] = p;
-        foreach (var p in criticParams) vector[idx++] = p;
-
-        return vector;
-    }
-
-    /// <inheritdoc/>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        var actorParams = _actorNetwork.GetParameters();
-        var criticParams = _criticNetwork.GetParameters();
-
-        int idx = 0;
-        var actorVec = new Vector<T>(actorParams.Length);
-        var criticVec = new Vector<T>(criticParams.Length);
-
-        for (int i = 0; i < actorParams.Length; i++) actorVec[i] = parameters[idx++];
-        for (int i = 0; i < criticParams.Length; i++) criticVec[i] = parameters[idx++];
-
-        _actorNetwork.UpdateParameters(actorVec);
-        _criticNetwork.UpdateParameters(criticVec);
-
-        CopyNetworkWeights(_actorNetwork, _actorTargetNetwork);
-        CopyNetworkWeights(_criticNetwork, _criticTargetNetwork);
-    }
-
-    /// <inheritdoc/>
     public override IFullModel<T, Vector<T>, Vector<T>> Clone()
     {
+        // Actor/critic Dense layers are shape-lazy. Without a warm-up, GetParameters() is empty
+        // when Clone is called before the first inference and the two policies initialize
+        // independently. Materialize every registered and derived network on both sides before the
+        // parameter snapshot/restore so Clone preserves an untrained policy as well as a trained one.
+        MaterializeNetworks();
         var clone = new DDPGAgent<T>(_options);
+        clone.MaterializeNetworks();
         clone.SetParameters(GetParameters());
         return clone;
+    }
+
+    private void MaterializeNetworks()
+    {
+        var state = new Tensor<T>([_options.StateSize]);
+        var stateAction = new Tensor<T>([_options.StateSize + _options.ActionSize]);
+        _ = _actorNetwork.Predict(state);
+        _ = _actorTargetNetwork.Predict(state);
+        _ = _criticNetwork.Predict(stateAction);
+        _ = _criticTargetNetwork.Predict(stateAction);
     }
 
     /// <inheritdoc/>
@@ -565,10 +564,6 @@ public class DDPGAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradientComp
             "Direct gradient application through this interface is not applicable.");
     }
 
-    private void CopyNetworkWeights(INeuralNetwork<T> source, INeuralNetwork<T> target)
-    {
-        target.UpdateParameters(source.GetParameters());
-    }
     /// <inheritdoc/>
     public override void SaveModel(string filepath)
     {

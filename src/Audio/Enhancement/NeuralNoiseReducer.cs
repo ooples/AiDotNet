@@ -72,9 +72,26 @@ namespace AiDotNet.Audio.Enhancement;
 [ModelTask(ModelTask.Enhancement)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("A Regression Approach to Speech Enhancement Based on Deep Neural Networks", "https://arxiv.org/abs/1406.2279", Year = 2015, Authors = "Yong Xu, Jun Du, Li-Rong Dai, Chin-Hui Lee")]
-public class NeuralNoiseReducer<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
+// Citation URL corrected. arXiv 1406.2279 is "$B_s \to K \ell v$ form factors from lattice QCD" — an
+// unrelated particle-physics paper. This work was published in IEEE/ACM TASLP vol. 23 no. 1 (Jan 2015),
+// pp. 7-19, and is not on arXiv, so the canonical DOI replaces the invented preprint id.
+[ResearchPaper("A Regression Approach to Speech Enhancement Based on Deep Neural Networks",
+    "https://doi.org/10.1109/TASLP.2014.2364452",
+    Year = 2015,
+    Authors = "Yong Xu, Jun Du, Li-Rong Dai, Chin-Hui Lee")]
+public partial class NeuralNoiseReducer<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// DERIVED, not stored: <c>PredictCore</c> runs the inherited <c>Forward</c> (a fold over
+    /// <c>Layers</c>) and <c>PostprocessOutput</c> returns the mask unchanged. The last layer of
+    /// <c>CreateNeuralNoiseReducerLayers</c> is <c>DenseLayer&lt;T&gt;(freqBins, sigmoid)</c> with
+    /// <c>freqBins = fftSize / 2 + 1</c> computed inside the helper from the <c>_fftSize</c> this
+    /// model passes - a per-bin soft mask. 257 for the default 512-point FFT, and that number appears
+    /// nowhere in the options.
+    /// </remarks>
+    protected override int OutputFeatureWidth => _fftSize / 2 + 1;
+
     private readonly NeuralNoiseReducerOptions _options;
 
     /// <inheritdoc/>
@@ -176,11 +193,13 @@ public class NeuralNoiseReducer<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T
     /// <summary>
     /// Input buffer for streaming mode.
     /// </summary>
+    [Scratch]
     private Vector<T> _inputBuffer = new Vector<T>(0);
 
     /// <summary>
     /// Output buffer for overlap-add.
     /// </summary>
+    [Scratch]
     private Vector<T> _outputBuffer = new Vector<T>(0);
 
     /// <summary>
@@ -191,6 +210,7 @@ public class NeuralNoiseReducer<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T
     /// <summary>
     /// Window function for STFT.
     /// </summary>
+    [Buffer]
     private Vector<T> _window = new Vector<T>(0);
 
     /// <summary>
@@ -965,88 +985,7 @@ public class NeuralNoiseReducer<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T
         }
     }
 
-    /// <inheritdoc/>
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        if (IsOnnxMode)
-        {
-            throw new InvalidOperationException("Cannot update parameters in ONNX mode.");
-        }
-
-        int offset = 0;
-
-        // Update encoder layers
-        foreach (var layer in _encoderLayers)
-        {
-            var layerParams = layer.GetParameters();
-            int layerParamCount = layerParams.Length;
-
-            if (offset + layerParamCount <= parameters.Length)
-            {
-                var newParams = new Vector<T>(layerParamCount);
-                for (int i = 0; i < layerParamCount; i++)
-                {
-                    newParams[i] = parameters[offset + i];
-                }
-                layer.SetParameters(newParams);
-                offset += layerParamCount;
-            }
-        }
-
-        // Update bottleneck layer
-        if (_bottleneckLayer is not null)
-        {
-            var layerParams = _bottleneckLayer.GetParameters();
-            int layerParamCount = layerParams.Length;
-
-            if (offset + layerParamCount <= parameters.Length)
-            {
-                var newParams = new Vector<T>(layerParamCount);
-                for (int i = 0; i < layerParamCount; i++)
-                {
-                    newParams[i] = parameters[offset + i];
-                }
-                _bottleneckLayer.SetParameters(newParams);
-                offset += layerParamCount;
-            }
-        }
-
-        // Update decoder layers
-        foreach (var layer in _decoderLayers)
-        {
-            var layerParams = layer.GetParameters();
-            int layerParamCount = layerParams.Length;
-
-            if (offset + layerParamCount <= parameters.Length)
-            {
-                var newParams = new Vector<T>(layerParamCount);
-                for (int i = 0; i < layerParamCount; i++)
-                {
-                    newParams[i] = parameters[offset + i];
-                }
-                layer.SetParameters(newParams);
-                offset += layerParamCount;
-            }
-        }
-
-        // Update output layer
-        if (_outputLayer is not null)
-        {
-            var layerParams = _outputLayer.GetParameters();
-            int layerParamCount = layerParams.Length;
-
-            if (offset + layerParamCount <= parameters.Length)
-            {
-                var newParams = new Vector<T>(layerParamCount);
-                for (int i = 0; i < layerParamCount; i++)
-                {
-                    newParams[i] = parameters[offset + i];
-                }
-                _outputLayer.SetParameters(newParams);
-            }
-        }
-    }
-
+    // UpdateParameters restated the base verbatim; ModelBase routes it to SetParameters.
     /// <inheritdoc/>
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {

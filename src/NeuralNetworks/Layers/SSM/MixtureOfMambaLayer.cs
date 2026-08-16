@@ -68,7 +68,14 @@ namespace AiDotNet.NeuralNetworks.Layers.SSM;
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerTask(LayerTask.Routing)]
 [LayerProperty(IsTrainable = true, IsStateful = true, Cost = ComputeCost.High, TestInputShape = "4, 256", TestConstructorArgs = "4")]
-public partial class MixtureOfMambaLayer<T> : LayerBase<T>
+// Shape-preserving. Relations discovered by probing; roles read from the forward - this folder's
+// convention is seqLen = Shape[rank-2], modelDim = Shape[rank-1], so rank 2 is [Time, Features].
+[TensorLayout(TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
+[AutoParameters]
+public partial class MixtureOfMambaLayer<T> : LayerBase<T>, IShapeContract
 {
     private readonly int _modelDimension;
     private readonly int _numExperts;
@@ -85,12 +92,16 @@ public partial class MixtureOfMambaLayer<T> : LayerBase<T>
 
     // Per-expert SSM parameters
     // A (state transition): [numExperts, stateDim] — diagonal approximation
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
     private Tensor<T> _expertA;
     // B (input projection): [numExperts, stateDim, modelDim]
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
     private Tensor<T> _expertB;
     // C (output projection): [numExperts, modelDim, stateDim]
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
     private Tensor<T> _expertC;
     // D (skip connection): [numExperts, modelDim]
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
     private Tensor<T> _expertD;
 
     // Output gate: [modelDim, modelDim]
@@ -119,7 +130,6 @@ public partial class MixtureOfMambaLayer<T> : LayerBase<T>
     private Tensor<T>? _lastGate;
     private Tensor<T>? _lastGateRaw;
     private Tensor<T>? _lastMoEOutput;
-    private Tensor<T>? _lastExpertStates;
     private int[]? _originalInputShape;
 
     // Gradients
@@ -148,17 +158,6 @@ public partial class MixtureOfMambaLayer<T> : LayerBase<T>
 
     /// <summary>Gets the SSM state dimension per expert.</summary>
     public int StateDimension => _stateDimension;
-
-    /// <inheritdoc />
-    public override long ParameterCount =>
-        // Cast the first term to long so the running sum is evaluated in 64-bit
-        // and never wraps before reaching ToFlatVectorSize. With ten tensors
-        // the implicit int sum can overflow on multi-billion-parameter MoE
-        // configs (router + 4 experts × full hidden² weights).
-        (long)_routerWeights.Length + _routerBias.Length +
-        _expertA.Length + _expertB.Length + _expertC.Length + _expertD.Length +
-        _outputGateWeights.Length + _outputGateBias.Length +
-        _outputProjectionWeights.Length + _outputProjectionBias.Length;
 
     /// <summary>
     /// Creates a new Mixture-of-Mamba layer.
@@ -273,7 +272,7 @@ public partial class MixtureOfMambaLayer<T> : LayerBase<T>
     }
 
     /// <inheritdoc />
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         _originalInputShape = input._shape;
 
@@ -299,92 +298,40 @@ public partial class MixtureOfMambaLayer<T> : LayerBase<T>
             Engine.Reshape(_routerBias, new[] { 1, _numExperts }));
         _lastRouterLogits = routerLogits;
 
-        // Softmax over experts for each token, then top-K selection
+        // Softmax over experts, then use top-K only to construct the constant sparse mask. The
+        // selected probabilities and their renormalization remain ordinary tape-tracked ops.
         int totalTokens = batchSize * seqLen;
-        var routerWeightsResult = new Tensor<T>(new[] { totalTokens, _numExperts });
+        var routerProbabilities = Engine.Softmax(routerLogits, axis: 1);
+        _ = Engine.TensorTopK(routerProbabilities, _topK, axis: 1, out Tensor<int> topKTensor);
+        var activeMaskFlat = new Tensor<T>(new[] { totalTokens, _numExperts });
         var topKIndices = new int[totalTokens, _topK];
-        ComputeTopKSoftmax(routerLogits, routerWeightsResult, topKIndices, totalTokens);
+        for (int token = 0; token < totalTokens; token++)
+            for (int selected = 0; selected < _topK; selected++)
+            {
+                int expert = topKTensor[token, selected];
+                topKIndices[token, selected] = expert;
+                activeMaskFlat[token, expert] = NumOps.One;
+            }
+        var maskedWeights = Engine.TensorBroadcastMultiply(routerProbabilities, activeMaskFlat);
+        var weightSums = Engine.ReduceSum(maskedWeights, new[] { 1 }, keepDims: true);
+        var routerWeightsResult = Engine.TensorBroadcastDivide(
+            maskedWeights, Engine.TensorAddScalar(weightSums, NumOps.FromDouble(1e-10)));
         _lastRouterWeightsResult = routerWeightsResult;
         _lastTopKIndices = topKIndices;
 
-        // Step 2: Run selective scan for each active expert per token
-        var expertOutputs = new Tensor<T>(new[] { totalTokens, _topK, _modelDimension });
-        var expertStates = TensorAllocator.Rent<T>(new[] { batchSize, _numExperts, seqLen + 1, _stateDimension });
-
-        for (int bi = 0; bi < batchSize; bi++)
-        {
-            for (int t = 0; t < seqLen; t++)
-            {
-                int tokenIdx = bi * seqLen + t;
-
-                for (int ki = 0; ki < _topK; ki++)
-                {
-                    int expertIdx = topKIndices[tokenIdx, ki];
-
-                    // SSM scan: h_t = diag(exp(A)) * h_{t-1} + B * x_t
-                    //           y_t = C * h_t + D * x_t
-                    for (int si = 0; si < _stateDimension; si++)
-                    {
-                        // A is diagonal: h_t[s] = exp(A[e,s]) * h_{t-1}[s] + (B*x)[s]
-                        T aVal = NumOps.Exp(_expertA[new[] { expertIdx, si }]);
-                        T prevH = t > 0
-                            ? expertStates[new[] { bi, expertIdx, t, si }]
-                            : NumOps.Zero;
-
-                        // B * x: sum over modelDim
-                        T bx = NumOps.Zero;
-                        for (int di = 0; di < _modelDimension; di++)
-                        {
-                            T xVal = input3D[new[] { bi, t, di }];
-                            bx = NumOps.Add(bx, NumOps.Multiply(_expertB[new[] { expertIdx, si, di }], xVal));
-                        }
-
-                        T newH = NumOps.Add(NumOps.Multiply(aVal, prevH), bx);
-                        expertStates[new[] { bi, expertIdx, t + 1, si }] = newH;
-                    }
-
-                    // Output: y = C * h + D * x
-                    for (int di = 0; di < _modelDimension; di++)
-                    {
-                        // C * h
-                        T ch = NumOps.Zero;
-                        for (int si = 0; si < _stateDimension; si++)
-                        {
-                            T hVal = expertStates[new[] { bi, expertIdx, t + 1, si }];
-                            ch = NumOps.Add(ch, NumOps.Multiply(_expertC[new[] { expertIdx, di, si }], hVal));
-                        }
-
-                        // D * x (element-wise skip)
-                        T dx = NumOps.Multiply(_expertD[new[] { expertIdx, di }], input3D[new[] { bi, t, di }]);
-
-                        expertOutputs[new[] { tokenIdx, ki, di }] = NumOps.Add(ch, dx);
-                    }
-                }
-            }
-        }
+        // Step 2: one operation-specific recurrent node owns the routed expert scan. This exactly
+        // preserves the legacy reset semantics: an expert not selected at t has zero state at t+1.
+        var activeMask = Engine.Reshape(activeMaskFlat, new[] { batchSize, seqLen, _numExperts });
+        var transition = Engine.TensorExp(_expertA);
+        var expertOutputs = Engine.RoutedDiagonalSsmScanForward(
+            input3D, activeMask, transition, _expertB, _expertC, _expertD);
         _lastExpertOutputs = expertOutputs;
-        _lastExpertStates = expertStates;
 
         // Step 3: Combine expert outputs weighted by router scores
-        var moeOutput = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
-        for (int tokenIdx = 0; tokenIdx < totalTokens; tokenIdx++)
-        {
-            int bi = tokenIdx / seqLen;
-            int t = tokenIdx % seqLen;
-
-            for (int di = 0; di < _modelDimension; di++)
-            {
-                T combined = NumOps.Zero;
-                for (int ki = 0; ki < _topK; ki++)
-                {
-                    int expertIdx = topKIndices[tokenIdx, ki];
-                    T weight = routerWeightsResult[new[] { tokenIdx, expertIdx }];
-                    T expertOut = expertOutputs[new[] { tokenIdx, ki, di }];
-                    combined = NumOps.Add(combined, NumOps.Multiply(weight, expertOut));
-                }
-                moeOutput[new[] { bi, t, di }] = combined;
-            }
-        }
+        var routing4D = Engine.Reshape(
+            routerWeightsResult, new[] { batchSize, seqLen, _numExperts, 1 });
+        var weightedExperts = Engine.TensorBroadcastMultiply(expertOutputs, routing4D);
+        var moeOutput = Engine.ReduceSum(weightedExperts, new[] { 2 }, keepDims: false);
         _lastMoEOutput = moeOutput;
 
         // Step 4: Output gate
@@ -533,28 +480,6 @@ public partial class MixtureOfMambaLayer<T> : LayerBase<T>
 
     }
 
-    /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        var parameters = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
-        int index = 0;
-        foreach (var tensor in GetAllTensors())
-            for (int i = 0; i < tensor.Length; i++)
-                parameters[index++] = tensor[i];
-        return parameters;
-    }
-
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (parameters.Length != ParameterCount)
-            throw new ArgumentException($"Expected {ParameterCount} parameters, got {parameters.Length}");
-        int index = 0;
-        foreach (var tensor in GetAllTensors())
-            for (int i = 0; i < tensor.Length; i++)
-                tensor[i] = parameters[index++];
-    }
-
     private Tensor<T>[] GetAllTensors() =>
     [
         _routerWeights, _routerBias,
@@ -598,7 +523,6 @@ public partial class MixtureOfMambaLayer<T> : LayerBase<T>
         _lastGate = null;
         _lastGateRaw = null;
         _lastMoEOutput = null;
-        _lastExpertStates = null;
         _originalInputShape = null;
         _routerWeightsGradient = null;
         _routerBiasGradient = null;

@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Document.Interfaces;
 using AiDotNet.Document.Options;
 using AiDotNet.Enums;
@@ -58,7 +58,7 @@ namespace AiDotNet.Document.Analysis.PageSegmentation;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("DocBank: A Benchmark for Document Layout Analysis", "https://doi.org/10.48550/arXiv.2006.01038", Year = 2020, Authors = "Minghao Li, Yiheng Xu, Lei Cui, Shaohan Huang, Furu Wei, Zhoujun Li, Ming Zhou")]
-public class DocBank<T> : DocumentNeuralNetworkBase<T>, IPageSegmenter<T>
+public partial class DocBank<T> : DocumentNeuralNetworkBase<T>, IPageSegmenter<T>
 {
     private readonly DocBankOptions _options;
 
@@ -69,7 +69,7 @@ public class DocBank<T> : DocumentNeuralNetworkBase<T>, IPageSegmenter<T>
 
     private readonly bool _useNativeMode;
     private readonly InferenceSession? _onnxSession;
-    private readonly IOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
 
     // Cached tape-training optimizer (see GetOrCreateBaseOptimizer): a cosine-annealed Adam so the
     // ResNet backbone trains with a decaying learning rate (He et al. 2016), the same schedule that
@@ -155,7 +155,7 @@ public class DocBank<T> : DocumentNeuralNetworkBase<T>, IPageSegmenter<T>
         int backboneChannels = 256,
         int numClasses = 13,
         bool useTextFeatures = false,
-        IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         DocBankOptions? options = null)
         : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
@@ -211,7 +211,7 @@ public class DocBank<T> : DocumentNeuralNetworkBase<T>, IPageSegmenter<T>
         int numClasses = 13,
         int hiddenDim = 256,
         bool useTextFeatures = false,
-        IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         DocBankOptions? options = null)
         : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
@@ -720,31 +720,14 @@ public class DocBank<T> : DocumentNeuralNetworkBase<T>, IPageSegmenter<T>
         // a hand-rolled params -= grads*lr in UpdateParameters), double-updating the weights with
         // inconsistent gradients — the cause of the training divergence (loss exploding to ~4e7).
         // Tape-based training with the registered optimizer is the industry-standard path.
-        TrainWithTape(input, expectedOutput);
+        TrainWithTape(input, expectedOutput, _optimizer);
         SetTrainingMode(false);
     }
 
-    /// <inheritdoc/>
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        if (!_useNativeMode)
-        {
-            throw new NotSupportedException("Parameter updates are not supported in ONNX inference mode.");
-        }
-
-        // Standard contract: distribute the flat parameter vector back into the layers (SET, not a
-        // gradient step). Framework clone/DeepCopy relies on this — the old override treated the
-        // argument as gradients and SUBTRACTED them, corrupting any copy.
-        int idx = 0;
-        foreach (var layer in Layers)
-        {
-            int count = checked((int)layer.ParameterCount);
-            if (count == 0) continue;
-            layer.UpdateParameters(parameters.Slice(idx, count));
-            idx += count;
-        }
-    }
-
+    /// <inheritdoc />
+    /// <remarks>The weights belong to the loaded graph in this mode. The base refuses
+    /// the write on every parameter surface, so the guard is stated once, here.</remarks>
+    protected override bool SupportsParameterMutation => _useNativeMode;
     #endregion
 
     #region Disposal

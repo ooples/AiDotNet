@@ -1,4 +1,5 @@
 using AiDotNet.LossFunctions;
+using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines.Autodiff;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
@@ -11,25 +12,30 @@ namespace AiDotNet.Tests.ModelFamilyTests.Base;
 /// Base test class for triplet-style loss functions that operate on (anchor, positive, negative) matrix triplets.
 /// Tests mathematical invariants: non-negativity, margin enforcement, gradient correctness, and finiteness.
 /// </summary>
-public abstract class TripletLossTestBase
+public abstract class TripletLossTestBase<T>
 {
-    protected abstract TripletLoss<double> CreateLoss();
+    protected static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+    protected static T ToT(double value) => NumOps.FromDouble(value);
+    protected static double ToD(T value) => Convert.ToDouble(value);
+    protected virtual double Tolerance => typeof(T) == typeof(float) ? 1e-6 : 1e-10;
 
-    private static Matrix<double> CreateMatrix(int rows, int cols, double fillValue)
+    protected abstract TripletLoss<T> CreateLoss();
+
+    private static Matrix<T> CreateMatrix(int rows, int cols, double fillValue)
     {
-        var m = new Matrix<double>(rows, cols);
+        var m = new Matrix<T>(rows, cols);
         for (int i = 0; i < rows; i++)
             for (int j = 0; j < cols; j++)
-                m[i, j] = fillValue + i * 0.1 + j * 0.05;
+                m[i, j] = ToT(fillValue + i * 0.1 + j * 0.05);
         return m;
     }
 
-    private static Matrix<double> CreateConstantMatrix(int rows, int cols, double value)
+    private static Matrix<T> CreateConstantMatrix(int rows, int cols, double value)
     {
-        var m = new Matrix<double>(rows, cols);
+        var m = new Matrix<T>(rows, cols);
         for (int i = 0; i < rows; i++)
             for (int j = 0; j < cols; j++)
-                m[i, j] = value;
+                m[i, j] = ToT(value);
         return m;
     }
 
@@ -47,7 +53,7 @@ public abstract class TripletLossTestBase
         var positive = CreateMatrix(2, 3, 0.15);
         var negative = CreateMatrix(2, 3, 0.9);
 
-        double value = loss.CalculateLoss(anchor, positive, negative);
+        double value = ToD(loss.CalculateLoss(anchor, positive, negative));
 
         Assert.False(double.IsNaN(value), "Loss returned NaN.");
         Assert.False(double.IsInfinity(value), "Loss returned Infinity.");
@@ -67,8 +73,8 @@ public abstract class TripletLossTestBase
         var positive = CreateMatrix(2, 3, 0.15);
         var negative = CreateMatrix(2, 3, 0.9);
 
-        double value = loss.CalculateLoss(anchor, positive, negative);
-        Assert.True(value >= -1e-10, $"Triplet loss should be non-negative but got {value}.");
+        double value = ToD(loss.CalculateLoss(anchor, positive, negative));
+        Assert.True(value >= -Tolerance, $"Triplet loss should be non-negative but got {value}.");
     }
 
     // =========================================================================
@@ -85,8 +91,8 @@ public abstract class TripletLossTestBase
         var positive = CreateConstantMatrix(1, 3, 0.5);
         var negative = CreateConstantMatrix(1, 3, 100.0);
 
-        double value = loss.CalculateLoss(anchor, positive, negative);
-        Assert.True(value < 1e-10,
+        double value = ToD(loss.CalculateLoss(anchor, positive, negative));
+        Assert.True(value < Tolerance,
             $"Loss should be 0 when positive distance << negative distance, but got {value}.");
     }
 
@@ -105,10 +111,10 @@ public abstract class TripletLossTestBase
         var closePositive = CreateConstantMatrix(1, 3, 0.1);
         var farPositive = CreateConstantMatrix(1, 3, 1.5);
 
-        double closeLoss = loss.CalculateLoss(anchor, closePositive, negative);
-        double farLoss = loss.CalculateLoss(anchor, farPositive, negative);
+        double closeLoss = ToD(loss.CalculateLoss(anchor, closePositive, negative));
+        double farLoss = ToD(loss.CalculateLoss(anchor, farPositive, negative));
 
-        Assert.True(farLoss >= closeLoss - 1e-10,
+        Assert.True(farLoss >= closeLoss - Tolerance,
             $"Farther positive should produce larger loss: close={closeLoss}, far={farLoss}.");
     }
 
@@ -129,11 +135,11 @@ public abstract class TripletLossTestBase
         // All three gradients come from one backward pass over the triplet forward, which is what
         // the objective needs: the anchor is pulled toward the positive and pushed from the
         // negative in the same step.
-        using var tape = new GradientTape<double>();
+        using var tape = new GradientTape<T>();
 
-        var a = Tensor<double>.FromMatrix(anchor);
-        var pos = Tensor<double>.FromMatrix(positive);
-        var neg = Tensor<double>.FromMatrix(negative);
+        var a = Tensor<T>.FromMatrix(anchor);
+        var pos = Tensor<T>.FromMatrix(positive);
+        var neg = Tensor<T>.FromMatrix(negative);
 
         var scalar = loss.ComputeTapeLoss(a, pos, neg);
         var gradients = tape.ComputeGradients(scalar, new[] { a, pos, neg });
@@ -146,12 +152,12 @@ public abstract class TripletLossTestBase
         {
             for (int j = 0; j < anchorGrad.Columns; j++)
             {
-                Assert.False(double.IsNaN(anchorGrad[i, j]), $"Anchor gradient[{i},{j}] is NaN.");
-                Assert.False(double.IsInfinity(anchorGrad[i, j]), $"Anchor gradient[{i},{j}] is Infinity.");
-                Assert.False(double.IsNaN(positiveGrad[i, j]), $"Positive gradient[{i},{j}] is NaN.");
-                Assert.False(double.IsInfinity(positiveGrad[i, j]), $"Positive gradient[{i},{j}] is Infinity.");
-                Assert.False(double.IsNaN(negativeGrad[i, j]), $"Negative gradient[{i},{j}] is NaN.");
-                Assert.False(double.IsInfinity(negativeGrad[i, j]), $"Negative gradient[{i},{j}] is Infinity.");
+                Assert.False(double.IsNaN(ToD(anchorGrad[i, j])), $"Anchor gradient[{i},{j}] is NaN.");
+                Assert.False(double.IsInfinity(ToD(anchorGrad[i, j])), $"Anchor gradient[{i},{j}] is Infinity.");
+                Assert.False(double.IsNaN(ToD(positiveGrad[i, j])), $"Positive gradient[{i},{j}] is NaN.");
+                Assert.False(double.IsInfinity(ToD(positiveGrad[i, j])), $"Positive gradient[{i},{j}] is Infinity.");
+                Assert.False(double.IsNaN(ToD(negativeGrad[i, j])), $"Negative gradient[{i},{j}] is NaN.");
+                Assert.False(double.IsInfinity(ToD(negativeGrad[i, j])), $"Negative gradient[{i},{j}] is Infinity.");
             }
         }
     }
@@ -173,3 +179,6 @@ public abstract class TripletLossTestBase
             loss.CalculateLoss(anchor, positive, anchor));
     }
 }
+
+/// <summary>Default-precision alias for existing hand-written fixtures.</summary>
+public abstract class TripletLossTestBase : TripletLossTestBase<double> { }

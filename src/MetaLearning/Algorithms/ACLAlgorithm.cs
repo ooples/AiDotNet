@@ -54,7 +54,7 @@ namespace AiDotNet.MetaLearning.Algorithms;
     Authors = "Joan Serra, Didac Suris, Marius Miron, Alexandros Karatzoglou")]
 [ComponentType(ComponentType.MetaLearner)]
 [PipelineStage(PipelineStage.Training)]
-public class ACLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
+public partial class ACLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
     private IParameterizable<T, TInput, TOutput>? _cachedParamModel;
     private IParameterizable<T, TInput, TOutput> ParamModel => _cachedParamModel ??= InterfaceGuard.Parameterizable(MetaModel);
@@ -63,6 +63,7 @@ public class ACLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutp
     private readonly int _paramDim;
 
     /// <summary>Per-parameter importance scores (accumulated via EMA).</summary>
+    [Buffer]
     private Vector<T> _importance;
 
     /// <inheritdoc/>

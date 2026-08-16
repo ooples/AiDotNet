@@ -1,6 +1,7 @@
 using System;
 using AiDotNet.Diffusion.NoisePredictors;
 using AiDotNet.Enums;
+using AiDotNet.Models.Parameters;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
 
@@ -96,6 +97,17 @@ public class PredictorParameterStreamingTests
     }
 
     [Fact]
+    public async System.Threading.Tasks.Task UViT_ManifestReportsDeferredRatherThanParameterFree()
+    {
+        await System.Threading.Tasks.Task.Yield();
+
+        var predictor = UViT(7);
+        var provider = Assert.IsAssignableFrom<IParameterManifestProvider>(predictor);
+
+        Assert.Equal(ParameterReadiness.ShapeDeferred, provider.ParameterLayout.Readiness);
+    }
+
+    [Fact]
     public void UViT_Chunks_IndexIdentical()
     {
         var p = UViT(7);
@@ -161,6 +173,27 @@ public class PredictorParameterStreamingTests
         src.PredictNoise(UNetInput(), 0);
         dst.PredictNoise(UNetInput(), 0);
         AssertRoundTrips(src, dst);
+    }
+
+    [Fact]
+    public void UNet_Clone_RoundTripsParametersAndOutput()
+    {
+        var src = UNet(1);
+        var input = UNetInput();
+        var expectedOutput = src.PredictNoise(input, 0);
+        var expectedParameters = src.GetParameters();
+
+        var clone = (UNetNoisePredictor<double>)src.Clone();
+        var actualParameters = clone.GetParameters();
+        var actualOutput = clone.PredictNoise(input, 0);
+
+        Assert.Equal(expectedParameters.Length, actualParameters.Length);
+        for (int i = 0; i < expectedParameters.Length; i++)
+            Assert.Equal(expectedParameters[i], actualParameters[i], 12);
+
+        Assert.Equal(expectedOutput.Length, actualOutput.Length);
+        for (int i = 0; i < expectedOutput.Length; i++)
+            Assert.Equal(expectedOutput[i], actualOutput[i], 12);
     }
 
     // Generic over the element type so fixtures can choose precision (FP64 for the tiny ones; FP32 for the

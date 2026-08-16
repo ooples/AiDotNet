@@ -1,5 +1,8 @@
 ﻿using AiDotNet.ActivationFunctions;
 using AiDotNet.Engines;
+// File-level, deliberately: two Tensors namespaces in the project's global usings also define a
+// TensorLayout, so [TensorLayout(...)] only binds when this import shadows them from a nearer scope.
+using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.ModelLoading;
 using AiDotNet.NeuralNetworks.Layers;
@@ -36,8 +39,76 @@ namespace AiDotNet.Diffusion.VAE;
 /// in a compressed form suitable for diffusion.
 /// </para>
 /// </remarks>
-public class VAEEncoder<T> : LayerBase<T>
+// Roles from this encoder's own ForwardTraced doc - "Input image tensor [batch, inputChannels, H, W]"
+// producing "Concatenated mean and log variance [batch, 2*latentChannels, H/f, W/f]". Batch is NOT
+// marked optional: every pre-resolve in the constructor hands its convolutions a rank-4 shape
+// (ResolveFromShape(new[] { 1, inputChannels, inputSpatialSize, inputSpatialSize })), and nothing here
+// establishes that the stack accepts an unbatched [C,H,W].
+// OutputAxesFor below is HAND-WRITTEN: both the latent width and the downsample depth are options.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Output,
+    Note = "Channels carry mean and log-variance concatenated, hence 2 * latentChannels.")]
+[AutoParameters]
+public partial class VAEEncoder<T> : LayerBase<T>, IShapeContract
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// CHANNELS. <c>Fixed(_latentChannels * 2)</c>, matching the private <c>CalculateOutputShape</c>
+    /// (<c>new[] { latentChannels * 2, ... }</c>) and what <c>ForwardEager</c> actually builds: a
+    /// <c>_meanConv</c> and a <c>_logVarConv</c> both of <c>outputDepth: latentChannels</c>, joined by
+    /// <c>ConcatenateChannels(mean, logVar)</c>. Nothing about the input channel count survives - the
+    /// very first <c>_inputConv</c> replaces it with <c>baseChannels</c>.
+    /// </para>
+    /// <para>
+    /// SPATIAL. Every convolution in this stack is extent-preserving (3x3 stride 1 padding 1, or 1x1
+    /// stride 1 padding 0) EXCEPT the strided downsample inside each <c>DownBlock</c>, so the whole
+    /// encoder's spatial relation is exactly that one downsample repeated. There are
+    /// <c>_channelMults.Length - 1</c> of them - the constructor sets
+    /// <c>hasDownsample = level &lt; _channelMults.Length - 1</c>, "No downsample on last block" - and
+    /// each is <c>kernelSize: 3, stride: 2, padding: 1</c>.
+    /// </para>
+    /// <para>
+    /// A STACK OF WINDOWS FOLDS INTO ONE WINDOW, left to right:
+    /// <c>k = k1 + (k2-1)*s1</c>, <c>s = s1*s2</c>, <c>p = p1 + p2*s1</c>. Repeating (3, 2, 1) L times
+    /// gives <c>s = 2^L</c>, <c>k = 2*s - 1</c>, <c>p = s - 1</c> - which is why the kernel and padding
+    /// below are derived from <see cref="DownsampleFactor"/> (itself <c>2^(_channelMults.Length - 1)</c>)
+    /// rather than written out. Evaluated, that window is <c>ceil(H / 2^L)</c>.
+    /// </para>
+    /// <para>
+    /// <c>Window</c> and NOT <c>Scaled(Height, 1, DownsampleFactor)</c>, which is the tempting shorthand
+    /// and is wrong twice over: <c>Scaled</c> refuses uneven division, so it would decline on any odd
+    /// extent the layer in fact accepts, and where it did resolve it would report <c>floor</c> where a
+    /// padded stride-2 convolution produces <c>ceil</c>. The two agree only on even sizes.
+    /// </para>
+    /// <para>
+    /// The <c>inputSpatialSize</c> constructor argument is not a claim about the input. It sizes the
+    /// pre-resolved parameter shapes so <c>ParameterRegistry</c> and pretrained-weight loading work
+    /// before any forward pass; the relation above holds for whatever extent actually arrives.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        if (inputRank != 4 || _latentChannels <= 0) return null;
+
+        int stride = DownsampleFactor;
+        if (stride <= 0) return null;
+        int kernel = 2 * stride - 1;
+        int padding = stride - 1;
+
+        return new[]
+        {
+            new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+            new OutputAxisContract(TensorAxis.Channels, AxisRelation.Fixed(_latentChannels * 2)),
+            new OutputAxisContract(
+                TensorAxis.Height, AxisRelation.Window(TensorAxis.Height, kernel, stride, padding)),
+            new OutputAxisContract(
+                TensorAxis.Width, AxisRelation.Window(TensorAxis.Width, kernel, stride, padding)),
+        };
+    }
+
     /// <summary>
     /// Input convolution from image channels to base channels.
     /// </summary>
@@ -312,7 +383,7 @@ public class VAEEncoder<T> : LayerBase<T>
     /// </summary>
     /// <param name="input">Input image tensor [batch, inputChannels, H, W].</param>
     /// <returns>Concatenated mean and log variance [batch, 2*latentChannels, H/f, W/f].</returns>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         _lastInput = input;
         return EnsureCompileHost().Predict(input, _compileStructureVersion, () => ForwardEager(input));
@@ -524,6 +595,13 @@ public class VAEEncoder<T> : LayerBase<T>
     /// <summary>
     /// Updates all learnable parameters using gradient descent.
     /// </summary>
+    // GetParameters / SetParameters are deliberately NOT overridden. LayerBase now implements both
+    // concretely, folding over the same registry ParameterCount sums -- Parameters, this layer's
+    // registered tensors, then each sub-layer -- in one order, so the count, the vector and the
+    // restore cannot describe different tensors. The hand-written versions here walked the child
+    // fields directly while ParameterCount walked the registry, which is why this layer reported 0
+    // against a 56,092-value vector and every model containing it inherited the mismatch.
+
     public override void UpdateParameters(T learningRate)
     {
         _inputConv.UpdateParameters(learningRate);
@@ -544,32 +622,6 @@ public class VAEEncoder<T> : LayerBase<T>
         _quantConv.UpdateParameters(learningRate);
     }
 
-    /// <summary>
-    /// Gets all trainable parameters as a single vector.
-    /// </summary>
-    public override Vector<T> GetParameters()
-    {
-        var paramsList = new List<T>();
-
-        AddParameters(paramsList, _inputConv.GetParameters());
-
-        foreach (var block in _downBlocks)
-        {
-            AddParameters(paramsList, block.GetParameters());
-        }
-
-        foreach (var block in _midBlocks)
-        {
-            AddParameters(paramsList, block.GetParameters());
-        }
-
-        AddParameters(paramsList, _normOut.GetParameters());
-        AddParameters(paramsList, _meanConv.GetParameters());
-        AddParameters(paramsList, _logVarConv.GetParameters());
-        AddParameters(paramsList, _quantConv.GetParameters());
-
-        return new Vector<T>(paramsList.ToArray());
-    }
 
     private static void AddParameters(List<T> list, Vector<T> parameters)
     {
@@ -579,30 +631,6 @@ public class VAEEncoder<T> : LayerBase<T>
         }
     }
 
-    /// <summary>
-    /// Sets all trainable parameters from a single vector.
-    /// </summary>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int index = 0;
-
-        SetLayerParams(_inputConv, parameters, ref index);
-
-        foreach (var block in _downBlocks)
-        {
-            SetLayerParams(block, parameters, ref index);
-        }
-
-        foreach (var block in _midBlocks)
-        {
-            SetLayerParams(block, parameters, ref index);
-        }
-
-        SetLayerParams(_normOut, parameters, ref index);
-        SetLayerParams(_meanConv, parameters, ref index);
-        SetLayerParams(_logVarConv, parameters, ref index);
-        SetLayerParams(_quantConv, parameters, ref index);
-    }
 
     private static void SetLayerParams(ILayer<T> layer, Vector<T> parameters, ref int index)
     {

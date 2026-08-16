@@ -2,6 +2,7 @@
 using AiDotNet.Attributes;
 using AiDotNet.Classification;
 using AiDotNet.Enums;
+using AiDotNet.Models.Parameters;
 using AiDotNet.Models.Options;
 using AiDotNet.Tensors.Helpers;
 using Newtonsoft.Json;
@@ -77,27 +78,31 @@ namespace AiDotNet.Classification.SVM;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("New Support Vector Algorithms", "https://doi.org/10.1162/089976600300015565", Year = 2000, Authors = "Bernhard Scholkopf, Alex J. Smola, Robert C. Williamson, Peter L. Bartlett")]
-public class NuSupportVectorClassifier<T> : SVMBase<T>
+public partial class NuSupportVectorClassifier<T> : SVMBase<T>
 {
     /// <summary>
     /// Stored training features.
     /// </summary>
+    [Buffer(Availability = ParameterAvailability.Fit)]
     private Matrix<T>? _xTrain;
 
     /// <summary>
     /// Stored training labels (converted to +1/-1).
     /// </summary>
+    [Buffer(Availability = ParameterAvailability.Fit)]
     private Vector<T>? _yTrain;
 
     /// <summary>
     /// Alpha coefficients.
     /// </summary>
+    [FittedParameter]
     private Vector<T>? _alphas;
 
     /// <summary>
     /// Rho parameter (offset in the decision function).
     /// </summary>
 
+    [FittedParameter]
     private T _rho;
 
 

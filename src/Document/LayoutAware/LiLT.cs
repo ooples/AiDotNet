@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Document.Interfaces;
 using AiDotNet.Document.Options;
 using AiDotNet.Enums;
@@ -62,7 +62,7 @@ namespace AiDotNet.Document.LayoutAware;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("LiLT: A Simple yet Effective Language-Independent Layout Transformer for Structured Document Understanding", "https://doi.org/10.48550/arXiv.2202.13669", Year = 2022, Authors = "Jiapeng Wang, Lianwen Jin, Kai Ding")]
-public class LiLT<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, IDocumentQA<T>
+public partial class LiLT<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, IDocumentQA<T>
 {
     private readonly LiLTOptions _options;
 
@@ -74,7 +74,7 @@ public class LiLT<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, IDocume
     private bool _useNativeMode;
     private readonly InferenceSession? _onnxSession;
     private readonly ITokenizer _tokenizer;
-    private readonly IOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private int _hiddenDim;
     private int _numLayers;
     private int _numHeads;
@@ -89,9 +89,9 @@ public class LiLT<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, IDocume
     private readonly List<ILayer<T>> _outputLayers = [];
 
     // Learnable embeddings
-    private Tensor<T>? _textPositionEmbeddings;
-    private Tensor<T>? _layoutPositionEmbeddings;
-    private Tensor<T>? _spatialEmbeddings;
+    // The text-position, layout-position and spatial coordinate tables used to be model fields
+    // here. They are now inside the two LayoutEmbeddingLayers at the front of the stack, where the
+    // forward pass reads them -- see LayerHelper.CreateDefaultLiLTLayers.
 
     #endregion
 
@@ -143,7 +143,7 @@ public class LiLT<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, IDocume
         int numHeads = 12,
         int vocabSize = 30522,
         string textBackbone = "bert-base",
-        IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         LiLTOptions? options = null)
         : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
@@ -198,7 +198,7 @@ public class LiLT<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, IDocume
         int numHeads = 12,
         int vocabSize = 30522,
         string textBackbone = "bert-base",
-        IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         LiLTOptions? options = null)
         : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
@@ -221,7 +221,6 @@ public class LiLT<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, IDocume
         _tokenizer = tokenizer ?? CreateTokenizerForBackbone(textBackbone, vocabSize);
 
         InitializeLayers();
-        InitializeEmbeddings();
     }
 
     #endregion
@@ -249,31 +248,8 @@ public class LiLT<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, IDocume
             numHeads: _numHeads,
             layoutDim: _hiddenDim,
             vocabSize: _vocabSize,
-            numClasses: _numClasses));
-    }
-
-    private void InitializeEmbeddings()
-    {
-        var random = RandomHelper.CreateSeededRandom(42);
-
-        _textPositionEmbeddings = Tensor<T>.CreateDefault([MaxSequenceLength, _hiddenDim], NumOps.Zero);
-        _layoutPositionEmbeddings = Tensor<T>.CreateDefault([MaxSequenceLength, _hiddenDim], NumOps.Zero);
-        _spatialEmbeddings = Tensor<T>.CreateDefault([1024, _hiddenDim], NumOps.Zero);
-
-        InitializeWithSmallRandomValues(_textPositionEmbeddings, random, 0.02);
-        InitializeWithSmallRandomValues(_layoutPositionEmbeddings, random, 0.02);
-        InitializeWithSmallRandomValues(_spatialEmbeddings, random, 0.02);
-    }
-
-    private void InitializeWithSmallRandomValues(Tensor<T> tensor, Random random, double stdDev)
-    {
-        for (int i = 0; i < tensor.Data.Length; i++)
-        {
-            double u1 = 1.0 - random.NextDouble();
-            double u2 = 1.0 - random.NextDouble();
-            double randStdNormal = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Sin(2.0 * Math.PI * u2);
-            tensor.Data.Span[i] = NumOps.FromDouble(randStdNormal * stdDev);
-        }
+            numClasses: _numClasses,
+            maxPosition2D: 1024));
     }
 
     private static ITokenizer CreateTokenizerForBackbone(string textBackbone, int vocabSize)
@@ -1031,10 +1007,15 @@ public class LiLT<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, IDocume
     }
 
     // ── Faithful LiLT dual-stream forward with BiACM (Wang et al. 2022, §3.2) ──────────────────────────
-    // Layer layout from CreateDefaultLiLTLayers: [0]=text EmbeddingLayer, [1]=text PositionalEncoding,
-    // [2]=layout Dense(box→hidden), [3]=layout LayerNorm, then numLayers blocks of 7 layers
+    // Layer layout from CreateDefaultLiLTLayers: [0]=text LayoutEmbeddingLayer (word + learned 1D
+    // position, no layout terms), [1]=boxes-only LayoutEmbeddingLayer (the paper's per-coordinate
+    // tables), [2]=layout LayerNorm, then numLayers blocks of 7 layers
     // [textMHA, textLN, layoutMHA, layoutLN, ffn1, ffn2, ffnLN], then [Dropout, Dense(head)].
-    private const int LiLTPrefixLayers = 4;
+    //
+    // Three, not four: the text side's Embedding + sinusoidal PositionalEncoding pair became one
+    // block with LEARNED positions, and the layout side's Dense(box→hidden) became the coordinate
+    // lookup the paper specifies.
+    private const int LiLTPrefixLayers = 3;
     private const int LiLTBlockLayers = 7;
     private int HeadDim => _hiddenDim / _numHeads;
 
@@ -1044,15 +1025,15 @@ public class LiLT<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, IDocume
     // layout branch's gradient — exactly the asymmetric coupling in the paper.
     private Tensor<T> RunDualStream(Tensor<T> textTokens, Tensor<T>? layoutBoxes)
     {
-        // Text stream embeddings: token embedding + positional encoding.
-        var text = Layers[1].Forward(Layers[0].Forward(textTokens));
+        // Text stream embeddings: word + learned 1D position, in one block.
+        var text = Layers[0].Forward(textTokens);
 
         // Layout stream embeddings from bounding boxes: Dense(box→hidden) + LayerNorm. Absent boxes ⇒
         // text-only operation (graceful degradation the reference model lacks); BiACM then reduces to a
         // standard text self-attention transformer.
         Tensor<T>? layout = null;
         if (layoutBoxes is not null)
-            layout = Layers[3].Forward(Layers[2].Forward(layoutBoxes));
+            layout = Layers[2].Forward(Layers[1].Forward(layoutBoxes));
 
         int numBlocks = (Layers.Count - LiLTPrefixLayers - 2) / LiLTBlockLayers;
         for (int b = 0; b < numBlocks; b++)
@@ -1147,11 +1128,139 @@ public class LiLT<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, IDocume
     // modality, so defer to the base sequential walk rather than forcing it through the token path.
     /// <inheritdoc/>
     protected override Tensor<T> Forward(Tensor<T> input)
-        => (_useNativeMode && input.Rank <= 2) ? RunDualStream(input, null) : base.Forward(input);
+        => RouteDualStream(input, trainingPath: false);
 
     /// <inheritdoc/>
     public override Tensor<T> ForwardForTraining(Tensor<T> input)
-        => (_useNativeMode && input.Rank <= 2) ? RunDualStream(input, null) : base.ForwardForTraining(input);
+        => RouteDualStream(input, trainingPath: true);
+
+    /// <summary>
+    /// Sends an input through the BiACM dual stream, unpacking bounding boxes when they are present.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Both forwards used to pass <c>null</c> for boxes. The layout stream was therefore unreachable
+    /// from <c>Predict</c> and from <c>Train</c> alike -- LiLT could only ever run, and only ever
+    /// learn, as a plain text transformer, which is the one thing the paper is not about. The only
+    /// entry point that accepted boxes, <see cref="EncodeDualStream"/>, opens a <c>NoGradScope</c>
+    /// and so could never train the layout side either.
+    /// </para>
+    /// <para>
+    /// A packed <c>[seq, 5]</c> row -- <c>(tokenId, x0, y0, x1, y1)</c>, the convention the rest of
+    /// this family uses -- is split here and both halves reach the streams, on the training path as
+    /// well as the inference one. A bare token sequence still runs text-only, so callers with no OCR
+    /// boxes are unaffected. A higher-rank input is not LiLT's modality and defers to the base walk.
+    /// </para>
+    /// </remarks>
+    /// <summary>
+    /// Reports per-stage activations by running LiLT's actual dual stream.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The base implementation walks <c>Layers</c> as a chain, feeding each layer the previous one's
+    /// output. LiLT is not a chain: <c>Layers[0]</c> embeds text, <c>Layers[1..2]</c> embed layout
+    /// from bounding boxes, and the blocks after them consume BOTH. Walking it linearly handed the
+    /// layout embedding a text activation, which the old <c>Dense(box-&gt;hidden)</c> silently accepted
+    /// and multiplied -- so the reported "activations" were arithmetic on mismatched tensors that
+    /// corresponded to nothing the model computes. The coordinate lookup that replaced the Dense
+    /// rejects it outright, which is the correct response to being handed the wrong stream.
+    /// </para>
+    /// <para>
+    /// Running the real dual stream reports what the model actually produces, and names the two
+    /// streams so a caller can tell them apart.
+    /// </para>
+    /// </remarks>
+    public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input)
+    {
+        if (!_useNativeMode || input.Rank > 2)
+        {
+            return base.GetNamedLayerActivations(input);
+        }
+
+        using var _ = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+
+        Tensor<T> tokens = input;
+        Tensor<T>? boxes = null;
+        if (TrySplitPackedLayout(input, out var splitTokens, out var splitBoxes))
+        {
+            tokens = splitTokens;
+            boxes = splitBoxes;
+        }
+
+        var activations = new Dictionary<string, Tensor<T>>
+        {
+            ["text_embedding"] = Layers[0].Forward(tokens),
+        };
+
+        if (boxes is not null)
+        {
+            activations["layout_embedding"] = Layers[2].Forward(Layers[1].Forward(boxes));
+        }
+
+        activations["output"] = RunDualStream(tokens, boxes);
+        return activations;
+    }
+
+
+    private Tensor<T> RouteDualStream(Tensor<T> input, bool trainingPath)
+    {
+        if (_useNativeMode && TrySplitPackedLayout(input, out var tokens, out var boxes))
+        {
+            return RunDualStream(tokens, boxes);
+        }
+
+        if (_useNativeMode && input.Rank <= 2)
+        {
+            return RunDualStream(input, null);
+        }
+
+        return trainingPath ? base.ForwardForTraining(input) : base.Forward(input);
+    }
+
+    /// <summary>
+    /// Splits a packed <c>[seq, 5]</c> or <c>[batch, seq, 5]</c> tensor into token IDs and the
+    /// <c>[.., 4]</c> box tensor the layout stream consumes. False when the input is not packed.
+    /// </summary>
+    private static bool TrySplitPackedLayout(Tensor<T> input, out Tensor<T> tokens, out Tensor<T>? boxes)
+    {
+        tokens = input;
+        boxes = null;
+
+        int rank = input.Rank;
+        if (rank < 2 || input.Shape[rank - 1] != NeuralNetworks.Layers.LayoutEmbeddingLayer<T>.PackedRowWidth)
+            return false;
+
+        int rows = 1;
+        for (int i = 0; i < rank - 1; i++) rows *= input.Shape[i];
+
+        var tokenShape = new int[rank - 1];
+        for (int i = 0; i < rank - 1; i++) tokenShape[i] = input.Shape[i];
+
+        var boxShape = new int[rank];
+        for (int i = 0; i < rank - 1; i++) boxShape[i] = input.Shape[i];
+        boxShape[rank - 1] = LayoutBoxWidth;
+
+        var tokenTensor = new Tensor<T>(tokenShape);
+        var boxTensor = new Tensor<T>(boxShape);
+        var src = input.Data.Span;
+        var tokenDst = tokenTensor.Data.Span;
+        var boxDst = boxTensor.Data.Span;
+
+        for (int r = 0; r < rows; r++)
+        {
+            int b = r * NeuralNetworks.Layers.LayoutEmbeddingLayer<T>.PackedRowWidth;
+            tokenDst[r] = src[b];
+            for (int c = 0; c < LayoutBoxWidth; c++)
+                boxDst[r * LayoutBoxWidth + c] = src[b + 1 + c];
+        }
+
+        tokens = tokenTensor;
+        boxes = boxTensor;
+        return true;
+    }
+
+    /// <summary>Coordinates per box: x0, y0, x1, y1.</summary>
+    private const int LayoutBoxWidth = 4;
 
     /// <inheritdoc/>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
@@ -1167,7 +1276,7 @@ public class LiLT<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, IDocume
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expectedOutput, _optimizer as IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>);
+            TrainWithTape(input, expectedOutput, _optimizer);
         }
         finally
         {
@@ -1175,19 +1284,18 @@ public class LiLT<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, IDocume
         }
     }
 
-    /// <inheritdoc/>
-    public override void UpdateParameters(Vector<T> gradients)
-    {
-        if (!_useNativeMode)
-            throw new NotSupportedException("Parameter updates not supported in ONNX mode.");
+    // UpdateParameters applied a GRADIENT STEP, but its one-argument form is the value setter and every caller passes values -- the override corrupted the model. Removed under AIDN082.
 
-        var currentParams = GetParameters();
-        T lr = NumOps.FromDouble(0.00005);
-
-        currentParams = Engine.Subtract(currentParams, Engine.Multiply(gradients, lr));
-        SetParameters(currentParams);
-    }
-
+    /// <summary>
+    /// Parameters cannot be written while the model is backed by a loaded ONNX graph: the weights
+    /// belong to that graph, not to this instance.
+    /// </summary>
+    /// <remarks>
+    /// Replaces a hand-written throw that used to sit inside UpdateParameters. The base checks this
+    /// on every mutating entry point rather than the one member the throw happened to guard, and
+    /// reading -- ParameterCount and GetParameters -- stays available either way.
+    /// </remarks>
+    protected override bool SupportsParameterMutation => _useNativeMode;
     #endregion
 
     #region Disposal

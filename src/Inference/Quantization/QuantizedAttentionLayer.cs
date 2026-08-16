@@ -1,4 +1,7 @@
-﻿using AiDotNet.Autodiff;
+﻿// File-level, deliberately: two Tensors namespaces in the project's global usings also define a
+// TensorLayout, so [TensorLayout(...)] only binds when this import shadows them from a nearer scope.
+using AiDotNet.Attributes;
+using AiDotNet.Autodiff;
 using AiDotNet.Configuration;
 using AiDotNet.Enums;
 using AiDotNet.NeuralNetworks.Attention;
@@ -24,7 +27,25 @@ namespace AiDotNet.Inference.Quantization;
 /// time so you get faster prediction with less memory.
 /// </para>
 /// </remarks>
-internal sealed class QuantizedAttentionLayer : LayerBase<float>
+// Shape-preserving, at the two ranks ForwardTraced handles: it reads seqLen from Shape[rank-2] and embDim
+// from Shape[rank-1], then rebuilds the result as [seqLen, _embeddingDimension] for rank 2 and as the
+// original leading axes with [seqLen, _embeddingDimension] appended for rank 3. Same roles as the
+// MultiHeadAttentionLayer / GroupedQueryAttentionLayer this replaces - quantization compresses the stored
+// weights, it does not change what the attention block emits, so a differing contract here would be a bug
+// in the swap-in rather than a property worth declaring.
+//
+// No hand-written OutputAxesFor: every axis is carried through, so the generated Same(role) per axis is
+// the whole relation. The feature axis is Same rather than Fixed(_embeddingDimension) deliberately -
+// the output projection's OutDim equals the width the input had to arrive with (the Q/K/V projections
+// take InDim = _embeddingDimension), so the layer returns the width it was given rather than setting one.
+[TensorLayout(TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Output)]
+[AutoParameters]
+internal sealed partial class QuantizedAttentionLayer : LayerBase<float>, IShapeContract
 {
     private readonly int _embeddingDimension;
     private readonly int _headCount;
@@ -121,8 +142,6 @@ internal sealed class QuantizedAttentionLayer : LayerBase<float>
 
     public override bool SupportsTraining => false;
 
-    public override long ParameterCount => 0;
-
     public override Tensor<float>? GetWeights() => null;
 
     public override Tensor<float>? GetBiases() => null;
@@ -159,7 +178,7 @@ internal sealed class QuantizedAttentionLayer : LayerBase<float>
     /// </summary>
     internal int OutputBiasLength => _outputBias.Length;
 
-    public override Tensor<float> Forward(Tensor<float> input)
+    protected override Tensor<float> ForwardTraced(Tensor<float> input)
     {
         int rank = input.Shape.Length;
         int seqLen = rank >= 2 ? input.Shape[rank - 2] : 1;
@@ -259,12 +278,7 @@ internal sealed class QuantizedAttentionLayer : LayerBase<float>
     public override void UpdateParameters(float learningRate)
         => throw new NotSupportedException("QuantizedAttentionLayer is inference-only.");
 
-    public override void UpdateParameters(Vector<float> parameters)
-        => throw new NotSupportedException("QuantizedAttentionLayer is inference-only.");
-
-    public override Vector<float> GetParameters()
-        => Vector<float>.Empty();
-
+    // UpdateParameters refused unconditionally; the base implements it properly.
     public override void ResetState()
     {
         // Inference-only; no recurrent state to clear.

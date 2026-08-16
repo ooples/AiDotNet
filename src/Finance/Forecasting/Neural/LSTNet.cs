@@ -70,7 +70,7 @@ namespace AiDotNet.Finance.Forecasting.Neural;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Modeling Long- and Short-Term Temporal Patterns with Deep Neural Networks", "https://arxiv.org/abs/1703.07015", Year = 2018, Authors = "Guokun Lai, Wei-Cheng Chang, Yiming Yang, Hanxiao Liu")]
-public class LSTNet<T> : ForecastingModelBase<T>
+public partial class LSTNet<T> : ForecastingModelBase<T>
 {
     #region Execution Mode
 
@@ -565,17 +565,8 @@ public class LSTNet<T> : ForecastingModelBase<T>
         base.Train(input, target);
     }
 
-    /// <inheritdoc/>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the LSTNet model, UpdateParameters updates internal parameters or state. This keeps the LSTNet architecture aligned with the latest values.
-    /// </para>
-    /// </remarks>
-    public override void UpdateParameters(Vector<T> gradients)
-    {
-        // Parameters are updated by the optimizer in Train method
-    }
-
+    // UpdateParameters was an empty override, silently dropping every restore. The base
+    // distributes the vector over the declared enumeration.
     /// <inheritdoc/>
     /// <remarks>
     /// <para>

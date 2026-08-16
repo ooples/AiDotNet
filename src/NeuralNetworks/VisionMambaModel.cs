@@ -78,7 +78,7 @@ public enum VisionScanPattern
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Vision Mamba: Efficient Visual Representation Learning with Bidirectional State Space Model", "https://arxiv.org/abs/2401.09417", Year = 2024, Authors = "Lianghui Zhu, Bencheng Liao, Qian Zhang, Xinlong Wang, Wenyu Liu, Xinggang Wang")]
-public class VisionMambaModel<T> : NeuralNetworkBase<T>
+public partial class VisionMambaModel<T> : ImageClassifierModelLayoutBase<T>
 {
     private readonly VisionMambaOptions _options;
     private readonly int _imageHeight;
@@ -347,21 +347,7 @@ public class VisionMambaModel<T> : NeuralNetworkBase<T>
         return logits;
     }
 
-    public override void UpdateParameters(Vector<T> gradients)
-    {
-        if (gradients.Length != ParameterCount)
-        {
-            throw new ArgumentException(
-                $"Expected {ParameterCount} gradients, but got {gradients.Length}",
-                nameof(gradients));
-        }
-
-        var currentParams = GetParameters();
-        T learningRate = NumOps.FromDouble(0.001);
-        currentParams = Engine.Subtract(currentParams, Engine.Multiply(gradients, learningRate));
-        SetParameters(currentParams);
-    }
-
+    // UpdateParameters applied a GRADIENT STEP, but its one-argument form is the value setter and every caller passes values -- the override corrupted the model. Removed under AIDN082.
     public override ModelMetadata<T> GetModelMetadata()
     {
         return new ModelMetadata<T>

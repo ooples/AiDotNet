@@ -63,7 +63,7 @@ namespace AiDotNet.TimeSeries;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("N-BEATS: Neural basis expansion analysis for interpretable time series forecasting", "https://arxiv.org/abs/1905.10437", Year = 2020, Authors = "Boris N. Oreshkin, Dmitri Carpov, Nicolas Chapados, Yoshua Bengio")]
-public class NBEATSModel<T> : TimeSeriesModelBase<T>, ISupportsLossFunction<T>
+public partial class NBEATSModel<T> : TimeSeriesModelBase<T>, ISupportsLossFunction<T>
 {
     /// <inheritdoc />
     /// <remarks>
@@ -74,6 +74,7 @@ public class NBEATSModel<T> : TimeSeriesModelBase<T>, ISupportsLossFunction<T>
 
     private readonly NBEATSModelOptions<T> _options;
     private readonly List<NBEATSBlock<T>> _blocks;
+    [Buffer]
     private Vector<T> _trainingSeries = Vector<T>.Empty();
 
     // Normalization statistics computed during training
@@ -1196,69 +1197,12 @@ public class NBEATSModel<T> : TimeSeriesModelBase<T>, ISupportsLossFunction<T>
         return new NBEATSModel<T>(new NBEATSModelOptions<T>(_options));
     }
 
-    /// <summary>
-    /// Gets the total number of trainable parameters in the model.
-    /// </summary>
-    public override long ParameterCount
-    {
-        get
-        {
-            int totalParams = 0;
-            foreach (var block in _blocks)
-            {
-                totalParams += (int)block.ParameterCount;
-            }
-            return totalParams;
-        }
-    }
-
-    /// <summary>
-    /// Gets all model parameters as a single vector.
-    /// </summary>
-    public override Vector<T> GetParameters()
-    {
-        var allParams = new List<T>();
-
-        foreach (var block in _blocks)
-        {
-            Vector<T> blockParams = block.GetParameters();
-            for (int i = 0; i < blockParams.Length; i++)
-            {
-                allParams.Add(blockParams[i]);
-            }
-        }
-
-        return new Vector<T>(allParams.ToArray());
-    }
-
-    /// <summary>
-    /// Sets all model parameters from a single vector.
-    /// </summary>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int expectedCount = ParameterCountHelper.ToFlatVectorSize(ParameterCount);
-        if (parameters.Length != expectedCount)
-        {
-            throw new ArgumentException(
-                $"Expected {expectedCount} parameters, but got {parameters.Length}.",
-                nameof(parameters));
-        }
-
-        int idx = 0;
-        foreach (var block in _blocks)
-        {
-            int blockParamCount = checked((int)block.ParameterCount);
-            Vector<T> blockParams = new Vector<T>(blockParamCount);
-
-            for (int i = 0; i < blockParamCount; i++)
-            {
-                blockParams[i] = parameters[idx++];
-            }
-
-            block.SetParameters(blockParams);
-        }
-    }
-
+    // ParameterCount restated a fold the base now derives from generated component registration.
+    // Removed under AIDN082.
+    // GetParameters restated a fold the base now derives from generated component registration.
+    // Removed under AIDN082.
+    // SetParameters restated a fold the base now derives from generated component registration.
+    // Removed under AIDN082.
     /// <summary>
     /// Creates slice weights for extracting a single element from a vector.
     /// </summary>

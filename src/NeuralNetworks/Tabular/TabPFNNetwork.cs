@@ -61,7 +61,7 @@ namespace AiDotNet.NeuralNetworks.Tabular;
     "https://arxiv.org/abs/2207.01848",
     Year = 2023,
     Authors = "Noah Hollmann, Samuel Müller, Katharina Eggensperger, Frank Hutter")]
-public class TabPFNNetwork<T> : NeuralNetworkBase<T>
+public class TabPFNNetwork<T> : TabularNeuralNetworkBase<T>
 {
     private readonly TabPFNOptions<T> _options;
 
@@ -111,7 +111,15 @@ public class TabPFNNetwork<T> : NeuralNetworkBase<T>
     {
         _options = options ?? new TabPFNOptions<T>();
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        // TabPFN (Hollmann et al., ICLR 2023) trains its transformer at 1e-4. Built bare, the
+        // optimizer ran on framework defaults; the rate now comes from TabPFNOptions.LearningRate,
+        // which carries that published value as its default so callers can override it rather than
+        // being stuck with a hardcoded constant.
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
+            new AiDotNet.Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate,
+            });
 
         if (_options.EmbeddingDimension % _options.NumHeads != 0)
         {
@@ -182,22 +190,8 @@ public class TabPFNNetwork<T> : NeuralNetworkBase<T>
         }
     }
 
-    /// <inheritdoc/>
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        int startIndex = 0;
-        foreach (var layer in Layers)
-        {
-            int layerParameterCount = checked((int)layer.ParameterCount);
-            if (layerParameterCount > 0)
-            {
-                Vector<T> layerParameters = parameters.SubVector(startIndex, layerParameterCount);
-                layer.UpdateParameters(layerParameters);
-                startIndex += layerParameterCount;
-            }
-        }
-    }
-
+    // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
+    // exactly the same enumeration, so this said nothing the base does not already say.
     /// <inheritdoc/>
     public override Dictionary<string, T> GetFeatureImportance()
     {

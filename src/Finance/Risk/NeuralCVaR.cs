@@ -244,26 +244,8 @@ public class NeuralCVaR<T> : RiskModelBase<T>
 
     #region NeuralNetworkBase Overrides
 
-    /// <summary>
-    /// Updates the model parameters from a flat parameter vector.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> This lets you load or apply all model weights at once,
-    /// which is useful for cloning or restoring a trained model.
-    /// </para>
-    /// </remarks>
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        int offset = 0;
-        foreach (var layer in Layers)
-        {
-            var layerParams = layer.GetParameters();
-            layer.SetParameters(parameters.Slice(offset, layerParams.Length));
-            offset += layerParams.Length;
-        }
-    }
-
+    // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
+    // exactly the same enumeration, so this said nothing the base does not already say.
     /// <summary>
     /// Creates a new instance of the NeuralCVaR model with the same configuration.
     /// </summary>

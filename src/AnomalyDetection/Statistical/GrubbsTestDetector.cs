@@ -45,8 +45,11 @@ namespace AiDotNet.AnomalyDetection.Statistical;
 public class GrubbsTestDetector<T> : AnomalyDetectorBase<T>
 {
     private readonly double _alpha;
+    [Buffer]
     private Vector<T>? _means;
+    [Buffer]
     private Vector<T>? _stds;
+    [Buffer]
     private Vector<T>? _criticalValues;
     private int _nFeatures;
 

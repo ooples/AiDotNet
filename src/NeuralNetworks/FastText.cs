@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -48,7 +48,7 @@ namespace AiDotNet.NeuralNetworks
     [ModelComplexity(ModelComplexity.Low)]
     [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     [ResearchPaper("Enriching Word Vectors with Subword Information", "https://arxiv.org/abs/1607.04606", Year = 2017, Authors = "Piotr Bojanowski, Edouard Grave, Armand Joulin, Tomas Mikolov")]
-    public class FastText<T> : NeuralNetworkBase<T>, IEmbeddingModel<T>
+    public class FastText<T> : TextEmbeddingModelLayoutBase<T>, IEmbeddingModel<T>
     {
         private readonly FastTextOptions _options;
 
@@ -71,6 +71,7 @@ namespace AiDotNet.NeuralNetworks
         /// The dimensionality of the embedding vectors.
         /// </summary>
         private int _embeddingDimension;
+
 
         /// <summary>
         /// The tokenizer used to process text input.
@@ -125,7 +126,7 @@ namespace AiDotNet.NeuralNetworks
         /// <param name="tokenizer">Optional tokenizer for text processing.</param>
         /// <param name="optimizer">Optional optimizer for training.</param>
         /// <param name="vocabSize">The size of the vocabulary (default: 10000).</param>
-        /// <param name="bucketSize">The number of subword buckets (default: 2,000,000).</param>
+        /// <param name="bucketSize">The number of subword buckets (default: 2,000,000, the value used by the paper).</param>
         /// <param name="embeddingDimension">The dimension of the word vectors (default: 100).</param>
         /// <param name="maxTokens">The maximum tokens per sentence (default: 512).</param>
         /// <param name="lossFunction">Optional loss function. Defaults to Binary Cross Entropy.</param>
@@ -214,6 +215,7 @@ namespace AiDotNet.NeuralNetworks
             }
         }
 
+
         #endregion
 
         #region Methods
@@ -235,24 +237,8 @@ namespace AiDotNet.NeuralNetworks
             return output;
         }
 
-        /// <summary>
-        /// Updates all trainable weights in the FastText model.
-        /// </summary>
-        public override void UpdateParameters(Vector<T> parameters)
-        {
-            int index = 0;
-            foreach (var layer in Layers)
-            {
-                int layerParameterCount = checked((int)layer.ParameterCount);
-                if (layerParameterCount > 0)
-                {
-                    var layerParameters = parameters.Slice(index, layerParameterCount);
-                    layer.UpdateParameters(layerParameters);
-                    index += layerParameterCount;
-                }
-            }
-        }
-
+    // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
+    // exactly the same enumeration, so this said nothing the base does not already say.
         /// <summary>
         /// Routes inference through <see cref="NeuralNetworkBase{T}.PredictCompiled"/> for
         /// compiled-plan replay; <see cref="Forward"/> remains the eager fallback.
@@ -306,8 +292,14 @@ namespace AiDotNet.NeuralNetworks
             var inputVec = new Vector<T>(tokenIds.Select(id => NumOps.FromDouble(id)).ToArray());
             var inputTensor = Tensor<T>.FromVector(inputVec, [tokenIds.Count]);
 
-            // FastText uses word embeddings (layer 0) and n-gram embeddings (layer 1)
-            var wordEmbeds = Layers[0].Forward(inputTensor);
+            // Words and subwords are both looked up from the SAME table -- Layers[0], the chain's
+            // (vocabSize + bucketSize) x dim input matrix -- and averaged into one hidden vector.
+            // Both are indexed from the original tokens, never one from the other's output.
+            if (Layers[0] is not FastTextEmbeddingLayer<T> featureBag)
+                throw new InvalidOperationException(
+                    "FastText's native input layer must be FastTextEmbeddingLayer.");
+
+            var wordEmbeds = featureBag.LookupFeatures(inputTensor);
 
             var sumVector = new Vector<T>(_embeddingDimension);
             int totalComponents = 0;
@@ -325,7 +317,12 @@ namespace AiDotNet.NeuralNetworks
                 var ngrams = GetCharacterNGrams(tokens[s], 3, 6);
                 if (ngrams.Count > 0)
                 {
-                    var ngramIndices = ngrams.Select(ng => Math.Abs(ng.GetHashCode()) % _bucketSize).ToArray();
+                    // Subword ids live ABOVE the word ids in the one shared table, matching
+                    // fastText's (nwords + bucket) x dim input matrix: words occupy
+                    // [0, _vocabSize), hashed n-grams [_vocabSize, _vocabSize + _bucketSize).
+                    var ngramIndices = ngrams
+                        .Select(ng => _vocabSize + (Math.Abs(ng.GetHashCode()) % _bucketSize))
+                        .ToArray();
                     var ngramValues = new T[ngramIndices.Length];
                     for (int i = 0; i < ngramIndices.Length; i++)
                     {
@@ -333,7 +330,7 @@ namespace AiDotNet.NeuralNetworks
                     }
 
                     var ngramInputTensor = Tensor<T>.FromVector(new Vector<T>(ngramValues), [ngrams.Count]);
-                    var ngramEmbeds = Layers[1].Forward(ngramInputTensor);
+                    var ngramEmbeds = featureBag.LookupFeatures(ngramInputTensor);
 
                     for (int n = 0; n < ngrams.Count; n++)
                     {

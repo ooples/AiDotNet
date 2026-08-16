@@ -1,4 +1,5 @@
 using AiDotNet.Interfaces;
+using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors;
 using Xunit;
 using System.Threading.Tasks;
@@ -26,6 +27,13 @@ public abstract class AudioNNModelTestBase<T> : NeuralNetworkModelTestBase<T>
     /// </summary>
     protected override Tensor<T> CreateConstantTensor(int[] shape, double value)
     {
+        // Some audio-family models accept codec/token IDs rather than waveform samples. Their
+        // generated model contract is authoritative: an audio-shaped sine wave would be an illegal
+        // fractional token tensor. Let the shared domain-aware fixture synthesize distinct legal
+        // constants for every non-continuous domain, and reserve the waveform probe for true audio.
+        if (InputDomainFor(shape).Kind != LayerInputDomainKind.Continuous)
+            return base.CreateConstantTensor(shape, value);
+
         var tensor = new Tensor<T>(shape);
         if (value == 0.0) return tensor; // all-zero silence
 
@@ -49,7 +57,7 @@ public abstract class AudioNNModelTestBase<T> : NeuralNetworkModelTestBase<T>
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var network = CreateNetwork();
-        var input = CreateRandomTensor(InputShape, rng);
+        var input = CreateRandomTensor(EffectiveInputShape, rng);
 
         var output = network.Predict(input);
         double energy = 0;
@@ -77,7 +85,7 @@ public abstract class AudioNNModelTestBase<T> : NeuralNetworkModelTestBase<T>
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var network = CreateNetwork();
-        var silence = CreateConstantTensor(InputShape, 0.0);
+        var silence = CreateConstantTensor(EffectiveInputShape, 0.0);
 
         var output = network.Predict(silence);
 
@@ -100,6 +108,19 @@ public abstract class AudioNNModelTestBase<T> : NeuralNetworkModelTestBase<T>
     // Audio models must handle varying input sizes gracefully.
     // =====================================================
 
+    /// <summary>
+    /// Index of the <see cref="EffectiveInputShape"/> axis that represents the model's
+    /// variable-length (time / audio-token) dimension — the axis
+    /// <see cref="DifferentInputLengths_ShouldNotCrash"/> varies to simulate a
+    /// different clip. Defaults to the last axis, which is correct for the raw-audio
+    /// and time-major frontends that make up most of the audio family. Transformer
+    /// audio-language models whose input is <c>[batch, tokens, embedDim]</c> (e.g.
+    /// Pengi) must override this to the token axis: their final embedding dimension is
+    /// fixed by the attention projection weights and cannot vary, so halving the last
+    /// axis would feed an invalid embedding width rather than a shorter sequence.
+    /// </summary>
+    protected virtual int VariableLengthAxis => EffectiveInputShape.Length - 1;
+
     [Fact(Timeout = 120000)]
     public async Task DifferentInputLengths_ShouldNotCrash()
     {
@@ -108,17 +129,20 @@ public abstract class AudioNNModelTestBase<T> : NeuralNetworkModelTestBase<T>
         var rng = ModelTestHelpers.CreateSeededRandom();
         var network = CreateNetwork();
 
-        // Try input at half the default size
-        var halfShape = (int[])InputShape.Clone();
-        halfShape[halfShape.Length - 1] = Math.Max(1, halfShape[halfShape.Length - 1] / 2);
-        var smallInput = CreateRandomTensor(halfShape, rng);
+        // Grow the variable-length axis. Shrinking can violate a generated minimum-length
+        // contract (for example a separator whose convolution stack needs a full receptive
+        // field), while growing still proves the model does not hard-code the fixture length.
+        var variedShape = (int[])EffectiveInputShape.Clone();
+        int lenAxis = VariableLengthAxis;
+        variedShape[lenAxis] = checked(variedShape[lenAxis] * 2);
+        var variedInput = CreateRandomInputTensor(variedShape, rng);
 
-        var output = network.Predict(smallInput);
-        Assert.True(output.Length > 0, "Output should not be empty for smaller input.");
+        var output = network.Predict(variedInput);
+        Assert.True(output.Length > 0, "Output should not be empty for a different input length.");
         for (int i = 0; i < output.Length; i++)
         {
             Assert.False(double.IsNaN(ConvertToDouble(output[i])),
-                $"Output[{i}] is NaN for smaller input — model can't handle variable lengths.");
+                $"Output[{i}] is NaN for a different input length — model can't handle variable lengths.");
         }
     }
 
@@ -134,7 +158,7 @@ public abstract class AudioNNModelTestBase<T> : NeuralNetworkModelTestBase<T>
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var network = CreateNetwork();
-        var input = CreateRandomTensor(InputShape, rng);
+        var input = CreateRandomTensor(EffectiveInputShape, rng);
 
         var output = network.Predict(input);
         Assert.True(output.Length > 0, "Audio model produced empty output.");

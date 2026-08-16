@@ -36,7 +36,7 @@ namespace AiDotNet.ReinforcementLearning.Policies
         "https://incompleteideas.net/book/the-book-2nd.html",
         Year = 2018,
         Authors = "Sutton, R. S. & Barto, A. G.")]
-    public class DiscretePolicy<T> : PolicyBase<T>
+    public partial class DiscretePolicy<T> : PolicyBase<T>
     {
         private readonly INeuralNetwork<T> _policyNetwork;
         private readonly IExplorationStrategy<T> _explorationStrategy;

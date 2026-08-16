@@ -59,7 +59,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Deep Residual Learning for Image Recognition", "https://arxiv.org/abs/1512.03385", Year = 2016, Authors = "Kaiming He, Xiangyu Zhang, Shaoqing Ren, Jian Sun")]
-public class ResNetNetwork<T> : NeuralNetworkBase<T>
+public class ResNetNetwork<T> : ImageClassifierModelLayoutBase<T>
 {
     private readonly ResNetOptions _options;
 
@@ -444,22 +444,8 @@ public class ResNetNetwork<T> : NeuralNetworkBase<T>
     }
 
 
-    /// <summary>
-    /// Updates the parameters of all layers in the network.
-    /// </summary>
-    /// <param name="parameters">A vector containing all parameters for the network.</param>
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        int index = 0;
-        foreach (var layer in Layers)
-        {
-            int layerParameterCount = checked((int)layer.ParameterCount);
-            var layerParameters = parameters.Slice(index, layerParameterCount);
-            layer.UpdateParameters(layerParameters);
-            index += layerParameterCount;
-        }
-    }
-
+    // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
+    // exactly the same enumeration, so this said nothing the base does not already say.
     /// <summary>
     /// Makes a prediction using the ResNet network for the given input.
     /// </summary>

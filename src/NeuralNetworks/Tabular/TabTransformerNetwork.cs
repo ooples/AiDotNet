@@ -66,7 +66,7 @@ namespace AiDotNet.NeuralNetworks.Tabular;
     "https://arxiv.org/abs/2012.06678",
     Year = 2020,
     Authors = "Xin Huang, Ashish Khetan, Milan Cvitkovic, Zohar Karnin")]
-public class TabTransformerNetwork<T> : NeuralNetworkBase<T>
+public class TabTransformerNetwork<T> : TabularNeuralNetworkBase<T>
 {
     private readonly TabTransformerOptions<T> _options;
 
@@ -151,7 +151,23 @@ public class TabTransformerNetwork<T> : NeuralNetworkBase<T>
     {
         _options = options ?? new TabTransformerOptions<T>();
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+
+        if (_options.LearningRate <= 0)
+            throw new ArgumentOutOfRangeException(nameof(options), "LearningRate must be positive.");
+        if (_options.WeightDecay < 0)
+            throw new ArgumentOutOfRangeException(nameof(options), "WeightDecay cannot be negative.");
+
+        // Huang et al. train every deep baseline with AdamW and a constant learning rate.
+        // Keep the optimizer fully replaceable, but make the built-in path match that recipe
+        // instead of silently using plain Adam with no decoupled weight decay.
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate,
+                WeightDecay = _options.WeightDecay,
+                UseAdaptiveLearningRate = false
+            });
 
         // Validate configuration
         if (_options.EmbeddingDimension % _options.NumHeads != 0)
@@ -314,37 +330,8 @@ public class TabTransformerNetwork<T> : NeuralNetworkBase<T>
         _optimizer.UpdateParameters(Layers);
     }
 
-    /// <summary>
-    /// Updates the parameters of all layers in the network.
-    /// </summary>
-    /// <param name="parameters">A vector containing all parameters for the network.</param>
-    /// <remarks>
-    /// <para>
-    /// This method distributes the parameters to each layer based on their parameter count.
-    /// It's typically called during training after calculating parameter updates.
-    /// </para>
-    /// <para>
-    /// <b>For Beginners:</b> After the backward pass calculates how to improve the network,
-    /// this method actually applies those improvements. It takes a list of updated settings
-    /// (parameters) and distributes them to each layer in the network. This method is
-    /// called repeatedly during training to gradually improve the network's accuracy.
-    /// </para>
-    /// </remarks>
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        int startIndex = 0;
-        foreach (var layer in Layers)
-        {
-            int layerParameterCount = checked((int)layer.ParameterCount);
-            if (layerParameterCount > 0)
-            {
-                Vector<T> layerParameters = parameters.SubVector(startIndex, layerParameterCount);
-                layer.UpdateParameters(layerParameters);
-                startIndex += layerParameterCount;
-            }
-        }
-    }
-
+    // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
+    // exactly the same enumeration, so this said nothing the base does not already say.
     /// <summary>
     /// Gets the learned feature importance from the attention layers.
     /// </summary>
@@ -419,6 +406,8 @@ public class TabTransformerNetwork<T> : NeuralNetworkBase<T>
                 { "NumHeads", _options.NumHeads },
                 { "NumLayers", _options.NumLayers },
                 { "DropoutRate", _options.DropoutRate },
+                { "LearningRate", _options.LearningRate },
+                { "WeightDecay", _options.WeightDecay },
                 { "LayerCount", Layers.Count },
                 { "LayerTypes", Layers.Select(l => l.GetType().Name).ToArray() }
             },
@@ -471,10 +460,47 @@ public class TabTransformerNetwork<T> : NeuralNetworkBase<T>
     /// <inheritdoc/>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
-        return new TabTransformerNetwork<T>(
+        // Optimizers carry step counters and moment tensors keyed to the source model's
+        // parameters. Sharing one across a clone leaks training state and can also leave the
+        // optimizer bound to the source model. Recreate the same optimizer type from its
+        // configuration, then bind that fresh instance to the clone.
+        var freshOptimizer = CreateFreshOptimizer();
+        var clone = new TabTransformerNetwork<T>(
             Architecture,
             _options,
-            _optimizer,
+            freshOptimizer,
             _lossFunction);
+        freshOptimizer.SetModel(clone);
+        return clone;
+    }
+
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreateFreshOptimizer()
+    {
+        var optimizerType = _optimizer.GetType();
+        var optimizerOptions = _optimizer.GetOptions();
+
+        foreach (var constructor in optimizerType.GetConstructors())
+        {
+            var parameters = constructor.GetParameters();
+            if (parameters.Length == 2 &&
+                parameters[0].ParameterType.IsAssignableFrom(typeof(TabTransformerNetwork<T>)) &&
+                parameters[1].ParameterType.IsInstanceOfType(optimizerOptions) &&
+                constructor.Invoke([null, optimizerOptions]) is
+                    IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> optimizer)
+            {
+                return optimizer;
+            }
+        }
+
+        // Custom optimizers without a configuration constructor cannot be safely shared.
+        // Fall back to the model's documented default with fresh state.
+        return new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+            null,
+            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate,
+                WeightDecay = _options.WeightDecay,
+                UseAdaptiveLearningRate = false
+            });
     }
 }

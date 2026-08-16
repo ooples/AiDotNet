@@ -23,6 +23,10 @@ public class TS2VecOptions<T> : TimeSeriesRegressionOptions<T>
     public TS2VecOptions(TS2VecOptions<T> other)
     {
         if (other == null) throw new ArgumentNullException(nameof(other));
+        // Seed is declared on ModelOptions rather than in this file, so a copy constructor
+        // written from the local declarations alone misses it. Losing it on a clone silently
+        // changes deterministic initialization.
+        Seed = other.Seed;
         ContextLength = other.ContextLength; ForecastHorizon = other.ForecastHorizon;
         HiddenDimension = other.HiddenDimension; OutputDimension = other.OutputDimension;
         NumLayers = other.NumLayers; DropoutRate = other.DropoutRate;

@@ -39,7 +39,15 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Memory)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = true, ApiShape = LayerApiShape.DualTensor, TestInputShape = "1, 4", TestConstructorArgs = "4, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
-public partial class MemoryWriteLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
+// Writes into memory and passes the stream on: shape-preserving at rank 3 [Batch, Time, Features].
+// Rank 2 comes from this layer's own [LayerProperty(TestInputShape = "1, 4")] - a single row of 4
+// features, so [Batch, Features]. ADNSHAPE005 caught the rank-3-only declaration.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
+[AutoParameters]
+public partial class MemoryWriteLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IShapeContract
 {
     /// <summary>
     /// Gets or sets a value indicating whether auxiliary loss is enabled for this layer.
@@ -236,32 +244,6 @@ public partial class MemoryWriteLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     private Tensor<T>? _outputBiasGradient;
 
-    /// <summary>
-    /// Gets a value indicating whether this layer supports training.
-    /// </summary>
-    /// <value>
-    /// Always <c>true</c> because the MemoryWriteLayer has trainable parameters.
-    /// </value>
-    /// <remarks>
-    /// <para>
-    /// This property indicates that MemoryWriteLayer can be trained through backpropagation. The layer
-    /// has trainable parameters (weights and biases) that are updated during training to optimize
-    /// the memory writing process.
-    /// </para>
-    /// <para><b>For Beginners:</b> This property tells you that this layer can learn from data.
-    /// 
-    /// A value of true means:
-    /// - The layer has internal values (weights and biases) that change during training
-    /// - It will improve its performance as it sees more data
-    /// - It learns to better focus attention on relevant parts of memory for writing
-    /// 
-    /// During training, the layer learns:
-    /// - Which features in the input are important for determining where to write
-    /// - How to transform input information into memory updates
-    /// - How to selectively update memory instead of overwriting everything
-    /// </para>
-    /// </remarks>
-    public override long ParameterCount => _queryWeights.Length + _keyWeights.Length + _valueWeights.Length + _outputWeights.Length + _outputBias.Length;
     public override bool SupportsTraining => true;
 
     /// <inheritdoc/>
@@ -292,7 +274,7 @@ public partial class MemoryWriteLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// is carefully chosen to prevent training issues like vanishing or exploding gradients.
     /// </para>
     /// </remarks>
-    public MemoryWriteLayer(int memoryDimension, IActivationFunction<T>? activationFunction = null)
+    public MemoryWriteLayer([LayerState] int memoryDimension, IActivationFunction<T>? activationFunction = null)
         : base(new[] { -1 }, new[] { memoryDimension }, activationFunction ?? new IdentityActivation<T>())
     {
         if (memoryDimension <= 0) throw new ArgumentOutOfRangeException(nameof(memoryDimension));
@@ -363,7 +345,7 @@ public partial class MemoryWriteLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// that consider the relationships between different outputs in your memory writing operation.
     /// </para>
     /// </remarks>
-    public MemoryWriteLayer(int memoryDimension, IVectorActivationFunction<T> activationFunction)
+    public MemoryWriteLayer([LayerState] int memoryDimension, IVectorActivationFunction<T> activationFunction)
         : base(new[] { -1 }, new[] { memoryDimension }, activationFunction ?? new IdentityActivation<T>())
     {
         if (memoryDimension <= 0) throw new ArgumentOutOfRangeException(nameof(memoryDimension));
@@ -507,19 +489,24 @@ public partial class MemoryWriteLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         if (actualInputDim != expectedInputDim)
         {
             int memoryDim = _queryWeights.Shape[1];
-            T scale = NumOps.FromDouble(Math.Sqrt(2.0 / (actualInputDim + memoryDim)));
-            var random = RandomHelper.CreateSecureRandom();
 
             _queryWeights = new Tensor<T>([actualInputDim, memoryDim]);
             _keyWeights = new Tensor<T>([actualInputDim, memoryDim]);
             _valueWeights = new Tensor<T>([actualInputDim, memoryDim]);
 
-            for (int i = 0; i < _queryWeights.Length; i++)
-                _queryWeights.SetFlat(i, NumOps.Multiply(scale, NumOps.FromDouble(random.NextDouble() * 2 - 1)));
-            for (int i = 0; i < _keyWeights.Length; i++)
-                _keyWeights.SetFlat(i, NumOps.Multiply(scale, NumOps.FromDouble(random.NextDouble() * 2 - 1)));
-            for (int i = 0; i < _valueWeights.Length; i++)
-                _valueWeights.SetFlat(i, NumOps.Multiply(scale, NumOps.FromDouble(random.NextDouble() * 2 - 1)));
+            // All three are replaced wholesale, so unlike FeedForwardLayer's grow path there is nothing
+            // to preserve and the base initializer can be used directly. Three things improve at once:
+            //
+            //  * The draws were scale * U(-1,1) with scale = sqrt(2/(fanIn+fanOut)) - variance scale^2/3
+            //    where Xavier-uniform wants a limit of sqrt(6/(fanIn+fanOut)), so sqrt(3)x too narrow.
+            //  * CreateSecureRandom ignored RandomSeed, so a model that adapted its input dimension
+            //    stopped being reproducible from that point on.
+            //  * THIS RUNS ON THE FORWARD PATH, not at construction. CreateSecureRandom returns a
+            //    LockedRandom, so every one of these three fills took a lock per element during
+            //    inference. The base path writes the raw array with an unlocked local RNG.
+            InitializeLayerWeights(_queryWeights, actualInputDim, memoryDim);
+            InitializeLayerWeights(_keyWeights, actualInputDim, memoryDim);
+            InitializeLayerWeights(_valueWeights, actualInputDim, memoryDim);
 
             UpdateInputShape([actualInputDim]);
         }
@@ -758,7 +745,7 @@ public partial class MemoryWriteLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// <summary>
     /// Named multi-input forward pass.
     /// </summary>
-    public override Tensor<T> Forward(IReadOnlyDictionary<string, Tensor<T>> inputs)
+    protected override Tensor<T> ForwardTracedPorts(IReadOnlyDictionary<string, Tensor<T>> inputs)
     {
         if (inputs == null) throw new ArgumentNullException(nameof(inputs));
         if (!inputs.TryGetValue("input", out var input) || input == null)
@@ -793,7 +780,7 @@ public partial class MemoryWriteLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// - You want to simplify your code by not having to create empty memory yourself
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // Promote rank-1 [features] to rank-2 [1, features] so the downstream
         // TensorMatMul (which requires rank >= 2) works for the standalone
@@ -822,121 +809,6 @@ public partial class MemoryWriteLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             result = result.Reshape(new[] { result.Shape[1] });
         }
         return result;
-    }
-
-    /// <summary>
-    /// Gets all trainable parameters from the memory write layer as a single vector.
-    /// </summary>
-    /// <returns>A vector containing all trainable parameters.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method retrieves all trainable parameters from the layer as a single vector. It concatenates
-    /// the query weights, key weights, value weights, output weights, and output bias into a single vector.
-    /// This is useful for optimization algorithms that operate on all parameters at once, or for saving
-    /// and loading model weights.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method collects all the learnable values in the layer.
-    /// 
-    /// The parameters:
-    /// - Are the numbers that the neural network learns during training
-    /// - Include all the weights and biases from this layer
-    /// - Are combined into a single long list (vector)
-    /// 
-    /// This is useful for:
-    /// - Saving the model to disk
-    /// - Loading parameters from a previously trained model
-    /// - Advanced optimization techniques that need access to all parameters
-    /// 
-    /// The method carefully arranges all parameters in a specific order
-    /// so they can be correctly restored later.
-    /// </para>
-    /// </remarks>
-    public override Vector<T> GetParameters()
-    {
-        // Use Vector.Concatenate to efficiently combine all parameters
-        return Vector<T>.Concatenate(
-            new Vector<T>(_queryWeights.ToArray()),
-            new Vector<T>(_keyWeights.ToArray()),
-            new Vector<T>(_valueWeights.ToArray()),
-            new Vector<T>(_outputWeights.ToArray()),
-            new Vector<T>(_outputBias.ToArray())
-        );
-    }
-
-    /// <summary>
-    /// Sets the trainable parameters for the memory write layer.
-    /// </summary>
-    /// <param name="parameters">A vector containing all parameters to set.</param>
-    /// <exception cref="ArgumentException">Thrown when the parameters vector has incorrect length.</exception>
-    /// <remarks>
-    /// <para>
-    /// This method sets all trainable parameters of the layer from a single vector. It extracts the appropriate
-    /// portions of the input vector for each parameter (query weights, key weights, value weights, output weights,
-    /// and output bias). This is useful for loading saved model weights or for implementing optimization algorithms
-    /// that operate on all parameters at once.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method updates all the learnable values in the layer.
-    /// 
-    /// When setting parameters:
-    /// - The input must be a vector with the correct length
-    /// - The method extracts portions for each weight matrix and bias vector
-    /// - It places each value in its correct position
-    /// 
-    /// This is useful for:
-    /// - Loading a previously saved model
-    /// - Transferring parameters from another model
-    /// - Testing different parameter values
-    /// 
-    /// An error is thrown if the input vector doesn't have the expected number of parameters,
-    /// ensuring that all matrices and vectors maintain their correct dimensions.
-    /// </para>
-    /// </remarks>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int querySize = _queryWeights.Shape[0] * _queryWeights.Shape[1];
-        int keySize = _keyWeights.Shape[0] * _keyWeights.Shape[1];
-        int valueSize = _valueWeights.Shape[0] * _valueWeights.Shape[1];
-        int outputSize = _outputWeights.Shape[0] * _outputWeights.Shape[1];
-        int biasSize = _outputBias.Length;
-        int totalParams = querySize + keySize + valueSize + outputSize + biasSize;
-
-        if (parameters.Length != totalParams)
-        {
-            throw new ArgumentException($"Expected {totalParams} parameters, but got {parameters.Length}");
-        }
-
-        int index = 0;
-
-        // Set query weights using Tensor.FromVector
-        var queryParams = parameters.SubVector(index, querySize);
-        _queryWeights = Tensor<T>.FromVector(queryParams).Reshape(_queryWeights._shape);
-        index += querySize;
-
-        // Set key weights
-        var keyParams = parameters.SubVector(index, keySize);
-        _keyWeights = Tensor<T>.FromVector(keyParams).Reshape(_keyWeights._shape);
-        index += keySize;
-
-        // Set value weights
-        var valueParams = parameters.SubVector(index, valueSize);
-        _valueWeights = Tensor<T>.FromVector(valueParams).Reshape(_valueWeights._shape);
-        index += valueSize;
-
-        // Set output weights
-        var outputParams = parameters.SubVector(index, outputSize);
-        _outputWeights = Tensor<T>.FromVector(outputParams).Reshape(_outputWeights._shape);
-        index += outputSize;
-
-        // Set output bias
-        var biasParams = parameters.SubVector(index, biasSize);
-        _outputBias = Tensor<T>.FromVector(biasParams);
-
-        // Notify GPU that tensor data has changed
-        Engine.InvalidatePersistentTensor(_queryWeights);
-        Engine.InvalidatePersistentTensor(_keyWeights);
-        Engine.InvalidatePersistentTensor(_valueWeights);
-        Engine.InvalidatePersistentTensor(_outputWeights);
-        Engine.InvalidatePersistentTensor(_outputBias);
     }
 
     /// <summary>

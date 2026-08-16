@@ -35,7 +35,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("RecurrentGemma: Moving Past Transformers for Efficient Open Language Models", "https://arxiv.org/abs/2404.07839", Year = 2024, Authors = "Aleksandar Botev, Soham De, Samuel L. Smith, Anushan Fernando, George-Cristian Muraru, Ruba Haroun, Leonard Berrada, Razvan Pascanu, Pier Giuseppe Sessa, Robert Dadashi, Leonard Hussenot, Johan Ferret, Sertan Girgin, Olivier Bachem, Alek Andreev, Kathleen Kenealy, Thomas Mesnard, Cassidy Hardin, Surya Bhupatiraju, Shreya Pathak, Laurent Sifre, Morgane Riviere, Mihir Sanjay Kale, Juliette Love, Pouya Tafti, Armand Joulin, Noah Fiedel, Evan Senter, Yutian Chen, Srivatsan Srinivasan, Guillaume Desjardins, David Budden, Arnaud Doucet, Koray Kavukcuoglu, Nando De Freitas")]
-public class RecurrentGemmaLanguageModel<T> : NeuralNetworkBase<T>
+public class RecurrentGemmaLanguageModel<T> : TokenLanguageModelLayoutBase<T>
 {
     private readonly RecurrentGemmaOptions _options;
     private readonly int _vocabSize;
@@ -69,7 +69,10 @@ public class RecurrentGemmaLanguageModel<T> : NeuralNetworkBase<T>
         ILossFunction<T>? lossFunction = null,
         RecurrentGemmaOptions? options = null)
         : base(architecture,
-            lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(NeuralNetworkTaskType.TextGeneration))
+            // The recurrent Gemma LM head emits raw logits. Use the paper-faithful
+            // fused log-softmax/NLL objective rather than categorical CE, which expects
+            // probabilities and can produce non-finite gradients when fed logits.
+            lossFunction ?? new AiDotNet.LossFunctions.CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new RecurrentGemmaOptions();
         Options = _options;
@@ -115,20 +118,8 @@ public class RecurrentGemmaLanguageModel<T> : NeuralNetworkBase<T>
         });
     }
 
-    public override void UpdateParameters(Vector<T> gradients)
-    {
-        if (gradients.Length != ParameterCount)
-        {
-            throw new ArgumentException(
-                $"Expected {ParameterCount} gradients, but got {gradients.Length}",
-                nameof(gradients));
-        }
-
-        var currentParams = GetParameters();
-        T learningRate = NumOps.FromDouble(0.001);
-        currentParams = Engine.Subtract(currentParams, Engine.Multiply(gradients, learningRate));
-        SetParameters(currentParams);
-    }
+    // UpdateParameters validated the length and distributed the vector across Layers, both of which
+    // the base does. Removed under AIDN082.
 
     public override ModelMetadata<T> GetModelMetadata()
     {

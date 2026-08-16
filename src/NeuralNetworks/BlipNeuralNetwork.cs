@@ -68,7 +68,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("BLIP: Bootstrapping Language-Image Pre-training for Unified Vision-Language Understanding and Generation", "https://arxiv.org/abs/2201.12086", Year = 2022, Authors = "Junnan Li, Dongxu Li, Caiming Xiong, Steven Hoi")]
-public class BlipNeuralNetwork<T> : NeuralNetworkBase<T>, IBlipModel<T>
+public partial class BlipNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IBlipModel<T>
 {
     private readonly BlipOptions _options;
 
@@ -148,22 +148,22 @@ public class BlipNeuralNetwork<T> : NeuralNetworkBase<T>, IBlipModel<T>
     /// <summary>
     /// Learnable CLS token for vision encoder.
     /// </summary>
-    private Matrix<T>? _visionClsToken;
+    private Tensor<T>? _visionClsToken;
 
     /// <summary>
     /// Learnable CLS token for text encoder.
     /// </summary>
-    private Matrix<T>? _textClsToken;
+    private Tensor<T>? _textClsToken;
 
     /// <summary>
     /// Vision positional embeddings.
     /// </summary>
-    private Matrix<T>? _visionPositionalEmbeddings;
+    private Tensor<T>? _visionPositionalEmbeddings;
 
     /// <summary>
     /// Text positional embeddings.
     /// </summary>
-    private Matrix<T>? _textPositionalEmbeddings;
+    private Tensor<T>? _textPositionalEmbeddings;
 
     /// <summary>
     /// Text token embeddings (vocabulary lookup).
@@ -192,7 +192,7 @@ public class BlipNeuralNetwork<T> : NeuralNetworkBase<T>, IBlipModel<T>
     /// <summary>
     /// Optimizer for training.
     /// </summary>
-    private readonly IOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
 
     /// <summary>
     /// Loss function for training.
@@ -288,7 +288,7 @@ public class BlipNeuralNetwork<T> : NeuralNetworkBase<T>, IBlipModel<T>
         int embeddingDimension = 256,
         int maxSequenceLength = 35,
         int imageSize = 384,
-        IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         BlipOptions? options = null)
         : base(architecture,
@@ -404,7 +404,7 @@ public class BlipNeuralNetwork<T> : NeuralNetworkBase<T>, IBlipModel<T>
         int numHeads = 12,
         int mlpDim = 3072,
         ITokenizer? tokenizer = null,
-        IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         BlipOptions? options = null)
         : base(architecture,
@@ -505,12 +505,12 @@ public class BlipNeuralNetwork<T> : NeuralNetworkBase<T>, IBlipModel<T>
         _lmHead = Layers[idx++];
 
         // Initialize learnable tokens
-        _visionClsToken = Matrix<T>.CreateDefault(1, _hiddenDim, NumOps.Zero);
-        _textClsToken = Matrix<T>.CreateDefault(1, _hiddenDim, NumOps.Zero);
+        _visionClsToken = new Tensor<T>([1, _hiddenDim]);
+        _textClsToken = new Tensor<T>([1, _hiddenDim]);
 
         // Initialize positional embeddings
-        _visionPositionalEmbeddings = Matrix<T>.CreateDefault(numPatches + 1, _hiddenDim, NumOps.Zero);
-        _textPositionalEmbeddings = Matrix<T>.CreateDefault(_maxSequenceLength, _hiddenDim, NumOps.Zero);
+        _visionPositionalEmbeddings = new Tensor<T>([numPatches + 1, _hiddenDim]);
+        _textPositionalEmbeddings = new Tensor<T>([_maxSequenceLength, _hiddenDim]);
 
         // Initialize with small random values
         InitializeParameters();
@@ -544,9 +544,9 @@ public class BlipNeuralNetwork<T> : NeuralNetworkBase<T>, IBlipModel<T>
         // Initialize positional embeddings
         if (_visionPositionalEmbeddings is not null)
         {
-            for (int i = 0; i < _visionPositionalEmbeddings.Rows; i++)
+            for (int i = 0; i < _visionPositionalEmbeddings.Shape[0]; i++)
             {
-                for (int j = 0; j < _visionPositionalEmbeddings.Columns; j++)
+                for (int j = 0; j < _visionPositionalEmbeddings.Shape[1]; j++)
                 {
                     _visionPositionalEmbeddings[i, j] = NumOps.FromDouble((random.NextDouble() - 0.5) * scale);
                 }
@@ -555,9 +555,9 @@ public class BlipNeuralNetwork<T> : NeuralNetworkBase<T>, IBlipModel<T>
 
         if (_textPositionalEmbeddings is not null)
         {
-            for (int i = 0; i < _textPositionalEmbeddings.Rows; i++)
+            for (int i = 0; i < _textPositionalEmbeddings.Shape[0]; i++)
             {
-                for (int j = 0; j < _textPositionalEmbeddings.Columns; j++)
+                for (int j = 0; j < _textPositionalEmbeddings.Shape[1]; j++)
                 {
                     _textPositionalEmbeddings[i, j] = NumOps.FromDouble((random.NextDouble() - 0.5) * scale);
                 }
@@ -860,7 +860,7 @@ public class BlipNeuralNetwork<T> : NeuralNetworkBase<T>, IBlipModel<T>
         // Add positional embeddings using Engine
         if (_textPositionalEmbeddings is not null)
         {
-            var posEmbTensor = Tensor<T>.FromMatrix(_textPositionalEmbeddings);
+            var posEmbTensor = _textPositionalEmbeddings;
             int seqLen = Math.Min(hidden.Shape[1], posEmbTensor.Shape[0]);
 
             // Slice to actual sequence length using proper int[] parameters
@@ -908,7 +908,7 @@ public class BlipNeuralNetwork<T> : NeuralNetworkBase<T>, IBlipModel<T>
         // Prepend CLS token using Engine operations
         if (_visionClsToken is not null)
         {
-            var clsTensor = Tensor<T>.FromMatrix(_visionClsToken);
+            var clsTensor = _visionClsToken;
             var clsExpanded = Engine.TensorExpandDims<T>(clsTensor, 0);
 
             // Concatenate CLS token with patch embeddings
@@ -918,7 +918,7 @@ public class BlipNeuralNetwork<T> : NeuralNetworkBase<T>, IBlipModel<T>
         // Add positional embeddings
         if (_visionPositionalEmbeddings is not null)
         {
-            var posEmbTensor = Tensor<T>.FromMatrix(_visionPositionalEmbeddings);
+            var posEmbTensor = _visionPositionalEmbeddings;
             int seqLen = Math.Min(hidden.Shape[1], posEmbTensor.Shape[0]);
 
             var posSlice = Engine.TensorSlice(posEmbTensor, new[] { 0, 0 }, new[] { seqLen, _hiddenDim });
@@ -1123,14 +1123,14 @@ public class BlipNeuralNetwork<T> : NeuralNetworkBase<T>, IBlipModel<T>
 
         if (_visionClsToken is not null)
         {
-            var clsTensor = Tensor<T>.FromMatrix(_visionClsToken);
+            var clsTensor = _visionClsToken;
             var clsExpanded = Engine.TensorExpandDims<T>(clsTensor, 0);
             hidden = Engine.TensorConcatenate(new[] { clsExpanded, hidden }, axis: 1);
         }
 
         if (_visionPositionalEmbeddings is not null)
         {
-            var posEmbTensor = Tensor<T>.FromMatrix(_visionPositionalEmbeddings);
+            var posEmbTensor = _visionPositionalEmbeddings;
             int seqLen = Math.Min(hidden.Shape[1], posEmbTensor.Shape[0]);
 
             var posSlice = Engine.TensorSlice(posEmbTensor, new[] { 0, 0 }, new[] { seqLen, _hiddenDim });
@@ -1182,7 +1182,7 @@ public class BlipNeuralNetwork<T> : NeuralNetworkBase<T>, IBlipModel<T>
 
         if (_textPositionalEmbeddings is not null)
         {
-            var posEmbTensor = Tensor<T>.FromMatrix(_textPositionalEmbeddings);
+            var posEmbTensor = _textPositionalEmbeddings;
             int seqLen = Math.Min(hidden.Shape[1], posEmbTensor.Shape[0]);
 
             var posSlice = Engine.TensorSlice(posEmbTensor, new[] { 0, 0 }, new[] { seqLen, _hiddenDim });
@@ -1219,7 +1219,7 @@ public class BlipNeuralNetwork<T> : NeuralNetworkBase<T>, IBlipModel<T>
         // Add positional embeddings
         if (_textPositionalEmbeddings is not null)
         {
-            var posEmbTensor = Tensor<T>.FromMatrix(_textPositionalEmbeddings);
+            var posEmbTensor = _textPositionalEmbeddings;
             int seqLen = Math.Min(hidden.Shape[1], posEmbTensor.Shape[0]);
 
             var posSlice = Engine.TensorSlice(posEmbTensor, new[] { 0, 0 }, new[] { seqLen, _hiddenDim });
@@ -1513,7 +1513,7 @@ public class BlipNeuralNetwork<T> : NeuralNetworkBase<T>, IBlipModel<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, target, _optimizer as IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>);
+            TrainWithTape(input, target, _optimizer);
         }
         finally
         {
@@ -1587,247 +1587,49 @@ public class BlipNeuralNetwork<T> : NeuralNetworkBase<T>, IBlipModel<T>
 
     #region Parameter Management
 
+    // UpdateParameters was overridden here to validate against ParameterCount and walk
+    // Layers by hand. Both are the base's job, and keeping it would have broken as soon as
+    // the tables below joined the count: it walked only Layers, so it would have been short
+    // by exactly their size.
     /// <summary>
-    /// Gets the total number of trainable parameters.
+    /// Declares the vision and text CLS tokens and both positional embedding tables, which live outside <see cref="NeuralNetworkBase{T}.Layers"/>.
     /// </summary>
-    public override long ParameterCount
+    /// <remarks>
+    /// <para>
+    /// These were in NEITHER surface. The base walks Layers, these are not in Layers, and
+    /// nothing declared them -- so they were never counted, never handed out, never restored,
+    /// and never trained through a flat-vector optimizer. Declaring them adds to the parameter
+    /// count, deliberately: the old number was not a smaller-but-correct total, it omitted real
+    /// weights.
+    /// </para>
+    /// <para>
+    /// A hook rather than a [TrainableParameter] attribute because TrainableParameterGenerator
+    /// only processes LayerBase subclasses (see its ExtendsLayerBase guard) -- the attribute
+    /// does nothing on a model. For a model, declaring through this hook IS the mechanism.
+    /// </para>
+    /// </remarks>
+    protected override IEnumerable<Tensor<T>> GetExtraTrainableTensors()
     {
-        get
-        {
-            if (!_useNativeMode) return 0;
-
-            int count = 0;
-
-            // CLS tokens and positional embeddings first
-            if (_visionClsToken is not null) count += _visionClsToken.Rows * _visionClsToken.Columns;
-            if (_textClsToken is not null) count += _textClsToken.Rows * _textClsToken.Columns;
-            if (_visionPositionalEmbeddings is not null) count += _visionPositionalEmbeddings.Rows * _visionPositionalEmbeddings.Columns;
-            if (_textPositionalEmbeddings is not null) count += _textPositionalEmbeddings.Rows * _textPositionalEmbeddings.Columns;
-
-            // Add layer parameters from all native layer lists
-            foreach (var layer in _visionEncoderLayers)
-            {
-                count += (int)layer.ParameterCount;
-            }
-
-            foreach (var layer in _textEncoderLayers)
-            {
-                count += (int)layer.ParameterCount;
-            }
-
-            foreach (var layer in _textDecoderLayers)
-            {
-                count += (int)layer.ParameterCount;
-            }
-
-            foreach (var layer in _crossAttentionLayers)
-            {
-                count += (int)layer.ParameterCount;
-            }
-
-            return count;
-        }
-    }
-
-    /// <inheritdoc/>
-    public override Vector<T> GetParameters()
-    {
-        var parameters = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
-        int index = 0;
-
-        if (!_useNativeMode) return parameters;
-
-        // CLS tokens and positional embeddings first
         if (_visionClsToken is not null)
         {
-            for (int i = 0; i < _visionClsToken.Rows; i++)
-            {
-                for (int j = 0; j < _visionClsToken.Columns; j++)
-                {
-                    parameters[index++] = _visionClsToken[i, j];
-                }
-            }
+            yield return _visionClsToken;
         }
 
         if (_textClsToken is not null)
         {
-            for (int i = 0; i < _textClsToken.Rows; i++)
-            {
-                for (int j = 0; j < _textClsToken.Columns; j++)
-                {
-                    parameters[index++] = _textClsToken[i, j];
-                }
-            }
+            yield return _textClsToken;
         }
 
         if (_visionPositionalEmbeddings is not null)
         {
-            for (int i = 0; i < _visionPositionalEmbeddings.Rows; i++)
-            {
-                for (int j = 0; j < _visionPositionalEmbeddings.Columns; j++)
-                {
-                    parameters[index++] = _visionPositionalEmbeddings[i, j];
-                }
-            }
+            yield return _visionPositionalEmbeddings;
         }
 
         if (_textPositionalEmbeddings is not null)
         {
-            for (int i = 0; i < _textPositionalEmbeddings.Rows; i++)
-            {
-                for (int j = 0; j < _textPositionalEmbeddings.Columns; j++)
-                {
-                    parameters[index++] = _textPositionalEmbeddings[i, j];
-                }
-            }
-        }
-
-        // Layer parameters from all native layer lists
-        foreach (var layer in _visionEncoderLayers)
-        {
-            var layerParams = layer.GetParameters();
-            for (int i = 0; i < layerParams.Length; i++)
-            {
-                parameters[index++] = layerParams[i];
-            }
-        }
-
-        foreach (var layer in _textEncoderLayers)
-        {
-            var layerParams = layer.GetParameters();
-            for (int i = 0; i < layerParams.Length; i++)
-            {
-                parameters[index++] = layerParams[i];
-            }
-        }
-
-        foreach (var layer in _textDecoderLayers)
-        {
-            var layerParams = layer.GetParameters();
-            for (int i = 0; i < layerParams.Length; i++)
-            {
-                parameters[index++] = layerParams[i];
-            }
-        }
-
-        foreach (var layer in _crossAttentionLayers)
-        {
-            var layerParams = layer.GetParameters();
-            for (int i = 0; i < layerParams.Length; i++)
-            {
-                parameters[index++] = layerParams[i];
-            }
-        }
-
-        return parameters;
-    }
-
-    /// <inheritdoc/>
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        int expectedCount = ParameterCountHelper.ToFlatVectorSize(ParameterCount);
-        if (parameters.Length != expectedCount)
-        {
-            throw new ArgumentException(
-                $"Expected {expectedCount} parameters, but got {parameters.Length}",
-                nameof(parameters));
-        }
-
-        if (!_useNativeMode) return;
-
-        int index = 0;
-
-        // CLS tokens and positional embeddings first
-        if (_visionClsToken is not null)
-        {
-            for (int i = 0; i < _visionClsToken.Rows; i++)
-            {
-                for (int j = 0; j < _visionClsToken.Columns; j++)
-                {
-                    _visionClsToken[i, j] = parameters[index++];
-                }
-            }
-        }
-
-        if (_textClsToken is not null)
-        {
-            for (int i = 0; i < _textClsToken.Rows; i++)
-            {
-                for (int j = 0; j < _textClsToken.Columns; j++)
-                {
-                    _textClsToken[i, j] = parameters[index++];
-                }
-            }
-        }
-
-        if (_visionPositionalEmbeddings is not null)
-        {
-            for (int i = 0; i < _visionPositionalEmbeddings.Rows; i++)
-            {
-                for (int j = 0; j < _visionPositionalEmbeddings.Columns; j++)
-                {
-                    _visionPositionalEmbeddings[i, j] = parameters[index++];
-                }
-            }
-        }
-
-        if (_textPositionalEmbeddings is not null)
-        {
-            for (int i = 0; i < _textPositionalEmbeddings.Rows; i++)
-            {
-                for (int j = 0; j < _textPositionalEmbeddings.Columns; j++)
-                {
-                    _textPositionalEmbeddings[i, j] = parameters[index++];
-                }
-            }
-        }
-
-        // Update layer parameters from all native layer lists
-        foreach (var layer in _visionEncoderLayers)
-        {
-            int layerParameterCount = checked((int)layer.ParameterCount);
-            if (layerParameterCount > 0)
-            {
-                var layerParameters = parameters.Slice(index, layerParameterCount);
-                layer.UpdateParameters(layerParameters);
-                index += layerParameterCount;
-            }
-        }
-
-        foreach (var layer in _textEncoderLayers)
-        {
-            int layerParameterCount = checked((int)layer.ParameterCount);
-            if (layerParameterCount > 0)
-            {
-                var layerParameters = parameters.Slice(index, layerParameterCount);
-                layer.UpdateParameters(layerParameters);
-                index += layerParameterCount;
-            }
-        }
-
-        foreach (var layer in _textDecoderLayers)
-        {
-            int layerParameterCount = checked((int)layer.ParameterCount);
-            if (layerParameterCount > 0)
-            {
-                var layerParameters = parameters.Slice(index, layerParameterCount);
-                layer.UpdateParameters(layerParameters);
-                index += layerParameterCount;
-            }
-        }
-
-        foreach (var layer in _crossAttentionLayers)
-        {
-            int layerParameterCount = checked((int)layer.ParameterCount);
-            if (layerParameterCount > 0)
-            {
-                var layerParameters = parameters.Slice(index, layerParameterCount);
-                layer.UpdateParameters(layerParameters);
-                index += layerParameterCount;
-            }
+            yield return _textPositionalEmbeddings;
         }
     }
-
     /// <summary>
     /// Retrieves metadata about the BLIP neural network model.
     /// </summary>

@@ -1,3 +1,6 @@
+// File-level, deliberately: two Tensors namespaces in the project's global usings also define a
+// TensorLayout, so [TensorLayout(...)] only binds when this import shadows them from a nearer scope.
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -116,38 +119,6 @@ internal abstract class DeepARDistributionHead<T> : NeuralNetworks.Layers.LayerB
 
     public override bool SupportsTraining => true;
     public override void ResetState() { }
-    public override void UpdateParameters(T learningRate) { /* tape-based optimizer updates registered params */ }
-
-    public override long ParameterCount
-    {
-        get
-        {
-            long count = 0;
-            foreach (var p in _params)
-                count += p.Length;
-            return count;
-        }
-    }
-
-    public override Vector<T> GetParameters()
-    {
-        long total = ParameterCount;
-        var arr = new T[total];
-        int idx = 0;
-        foreach (var p in _params)
-            for (int i = 0; i < p.Length; i++)
-                arr[idx++] = p[i];
-        return new Vector<T>(arr);
-    }
-
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int idx = 0;
-        foreach (var p in _params)
-            for (int i = 0; i < p.Length; i++)
-                p[i] = parameters[idx++];
-    }
-
     public override void Serialize(BinaryWriter writer)
     {
         writer.Write(Hidden);
@@ -194,11 +165,37 @@ internal abstract class DeepARDistributionHead<T> : NeuralNetworks.Layers.LayerB
 /// detached mean for σ (so the scale learns the residual spread without an "inflate σ to kill the μ gradient"
 /// escape hatch). This is the historical DeepAR head, preserved bit-for-bit as the default.
 /// </summary>
-internal sealed class DeepARGaussianHead<T> : DeepARDistributionHead<T>
+// Rank 2, and FEATURE-MAJOR - the hidden state arrives as [H, B], not [B, H]. That ordering is the
+// base class's own statement, on Linear: "Applies a registered projection to hidden state h [H, B]
+// -> [outDim, B]", implemented as TensorMatMul(w [outDim, H], h [H, B]). ComputeBatchLoss annotates
+// the same call site `// [1, B]`.
+[TensorLayout(TensorAxis.Features, TensorAxis.Batch, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Features, TensorAxis.Batch, Direction = TensorLayoutDirection.Output)]
+[AutoParameters]
+internal sealed partial class DeepARGaussianHead<T> : DeepARDistributionHead<T>, IShapeContract
 {
     private readonly Tensor<T> _meanW, _meanB, _scaleW, _scaleB;
 
     public override string LikelihoodName => "Gaussian";
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// HAND-WRITTEN because the projection collapses the hidden width: ForwardTraced is
+    /// <c>Linear(_meanW, _meanB, input)</c>, and <c>_meanW</c> is <c>[outDim, H]</c>, so the emitted
+    /// row count is the weight's own leading dimension - one row here, the residual mean delta. Read
+    /// off <c>_meanW.Shape[0]</c> rather than written as a literal so the contract still holds if the
+    /// head ever emits more than one mean parameter.
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        if (inputRank != 2 || _meanW.Shape.Length != 2) return null;
+
+        return new[]
+        {
+            new OutputAxisContract(TensorAxis.Features, AxisRelation.Fixed(_meanW.Shape[0])),
+            new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+        };
+    }
 
     public DeepARGaussianHead(int hiddenSize, int seed = 12345)
         : base(hiddenSize, outputDim: 1)
@@ -208,7 +205,7 @@ internal sealed class DeepARGaussianHead<T> : DeepARDistributionHead<T>
         (_scaleW, _scaleB) = AddProjection(1, random);
     }
 
-    public override Tensor<T> Forward(Tensor<T> input) => Linear(_meanW, _meanB, input);
+    protected override Tensor<T> ForwardTraced(Tensor<T> input) => Linear(_meanW, _meanB, input);
 
     public override Tensor<T> ComputeBatchLoss(
         IReadOnlyList<Tensor<T>> hiddenSteps, IReadOnlyList<Tensor<T>> obsSteps, Tensor<T> target)
@@ -272,13 +269,37 @@ internal sealed class DeepARGaussianHead<T> : DeepARDistributionHead<T>
 /// fat-tailed data. ν is fixed (not learned) so the log-Γ normalisation constants are true constants and the
 /// loss stays fully differentiable in (μ, σ) with standard tape ops — no differentiable log-Γ required.
 /// </summary>
-internal sealed class DeepARStudentTHead<T> : DeepARDistributionHead<T>
+// Rank 2, feature-major [H, B] - same reasoning as DeepARGaussianHead: the shared base's Linear
+// documents and implements h [H, B] -> [outDim, B].
+[TensorLayout(TensorAxis.Features, TensorAxis.Batch, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Features, TensorAxis.Batch, Direction = TensorLayoutDirection.Output)]
+[AutoParameters]
+internal sealed partial class DeepARStudentTHead<T> : DeepARDistributionHead<T>, IShapeContract
 {
     private readonly Tensor<T> _meanW, _meanB, _scaleW, _scaleB;
     private readonly double _nu;
     private readonly T _nuT, _halfNuPlus1, _logNormConst, _stdScale;
 
     public override string LikelihoodName => "StudentT";
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// HAND-WRITTEN for the same reason as the Gaussian head: ForwardTraced is
+    /// <c>Linear(_meanW, _meanB, input)</c> and <c>_meanW</c> is <c>[outDim, H]</c>, so the output
+    /// row count is the weight's leading dimension, not the hidden width it consumed. Note that the
+    /// degrees-of-freedom nu is a fixed scalar rather than an emitted parameter, so it does not widen
+    /// this axis.
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        if (inputRank != 2 || _meanW.Shape.Length != 2) return null;
+
+        return new[]
+        {
+            new OutputAxisContract(TensorAxis.Features, AxisRelation.Fixed(_meanW.Shape[0])),
+            new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+        };
+    }
 
     public DeepARStudentTHead(int hiddenSize, double degreesOfFreedom, int seed = 12345)
         : base(hiddenSize, outputDim: 1)
@@ -300,7 +321,7 @@ internal sealed class DeepARStudentTHead<T> : DeepARDistributionHead<T>
         _stdScale = NumOps.FromDouble(Math.Sqrt(_nu / (_nu - 2.0))); // std = σ·sqrt(ν/(ν−2))
     }
 
-    public override Tensor<T> Forward(Tensor<T> input) => Linear(_meanW, _meanB, input);
+    protected override Tensor<T> ForwardTraced(Tensor<T> input) => Linear(_meanW, _meanB, input);
 
     public override Tensor<T> ComputeBatchLoss(
         IReadOnlyList<Tensor<T>> hiddenSteps, IReadOnlyList<Tensor<T>> obsSteps, Tensor<T> target)
@@ -366,7 +387,13 @@ internal sealed class DeepARStudentTHead<T> : DeepARDistributionHead<T>
 /// distribution can be ASYMMETRIC and multi-modal-ish — the head that actually models skew, which the
 /// downstream skew-aware sizing consumes via the closed-form quantile function.
 /// </summary>
-internal sealed class DeepARSplineHead<T> : DeepARDistributionHead<T>
+// Rank 2, feature-major [H, B] - same reasoning as the other two heads: the shared base's Linear
+// documents and implements h [H, B] -> [outDim, B]. BuildKnotsBL annotates its own call site
+// `// each [K, B]`, which is this layer's outDim spelled out.
+[TensorLayout(TensorAxis.Features, TensorAxis.Batch, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Features, TensorAxis.Batch, Direction = TensorLayoutDirection.Output)]
+[AutoParameters]
+internal sealed partial class DeepARSplineHead<T> : DeepARDistributionHead<T>, IShapeContract
 {
     // Fixed probability grid (must be strictly increasing, symmetric around 0.5 for a sane median).
     private static readonly double[] Grid = { 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95 };
@@ -377,6 +404,25 @@ internal sealed class DeepARSplineHead<T> : DeepARDistributionHead<T>
 
     public override string LikelihoodName => "Spline";
 
+    /// <inheritdoc />
+    /// <remarks>
+    /// HAND-WRITTEN because this head emits one row per quantile knot, not one per hidden unit:
+    /// ForwardTraced is <c>Linear(_knotW, _knotB, input)</c> against <c>_knotW</c> <c>[K, H]</c>, so
+    /// the output height is <c>_k</c> - the size of the fixed probability <c>Grid</c> the constructor
+    /// passed to <c>AddProjection</c>. It is the field rather than the literal 7 because the grid is
+    /// the single place that count is defined.
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        if (inputRank != 2 || _k <= 0) return null;
+
+        return new[]
+        {
+            new OutputAxisContract(TensorAxis.Features, AxisRelation.Fixed(_k)),
+            new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+        };
+    }
+
     public DeepARSplineHead(int hiddenSize, int seed = 12345)
         : base(hiddenSize, outputDim: Grid.Length)
     {
@@ -384,7 +430,7 @@ internal sealed class DeepARSplineHead<T> : DeepARDistributionHead<T>
         (_knotW, _knotB) = AddProjection(Grid.Length, random);
     }
 
-    public override Tensor<T> Forward(Tensor<T> input) => Linear(_knotW, _knotB, input);
+    protected override Tensor<T> ForwardTraced(Tensor<T> input) => Linear(_knotW, _knotB, input);
 
     // Builds the K monotone knot quantiles for every step as [B, L] tensors (index k → q at Grid[k]).
     // q[0] = obs + raw[0];  q[k] = q[k-1] + softplus(raw[k]) for k>0  → strictly non-decreasing in k.

@@ -152,7 +152,7 @@ namespace AiDotNet.NeuralRadianceFields.Models;
 [ModelComplexity(ModelComplexity.VeryHigh)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Instant Neural Graphics Primitives with a Multiresolution Hash Encoding", "https://doi.org/10.1145/3528223.3530127", Year = 2022, Authors = "Thomas Müller, Alex Evans, Christoph Schied, Alexander Keller")]
-public class InstantNGP<T> : NeuralNetworkBase<T>, IRadianceField<T>, NeuralRadianceFields.Interfaces.IImageTrainable<T>
+public partial class InstantNGP<T> : AiDotNet.NeuralNetworks.VectorModelLayoutBase<T>, IRadianceField<T>, NeuralRadianceFields.Interfaces.IImageTrainable<T>
 {
     private readonly InstantNGPOptions<T> _options;
 
@@ -191,6 +191,7 @@ public class InstantNGP<T> : NeuralNetworkBase<T>, IRadianceField<T>, NeuralRadi
     private DenseLayer<T>? _colorOutputLayer;
 
     // Occupancy grid for efficient sampling
+    [Buffer]
     private Tensor<T>? _occupancyGrid;
     private uint[]? _occupancyBitfield;
     private readonly int _occupancyGridResolution;
@@ -198,10 +199,15 @@ public class InstantNGP<T> : NeuralNetworkBase<T>, IRadianceField<T>, NeuralRadi
     private readonly double[] _sceneMax = new double[3];
     private readonly double[] _sceneSize = new double[3];
     private readonly double[] _sceneInvSize = new double[3];
+    [Scratch]
     private Tensor<T>? _lastPositions;
+    [Scratch]
     private Tensor<T>? _lastDirections;
+    [Scratch]
     private Tensor<T>? _lastDensityRaw;
+    [Scratch]
     private Tensor<T>? _lastRgbRaw;
+    [Scratch]
     private Tensor<T>? _lastHashFeatureGradients;
 
     public override bool SupportsTraining => true;
@@ -1785,44 +1791,7 @@ public class InstantNGP<T> : NeuralNetworkBase<T>, IRadianceField<T>, NeuralRadi
         SetTrainingMode(false);
     }
 
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        if (parameters == null)
-        {
-            throw new ArgumentNullException(nameof(parameters));
-        }
-
-        int layerParameterCount = ParameterCountHelper.ToFlatVectorSize(ParameterCount);
-        int hashParameterCount = _numLevels * _hashTableSize * _featuresPerLevel;
-        if (parameters.Length != layerParameterCount &&
-            parameters.Length != layerParameterCount + hashParameterCount)
-        {
-            throw new ArgumentException(
-                $"Expected {layerParameterCount} or {layerParameterCount + hashParameterCount} parameters, got {parameters.Length}.",
-                nameof(parameters));
-        }
-
-        if (layerParameterCount > 0)
-        {
-            SetParameters(parameters.GetSubVector(0, layerParameterCount));
-        }
-
-        if (parameters.Length == layerParameterCount + hashParameterCount)
-        {
-            int offset = layerParameterCount;
-            for (int level = 0; level < _numLevels; level++)
-            {
-                var data = new T[_hashTableSize * _featuresPerLevel];
-                for (int i = 0; i < data.Length; i++)
-                {
-                    data[i] = parameters[offset++];
-                }
-
-                _hashTables[level] = new Tensor<T>(data, [_hashTableSize, _featuresPerLevel]);
-            }
-        }
-    }
-
+    // UpdateParameters restated the base verbatim; ModelBase routes it to SetParameters.
     public override ModelMetadata<T> GetModelMetadata()
     {
         int hashParameterCount = _numLevels * _hashTableSize * _featuresPerLevel;

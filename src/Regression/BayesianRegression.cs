@@ -82,6 +82,7 @@ public class BayesianRegression<T> : RegressionBase<T>
     /// <summary>
     /// The covariance matrix of the posterior distribution over model parameters.
     /// </summary>
+    [Buffer]
     private Matrix<T> _posteriorCovariance;
 
     /// <summary>
@@ -120,9 +121,19 @@ public class BayesianRegression<T> : RegressionBase<T>
     }
 
     /// <summary>
-    /// Bayesian regression computes posterior analytically â€” random parameter injection is harmful.
+    /// Bayesian regression computes its posterior analytically, so the optimizer must not inject
+    /// random starting parameters.
     /// </summary>
-    public override long ParameterCount => 0;
+    /// <remarks>
+    /// This used to be expressed as <c>ParameterCount =&gt; 0</c>, because a zero count makes the
+    /// inherited <c>SupportsParameterInitialization</c> return false. That works, but it overloads a
+    /// COUNT to carry a CAPABILITY: the model does have parameters — the base getter returns its
+    /// coefficients and intercept — so the count contradicted the vector, and anything pairing the
+    /// two by length saw a model with parameters it claimed not to have. Saying "no injection"
+    /// directly leaves the count free to tell the truth. <c>LinearDiscriminantAnalysis</c> already
+    /// used this form.
+    /// </remarks>
+    public override bool SupportsParameterInitialization => false;
 
     /// <summary>
     /// Trains the Bayesian regression model on the provided input data and target values.

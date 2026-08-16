@@ -72,12 +72,14 @@ public class GaussianNaiveBayes<T> : NaiveBayesBase<T>
     /// Mean values for each feature in each class.
     /// Shape: [NumClasses, NumFeatures]
     /// </summary>
+    [Buffer]
     private Matrix<T>? _means;
 
     /// <summary>
     /// Variance values for each feature in each class.
     /// Shape: [NumClasses, NumFeatures]
     /// </summary>
+    [Buffer]
     private Matrix<T>? _variances;
 
     /// <summary>

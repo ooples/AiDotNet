@@ -56,7 +56,7 @@ public abstract class ClassicalVolatilityModelBase<T> :
     public abstract int ParameterCount { get; }
 
     /// <inheritdoc/>
-    long IParameterizable<T, Tensor<T>, Tensor<T>>.ParameterCount => ParameterCount;
+    long IParameterSource<T>.ParameterCount => ParameterCount;
 
     /// <inheritdoc/>
     public virtual bool SupportsParameterInitialization => ParameterCount > 0;

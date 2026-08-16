@@ -1,4 +1,5 @@
 using AiDotNet.Attributes;
+using System.Collections.Generic;
 using AiDotNet.Enums;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks.Layers;
@@ -68,7 +69,10 @@ public class TabPFNClassifier<T> : TabPFNBase<T>
     /// <summary>
     /// Gets the total number of trainable parameters.
     /// </summary>
-    public override long ParameterCount => base.ParameterCount + _classificationHead.ParameterCount;
+    /// <inheritdoc />
+    /// <remarks>The head, folded after the shared backbone by the base's single traversal.</remarks>
+    protected override IEnumerable<ILayer<T>> GetExtraTrainableLayers()
+        => new ILayer<T>[] { _classificationHead };
 
     /// <summary>
     /// Initializes a new instance of the TabPFNClassifier class.
@@ -92,7 +96,9 @@ public class TabPFNClassifier<T> : TabPFNBase<T>
 
         _numClasses = numClasses;
 
+        // Consumes the backbone output, whose width the base already names.
         _classificationHead = new FullyConnectedLayer<T>(
+            MLPOutputDimension,
             numClasses,
             (IActivationFunction<T>?)null);
     }

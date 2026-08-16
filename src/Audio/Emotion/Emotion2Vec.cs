@@ -8,6 +8,7 @@ using AiDotNet.Onnx;
 using AiDotNet.Optimizers;
 using AiDotNet.Audio.Classification;
 using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Tensors.Engines;
 
 namespace AiDotNet.Audio.Emotion;
 
@@ -237,7 +238,32 @@ public class Emotion2Vec<T> : AudioClassifierBase<T>, IEmotionRecognizer<T>
     {
         ThrowIfDisposed();
         if (IsOnnxMode && OnnxEncoder is not null) return OnnxEncoder.Run(input);
-        var c = input; foreach (var l in Layers) c = l.Forward(c); return c;
+        var c = input;
+        foreach (var l in Layers) c = l.Forward(c);
+
+        // The encoder produces frame-wise representations. Emotion2Vec's public
+        // feature contract is one utterance embedding, so pool all leading frames
+        // while preserving the final hidden dimension (and avoid returning a
+        // flattened timeÃ—hidden tensor to embedding consumers).
+        return PoolFrameRepresentations(c);
+    }
+
+    /// <summary>Runs the native stack for tape training and pools frame logits into one embedding.</summary>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input)
+    {
+        ThrowIfDisposed();
+        if (IsOnnxMode && OnnxEncoder is not null) return OnnxEncoder.Run(input);
+        var c = input;
+        foreach (var l in Layers) c = l.Forward(c);
+        return PoolFrameRepresentations(c);
+    }
+
+    private Tensor<T> PoolFrameRepresentations(Tensor<T> tensor)
+    {
+        if (tensor.Shape.Length <= 1) return tensor;
+        int[] axes = new int[tensor.Shape.Length - 1];
+        for (int i = 0; i < axes.Length; i++) axes[i] = i;
+        return Engine.ReduceMean(tensor, axes, keepDims: false);
     }
 
     public override void Train(Tensor<T> input, Tensor<T> expected)
@@ -246,7 +272,7 @@ public class Emotion2Vec<T> : AudioClassifierBase<T>, IEmotionRecognizer<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expected);
+            TrainWithTape(input, expected, _optimizer);
         }
         finally
         {
@@ -254,12 +280,11 @@ public class Emotion2Vec<T> : AudioClassifierBase<T>, IEmotionRecognizer<T>
         }
     }
 
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        if (!_useNativeMode) throw new NotSupportedException("ONNX mode.");
-        int idx = 0; foreach (var l in Layers) { int c = (int)l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; }
-    }
-
+    /// <inheritdoc />
+    /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
+    /// write on every parameter surface, so the guard is stated once here instead of being
+    /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
+    protected override bool SupportsParameterMutation => _useNativeMode;
     protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio)
     {
         if (MelSpec is not null) return MelSpec.Forward(rawAudio);

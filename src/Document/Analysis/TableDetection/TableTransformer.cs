@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Document.Interfaces;
 using AiDotNet.Document.Options;
 using AiDotNet.Enums;
@@ -55,7 +55,7 @@ namespace AiDotNet.Document.Analysis.TableDetection;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("PubTables-1M: Towards Comprehensive Table Extraction from Unstructured Documents", "https://doi.org/10.48550/arXiv.2110.00061", Year = 2022, Authors = "Brandon Smock, Rohith Pesala, Robin Abraham")]
-public class TableTransformer<T> : DocumentNeuralNetworkBase<T>, ITableExtractor<T>
+public partial class TableTransformer<T> : DocumentNeuralNetworkBase<T>, ITableExtractor<T>
 {
     private readonly TableTransformerOptions _options;
 
@@ -69,7 +69,7 @@ public class TableTransformer<T> : DocumentNeuralNetworkBase<T>, ITableExtractor
     private InferenceSession? _onnxStructureSession;
     private string? _onnxDetectionModelPath;
     private string? _onnxStructureModelPath;
-    private readonly IOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private int _hiddenDim;
     private int _numEncoderLayers;
     private int _numDecoderLayers;
@@ -150,7 +150,7 @@ public class TableTransformer<T> : DocumentNeuralNetworkBase<T>, ITableExtractor
         int numDecoderLayers = 6,
         int numHeads = 8,
         int numQueries = 100,
-        IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         TableTransformerOptions? options = null)
         : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
@@ -175,7 +175,15 @@ public class TableTransformer<T> : DocumentNeuralNetworkBase<T>, ITableExtractor
         _numQueries = numQueries;
         _numTableClasses = 2;       // background, table
         _numStructureClasses = 7;   // background, table, column, row, column header, projected row header, spanning cell
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        // TableTransformer is a DETR-based detector (Smock et al. 2022). DETR fine-tunes at 1e-4 with
+        // gradient-norm clipping at 0.1-1.0; built bare, the optimizer ran on framework defaults.
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
+            new AiDotNet.Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = 0.0001,
+                EnableGradientClipping = true,
+                MaxGradientNorm = 1.0,
+            });
 
         ImageSize = imageSize;
 
@@ -215,7 +223,7 @@ public class TableTransformer<T> : DocumentNeuralNetworkBase<T>, ITableExtractor
         int numDecoderLayers = 6,
         int numHeads = 8,
         int numQueries = 100,
-        IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         TableTransformerOptions? options = null)
         : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
@@ -231,7 +239,15 @@ public class TableTransformer<T> : DocumentNeuralNetworkBase<T>, ITableExtractor
         _numQueries = numQueries;
         _numTableClasses = 2;
         _numStructureClasses = 7;
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        // TableTransformer is a DETR-based detector (Smock et al. 2022). DETR fine-tunes at 1e-4 with
+        // gradient-norm clipping at 0.1-1.0; built bare, the optimizer ran on framework defaults.
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
+            new AiDotNet.Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = 0.0001,
+                EnableGradientClipping = true,
+                MaxGradientNorm = 1.0,
+            });
 
         ImageSize = imageSize;
 
@@ -1178,7 +1194,10 @@ public class TableTransformer<T> : DocumentNeuralNetworkBase<T>, ITableExtractor
             // not match GetParameters() (a layer's gradient count differs from its
             // ParameterCount), throwing in Engine.Subtract once the forward stopped
             // crashing. TrainWithTape owns the whole step.
-            TrainWithTape(input, expectedOutput);
+            // Pass the configured optimizer through. The two-argument overload left _optimizer
+            // assigned but never read, so training ran on the framework default instead of DETR's
+            // 1e-4 (Smock et al., 2022) and the memorization loss went from 0.0000 to 12.3652.
+            TrainWithTape(input, expectedOutput, _optimizer);
         }
         finally
         {
@@ -1186,22 +1205,18 @@ public class TableTransformer<T> : DocumentNeuralNetworkBase<T>, ITableExtractor
         }
     }
 
-    /// <inheritdoc/>
-    public override void UpdateParameters(Vector<T> gradients)
-    {
-        if (!_useNativeMode)
-        {
-            throw new NotSupportedException("Parameter updates are not supported in ONNX inference mode.");
-        }
+    // UpdateParameters applied a GRADIENT STEP, but its one-argument form is the value setter and every caller passes values -- the override corrupted the model. Removed under AIDN082.
 
-        var currentParams = GetParameters();
-        T learningRate = NumOps.FromDouble(0.0001);
-
-        currentParams = Engine.Subtract(currentParams, Engine.Multiply(gradients, learningRate));
-
-        SetParameters(currentParams);
-    }
-
+    /// <summary>
+    /// Parameters cannot be written while the model is backed by a loaded ONNX graph: the weights
+    /// belong to that graph, not to this instance.
+    /// </summary>
+    /// <remarks>
+    /// Replaces a hand-written throw that used to sit inside UpdateParameters. The base checks this
+    /// on every mutating entry point rather than the one member the throw happened to guard, and
+    /// reading -- ParameterCount and GetParameters -- stays available either way.
+    /// </remarks>
+    protected override bool SupportsParameterMutation => _useNativeMode;
     private Vector<T> CollectParameterGradients()
     {
         var gradients = new List<T>();

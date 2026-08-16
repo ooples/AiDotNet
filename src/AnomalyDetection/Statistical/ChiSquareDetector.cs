@@ -42,7 +42,9 @@ namespace AiDotNet.AnomalyDetection.Statistical;
 public class ChiSquareDetector<T> : AnomalyDetectorBase<T>
 {
     private readonly double _alpha;
+    [Buffer]
     private Vector<T>? _mean;
+    [Buffer]
     private Matrix<T>? _covarianceInverse;
 
     private T _chiSquareCritical;

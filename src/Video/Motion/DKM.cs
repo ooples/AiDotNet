@@ -48,7 +48,7 @@ namespace AiDotNet.Video.Motion;
     "https://arxiv.org/abs/2202.00667",
     Year = 2023,
     Authors = "Johan Edstedt, Ioannis Athanasiadis, Marten Wadenbäck, Michael Felsberg")]
-public class DKM<T> : OpticalFlowBase<T>
+public partial class DKM<T> : OpticalFlowBase<T>
 {
     private readonly DKMOptions _options;
 
@@ -93,6 +93,18 @@ public class DKM<T> : OpticalFlowBase<T>
     {
         _options = options ?? new DKMOptions();
         Options = _options;
+
+        if (_options.LearningRate is double learningRate)
+        {
+            if (learningRate <= 0)
+                throw new ArgumentOutOfRangeException(nameof(options), "Learning rate must be greater than zero.");
+
+            SetBaseTrainOptimizer(new AiDotNet.Optimizers.AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
+                new AiDotNet.Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+                {
+                    InitialLearningRate = learningRate
+                }));
+        }
 
         _numFeatures = numFeatures;
         _numLayers = numLayers;
@@ -163,14 +175,12 @@ public class DKM<T> : OpticalFlowBase<T>
         }
         var rawFlow = _outputConv.Forward(feat);
 
-        // Extract 2-channel flow field
-        var flow = new Tensor<T>([2, height, width]);
-        for (int i = 0; i < Math.Min(rawFlow.Length, flow.Length); i++)
-        {
-            flow.Data.Span[i] = rawFlow.Data.Span[i];
-        }
-
-        return flow;
+        // The output convolution already emits exactly 2 channels at the input resolution
+        // (ConvolutionalLayer(2, kernel 3, stride 1, padding 1)), so rawFlow IS the flow field. The
+        // element-by-element Data.Span copy this replaced was a numeric no-op that severed the
+        // autodiff tape at the end of the forward pass, discarding the gradient path for the whole
+        // network behind it. Returning the tensor directly is bit-identical.
+        return rawFlow;
     }
 
     /// <inheritdoc/>
@@ -187,44 +197,7 @@ public class DKM<T> : OpticalFlowBase<T>
         }
     }
 
-    /// <inheritdoc/>
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        int offset = 0;
-        if (_featureExtract is not null)
-        {
-            var p = _featureExtract.GetParameters();
-            if (offset + p.Length <= parameters.Length)
-            {
-                var sub = new Vector<T>(p.Length);
-                for (int i = 0; i < p.Length; i++) sub[i] = parameters[offset + i];
-                _featureExtract.SetParameters(sub);
-                offset += p.Length;
-            }
-        }
-        foreach (var block in _processingBlocks)
-        {
-            var p = block.GetParameters();
-            if (offset + p.Length <= parameters.Length)
-            {
-                var sub = new Vector<T>(p.Length);
-                for (int i = 0; i < p.Length; i++) sub[i] = parameters[offset + i];
-                block.SetParameters(sub);
-                offset += p.Length;
-            }
-        }
-        if (_outputConv is not null)
-        {
-            var p = _outputConv.GetParameters();
-            if (offset + p.Length <= parameters.Length)
-            {
-                var sub = new Vector<T>(p.Length);
-                for (int i = 0; i < p.Length; i++) sub[i] = parameters[offset + i];
-                _outputConv.SetParameters(sub);
-            }
-        }
-    }
-
+    // UpdateParameters restated the base verbatim; ModelBase routes it to SetParameters.
     /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()
     {

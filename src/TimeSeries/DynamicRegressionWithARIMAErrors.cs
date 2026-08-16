@@ -59,7 +59,7 @@ namespace AiDotNet.TimeSeries;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("Forecasting: Principles and Practice", "https://otexts.com/fpp3/", Year = 2021, Authors = "Rob J. Hyndman, George Athanasopoulos")]
-public class DynamicRegressionWithARIMAErrors<T> : TimeSeriesModelBase<T>, IExogenousForecastModel<T>
+public partial class DynamicRegressionWithARIMAErrors<T> : TimeSeriesModelBase<T>, IExogenousForecastModel<T>
 {
     /// <summary>
     /// Forecasts from future exogenous regressors (the unified facade-forecast entry point).
@@ -227,6 +227,7 @@ public class DynamicRegressionWithARIMAErrors<T> : TimeSeriesModelBase<T>, IExog
     /// 
     /// This field stores the original values needed to convert predictions back to the original scale.
     /// </remarks>
+    [Buffer]
     private Vector<T> _differenced;
 
     /// <summary>
@@ -244,6 +245,7 @@ public class DynamicRegressionWithARIMAErrors<T> : TimeSeriesModelBase<T>, IExog
     private T _intercept;
 
     /// <summary>Stored training series for in-sample predictions.</summary>
+    [Buffer]
     private Vector<T> _trainingSeries = Vector<T>.Empty();
 
     /// <summary>
@@ -251,6 +253,7 @@ public class DynamicRegressionWithARIMAErrors<T> : TimeSeriesModelBase<T>, IExog
     /// so <see cref="ForecastWithExogenous"/> can seed its AR error forecast from the tail of the
     /// data the model was actually fit on.
     /// </summary>
+    [Buffer]
     private Vector<T> _trainingResiduals = Vector<T>.Empty();
 
     /// <summary>

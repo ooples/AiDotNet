@@ -61,7 +61,7 @@ namespace AiDotNet.NeuralNetworks.Tabular;
     "https://arxiv.org/abs/2106.11959",
     Year = 2021,
     Authors = "Gorishniy, Y., Rubachev, I., Khrulkov, V., & Babenko, A.")]
-public class FTTransformerNetwork<T> : NeuralNetworkBase<T>
+public class FTTransformerNetwork<T> : TabularNeuralNetworkBase<T>
 {
     private FTTransformerOptions<T> _options;
 
@@ -116,7 +116,22 @@ public class FTTransformerNetwork<T> : NeuralNetworkBase<T>
     {
         _options = options ?? new FTTransformerOptions<T>();
         _lossFunction = lossFunction;
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        // FT-Transformer (Gorishniy et al., 2021 — arXiv:2106.11959) is trained with
+        // AdamW at a LOW learning rate: the paper's default is lr=1e-4 with weight
+        // decay 1e-5 and NO learning-rate schedule. The generic default optimizer is
+        // plain Adam at lr=1e-3 — 10x the paper's rate — which lets training overshoot
+        // the minimum of the tiny tabular objective and drift back UP once it has
+        // converged (MoreData_ShouldNotDegrade: the 200-iteration loss came out higher
+        // than the 50-iteration loss). Matching the paper's AdamW@1e-4 (together with
+        // the PreNorm transformer blocks that are already the default and the model's
+        // MaxGradientNorm clipping) keeps the loss decreasing monotonically with more
+        // training. WeightDecay is threaded from the options so callers can still tune it.
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
+            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = 1e-4,
+                WeightDecay = _options.WeightDecay,
+            });
 
         if (_options.NumHeads <= 0)
         {
@@ -196,22 +211,8 @@ public class FTTransformerNetwork<T> : NeuralNetworkBase<T>
         }
     }
 
-    /// <inheritdoc/>
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        int startIndex = 0;
-        foreach (var layer in Layers)
-        {
-            int layerParameterCount = checked((int)layer.ParameterCount);
-            if (layerParameterCount > 0)
-            {
-                Vector<T> layerParameters = parameters.SubVector(startIndex, layerParameterCount);
-                layer.UpdateParameters(layerParameters);
-                startIndex += layerParameterCount;
-            }
-        }
-    }
-
+    // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
+    // exactly the same enumeration, so this said nothing the base does not already say.
     /// <inheritdoc/>
     public override Dictionary<string, T> GetFeatureImportance()
     {

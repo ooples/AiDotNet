@@ -23,6 +23,17 @@ public class CUPSOptions : NeuralNetworkOptions
 
         Seed = other.Seed;
         EncoderLayerCount = other.EncoderLayerCount;
+        ChannelDimensions = (int[])other.ChannelDimensions.Clone();
+        StageDepths = (int[])other.StageDepths.Clone();
+        DecoderDimension = other.DecoderDimension;
     }
 
+    /// <summary>Feature widths for the four hierarchical encoder stages.</summary>
+    public int[] ChannelDimensions { get; set; } = [96, 192, 384, 768];
+
+    /// <summary>Block counts for the four hierarchical encoder stages.</summary>
+    public int[] StageDepths { get; set; } = [2, 2, 6, 2];
+
+    /// <summary>Feature width used by the panoptic decoder.</summary>
+    public int DecoderDimension { get; set; } = 256;
 }

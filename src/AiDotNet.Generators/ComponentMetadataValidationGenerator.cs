@@ -58,6 +58,14 @@ public class ComponentMetadataValidationGenerator : IIncrementalGenerator
         defaultSeverity: DiagnosticSeverity.Warning,
         isEnabledByDefault: true);
 
+    private static readonly DiagnosticDescriptor InvalidLayerGradientContract = new(
+        id: "AIDN086",
+        title: "Layer declares a contradictory gradient contract",
+        messageFormat: "Layer '{0}' has an invalid [LayerProperty] gradient contract: {1}",
+        category: "AiDotNet.ComponentMetadata",
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true);
+
     // Base type / interface prefixes
     private const string IActivationFunctionPrefix = "AiDotNet.Interfaces.IActivationFunction<";
     private const string LossFunctionBasePrefix = "AiDotNet.LossFunctions.LossFunctionBase<";
@@ -259,6 +267,44 @@ public class ComponentMetadataValidationGenerator : IIncrementalGenerator
 
         if (!HasAttributeEndingWith(attrs, "LayerTaskAttribute"))
             context.ReportDiagnostic(Diagnostic.Create(MissingLayerAttributes, location, name, "LayerTask"));
+
+        var property = attrs.FirstOrDefault(attr =>
+            attr.AttributeClass?.ToDisplayString() == LayerPropertyAttr);
+        if (property is null)
+            return;
+
+        bool isTrainable = GetNamedBool(property, "IsTrainable", defaultValue: true);
+        bool supportsBackpropagation = GetNamedBool(property, "SupportsBackpropagation", defaultValue: true);
+        bool usesSurrogateGradient = GetNamedBool(property, "UsesSurrogateGradient", defaultValue: false);
+        bool trainsViaCustomLoss = GetNamedBool(property, "TrainsViaCustomLoss", defaultValue: false);
+
+        string? invalidReason = null;
+        if (usesSurrogateGradient && trainsViaCustomLoss)
+            invalidReason = "UsesSurrogateGradient and TrainsViaCustomLoss are mutually exclusive";
+        else if (usesSurrogateGradient && (!isTrainable || !supportsBackpropagation))
+            invalidReason = "a surrogate-gradient layer must be trainable and support backpropagation";
+        else if (trainsViaCustomLoss && (!isTrainable || supportsBackpropagation))
+            invalidReason = "a custom-loss layer must be trainable and set SupportsBackpropagation = false because its Forward output is not the gradient objective";
+
+        if (invalidReason is not null)
+        {
+            context.ReportDiagnostic(Diagnostic.Create(
+                InvalidLayerGradientContract,
+                location,
+                name,
+                invalidReason));
+        }
+    }
+
+    private static bool GetNamedBool(AttributeData attribute, string name, bool defaultValue)
+    {
+        foreach (var argument in attribute.NamedArguments)
+        {
+            if (argument.Key == name && argument.Value.Value is bool value)
+                return value;
+        }
+
+        return defaultValue;
     }
 
     private static void ValidateComponentPipelinePairing(SourceProductionContext context, INamedTypeSymbol symbol)

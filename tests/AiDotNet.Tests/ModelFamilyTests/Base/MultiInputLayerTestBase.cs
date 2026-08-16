@@ -12,9 +12,14 @@ namespace AiDotNet.Tests.ModelFamilyTests.Base;
 /// Used by merge layers: AddLayer, ConcatenateLayer, MultiplyLayer.
 /// Tests forward output, backward gradient flow, parameter consistency, and serialization.
 /// </summary>
-public abstract class MultiInputLayerTestBase
+public abstract class MultiInputLayerTestBase<T>
 {
-    protected abstract ILayer<double> CreateLayer();
+    protected static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+    protected static T ToT(double value) => NumOps.FromDouble(value);
+    protected static double ToD(T value) => Convert.ToDouble(value);
+    protected virtual double Tolerance => typeof(T) == typeof(float) ? 1e-6 : 1e-12;
+
+    protected abstract ILayer<T> CreateLayer();
 
     /// <summary>Shape of each input tensor. Default: [1, 4].</summary>
     protected virtual int[] InputShape => [1, 4];
@@ -25,18 +30,18 @@ public abstract class MultiInputLayerTestBase
     /// <summary>Whether the layer has trainable parameters. Default: false (merge layers typically don't).</summary>
     protected virtual bool ExpectsTrainableParameters => false;
 
-    protected static Tensor<double> CreateRandomTensor(int[] shape, int seed = 42)
+    protected static Tensor<T> CreateRandomTensor(int[] shape, int seed = 42)
     {
         var rng = new Random(seed);
-        var tensor = new Tensor<double>(shape);
+        var tensor = new Tensor<T>(shape);
         for (int i = 0; i < tensor.Length; i++)
-            tensor[i] = rng.NextDouble() * 2.0 - 1.0;
+            tensor[i] = ToT(rng.NextDouble() * 2.0 - 1.0);
         return tensor;
     }
 
-    private Tensor<double>[] CreateInputs(int baseSeed = 42)
+    private Tensor<T>[] CreateInputs(int baseSeed = 42)
     {
-        var inputs = new Tensor<double>[NumInputs];
+        var inputs = new Tensor<T>[NumInputs];
         for (int i = 0; i < NumInputs; i++)
             inputs[i] = CreateRandomTensor(InputShape, baseSeed + i * 100);
         return inputs;
@@ -47,15 +52,15 @@ public abstract class MultiInputLayerTestBase
     /// The ILayer interface only exposes Forward(Tensor), so we use the
     /// LayerBase.Forward(params Tensor[]) overload via reflection.
     /// </summary>
-    protected Tensor<double> ForwardMulti(ILayer<double> layer, Tensor<double>[] inputs)
+    protected Tensor<T> ForwardMulti(ILayer<T> layer, Tensor<T>[] inputs)
     {
         var method = layer.GetType().GetMethod("Forward",
-            new[] { typeof(Tensor<double>[]) });
+            new[] { typeof(Tensor<T>[]) });
 
         if (method is not null)
         {
             var result = method.Invoke(layer, new object[] { inputs });
-            if (result is Tensor<double> tensor)
+            if (result is Tensor<T> tensor)
                 return tensor;
         }
 
@@ -80,8 +85,8 @@ public abstract class MultiInputLayerTestBase
         Assert.True(output.Length > 0, "Output should not be empty.");
         for (int i = 0; i < output.Length; i++)
         {
-            Assert.False(double.IsNaN(output[i]), $"Output[{i}] is NaN.");
-            Assert.False(double.IsInfinity(output[i]), $"Output[{i}] is Infinity.");
+            Assert.False(double.IsNaN(ToD(output[i])), $"Output[{i}] is NaN.");
+            Assert.False(double.IsInfinity(ToD(output[i])), $"Output[{i}] is Infinity.");
         }
     }
 
@@ -131,7 +136,7 @@ public abstract class MultiInputLayerTestBase
         int minLen = Math.Min(output1.Length, output2.Length);
         for (int i = 0; i < minLen; i++)
         {
-            if (Math.Abs(output1[i] - output2[i]) > 1e-12)
+            if (Math.Abs(ToD(output1[i]) - ToD(output2[i])) > Tolerance)
             {
                 anyDifferent = true;
                 break;
@@ -180,7 +185,7 @@ public abstract class MultiInputLayerTestBase
         var output = ForwardMulti(layer, inputs);
         Assert.True(output.Length > 0, "Output should not be empty after ResetState.");
         for (int i = 0; i < output.Length; i++)
-            Assert.False(double.IsNaN(output[i]), $"Output[{i}] is NaN after ResetState.");
+            Assert.False(double.IsNaN(ToD(output[i])), $"Output[{i}] is NaN after ResetState.");
     }
 
     // =========================================================================
@@ -213,8 +218,11 @@ public abstract class MultiInputLayerTestBase
         Assert.Equal(originalOutput.Length, output2.Length);
         for (int i = 0; i < originalOutput.Length; i++)
         {
-            Assert.True(Math.Abs(originalOutput[i] - output2[i]) < 1e-12,
-                $"Output[{i}] differs after serialization: original={originalOutput[i]:G17}, deserialized={output2[i]:G17}");
+            if (EqualityComparer<T>.Default.Equals(originalOutput[i], output2[i])) continue;
+            double originalValue = ToD(originalOutput[i]);
+            double restoredValue = ToD(output2[i]);
+            Assert.True(Math.Abs(originalValue - restoredValue) < Tolerance,
+                $"Output[{i}] differs after serialization: original={originalValue:G17}, deserialized={restoredValue:G17}");
         }
     }
 
@@ -245,7 +253,7 @@ public abstract class MultiInputLayerTestBase
         int minLen = Math.Min(outputBoth.Length, outputModified.Length);
         for (int i = 0; i < minLen; i++)
         {
-            if (Math.Abs(outputBoth[i] - outputModified[i]) > 1e-12)
+            if (Math.Abs(ToD(outputBoth[i]) - ToD(outputModified[i])) > Tolerance)
             {
                 anyDifferent = true;
                 break;
@@ -255,3 +263,6 @@ public abstract class MultiInputLayerTestBase
             "Changing the last input should change the output — layer may be ignoring some inputs.");
     }
 }
+
+/// <summary>Default-precision alias for existing hand-written fixtures.</summary>
+public abstract class MultiInputLayerTestBase : MultiInputLayerTestBase<double> { }

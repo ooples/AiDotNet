@@ -185,6 +185,24 @@ namespace AiDotNetTests.UnitTests.Agentic.SelfImproving
         // Minimal IFullModel test double; the fine-tuner only stores and returns it, so members are unused.
         private sealed class StubStringModel : IFullModel<double, string, string>
         {
+            // A pass-through test double owns no weights. Empty is the honest surface, and the
+            // same answer nn.Module.parameters() gives for a module holding none.
+            public long ParameterCount => 0;
+            public bool SupportsParameterInitialization => false;
+            public Vector<double> SanitizeParameters(Vector<double> parameters) => parameters;
+            public Vector<double> GetParameters() => new Vector<double>(0);
+            public void SetParameters(Vector<double> parameters)
+            {
+                if (parameters is null) throw new ArgumentNullException(nameof(parameters));
+                if (parameters.Length != 0)
+                    throw new ArgumentException("This test model is parameter-free.", nameof(parameters));
+            }
+            public IFullModel<double, string, string> WithParameters(Vector<double> parameters)
+            {
+                SetParameters(parameters);
+                return this;
+            }
+
             public ILossFunction<double> DefaultLossFunction => new MeanSquaredErrorLoss<double>();
 
             public void Train(string input, string expectedOutput) => throw new NotSupportedException();

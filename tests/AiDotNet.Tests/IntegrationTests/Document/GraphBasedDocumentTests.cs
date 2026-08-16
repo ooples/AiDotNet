@@ -102,6 +102,7 @@ public class GraphBasedDocumentTests
     [Fact(Timeout = 120000)]
     public async Task PICK_NativeConstruction_Succeeds()
     {
+        await Task.Yield();
         var arch = CreateArchitecture();
         var model = new PICK<double>(arch);
         Assert.NotNull(model);
@@ -110,9 +111,10 @@ public class GraphBasedDocumentTests
     [Fact(Timeout = 120000)]
     public async Task PICK_Predict_ReturnsOutput()
     {
+        await Task.Yield();
         var arch = CreateArchitecture();
         var model = new PICK<double>(arch);
-        var input = CreateSmallImage();
+        var input = CreateTokenIds(10);
         var output = model.Predict(input);
         Assert.NotNull(output);
         Assert.True(output.Shape.Length > 0, "Output should have non-empty shape");
@@ -122,6 +124,7 @@ public class GraphBasedDocumentTests
     [Fact(Timeout = 120000)]
     public async Task PICK_GetModelMetadata_ReturnsValidData()
     {
+        await Task.Yield();
         var arch = CreateArchitecture();
         var model = new PICK<double>(arch);
         var meta = model.GetModelMetadata();

@@ -51,12 +51,35 @@ namespace AiDotNet.Video.FrameInterpolation;
 [ModelTask(ModelTask.FrameInterpolation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("IQ-VFI: Image Quality-Aware Video Frame Interpolation",
-    "https://arxiv.org/abs/2408.11108",
+// CITATION CORRECTED. This model previously cited "IQ-VFI: Image Quality-Aware Video Frame
+// Interpolation" at arXiv:2408.11108, attributed to Xinyi Zhang, Fanghua Yu, Jie Huang and Feng Zhao.
+// Every part of that was wrong: arXiv:2408.11108 is "The densities in diffuse and translucent
+// molecular clouds", an ASTROPHYSICS paper on interstellar cloud densities by Neufeld et al. The "IQ"
+// in IQ-VFI is Implicit Quadratic, not Image Quality — and the model had been built to the misread
+// title, which is why its options carried NumQualityBlocks and QualityThreshold while the paper's
+// actual mechanism (acceleration-modulated quadratic motion) was absent entirely.
+[ResearchPaper("IQ-VFI: Implicit Quadratic Motion Estimation for Video Frame Interpolation",
+    "https://openaccess.thecvf.com/content/CVPR2024/papers/Hu_IQ-VFI_Implicit_Quadratic_Motion_Estimation_for_Video_Frame_Interpolation_CVPR_2024_paper.pdf",
     Year = 2024,
-    Authors = "Xinyi Zhang, Fanghua Yu, Jie Huang, Feng Zhao")]
+    Authors = "Mengshun Hu, Kui Jiang, Zhihang Zhong, Zheng Wang, Yinqiang Zheng")]
 public class IQVFI<T> : FrameInterpolationBase<T>
 {
+    /// <summary>
+    /// Gets the implicit quadratic motion model, which modulates linear intermediate flows into
+    /// quadratic ones using a latent acceleration prior.
+    /// </summary>
+    /// <remarks>
+    /// This is the mechanism the paper is named for and it was entirely missing before the citation was
+    /// corrected. See <see cref="ImplicitQuadraticMotion{T}"/>.
+    /// </remarks>
+    public ImplicitQuadraticMotion<T> QuadraticMotion { get; } = new();
+
+    /// <summary>
+    /// Gets the knowledge-distillation objective: pyramid reconstruction plus acceleration and motion
+    /// distillation from a privileged teacher, gated by the selective mask.
+    /// </summary>
+    public IQVFIDistillation<T> Distillation { get; } = new();
+
     #region Fields
 
     private readonly IQVFIOptions _options;
@@ -145,7 +168,7 @@ public class IQVFI<T> : FrameInterpolationBase<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expected);
+            TrainWithTape(input, expected, _optimizer);
         }
         finally
         {
@@ -153,18 +176,11 @@ public class IQVFI<T> : FrameInterpolationBase<T>
         }
     }
 
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        if (!_useNativeMode) throw new NotSupportedException("Parameter updates are not supported in ONNX mode.");
-        int idx = 0;
-        foreach (var layer in Layers)
-        {
-            int count = checked((int)layer.ParameterCount);
-            layer.UpdateParameters(parameters.Slice(idx, count));
-            idx += count;
-        }
-    }
-
+    /// <inheritdoc />
+    /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
+    /// write on every parameter surface, so the guard is stated once here instead of being
+    /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
+    protected override bool SupportsParameterMutation => _useNativeMode;
     // Identity: tape training runs the raw layer stack (no NormalizeFrames) and the sigmoid head
     // emits [0,1] frames, so /255+*255 only on inference was a train/eval mismatch (MoreData).
     protected override Tensor<T> PreprocessFrames(Tensor<T> rawFrames) => rawFrames;

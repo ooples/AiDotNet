@@ -53,7 +53,7 @@ namespace AiDotNet.Document.OCR.TextDetection;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("EAST: An Efficient and Accurate Scene Text Detector", "https://doi.org/10.48550/arXiv.1704.03155", Year = 2017, Authors = "Xinyu Zhou, Cong Yao, He Wen, Yuzhi Wang, Shuchang Zhou, Weiran He, Jiajun Liang")]
-public class EAST<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
+public partial class EAST<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
 {
     private readonly EASTOptions _options;
 
@@ -64,7 +64,7 @@ public class EAST<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
 
     private readonly bool _useNativeMode;
     private readonly InferenceSession? _onnxSession;
-    private readonly IOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private readonly int _backboneChannels;
     private readonly int _featureChannels;
     private readonly string _geometryType;
@@ -115,7 +115,7 @@ public class EAST<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
         int backboneChannels = 512,
         int featureChannels = 128,
         string geometryType = "RBOX",
-        IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         EASTOptions? options = null)
         : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>(), 1.0)
@@ -159,7 +159,7 @@ public class EAST<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
         int backboneChannels = 512,
         int featureChannels = 128,
         string geometryType = "RBOX",
-        IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         EASTOptions? options = null)
         : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>(), 1.0)
@@ -706,7 +706,7 @@ public class EAST<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expectedOutput);
+            TrainWithTape(input, expectedOutput, _optimizer);
         }
         finally
         {
@@ -714,19 +714,18 @@ public class EAST<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
         }
     }
 
-    /// <inheritdoc/>
-    public override void UpdateParameters(Vector<T> gradients)
-    {
-        if (!_useNativeMode)
-            throw new NotSupportedException("Parameter updates not supported in ONNX mode.");
+    // UpdateParameters applied a GRADIENT STEP, but its one-argument form is the value setter and every caller passes values -- the override corrupted the model. Removed under AIDN082.
 
-        var currentParams = GetParameters();
-        T lr = NumOps.FromDouble(0.0001);
-        
-        currentParams = Engine.Subtract(currentParams, Engine.Multiply(gradients, lr));
-        SetParameters(currentParams);
-    }
-
+    /// <summary>
+    /// Parameters cannot be written while the model is backed by a loaded ONNX graph: the weights
+    /// belong to that graph, not to this instance.
+    /// </summary>
+    /// <remarks>
+    /// Replaces a hand-written throw that used to sit inside UpdateParameters. The base checks this
+    /// on every mutating entry point rather than the one member the throw happened to guard, and
+    /// reading -- ParameterCount and GetParameters -- stays available either way.
+    /// </remarks>
+    protected override bool SupportsParameterMutation => _useNativeMode;
     private Vector<T> CollectGradients()
     {
         var grads = new List<T>();

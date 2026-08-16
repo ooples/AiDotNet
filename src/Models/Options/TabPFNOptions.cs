@@ -38,6 +38,65 @@ namespace AiDotNet.Models.Options;
 /// </remarks>
 public class TabPFNOptions<T> : RiskModelOptions<T>
 {
+    /// <summary>Initializes a new instance with default values.</summary>
+    public TabPFNOptions() { }
+
+    /// <summary>Initializes a new instance by copying every property from another instance.</summary>
+    /// <param name="other">The instance to copy from.</param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="other"/> is null.</exception>
+    /// <remarks>
+    /// <para>
+    /// EVERY property is carried, including the inherited <c>ModelOptions.Seed</c> -- which is
+    /// declared on a base class rather than in this file, so a constructor written from the local
+    /// declarations alone would silently drop it and the clone would lose its configured seed.
+    /// </para>
+    /// <para>
+    /// Collection properties are CLONED, not assigned: a bare assignment leaves the clone and
+    /// the original writing through the same buffer, so mutating one silently reconfigures the
+    /// other. A null source stays null rather than becoming an empty collection.
+    /// </para>
+    /// </remarks>
+    public TabPFNOptions(TabPFNOptions<T> other)
+    {
+        if (other is null) throw new ArgumentNullException(nameof(other));
+
+        Seed = other.Seed;
+        LearningRate = other.LearningRate;
+        EmbeddingDimension = other.EmbeddingDimension;
+        NumLayers = other.NumLayers;
+        NumHeads = other.NumHeads;
+        FeedForwardMultiplier = other.FeedForwardMultiplier;
+        DropoutRate = other.DropoutRate;
+        MaxFeatures = other.MaxFeatures;
+        MaxContextSamples = other.MaxContextSamples;
+        MaxClasses = other.MaxClasses;
+        UsePositionalEncoding = other.UsePositionalEncoding;
+        UsePreNorm = other.UsePreNorm;
+        InitScale = other.InitScale;
+        // An empty array rather than a suppressed null. OutputHeadDimensions is declared
+        // non-nullable, so a null source already violates its own contract, and propagating that
+        // with a null-forgiving operator just moves the failure downstream to whoever reads it.
+        OutputHeadDimensions = other.OutputHeadDimensions is null
+            ? []
+            : (int[])other.OutputHeadDimensions.Clone();
+        UseEnsemble = other.UseEnsemble;
+        NumEnsembles = other.NumEnsembles;
+        CategoricalCardinalities = other.CategoricalCardinalities is null ? null : (int[])other.CategoricalCardinalities.Clone();
+        HiddenActivation = other.HiddenActivation;
+        HiddenVectorActivation = other.HiddenVectorActivation;
+    }
+
+    /// <summary>
+    /// Gets or sets the Adam learning rate.
+    /// </summary>
+    /// <value>The learning rate, defaulting to the paper's 1e-4 (Hollmann et al., ICLR 2023).</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> How big a step the model takes each time it learns. The default is
+    /// the value the TabPFN authors used. Lower it if the loss stops improving and starts drifting
+    /// back up over long training runs.</para>
+    /// </remarks>
+    public double LearningRate { get; set; } = 1e-4;
+
     /// <summary>
     /// Gets or sets the embedding dimension.
     /// </summary>

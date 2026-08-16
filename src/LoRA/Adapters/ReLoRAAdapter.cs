@@ -201,7 +201,7 @@ public class ReLoRAAdapter<T> : LoRAAdapterBase<T>
 
         // Initialize accumulated weight matrix to zero
         int inputSize = GetInputShape()[0];
-        int outputSize = GetOutputShape()[0];
+        int outputSize = GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0];
         _accumulatedWeight = new Matrix<T>(outputSize, inputSize);
         for (int i = 0; i < outputSize; i++)
         {
@@ -332,7 +332,7 @@ public class ReLoRAAdapter<T> : LoRAAdapterBase<T>
     /// All three are added together to produce the final output.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // Check if restart is needed
         if (ShouldRestart())
@@ -349,7 +349,7 @@ public class ReLoRAAdapter<T> : LoRAAdapterBase<T>
         // Apply accumulated weights
         int batchSize = input.Shape[0];
         int inputSize = input.Shape.Length > 1 ? input.Shape[1] : input.Length;
-        int outputSize = GetOutputShape()[0];
+        int outputSize = GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0];
 
         // Convert input to matrix for accumulated weight multiplication
         Matrix<T> inputMatrix = new Matrix<T>(batchSize, inputSize);
@@ -426,32 +426,6 @@ public class ReLoRAAdapter<T> : LoRAAdapterBase<T>
         }
 
         // Update parameter vector
-        UpdateParametersFromLayers();
-    }
-
-    /// <summary>
-    /// Updates the parameter vector from the current layer states.
-    /// </summary>
-    protected override void UpdateParametersFromLayers()
-    {
-        int idx = 0;
-
-        // If base layer is not frozen, pack its parameters first
-        if (!_freezeBase)
-        {
-            Vector<T> baseParams = _baseLayer.GetParameters();
-            for (int i = 0; i < baseParams.Length; i++)
-            {
-                Parameters[idx++] = baseParams[i];
-            }
-        }
-
-        // Pack LoRA parameters
-        Vector<T> loraParams = _loraLayer.GetParameters();
-        for (int i = 0; i < loraParams.Length; i++)
-        {
-            Parameters[idx++] = loraParams[i];
-        }
     }
 
     /// <summary>
@@ -496,7 +470,7 @@ public class ReLoRAAdapter<T> : LoRAAdapterBase<T>
         Vector<T> baseParams = _baseLayer.GetParameters();
 
         int inputSize = GetInputShape()[0];
-        int outputSize = GetOutputShape()[0];
+        int outputSize = GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0];
         int weightCount = inputSize * outputSize;
 
         // Create new parameters with all merged weights

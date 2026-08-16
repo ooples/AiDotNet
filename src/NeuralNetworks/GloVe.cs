@@ -53,7 +53,7 @@ namespace AiDotNet.NeuralNetworks
     [ModelComplexity(ModelComplexity.Low)]
     [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     [ResearchPaper("GloVe: Global Vectors for Word Representation", "https://nlp.stanford.edu/pubs/glove.pdf", Year = 2014, Authors = "Jeffrey Pennington, Richard Socher, Christopher D. Manning")]
-    public class GloVe<T> : NeuralNetworkBase<T>, IEmbeddingModel<T>
+    public class GloVe<T> : TextEmbeddingModelLayoutBase<T>, IEmbeddingModel<T>
     {
         private readonly GloVeOptions _options;
 
@@ -383,29 +383,8 @@ namespace AiDotNet.NeuralNetworks
             return Engine.TensorBroadcastAdd(withBias, bTilde);
         }
 
-        /// <summary>
-        /// Updates the internal weights and biases of the model.
-        /// </summary>
-        /// <param name="parameters">The new coordinates and scores for the model.</param>
-        /// <remarks>
-        /// <b>For Beginners:</b> This method actually moves the words around on the map. 
-        /// It updates the "addresses" of the words based on what it learned in the backward pass.
-        /// </remarks>
-        public override void UpdateParameters(Vector<T> parameters)
-        {
-            int index = 0;
-            foreach (var layer in Layers)
-            {
-                int layerParameterCount = checked((int)layer.ParameterCount);
-                if (layerParameterCount > 0)
-                {
-                    var layerParameters = parameters.Slice(index, layerParameterCount);
-                    layer.UpdateParameters(layerParameters);
-                    index += layerParameterCount;
-                }
-            }
-        }
-
+    // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
+    // exactly the same enumeration, so this said nothing the base does not already say.
         /// <inheritdoc/>
         /// <remarks>
         /// <b>For Beginners:</b> This is identical to the Forward pass—it takes word IDs and 

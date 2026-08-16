@@ -189,7 +189,7 @@ namespace AiDotNet.NeuralRadianceFields.Models;
 [ModelComplexity(ModelComplexity.VeryHigh)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("3D Gaussian Splatting for Real-Time Radiance Field Rendering", "https://doi.org/10.1145/3592433", Year = 2023, Authors = "Bernhard Kerbl, Georgios Kopanas, Thomas Leimkühler, George Drettakis")]
-public class GaussianSplatting<T> : NeuralNetworkBase<T>, IRadianceField<T>,
+public class GaussianSplatting<T> : AiDotNet.NeuralNetworks.VectorModelLayoutBase<T>, IRadianceField<T>,
     IHyperparameterAware<T, Tensor<T>, Tensor<T>>,
     NeuralRadianceFields.Interfaces.IImageTrainable<T>
 {
@@ -230,7 +230,30 @@ public class GaussianSplatting<T> : NeuralNetworkBase<T>, IRadianceField<T>,
         public Vector<T> Rotation { get; }
         public Vector<T> Scale { get; }
         public Vector<T> Color { get; }
-        public T Opacity { get; set; }
+
+        /// <summary>
+        /// Backing store for <see cref="Opacity"/>, a one-element vector rather than a bare
+        /// <typeparamref name="T"/> so the parameter walk can reach it.
+        /// </summary>
+        /// <remarks>
+        /// Every other attribute of a Gaussian is already a <see cref="Vector{T}"/>, which a tensor
+        /// can be built over WITHOUT copying -- writes through that view land in the field itself.
+        /// A bare scalar field has no address the walk can hold, so opacity alone would have forced
+        /// the hand-written parameter surfaces to stay. One element of indirection removes them all,
+        /// and the property below keeps every existing read and write in the renderer working
+        /// unchanged.
+        /// </remarks>
+        private readonly Vector<T> _opacity = new(1);
+
+        /// <summary>Opacity in logit space, stored in <see cref="OpacityStorage"/>.</summary>
+        public T Opacity
+        {
+            get => _opacity[0];
+            set => _opacity[0] = value;
+        }
+
+        /// <summary>The one-element store behind <see cref="Opacity"/>, for the parameter walk.</summary>
+        public Vector<T> OpacityStorage => _opacity;
 
         // Derived: Covariance matrix Σ = R * S * S^T * R^T
         public Matrix<T>? Covariance { get; set; }
@@ -2400,6 +2423,13 @@ public class GaussianSplatting<T> : NeuralNetworkBase<T>, IRadianceField<T>,
             meanDensityGrad = NumOps.Multiply(sum, invRays);
         }
 
+        int publishedLength = 0;
+        for (int g = 0; g < _gaussians.Count; g++)
+            publishedLength += 11 + _gaussians[g].Color.Length;
+        var publishedGradients = new Vector<T>(publishedLength);
+        var publishedSpan = publishedGradients.AsWritableSpan();
+        int publishedOffset = 0;
+
         for (int g = 0; g < _gaussians.Count; g++)
         {
             var gauss = _gaussians[g];
@@ -2416,6 +2446,7 @@ public class GaussianSplatting<T> : NeuralNetworkBase<T>, IRadianceField<T>,
             {
                 int colorIdx = sh ? c * basisCount : c;
                 if (colorIdx >= gauss.Color.Length) continue;
+                publishedSpan[publishedOffset + 11 + colorIdx] = meanRgbGrad[c];
                 var delta = NumOps.Multiply(meanRgbGrad[c], colorStep);
                 gauss.Color[colorIdx] = NumOps.Subtract(gauss.Color[colorIdx], delta);
             }
@@ -2424,49 +2455,21 @@ public class GaussianSplatting<T> : NeuralNetworkBase<T>, IRadianceField<T>,
             // monotonic function of opacity), so a 4-channel ray target trains geometry too.
             if (hasDensityChannel)
             {
+                publishedSpan[publishedOffset + 10] = meanDensityGrad;
                 var opacityStep = NumOps.FromDouble(OpacityLearningRate * gauss.OpacityLrScale);
                 var delta = NumOps.Multiply(meanDensityGrad, opacityStep);
                 gauss.Opacity = NumOps.Subtract(gauss.Opacity, delta);
             }
+
+            publishedOffset += 11 + gauss.Color.Length;
         }
+
+        PublishFlatParameterGradients(publishedGradients);
     }
 
-    /// <summary>
-    /// Flattens every Gaussian's trainable state (position, rotation, scale,
-    /// opacity, colour) into a single contiguous vector. Mirrors
-    /// <see cref="UpdateParameters"/>'s ordering exactly so a round-trip
-    /// <c>GetParameters → UpdateParameters</c> is a no-op.
-    /// </summary>
-    /// <remarks>
-    /// The base NeuralNetworkBase.GetParameters walks Layers, but
-    /// GaussianSplatting has no neural layers (InitializeLayers is a
-    /// no-op by design — Gaussians are an explicit, non-layered
-    /// representation). Override to expose the Gaussian collection's
-    /// flat state vector so model-family invariant tests
-    /// (Training_ShouldChangeParameters, GradientFlow_ShouldBeNonZero...,
-    /// Clone_ShouldProduceIdenticalOutput) can read and diff the model's
-    /// trained state.
-    /// </remarks>
-    /// <summary>
-    /// The number of learnable parameters. Gaussian Splatting is an explicit-representation
-    /// model: its trainable state lives in <c>_gaussians</c>, not in <c>Layers</c>, so the base
-    /// class's layer-walking <c>ParameterCount</c> reports 0 and every ParameterCount-gated
-    /// consumer (streaming/memory auto-detect, and the model-family
-    /// <c>Parameters_ShouldBeNonEmpty</c> invariant) mis-reads the model as parameter-free.
-    /// Report the flattened Gaussian parameter count, matching <see cref="GetParameters"/>'s
-    /// layout exactly (position 3 + rotation 4 + scale 3 + opacity 1 + colour) so the two stay
-    /// consistent.
-    /// </summary>
-    public override long ParameterCount
-    {
-        get
-        {
-            if (_gaussians.Count == 0) return 0;
-            int colorDim = _useSphericalHarmonics ? 3 * GetShBasisCount() : 3;
-            int perGaussian = 3 + 4 + 3 + 1 + colorDim;
-            return (long)perGaussian * _gaussians.Count;
-        }
-    }
+    // ParameterCount was a formula here -- perGaussian * _gaussians.Count -- restating the layout
+    // that GetParameters, GetParameterChunks and UpdateParameters each restated separately. All of
+    // them are replaced by the single declaration below; see GetExtraTrainableTensors.
 
     /// <summary>
     /// Exposes inspectable activations for this explicit-representation model. GaussianSplatting
@@ -2496,102 +2499,51 @@ public class GaussianSplatting<T> : NeuralNetworkBase<T>, IRadianceField<T>,
         return activations;
     }
 
-    public override Vector<T> GetParameters()
+    /// <summary>
+    /// Declares every Gaussian's trainable attributes. This is an explicit representation -- the
+    /// scene is a list of Gaussians, not a stack of layers -- so <c>Layers</c> is empty by design
+    /// and the base walk would otherwise find nothing.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Per Gaussian, in the order the deleted GetParameters flattened them: position (3), rotation
+    /// (4), scale (3), opacity (1), colour (3, or 3 x the SH basis count). Same layout, same order,
+    /// so a checkpoint written before this change still restores.
+    /// </para>
+    /// <para>
+    /// This replaces ParameterCount, GetParameters, GetParameterChunks, SetParameters and
+    /// UpdateParameters -- five members each re-deriving <c>perGaussian = 3 + 4 + 3 + 1 +
+    /// colorDim</c> and walking the list in lockstep. A tensor built over a <c>Vector&lt;T&gt;</c>
+    /// shares its storage, so these views are the fields themselves and the base's restore writes
+    /// straight into the scene; the old GetParameterChunks yielded a COPY, which any restore driven
+    /// through it would have written to and thrown away.
+    /// </para>
+    /// </remarks>
+    protected override IEnumerable<Tensor<T>> GetExtraTrainableTensors()
     {
-        if (_gaussians.Count == 0) return new Vector<T>(0);
-
-        int colorDim = _useSphericalHarmonics ? 3 * GetShBasisCount() : 3;
-        int perGaussian = 3 + 4 + 3 + 1 + colorDim;
-        var flat = new T[perGaussian * _gaussians.Count];
-        int offset = 0;
         foreach (var gaussian in _gaussians)
         {
-            for (int i = 0; i < 3; i++) flat[offset++] = gaussian.Position[i];
-            for (int i = 0; i < 4; i++) flat[offset++] = gaussian.Rotation[i];
-            for (int i = 0; i < 3; i++) flat[offset++] = gaussian.Scale[i];
-            flat[offset++] = gaussian.Opacity;
-            for (int i = 0; i < colorDim; i++) flat[offset++] = gaussian.Color[i];
+            yield return new Tensor<T>([gaussian.Position.Length], gaussian.Position);
+            yield return new Tensor<T>([gaussian.Rotation.Length], gaussian.Rotation);
+            yield return new Tensor<T>([gaussian.Scale.Length], gaussian.Scale);
+            yield return new Tensor<T>([gaussian.OpacityStorage.Length], gaussian.OpacityStorage);
+            yield return new Tensor<T>([gaussian.Color.Length], gaussian.Color);
         }
-        return new Vector<T>(flat);
     }
 
-    /// <summary>
-    /// Yields the Gaussian state as a single chunk for parameter-diff
-    /// iteration. NeuralNetworkBase.GetParameterChunks walks <c>Layers</c>
-    /// which is empty for explicit-representation models like this one,
-    /// so model-family invariant tests
-    /// (<c>Training_ShouldChangeParameters</c>, <c>GradientFlow_…</c>)
-    /// see zero chunks and silently mis-validate. One chunk = the full
-    /// GetParameters vector gives the test base a reliable
-    /// content-hash key per training step.
-    /// </summary>
-    public override IEnumerable<Tensor<T>> GetParameterChunks()
+    /// <inheritdoc />
+    /// <remarks>
+    /// A Gaussian's covariance is DERIVED from its rotation and scale, and the spatial index is
+    /// built from positions, so restoring the parameters without rebuilding both leaves the
+    /// renderer drawing the old geometry while reporting the new weights. This ran at the end of
+    /// the deleted UpdateParameters; SetParameters -- the path serialization and the optimizer's
+    /// post-training writeback both call -- only reached it because SetParameters was overridden to
+    /// forward here. Now it is a hook on the one restore path, so it cannot be skipped.
+    /// </remarks>
+    protected override void OnParametersRestored()
     {
-        var flat = GetParameters();
-        if (flat.Length == 0) yield break;
-        var arr = new T[flat.Length];
-        for (int i = 0; i < flat.Length; i++) arr[i] = flat[i];
-        yield return new Tensor<T>(arr, new[] { flat.Length });
-    }
-
-    /// <summary>
-    /// Replaces the full Gaussian parameter state from a flat vector. GaussianSplatting stores
-    /// its parameters in <c>_gaussians</c>, not in <c>Layers</c>, so the base class's
-    /// layer-walking <c>SetParameters</c> is a silent no-op for this model — which meant the
-    /// optimizer's post-training writeback (<c>OptimizerBase.CreateOptimizationResult</c> copies
-    /// the trained best-solution parameters back into the caller's model via SetParameters)
-    /// never reached the Gaussians, so a facade-trained model appeared to never move from init.
-    /// Delegate to <see cref="UpdateParameters"/>, which performs the same GetParameters-ordered
-    /// full-state replacement.
-    /// </summary>
-    public override void SetParameters(Vector<T> parameters) => UpdateParameters(parameters);
-
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        if (parameters == null)
-        {
-            throw new ArgumentNullException(nameof(parameters));
-        }
-
-        if (_gaussians.Count == 0)
-        {
-            if (parameters.Length == 0)
-            {
-                return;
-            }
-
-            throw new ArgumentException("No gaussians initialized to update.", nameof(parameters));
-        }
-
-        int colorDim = _useSphericalHarmonics ? 3 * GetShBasisCount() : 3;
-        int perGaussian = 3 + 4 + 3 + 1 + colorDim;
-        int expectedLength = perGaussian * _gaussians.Count;
-        if (parameters.Length != expectedLength)
-        {
-            throw new ArgumentException($"Expected {expectedLength} parameters, got {parameters.Length}.", nameof(parameters));
-        }
-
-        int offset = 0;
         foreach (var gaussian in _gaussians)
         {
-            for (int i = 0; i < 3; i++)
-            {
-                gaussian.Position[i] = parameters[offset++];
-            }
-            for (int i = 0; i < 4; i++)
-            {
-                gaussian.Rotation[i] = parameters[offset++];
-            }
-            for (int i = 0; i < 3; i++)
-            {
-                gaussian.Scale[i] = parameters[offset++];
-            }
-            gaussian.Opacity = parameters[offset++];
-            for (int i = 0; i < colorDim; i++)
-            {
-                gaussian.Color[i] = parameters[offset++];
-            }
-
             ComputeCovariance(gaussian);
         }
 
@@ -2917,9 +2869,20 @@ public class GaussianSplatting<T> : NeuralNetworkBase<T>, IRadianceField<T>,
         var gradients = new List<GaussianGradient>(sorted.Count);
         int basisCount = GetShBasisCount();
 
+        var publishedOffsets = new Dictionary<Gaussian, int>();
+        int publishedLength = 0;
+        for (int i = 0; i < _gaussians.Count; i++)
+        {
+            publishedOffsets[_gaussians[i]] = publishedLength;
+            publishedLength += 11 + _gaussians[i].Color.Length;
+        }
+        var publishedGradients = new Vector<T>(publishedLength);
+        var publishedSpan = publishedGradients.AsWritableSpan();
+
         foreach (var gaussian in sorted)
         {
             var source = gaussian.Source;
+            int publishedOffset = publishedOffsets[source];
             double gradPosX = 0.0;
             double gradPosY = 0.0;
             double gradPosZ = 0.0;
@@ -3049,6 +3012,11 @@ public class GaussianSplatting<T> : NeuralNetworkBase<T>, IRadianceField<T>,
             double lrOpacity  = OpacityLearningRate  * source.OpacityLrScale;
             double lrPosition = PositionLearningRate * source.PositionLrScale;
 
+            publishedSpan[publishedOffset] = NumOps.FromDouble(gradPosX);
+            publishedSpan[publishedOffset + 1] = NumOps.FromDouble(gradPosY);
+            publishedSpan[publishedOffset + 2] = NumOps.FromDouble(gradPosZ);
+            publishedSpan[publishedOffset + 10] = NumOps.FromDouble(gradOpacity);
+
             if (_useSphericalHarmonics && gradCoeffR != null && gradCoeffG != null && gradCoeffB != null)
             {
                 for (int b = 0; b < basisCount; b++)
@@ -3056,6 +3024,10 @@ public class GaussianSplatting<T> : NeuralNetworkBase<T>, IRadianceField<T>,
                     int rIdx = b;
                     int gIdx = b + basisCount;
                     int bIdx = b + 2 * basisCount;
+
+                    publishedSpan[publishedOffset + 11 + rIdx] = NumOps.FromDouble(gradCoeffR[b]);
+                    publishedSpan[publishedOffset + 11 + gIdx] = NumOps.FromDouble(gradCoeffG[b]);
+                    publishedSpan[publishedOffset + 11 + bIdx] = NumOps.FromDouble(gradCoeffB[b]);
 
                     source.Color[rIdx] = NumOps.FromDouble(
                         NumOps.ToDouble(source.Color[rIdx]) - lrColor * gradCoeffR[b]);
@@ -3067,6 +3039,9 @@ public class GaussianSplatting<T> : NeuralNetworkBase<T>, IRadianceField<T>,
             }
             else
             {
+                publishedSpan[publishedOffset + 11] = NumOps.FromDouble(gradColorR);
+                publishedSpan[publishedOffset + 12] = NumOps.FromDouble(gradColorG);
+                publishedSpan[publishedOffset + 13] = NumOps.FromDouble(gradColorB);
                 source.Color[0] = NumOps.FromDouble(Clamp01(NumOps.ToDouble(source.Color[0]) - lrColor * gradColorR));
                 source.Color[1] = NumOps.FromDouble(Clamp01(NumOps.ToDouble(source.Color[1]) - lrColor * gradColorG));
                 source.Color[2] = NumOps.FromDouble(Clamp01(NumOps.ToDouble(source.Color[2]) - lrColor * gradColorB));
@@ -3164,6 +3139,10 @@ public class GaussianSplatting<T> : NeuralNetworkBase<T>, IRadianceField<T>,
                 double gradScaleY = 2.0 * sy * rt11;
                 double gradScaleZ = 2.0 * sz * rt22;
 
+                publishedSpan[publishedOffset + 7] = NumOps.FromDouble(gradScaleX);
+                publishedSpan[publishedOffset + 8] = NumOps.FromDouble(gradScaleY);
+                publishedSpan[publishedOffset + 9] = NumOps.FromDouble(gradScaleZ);
+
                 double lrScale = ScaleLearningRate * source.ScaleLrScale;
                 sx = Math.Max(MinScale, sx - lrScale * gradScaleX);
                 sy = Math.Max(MinScale, sy - lrScale * gradScaleY);
@@ -3209,6 +3188,11 @@ public class GaussianSplatting<T> : NeuralNetworkBase<T>, IRadianceField<T>,
                                + gR10 * (2.0 * qw) + gR11 * (-4.0 * qz) + gR12 * (2.0 * qy)
                                + gR20 * (2.0 * qx) + gR21 * (2.0 * qy);
 
+                publishedSpan[publishedOffset + 3] = NumOps.FromDouble(gradW);
+                publishedSpan[publishedOffset + 4] = NumOps.FromDouble(gradX);
+                publishedSpan[publishedOffset + 5] = NumOps.FromDouble(gradY);
+                publishedSpan[publishedOffset + 6] = NumOps.FromDouble(gradZ);
+
                 double lrRotation = RotationLearningRate * source.RotationLrScale;
                 qw -= lrRotation * gradW;
                 qx -= lrRotation * gradX;
@@ -3243,6 +3227,7 @@ public class GaussianSplatting<T> : NeuralNetworkBase<T>, IRadianceField<T>,
         }
 
         MarkSpatialIndexDirty();
+        PublishFlatParameterGradients(publishedGradients);
         return gradients;
     }
 

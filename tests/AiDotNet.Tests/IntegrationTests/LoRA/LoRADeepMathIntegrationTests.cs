@@ -373,6 +373,8 @@ public class LoRADeepMathIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task DoRA_Magnitude_L2Norm_KnownWeights()
     {
+        await Task.Yield();
+
         // Weights = [[3,4],[0,5]], biases = [0,0]
         // magnitude[0] = ||[3,4]|| = 5
         // magnitude[1] = ||[0,5]|| = 5
@@ -382,10 +384,9 @@ public class LoRADeepMathIntegrationTests
         var adapter = new DoRAAdapter<double>(baseLayer, rank: 1, alpha: 1.0);
         var parameters = adapter.GetParameters();
 
-        // DoRA params: LoRA params (inputSize*rank + rank*outputSize) + magnitude (outputSize)
-        // = 2*1 + 1*2 + 2 = 6
-        int loraParamCount = 2 * 1 + 1 * 2; // A[2x1] + B[1x2] = 4
-        int magnitudeStart = loraParamCount;
+        // LayerBase's canonical manifest is own tensors, buffers, then child layers. Magnitude is
+        // DoRA's own tensor; the inherited LoRA A/B tensors follow it as the child-layer segment.
+        int magnitudeStart = 0;
 
         Assert.Equal(5.0, parameters[magnitudeStart], 1e-6);     // magnitude[0]
         Assert.Equal(5.0, parameters[magnitudeStart + 1], 1e-6); // magnitude[1]
@@ -394,6 +395,8 @@ public class LoRADeepMathIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task DoRA_Magnitude_UnitWeights()
     {
+        await Task.Yield();
+
         // Weights = [[1,0],[0,1]], biases = [0,0]
         // magnitude[0] = ||[1,0]|| = 1, magnitude[1] = ||[0,1]|| = 1
         var baseLayer = new DenseLayer<double>(2);
@@ -401,7 +404,7 @@ public class LoRADeepMathIntegrationTests
 
         var adapter = new DoRAAdapter<double>(baseLayer, rank: 1, alpha: 1.0);
         var parameters = adapter.GetParameters();
-        int magnitudeStart = 2 * 1 + 1 * 2;
+        int magnitudeStart = 0;
 
         Assert.Equal(1.0, parameters[magnitudeStart], 1e-6);
         Assert.Equal(1.0, parameters[magnitudeStart + 1], 1e-6);
@@ -410,6 +413,8 @@ public class LoRADeepMathIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task DoRA_Magnitude_3_4_5_Triangle()
     {
+        await Task.Yield();
+
         // Only first output neuron has [3,4] → magnitude = 5
         // Second: [5,12] → magnitude = 13
         var baseLayer = new DenseLayer<double>(2);
@@ -417,7 +422,7 @@ public class LoRADeepMathIntegrationTests
 
         var adapter = new DoRAAdapter<double>(baseLayer, rank: 1, alpha: 1.0);
         var parameters = adapter.GetParameters();
-        int magnitudeStart = 2 * 1 + 1 * 2;
+        int magnitudeStart = 0;
 
         Assert.Equal(5.0, parameters[magnitudeStart], 1e-6);
         Assert.Equal(13.0, parameters[magnitudeStart + 1], 1e-6);
@@ -427,6 +432,7 @@ public class LoRADeepMathIntegrationTests
     public async Task DoRA_ParameterCount_IncludesMagnitude()
     {
         var baseLayer = new DenseLayer<double>(5);
+        baseLayer.ResolveFromShape(new[] { 10 });
         var adapter = new DoRAAdapter<double>(baseLayer, rank: 2, alpha: 2.0);
 
         // frozen: loraParams + magnitude = (10*2 + 2*5) + 5 = 35
@@ -497,6 +503,7 @@ public class LoRADeepMathIntegrationTests
     public async Task StandardAdapter_FrozenParamCount_OnlyLoRA()
     {
         var baseLayer = new DenseLayer<double>(5);
+        baseLayer.ResolveFromShape(new[] { 10 });
         var adapter = new StandardLoRAAdapter<double>(baseLayer, rank: 3, freezeBaseLayer: true);
 
         int loraOnly = 10 * 3 + 3 * 5;
@@ -507,6 +514,7 @@ public class LoRADeepMathIntegrationTests
     public async Task StandardAdapter_UnfrozenParamCount_BaseAndLoRA()
     {
         var baseLayer = new DenseLayer<double>(5);
+        baseLayer.ResolveFromShape(new[] { 10 });
         int baseParams = (int)baseLayer.ParameterCount;
         var adapter = new StandardLoRAAdapter<double>(baseLayer, rank: 3, freezeBaseLayer: false);
 
@@ -580,8 +588,11 @@ public class LoRADeepMathIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task LoHa_ParameterCount_Frozen()
     {
+        await Task.Yield();
+
         // 2 * rank * inputSize * outputSize (frozen)
         var baseLayer = new DenseLayer<double>(5);
+        baseLayer.ResolveFromShape(new[] { 10 });
         var adapter = new LoHaAdapter<double>(baseLayer, rank: 3, alpha: 3.0);
 
         Assert.Equal(2 * 3 * 10 * 5, (int)adapter.ParameterCount);

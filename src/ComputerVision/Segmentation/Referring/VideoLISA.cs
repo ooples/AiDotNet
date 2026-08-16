@@ -1,4 +1,4 @@
-﻿using System.IO;
+using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -33,7 +33,7 @@ namespace AiDotNet.ComputerVision.Segmentation.Referring;
 /// - Handles temporal reasoning queries in video
 /// </para>
 /// <para>
-/// <b>Reference:</b> Bai et al., "Video-LISA: Language Instructed Segmentation Assistant for Video", arXiv 2024.
+/// <b>Reference:</b> Bai et al., "One Token to Seg Them All: Language Instructed Reasoning Segmentation in Videos", NeurIPS 2024.
 /// </para>
 /// </remarks>
 /// <example>
@@ -58,38 +58,38 @@ namespace AiDotNet.ComputerVision.Segmentation.Referring;
 [ModelTask(ModelTask.Tracking)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("Video-LISA: Language Instructed Segmentation Assistant for Video", "https://arxiv.org/abs/2410.00287", Year = 2024, Authors = "Yuqi Bai, Haoming Wang, Jianzhi Liu, Xiang Li, Yixiao Ge, Jianfeng Dong, Ying Shan")]
-public class VideoLISA<T> : NeuralNetworkBase<T>, IReferringSegmentation<T>
+[ResearchPaper("One Token to Seg Them All: Language Instructed Reasoning Segmentation in Videos", "https://arxiv.org/abs/2409.19603", Year = 2024, Authors = "Zechen Bai, Tong He, Haiyang Mei, Pichao Wang, Ziteng Gao, Joya Chen, Lei Liu, Zheng Zhang, Mike Zheng Shou")]
+public class VideoLISA<T> : Common.ReferringSegmentationBase<T>
 {
+    /// <inheritdoc />
+    /// <remarks>Does NOT downsample: measured [1,3,64,64] -> [1,C,64,64].</remarks>
+    public override IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+        => SpatialStrideContract(inputRank, 1);
+
     private readonly VideoLISAOptions _options;
     public override ModelOptions GetOptions() => _options;
 
     #region Fields
-    private readonly int _height, _width, _channels, _numClasses;
+    // Only VideoLISA's OWN configuration lives here. _height, _width, _channels, _numClasses,
+    // _useNativeMode, _onnxModelPath, _onnxSession, _optimizer, _disposed and _encoderLayerEnd all
+    // come from ReferringSegmentationBase -> SegmentationModelBase.
     private readonly int[] _channelDims;
     private readonly int _decoderDim;
     private readonly int[] _depths;
     private readonly double _dropRate;
-    private readonly bool _useNativeMode;
-    private readonly string? _onnxModelPath;
-    private InferenceSession? _onnxSession;
-    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
-    private bool _disposed;
-    private int _encoderLayerEnd;
     #endregion
 
     #region Properties
-    /// <summary>
-    /// Gets whether this VideoLISA instance supports training.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Returns <c>true</c> in native mode, <c>false</c> in ONNX mode.
-    /// </para>
-    /// </remarks>
-    public override bool SupportsTraining => _useNativeMode;
+    // SupportsTraining, NumClasses and MaxTextLength are inherited: SegmentationModelBase supplies
+    // the first two and ReferringSegmentationBase defaults MaxTextLength to 512, which is exactly
+    // what the explicit interface implementation used to return.
     internal bool UseNativeMode => _useNativeMode;
-    internal int NumClasses => _numClasses;
+
+    /// <inheritdoc/>
+    public override bool SupportsConversation => true;
+
+    /// <inheritdoc/>
+    public override bool SupportsVideoInput => true;
     #endregion
 
     #region Constructors
@@ -98,7 +98,7 @@ public class VideoLISA<T> : NeuralNetworkBase<T>, IReferringSegmentation<T>
     /// </summary>
     /// <param name="architecture">Neural network architecture defining input dimensions.</param>
     /// <param name="optimizer">Gradient-based optimizer (default: AdamW).</param>
-    /// <param name="lossFunction">Loss function (default: CrossEntropyLoss).</param>
+    /// <param name="lossFunction">Loss function (default: binary cross-entropy with logits for one mask class; otherwise cross-entropy with logits).</param>
     /// <param name="numClasses">Number of segmentation classes (default: 1).</param>
     /// <param name="dropRate">Dropout rate (default: 0).</param>
     /// <param name="options">Optional model options.</param>
@@ -112,18 +112,21 @@ public class VideoLISA<T> : NeuralNetworkBase<T>, IReferringSegmentation<T>
         ILossFunction<T>? lossFunction = null, int numClasses = 1,
         double dropRate = 0,
         VideoLISAOptions? options = null)
-        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>())
+        // VideoLISA's own loss default is preserved verbatim - the base would otherwise substitute
+        // plain CrossEntropyWithLogitsLoss, which is wrong for the single-mask (numClasses == 1) case.
+        // `optimizer` is passed straight through INCLUDING null: the base resolves it lazily through
+        // CreateDefaultOptimizer() below, which builds the same AdamW this constructor used to.
+        : base(architecture, optimizer, lossFunction ?? (numClasses == 1
+            ? (ILossFunction<T>)new BinaryCrossEntropyWithLogitsLoss<T>()
+            : new CrossEntropyWithLogitsLoss<T>(classAxis: 1)), numClasses)
     {
-        _options = options ?? new VideoLISAOptions(); Options = _options;
-        _height = architecture.InputHeight > 0 ? architecture.InputHeight : 1024;
-        _width = architecture.InputWidth > 0 ? architecture.InputWidth : 1024;
-        _channels = architecture.InputDepth > 0 ? architecture.InputDepth : 3;
-        _numClasses = numClasses; _dropRate = dropRate;
-        _useNativeMode = true; _onnxModelPath = null;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
-        _channelDims = [64, 128, 320, 768];
-        _depths = [2, 2, 4, 12];
-        _decoderDim = 256;
+        _options = options is null ? new VideoLISAOptions() : new VideoLISAOptions(options);
+        ValidateOptions(_options);
+        Options = _options;
+        _dropRate = dropRate;
+        _channelDims = (int[])_options.ChannelDimensions.Clone();
+        _depths = (int[])_options.EncoderDepths.Clone();
+        _decoderDim = _options.DecoderDimension;
         InitializeLayers();
     }
 
@@ -145,23 +148,15 @@ public class VideoLISA<T> : NeuralNetworkBase<T>, IReferringSegmentation<T>
     public VideoLISA(NeuralNetworkArchitecture<T> architecture, string onnxModelPath,
         int numClasses = 1,
         VideoLISAOptions? options = null)
-        : base(architecture, new CrossEntropyWithLogitsLoss<T>())
+        : base(architecture, onnxModelPath, numClasses)
     {
-        _options = options ?? new VideoLISAOptions(); Options = _options;
-        if (string.IsNullOrWhiteSpace(onnxModelPath))
-            throw new ArgumentException("ONNX model path cannot be null or empty.", nameof(onnxModelPath));
-        if (!File.Exists(onnxModelPath))
-            throw new FileNotFoundException($"VideoLISA ONNX model not found: {onnxModelPath}");
-        _height = architecture.InputHeight > 0 ? architecture.InputHeight : 1024;
-        _width = architecture.InputWidth > 0 ? architecture.InputWidth : 1024;
-        _channels = architecture.InputDepth > 0 ? architecture.InputDepth : 3;
-        _numClasses = numClasses; _dropRate = 0;
-        _useNativeMode = false; _onnxModelPath = onnxModelPath; _optimizer = null;
-        _channelDims = [64, 128, 320, 768];
-        _depths = [2, 2, 4, 12];
-        _decoderDim = 256;
-        try { _onnxSession = new InferenceSession(onnxModelPath); }
-        catch (Exception ex) { throw new InvalidOperationException($"Failed to load VideoLISA ONNX model: {ex.Message}", ex); }
+        _options = options is null ? new VideoLISAOptions() : new VideoLISAOptions(options);
+        ValidateOptions(_options);
+        Options = _options;
+        _dropRate = 0;
+        _channelDims = (int[])_options.ChannelDimensions.Clone();
+        _depths = (int[])_options.EncoderDepths.Clone();
+        _decoderDim = _options.DecoderDimension;
         InitializeLayers();
     }
     #endregion
@@ -196,7 +191,8 @@ public class VideoLISA<T> : NeuralNetworkBase<T>, IReferringSegmentation<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expectedOutput);
+            // Pass the configured optimizer through; the two-argument overload ignored it.
+            TrainWithTape(input, expectedOutput, Optimizer);
         }
         finally
         {
@@ -206,7 +202,7 @@ public class VideoLISA<T> : NeuralNetworkBase<T>, IReferringSegmentation<T>
     #endregion
 
     #region Private Methods
-    private Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> Forward(Tensor<T> input)
     {
         bool hasBatch = input.Rank == 4; if (!hasBatch) input = AddBatchDimension(input);
         var features = input;
@@ -215,7 +211,7 @@ public class VideoLISA<T> : NeuralNetworkBase<T>, IReferringSegmentation<T>
         if (!hasBatch) features = RemoveBatchDimension(features); return features;
     }
 
-    private Tensor<T> PredictOnnx(Tensor<T> input)
+    protected override Tensor<T> PredictOnnx(Tensor<T> input)
     {
         if (_onnxSession is null) throw new InvalidOperationException("ONNX session is not initialized.");
         bool hasBatch = input.Rank == 4; if (!hasBatch) input = AddBatchDimension(input);
@@ -232,11 +228,64 @@ public class VideoLISA<T> : NeuralNetworkBase<T>, IReferringSegmentation<T>
         if (!hasBatch) result = RemoveBatchDimension(result); return result;
     }
 
-    private Tensor<T> AddBatchDimension(Tensor<T> tensor)
-    { var result = new Tensor<T>([1, tensor.Shape[0], tensor.Shape[1], tensor.Shape[2]]); tensor.Data.Span.CopyTo(result.Data.Span); return result; }
+    /// <summary>Adds a leading batch axis. Recorded, so it stays on the autodiff tape.</summary>
+    /// <remarks>
+    /// DELIBERATELY shadows the inherited SegmentationModelBase helper rather than using it. The base
+    /// copies raw spans into a freshly allocated tensor - precisely the tape-detaching behaviour
+    /// documented on RemoveBatchDimension below - so inheriting it would reintroduce the zero-gradient
+    /// bug this pair was written to fix.
+    /// </remarks>
+    private new Tensor<T> AddBatchDimension(Tensor<T> tensor)
+        => Engine.Reshape(tensor, new[] { 1, tensor.Shape[0], tensor.Shape[1], tensor.Shape[2] });
 
-    private Tensor<T> RemoveBatchDimension(Tensor<T> tensor)
-    { int[] s = new int[tensor.Shape.Length - 1]; for (int i = 0; i < s.Length; i++) s[i] = tensor.Shape[i + 1]; var r = new Tensor<T>(s); tensor.Data.Span.CopyTo(r.Data.Span); return r; }
+    /// <summary>
+    /// Drops the leading batch axis. Recorded, for the same reason.
+    /// </summary>
+    /// <remarks>
+    /// Both of these copied raw spans into a freshly allocated tensor, which produces a value with no
+    /// history on the autodiff tape. Forward ends by calling this one whenever the caller passed an
+    /// unbatched clip, so the network's OUTPUT was detached and every gradient came back zero —
+    /// GradientFlow_ShouldBeNonZeroAndFinite reported "No parameters changed after training".
+    /// </remarks>
+    private new Tensor<T> RemoveBatchDimension(Tensor<T> tensor)
+    {
+        int[] s = new int[tensor.Shape.Length - 1];
+        for (int i = 0; i < s.Length; i++) s[i] = tensor.Shape[i + 1];
+        return Engine.Reshape(tensor, s);
+    }
+
+    /// <summary>
+    /// Creates VideoLISA's AdamW default when the caller supplies no optimizer. The base resolves this
+    /// lazily after construction, so <c>_options</c> is already assigned by the time it runs - which is
+    /// exactly what a base-constructor argument could never express.
+    /// </summary>
+    protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreateDefaultOptimizer() =>
+        new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate,
+                WeightDecay = _options.WeightDecay,
+                UseAdaptiveLearningRate = false,
+            });
+
+    private static void ValidateOptions(VideoLISAOptions options)
+    {
+        if (options.ChannelDimensions is null || options.ChannelDimensions.Length == 0)
+            throw new ArgumentException("At least one encoder channel dimension is required.", nameof(options));
+        if (options.EncoderDepths is null || options.EncoderDepths.Length != options.ChannelDimensions.Length)
+            throw new ArgumentException("EncoderDepths must contain one value per ChannelDimensions stage.", nameof(options));
+        if (options.ChannelDimensions.Any(d => d <= 0))
+            throw new ArgumentOutOfRangeException(nameof(options), "All encoder channel dimensions must be positive.");
+        if (options.EncoderDepths.Any(d => d <= 0))
+            throw new ArgumentOutOfRangeException(nameof(options), "All encoder depths must be positive.");
+        if (options.DecoderDimension <= 0)
+            throw new ArgumentOutOfRangeException(nameof(options), "DecoderDimension must be positive.");
+        if (options.LearningRate <= 0)
+            throw new ArgumentOutOfRangeException(nameof(options), "LearningRate must be positive.");
+        if (options.WeightDecay < 0)
+            throw new ArgumentOutOfRangeException(nameof(options), "WeightDecay cannot be negative.");
+    }
     #endregion
 
     #region Abstract Implementation
@@ -253,7 +302,12 @@ public class VideoLISA<T> : NeuralNetworkBase<T>, IReferringSegmentation<T>
     {
         if (!_useNativeMode) { ClearLayers(); return; }
         if (Architecture.Layers != null && Architecture.Layers.Count > 0)
-        { Layers.AddRange(Architecture.Layers); _encoderLayerEnd = Architecture.Layers.Count / 2; }
+        {
+            Layers.AddRange(Architecture.Layers);
+            _encoderLayerEnd = _options.EncoderLayerCount ?? Architecture.Layers.Count / 2;
+            if (_encoderLayerEnd < 0 || _encoderLayerEnd > Architecture.Layers.Count)
+                throw new ArgumentOutOfRangeException(nameof(_options.EncoderLayerCount), "EncoderLayerCount must be within the custom layer list.");
+        }
         else
         {
             var encoderLayers = LayerHelper<T>.CreateVideoLISAEncoderLayers(_channels, _height, _width, _channelDims, _depths, _dropRate).ToList();
@@ -264,18 +318,8 @@ public class VideoLISA<T> : NeuralNetworkBase<T>, IReferringSegmentation<T>
         }
     }
 
-    /// <summary>
-    /// Updates all trainable parameters from a flat parameter vector.
-    /// </summary>
-    /// <param name="parameters">Flat vector of all model parameters.</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Replaces all model weights with new values.
-    /// </para>
-    /// </remarks>
-    public override void UpdateParameters(Vector<T> parameters)
-    { int o = 0; foreach (var l in Layers) { var p = l.GetParameters(); int c = p.Length; if (o + c <= parameters.Length) { var n = new Vector<T>(c); for (int i = 0; i < c; i++) n[i] = parameters[o + i]; l.UpdateParameters(n); o += c; } } }
-
+    // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
+    // exactly the same enumeration, so this said nothing the base does not already say.
     /// <summary>
     /// Collects metadata describing this model's configuration.
     /// </summary>
@@ -325,33 +369,14 @@ public class VideoLISA<T> : NeuralNetworkBase<T>, IReferringSegmentation<T>
     /// </para>
     /// </remarks>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() => _useNativeMode
-        ? new VideoLISA<T>(Architecture, _optimizer, LossFunction, _numClasses, _dropRate, _options)
-        : new VideoLISA<T>(Architecture, _onnxModelPath ?? throw new InvalidOperationException("ONNX model path not initialized."), _numClasses, _options);
+        ? new VideoLISA<T>(Architecture, null, LossFunction, _numClasses, _dropRate, new VideoLISAOptions(_options))
+        : new VideoLISA<T>(Architecture, _onnxModelPath ?? throw new InvalidOperationException("ONNX model path not initialized."), _numClasses, new VideoLISAOptions(_options));
 
-    /// <summary>
-    /// Releases managed resources including the ONNX inference session.
-    /// </summary>
-    /// <param name="disposing">True when called from Dispose().</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Frees memory used by the ONNX runtime.
-    /// </para>
-    /// </remarks>
-    protected override void Dispose(bool disposing)
-    { if (!_disposed) { if (disposing) { _onnxSession?.Dispose(); _onnxSession = null; } _disposed = true; } base.Dispose(disposing); }
     #endregion
 
     #region IReferringSegmentation Implementation
-    int ISegmentationModel<T>.NumClasses => _numClasses;
-    int ISegmentationModel<T>.InputHeight => _height;
-    int ISegmentationModel<T>.InputWidth => _width;
-    bool ISegmentationModel<T>.IsOnnxMode => !_useNativeMode;
-    Tensor<T> ISegmentationModel<T>.Segment(Tensor<T> image) => Predict(image);
-    int IReferringSegmentation<T>.MaxTextLength => 512;
-    bool IReferringSegmentation<T>.SupportsConversation => true;
-    bool IReferringSegmentation<T>.SupportsVideoInput => true;
-
-    ReferringSegmentationResult<T> IReferringSegmentation<T>.SegmentFromExpression(Tensor<T> image, string expression)
+    /// <inheritdoc/>
+    public override ReferringSegmentationResult<T> SegmentFromExpression(Tensor<T> image, string expression)
     {
         var logits = Common.SegmentationTensorOps.EnsureUnbatched(Predict(image));
         int numC = logits.Shape[0], h = logits.Shape[1], w = logits.Shape[2];
@@ -380,24 +405,26 @@ public class VideoLISA<T> : NeuralNetworkBase<T>, IReferringSegmentation<T>
         return new ReferringSegmentationResult<T> { Masks = masks, TextResponse = response, Confidence = confidence, BoundingBoxes = boxes };
     }
 
-    ReferringSegmentationResult<T> IReferringSegmentation<T>.SegmentFromConversation(
+    /// <inheritdoc/>
+    protected override ReferringSegmentationResult<T> SegmentFromConversationInternal(
         Tensor<T> image, IReadOnlyList<(string Role, string Message)> conversationHistory, string currentQuery)
     {
         var context = string.Join(" ", conversationHistory.Select(c => c.Message));
         var fullQuery = string.IsNullOrEmpty(context) ? currentQuery : $"{context} {currentQuery}";
-        return ((IReferringSegmentation<T>)this).SegmentFromExpression(image, fullQuery);
+        return SegmentFromExpression(image, fullQuery);
     }
 
-    List<ReferringSegmentationResult<T>> IReferringSegmentation<T>.SegmentVideoFromExpression(Tensor<T> frames, string expression)
+    /// <inheritdoc/>
+    protected override List<ReferringSegmentationResult<T>> SegmentVideoFromExpressionInternal(Tensor<T> frames, string expression)
     {
         var results = new List<ReferringSegmentationResult<T>>();
-        if (frames.Rank == 3) { var r = ((IReferringSegmentation<T>)this).SegmentFromExpression(frames, expression); r.FrameIndex = 0; results.Add(r); return results; }
+        if (frames.Rank == 3) { var r = SegmentFromExpression(frames, expression); r.FrameIndex = 0; results.Add(r); return results; }
         int nf = frames.Shape[0], c = frames.Shape[1], fh = frames.Shape[2], fw = frames.Shape[3];
         for (int f = 0; f < nf; f++)
         {
             var frame = new Tensor<T>([c, fh, fw]);
             for (int ch = 0; ch < c; ch++) for (int y = 0; y < fh; y++) for (int x = 0; x < fw; x++) frame[ch, y, x] = frames[f, ch, y, x];
-            var r = ((IReferringSegmentation<T>)this).SegmentFromExpression(frame, expression);
+            var r = SegmentFromExpression(frame, expression);
             r.FrameIndex = f; results.Add(r);
         }
         return results;

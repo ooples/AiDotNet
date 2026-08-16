@@ -91,8 +91,18 @@ namespace AiDotNet.Diffusion.Control;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("T2I-Adapter: Learning Adapters to Dig out More Controllable Ability for Text-to-Image Diffusion Models", "https://arxiv.org/abs/2302.08453", Year = 2024, Authors = "Mou et al.")]
-public class T2IAdapterModel<T> : LatentDiffusionModelBase<T>
+public partial class T2IAdapterModel<T> : LatentDiffusionModelBase<T>
 {
+    /// <inheritdoc />
+    /// <remarks>Registration order is serialization order, and matches the
+    /// concatenation the previous hand-written GetParameters performed.</remarks>
+    protected override void RegisterComponents()
+    {
+        RegisterParameterComponent(_unet);
+        RegisterParameterComponent(_adapterNetwork);
+        RegisterParameterComponent(_vae);
+    }
+
     #region Constants
 
     /// <summary>
@@ -150,7 +160,6 @@ public class T2IAdapterModel<T> : LatentDiffusionModelBase<T>
     public override int LatentChannels => ADAPTER_LATENT_CHANNELS;
 
     /// <inheritdoc />
-    public override long ParameterCount => _unet.ParameterCount + _adapterNetwork.ParameterCount + _vae.ParameterCount;
 
     /// <summary>
     /// Gets the adapter network that processes spatial conditions.
@@ -324,80 +333,7 @@ public class T2IAdapterModel<T> : LatentDiffusionModelBase<T>
 
     #region IParameterizable Implementation
 
-    /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        var unetParams = _unet.GetParameters();
-        var adapterParams = _adapterNetwork.GetParameters();
-        var vaeParams = _vae.GetParameters();
 
-        var totalLength = unetParams.Length + adapterParams.Length + vaeParams.Length;
-        var combined = new Vector<T>(totalLength);
-
-        var offset = 0;
-        for (int i = 0; i < unetParams.Length; i++)
-        {
-            combined[offset + i] = unetParams[i];
-        }
-        offset += unetParams.Length;
-
-        for (int i = 0; i < adapterParams.Length; i++)
-        {
-            combined[offset + i] = adapterParams[i];
-        }
-        offset += adapterParams.Length;
-
-        for (int i = 0; i < vaeParams.Length; i++)
-        {
-            combined[offset + i] = vaeParams[i];
-        }
-
-        return combined;
-    }
-
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        // ParameterCount is the cheap path; GetParameters().Length materialises
-        // a flat aggregate. checked() guards against foundation-scale overflow
-        // (Vector.Length is int — slicing past int.MaxValue isn't expressible).
-        int unetCount = checked((int)_unet.ParameterCount);
-        int adapterCount = checked((int)_adapterNetwork.ParameterCount);
-        int vaeCount = checked((int)_vae.ParameterCount);
-
-        if (parameters.Length != unetCount + adapterCount + vaeCount)
-        {
-            throw new ArgumentException(
-                $"Expected {unetCount + adapterCount + vaeCount} parameters, got {parameters.Length}.",
-                nameof(parameters));
-        }
-
-        var unetParams = new Vector<T>(unetCount);
-        var adapterParams = new Vector<T>(adapterCount);
-        var vaeParams = new Vector<T>(vaeCount);
-
-        var offset = 0;
-        for (int i = 0; i < unetCount; i++)
-        {
-            unetParams[i] = parameters[offset + i];
-        }
-        offset += unetCount;
-
-        for (int i = 0; i < adapterCount; i++)
-        {
-            adapterParams[i] = parameters[offset + i];
-        }
-        offset += adapterCount;
-
-        for (int i = 0; i < vaeCount; i++)
-        {
-            vaeParams[i] = parameters[offset + i];
-        }
-
-        _unet.SetParameters(unetParams);
-        _adapterNetwork.SetParameters(adapterParams);
-        _vae.SetParameters(vaeParams);
-    }
 
     #endregion
 

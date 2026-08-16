@@ -51,7 +51,7 @@ namespace AiDotNet.VisionLanguage.Encoders;
     Year = 2022,
     Authors = "Li et al."
 )]
-public class DeCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageModel<T>
+public partial class DeCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageModel<T>
 {
     private readonly DeCLIPOptions _options;
 
@@ -131,6 +131,10 @@ public class DeCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageM
     public int ProjectionDimension => _options.ProjectionDim;
     public T Temperature => NumOps.FromDouble(_options.Temperature);
 
+    /// <inheritdoc />
+    protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> GetOrCreateBaseOptimizer()
+        => _optimizer ?? base.GetOrCreateBaseOptimizer();
+
     public Tensor<T> EncodeImage(Tensor<T> image)
     {
         ThrowIfDisposed();
@@ -191,7 +195,10 @@ public class DeCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageM
             return;
         }
 
-        int patchSize = Math.Max(1, _options.ImageSize / 16);
+        // Respect the configured ViT patch size. Deriving it from ImageSize forced every
+        // configuration to produce a 16x16 token grid and made small/custom inputs much
+        // more expensive than requested (for example, ImageSize=16 became PatchSize=1).
+        int patchSize = Math.Max(1, _options.PatchSize);
         Layers.Add(
             new PatchEmbeddingLayer<T>(
                 patchSize,
@@ -244,22 +251,13 @@ public class DeCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageM
         }
     }
 
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        if (!_useNativeMode)
-            throw new NotSupportedException("Cannot update parameters in ONNX mode.");
-        int idx = 0;
-        foreach (var l in Layers)
-        {
-            int c = (int)l.ParameterCount;
-            l.UpdateParameters(parameters.Slice(idx, c));
-            idx += c;
-        }
-    }
-
     /// <inheritdoc />
-    protected override IEnumerable<LayerBase<T>?> GetExtraTrainableLayers() =>
-        EnumerateTextEncoderTrainableLayers();
+    /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
+    /// write on every parameter surface, so the guard is stated once here instead of being
+    /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
+    protected override bool SupportsParameterMutation => _useNativeMode;
+    // This forwarded to a helper the base now calls from its own
+    // GetExtraTrainableLayers, so the override restated it. Removed under AIDN082.
 
     protected override Tensor<T> PreprocessImage(Tensor<T> image) =>
         NormalizeImage(image, _options.ImageMean, _options.ImageStd);
@@ -317,13 +315,14 @@ public class DeCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageM
 
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
+        var clonedOptions = new DeCLIPOptions(_options);
         if (
             !_useNativeMode
             && _options.ImageEncoderModelPath is { } mp
             && !string.IsNullOrEmpty(mp)
         )
-            return new DeCLIP<T>(Architecture, mp, _options);
-        return new DeCLIP<T>(Architecture, _options);
+            return new DeCLIP<T>(Architecture, mp, clonedOptions);
+        return new DeCLIP<T>(Architecture, clonedOptions, optimizer: null);
     }
 
     private Tensor<T> TokenizeText(string text)

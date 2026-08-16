@@ -76,6 +76,22 @@ namespace AiDotNet.Diffusion.NoisePredictors;
     [ResearchPaper("Scalable Diffusion Models with Transformers", "https://arxiv.org/abs/2212.09748")]
 public class DiTNoisePredictor<T> : NoisePredictorBase<T>
 {
+
+    /// <inheritdoc />
+    /// <remarks>DiT builds its blocks lazily, so nothing is reflectable until this runs. Without it
+    /// SiTPredictor, which derives from this type, reported 0 parameters against a real 49,328.</remarks>
+    protected override void EnsureParametersReady()
+    {
+        EnsureLayersInitialized();
+    }
+
+    /// <inheritdoc />
+    protected override void EnsureParameterStructureReady()
+    {
+        // This creates the fixed-shape LazyDense/normalization graph only. LazyDense uses
+        // ResolveShapesOnly, so a count/layout query does not allocate DiT's multi-GB weights.
+        EnsureLayersInitialized();
+    }
     /// <summary>
     /// Standard DiT model sizes.
     /// </summary>
@@ -214,6 +230,12 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
     /// weights use <see cref="CopyParametersFrom"/> instead.
     /// </summary>
     public bool AreLayersInitialized => _layersInitialized;
+
+    /// <summary>
+    /// True when the construction-resolved layer graph has also allocated its lazy weights.
+    /// Count and metadata queries build the graph but must leave this false.
+    /// </summary>
+    internal bool WeightsMaterialized => _layersInitialized && _patchEmbed?.IsInitialized == true;
 
     /// <summary>
     /// Position embeddings (learnable).
@@ -439,7 +461,11 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
         // runner just from `new DiTNoisePredictor()`.
         _patchEmbed = LazyDense(patchDim, _hiddenSize);
 
-        _timeEmbed1 = LazyDense(_hiddenSize, timeEmbedDim, new SiLUActivation<T>());
+        // The sinusoidal base contract emits TimeEmbeddingDim features. Declare that exact input
+        // width up front so the generated manifest matches the real forward topology; letting the
+        // first forward silently resize a hiddenSize-wide placeholder makes pre-forward counts and
+        // copy-on-write clone validation disagree with the materialized model.
+        _timeEmbed1 = LazyDense(TimeEmbeddingDim, timeEmbedDim, new SiLUActivation<T>());
         _timeEmbed2 = LazyDense(timeEmbedDim, timeEmbedDim, new SiLUActivation<T>());
 
         // Class conditioning embedding (Peebles & Xie 2022 §3.2 / Appendix C).
@@ -454,7 +480,7 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
             _labelEmbed = LazyDense(numClasses, timeEmbedDim);
         }
 
-        _finalNorm = new LayerNormalizationLayer<T>();
+        _finalNorm = LazyLayerNorm(_hiddenSize);
         _adaln_modulation = LazyDense(timeEmbedDim, _hiddenSize * 2);
         _outputProj = LazyDense(_hiddenSize, patchDim);
 
@@ -479,13 +505,13 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
 
                 _blocks.Add(new DiTBlock
                 {
-                    Norm1 = new LayerNormalizationLayer<T>(),
+                    Norm1 = LazyLayerNorm(_hiddenSize),
                     Attention = CreateAttentionLayer(),
-                    Norm2 = new LayerNormalizationLayer<T>(),
+                    Norm2 = LazyLayerNorm(_hiddenSize),
                     MLP1 = mlp1,
                     MLP2 = LazyDense((int)(_hiddenSize * _mlpRatio), _hiddenSize),
                     AdaLNModulation = LazyDense(timeEmbedDim, _hiddenSize * 6),
-                    CrossAttnNorm = new LayerNormalizationLayer<T>(),
+                    CrossAttnNorm = LazyLayerNorm(_hiddenSize),
                     CrossAttnQ = LazyDense(_hiddenSize, _hiddenSize),
                     CrossAttnK = LazyDense(_contextDim, _hiddenSize),
                     CrossAttnV = LazyDense(_contextDim, _hiddenSize),
@@ -510,13 +536,13 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
         {
             _blocks.Add(new DiTBlock
             {
-                Norm1 = new LayerNormalizationLayer<T>(),
+                Norm1 = LazyLayerNorm(_hiddenSize),
                 Attention = CreateAttentionLayer(),
-                Norm2 = new LayerNormalizationLayer<T>(),
+                Norm2 = LazyLayerNorm(_hiddenSize),
                 MLP1 = LazyDense(_hiddenSize, mlpHidden, new GELUActivation<T>()),
                 MLP2 = LazyDense(mlpHidden, _hiddenSize),
                 AdaLNModulation = LazyDense(timeEmbedDim, _hiddenSize * 6),
-                CrossAttnNorm = new LayerNormalizationLayer<T>(),
+                CrossAttnNorm = LazyLayerNorm(_hiddenSize),
                 CrossAttnQ = LazyDense(_hiddenSize, _hiddenSize),
                 CrossAttnK = LazyDense(_contextDim, _hiddenSize),
                 CrossAttnV = LazyDense(_contextDim, _hiddenSize),
@@ -1134,63 +1160,6 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
         return Engine.Reshape(permuted, new[] { batch, _inputChannels, height, width });
     }
 
-    /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        EnsureLayersInitialized();
-
-        // Pre-allocate with known size so we avoid the List<T> doubling
-        // path AND its ToArray() copy. For a real-scale DiT (Bark uses
-        // 24 blocks × 1024 hidden ≈ 250 M parameters; 8-byte doubles ⇒
-        // 2 GB), the previous List+ToArray pattern peaked at ~3× that
-        // size during the doubling and copy, OOMing CI test hosts.
-        int totalParams = ParameterCountHelper.ToFlatVectorSize(ParameterCount);
-        var result = new Vector<T>(totalParams);
-        int offset = 0;
-
-        if (_patchEmbed != null) WriteLayerParams(result, ref offset, _patchEmbed);
-        if (_timeEmbed1 != null) WriteLayerParams(result, ref offset, _timeEmbed1);
-        if (_timeEmbed2 != null) WriteLayerParams(result, ref offset, _timeEmbed2);
-        if (_labelEmbed != null) WriteLayerParams(result, ref offset, _labelEmbed);
-
-        foreach (var block in _blocks)
-        {
-            if (block.Norm1 != null) WriteLayerParams(result, ref offset, block.Norm1);
-            if (block.Attention != null) WriteLayerParams(result, ref offset, block.Attention);
-            if (block.Norm2 != null) WriteLayerParams(result, ref offset, block.Norm2);
-            if (block.MLP1 != null) WriteLayerParams(result, ref offset, block.MLP1);
-            if (block.MLP2 != null) WriteLayerParams(result, ref offset, block.MLP2);
-            if (block.AdaLNModulation != null) WriteLayerParams(result, ref offset, block.AdaLNModulation);
-            if (block.CrossAttnNorm != null) WriteLayerParams(result, ref offset, block.CrossAttnNorm);
-            if (block.CrossAttnQ != null) WriteLayerParams(result, ref offset, block.CrossAttnQ);
-            if (block.CrossAttnK != null) WriteLayerParams(result, ref offset, block.CrossAttnK);
-            if (block.CrossAttnV != null) WriteLayerParams(result, ref offset, block.CrossAttnV);
-            if (block.CrossAttnOut != null) WriteLayerParams(result, ref offset, block.CrossAttnOut);
-        }
-
-        if (_finalNorm != null) WriteLayerParams(result, ref offset, _finalNorm);
-        if (_adaln_modulation != null) WriteLayerParams(result, ref offset, _adaln_modulation);
-        if (_outputProj != null) WriteLayerParams(result, ref offset, _outputProj);
-
-        // Validate the final offset matches the pre-allocated buffer.
-        // A mismatch means some layer's `ParameterCount` disagreed with
-        // its `GetParameters().Length` between the two reads — most
-        // likely caused by a lazy-init layer materializing weights
-        // mid-walk and changing its reported count. Throwing here turns
-        // a silently corrupt parameter dump (random tail garbage or
-        // lost trailing layers) into an actionable exception.
-        if (offset != totalParams)
-        {
-            throw new InvalidOperationException(
-                $"DiTNoisePredictor.GetParameters wrote {offset} elements but " +
-                $"ParameterCount reported {totalParams}. Some layer's " +
-                $"GetParameters().Length doesn't match its ParameterCount — " +
-                $"check for layers whose weight tensors materialized between " +
-                $"the count and the write (lazy init mid-walk).");
-        }
-        return result;
-    }
-
     private static void WriteLayerParams(Vector<T> dst, ref int offset, ILayer<T> layer)
     {
         var p = layer.GetParameters();
@@ -1211,48 +1180,6 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
         offset += p.Length;
     }
 
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        EnsureLayersInitialized();
-        int offset = 0;
-
-        // Set patch embed
-        if (_patchEmbed != null)
-        {
-            offset = SetLayerParams(_patchEmbed, parameters, offset);
-        }
-
-        // Set time embedding
-        if (_timeEmbed1 != null) offset = SetLayerParams(_timeEmbed1, parameters, offset);
-        if (_timeEmbed2 != null) offset = SetLayerParams(_timeEmbed2, parameters, offset);
-
-        // Set label embed (optional)
-        if (_labelEmbed != null) offset = SetLayerParams(_labelEmbed, parameters, offset);
-
-        // Set transformer blocks
-        foreach (var block in _blocks)
-        {
-            if (block.Norm1 != null) offset = SetLayerParams(block.Norm1, parameters, offset);
-            if (block.Attention != null) offset = SetLayerParams(block.Attention, parameters, offset);
-            if (block.Norm2 != null) offset = SetLayerParams(block.Norm2, parameters, offset);
-            if (block.MLP1 != null) offset = SetLayerParams(block.MLP1, parameters, offset);
-            if (block.MLP2 != null) offset = SetLayerParams(block.MLP2, parameters, offset);
-            if (block.AdaLNModulation != null) offset = SetLayerParams(block.AdaLNModulation, parameters, offset);
-            // Cross-attention layers
-            if (block.CrossAttnNorm != null) offset = SetLayerParams(block.CrossAttnNorm, parameters, offset);
-            if (block.CrossAttnQ != null) offset = SetLayerParams(block.CrossAttnQ, parameters, offset);
-            if (block.CrossAttnK != null) offset = SetLayerParams(block.CrossAttnK, parameters, offset);
-            if (block.CrossAttnV != null) offset = SetLayerParams(block.CrossAttnV, parameters, offset);
-            if (block.CrossAttnOut != null) offset = SetLayerParams(block.CrossAttnOut, parameters, offset);
-        }
-
-        // Set final layers
-        if (_finalNorm != null) offset = SetLayerParams(_finalNorm, parameters, offset);
-        if (_adaln_modulation != null) offset = SetLayerParams(_adaln_modulation, parameters, offset);
-        if (_outputProj != null) offset = SetLayerParams(_outputProj, parameters, offset);
-    }
-
     private int SetLayerParams(ILayer<T> layer, Vector<T> parameters, int offset)
     {
         int count = checked((int)layer.ParameterCount);
@@ -1270,7 +1197,7 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
     /// predictor. Avoids the round-trip through a single flat
     /// <see cref="Vector{T}"/> that <see cref="GetParameters"/> +
     /// <see cref="SetParameters"/> would otherwise produce — for real-scale
-    /// DiT models (Bark: ~360M parameters; ~3 GB as doubles), the flat
+    /// DiT models (hundreds of millions of parameters; multiple GB as doubles), the flat
     /// intermediate triples peak memory and OOMs CI test hosts. Per-layer
     /// copy keeps peak at ~2× model weights instead of ~3×.
     /// </summary>
@@ -1400,46 +1327,6 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
     }
 
     /// <inheritdoc />
-    public override long ParameterCount
-    {
-        get
-        {
-            // #1237: long accumulator. DiT-XL/2 with HiddenDim 3072 × 48
-            // layers (Sora's paper config) sums to ~5.4 B parameters,
-            // overflowing int.MaxValue. Per-layer ParameterCount stays
-            // int (single-tensor < 2.1 B); the cross-layer sum is long.
-            EnsureLayersInitialized();
-            long count = 0;
-
-            if (_patchEmbed != null) count += _patchEmbed.ParameterCount;
-            if (_timeEmbed1 != null) count += _timeEmbed1.ParameterCount;
-            if (_timeEmbed2 != null) count += _timeEmbed2.ParameterCount;
-            if (_labelEmbed != null) count += _labelEmbed.ParameterCount;
-
-            foreach (var block in _blocks)
-            {
-                if (block.Norm1 != null) count += block.Norm1.ParameterCount;
-                if (block.Attention != null) count += block.Attention.ParameterCount;
-                if (block.Norm2 != null) count += block.Norm2.ParameterCount;
-                if (block.MLP1 != null) count += block.MLP1.ParameterCount;
-                if (block.MLP2 != null) count += block.MLP2.ParameterCount;
-                if (block.AdaLNModulation != null) count += block.AdaLNModulation.ParameterCount;
-                if (block.CrossAttnNorm != null) count += block.CrossAttnNorm.ParameterCount;
-                if (block.CrossAttnQ != null) count += block.CrossAttnQ.ParameterCount;
-                if (block.CrossAttnK != null) count += block.CrossAttnK.ParameterCount;
-                if (block.CrossAttnV != null) count += block.CrossAttnV.ParameterCount;
-                if (block.CrossAttnOut != null) count += block.CrossAttnOut.ParameterCount;
-            }
-
-            if (_finalNorm != null) count += _finalNorm.ParameterCount;
-            if (_adaln_modulation != null) count += _adaln_modulation.ParameterCount;
-            if (_outputProj != null) count += _outputProj.ParameterCount;
-
-            return count;
-        }
-    }
-
-    /// <inheritdoc />
     public override INoisePredictor<T> Clone()
     {
         var clone = new DiTNoisePredictor<T>(
@@ -1453,7 +1340,7 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
             latentSpatialSize: _latentSpatialSize,
             seed: _seed);
 
-        // Carry the test-only resident-threshold override so the clone's probe forward takes the same
+        // Carry the test-only resident-threshold override so an eager fallback takes the same
         // (fp16-resident vs fp32) path as the source — otherwise a small test clone would materialize fp32
         // while the source is resident, masking the resident clone round-trip under test (#1764). Null in
         // production, so this is a no-op there.
@@ -1464,9 +1351,11 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
     }
 
     /// <summary>
-    /// Materializes <paramref name="clone"/> through the FORWARD path and copies this predictor's
-    /// trained weights into it. Shared by <see cref="Clone"/> and every derived predictor's
-    /// <c>Clone</c> (e.g. <c>SiTPredictor</c>) so they all get the correct clone semantics.
+    /// Shares this predictor's trained weights with <paramref name="clone"/> through the central
+    /// copy-on-write path, falling back to a materialize-and-copy forward only when the generated
+    /// layer-shape contracts cannot prove the two graphs equivalent. Shared by <see cref="Clone"/>
+    /// and every derived predictor's <c>Clone</c> (e.g. <c>SiTPredictor</c>) so they all get the same
+    /// clone semantics.
     /// </summary>
     /// <remarks>
     /// Preserve trained/materialized weights without forcing a foundation-scale default
@@ -1494,6 +1383,14 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
     {
         Guard.NotNull(clone);
         if (!HasMaterializedParameters()) return;
+
+        // Build only the fixed-shape layer graph. The generator's declared parameter shapes let the
+        // shared helper validate and bind the source tensors directly into the destination's lazy
+        // placeholders. This is O(number of layers) and O(1) weight storage until either side writes,
+        // avoiding both a foundation-scale destination allocation and the extra probe forward.
+        clone.EnsureLayersInitialized();
+        if (clone.TryShareParametersFrom(this))
+            return;
 
         var probe = new Tensor<T>(new[] { 1, _inputChannels, _latentSpatialSize, _latentSpatialSize });
         clone.PredictNoise(probe, timestep: 0, conditioning: BuildProbeConditioning());
@@ -1551,75 +1448,6 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
 
     /// <inheritdoc />
     public override bool SupportsCrossAttention => true;
-
-    /// <summary>
-    /// Streams DiT's materialized trainable tensors directly from each layer,
-    /// matching the PyTorch <c>nn.Module.parameters()</c> contract: yielded
-    /// tensors are the same objects used by forward/training, not flat copies.
-    /// Lazy paper-scale defaults may report a structural
-    /// <see cref="ParameterCount"/> before their tensors have been allocated;
-    /// in that state this iterator yields only already-materialized tensors
-    /// instead of forcing a multi-billion-parameter allocation.
-    /// </summary>
-    public override IEnumerable<Tensor<T>> GetParameterChunks()
-    {
-        // #1715: engage full-precision weight streaming before initializing/iterating so foundation-scale
-        // DiT predictors (e.g. SiT) route their weight allocation through the streaming pool (bounded
-        // resident set + lossless write-back) instead of accumulating the full set via RentPinned → OOM.
-        // No-op below the param-count/memory threshold; full-precision so the round-trip is exact.
-        MaybeEngageWeightStreaming();
-        EnsureLayersInitialized();
-
-        foreach (var layer in EnumerateAllLayers())
-        {
-            foreach (var parameter in EnumerateMaterializedParameters(layer))
-                yield return parameter;
-        }
-    }
-
-    /// <summary>
-    /// #1715: per-tensor counterpart to <see cref="GetParameterChunks"/> — copies each incoming chunk
-    /// IN PLACE into the corresponding resident weight, in the same EnumerateAllLayers ×
-    /// EnumerateMaterializedParameters order, instead of the base implementation that buffers every
-    /// chunk into one flat list + Vector (which re-materializes the whole foundation-scale weight set
-    /// at once → OOM). Engages full-precision streaming first so the writes round-trip losslessly and
-    /// the resident set stays bounded.
-    /// </summary>
-    public override void SetParameterChunks(IEnumerable<Tensor<T>> chunks)
-    {
-        if (chunks is null) throw new ArgumentNullException(nameof(chunks));
-        MaybeEngageWeightStreaming();
-        EnsureLayersInitialized();
-
-        using var e = chunks.GetEnumerator();
-        foreach (var layer in EnumerateAllLayers())
-        {
-            foreach (var dst in EnumerateMaterializedParameters(layer))
-            {
-                if (!e.MoveNext())
-                    throw new System.ArgumentException(
-                        "SetParameterChunks received fewer chunks than the predictor has parameter tensors.",
-                        nameof(chunks));
-                var src = e.Current;
-                if (src is null)
-                    throw new System.ArgumentException("SetParameterChunks received a null chunk.", nameof(chunks));
-                if (src.Length != dst.Length)
-                    throw new System.ArgumentException(
-                        $"SetParameterChunks chunk length {src.Length} does not match parameter length {dst.Length}.",
-                        nameof(chunks));
-                src.Data.Span.CopyTo(dst.Data.Span); // in place — no rebinding, no flat aggregate
-            }
-        }
-
-        // Symmetric with the "fewer chunks" guard above: every parameter tensor has now been filled,
-        // so any remaining chunk means the caller supplied more than the predictor consumes. Reject it
-        // instead of silently dropping it — an over-long chunk stream is a caller bug, and the base
-        // implementation likewise consumes exactly one chunk per parameter tensor.
-        if (e.MoveNext())
-            throw new System.ArgumentException(
-                "SetParameterChunks received more chunks than the predictor has parameter tensors.",
-                nameof(chunks));
-    }
 
     private static IEnumerable<Tensor<T>> EnumerateMaterializedParameters(ILayer<T>? layer)
     {

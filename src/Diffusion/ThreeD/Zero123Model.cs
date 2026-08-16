@@ -83,8 +83,19 @@ namespace AiDotNet.Diffusion.ThreeD;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Zero-1-to-3: Zero-shot One Image to 3D Object", "https://arxiv.org/abs/2303.11328", Year = 2023, Authors = "Liu et al.")]
-public class Zero123Model<T> : LatentDiffusionModelBase<T>
+public partial class Zero123Model<T> : LatentDiffusionModelBase<T>
 {
+    /// <inheritdoc />
+    /// <remarks>Registration order is serialization order, and matches the
+    /// concatenation the previous hand-written GetParameters performed.</remarks>
+    protected override void RegisterComponents()
+    {
+        RegisterParameterComponent(_unet);
+        RegisterParameterComponent(_vae);
+        RegisterParameterComponent(_imageEncoder);
+        RegisterParameterComponent(_poseEncoder);
+    }
+
     #region Constants
 
     /// <summary>
@@ -155,9 +166,6 @@ public class Zero123Model<T> : LatentDiffusionModelBase<T>
     public override int LatentChannels => Z123_LATENT_CHANNELS;
 
     /// <inheritdoc />
-    public override long ParameterCount =>
-        _unet.ParameterCount + _vae.ParameterCount +
-        _imageEncoder.ParameterCount + _poseEncoder.ParameterCount;
 
     #endregion
 
@@ -443,18 +451,7 @@ public class Zero123Model<T> : LatentDiffusionModelBase<T>
 
     #region IParameterizable Implementation
 
-    /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        var allParams = new List<T>();
 
-        AddParams(allParams, _unet.GetParameters());
-        AddParams(allParams, _vae.GetParameters());
-        AddParams(allParams, _imageEncoder.GetParameters());
-        AddParams(allParams, _poseEncoder.GetParameters());
-
-        return new Vector<T>(allParams.ToArray());
-    }
 
     private void AddParams(List<T> allParams, Vector<T> p)
     {
@@ -462,54 +459,6 @@ public class Zero123Model<T> : LatentDiffusionModelBase<T>
         {
             allParams.Add(p[i]);
         }
-    }
-
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        var expectedCount = _unet.ParameterCount + _vae.ParameterCount +
-                            _imageEncoder.ParameterCount + _poseEncoder.ParameterCount;
-
-        if (parameters.Length != expectedCount)
-        {
-            throw new ArgumentException(
-                $"Expected {expectedCount} parameters, got {parameters.Length}.",
-                nameof(parameters));
-        }
-
-        var offset = 0;
-
-        var unetCount = checked((int)_unet.ParameterCount);
-        var unetParams = new T[unetCount];
-        for (int i = 0; i < unetCount; i++)
-        {
-            unetParams[i] = parameters[offset++];
-        }
-        _unet.SetParameters(new Vector<T>(unetParams));
-
-        var vaeCount = checked((int)_vae.ParameterCount);
-        var vaeParams = new T[vaeCount];
-        for (int i = 0; i < vaeCount; i++)
-        {
-            vaeParams[i] = parameters[offset++];
-        }
-        _vae.SetParameters(new Vector<T>(vaeParams));
-
-        int encoderCount = checked((int)_imageEncoder.ParameterCount);
-        var encoderParams = new T[encoderCount];
-        for (int i = 0; i < encoderCount; i++)
-        {
-            encoderParams[i] = parameters[offset++];
-        }
-        _imageEncoder.SetParameters(new Vector<T>(encoderParams));
-
-        int poseCount = checked((int)_poseEncoder.ParameterCount);
-        var poseParams = new T[poseCount];
-        for (int i = 0; i < poseCount; i++)
-        {
-            poseParams[i] = parameters[offset++];
-        }
-        _poseEncoder.SetParameters(new Vector<T>(poseParams));
     }
 
     #endregion
@@ -547,7 +496,7 @@ public class Zero123Model<T> : LatentDiffusionModelBase<T>
 /// Encodes camera pose (polar, azimuth, radius) into embeddings.
 /// </summary>
 /// <typeparam name="T">The numeric type.</typeparam>
-public class CameraPoseEncoder<T>
+public class CameraPoseEncoder<T> : IParameterSource<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 

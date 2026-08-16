@@ -1,4 +1,7 @@
-using System;
+﻿using System;
+// File-level, deliberately: two Tensors namespaces in the project's global usings also define a
+// TensorLayout, so [TensorLayout(...)] only binds when this import shadows them from a nearer scope.
+using AiDotNet.Attributes;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors.LinearAlgebra;
 
@@ -25,7 +28,29 @@ namespace AiDotNet.DistributedTraining.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type.</typeparam>
-public sealed class TensorParallelAttention<T> : LayerBase<T>
+// Shape-preserving at rank 3, so the generator derives Same on every axis and no OutputAxesFor is
+// written here. Straight from ForwardTraced: the guard is
+// "if (input.Rank != 3 || input.Shape[2] != _embedDim) throw", and the return is
+// outFlat.Reshape(batch, seq, _embedDim) with batch and seq read off the input. Self-attention keeps
+// the sequence length, and the trailing width is not merely observed to come back unchanged - the
+// layer REFUSES any input whose last axis is not _embedDim, and the output projection is
+// embedDim -> embedDim, so Same(Features) is enforced at both ends.
+//
+// THE SHARDING IS INVISIBLE HERE, and that is the point of the contract. Internally each rank sees
+// only localDim = _localHeads * _headDim columns of Q/K/V; the row-parallel output projection's
+// all-reduce sums the per-rank head contributions back to the full embedDim, so the block's edges are
+// identical on every rank and identical to the un-sharded block. A contract that leaked _localHeads
+// would describe an intermediate, not this layer's interface.
+//
+// Rank 3 only - no BatchOptional. The guard rejects every other rank outright, so declaring the
+// unbatched [Time, Features] form would claim input this layer throws on.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Output,
+    Note = "Identical across ranks after the output projection's all-reduce.")]
+[AutoParameters]
+public sealed partial class TensorParallelAttention<T> : LayerBase<T>, IShapeContract
 {
     private readonly ColumnParallelLinear<T> _q;
     private readonly ColumnParallelLinear<T> _k;
@@ -76,8 +101,6 @@ public sealed class TensorParallelAttention<T> : LayerBase<T>
 
     public override bool SupportsTraining => false;
 
-    public override long ParameterCount => _q.ParameterCount + _k.ParameterCount + _v.ParameterCount + _o.ParameterCount;
-
     /// <summary>Seeds all four projections from full (un-sharded) weights, slicing each rank's shard. Used to
     /// build the block from an un-sharded reference for equivalence verification.</summary>
     public void SetFromFullWeights(
@@ -96,7 +119,7 @@ public sealed class TensorParallelAttention<T> : LayerBase<T>
     /// Runs tensor-parallel self-attention. Input is <c>[batch, seq, embedDim]</c>; output is the same shape
     /// (identical across ranks after the output projection's all-reduce).
     /// </summary>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         if (input.Rank != 3 || input.Shape[2] != _embedDim)
             throw new ArgumentException($"TensorParallelAttention expects input [batch, seq, {_embedDim}]; got [{string.Join(",", input.Shape)}].", nameof(input));
@@ -172,32 +195,6 @@ public sealed class TensorParallelAttention<T> : LayerBase<T>
         // Output projection: row-parallel all-reduces the per-rank head contributions into the full output.
         var outFlat = _o.Forward(context); // [batch*seq, embedDim]
         return outFlat.Reshape(batch, seq, _embedDim);
-    }
-
-    public override Vector<T> GetParameters()
-    {
-        var parts = new[] { _q.GetParameters(), _k.GetParameters(), _v.GetParameters(), _o.GetParameters() };
-        var all = new T[ParameterCount];
-        int idx = 0;
-        foreach (var p in parts)
-            for (int i = 0; i < p.Length; i++) all[idx++] = p[i];
-        return new Vector<T>(all);
-    }
-
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (parameters is null) throw new ArgumentNullException(nameof(parameters));
-        if (parameters.Length != ParameterCount)
-            throw new ArgumentException($"Expected {ParameterCount} parameters, got {parameters.Length}.", nameof(parameters));
-        int idx = 0;
-        void Assign(LayerBase<T> layer)
-        {
-            long n = layer.ParameterCount;
-            var slice = new T[n];
-            for (int i = 0; i < n; i++) slice[i] = parameters[idx++];
-            layer.SetParameters(new Vector<T>(slice));
-        }
-        Assign(_q); Assign(_k); Assign(_v); Assign(_o);
     }
 
     public override void UpdateParameters(T learningRate)

@@ -75,7 +75,7 @@ namespace AiDotNet.Finance.Forecasting.Neural;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("An Empirical Evaluation of Generic Convolutional and Recurrent Networks for Sequence Modeling", "https://arxiv.org/abs/1803.01271", Year = 2018, Authors = "Shaojie Bai, J. Zico Kolter, Vladlen Koltun")]
-public class TCN<T> : ForecastingModelBase<T>
+public partial class TCN<T> : ForecastingModelBase<T>
 {
     #region Execution Mode
 
@@ -508,17 +508,8 @@ public class TCN<T> : ForecastingModelBase<T>
                 InitialLearningRate = 1e-5
             });
 
-    /// <inheritdoc/>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the TCN model, UpdateParameters updates internal parameters or state. This keeps the TCN architecture aligned with the latest values.
-    /// </para>
-    /// </remarks>
-    public override void UpdateParameters(Vector<T> gradients)
-    {
-        // Parameters are updated by the optimizer in Train method
-    }
-
+    // UpdateParameters was an empty override, silently dropping every restore. The base
+    // distributes the vector over the declared enumeration.
     /// <inheritdoc/>
     /// <remarks>
     /// <para>

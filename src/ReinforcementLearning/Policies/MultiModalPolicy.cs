@@ -37,7 +37,7 @@ namespace AiDotNet.ReinforcementLearning.Policies
         "https://publications.aston.ac.uk/id/eprint/373/1/NCRG_94_004.pdf",
         Year = 1994,
         Authors = "Bishop, C. M.")]
-    public class MultiModalPolicy<T> : PolicyBase<T>
+    public partial class MultiModalPolicy<T> : PolicyBase<T>
     {
         private readonly INeuralNetwork<T> _policyNetwork;
         private readonly IExplorationStrategy<T> _explorationStrategy;

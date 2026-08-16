@@ -43,6 +43,12 @@ namespace AiDotNet.Audio.Generation;
 [ResearchPaper("AudioLM: A Language Modeling Approach to Audio Generation", "https://arxiv.org/abs/2209.03143", Year = 2023, Authors = "Zalán Borsos, Raphaël Marinier, Damien Vincent, Eugene Kharitonov, Olivier Pietquin, Matt Sharifi, Dominik Roblek, Olivier Teboul, David Grangier, Marco Tagliasacchi, Neil Zeghidour")]
 public class AudioLM<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// Measured: a [1,8] input returns [1,1024], which is this model's semantic vocabulary.
+    /// </remarks>
+    protected override int OutputFeatureWidth => _options.SemanticVocabSize;
+
     #region Fields
 
     private readonly AudioLMOptions _options;
@@ -227,7 +233,7 @@ public class AudioLM<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expected);
+            TrainWithTape(input, expected, _optimizer);
         }
         finally
         {
@@ -235,12 +241,11 @@ public class AudioLM<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
         }
     }
 
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        if (!_useNativeMode) throw new NotSupportedException("ONNX mode.");
-        int idx = 0; foreach (var l in Layers) { int c = (int)l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; }
-    }
-
+    /// <inheritdoc />
+    /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
+    /// write on every parameter surface, so the guard is stated once here instead of being
+    /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
+    protected override bool SupportsParameterMutation => _useNativeMode;
     protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio) => rawAudio;
     protected override Tensor<T> PostprocessOutput(Tensor<T> o) => o;
 

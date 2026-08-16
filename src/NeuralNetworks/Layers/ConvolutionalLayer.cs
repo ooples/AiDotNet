@@ -1,6 +1,7 @@
-using AiDotNet.Helpers;
+﻿using AiDotNet.Helpers;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Engines;
 using AiDotNet.Initialization;
 using AiDotNet.Interfaces;
@@ -41,8 +42,66 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerTask(LayerTask.SpatialProcessing)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 4, Cost = ComputeCost.High, TestInputShape = "1, 1, 8, 8", TestConstructorArgs = "2, 3")]
-public partial class ConvolutionalLayer<T> : LayerBase<T>
+// 2-D convolution consumes and produces spatial feature maps. Batch is OPTIONAL on both sides because
+// this layer is used unbatched ([C,H,W]) inside per-instance paths and batched ([B,C,H,W]) in training,
+// and both are correct — declaring only one would force false annotations at real call sites.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    BatchOptional = true, Direction = TensorLayoutDirection.Input,
+    Note = "2-D conv input: spatial feature maps.")]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    BatchOptional = true, Direction = TensorLayoutDirection.Output,
+    Note = "Channel count becomes OutputDepth; H and W follow stride/padding.")]
+[AutoParameters]
+public partial class ConvolutionalLayer<T> : LayerBase<T>, IShapeContract
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// Channel axis is this layer's OutputDepth; spatial axes follow
+    /// floor((in + 2*padding - kernel) / stride) + 1.
+    /// </remarks>
+    protected internal override ShapeRelationKind OutputShapeRelation => ShapeRelationKind.Convolutional;
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// The evaluable form of the relation above. <see cref="ShapeRelationKind.Convolutional"/> names the
+    /// rule but carries none of its terms, so nothing can compute a shape from it; these relations read
+    /// THIS instance's <see cref="KernelSize"/>, <see cref="Stride"/> and <see cref="Padding"/>, so a
+    /// stride-2 layer reports the halving and a stride-1 layer does not.
+    /// </para>
+    /// <para>
+    /// Height and Width get separate relations even though this layer applies one square kernel to both.
+    /// They are separate because the INPUTS differ — a 32x64 feature map produces different extents on
+    /// the two axes — and because a future rectangular-kernel overload changes only the two literals
+    /// here rather than the shape of the declaration.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        // Not yet resolved: OutputDepth is real from construction, but a lazy layer has no input depth
+        // and AxisRelation.Fixed rejects a non-positive size. Claiming nothing beats claiming zero.
+        if (OutputDepth <= 0) return null;
+
+        var channels = new OutputAxisContract(TensorAxis.Channels, AxisRelation.Fixed(OutputDepth));
+        var height = new OutputAxisContract(
+            TensorAxis.Height, AxisRelation.Window(TensorAxis.Height, KernelSize, Stride, Padding));
+        var width = new OutputAxisContract(
+            TensorAxis.Width, AxisRelation.Window(TensorAxis.Width, KernelSize, Stride, Padding));
+
+        return inputRank switch
+        {
+            // Unbatched [C,H,W] in, unbatched out. Emitting a batch axis here would invent an axis the
+            // caller never supplied and the forward never produces.
+            3 => new[] { channels, height, width },
+            4 => new[]
+            {
+                new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+                channels, height, width,
+            },
+            _ => null,
+        };
+    }
+
     /// <summary>
     /// Gets the depth (number of channels) of the input data.
     /// </summary>
@@ -225,7 +284,7 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
     /// are what actually get updated when the network learns.
     /// </para>
     /// </remarks>
-    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+    [TrainableParameter(Role = PersistentTensorRole.Weights, Shape = "OutputDepth, KernelInChannels, KernelSize, KernelSize")]
 
     private Tensor<T> _kernels;
 
@@ -248,7 +307,7 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
     /// perfectly match what the kernel is looking for.
     /// </para>
     /// </remarks>
-    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+    [TrainableParameter(Role = PersistentTensorRole.Biases, Shape = "OutputDepth")]
 
     private Tensor<T> _biases;
 
@@ -271,17 +330,12 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
     private Tensor<T>? _biasReshaped4D;
 
     /// <summary>
-    /// Snapshot of the <c>_biases</c> reference at the moment
-    /// <see cref="_biasReshaped4D"/> was populated. A simple reference equality
-    /// check against the current <c>_biases</c> detects optimizer-driven
-    /// rebinds — the cache is invalidated in that case.
+    /// Snapshot of the <c>_biases</c> reference and mutation version at the moment
+    /// <see cref="_biasReshaped4D"/> was populated. Optimizers may either rebind the
+    /// tensor or update its storage in place, so both signals are required.
     /// </summary>
     private Tensor<T>? _biasReshaped4DSource;
-
-    /// <summary>
-    /// Pre-allocated output buffer for Conv2DInto. Reused every forward pass.
-    /// </summary>
-    private Tensor<T>? _preAllocatedOutput;
+    private int _biasReshaped4DVersion = -1;
 
     /// <summary>
     /// The execution engine for GPU-accelerated convolution operations.
@@ -340,6 +394,13 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
     /// so you can understand where you made a mistake.
     /// </para>
     /// </remarks>
+    // [Scratch]: these hold the last forward's input and output for the backward pass. They are
+    // per-forward CACHES, not weights, and [AutoParameters] would otherwise discover them --
+    // any non-nullable Tensor<T> field is a candidate. Counting them makes ParameterCount
+    // depend on the batch size and spatial extent of whatever ran last: this layer measured
+    // 37,120 against its true 3,584, the extra 33,536 being a cached [1,3,16,16] input and a
+    // [1,128,16,16] output. It also made a model appear to change size once a forward had run.
+    [Scratch]
     private Tensor<T> _lastInput;
 
     /// <summary>
@@ -360,6 +421,13 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
     /// and adjust its internal values to make better predictions next time.
     /// </para>
     /// </remarks>
+    // [Scratch]: these hold the last forward's input and output for the backward pass. They are
+    // per-forward CACHES, not weights, and [AutoParameters] would otherwise discover them --
+    // any non-nullable Tensor<T> field is a candidate. Counting them makes ParameterCount
+    // depend on the batch size and spatial extent of whatever ran last: this layer measured
+    // 37,120 against its true 3,584, the extra 33,536 being a cached [1,3,16,16] input and a
+    // [1,128,16,16] output. It also made a model appear to change size once a forward had run.
+    [Scratch]
     private Tensor<T> _lastOutput;
 
     // GPU-resident cached tensors for GPU training pipeline
@@ -396,7 +464,6 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
     /// Without randomness, all pattern detectors might end up looking for the same thing.
     /// </para>
     /// </remarks>
-    private readonly Random _random;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="ConvolutionalLayer{T}"/> class with the specified parameters
@@ -431,12 +498,31 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
     /// that will be improved during training.
     /// </para>
     /// </remarks>
-    public ConvolutionalLayer(int outputDepth, int kernelSize, int stride = 1, int padding = 0,
-                              IActivationFunction<T>? activationFunction = null,
-                              IInitializationStrategy<T>? initializationStrategy = null,
-                              IActivationFunction<T>? nonlinearityForInit = null,
-                              int groups = 1)
-        : base(new[] { -1, -1, -1 }, new[] { outputDepth, -1, -1 }, activationFunction ?? new ReLUActivation<T>())
+    public ConvolutionalLayer(
+        [LayerState] int outputDepth,
+        [LayerState] int kernelSize,
+        [LayerState] int stride = 1,
+        [LayerState] int padding = 0,
+        IActivationFunction<T>? activationFunction = null,
+        IInitializationStrategy<T>? initializationStrategy = null,
+        IActivationFunction<T>? nonlinearityForInit = null,
+        [LayerState] int groups = 1)
+        // Linear by default, matching PyTorch nn.Conv2d and Keras Conv2D, both of which apply no
+        // activation unless one is requested. This previously defaulted to ReLU, which is the
+        // same defect this PR fixed in DenseLayer: every caller that wanted a plain convolution —
+        // a projection, a logit head, a residual branch — silently got its negative
+        // pre-activations clamped to zero.
+        //
+        // It is directly observable: with a uniform input, a convolution outputs
+        // sum(w) * value + b, so if that is negative the ReLU maps EVERY uniform input to the
+        // same zero. That is what
+        // ConvolutionalLayerTests.Forward_DifferentInputs_ShouldProduceDifferentOutputs reported
+        // as "Layer produces identical output for inputs [0.1,...] and [0.9,...]" — the layer was
+        // not ignoring its input, the default activation was erasing it.
+        //
+        // Callers wanting a nonlinearity pass one explicitly, exactly as they now do for
+        // DenseLayer.
+        : base(new[] { -1, -1, -1 }, new[] { outputDepth, -1, -1 }, activationFunction ?? new IdentityActivation<T>())
     {
         if (outputDepth <= 0) throw new ArgumentOutOfRangeException(nameof(outputDepth), "outputDepth must be positive.");
         if (kernelSize <= 0) throw new ArgumentOutOfRangeException(nameof(kernelSize), "kernelSize must be positive.");
@@ -471,8 +557,70 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
         _biases = new Tensor<T>([0]);
         _lastInput = new Tensor<T>([0, 0, 0, 0]);
         _lastOutput = new Tensor<T>([0, 0, 0, 0]);
-        _random = RandomHelper.CreateSecureRandom();
         _isInitialized = false;
+    }
+
+    /// <summary>
+    /// Initializes a convolution whose input channel count is already known.
+    /// </summary>
+    /// <param name="inputDepth">Number of input channels. Must be positive.</param>
+    /// <param name="outputDepth">Number of output channels (filters).</param>
+    /// <param name="kernelSize">Side length of the square kernel.</param>
+    /// <param name="stride">Step between kernel applications.</param>
+    /// <param name="padding">Zero-padding added to each spatial edge.</param>
+    /// <param name="activationFunction">Optional activation; linear when omitted, as in nn.Conv2d.</param>
+    /// <param name="initializationStrategy">Optional weight initialization strategy.</param>
+    /// <param name="nonlinearityForInit">Optional activation whose Kaiming gain seeds the weights.</param>
+    /// <param name="groups">Number of blocked connections from input to output channels.</param>
+    /// <remarks>
+    /// <para>
+    /// This is the direct counterpart of PyTorch's <c>nn.Conv2d(in_channels, out_channels, ...)</c>
+    /// and is the constructor to prefer. Almost every architecture knows its channel widths when it
+    /// is built — a ResNet stem takes the image's channels, and every block conv takes the previous
+    /// block's output width — so deferring that number to the first forward discards information
+    /// the caller already had.
+    /// </para>
+    /// <para>
+    /// Giving it up front is strictly better: <see cref="ParameterCount"/> and
+    /// <see cref="GetParameters"/> are exact before any data flows, weights are allocated once
+    /// instead of being materialized mid-forward, and serialization round-trips without having to
+    /// re-derive the depth from a vector length. Reserve the deferred overload for layers whose
+    /// fan-in genuinely is not known until runtime, which is what PyTorch's separate
+    /// <c>nn.LazyConv2d</c> exists for.
+    /// </para>
+    /// </remarks>
+    /// <remarks>
+    /// A static factory rather than a constructor overload on purpose: the deferred constructor
+    /// already begins <c>(int outputDepth, int kernelSize, int stride, int padding, ...)</c>, so an
+    /// overload taking a leading <c>inputDepth</c> would be positionally ambiguous with it. Worse
+    /// than a compile error, the two could bind silently at some arities and reinterpret every
+    /// argument. A named entry point cannot be misread.
+    /// </remarks>
+    public static ConvolutionalLayer<T> WithInputDepth(
+        int inputDepth,
+        int outputDepth,
+        int kernelSize,
+        int stride = 1,
+        int padding = 0,
+        IActivationFunction<T>? activationFunction = null,
+        IInitializationStrategy<T>? initializationStrategy = null,
+        IActivationFunction<T>? nonlinearityForInit = null,
+        int groups = 1)
+    {
+        if (inputDepth <= 0)
+            throw new ArgumentOutOfRangeException(nameof(inputDepth), "inputDepth must be positive.");
+
+        var layer = new ConvolutionalLayer<T>(
+            outputDepth, kernelSize, stride, padding, activationFunction,
+            initializationStrategy, nonlinearityForInit, groups);
+
+        // Pin the channel axis only. The spatial axes stay deferred: a convolution's parameters do
+        // not depend on height or width, and pinning them would reject the variable-resolution
+        // inputs these layers are expected to accept. ResolveFromShape is deliberately NOT used —
+        // it requires every axis to be concrete, which is precisely the over-constraint this
+        // factory exists to avoid.
+        layer.InputDepth = inputDepth;
+        return layer;
     }
 
     /// <summary>
@@ -529,7 +677,6 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
         _biases = new Tensor<T>([0]);
         _lastInput = new Tensor<T>([0, 0, 0, 0]);
         _lastOutput = new Tensor<T>([0, 0, 0, 0]);
-        _random = RandomHelper.CreateSecureRandom();
         _isInitialized = false;
     }
 
@@ -877,29 +1024,57 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
             new[] { OutputDepth, outH, outW });
     }
 
+    /// <inheritdoc />
+    protected override void ReconcileShapeOnlyResolution(Tensor<T> input)
+    {
+        // A topology-only walk can reach a convolution through an approximate sequential path,
+        // while the real model routes a different branch or batch layout into it. No weights have
+        // been allocated at that point, so bind the lazy convolution once to the first real tensor.
+        // Explicitly-sized convolutions never carry shape-only provenance and remain strict.
+        OnFirstForward(input);
+    }
+
     protected override void EnsureInitialized()
     {
         if (_isInitialized) return;
 
-        // Cannot eager-initialize a lazy layer that has not yet seen any input — the
-        // PyTorch LazyConv2d contract is identical: GetParameters / SetParameters /
-        // ParameterCount on an uninitialized lazy module throws because the weight
-        // shapes aren't yet known. Callers must run a forward first.
-        if (!IsShapeResolved || InputDepth <= 0)
+        // Restored before the first forward: keep what arrived. Rule in LayerBase,
+        // shapes from the [TrainableParameter(Shape = ...)] annotations.
+        if (TryAdoptRestoredParameters())
+        {
+            _isInitialized = true;
+            return;
+        }
+
+        // A convolution's WEIGHTS depend only on the channel counts and kernel size — the kernel is
+        // [outputDepth, inputDepth/groups, k, k], with no height or width in it, exactly as in
+        // PyTorch. So the input CHANNEL count is the whole precondition; spatial extent is not.
+        // Requiring every axis (IsShapeResolved) instead forced a layer that already knew its
+        // fan-in to wait for a forward pass before it could size weights it could have allocated at
+        // construction. Callers that genuinely do not know the channel count still get the
+        // LazyConv2d contract: run a Forward first.
+        if (InputDepth <= 0)
         {
             throw new InvalidOperationException(
-                "ConvolutionalLayer is in deferred-shape mode and has not yet seen any input. " +
+                "ConvolutionalLayer does not yet know its input channel count. " +
                 "Run a Forward(input) before calling GetParameters / SetParameters / ParameterCount, " +
-                "or construct the layer with a concrete input shape.");
+                $"or build it with {nameof(ConvolutionalLayer<T>)}<T>.{nameof(WithInputDepth)} when the " +
+                "fan-in is known up front.");
         }
 
         lock (InitializationLock)
         {
             if (_isInitialized) return;
 
-            // Use correct input/output shapes as placeholders (batch=1, replaced in Forward())
-            _lastInput = new Tensor<T>([1, InputShape[0], InputShape[1], InputShape[2]]);
-            _lastOutput = new Tensor<T>([1, OutputShape[0], OutputShape[1], OutputShape[2]]);
+            // Placeholder activation caches (batch=1, replaced in Forward()). These are the only
+            // part of initialization that needs concrete spatial dims, so allocate them only when
+            // those are known; a channel-pinned layer whose height/width arrive with the first
+            // input skips them and Forward sizes them for real.
+            if (IsShapeResolved && InputShape.Length >= 3 && OutputShape.Length >= 3)
+            {
+                _lastInput = new Tensor<T>([1, InputShape[0], InputShape[1], InputShape[2]]);
+                _lastOutput = new Tensor<T>([1, OutputShape[0], OutputShape[1], OutputShape[2]]);
+            }
 
             // Allocate kernels and biases with proper shapes before initializing weights.
             // The lazy path sets _kernels to [0,0,0,0], so we must resize here.
@@ -926,6 +1101,37 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
             // Depthwise collapses the kernel's in-channel dim to InputDepth/Groups (== 1 for depthwise).
             int[] kShape = [OutputDepth, KernelInChannels, KernelSize, KernelSize];
             int[] bShape = [OutputDepth];
+
+            // Restore and parameter-buffer rebinding can install the final tensors before this
+            // lazy layer sees its first input. In that state the tensors are authoritative: do not
+            // replace checkpointed values merely because the initialization latch has not run.
+            // DenseLayer and Conv3DLayer follow the same idempotent materialization contract.
+            bool hasExpectedKernels =
+                _kernels.Rank == 4 &&
+                _kernels.Shape[0] == kShape[0] &&
+                _kernels.Shape[1] == kShape[1] &&
+                _kernels.Shape[2] == kShape[2] &&
+                _kernels.Shape[3] == kShape[3];
+            bool hasExpectedBiases =
+                _biases.Rank == 1 && _biases.Shape[0] == bShape[0];
+
+            if (hasExpectedKernels && hasExpectedBiases)
+            {
+                RegisterTrainableParameter(_kernels, PersistentTensorRole.Weights);
+                RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);
+                _isInitialized = true;
+                return;
+            }
+
+            if (_kernels.Length > 0 || _biases.Length > 0)
+            {
+                throw new InvalidOperationException(
+                    $"ConvolutionalLayer parameters do not conform to the resolved shape. " +
+                    $"Expected kernels [{string.Join(", ", kShape)}] and biases [{OutputDepth}], " +
+                    $"but received kernels [{string.Join(", ", _kernels.Shape.ToArray())}] and " +
+                    $"biases [{string.Join(", ", _biases.Shape.ToArray())}].");
+            }
+
             _kernels = AllocateLazyWeight(kShape, () => TensorAllocator.RentPinned<T>(kShape));
             _biases = AllocateLazyWeight(bShape);
 
@@ -1069,7 +1275,13 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
     /// The result shows where each pattern was found in the input.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    /// <remarks>
+    /// Overrides ForwardTraced rather than Forward so this layer is visible to graph tracing: the
+    /// base's Forward records which tensor this call consumed and produced, which is how a model's
+    /// real dataflow is recovered without the model declaring it. A layer that overrides Forward
+    /// directly bypasses that recording and becomes a hole in the traced graph.
+    /// </remarks>
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // Shape-inference mode: resolve dims from the input and return a correctly-shaped
         // placeholder WITHOUT allocating the kernel or computing. Lets a model resolve all
@@ -1078,6 +1290,23 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
 
         // Resolve deferred shape (PyTorch LazyConv2d-style) and allocate weights on first call.
         EnsureInitializedFromInput(input);
+
+        // Convolution weights are bound to channel counts, not to one image resolution. Callers
+        // can legitimately materialize a lazy head from [C,1,1] for parameter initialization and
+        // later execute it on [B,C,H,W]. Keep the reported spatial contract synchronized with the
+        // real tensor while preserving the strict InputDepth check below. Without this, the
+        // convolution computed the correct HxW result but continued reporting the materialization
+        // probe's 1x1 extent to shape validation, serialization, and downstream layer sizing.
+        int[] reportedInputShape = GetInputShape();
+        int spatialShapeOffset = input.Rank == 4 ? 1 : 0;
+        if ((input.Rank == 3 || input.Rank == 4)
+            && reportedInputShape.Length == 3
+            && reportedInputShape[0] == input.Shape[spatialShapeOffset]
+            && (reportedInputShape[1] != input.Shape[spatialShapeOffset + 1]
+                || reportedInputShape[2] != input.Shape[spatialShapeOffset + 2]))
+        {
+            OnFirstForward(input);
+        }
 
         // Accept any rank and canonicalize to 4D [B, C, H, W]. The library's
         // design principle is rank-agnostic ops — a flat feature vector
@@ -1157,8 +1386,7 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
             _lastInput = new Tensor<T>([0, 0, 0, 0]);
         }
 
-        // === Zero-Allocation Convolution ===
-        // Pre-allocate output buffer on first forward pass, then reuse via Conv2DInto
+        // === Convolution ===
         // Use CalculateOutputDimension here too so a forward call with smaller
         // spatial dims surfaces the same actionable "output would be <= 0"
         // exception the helper already produces, instead of failing deep inside
@@ -1167,24 +1395,6 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
         int outputWidth = CalculateOutputDimension(input4D.Shape[3], KernelSize, Stride, Padding);
         int batchSize_conv = input4D.Shape[0];
         int[] expectedShape = [batchSize_conv, OutputDepth, outputHeight, outputWidth];
-
-        // Cross-forward output-buffer reuse is unsafe only when a TensorArena is actually
-        // active: _preAllocatedOutput is arena scratch, and reusing the same slot across the
-        // per-step Reset() would alias whatever the next step Rents into that slot (#1668).
-        // Key this off TensorArena.Current (not InferenceMode) so the escape hatch
-        // (AIDOTNET_INFERENCE_ARENA_DIFFUSION=0, which leaves InferenceMode on but disables
-        // the arena) keeps the manual zero-allocation reuse — otherwise we'd rent a fresh
-        // buffer every forward with no arena to pool it. With the arena on, re-renting per
-        // forward stays zero-allocation after warmup (the arena recycles in cursor order).
-        bool arenaActive = AiDotNet.Tensors.Helpers.TensorArena.Current is not null;
-        if (_preAllocatedOutput is null ||
-            arenaActive ||
-            _preAllocatedOutput.Shape[0] != batchSize_conv ||
-            _preAllocatedOutput.Shape[2] != outputHeight ||
-            _preAllocatedOutput.Shape[3] != outputWidth)
-        {
-            _preAllocatedOutput = TensorAllocator.Rent<T>(expectedShape);
-        }
 
         // === Try FusedConv2D: Conv + Bias + Activation in single kernel ===
         // Eliminates 2 intermediate allocations and enables kernel-level optimization
@@ -1253,23 +1463,30 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
         else
         {
             // Inference fast path: separate Conv2DInto + in-place bias + activation.
-            // Safe because no tape is active during inference (NoGradScope).
-            Engine.Conv2DInto(_preAllocatedOutput, input4D, _kernels, Stride, Padding, dilation: 1);
-            var output = _preAllocatedOutput;
+            // Every invocation owns a distinct destination. Reusing a layer-held output buffer
+            // changes the function when one layer instance is called more than once in a graph:
+            // the later call overwrites an earlier result that is still live (shared encoders,
+            // recurrent blocks, Siamese networks, and any caller retaining multiple outputs).
+            // Explicit *Into APIs remain the opt-in zero-allocation contract for callers that can
+            // prove destination lifetime; ordinary Forward must have value semantics. TensorArena
+            // still makes these per-call rents allocation-free within a scoped inference pass.
+            var output = TensorAllocator.Rent<T>(expectedShape);
+            Engine.Conv2DInto(output, input4D, _kernels, Stride, Padding, dilation: 1);
 
-            // Reuse a cached rank-4 reshape view of _biases. Cache is keyed on
-            // the _biases reference: optimizer.Step rebinds to a new tensor →
-            // cache invalidates → fresh reshape. Within a single iteration the
-            // bias reference is stable, so this collapses 19 conv-layer reshape
-            // calls per Predict down to 1-per-bias-rebind. Each cache hit saves
+            // Reuse a cached rank-4 reshape of _biases. Cache by tensor identity
+            // and mutation version because optimizers may rebind the parameter or
+            // update its contents in place. Each cache hit saves
             // one Tensor allocation + DifferentiableOps.RecordUnary + AutoTracer
             // record per layer per forward. Tape-inactive guard at the branch
             // level (entered only when neither tape nor IsTrainingMode is set)
             // makes this safe — no GradFn needs to bind through the reshape.
-            if (!ReferenceEquals(_biasReshaped4DSource, _biases) || _biasReshaped4D is null)
+            if (!ReferenceEquals(_biasReshaped4DSource, _biases)
+                || _biasReshaped4D is null
+                || _biasReshaped4DVersion != _biases.Version)
             {
                 _biasReshaped4D = Engine.Reshape(_biases, [1, OutputDepth, 1, 1]);
                 _biasReshaped4DSource = _biases;
+                _biasReshaped4DVersion = _biases.Version;
             }
             Engine.TensorBroadcastAddInPlace(output, _biasReshaped4D);
 
@@ -1588,48 +1805,13 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
     /// This provides access to all the "knowledge" the layer has learned.
     /// </para>
     /// </remarks>
-    public override long ParameterCount => _isInitialized
-        ? _kernels.Length + _biases.Shape[0]
-        // Deferred: input channel count unknown until first Forward. Report a
-        // placeholder count assuming InputDepth=1 (single-channel) so the
-        // layer still satisfies the "has learnable parameters" contract that
-        // model-family invariant tests (Parameters_ShouldBeNonEmpty) check
-        // BEFORE any Predict has run. Mirrors the Conv1DLayer<T>
-        // ParameterCount placeholder convention introduced in #1512 — it lets
-        // detection backbones (ResNet, EfficientNet, CSPDarknet, etc. whose
-        // stem 7x7 conv defers input-depth resolution to first forward) report
-        // a non-zero count without forcing a forward pass that materialises
-        // multi-MB weight tensors on every metadata access. Once the layer
-        // sees its first input, _isInitialized flips true and this branch is
-        // never taken again.
-        // Cast one operand to long so the multiplication runs in 64-bit. With
-        // paper-scale convs (e.g. DiT-XL: OutputDepth=1152, InputDepth=1152,
-        // KernelSize=2 → 5,308,416 fits in int; but a 11x11 conv at
-        // OutputDepth=1024, InputDepth=2048 overflows: 1024*2048*121=253M,
-        // and a 7x7 at OutputDepth=4096, InputDepth=4096 is 4096*4096*49 =
-        // 821M which already exceeds int.MaxValue/4) so the placeholder
-        // arithmetic must be long-promoted up front.
-        : (long)OutputDepth * (InputDepth > 0 ? InputDepth : 1) * KernelSize * KernelSize + OutputDepth;
-
-    /// <inheritdoc/>
-    public override Vector<T> GetParameters()
-    {
-        // For deferred-shape layers that haven't seen their first Forward
-        // yet (e.g., conditioning branch in UNetNoisePredictor that's only
-        // activated when text embeddings are present), EnsureInitialized
-        // would throw because InputDepth is still the -1 sentinel. Return
-        // an empty parameter vector — Clone/SetParameters/ParameterCount
-        // semantically have nothing to copy/set/count for an uninitialised
-        // layer and will pick up the real parameters on a subsequent pass
-        // after the first Forward materialises them.
-        if (!IsShapeResolved) return new Vector<T>(0);
-
-        EnsureInitialized();
-        // Bulk copy from contiguous tensor storage — replaces 4-nested scalar loops
-        return Vector<T>.Concatenate(
-            Vector<T>.FromMemory(_kernels.Data),
-            Vector<T>.FromMemory(_biases.Data));
-    }
+    /// <inheritdoc />
+    /// <remarks>
+    /// A convolution has weights the moment its input depth is known, and cannot size them before
+    /// that. <see cref="HasUninitializedParameters"/> reports the difference so callers never have
+    /// to infer it from a count of zero.
+    /// </remarks>
+    public override bool HasUninitializedParameters => !_isInitialized && InputDepth <= 0;
 
     /// <summary>
     /// Gets all parameter gradients of the layer as a single vector.
@@ -1661,87 +1843,29 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
             Vector<T>.FromMemory(_biasesGradient.Data));
     }
 
-    /// <summary>
-    /// Sets all trainable parameters of the layer from a single vector.
-    /// </summary>
-    /// <param name="parameters">A vector containing all parameters to set.</param>
-    /// <exception cref="ArgumentException">Thrown when the parameters vector has incorrect length.</exception>
-    /// <remarks>
-    /// <para>
-    /// This method sets all trainable parameters (kernel weights and biases) of the layer from a single
-    /// vector. The vector must have the exact length required for all parameters of the layer.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method updates all the layer's learned values at once.
-    /// 
-    /// When setting parameters:
-    /// - The vector must have exactly the right number of values
-    /// - The values are assigned to the kernels and biases in a specific order
-    /// 
-    /// This is useful for:
-    /// - Loading a previously saved model
-    /// - Copying parameters from another model
-    /// - Setting parameters that were optimized externally
-    /// 
-    /// It's like replacing all the "knowledge" in the layer with new information.
-    /// </para>
-    /// </remarks>
-    public override void SetParameters(Vector<T> parameters)
+    internal override void CopyTrainableParametersFrom(IReadOnlyList<Tensor<T>> sources)
     {
-        // Round-trip from saved parameters: derive inputDepth from vector length.
-        // Layout: kernels [outputDepth, inputDepth, kernelSize, kernelSize] + biases [outputDepth].
-        // inputDepth = (length - outputDepth) / (outputDepth * kernelSize * kernelSize).
-        if (!IsShapeResolved)
-        {
-            if (parameters.Length == 0) return;
-            // #639: depthwise (Groups>1) has a [OutputDepth, 1, K, K] kernel and
-            // InputDepth == Groups by definition, so resolve directly — the full-conv
-            // inference below (which assumes a [outC, inC, K, K] kernel) would pick the
-            // wrong InputDepth from the smaller depthwise parameter count.
-            if (Groups > 1)
-            {
-                // InputDepth == Groups for depthwise; fall through to EnsureInitialized below.
-                ResolveFromShape(new[] { Groups, KernelSize, KernelSize });
-            }
-            else
-            {
-            int kernelArea = OutputDepth * KernelSize * KernelSize;
-            if (OutputDepth <= 0 || kernelArea <= 0)
-                throw new InvalidOperationException(
-                    "Cannot SetParameters on deferred-shape ConvolutionalLayer before OutputDepth/KernelSize are known.");
-            int candidateInputDepth = (parameters.Length - OutputDepth) / kernelArea;
-            if (candidateInputDepth <= 0
-                || candidateInputDepth * kernelArea + OutputDepth != parameters.Length)
-                throw new ArgumentException(
-                    $"Cannot infer inputDepth for ConvolutionalLayer from {parameters.Length} parameters " +
-                    $"(outputDepth={OutputDepth}, kernelSize={KernelSize}).");
-            // Convolutional layers need a 3D inputShape [C, H, W]; H/W can't be
-            // derived from the parameter vector alone. Use spatial dims =
-            // KernelSize so OnFirstForward's "input spatial dims must be
-            // >= kernelSize" guard passes — kernels and biases only depend
-            // on inputDepth/outputDepth/kernelSize, so the actual spatial
-            // dims used here are immaterial for SetParameters. Using 1×1
-            // would fail the guard for any kernelSize>1.
-            ResolveFromShape(new[] { candidateInputDepth, KernelSize, KernelSize });
-            }
-        }
+        base.CopyTrainableParametersFrom(sources);
+        InvalidateBiasReshapeCache();
+    }
 
-        EnsureInitialized();
-        int kernelLen = _kernels.Length;
-        int biasLen = _biases.Shape[0];
-        if (parameters.Length != kernelLen + biasLen)
-        {
-            throw new ArgumentException($"Expected {kernelLen + biasLen} parameters, but got {parameters.Length}");
-        }
+    private void InvalidateBiasReshapeCache()
+    {
+        _biasReshaped4D = null;
+        _biasReshaped4DSource = null;
+        _biasReshaped4DVersion = -1;
+    }
 
-        // Bulk copy into contiguous tensor storage in-place — replaces 4-nested scalar loops
-        // Preserves tensor identity so engine persistent tensor references remain valid
-        var src = parameters.AsSpan();
-        src.Slice(0, kernelLen).CopyTo(_kernels.Data.Span);
-        src.Slice(kernelLen, biasLen).CopyTo(_biases.Data.Span);
+    /// <inheritdoc/>
+    public override void SetTrainingMode(bool isTraining)
+    {
+        base.SetTrainingMode(isTraining);
 
-        // Notify engine that parameters have changed (for GPU cache invalidation)
-        Engine.InvalidatePersistentTensor(_kernels);
-        Engine.InvalidatePersistentTensor(_biases);
+        // Parameter-buffer optimizers can update aliased bias storage without
+        // advancing this tensor view's Version. Rebuild the materialized reshape
+        // on the first inference forward after every training phase.
+        if (!isTraining)
+            InvalidateBiasReshapeCache();
     }
 
     /// <summary>
@@ -1828,20 +1952,9 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
             Engine.InvalidatePersistentTensor(_kernels);
             Engine.InvalidatePersistentTensor(_biases);
 
-            // Trainable-parameter pool returns (_kernels, _biases) are now
+            // Trainable-parameter pool returns (_kernels, _biases) are
             // handled by the auto-generated ReturnPooledParameters hook
             // invoked from LayerBase.Dispose(bool) — issue #1136 plan part 3.
-            // We only need to return the NON-trainable rented buffer here.
-
-            // Return the rented forward-pass output buffer. Without this,
-            // disposing many ConvolutionalLayer instances (one per conv in
-            // a deep UNet) leaks one rented activation per layer to the pool
-            // free list — dozens of MB per disposed model at SD scale.
-            if (_preAllocatedOutput is not null)
-            {
-                TensorAllocator.Return(_preAllocatedOutput);
-                _preAllocatedOutput = null;
-            }
 
             // Clear other managed resources (CPU)
             _kernelsGradient = null;

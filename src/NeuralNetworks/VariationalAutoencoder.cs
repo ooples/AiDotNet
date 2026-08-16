@@ -56,7 +56,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Auto-Encoding Variational Bayes", "https://arxiv.org/abs/1312.6114", Year = 2014, Authors = "Diederik P. Kingma, Max Welling")]
-public class VariationalAutoencoder<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
+public partial class VariationalAutoencoder<T> : VectorModelLayoutBase<T>, IAuxiliaryLossLayer<T>
 {
     private readonly VariationalAutoencoderOptions _options;
 
@@ -136,11 +136,13 @@ public class VariationalAutoencoder<T> : NeuralNetworkBase<T>, IAuxiliaryLossLay
     /// <summary>
     /// Stores the last computed mean vector from the encoder for auxiliary loss computation.
     /// </summary>
+    [Scratch]
     private Vector<T>? _lastMean;
 
     /// <summary>
     /// Stores the last computed log variance vector from the encoder for auxiliary loss computation.
     /// </summary>
+    [Scratch]
     private Vector<T>? _lastLogVariance;
 
     /// <summary>
@@ -517,64 +519,8 @@ public class VariationalAutoencoder<T> : NeuralNetworkBase<T>, IAuxiliaryLossLay
         return current;
     }
 
-    /// <summary>
-    /// Updates the parameters of all layers in the VAE network.
-    /// </summary>
-    /// <param name="parameters">A vector containing all parameters for the network.</param>
-    /// <remarks>
-    /// <para>
-    /// This method distributes the parameters to each layer based on their parameter counts.
-    /// It updates both the standard network layers and the specialized mean and log variance layers.
-    /// This is typically used during training when applying gradient updates.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method updates all the internal values of the VAE during training.
-    /// 
-    /// Think of parameters as the "settings" of the VAE:
-    /// - Each layer needs a certain number of parameters to function
-    /// - During training, these parameters are constantly adjusted to improve performance
-    /// - This method takes a big list of new parameter values and gives each layer its share
-    /// 
-    /// It makes sure to update:
-    /// - All the regular layers in the network
-    /// - The special mean and log variance layers that make the VAE work
-    /// 
-    /// It's like distributing updated parts to each section of a machine so it works better.
-    /// Each layer gets exactly the number of parameters it needs.
-    /// </para>
-    /// </remarks>
-    /// <exception cref="InvalidOperationException">
-    /// Thrown when the mean layer or log variance layer have not been properly initialized.
-    /// </exception>
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        int startIndex = 0;
-        foreach (var layer in Layers)
-        {
-            int layerParameterCount = checked((int)layer.ParameterCount);
-            if (layerParameterCount > 0)
-            {
-                Vector<T> layerParameters = parameters.SubVector(startIndex, layerParameterCount);
-                layer.UpdateParameters(layerParameters);
-                startIndex += layerParameterCount;
-            }
-        }
-
-        // Update mean and log variance layers
-        if (_meanLayer != null && _logVarianceLayer != null)
-        {
-            int meanParameterCount = checked((int)_meanLayer.ParameterCount);
-            _meanLayer.UpdateParameters(parameters.SubVector(startIndex, meanParameterCount));
-            startIndex += meanParameterCount;
-
-            int logVarianceParameterCount = checked((int)_logVarianceLayer.ParameterCount);
-            _logVarianceLayer.UpdateParameters(parameters.SubVector(startIndex, logVarianceParameterCount));
-        }
-        else
-        {
-            throw new InvalidOperationException("MeanLayer and LogVarianceLayer have not been properly initialized.");
-        }
-    }
-
+    // UpdateParameters restated a fold the base now derives from generated component registration.
+    // Removed under AIDN082.
     /// <summary>
     /// Makes a prediction using the Variational Autoencoder by encoding the input, sampling from the latent space, and decoding.
     /// </summary>

@@ -67,8 +67,36 @@ namespace AiDotNet.Diffusion.VAE;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     [ResearchPaper("Auto-Encoding Variational Bayes", "https://arxiv.org/abs/1312.6114")]
-public class StandardVAE<T> : VAEModelBase<T>
+public partial class StandardVAE<T> : VAEModelBase<T>
 {
+    /// <inheritdoc />
+    /// <remarks>Same layers, same order, as the previous GetParameters walked. The two preamble
+    /// calls are kept because an unresolved lazy layer contributes nothing, and the
+    /// old getter resolved shapes for exactly that reason.</remarks>
+    protected override void RegisterComponents()
+    {
+        EnsureLayersInitialized();
+        ResolveShapesViaForward();
+        RegisterParameterComponent("encoder/00000000/input", _inputConv);
+        RegisterLayerCollection("encoder/00000001/spatial", _encoderLayers);
+        RegisterParameterComponent("encoder/00000002/mean", _meanConv);
+        RegisterParameterComponent("encoder/00000003/log_variance", _logVarConv);
+        RegisterParameterComponent("encoder/00000004/quant", _quantConv);
+        RegisterParameterComponent("decoder/00000000/post_quant", _postQuantConv);
+        RegisterLayerCollection("decoder/00000001/spatial", _decoderLayers);
+        RegisterParameterComponent("decoder/00000002/output", _outputConv);
+    }
+
+    private void RegisterLayerCollection(string prefix, IReadOnlyList<ILayer<T>> layers)
+    {
+        for (int i = 0; i < layers.Count; i++)
+        {
+            RegisterParameterComponent(
+                $"{prefix}/{AiDotNet.Models.Parameters.ParameterStableId.IndexSegment(i)}",
+                layers[i]);
+        }
+    }
+
     /// <summary>
     /// Standard Stable Diffusion latent scale factor.
     /// </summary>
@@ -102,51 +130,61 @@ public class StandardVAE<T> : VAEModelBase<T>
     /// <summary>
     /// Encoder layers.
     /// </summary>
+    [Scratch]
     private List<ILayer<T>> _encoderLayers;
 
     /// <summary>
     /// Decoder layers.
     /// </summary>
+    [Scratch]
     private List<ILayer<T>> _decoderLayers;
 
     /// <summary>
     /// Mean projection layer for latent distribution.
     /// </summary>
+    [Scratch]
     private ConvolutionalLayer<T>? _meanConv;
 
     /// <summary>
     /// Log variance projection layer for latent distribution.
     /// </summary>
+    [Scratch]
     private ConvolutionalLayer<T>? _logVarConv;
 
     /// <summary>
     /// Input convolution to initial embedding.
     /// </summary>
+    [Scratch]
     private ConvolutionalLayer<T>? _inputConv;
 
     /// <summary>
     /// Quant convolution from latent to decoder.
     /// </summary>
+    [Scratch]
     private ConvolutionalLayer<T>? _quantConv;
 
     /// <summary>
     /// Post-quant convolution in decoder.
     /// </summary>
+    [Scratch]
     private ConvolutionalLayer<T>? _postQuantConv;
 
     /// <summary>
     /// Output convolution to RGB.
     /// </summary>
+    [Scratch]
     private ConvolutionalLayer<T>? _outputConv;
 
     /// <summary>
     /// Cached mean from encoding.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _cachedMean;
 
     /// <summary>
     /// Cached log variance from encoding.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _cachedLogVar;
 
     /// <summary>
@@ -198,9 +236,6 @@ public class StandardVAE<T> : VAEModelBase<T>
 
     /// <inheritdoc />
     public override double LatentScaleFactor => _latentScaleFactor;
-
-    /// <inheritdoc />
-    public override long ParameterCount => CalculateParameterCount();
 
     /// <inheritdoc />
     public override bool SupportsTiling => true;
@@ -415,7 +450,7 @@ public class StandardVAE<T> : VAEModelBase<T>
     public override Tensor<T> Encode(Tensor<T> image, bool sampleMode = true)
     {
         EnsureLayersInitialized();
-        _preserveMaterializedParameters = true;
+        if (!LayerBase<T>.IsInferringShapes) _preserveMaterializedParameters = true;
         var (mean, logVar) = EncodeWithDistribution(image);
 
         if (sampleMode)
@@ -468,7 +503,7 @@ public class StandardVAE<T> : VAEModelBase<T>
     public override Tensor<T> Decode(Tensor<T> latent)
     {
         EnsureLayersInitialized();
-        _preserveMaterializedParameters = true;
+        if (!LayerBase<T>.IsInferringShapes) _preserveMaterializedParameters = true;
         if (_postQuantConv == null || _outputConv == null)
         {
             throw new InvalidOperationException("Decoder layers not initialized.");
@@ -550,56 +585,10 @@ public class StandardVAE<T> : VAEModelBase<T>
 
     #region Parameter Management
 
-    private int CalculateParameterCount()
-    {
-        EnsureLayersInitialized();
-        // Resolve lazy layer shapes so the count matches GetParameters().Length even
-        // pre-forward (lazy layers otherwise report their architectural count here
-        // but an empty GetParameters() vector — the count-equality failure source).
-        TriggerLazyShapeResolution();
-
-        // Walk the same layers GetParameters walks and sum their actual ParameterCount.
-        // Must match GetParameters().Length exactly — earlier "approximate" formulas
-        // diverged from the real per-layer count and broke contract tests asserting
-        // ParameterCount == GetParameters().Length.
-        long count = 0;
-        AddLayerCount(ref count, _inputConv);
-        for (int i = 0; i < _encoderLayers.Count; i++) AddLayerCount(ref count, _encoderLayers[i]);
-        AddLayerCount(ref count, _meanConv);
-        AddLayerCount(ref count, _logVarConv);
-        AddLayerCount(ref count, _quantConv);
-        AddLayerCount(ref count, _postQuantConv);
-        for (int i = 0; i < _decoderLayers.Count; i++) AddLayerCount(ref count, _decoderLayers[i]);
-        AddLayerCount(ref count, _outputConv);
-        return (int)Math.Min(count, int.MaxValue);
-    }
 
     private static void AddLayerCount(ref long count, ILayer<T>? layer)
     {
         if (layer != null) count += (int)layer.ParameterCount;
-    }
-
-    /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        EnsureLayersInitialized();
-        // Resolve lazy layer shapes so the vector matches ParameterCount even
-        // before the first real forward (lazy layers otherwise contribute 0).
-        TriggerLazyShapeResolution();
-
-        // Single-allocation concat over the same layers GetParameterChunks walks.
-        // The previous List<T> + per-element Add + ToArray triple-copied the whole
-        // parameter vector (~3x), OOM'ing the runner when a paper-scale VAE is
-        // materialised (e.g. during a foundation model's Clone). Vector<T>.Concatenate
-        // pre-sizes one result and vectorized-copies each layer's params in once.
-        var parts = new List<Vector<T>>();
-        foreach (var layer in EnumerateAllLayers())
-        {
-            if (layer == null) continue;
-            parts.Add(layer.GetParameters());
-        }
-
-        return Vector<T>.Concatenate(parts.ToArray());
     }
 
     /// <inheritdoc />
@@ -651,38 +640,6 @@ public class StandardVAE<T> : VAEModelBase<T>
         }
     }
 
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        EnsureLayersInitialized();
-        // Resolve lazy layer shapes first so each layer's slice is sized to its
-        // real parameter count; otherwise lazy layers size to 0 and incoming
-        // values are silently dropped (the round-trip bug).
-        _preserveMaterializedParameters = true;
-        TriggerLazyShapeResolution();
-
-        var index = 0;
-
-        SetLayerParameters(_inputConv, parameters, ref index);
-
-        foreach (var layer in _encoderLayers)
-        {
-            SetLayerParameters(layer, parameters, ref index);
-        }
-
-        SetLayerParameters(_meanConv, parameters, ref index);
-        SetLayerParameters(_logVarConv, parameters, ref index);
-        SetLayerParameters(_quantConv, parameters, ref index);
-        SetLayerParameters(_postQuantConv, parameters, ref index);
-
-        foreach (var layer in _decoderLayers)
-        {
-            SetLayerParameters(layer, parameters, ref index);
-        }
-
-        SetLayerParameters(_outputConv, parameters, ref index);
-    }
-
     private void SetLayerParameters(ILayer<T>? layer, Vector<T> parameters, ref int index)
     {
         if (layer == null) return;
@@ -712,26 +669,41 @@ public class StandardVAE<T> : VAEModelBase<T>
             latentScaleFactor: _latentScaleFactor,
             lossFunction: LossFunction);
 
-        // Keep untouched default VAEs structural. Already-materialized eager
-        // tensors are still copied, but lazy tensors are resolved only after
-        // Encode/Decode or SetParameters has established runtime weight state.
-        if (_preserveMaterializedParameters)
+        // Keep source and destination at the same structural lifecycle before comparing or copying
+        // tensors. ParameterCount/GetParameters can resolve the lazy graph without a real forward;
+        // measuring before that resolution and copying afterward compares different layer sequences.
+        bool structureResolved = _shapesResolvedViaForward;
+        if (structureResolved)
+            clone.ResolveShapesViaForward();
+        else if (_layersInitialized)
+            clone.EnsureLayersInitialized();
+
+        // A flat parameter read materializes the complete generated surface without running
+        // Encode/Decode, so the forward-only flag is not enough to decide whether trained state
+        // exists. Only compare against ParameterCount after structure is already stable, ensuring
+        // the metadata read cannot mutate the sequence being measured.
+        bool hasCompleteMaterializedSurface = structureResolved
+            && GetMaterializedParameterCount() == ParameterCount;
+        if (_preserveMaterializedParameters || hasCompleteMaterializedSurface)
         {
             TriggerLazyShapeResolution();
-            var parameters = GetParameters();
             clone.TriggerLazyShapeResolution();
-            clone.SetParameters(parameters);
+            if (!clone.TryShareParametersFrom(this))
+                CopyMaterializedParametersTo(clone);
         }
         else
         {
-            if (_layersInitialized)
-            {
-                clone.EnsureLayersInitialized();
-            }
-
             CopyMaterializedParametersTo(clone);
         }
         return clone;
+    }
+
+    private long GetMaterializedParameterCount()
+    {
+        long count = 0;
+        foreach (var parameter in EnumerateMaterializedModelParameters())
+            count = checked(count + parameter.Length);
+        return count;
     }
 
     private void CopyMaterializedParametersTo(StandardVAE<T> clone)
@@ -797,6 +769,29 @@ public class StandardVAE<T> : VAEModelBase<T>
     /// underflow.
     /// </remarks>
     private bool _lazyShapesResolved;
+
+    private bool _shapesResolvedViaForward;
+
+    /// <summary>
+    /// Resolves every lazy encoder and decoder shape through the real VAE topology without allocating
+    /// parameter storage. Parameter manifests call this path; explicit value reads continue to use
+    /// <see cref="TriggerLazyShapeResolution"/> and therefore materialize the same resolved shapes.
+    /// </summary>
+    private void ResolveShapesViaForward()
+    {
+        EnsureLayersInitialized();
+        if (_shapesResolvedViaForward) return;
+        _shapesResolvedViaForward = true;
+
+        int downsamples = _channelMultipliers.Length - 1;
+        int dummySpatial = 1 << Math.Max(downsamples, 1);
+        var dummyImage = new Tensor<T>(new[] { 1, _inputChannels, dummySpatial, dummySpatial });
+        LayerBase<T>.RunShapeInference(() =>
+        {
+            var dummyLatent = Encode(dummyImage, sampleMode: false);
+            _ = Decode(dummyLatent);
+        });
+    }
 
     internal void TriggerLazyShapeResolution()
     {

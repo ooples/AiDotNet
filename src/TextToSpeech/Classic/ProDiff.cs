@@ -1,6 +1,7 @@
 using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
@@ -52,6 +53,7 @@ public class ProDiff<T> : TtsModelBase<T>, IAcousticModel<T>
 {
     private readonly ProDiffOptions _options;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
+    private readonly bool _usesDefaultOptimizer;
     private readonly ITokenizer? _tokenizer;
     private bool _useNativeMode;
     private bool _disposed;
@@ -93,7 +95,8 @@ public class ProDiff<T> : TtsModelBase<T>, IAcousticModel<T>
         _options = options ?? new ProDiffOptions();
         ValidateOptions(_options);
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _usesDefaultOptimizer = optimizer is null;
+        _optimizer = optimizer ?? CreateDefaultOptimizer();
         base.SampleRate = _options.SampleRate;
         base.MelChannels = _options.MelChannels;
         base.HopSize = _options.HopSize;
@@ -243,7 +246,10 @@ public class ProDiff<T> : TtsModelBase<T>, IAcousticModel<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expected);
+            // Honor the optimizer selected by the public constructor. The
+            // two-argument overload creates a generic fallback and silently
+            // ignores ProDiff's configured Adam + rsqrt schedule.
+            TrainWithTape(input, expected, _optimizer);
         }
         finally
         {
@@ -251,20 +257,22 @@ public class ProDiff<T> : TtsModelBase<T>, IAcousticModel<T>
         }
     }
 
-    public override void UpdateParameters(Vector<T> parameters)
+    /// <summary>
+    /// Refuses parameter work on a disposed model, on every entry point rather than one.
+    /// </summary>
+    /// <remarks>
+    /// This check used to live inside UpdateParameters, which meant ParameterCount, GetParameters
+    /// and SetParameters reached a disposed model unguarded. The base calls this hook from all of
+    /// them, so moving it here widens the guard and lets the hand-written UpdateParameters -- whose
+    /// only other content was a walk the base already performs -- be deleted.
+    /// </remarks>
+    protected override void EnsureParametersReady()
     {
         ThrowIfDisposed();
-        if (IsOnnxMode)
-            throw new NotSupportedException("Cannot update parameters in ONNX mode.");
-        int idx = 0;
-        foreach (var l in Layers)
-        {
-            int c = checked((int)l.ParameterCount);
-            l.UpdateParameters(parameters.Slice(idx, c));
-            idx += c;
-        }
+        base.EnsureParametersReady();
     }
 
+    // UpdateParameters folded one enumeration the base already folds. Removed under AIDN082.
     public override ModelMetadata<T> GetModelMetadata()
     {
         var m = new ModelMetadata<T>
@@ -320,8 +328,106 @@ public class ProDiff<T> : TtsModelBase<T>, IAcousticModel<T>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
         if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new ProDiff<T>(Architecture, mp, _options);
-        return new ProDiff<T>(Architecture, _options, _optimizer);
+            return new ProDiff<T>(Architecture, mp, new ProDiffOptions(_options));
+
+        if (_usesDefaultOptimizer)
+            return new ProDiff<T>(Architecture, new ProDiffOptions(_options));
+
+        // Never share mutable optimizer state between the source and clone.
+        // Preserve the built-in Adam/AdamW settings when possible; arbitrary
+        // injected optimizer implementations fall back to ProDiff's public,
+        // paper-aligned options on the new instance.
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? cloneOptimizer = _optimizer switch
+        {
+            AdamWOptimizer<T, Tensor<T>, Tensor<T>> when _optimizer.GetOptions() is AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>> options
+                => new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(null, CloneAdamWOptions(options)),
+            AdamOptimizer<T, Tensor<T>, Tensor<T>> when _optimizer.GetOptions() is AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> options
+                => new AdamOptimizer<T, Tensor<T>, Tensor<T>>(null, CloneAdamOptions(options)),
+            _ => null
+        };
+        return new ProDiff<T>(Architecture, new ProDiffOptions(_options), cloneOptimizer);
+    }
+
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreateDefaultOptimizer()
+    {
+        var scheduler = new NoamSchedule(
+            modelDimension: _options.HiddenDim,
+            warmupSteps: _options.WarmupSteps,
+            factor: _options.LearningRate);
+        bool clipGradients = _options.MaxGradientNorm > 0.0;
+        double maxGradientNorm = clipGradients ? _options.MaxGradientNorm : 1.0;
+
+        if (_options.WeightDecay > 0.0)
+        {
+            return new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+                this,
+                new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+                {
+                    InitialLearningRate = scheduler.CurrentLearningRate,
+                    Beta1 = _options.OptimizerBeta1,
+                    Beta2 = _options.OptimizerBeta2,
+                    Epsilon = _options.OptimizerEpsilon,
+                    WeightDecay = _options.WeightDecay,
+                    EnableGradientClipping = clipGradients,
+                    MaxGradientNorm = maxGradientNorm,
+                    UseAdaptiveLearningRate = false,
+                    UseAdaptiveBetas = false,
+                    UseAMSGrad = false,
+                    LearningRateScheduler = scheduler,
+                    SchedulerStepMode = SchedulerStepMode.StepPerBatch,
+                });
+        }
+
+        return new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = scheduler.CurrentLearningRate,
+                Beta1 = _options.OptimizerBeta1,
+                Beta2 = _options.OptimizerBeta2,
+                Epsilon = _options.OptimizerEpsilon,
+                EnableGradientClipping = clipGradients,
+                MaxGradientNorm = maxGradientNorm,
+                UseAdaptiveLearningRate = false,
+                UseAdaptiveBetas = false,
+                UseAMSGrad = false,
+                LearningRateScheduler = scheduler,
+                SchedulerStepMode = SchedulerStepMode.StepPerBatch,
+            });
+    }
+
+    private static AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> CloneAdamOptions(
+        AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> options)
+    {
+        var clone = new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>(options)
+        {
+            SchedulerStepMode = options.SchedulerStepMode,
+            LearningRateScheduler = CloneScheduler(options.LearningRateScheduler),
+        };
+        return clone;
+    }
+
+    private static AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>> CloneAdamWOptions(
+        AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>> options)
+    {
+        var clone = new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>(options)
+        {
+            SchedulerStepMode = options.SchedulerStepMode,
+            LearningRateScheduler = CloneScheduler(options.LearningRateScheduler),
+        };
+        return clone;
+    }
+
+    private static ILearningRateScheduler? CloneScheduler(ILearningRateScheduler? scheduler)
+    {
+        return scheduler switch
+        {
+            NoamSchedule noam => new NoamSchedule(
+                noam.ModelDimension,
+                noam.WarmupSteps,
+                noam.Factor),
+            _ => null,
+        };
     }
 
     private static void ValidateOptions(ProDiffOptions opts)
@@ -339,6 +445,20 @@ public class ProDiff<T> : TtsModelBase<T>, IAcousticModel<T>
             throw new ArgumentOutOfRangeException(nameof(opts), "MaxTextLength must be positive.");
         if (opts.HiddenDim <= 0)
             throw new ArgumentOutOfRangeException(nameof(opts), "HiddenDim must be positive.");
+        if (opts.WarmupSteps <= 0)
+            throw new ArgumentOutOfRangeException(nameof(opts), "WarmupSteps must be positive.");
+        if (opts.LearningRate <= 0.0)
+            throw new ArgumentOutOfRangeException(nameof(opts), "LearningRate factor must be positive.");
+        if (opts.WeightDecay < 0.0)
+            throw new ArgumentOutOfRangeException(nameof(opts), "WeightDecay cannot be negative.");
+        if (opts.OptimizerBeta1 is < 0.0 or >= 1.0)
+            throw new ArgumentOutOfRangeException(nameof(opts), "OptimizerBeta1 must be in [0, 1).");
+        if (opts.OptimizerBeta2 is < 0.0 or >= 1.0)
+            throw new ArgumentOutOfRangeException(nameof(opts), "OptimizerBeta2 must be in [0, 1).");
+        if (opts.OptimizerEpsilon <= 0.0)
+            throw new ArgumentOutOfRangeException(nameof(opts), "OptimizerEpsilon must be positive.");
+        if (opts.MaxGradientNorm < 0.0)
+            throw new ArgumentOutOfRangeException(nameof(opts), "MaxGradientNorm cannot be negative.");
     }
 
     private void ThrowIfDisposed()

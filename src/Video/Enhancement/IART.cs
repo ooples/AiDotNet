@@ -54,8 +54,8 @@ namespace AiDotNet.Video.Enhancement;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("IART: Implicit Resampling-based Alignment Transformer for Video Super-Resolution",
-    "https://arxiv.org/abs/2404.06573",
+[ResearchPaper("Enhancing Video Super-Resolution via Implicit Resampling-based Alignment",
+    "https://arxiv.org/abs/2305.00163",
     Year = 2024,
     Authors = "Kai Xu, Ziwei Yu, Xin Wang, Michael Bi Mi, Angela Yao")]
 public class IART<T> : VideoSuperResolutionBase<T>
@@ -91,7 +91,12 @@ public class IART<T> : VideoSuperResolutionBase<T>
     {
         _options = options ?? new IARTOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate
+            });
         ScaleFactor = _options.ScaleFactor;
         InitializeLayers();
     }
@@ -146,7 +151,7 @@ public class IART<T> : VideoSuperResolutionBase<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expected);
+            TrainWithTape(input, expected, _optimizer);
         }
         finally
         {
@@ -154,18 +159,15 @@ public class IART<T> : VideoSuperResolutionBase<T>
         }
     }
 
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        if (!_useNativeMode) throw new NotSupportedException("Parameter updates are not supported in ONNX mode.");
-        int idx = 0;
-        foreach (var layer in Layers)
-        {
-            int count = checked((int)layer.ParameterCount);
-            layer.UpdateParameters(parameters.Slice(idx, count));
-            idx += count;
-        }
-    }
+    /// <inheritdoc />
+    protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> GetOrCreateBaseOptimizer()
+        => _optimizer ?? base.GetOrCreateBaseOptimizer();
 
+    /// <inheritdoc />
+    /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
+    /// write on every parameter surface, so the guard is stated once here instead of being
+    /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
+    protected override bool SupportsParameterMutation => _useNativeMode;
     protected override Tensor<T> PreprocessFrames(Tensor<T> rawFrames) => NormalizeFrames(rawFrames);
 
     protected override Tensor<T> PostprocessOutput(Tensor<T> modelOutput) => DenormalizeFrames(modelOutput);
@@ -222,7 +224,12 @@ public class IART<T> : VideoSuperResolutionBase<T>
     }
 
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-        => new IART<T>(Architecture, _options);
+    {
+        var optionsCopy = new IARTOptions(_options);
+        if (!_useNativeMode && optionsCopy.ModelPath is { } path && !string.IsNullOrEmpty(path))
+            return new IART<T>(Architecture, path, optionsCopy);
+        return new IART<T>(Architecture, optionsCopy);
+    }
 
     #endregion
 

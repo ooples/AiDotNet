@@ -54,7 +54,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("MeshCNN: A Network with an Edge", "https://arxiv.org/abs/1809.05910", Year = 2019, Authors = "Rana Hanocka, Amir Hertz, Noa Fish, Raja Giryes, Shachar Fleishman, Daniel Cohen-Or")]
-public class MeshCNN<T> : NeuralNetworkBase<T>
+public class MeshCNN<T> : GraphModelLayoutBase<T>
 {
     /// <summary>
     /// The loss function used to compute training loss.
@@ -466,23 +466,8 @@ public class MeshCNN<T> : NeuralNetworkBase<T>
         }
     }
 
-    /// <summary>
-    /// Updates network parameters using a flat parameter vector.
-    /// </summary>
-    /// <param name="parameters">Vector containing all parameters.</param>
-    /// <inheritdoc />
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        int index = 0;
-        foreach (var layer in Layers)
-        {
-            int layerParams = checked((int)layer.ParameterCount);
-            var layerParameters = parameters.Slice(index, layerParams);
-            layer.UpdateParameters(layerParameters);
-            index += layerParams;
-        }
-    }
-
+    // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
+    // exactly the same enumeration, so this said nothing the base does not already say.
     /// <summary>
     /// Gets metadata about this model.
     /// </summary>

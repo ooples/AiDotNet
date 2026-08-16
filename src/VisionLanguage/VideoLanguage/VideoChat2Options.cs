@@ -38,6 +38,10 @@ public class VideoChat2Options : VideoLanguageOptions
         LanguageModelName = other.LanguageModelName;
         ProjectionDim = other.ProjectionDim;
         SystemPrompt = other.SystemPrompt;
+        QFormerDim = other.QFormerDim;
+        NumQFormerLayers = other.NumQFormerLayers;
+        NumQueryTokens = other.NumQueryTokens;
+        NumQFormerHeads = other.NumQFormerHeads;
     }
 
     public VideoChat2Options()
@@ -52,4 +56,18 @@ public class VideoChat2Options : VideoLanguageOptions
         LanguageModelName = "Mistral";
         MaxFrames = 16;
     }
+
+    /// <summary>Q-Former hidden width (BLIP-2 default 768). VideoChat2 (Li et al. 2023,
+    /// arXiv:2311.17005) resamples the video features with a Q-Former before the LLM.</summary>
+    public int QFormerDim { get; set; } = 768;
+
+    /// <summary>Number of Q-Former transformer blocks (BLIP-2 default 12).</summary>
+    public int NumQFormerLayers { get; set; } = 12;
+
+    /// <summary>Number of learnable Q-Former query tokens that cross-attend to the video features
+    /// (BLIP-2 default 32).</summary>
+    public int NumQueryTokens { get; set; } = 32;
+
+    /// <summary>Number of attention heads inside the Q-Former (BLIP-2 default 12).</summary>
+    public int NumQFormerHeads { get; set; } = 12;
 }

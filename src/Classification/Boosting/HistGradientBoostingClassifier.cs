@@ -86,6 +86,8 @@ namespace AiDotNet.Classification.Boosting;
     [ResearchPaper("LightGBM: A Highly Efficient Gradient Boosting Decision Tree", "https://papers.nips.cc/paper/6907-lightgbm-a-highly-efficient-gradient-boosting-decision-tree")]
 public class HistGradientBoostingClassifier<T> : ClassifierBase<T>
 {
+
+    // Its own comment: "For tree-based models, parameters do not fit the typical vector format".
     /// <summary>
     /// The ensemble of histogram-based decision trees.
     /// </summary>
@@ -739,34 +741,6 @@ public class HistGradientBoostingClassifier<T> : ClassifierBase<T>
     }
 
     /// <summary>
-    /// Gets the model parameters.
-    /// </summary>
-    /// <returns>Vector containing serialized tree parameters.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Trees are complex structures that don't fit neatly into a
-    /// parameter vector. This returns a simplified representation for compatibility.</para>
-    /// </remarks>
-    public Vector<T> GetParameters()
-    {
-        // For tree-based models, parameters don't fit the typical vector format
-        // Return a placeholder with tree count
-        return new Vector<T>(1) { [0] = NumOps.FromDouble(_trees.Count) };
-    }
-
-    /// <summary>
-    /// Sets the model parameters.
-    /// </summary>
-    /// <param name="parameters">Parameter vector (not fully supported for tree models).</param>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Tree-based models are better loaded via serialization
-    /// than through a parameter vector. This is a limited implementation.</para>
-    /// </remarks>
-    public void SetParameters(Vector<T> parameters)
-    {
-        // Limited support for tree models - use serialization instead
-    }
-
-    /// <summary>
     /// Creates a new instance with the specified parameters.
     /// </summary>
     /// <param name="parameters">Parameters (limited support).</param>
@@ -775,7 +749,7 @@ public class HistGradientBoostingClassifier<T> : ClassifierBase<T>
     /// <para><b>For Beginners:</b> Creates a new model. For tree models, the parameters
     /// don't fully capture the model state.</para>
     /// </remarks>
-    public IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
+    public override IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
     {
         var model = new HistGradientBoostingClassifier<T>(_maxBins, _maxDepth, _nEstimators,
             _learningRate, _minSamplesLeaf, _l2Regularization);

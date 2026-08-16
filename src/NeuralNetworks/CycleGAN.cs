@@ -6,6 +6,8 @@ using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks.Options;
 using AiDotNet.Optimizers;
 
+using System.Linq;
+
 namespace AiDotNet.NeuralNetworks;
 
 /// <summary>
@@ -60,8 +62,12 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Unpaired Image-to-Image Translation using Cycle-Consistent Adversarial Networks", "https://arxiv.org/abs/1703.10593", Year = 2017, Authors = "Jun-Yan Zhu, Taesung Park, Phillip Isola, Alexei A. Efros")]
-public class CycleGAN<T> : NeuralNetworkBase<T>
+public partial class CycleGAN<T> : ImageTranslationModelLayoutBase<T>
 {
+
+    // The four sub-networks are discovered as members and their layers surfaced in declaration
+    // order -- GeneratorAtoB, GeneratorBtoA, DiscriminatorA, DiscriminatorB -- which is the order
+    // this hook used and therefore the serialization order. Removed under AIDN082.
     private readonly CycleGANOptions _options;
 
     /// <inheritdoc/>
@@ -773,6 +779,38 @@ public class CycleGAN<T> : NeuralNetworkBase<T>
 
     protected override void InitializeLayers() { }
 
+    /// <summary>
+    /// Forwards the mode to the four sub-networks, which the base walk cannot reach.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <see cref="NeuralNetworkBase{T}.SetTrainingMode"/> propagates by iterating <c>Layers</c>, and
+    /// this model deliberately leaves that empty — its trainable state is four whole
+    /// <see cref="NeuralNetworkBase{T}"/> instances, not layers. So without this override
+    /// <c>SetTrainingMode(false)</c> was a no-op: every dropout and batch-normalization inside the
+    /// generators and discriminators stayed in TRAINING mode during inference, using batch
+    /// statistics instead of running ones and sampling dropout masks on a prediction path.
+    /// </para>
+    /// <para>
+    /// Only <see cref="TranslateAtoB"/> and <see cref="TranslateBtoA"/> were unaffected, because
+    /// they each save, flip and restore the generator's mode by hand around a single call. Every
+    /// other entry point — <c>Predict</c> included — was not covered.
+    /// </para>
+    /// <para>
+    /// Note this cannot be solved by <c>GetExtraTrainableLayers</c>: that hook is not consulted by
+    /// mode propagation, and its <c>LayerBase&lt;T&gt;</c> element type cannot hold a whole network.
+    /// </para>
+    /// </remarks>
+    public override void SetTrainingMode(bool isTraining)
+    {
+        base.SetTrainingMode(isTraining);
+
+        GeneratorAtoB.SetTrainingMode(isTraining);
+        GeneratorBtoA.SetTrainingMode(isTraining);
+        DiscriminatorA.SetTrainingMode(isTraining);
+        DiscriminatorB.SetTrainingMode(isTraining);
+    }
+
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         // GPU-resident optimization: use TryForwardGpuOptimized for speedup
@@ -939,19 +977,6 @@ public class CycleGAN<T> : NeuralNetworkBase<T>
 
     /// <inheritdoc />
     /// <remarks>
-    /// CycleGAN owns four sub-networks (two generators + two discriminators) outside
-    /// the inherited <c>Layers</c> list, so the base ParameterCount (which only sums
-    /// <c>Layers</c>) reports 0 — that's the symptom behind the "GAN has only 0
-    /// parameters" invariant test failure. Aggregate the four networks here.
-    /// </remarks>
-    public override long ParameterCount =>
-        GeneratorAtoB.GetParameterCount() +
-        GeneratorBtoA.GetParameterCount() +
-        DiscriminatorA.GetParameterCount() +
-        DiscriminatorB.GetParameterCount();
-
-    /// <inheritdoc />
-    /// <remarks>
     /// Streams parameters from each of the four sub-networks in sequence:
     /// <c>GeneratorAtoB</c>, <c>GeneratorBtoA</c>, <c>DiscriminatorA</c>,
     /// <c>DiscriminatorB</c>. Per #1237, callers walking these chunks
@@ -966,77 +991,7 @@ public class CycleGAN<T> : NeuralNetworkBase<T>
         foreach (var chunk in DiscriminatorB.GetParameterChunks()) yield return chunk;
     }
 
-    /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        var a2b = GeneratorAtoB.GetParameters();
-        var b2a = GeneratorBtoA.GetParameters();
-        var dA = DiscriminatorA.GetParameters();
-        var dB = DiscriminatorB.GetParameters();
-        var combined = new Vector<T>(a2b.Length + b2a.Length + dA.Length + dB.Length);
-        int idx = 0;
-        for (int i = 0; i < a2b.Length; i++) combined[idx++] = a2b[i];
-        for (int i = 0; i < b2a.Length; i++) combined[idx++] = b2a[i];
-        for (int i = 0; i < dA.Length; i++) combined[idx++] = dA[i];
-        for (int i = 0; i < dB.Length; i++) combined[idx++] = dB[i];
-        return combined;
-    }
-
-    /// <summary>
-    /// Updates the parameters of all networks in the CycleGAN.
-    /// </summary>
-    /// <param name="parameters">The new parameters vector containing parameters for all networks.</param>
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        if (parameters is null)
-        {
-            throw new ArgumentNullException(nameof(parameters), "Parameters vector cannot be null.");
-        }
-
-        int genAtoBCount = (int)GeneratorAtoB.GetParameterCount();
-        int genBtoACount = (int)GeneratorBtoA.GetParameterCount();
-        int discACount = (int)DiscriminatorA.GetParameterCount();
-        int discBCount = (int)DiscriminatorB.GetParameterCount();
-
-        int totalCount = genAtoBCount + genBtoACount + discACount + discBCount;
-
-        if (parameters.Length != totalCount)
-        {
-            throw new ArgumentException(
-                $"Parameters vector length mismatch: expected {totalCount} " +
-                $"(GeneratorAtoB: {genAtoBCount}, GeneratorBtoA: {genBtoACount}, " +
-                $"DiscriminatorA: {discACount}, DiscriminatorB: {discBCount}), " +
-                $"but received {parameters.Length}.",
-                nameof(parameters));
-        }
-
-        int offset = 0;
-
-        // Update GeneratorAtoB parameters
-        var genAtoBParams = new Vector<T>(genAtoBCount);
-        for (int i = 0; i < genAtoBCount; i++)
-            genAtoBParams[i] = parameters[offset + i];
-        GeneratorAtoB.UpdateParameters(genAtoBParams);
-        offset += genAtoBCount;
-
-        // Update GeneratorBtoA parameters
-        var genBtoAParams = new Vector<T>(genBtoACount);
-        for (int i = 0; i < genBtoACount; i++)
-            genBtoAParams[i] = parameters[offset + i];
-        GeneratorBtoA.UpdateParameters(genBtoAParams);
-        offset += genBtoACount;
-
-        // Update DiscriminatorA parameters
-        var discAParams = new Vector<T>(discACount);
-        for (int i = 0; i < discACount; i++)
-            discAParams[i] = parameters[offset + i];
-        DiscriminatorA.UpdateParameters(discAParams);
-        offset += discACount;
-
-        // Update DiscriminatorB parameters
-        var discBParams = new Vector<T>(discBCount);
-        for (int i = 0; i < discBCount; i++)
-            discBParams[i] = parameters[offset + i];
-        DiscriminatorB.UpdateParameters(discBParams);
-    }
+    // UpdateParameters split the vector four ways -- GeneratorAtoB, GeneratorBtoA, DiscriminatorA,
+    // DiscriminatorB -- and GetExtraTrainableLayers yields those four in the same order, so the base
+    // reproduces the split. Removed under AIDN082.
 }
