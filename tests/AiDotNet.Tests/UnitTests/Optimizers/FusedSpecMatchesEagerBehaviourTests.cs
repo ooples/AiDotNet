@@ -353,4 +353,102 @@ public class FusedSpecMatchesEagerBehaviourTests
         Assert.True(config.Extras!.Nesterov,
             "NAG fused without the Nesterov flag — the kernel would run classical momentum while the eager path runs the look-ahead.");
     }
+
+    // ── FTRL ─────────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// FTRL's hyperparameters live in Extras, and the learning rate is Alpha rather than the base class's
+    /// CurrentLearningRate — Alpha is what the eager update actually reads.
+    /// </summary>
+    /// <remarks>
+    /// <c>FtrlBeta</c> is the one that matters most here. The kernel previously assumed beta = 0, computing
+    /// <c>sqrt(n)/lr</c> with no beta term; McMahan's paper and this optimizer both default it to 1, so a
+    /// spec that omitted it would run a different per-coordinate learning-rate schedule on the fused path.
+    /// <c>LrPower = -0.5</c> is what turns the kernel's general <c>n^-p</c> into the paper's <c>sqrt(n)</c>.
+    /// </remarks>
+    [Fact]
+    public void Ftrl_CarriesAlphaBetaAndBothLambdasIntoTheKernel()
+    {
+        var options = new FTRLOptimizerOptions<double, Matrix<double>, Vector<double>>
+        {
+            Alpha = 0.02,
+            Beta = 1.5,
+            Lambda1 = 0.3,
+            Lambda2 = 0.7,
+            UseAdaptiveLearningRate = false,
+        };
+        var optimizer = new FTRLOptimizer<double, Matrix<double>, Vector<double>>(null, options);
+
+        Assert.True(TryGetConfig(optimizer, out var config));
+        Assert.Equal(Tensors.Engines.Compilation.OptimizerType.FTRL, config.Type);
+        Assert.Equal(0.02f, config.LearningRate, 6);
+
+        Assert.NotNull(config.Extras);
+        Assert.Equal(0.3f, config.Extras!.L1, 6);
+        Assert.Equal(0.7f, config.Extras.L2, 6);
+        Assert.Equal(1.5f, config.Extras.FtrlBeta, 6);
+        Assert.Equal(-0.5f, config.Extras.LrPower, 6);
+
+        // A default-constructed Extras would carry beta = 0 and silently change the schedule.
+        Assert.NotEqual(0f, config.Extras.FtrlBeta);
+    }
+
+    /// <summary>
+    /// The eager update must be the FTRL-Proximal formula the kernel implements, so this reproduces it
+    /// independently from the paper and demands element-wise agreement.
+    /// </summary>
+    /// <remarks>
+    /// Includes a coordinate that gets thresholded to exactly zero, which is the part of FTRL that makes it
+    /// worth choosing and the part a plausible-but-wrong denominator would still get right.
+    /// </remarks>
+    [Fact]
+    public void Ftrl_MatchesTheProximalFormulaExactly()
+    {
+        const double alpha = 0.1, beta = 1.0, l1 = 0.05, l2 = 0.2;
+        var options = new FTRLOptimizerOptions<double, Matrix<double>, Vector<double>>
+        {
+            Alpha = alpha,
+            Beta = beta,
+            Lambda1 = l1,
+            Lambda2 = l2,
+            UseAdaptiveLearningRate = false,
+        };
+        var optimizer = new FTRLOptimizer<double, Matrix<double>, Vector<double>>(null, options);
+
+        var parameters = new Vector<double>(new[] { 0.5, -0.4, 0.02 });
+        var gradient = new Vector<double>(new[] { 0.6, -0.9, 0.01 });
+
+        var actual = optimizer.UpdateParameters(parameters, gradient);
+
+        // Independent transcription of McMahan et al. (2013), Algorithm 1.
+        var z = new double[3];
+        var n = new double[3];
+        var expected = new double[3];
+        for (int i = 0; i < 3; i++)
+        {
+            double g = gradient[i];
+            double nOld = n[i];
+            double nNew = nOld + g * g;
+            double sigma = (Math.Sqrt(nNew) - Math.Sqrt(nOld)) / alpha;
+            z[i] += g - sigma * parameters[i];
+            n[i] = nNew;
+
+            double absZ = Math.Abs(z[i]);
+            if (absZ <= l1)
+            {
+                expected[i] = 0.0;
+            }
+            else
+            {
+                double sign = z[i] > 0 ? 1.0 : -1.0;
+                expected[i] = -sign * (absZ - l1) / (l2 + (Math.Sqrt(nNew) + beta) / alpha);
+            }
+        }
+
+        for (int i = 0; i < 3; i++)
+            Assert.Equal(expected[i], actual[i], 12);
+
+        // The third coordinate must have been thresholded to exactly zero.
+        Assert.Equal(0.0, actual[2], 12);
+    }
 }
