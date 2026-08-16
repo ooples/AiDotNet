@@ -250,4 +250,107 @@ public class FusedSpecMatchesEagerBehaviourTests
         Assert.False(TryGetConfig(optimizer, out _),
             "CoordinateDescent fused under a moving learning rate; the u = lr*v identity only holds while lr is fixed.");
     }
+
+    // ── NesterovAcceleratedGradient → SGDMomentum + Nesterov ─────────────────
+
+    /// <summary>
+    /// NAG must now perform the actual Nesterov look-ahead, not classical momentum.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// It previously applied <c>v = mu*v + lr*g; p -= v</c> — classical momentum under a Nesterov name.
+    /// The correct form (Sutskever et al. 2013, as in PyTorch's <c>nesterov=True</c>) is
+    /// <c>v = mu*v + g; p -= lr*(g + mu*v)</c>.
+    /// </para>
+    /// <para>
+    /// The two agree nowhere after the first step, and even the FIRST step differs: classical gives
+    /// <c>p -= lr*g</c> while Nesterov gives <c>p -= lr*(1 + mu)*g</c>, because the look-ahead already
+    /// includes the freshly updated velocity. That factor is what this test pins.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public void Nag_PerformsTheNesterovLookAhead_NotClassicalMomentum()
+    {
+        const double lr = 0.1, mu = 0.9;
+        var options = new NesterovAcceleratedGradientOptimizerOptions<double, Matrix<double>, Vector<double>>
+        {
+            InitialLearningRate = lr,
+            InitialMomentum = mu,
+            UseAdaptiveLearningRate = false,
+        };
+        var optimizer = new NesterovAcceleratedGradientOptimizer<double, Matrix<double>, Vector<double>>(null, options);
+
+        var start = new Vector<double>(new[] { 0.0 });
+        var g = new Vector<double>(new[] { 1.0 });
+
+        var after = optimizer.UpdateParameters(start, g);
+
+        // v = 0.9*0 + 1 = 1; update = 1 + 0.9*1 = 1.9; p -= 0.1*1.9
+        Assert.Equal(-lr * (1.0 + mu), after[0], 12);
+        // Classical momentum would have moved exactly -lr*g here.
+        Assert.NotEqual(-lr, after[0], 6);
+    }
+
+    /// <summary>
+    /// Exact agreement with an independent transcription of the kernel's nesterov branch, over several
+    /// steps — the assertion that would catch a mapping that merely looks right.
+    /// </summary>
+    [Fact]
+    public void Nag_MatchesTheKernelNesterovRecurrenceExactly()
+    {
+        const double lr = 0.05, mu = 0.8;
+        var options = new NesterovAcceleratedGradientOptimizerOptions<double, Matrix<double>, Vector<double>>
+        {
+            InitialLearningRate = lr,
+            InitialMomentum = mu,
+            UseAdaptiveLearningRate = false,
+        };
+        var optimizer = new NesterovAcceleratedGradientOptimizer<double, Matrix<double>, Vector<double>>(null, options);
+
+        var gradients = new[]
+        {
+            new[] { 0.4, -0.8 },
+            new[] { 0.2, 0.6 },
+            new[] { -0.1, 0.3 },
+        };
+
+        var actual = new Vector<double>(new[] { 1.0, -2.0 });
+        var reference = new[] { 1.0, -2.0 };
+        var v = new[] { 0.0, 0.0 };
+
+        foreach (var g in gradients)
+        {
+            actual = optimizer.UpdateParameters(actual, new Vector<double>((double[])g.Clone()));
+            for (int i = 0; i < reference.Length; i++)
+            {
+                v[i] = mu * v[i] + g[i];
+                reference[i] -= lr * (g[i] + mu * v[i]);
+            }
+
+            for (int i = 0; i < reference.Length; i++)
+                Assert.Equal(reference[i], actual[i], 12);
+        }
+    }
+
+    /// <summary>
+    /// The spec must request the Nesterov kernel variant, carrying momentum in beta1.
+    /// </summary>
+    [Fact]
+    public void Nag_ReportsSgdMomentum_WithNesterovSet()
+    {
+        var options = new NesterovAcceleratedGradientOptimizerOptions<double, Matrix<double>, Vector<double>>
+        {
+            InitialLearningRate = 0.05,
+            InitialMomentum = 0.8,
+            UseAdaptiveLearningRate = false,
+        };
+        var optimizer = new NesterovAcceleratedGradientOptimizer<double, Matrix<double>, Vector<double>>(null, options);
+
+        Assert.True(TryGetConfig(optimizer, out var config));
+        Assert.Equal(Tensors.Engines.Compilation.OptimizerType.SGDMomentum, config.Type);
+        Assert.Equal(0.8f, config.Beta1, 6);
+        Assert.NotNull(config.Extras);
+        Assert.True(config.Extras!.Nesterov,
+            "NAG fused without the Nesterov flag — the kernel would run classical momentum while the eager path runs the look-ahead.");
+    }
 }
