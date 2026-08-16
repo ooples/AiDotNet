@@ -1,6 +1,8 @@
+using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.Optimizers;
 using AiDotNet.Optimizers.Fused;
+using AiDotNet.Regularization;
 using Xunit;
 
 namespace AiDotNet.Tests.UnitTests.Optimizers;
@@ -450,5 +452,158 @@ public class FusedSpecMatchesEagerBehaviourTests
 
         // The third coordinate must have been thresholded to exactly zero.
         Assert.Equal(0.0, actual[2], 12);
+    }
+
+    // ── ProximalGradientDescent ──────────────────────────────────────────────
+
+    /// <summary>
+    /// With no regularizer the proximal operator is the identity, so PGD is literally SGD and must fuse as it.
+    /// </summary>
+    [Fact]
+    public void ProximalGradientDescent_WithNoRegularizer_FusesAsPlainSgd()
+    {
+        var optimizer = new ProximalGradientDescentOptimizer<double, Matrix<double>, Vector<double>>(
+            null,
+            new ProximalGradientDescentOptimizerOptions<double, Matrix<double>, Vector<double>>
+            {
+                InitialLearningRate = 0.05,
+                UseAdaptiveLearningRate = false,
+                Regularization = new NoRegularization<double, Matrix<double>, Vector<double>>(),
+            });
+
+        Assert.True(TryGetConfig(optimizer, out var config));
+        Assert.Equal(Tensors.Engines.Compilation.OptimizerType.SGD, config.Type);
+        Assert.Equal(0.05f, config.LearningRate, 6);
+        Assert.Equal(0f, config.Beta1);
+    }
+
+    /// <summary>
+    /// A zero-strength regularizer is the identity function, so it is SGD too — the type of the regularizer
+    /// object says nothing on its own.
+    /// </summary>
+    /// <remarks>
+    /// Dispatching on <c>_regularization is L2Regularization</c> alone would decline here, leaving a
+    /// configuration that is provably plain SGD running unfused.
+    /// </remarks>
+    [Fact]
+    public void ProximalGradientDescent_ZeroStrengthRegularizer_FusesAsPlainSgd()
+    {
+        var optimizer = new ProximalGradientDescentOptimizer<double, Matrix<double>, Vector<double>>(
+            null,
+            new ProximalGradientDescentOptimizerOptions<double, Matrix<double>, Vector<double>>
+            {
+                InitialLearningRate = 0.05,
+                UseAdaptiveLearningRate = false,
+                Regularization = new L2Regularization<double, Matrix<double>, Vector<double>>(
+                    new RegularizationOptions { Strength = 0.0 }),
+            });
+
+        Assert.True(TryGetConfig(optimizer, out var config));
+        Assert.Equal(Tensors.Engines.Compilation.OptimizerType.SGD, config.Type);
+
+        // And the eager path really is plain SGD at that strength.
+        var updated = optimizer.UpdateParameters(
+            new Vector<double>(new[] { 1.0, -2.0 }),
+            new Vector<double>(new[] { 0.5, 0.25 }));
+        Assert.Equal(1.0 - 0.05 * 0.5, updated[0], 12);
+        Assert.Equal(-2.0 - 0.05 * 0.25, updated[1], 12);
+    }
+
+    /// <summary>
+    /// The L1 case has to divide the strength by the learning rate, because the kernel thresholds at
+    /// <c>lr*l1</c> while this library's <c>Regularize</c> thresholds at the raw strength.
+    /// </summary>
+    /// <remarks>
+    /// Passing the strength through unconverted is the plausible-looking mapping, and with the default
+    /// lr = 0.01 it would threshold 100× too weakly — enough to leave the "sparse" solution dense while
+    /// still converging, which is why this asserts against that specific wrong value rather than just
+    /// checking that L1 is set.
+    /// </remarks>
+    [Fact]
+    public void ProximalGradientDescent_L1_RescalesStrengthToTheKernelsPreStepConvention()
+    {
+        var regularization = new L1Regularization<double, Matrix<double>, Vector<double>>(
+            new RegularizationOptions { Strength = 0.04 });
+        var optimizer = new ProximalGradientDescentOptimizer<double, Matrix<double>, Vector<double>>(
+            null,
+            new ProximalGradientDescentOptimizerOptions<double, Matrix<double>, Vector<double>>
+            {
+                InitialLearningRate = 0.1,
+                UseAdaptiveLearningRate = false,
+                Regularization = regularization,
+            });
+
+        Assert.True(TryGetConfig(optimizer, out var config));
+        Assert.Equal(Tensors.Engines.Compilation.OptimizerType.ProximalL1, config.Type);
+        Assert.Equal(0.1f, config.LearningRate, 6);
+        Assert.NotNull(config.Extras);
+
+        // lr * L1 must reproduce the eager threshold of 0.04.
+        Assert.Equal(0.4f, config.Extras!.L1, 5);
+        Assert.Equal(0.04f, config.LearningRate * config.Extras.L1, 5);
+        Assert.NotEqual(0.04f, config.Extras.L1);
+    }
+
+    /// <summary>
+    /// Runs the kernel's own arithmetic against the eager update and demands they agree, including on a
+    /// coordinate that the prox drives to exactly zero.
+    /// </summary>
+    [Fact]
+    public void ProximalGradientDescent_L1_KernelArithmeticReproducesTheEagerStep()
+    {
+        const double lr = 0.1, strength = 0.04;
+        var optimizer = new ProximalGradientDescentOptimizer<double, Matrix<double>, Vector<double>>(
+            null,
+            new ProximalGradientDescentOptimizerOptions<double, Matrix<double>, Vector<double>>
+            {
+                InitialLearningRate = lr,
+                UseAdaptiveLearningRate = false,
+                Regularization = new L1Regularization<double, Matrix<double>, Vector<double>>(
+                    new RegularizationOptions { Strength = strength }),
+            });
+
+        Assert.True(TryGetConfig(optimizer, out var config));
+
+        var parameters = new Vector<double>(new[] { 0.5, -0.3, 0.02, -0.03 });
+        var gradient = new Vector<double>(new[] { 1.0, -2.0, 0.05, 0.0 });
+
+        var actual = optimizer.UpdateParameters(parameters, gradient);
+
+        // ProximalL1UpdateSimd: z = param - lr*grad; param = sign(z)*max(|z| - lr*l1, 0).
+        double kernelLr = config.LearningRate;
+        double kernelL1 = config.Extras!.L1;
+        double threshold = kernelLr * kernelL1;
+        for (int i = 0; i < parameters.Length; i++)
+        {
+            double z = parameters[i] - kernelLr * gradient[i];
+            double magnitude = Math.Abs(z) - threshold;
+            double expected = magnitude <= 0.0 ? 0.0 : (z > 0.0 ? magnitude : -magnitude);
+            Assert.Equal(expected, actual[i], 6);
+        }
+
+        // Coordinates 2 and 3 land inside the threshold and must be exactly zero, not merely small.
+        Assert.Equal(0.0, actual[2], 12);
+        Assert.Equal(0.0, actual[3], 12);
+    }
+
+    /// <summary>
+    /// L2 has a proximal operator, but not this one — it shrinks toward zero rather than to zero — and no
+    /// kernel implements it, so the spec must decline rather than fuse the nearest available update.
+    /// </summary>
+    [Fact]
+    public void ProximalGradientDescent_L2_Declines()
+    {
+        var optimizer = new ProximalGradientDescentOptimizer<double, Matrix<double>, Vector<double>>(
+            null,
+            new ProximalGradientDescentOptimizerOptions<double, Matrix<double>, Vector<double>>
+            {
+                InitialLearningRate = 0.1,
+                UseAdaptiveLearningRate = false,
+                Regularization = new L2Regularization<double, Matrix<double>, Vector<double>>(
+                    new RegularizationOptions { Strength = 0.04 }),
+            });
+
+        Assert.False(TryGetConfig(optimizer, out _),
+            "PGD fused with an L2 prox the kernel does not implement — the fused path would run a different algorithm.");
     }
 }

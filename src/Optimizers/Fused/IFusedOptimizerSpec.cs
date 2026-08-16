@@ -77,20 +77,45 @@ internal readonly record struct FusedOptimizerConfig(
 /// <para>
 /// <b>Which optimizers can fuse.</b> Do not guess from a list here — <c>CompiledTrainingPlan</c> in
 /// AiDotNet.Tensors is the authority, and a type is fuse-able only if that plan has a
-/// <c>case OptimizerType.X</c> for it. As of Tensors 0.122 <c>FusedOptimizer</c> ships ~34 kernels
-/// and the plan dispatches seventeen types: SGD, SGDMomentum, Adam, AdamW, Adagrad, RMSprop, Lion,
-/// AdaMax, AMSGrad, Nadam, AdaDelta, LARS, LAMB, FTRL, RAdam, ASGD and Rprop.
+/// <c>case OptimizerType.X</c> for it. As of Tensors 0.127 the plan dispatches: SGD, SGDMomentum,
+/// Adam, AdamW, Adagrad, RMSprop, Lion, AdaMax, AMSGrad, Nadam, AdaDelta, LARS, LAMB, FTRL, RAdam,
+/// SparseAdam, ASGD, Rprop, LBFGS, HypergradientSGD, ScheduleFreeSGD, DAdaptationSGD, ProximalL1,
+/// TrustRegion and ConjugateGradient.
 /// </para>
 /// <para>
-/// An earlier version of this remark claimed only SGD/Adam/AdamW/AMSGrad had kernels, and that "only
-/// a handful of the ~20 optimizers are fuse-able: the rest have no SIMD kernel". That was already
-/// false, and it caused issue #1930 to be scoped as "write new SIMD kernels" when the kernels existed
-/// all along and the real gap was optimizers not implementing this interface. Second-order and
-/// proximal methods (BFGS, LBFGS, DFP, Newton, LevenbergMarquardt, TrustRegion, ConjugateGradient,
-/// CoordinateDescent, ADMM, ProximalGradientDescent) genuinely have no fused equivalent: their
-/// updates are not SGD-shaped, so declaring this interface on them would run a plain SGD step in
-/// place of the real algorithm — silently wrong training, worse than the eager fallback.
+/// <b>"Cannot fuse" is a claim about today, and it keeps turning out to be wrong.</b> An earlier
+/// version of this remark said only SGD/Adam/AdamW/AMSGrad had kernels and that "the rest have no SIMD
+/// kernel". That was already false when written, and it caused issue #1930 to be scoped as "write new
+/// SIMD kernels" when the kernels existed all along and the real gap was optimizers not implementing
+/// this interface. The revision after it then asserted that BFGS, LBFGS, DFP, Newton,
+/// LevenbergMarquardt, TrustRegion, ConjugateGradient, CoordinateDescent, ADMM and
+/// ProximalGradientDescent "genuinely have no fused equivalent" — and five of those ten now fuse,
+/// because the missing piece was a kernel nobody had written yet rather than a mathematical obstacle.
 /// </para>
+/// <para>
+/// So: an optimizer not implementing this interface means only that no mapping has been established
+/// yet. When one is missing, the question to ask is "what would the kernel have to do?", and the
+/// answer generally belongs in a Tensors PR. Three distinct reasons an optimizer legitimately does not
+/// implement it, which are worth telling apart:
+/// </para>
+/// <list type="number">
+/// <item><description>
+/// <b>The update needs information the fused path does not have.</b> Newton and LevenbergMarquardt
+/// need to re-evaluate the model (a Hessian, a residual Jacobian) rather than just transform the
+/// gradient. Their <c>Step</c> throws rather than pretending; no per-element kernel can help.
+/// </description></item>
+/// <item><description>
+/// <b>The state is not per-element.</b> BFGS and DFP carry a dense n×n inverse-Hessian approximation,
+/// which is why the field's own answer at scale is L-BFGS — the compact representation of Byrd,
+/// Nocedal &amp; Schnabel (1994) — and L-BFGS does fuse. PyTorch ships only <c>LBFGS</c> from this
+/// family and documents it as supporting neither <c>foreach</c> nor <c>fused</c>.
+/// </description></item>
+/// <item><description>
+/// <b>The kernel exists but disagrees with the eager path.</b> This is the one that must never be
+/// papered over by fusing anyway: it produces two different trainings of the same configuration
+/// depending on which path is taken, and nothing errors. Fix the kernel, then wire the spec.
+/// </description></item>
+/// </list>
 /// <para>
 /// <b>Optimizer-specific parameters.</b> LARS, FTRL, ASGD and Rprop read their coefficients from
 /// <c>FusedOptimizerExtras</c> rather than from the beta/epsilon slots on
