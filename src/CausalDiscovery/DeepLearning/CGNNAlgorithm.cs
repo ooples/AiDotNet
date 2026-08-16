@@ -1,16 +1,16 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Models.Options;
 
 namespace AiDotNet.CausalDiscovery.DeepLearning;
 
 /// <summary>
-/// CGNN — Causal Generative Neural Networks.
+/// CGNN â€” Causal Generative Neural Networks.
 /// </summary>
 /// <remarks>
 /// <para>
 /// CGNN generates data according to a causal model parameterized by neural networks.
-/// For each candidate edge (i→j), a generative model f_j(parents(j), noise) is trained.
+/// For each candidate edge (iâ†’j), a generative model f_j(parents(j), noise) is trained.
 /// The model quality is measured by Maximum Mean Discrepancy (MMD) between generated
 /// and observed data. Edges are scored pairwise: the direction with lower MMD indicates
 /// the causal direction.
@@ -20,9 +20,9 @@ namespace AiDotNet.CausalDiscovery.DeepLearning;
 /// <list type="number">
 /// <item>Initialize from correlation-based skeleton</item>
 /// <item>For each pair (i,j) with non-zero correlation:</item>
-/// <item>  Train MLP f: x_i + noise → x_j, compute MMD(generated_j, real_j)</item>
-/// <item>  Train MLP g: x_j + noise → x_i, compute MMD(generated_i, real_i)</item>
-/// <item>  If MMD(f) &lt; MMD(g), edge is i→j; otherwise j→i</item>
+/// <item>  Train MLP f: x_i + noise â†’ x_j, compute MMD(generated_j, real_j)</item>
+/// <item>  Train MLP g: x_j + noise â†’ x_i, compute MMD(generated_i, real_i)</item>
+/// <item>  If MMD(f) &lt; MMD(g), edge is iâ†’j; otherwise jâ†’i</item>
 /// <item>Compute OLS weights for the oriented edges</item>
 /// </list>
 /// </para>
@@ -52,13 +52,23 @@ public class CGNNAlgorithm<T> : DeepCausalBase<T>
 
     /// <inheritdoc/>
     public override bool SupportsNonlinear => true;
-
     private readonly int? _seed;
 
+    /// <summary>
+    /// Seed used when the caller does not supply one, so that a run is reproducible by default.
+    /// </summary>
+    /// <remarks>
+    /// Previously this fell back to an unseeded secure RNG, which made the model nondeterministic
+    /// and its generated model-family tests flaky: the identical test binary produced 13 failures
+    /// in one run and 8 in the next over the same 42 tests, which makes regression detection on
+    /// this path impossible. Callers still override via the options' Seed property. Matches the
+    /// fixed-seed convention already used by DAGMANonlinear in this module.
+    /// </remarks>
+    private const int DefaultRandomSeed = 42;
     public CGNNAlgorithm(CausalDiscoveryOptions? options = null)
     {
         ApplyDeepOptions(options);
-        _seed = options?.Seed;
+        _seed = options?.Seed ?? DefaultRandomSeed;
     }
 
     /// <inheritdoc/>
@@ -86,16 +96,16 @@ public class CGNNAlgorithm<T> : DeepCausalBase<T>
                 T absCorr = NumOps.Abs(corr[i, j]);
                 if (!NumOps.GreaterThan(absCorr, corrThreshold)) continue;
 
-                // Train MLP i→j and compute MMD
+                // Train MLP iâ†’j and compute MMD
                 T mmdIJ = TrainAndComputeMMD(data, i, j, h, n, rng);
-                // Train MLP j→i and compute MMD
+                // Train MLP jâ†’i and compute MMD
                 T mmdJI = TrainAndComputeMMD(data, j, i, h, n, rng);
 
                 // Direction with lower MMD wins
                 T varFrom, olsWeight;
                 if (NumOps.GreaterThan(mmdJI, mmdIJ))
                 {
-                    // i→j
+                    // iâ†’j
                     varFrom = cov[i, i];
                     if (NumOps.GreaterThan(varFrom, eps))
                     {
@@ -106,7 +116,7 @@ public class CGNNAlgorithm<T> : DeepCausalBase<T>
                 }
                 else
                 {
-                    // j→i
+                    // jâ†’i
                     varFrom = cov[j, j];
                     if (NumOps.GreaterThan(varFrom, eps))
                     {

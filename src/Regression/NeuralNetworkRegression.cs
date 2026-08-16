@@ -195,20 +195,15 @@ public class NeuralNetworkRegression<T> : NonLinearRegressionBase<T>
     /// </remarks>
     public override void Train(Matrix<T> X, Vector<T> y)
     {
-        // For the standard regression interface, use OLS for reliable fast predictions
-        _useOLS = true;
-        int n = X.Rows;
-        int p = X.Columns;
-        var xWithInt = X.AddConstantColumn(NumOps.One);
-        var xTx = xWithInt.Transpose().Multiply(xWithInt);
-        var xTy = xWithInt.Transpose().Multiply(y);
-        for (int i = 0; i < xTx.Rows; i++)
-            xTx[i, i] = NumOps.Add(xTx[i, i], NumOps.FromDouble(1e-10));
-        var solution = MatrixSolutionHelper.SolveLinearSystem(xTx, xTy, MatrixDecompositionType.Cholesky);
-        _olsIntercept = solution[0]; // AddConstantColumn puts at index 0
-        _olsCoefficients = solution.Slice(1, p);
-        // Neural network training path below is bypassed when OLS is active
-        if (_useOLS) return;
+        // This method previously fitted ORDINARY LEAST SQUARES and returned immediately —
+        // `_useOLS = true` was set unconditionally, making the entire neural-network training path
+        // below unreachable. A caller asking for a neural network received a linear least-squares
+        // fit, so the model could not represent any nonlinearity at all. The network now trains.
+        //
+        // `_useOLS` is retained (always false for newly trained models) purely so that models
+        // serialized before this fix still deserialize and predict through their stored OLS
+        // coefficients rather than silently changing behaviour on load.
+        _useOLS = false;
 
         // Auto-adjust first layer to match input dimensions if needed
         if (_options.LayerSizes.Count > 0 && _options.LayerSizes[0] != X.Columns)

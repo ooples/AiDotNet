@@ -1,11 +1,11 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Models.Options;
 
 namespace AiDotNet.CausalDiscovery.ContinuousOptimization;
 
 /// <summary>
-/// NOTEARS Low-Rank — DAG learning with low-rank parameterization for scalability.
+/// NOTEARS Low-Rank â€” DAG learning with low-rank parameterization for scalability.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -51,6 +51,18 @@ public class NOTEARSLowRank<T> : ContinuousOptimizationBase<T>
     private readonly int _maxRank;
     private readonly int _innerIterations;
     private readonly int? _seed;
+
+    /// <summary>
+    /// Seed used when the caller does not supply one, so that a run is reproducible by default.
+    /// </summary>
+    /// <remarks>
+    /// Previously this fell back to an unseeded secure RNG, which made the model nondeterministic
+    /// and its generated model-family tests flaky: the identical test binary produced 13 failures
+    /// in one run and 8 in the next over the same 42 tests, which makes regression detection on
+    /// this path impossible. Callers still override via the options' Seed property. Matches the
+    /// fixed-seed convention already used by DAGMANonlinear in this module.
+    /// </remarks>
+    private const int DefaultRandomSeed = 42;
     private readonly double _initScale;
     private double _rhoMax = 1e+16;
 
@@ -69,10 +81,10 @@ public class NOTEARSLowRank<T> : ContinuousOptimizationBase<T>
         _learningRateValue = options?.LearningRate ?? 0.01;
         _maxRank = options?.MaxRank ?? 10;
         _innerIterations = options?.InnerIterations ?? 20;
-        // Small init scale so W = A*B^T ≈ 0 (matching NOTEARS reference W=0 init).
+        // Small init scale so W = A*B^T â‰ˆ 0 (matching NOTEARS reference W=0 init).
         // L-BFGS builds up edges from near-zero. User can adjust via InitScale.
         _initScale = options?.InitScale ?? 0.01;
-        _seed = options?.Seed;
+        _seed = options?.Seed ?? DefaultRandomSeed;
         if (options?.MaxPenalty is { } maxPenalty) _rhoMax = maxPenalty;
         if (_maxRank <= 0)
             throw new ArgumentException("MaxRank must be greater than 0.");
@@ -100,8 +112,8 @@ public class NOTEARSLowRank<T> : ContinuousOptimizationBase<T>
 
         // Initialize low-rank factors using spectral initialization from OLS.
         // Standard NOTEARS uses W=0, but for low-rank W=A*B^T, zero init creates
-        // a saddle point where gradients vanish (∂L/∂A = ∂L/∂W * B = 0 when B=0).
-        // Solution: A = I (identity, for r≤d), B = scale * OLS^T (transposed regression weights).
+        // a saddle point where gradients vanish (âˆ‚L/âˆ‚A = âˆ‚L/âˆ‚W * B = 0 when B=0).
+        // Solution: A = I (identity, for râ‰¤d), B = scale * OLS^T (transposed regression weights).
         // This gives W = A*B^T = I * (scale * OLS^T)^T = scale * OLS, avoiding the saddle point
         // while starting near a meaningful solution.
         var cov = ComputeCovarianceMatrix(X);
@@ -146,7 +158,10 @@ public class NOTEARSLowRank<T> : ContinuousOptimizationBase<T>
         T rhoT = NumOps.One;
         T alphaLag = NumOps.Zero;
         T prevH = NumOps.FromDouble(double.MaxValue);
-        var optimizer = new Optimizers.LBFGSFunctionOptimizer<T>();
+        // The library's L-BFGS optimizer, used here purely as a function minimizer (no model), so
+        // the inner solver and the model-training path share one implementation of the two-loop
+        // recursion and the Armijo line search.
+        var optimizer = new Optimizers.LBFGSOptimizer<T, Tensor<T>, Tensor<T>>();
         int paramLen = 2 * d * rank;
 
         for (int outerIter = 0; outerIter < MaxIterations; outerIter++)
@@ -170,11 +185,11 @@ public class NOTEARSLowRank<T> : ContinuousOptimizationBase<T>
                     var W = ReconstructW(localA, localB, d, rank);
 
                     // Guard against non-finite W from an overshooting line-search
-                    // step: tr(exp(W∘W)) overflows for large |W|, the Inf/NaN then
+                    // step: tr(exp(Wâˆ˜W)) overflows for large |W|, the Inf/NaN then
                     // propagates through the gradient into A/B, and Math.Sign(NaN)
                     // below throws ArithmeticException. Returning a large finite
                     // objective with a zero gradient makes the line search treat
-                    // the step as a failure and backtrack — the standard handling
+                    // the step as a failure and backtrack â€” the standard handling
                     // in NOTEARS-style augmented-Lagrangian solvers.
                     bool wFinite = true;
                     for (int i = 0; i < d && wFinite; i++)
@@ -196,7 +211,7 @@ public class NOTEARSLowRank<T> : ContinuousOptimizationBase<T>
                     T obj = NumOps.FromDouble(loss + NumOps.ToDouble(currentAlpha) * h
                         + 0.5 * NumOps.ToDouble(currentRho) * h * h);
 
-                    // Chain rule to parameter space: ∂L/∂A, ∂L/∂B
+                    // Chain rule to parameter space: âˆ‚L/âˆ‚A, âˆ‚L/âˆ‚B
                     var grad = new Vector<T>(paramLen);
                     for (int i = 0; i < d; i++)
                         for (int r = 0; r < rank; r++)

@@ -181,28 +181,16 @@ public class TimeSeriesRegression<T> : RegressionBase<T>
     {
         TrainingFeatureCount = x.Columns;
 
-        // Use OLS for reliable predictions on standard regression data
-        _useOLS = true;
-        if (Options.UseIntercept)
-        {
-            var xWithInt = x.AddConstantColumn(NumOps.One);
-            var xTx = xWithInt.Transpose().Multiply(xWithInt);
-            var xTy = xWithInt.Transpose().Multiply(y);
-            for (int i = 0; i < xTx.Rows; i++)
-                xTx[i, i] = NumOps.Add(xTx[i, i], NumOps.FromDouble(1e-10));
-            var solution = SolveSystem(xTx, xTy);
-            Intercept = solution[0];
-            Coefficients = solution.Slice(1, x.Columns);
-        }
-        else
-        {
-            var xTx = x.Transpose().Multiply(x);
-            var xTy = x.Transpose().Multiply(y);
-            for (int i = 0; i < xTx.Rows; i++)
-                xTx[i, i] = NumOps.Add(xTx[i, i], NumOps.FromDouble(1e-10));
-            Coefficients = SolveSystem(xTx, xTy);
-        }
-        if (_useOLS) return;
+        // This method previously fitted ORDINARY LEAST SQUARES on the raw design matrix and
+        // returned immediately — `_useOLS = true` was set unconditionally, making the lag
+        // construction, differencing and seasonal handling below unreachable. A caller asking for
+        // a time-series regression received a plain cross-sectional fit with no temporal structure
+        // whatsoever. The time-series path now runs.
+        //
+        // `_useOLS` is retained (always false for newly trained models) purely so that models
+        // serialized before this fix still deserialize and predict through their stored
+        // coefficients rather than silently changing behaviour on load.
+        _useOLS = false;
 
         // Prepare the data
         Matrix<T> preparedX = PrepareInputData(x, y);

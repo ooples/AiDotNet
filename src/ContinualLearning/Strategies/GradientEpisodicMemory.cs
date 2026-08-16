@@ -533,42 +533,60 @@ public class GradientEpisodicMemory<T, TInput, TOutput>
     }
 
     /// <summary>
-    /// Solves the dual QP using projected gradient descent.
+    /// Solves the dual QP exactly with an active-set quadratic-programming solver.
     /// </summary>
     /// <remarks>
     /// <para>Dual problem: max -0.5 * λᵀGλ + aᵀλ s.t. λ ≥ 0</para>
+    /// <para>
+    /// Negating turns this into the minimization form the solver expects:
+    /// <c>minimize ½·λᵀGλ − aᵀλ subject to λ ≥ 0</c>, a bound-constrained convex quadratic program.
+    /// </para>
+    /// <para>
+    /// Lopez-Paz and Ranzato (2017) solve this dual <b>exactly</b> with a quadratic-programming
+    /// routine, and the exactness matters: the projected gradient it replaces is the step that
+    /// decides how much of the proposed update survives, so an approximate multiplier lets some
+    /// interference with previous tasks through — which is the specific thing GEM exists to prevent.
+    /// The previous implementation ran projected gradient ascent with a hardcoded step size of 0.1,
+    /// stopping on a gradient-norm tolerance that says nothing about how close the multipliers are
+    /// to the constrained optimum.
+    /// </para>
     /// </remarks>
     private double[] SolveQPDual(double[,] G, double[] a)
     {
         int n = a.Length;
-        var lambda = new double[n];
-        double stepSize = 0.1;
 
-        for (int iter = 0; iter < _maxQPIterations; iter++)
+        var quadratic = new Matrix<double>(n, n);
+        var linear = new Vector<double>(n);
+        for (int i = 0; i < n; i++)
         {
-            var gradDual = new double[n];
-            double maxGrad = 0;
+            linear[i] = -a[i];
+            for (int j = 0; j < n; j++) quadratic[i, j] = G[i, j];
+        }
 
-            // Compute dual gradient: grad = -Gλ + a
-            for (int i = 0; i < n; i++)
+        var program = new AiDotNet.Solvers.QuadraticProgramming.QuadraticProgram<double>(
+            quadratic,
+            linear,
+            lowerBounds: new Vector<double>(n));      // all zeros: lambda >= 0
+
+        var solver = new AiDotNet.Solvers.QuadraticProgramming.ActiveSetQuadraticProgramSolver<double>(
+            new ActiveSetQuadraticProgramSolverOptions
             {
-                gradDual[i] = a[i];
-                for (int j = 0; j < n; j++)
-                {
-                    gradDual[i] -= G[i, j] * lambda[j];
-                }
-                maxGrad = Math.Max(maxGrad, Math.Abs(gradDual[i]));
-            }
+                MaxIterations = _maxQPIterations,
+                Tolerance = _qpTolerance,
+            });
 
-            // Check convergence
-            if (maxGrad < _qpTolerance)
-                break;
+        var solution = solver.Solve(program);
 
-            // Projected gradient step
-            for (int i = 0; i < n; i++)
-            {
-                lambda[i] = Math.Max(0, lambda[i] + stepSize * gradDual[i]);
-            }
+        // lambda = 0 means "apply the proposed gradient unchanged", which is the correct fallback
+        // when no constraint binds and the only safe one if the solve could not complete.
+        if (solution.Solution is null) return new double[n];
+
+        var lambda = new double[n];
+        for (int i = 0; i < n; i++)
+        {
+            // Clamp away any residue on the wrong side of the bound; a negative multiplier would
+            // flip the sign of that memory's contribution to the projected gradient.
+            lambda[i] = Math.Max(0.0, solution.Solution[i]);
         }
 
         return lambda;

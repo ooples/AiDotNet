@@ -70,6 +70,18 @@ public class HyperparameterOptimizer<T>
         public Dictionary<string, double> Metrics { get; set; } = new();
     }
 
+    /// <summary>
+    /// Smallest value allowed for a strictly-positive hyperparameter (length scales, variances).
+    /// </summary>
+    private const double MinimumPositiveHyperparameter = 1e-6;
+
+    /// <summary>
+    /// Objective value reported for a point where the log marginal likelihood cannot be evaluated.
+    /// Large enough that no feasible point competes with it, finite so the optimizer's arithmetic
+    /// stays well defined.
+    /// </summary>
+    private const double InfeasiblePointPenalty = 1e300;
+
     private readonly INumericOperations<T> _numOps;
     private readonly int _maxIterations;
     private readonly double _tolerance;
@@ -352,86 +364,107 @@ public class HyperparameterOptimizer<T>
         if (initialParameters.Count == 0)
             throw new ArgumentException("Initial parameters cannot be empty.", nameof(initialParameters));
 
-        var parameters = new Dictionary<string, double>(initialParameters);
-
-        // Adam optimizer state
-        var m = new Dictionary<string, double>();
-        var v = new Dictionary<string, double>();
-        foreach (var name in parameters.Keys)
-        {
-            m[name] = 0;
-            v[name] = 0;
-        }
-
-        double beta1 = 0.9;
-        double beta2 = 0.999;
-        double epsilon = 1e-8;
+        // Fixed ordering so the dictionary can be mapped to and from a parameter vector.
+        var names = new List<string>(initialParameters.Keys);
+        var start = new Vector<double>(names.Count);
+        for (int i = 0; i < names.Count; i++) start[i] = initialParameters[names[i]];
 
         double bestLml = double.NegativeInfinity;
-        var bestParameters = new Dictionary<string, double>(parameters);
+        var bestParameters = new Dictionary<string, double>(initialParameters);
+        int evaluations = 0;
 
-        for (int iter = 0; iter < _maxIterations; iter++)
+        Dictionary<string, double> ToParameterDictionary(Vector<double> point)
         {
+            var result = new Dictionary<string, double>(names.Count);
+            for (int i = 0; i < names.Count; i++) result[names[i]] = point[i];
+            return result;
+        }
+
+        // The optimizer minimizes, while the log marginal likelihood is maximized, so both the
+        // objective and its gradient are negated on the way in.
+        (double objective, Vector<double> gradient) ObjectiveAndGradient(Vector<double> point)
+        {
+            var current = ToParameterDictionary(point);
+            var gradientVector = new Vector<double>(names.Count);
+
             try
             {
-                var (lml, gradient) = evaluateWithGradient(parameters);
+                var (lml, gradient) = evaluateWithGradient(current);
+                evaluations++;
 
                 if (lml > bestLml)
                 {
                     bestLml = lml;
-                    bestParameters = new Dictionary<string, double>(parameters);
+                    bestParameters = current;
                 }
 
-                // Check convergence
-                double gradNorm = 0;
-                foreach (var g in gradient.Values)
+                for (int i = 0; i < names.Count; i++)
                 {
-                    gradNorm += g * g;
+                    gradientVector[i] = gradient.TryGetValue(names[i], out double g) ? -g : 0.0;
                 }
-                gradNorm = Math.Sqrt(gradNorm);
 
-                if (gradNorm < _tolerance)
-                    break;
-
-                // Adam update
-                int t = iter + 1;
-                foreach (var name in parameters.Keys.ToList())
-                {
-                    if (!gradient.TryGetValue(name, out double g))
-                        continue;
-
-                    // We're maximizing, so follow positive gradient
-                    m[name] = beta1 * m[name] + (1 - beta1) * g;
-                    v[name] = beta2 * v[name] + (1 - beta2) * g * g;
-
-                    double mHat = m[name] / (1 - Math.Pow(beta1, t));
-                    double vHat = v[name] / (1 - Math.Pow(beta2, t));
-
-                    double update = learningRate * mHat / (Math.Sqrt(vHat) + epsilon);
-                    parameters[name] += update;
-
-                    // Apply bounds
-                    if (parameterBounds is not null && parameterBounds.TryGetValue(name, out var bounds))
-                    {
-                        parameters[name] = Math.Max(bounds.min, Math.Min(bounds.max, parameters[name]));
-                    }
-
-                    // Ensure positivity for common parameters
-                    if (name.Contains("variance", StringComparison.OrdinalIgnoreCase) ||
-                        name.Contains("length", StringComparison.OrdinalIgnoreCase) ||
-                        name.Contains("scale", StringComparison.OrdinalIgnoreCase))
-                    {
-                        parameters[name] = Math.Max(1e-6, parameters[name]);
-                    }
-                }
+                return (-lml, gradientVector);
             }
-            catch
+            catch (Exception exception) when (exception is not OutOfMemoryException and not StackOverflowException)
             {
-                // Reset to best parameters on error
-                parameters = new Dictionary<string, double>(bestParameters);
-                learningRate *= 0.5; // Reduce learning rate
+                // A Gaussian Process log marginal likelihood is undefined wherever the covariance
+                // matrix is not positive definite, which happens for hyperparameter combinations
+                // the search can legitimately propose (a near-zero length scale, a degenerate
+                // noise term). Rather than aborting the optimization, report the point as very bad
+                // and hand back a gradient that steers the iterate back toward the best feasible
+                // point found so far — the gradient of the squared distance to it. The previous
+                // implementation instead halved the learning rate on every failure, which
+                // permanently degraded the step size for the rest of the run even after the search
+                // had returned to a well-conditioned region.
+                for (int i = 0; i < names.Count; i++)
+                {
+                    double best = bestParameters.TryGetValue(names[i], out double b) ? b : point[i];
+                    gradientVector[i] = point[i] - best;
+                }
+
+                return (InfeasiblePointPenalty, gradientVector);
             }
         }
+
+        Vector<double> Project(Vector<double> point)
+        {
+            var projected = new Vector<double>(names.Count);
+            for (int i = 0; i < names.Count; i++)
+            {
+                string name = names[i];
+                double value = point[i];
+
+                if (parameterBounds is not null && parameterBounds.TryGetValue(name, out var bounds))
+                {
+                    value = Math.Max(bounds.min, Math.Min(bounds.max, value));
+                }
+
+                // Kernel length scales, signal variances and noise variances are strictly positive
+                // quantities; a non-positive value makes the covariance matrix indefinite.
+                if (name.Contains("variance", StringComparison.OrdinalIgnoreCase) ||
+                    name.Contains("length", StringComparison.OrdinalIgnoreCase) ||
+                    name.Contains("scale", StringComparison.OrdinalIgnoreCase))
+                {
+                    value = Math.Max(MinimumPositiveHyperparameter, value);
+                }
+
+                projected[i] = value;
+            }
+
+            return projected;
+        }
+
+        // Uses the library's Adam optimizer rather than a private reimplementation of the update
+        // rule. Bounds and positivity are enforced by projecting each iterate onto the feasible
+        // set after every step, which is where the old inline clamp ran.
+        var optimizer = new AdamOptimizer<double, Tensor<double>, Tensor<double>>(
+            null,
+            new AdamOptimizerOptions<double, Tensor<double>, Tensor<double>>
+            {
+                InitialLearningRate = learningRate,
+            });
+
+        optimizer.Minimize(start, ObjectiveAndGradient, _maxIterations, _tolerance, Project);
 
         return new HyperparameterResult
         {
@@ -439,7 +472,8 @@ public class HyperparameterOptimizer<T>
             LogMarginalLikelihood = bestLml,
             Metrics = new Dictionary<string, double>
             {
-                ["num_iterations"] = _maxIterations
+                ["num_iterations"] = _maxIterations,
+                ["num_evaluations"] = evaluations
             }
         };
     }

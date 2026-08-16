@@ -43,6 +43,20 @@ public abstract class RegressionModelTestBase : System.IDisposable
 
     protected abstract IFullModel<double, Matrix<double>, Vector<double>> CreateModel();
 
+    /// <summary>
+    /// True when the monotonic-response invariant applies to this model.
+    /// </summary>
+    /// <remarks>
+    /// The invariant trains on linear data and then probes a feature from -5 to 15 while holding
+    /// the others fixed, expecting predictions to rise. That assumes the model extrapolates
+    /// linearly, which a KERNEL method does not: an RBF kernel's influence decays with distance,
+    /// so outside the training support its prediction falls back toward the bias rather than
+    /// continuing to climb. Non-monotonicity there is the defining behaviour of the kernel, not a
+    /// failure to learn the coefficient direction. Override to <c>false</c> for kernel models, with
+    /// a comment naming the kernel involved.
+    /// </remarks>
+    protected virtual bool MonotonicResponseInvariantApplicable => true;
+
     protected virtual int TrainSamples => 100;
     protected virtual int TestSamples => 30;
     protected virtual int Features => 3;
@@ -277,6 +291,8 @@ public abstract class RegressionModelTestBase : System.IDisposable
     public async Task MonotonicResponse_IncreasingFeature_IncreasesPrediction()
     {
         await Task.Yield();
+        if (!MonotonicResponseInvariantApplicable) return;
+
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
         using var model = CreateModel();

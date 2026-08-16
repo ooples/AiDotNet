@@ -271,19 +271,16 @@ public class MultilayerPerceptronRegression<T> : NonLinearRegressionBase<T>
 
     public override void Train(Matrix<T> X, Vector<T> y)
     {
-        // Use OLS for reliable fast predictions
-        _useOLS = true;
-        int n = X.Rows;
-        int p = X.Columns;
-        var xWithInt = X.AddConstantColumn(NumOps.One);
-        var xTx = xWithInt.Transpose().Multiply(xWithInt);
-        var xTy = xWithInt.Transpose().Multiply(y);
-        for (int i = 0; i < xTx.Rows; i++)
-            xTx[i, i] = NumOps.Add(xTx[i, i], NumOps.FromDouble(1e-10));
-        var solution = MatrixSolutionHelper.SolveLinearSystem(xTx, xTy, MatrixDecompositionType.Cholesky);
-        _olsIntercept = solution[0];
-        _olsCoefficients = solution.Slice(1, p);
-        if (_useOLS) return;
+        // This method previously fitted ORDINARY LEAST SQUARES and returned immediately —
+        // `_useOLS = true` was set unconditionally, making the entire perceptron training path
+        // below unreachable. A caller asking for a multilayer perceptron received a linear
+        // least-squares fit, with none of the hidden layers or activations doing anything. The
+        // network now trains.
+        //
+        // `_useOLS` is retained (always false for newly trained models) purely so that models
+        // serialized before this fix still deserialize and predict through their stored OLS
+        // coefficients rather than silently changing behaviour on load.
+        _useOLS = false;
 
         int numSamples = X.Rows;
         int numFeatures = X.Columns;

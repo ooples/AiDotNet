@@ -405,20 +405,15 @@ public class SymbolicRegression<T> : NonLinearRegressionBase<T>
 
     protected override void OptimizeModel(Matrix<T> x, Vector<T> y)
     {
-        // Use OLS for reliable predictions
-        _useOLS = true;
-        var xWithInt = x.AddConstantColumn(NumOps.One);
-        var xTx = xWithInt.Transpose().Multiply(xWithInt);
-        var xTy = xWithInt.Transpose().Multiply(y);
-        for (int i = 0; i < xTx.Rows; i++)
-            xTx[i, i] = NumOps.Add(xTx[i, i], NumOps.FromDouble(1e-10));
-        var solution = MatrixSolutionHelper.SolveLinearSystem(xTx, xTy, MatrixDecompositionType.Cholesky);
-        _olsIntercept = solution[0];
-        _olsCoefficients = solution.Slice(1, x.Columns);
-        SupportVectors = x;
-        Alphas = new Vector<T>(x.Rows);
-        B = NumOps.Zero;
-        if (_useOLS) return;
+        // This method previously fitted ORDINARY LEAST SQUARES and returned immediately —
+        // `_useOLS = true` was set unconditionally, making the entire symbolic-regression search
+        // below unreachable. A caller asking for a discovered symbolic expression received a linear
+        // least-squares fit, so no expression was ever evolved. The search now runs.
+        //
+        // `_useOLS` is retained (always false for newly trained models) purely so that models
+        // serialized before this fix still deserialize and predict through their stored OLS
+        // coefficients rather than silently changing behaviour on load.
+        _useOLS = false;
 
         // Preprocess the data using the pipeline if configured
         var preprocessedX = _preprocessingPipeline is not null

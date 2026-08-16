@@ -1,6 +1,8 @@
 using AiDotNet.Finance.Interfaces;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
+using AiDotNet.Models.Options;
+using AiDotNet.Optimizers;
 
 namespace AiDotNet.Finance.Volatility;
 
@@ -29,6 +31,12 @@ public abstract class ClassicalVolatilityModelBase<T> :
     IParameterizable<T, Tensor<T>, Tensor<T>>
 {
     private const int MinimumFitReturnCount = 10;
+
+    /// <summary>Iteration budget for the quasi-maximum-likelihood simplex search.</summary>
+    private const int MaximumFitIterations = 4000;
+
+    /// <summary>Relative convergence tolerance on the spread of log-likelihood values.</summary>
+    private const double FitTolerance = 1e-10;
 
     /// <summary>Numeric operations for <typeparamref name="T"/>.</summary>
     protected INumericOperations<T> NumOps { get; } = MathHelper.GetNumericOperations<T>();
@@ -85,10 +93,25 @@ public abstract class ClassicalVolatilityModelBase<T> :
         double sampleVar = Variance(r);
         var start = ToUnconstrained(InitialGuess(sampleVar));
 
-        double Objective(double[] u) => NegLogLikelihood(ToNatural(u), r);
-        var best = NelderMead.Minimize(Objective, start, ParameterCount);
+        double Objective(Vector<double> u) => NegLogLikelihood(ToNatural(u.ToArray()), r);
 
-        Parameters = ToNatural(best);
+        // Uses the library's Nelder-Mead optimizer rather than a private copy. The options below
+        // reproduce the estimation settings this module has always used: a 10% relative initial
+        // simplex step, an absolute step for coordinates too small to perturb proportionally, and
+        // fixed (non-adaptive) reflection/expansion/contraction/shrink coefficients.
+        var optimizer = new NelderMeadOptimizer<double, Tensor<double>, Tensor<double>>(
+            new NelderMeadOptimizerOptions<double, Tensor<double>, Tensor<double>>
+            {
+                InitialSimplexStep = 0.1,
+                ZeroCoordinateSimplexStep = 0.1,
+                ZeroCoordinateThreshold = 1e-6,
+                UseAdaptiveParameters = false,
+            });
+
+        var best = optimizer.Minimize(
+            Vector<double>.FromArray(start), Objective, MaximumFitIterations, FitTolerance);
+
+        Parameters = ToNatural(best.ToArray());
         FittedUnconditionalVariance = UnconditionalVariance(Parameters);
     }
 

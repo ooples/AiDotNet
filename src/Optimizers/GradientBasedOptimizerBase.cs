@@ -41,7 +41,7 @@ namespace AiDotNet.Optimizers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
-public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : OptimizerBase<T, TInput, TOutput>, IGradientBasedOptimizer<T, TInput, TOutput>
+public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : OptimizerBase<T, TInput, TOutput>, IGradientBasedOptimizer<T, TInput, TOutput>, IFunctionOptimizer<T>
 {
     /// <summary>
     /// Options specific to gradient-based optimization algorithms.
@@ -2329,6 +2329,193 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     protected bool TryGetTapeParameterIndex(Tensor<T> parameter, out int parameterIndex)
     {
         return _tapeParameterIndices.TryGetValue(parameter, out parameterIndex);
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// This is the general-function entry point: it minimizes an arbitrary scalar objective over
+    /// a parameter vector, with no model, dataset, or training pipeline involved. It is the
+    /// counterpart of SciPy's <c>scipy.optimize.minimize</c>, and it reuses each optimizer's own
+    /// <see cref="Step(TapeStepContext{T})"/> update rule rather than reimplementing it — so
+    /// Adam-the-function-minimizer and Adam-the-model-trainer are the same code path and cannot
+    /// drift apart.
+    /// </para>
+    /// <para>
+    /// Each call is independent: <see cref="Reset"/> is invoked first, so accumulated state
+    /// (momentum buffers, adaptive moments, step counters used for bias correction) does not leak
+    /// from a previous minimization into this one. Two successive calls with the same arguments
+    /// therefore produce the same result.
+    /// </para>
+    /// <para>
+    /// Convergence is declared when the infinity norm of the gradient falls below
+    /// <paramref name="tolerance"/>, matching the criterion used by
+    /// <see cref="LBFGSOptimizer{T, TInput, TOutput}"/>.
+    /// </para>
+    /// <para><b>For Beginners:</b> Most of this library optimizes a model against training data.
+    /// Sometimes you instead have a plain mathematical function and you want the input that makes
+    /// it smallest — fitting a curve to measurements, calibrating a simulation, or finding the
+    /// cheapest configuration of something. This method does exactly that: you hand it a starting
+    /// guess and a function that reports both the value and the slope at any point, and it walks
+    /// downhill using whichever optimizer you created.
+    /// </para>
+    /// </remarks>
+    /// <exception cref="ArgumentNullException">
+    /// Thrown when <paramref name="initialParameters"/> or <paramref name="objectiveAndGradient"/>
+    /// is null.
+    /// </exception>
+    /// <exception cref="ArgumentException">
+    /// Thrown when <paramref name="initialParameters"/> is empty, when
+    /// <paramref name="maxIterations"/> is not positive, or when the supplied gradient length does
+    /// not match the parameter length.
+    /// </exception>
+    public virtual Vector<T> Minimize(
+        Vector<T> initialParameters,
+        Func<Vector<T>, (T objective, Vector<T> gradient)> objectiveAndGradient,
+        int maxIterations,
+        T tolerance)
+    {
+        return Minimize(initialParameters, objectiveAndGradient, maxIterations, tolerance, projection: null);
+    }
+
+    /// <summary>
+    /// Minimizes a function subject to a feasible set, by projecting each iterate back onto that
+    /// set after every step.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This is projected gradient descent. It is the standard way to impose simple constraints on
+    /// a smooth objective — a box (bounds on each variable), a norm ball, the probability simplex,
+    /// or a positivity requirement — without switching to a full constrained solver. It plays the
+    /// role that the <c>bounds=</c> argument plays in <c>scipy.optimize.minimize</c>, but is more
+    /// general: any set you can project onto is supported, not just a box.
+    /// </para>
+    /// <para>
+    /// The projection is applied after each parameter update, so every iterate the objective ever
+    /// sees is feasible. Convergence is still tested on the raw gradient, which is the correct
+    /// criterion for an interior optimum; at a constrained optimum the search will instead exhaust
+    /// <paramref name="maxIterations"/> while pinned to the boundary.
+    /// </para>
+    /// <para><b>For Beginners:</b> Sometimes an answer only makes sense inside a certain range — a
+    /// variance cannot be negative, a probability has to stay between 0 and 1, a physical length
+    /// has to stay positive. Left alone, the optimizer will happily step outside that range. A
+    /// projection is a rule that says "if you stepped outside, here is the nearest legal point" —
+    /// applied after every step, so the search stays where it is allowed to be.
+    /// </para>
+    /// </remarks>
+    /// <param name="initialParameters">Starting point for optimization.</param>
+    /// <param name="objectiveAndGradient">
+    /// Function that computes both the objective value and gradient at a given point.
+    /// </param>
+    /// <param name="maxIterations">Maximum number of optimization iterations.</param>
+    /// <param name="tolerance">Convergence tolerance on the infinity norm of the gradient.</param>
+    /// <param name="projection">
+    /// Maps any point to the nearest point of the feasible set, applied after each update. Pass
+    /// <c>null</c> for unconstrained minimization.
+    /// </param>
+    /// <returns>The optimized parameter vector.</returns>
+    public virtual Vector<T> Minimize(
+        Vector<T> initialParameters,
+        Func<Vector<T>, (T objective, Vector<T> gradient)> objectiveAndGradient,
+        int maxIterations,
+        T tolerance,
+        Func<Vector<T>, Vector<T>>? projection)
+    {
+        Guard.NotNull(initialParameters);
+        Guard.NotNull(objectiveAndGradient);
+
+        int parameterCount = initialParameters.Length;
+        if (parameterCount == 0)
+        {
+            throw new ArgumentException(
+                "Initial parameters must contain at least one element.",
+                nameof(initialParameters));
+        }
+
+        if (maxIterations <= 0)
+        {
+            throw new ArgumentException(
+                $"Maximum iterations must be positive, got {maxIterations}.",
+                nameof(maxIterations));
+        }
+
+        // A fresh minimization must not inherit momentum/moment state from a previous run.
+        Reset();
+
+        // Own the storage: FromVector wraps the caller's vector rather than copying it, so clone
+        // first to keep initialParameters unmodified while Step mutates the tensor in place.
+        var startingPoint = initialParameters.Clone();
+        if (projection is not null)
+        {
+            // The caller's starting guess is not required to be feasible; make it so before the
+            // objective ever sees it.
+            startingPoint = projection(startingPoint);
+            Guard.NotNull(startingPoint);
+            if (startingPoint.Length != parameterCount)
+            {
+                throw new ArgumentException(
+                    $"Projection returned a vector of length {startingPoint.Length}, " +
+                    $"but the parameter vector has length {parameterCount}.",
+                    nameof(projection));
+            }
+        }
+
+        var parameterTensor = Tensor<T>.FromVector(startingPoint);
+        var gradientTensor = new Tensor<T>([parameterCount]);
+
+        // Both collections are allocated once and reused across iterations: PrepareTapeState
+        // keys its O(1) fast path on the reference identity of the parameter list, and
+        // per-parameter optimizer state (Adam moments, momentum buffers) is keyed on the
+        // parameter tensor reference. Reallocating either would reset that state every step.
+        var parameters = new List<Tensor<T>>(1) { parameterTensor };
+        var gradients = new Dictionary<Tensor<T>, Tensor<T>> { [parameterTensor] = gradientTensor };
+
+        var reductionAxes = new[] { 0 };
+
+        for (int iteration = 0; iteration < maxIterations; iteration++)
+        {
+            var (objective, gradient) = objectiveAndGradient(parameterTensor.ToVector());
+
+            Guard.NotNull(gradient);
+            if (gradient.Length != parameterCount)
+            {
+                throw new ArgumentException(
+                    $"Gradient length ({gradient.Length}) must match parameter length ({parameterCount}).",
+                    nameof(objectiveAndGradient));
+            }
+
+            Engine.TensorCopy(Tensor<T>.FromVector(gradient), gradientTensor);
+
+            // Convergence on the infinity norm of the gradient.
+            var maxAbsoluteGradient = Engine.ReduceMax(
+                Engine.TensorAbs(gradientTensor), reductionAxes, keepDims: false);
+            if (NumOps.LessThan(maxAbsoluteGradient[0], tolerance))
+            {
+                break;
+            }
+
+            Step(new TapeStepContext<T>(parameters, gradients, objective));
+
+            if (projection is not null)
+            {
+                // Step mutated the parameter tensor in place; project it back onto the feasible
+                // set and write the result into the same tensor so per-parameter optimizer state
+                // (keyed on the tensor reference) is preserved.
+                var projected = projection(parameterTensor.ToVector());
+                Guard.NotNull(projected);
+                if (projected.Length != parameterCount)
+                {
+                    throw new ArgumentException(
+                        $"Projection returned a vector of length {projected.Length}, " +
+                        $"but the parameter vector has length {parameterCount}.",
+                        nameof(projection));
+                }
+
+                Engine.TensorCopy(Tensor<T>.FromVector(projected), parameterTensor);
+            }
+        }
+
+        return parameterTensor.ToVector();
     }
 
     /// <inheritdoc />

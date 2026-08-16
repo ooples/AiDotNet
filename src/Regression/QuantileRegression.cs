@@ -1,5 +1,6 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Enums;
+using AiDotNet.Models.Options;
 
 namespace AiDotNet.Regression;
 
@@ -114,83 +115,94 @@ public class QuantileRegression<T> : RegressionBase<T>
     {
         int n = x.Rows;
         int p = x.Columns;
-        TrainingFeatureCount = x.Columns;
+        TrainingFeatureCount = p;
 
-        // Use OLS for reliable predictions on generic linear data
-        var xWithInt = x.AddConstantColumn(NumOps.One);
-        var xTx = xWithInt.Transpose().Multiply(xWithInt);
-        var xTy = xWithInt.Transpose().Multiply(y);
-        for (int i = 0; i < xTx.Rows; i++)
-            xTx[i, i] = NumOps.Add(xTx[i, i], NumOps.FromDouble(1e-10));
-        var olsSolution = xTx.Inverse().Multiply(xTy);
-        Intercept = olsSolution[0];
-        Coefficients = olsSolution.Slice(1, p);
-        if (Coefficients.Length > 0) return;
-
-        // Initialize coefficients and intercept
-        Coefficients = new Vector<T>(p);
-        // Initialize intercept to quantile of y for faster convergence
-        var sortedY = y.OrderBy(v => NumOps.ToDouble(v)).ToList();
-        int qIdx = Math.Max(0, Math.Min(sortedY.Count - 1, (int)(sortedY.Count * _options.Quantile)));
-        Intercept = sortedY[qIdx];
-
-        // Auto-scale learning rate relative to data magnitude
-        double lr = _options.LearningRate;
-        if (Math.Abs(lr - 0.01) < 1e-10) // default value
+        if (n == 0)
         {
-            double xScale = 0;
-            for (int j = 0; j < p; j++)
-            {
-                double colMean = 0;
-                for (int i = 0; i < n; i++) colMean += NumOps.ToDouble(x[i, j]);
-                colMean /= n;
-                double colVar = 0;
-                for (int i = 0; i < n; i++)
-                {
-                    double d = NumOps.ToDouble(x[i, j]) - colMean;
-                    colVar += d * d;
-                }
-                xScale += colVar / n;
-            }
-            xScale = Math.Sqrt(xScale / p);
-            lr = Math.Max(0.1, xScale > 1e-10 ? 1.0 / xScale : 0.01);
+            throw new ArgumentException("Quantile regression requires at least one observation.", nameof(x));
         }
 
-        // Gradient descent optimization for quantile regression
-        T invN = NumOps.FromDouble(1.0 / n);
-        for (int iter = 0; iter < _options.MaxIterations; iter++)
+        // Quantile regression is solved EXACTLY as a linear program (Koenker and Bassett, 1978 —
+        // the paper that introduced the method). Splitting each residual into its positive and
+        // negative parts, u_i - v_i = y_i - (b0 + x_i . b) with u_i, v_i >= 0, turns the pinball
+        // loss into something linear:
+        //
+        //     minimize  sum_i [ tau * u_i + (1 - tau) * v_i ]
+        //     subject to  b0 + x_i . b + u_i - v_i = y_i     for every i
+        //                 u_i >= 0,  v_i >= 0,  b0 and b free
+        //
+        // At the optimum exactly one of u_i, v_i is non-zero for each observation, so the objective
+        // really is the asymmetric absolute loss: over-predictions are charged (1 - tau) and
+        // under-predictions tau.
+        //
+        // Two things were wrong before. First, the method returned the ORDINARY LEAST SQUARES fit
+        // whenever there was at least one feature — the quantile-specific code below that early
+        // return was unreachable — so it estimated the conditional MEAN regardless of the requested
+        // quantile, which is the one thing quantile regression exists not to do. Second, the
+        // unreachable code ran gradient descent on the pinball loss, which is not differentiable at
+        // zero, exactly where the optimum sits.
+        int variableCount = 1 + p + 2 * n;
+        int interceptColumn = 0;
+        int coefficientColumn = 1;
+        int positiveResidualColumn = 1 + p;
+        int negativeResidualColumn = 1 + p + n;
+
+        double quantile = _options.Quantile;
+        var objective = new Vector<T>(variableCount);
+        for (int i = 0; i < n; i++)
         {
-            Vector<T> gradients = new(p);
-            T interceptGradient = NumOps.Zero;
-
-            for (int i = 0; i < n; i++)
-            {
-                T prediction = Predict(x.GetRow(i));
-                T error = NumOps.Subtract(y[i], prediction);
-                T gradient = NumOps.GreaterThan(error, NumOps.Zero)
-                    ? NumOps.FromDouble(_options.Quantile)
-                    : NumOps.FromDouble(_options.Quantile - 1);
-
-                for (int j = 0; j < p; j++)
-                {
-                    gradients[j] = NumOps.Add(gradients[j], NumOps.Multiply(gradient, x[i, j]));
-                }
-                interceptGradient = NumOps.Add(interceptGradient, gradient);
-            }
-
-            // Average gradients over samples and update
-            T lrT = NumOps.FromDouble(lr);
-            for (int j = 0; j < p; j++)
-            {
-                T avgGrad = NumOps.Multiply(gradients[j], invN);
-                Coefficients[j] = NumOps.Add(Coefficients[j], NumOps.Multiply(lrT, avgGrad));
-            }
-            T avgInterceptGrad = NumOps.Multiply(interceptGradient, invN);
-            Intercept = NumOps.Add(Intercept, NumOps.Multiply(lrT, avgInterceptGrad));
-
-            // Apply regularization to coefficients (not to input data)
-            Coefficients = Regularization.Regularize(Coefficients);
+            objective[positiveResidualColumn + i] = NumOps.FromDouble(quantile);
+            objective[negativeResidualColumn + i] = NumOps.FromDouble(1.0 - quantile);
         }
+
+        var equalityMatrix = new Matrix<T>(n, variableCount);
+        var equalityBounds = new Vector<T>(n);
+        for (int i = 0; i < n; i++)
+        {
+            equalityMatrix[i, interceptColumn] = NumOps.One;
+            for (int j = 0; j < p; j++) equalityMatrix[i, coefficientColumn + j] = x[i, j];
+            equalityMatrix[i, positiveResidualColumn + i] = NumOps.One;
+            equalityMatrix[i, negativeResidualColumn + i] = NumOps.Negate(NumOps.One);
+            equalityBounds[i] = y[i];
+        }
+
+        // The intercept and slopes are unrestricted in sign; the residual parts are non-negative.
+        var lowerBounds = new Vector<T>(variableCount);
+        var upperBounds = new Vector<T>(variableCount);
+        var negativeInfinity = NumOps.FromDouble(double.NegativeInfinity);
+        var positiveInfinity = NumOps.FromDouble(double.PositiveInfinity);
+        for (int c = 0; c < variableCount; c++)
+        {
+            lowerBounds[c] = c < 1 + p ? negativeInfinity : NumOps.Zero;
+            upperBounds[c] = positiveInfinity;
+        }
+
+        var program = new AiDotNet.Solvers.LinearProgramming.LinearProgram<T>(
+            objective,
+            equalityMatrix: equalityMatrix,
+            equalityBounds: equalityBounds,
+            lowerBounds: lowerBounds,
+            upperBounds: upperBounds);
+
+        var solver = new AiDotNet.Solvers.LinearProgramming.SimplexSolver<T>(
+            new SimplexSolverOptions { MaxIterations = Math.Max(_options.MaxIterations, 10000) });
+
+        var solution = solver.Solve(program);
+
+        if (solution.Solution is null)
+        {
+            throw new InvalidOperationException(
+                $"The quantile regression linear program did not solve (status {solution.Status}). " +
+                "This usually means the design matrix contains non-finite values.");
+        }
+
+        Intercept = solution.Solution[interceptColumn];
+        var coefficients = new Vector<T>(p);
+        for (int j = 0; j < p; j++) coefficients[j] = solution.Solution[coefficientColumn + j];
+
+        // Regularization is applied to the fitted coefficients, matching every other regression in
+        // the library; the intercept is deliberately left unpenalized.
+        Coefficients = Regularization.Regularize(coefficients);
     }
 
     /// <summary>

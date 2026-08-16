@@ -1,11 +1,11 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Models.Options;
 
 namespace AiDotNet.CausalDiscovery.ContinuousOptimization;
 
 /// <summary>
-/// NOTEARS with Sobolev regularization — DAG learning with smoothness constraints.
+/// NOTEARS with Sobolev regularization â€” DAG learning with smoothness constraints.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -16,7 +16,7 @@ namespace AiDotNet.CausalDiscovery.ContinuousOptimization;
 /// <para>
 /// <b>Algorithm:</b>
 /// <list type="number">
-/// <item>Initialize per-variable MLPs: Input(d) → Hidden(h, sigmoid) → Output(1)</item>
+/// <item>Initialize per-variable MLPs: Input(d) â†’ Hidden(h, sigmoid) â†’ Output(1)</item>
 /// <item>Compute L2 reconstruction loss plus Sobolev penalty on Jacobian norms</item>
 /// <item>Extract adjacency A[i,j] = ||W1[j][:,i]||_2 from input weights</item>
 /// <item>Apply NOTEARS acyclicity constraint h(A) = tr(e^(A*A)) - d</item>
@@ -33,7 +33,7 @@ namespace AiDotNet.CausalDiscovery.ContinuousOptimization;
 /// <para>
 /// <b>For Beginners:</b> Regular NOTEARS with neural networks might learn very wiggly functions
 /// that fit noise rather than real causal relationships. The Sobolev penalty encourages smoother
-/// functions, similar to how L2 regularization prevents large weights — but it penalizes the
+/// functions, similar to how L2 regularization prevents large weights â€” but it penalizes the
 /// derivatives (wigglyness) of the learned functions, not just their magnitude.
 /// </para>
 /// <para>
@@ -69,6 +69,17 @@ public class NOTEARSSobolev<T> : ContinuousOptimizationBase<T>
     private double _sobolevWeight = DEFAULT_SOBOLEV_WEIGHT;
     private readonly int? _seed;
 
+    /// <summary>
+    /// Seed used when the caller does not supply one, so that a run is reproducible by default.
+    /// </summary>
+    /// <remarks>
+    /// Previously this fell back to an unseeded secure RNG, which made the model nondeterministic
+    /// and its generated model-family tests flaky: the identical test binary produced 13 failures
+    /// in one run and 8 in the next over the same 42 tests, which makes regression detection on
+    /// this path impossible. Callers still override via the options' Seed property. Matches the
+    /// fixed-seed convention already used by DAGMANonlinear in this module.
+    /// </remarks>
+    private const int DefaultRandomSeed = 42;
     // MLP parameters per variable:
     // W1[j] is [d x h], b1[j] is [h], W2[j] is [h], b2[j] is scalar
     private Matrix<T>[] _W1 = [];
@@ -106,7 +117,7 @@ public class NOTEARSSobolev<T> : ContinuousOptimizationBase<T>
                 throw new ArgumentException("HiddenUnits must be at least 1.");
             _hiddenSize = hiddenUnits;
         }
-        _seed = options?.Seed;
+        _seed = options?.Seed ?? DefaultRandomSeed;
         _sobolevWeight = options?.SobolevWeight ?? DEFAULT_SOBOLEV_WEIGHT;
         if (_sobolevWeight < 0 || double.IsNaN(_sobolevWeight) || double.IsInfinity(_sobolevWeight))
             throw new ArgumentException("SobolevWeight must be a non-negative finite number.");

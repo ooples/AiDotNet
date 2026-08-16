@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Models.Options;
 
@@ -226,29 +226,16 @@ public class LinearMixedModel<T> : RegressionBase<T>
             throw new InvalidOperationException("At least one random effect must be specified. Use AddRandomIntercept() or AddRandomSlope().");
         }
 
-        // Use OLS for reliable predictions
-        _useOLS = true;
+        // This method previously fitted ORDINARY LEAST SQUARES and returned immediately —
+        // `_useOLS = true` was set unconditionally, making the mixed-effects (REML) estimation below
+        // unreachable. A caller asking for a linear mixed model received a fixed-effects-only fit, so the random effects they declared were estimated as nothing at all.
+        // The real estimation now runs.
+        //
+        // `_useOLS` is retained (always false for newly trained models) purely so that models
+        // serialized before this fix still deserialize and predict through their stored
+        // coefficients rather than silently changing behaviour on load.
+        _useOLS = false;
         TrainingFeatureCount = x.Columns;
-        if (Options.UseIntercept)
-        {
-            var xWithInt = x.AddConstantColumn(NumOps.One);
-            var xTx = xWithInt.Transpose().Multiply(xWithInt);
-            var xTy = xWithInt.Transpose().Multiply(y);
-            for (int i = 0; i < xTx.Rows; i++)
-                xTx[i, i] = NumOps.Add(xTx[i, i], NumOps.FromDouble(1e-10));
-            var solution = SolveSystem(xTx, xTy);
-            Intercept = solution[0];
-            Coefficients = solution.Slice(1, x.Columns);
-        }
-        else
-        {
-            var xTx = x.Transpose().Multiply(x);
-            var xTy = x.Transpose().Multiply(y);
-            for (int i = 0; i < xTx.Rows; i++)
-                xTx[i, i] = NumOps.Add(xTx[i, i], NumOps.FromDouble(1e-10));
-            Coefficients = SolveSystem(xTx, xTy);
-        }
-        if (_useOLS) return;
 
         // Validate grouping column indices are within bounds
         foreach (var re in _randomEffects)
@@ -832,7 +819,7 @@ public class LinearMixedModel<T> : RegressionBase<T>
     {
         if (_useOLS)
         {
-            // Manual clone for OLS path — copy coefficients directly
+            // Manual clone for OLS path â€” copy coefficients directly
             var clone = new LinearMixedModel<T>(_options, Regularization);
             clone._useOLS = true;
             clone.Coefficients = new Vector<T>(Coefficients);

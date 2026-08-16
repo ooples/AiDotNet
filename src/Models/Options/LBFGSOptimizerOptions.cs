@@ -81,6 +81,128 @@ public class LBFGSOptimizerOptions<T, TInput, TOutput> : GradientBasedOptimizerO
     public int MemorySize { get; set; } = 10;
 
     /// <summary>
+    /// Gets or sets the maximum number of backtracking steps in the line search.
+    /// </summary>
+    /// <value>The maximum line search steps, defaulting to 20.</value>
+    /// <remarks>
+    /// <para>
+    /// L-BFGS proposes a search direction and then asks "how far along it should I actually go?".
+    /// The line search starts at a full step and repeatedly shrinks it until the Armijo
+    /// sufficient-decrease condition holds. This caps how many shrinks are attempted before the
+    /// search gives up and takes <see cref="LineSearchFallbackStep"/> instead. With the default
+    /// contraction factor of 0.5, twenty steps reduce the trial step to about one millionth of
+    /// the original.
+    /// </para>
+    /// <para><b>For Beginners:</b> The optimizer works out which way is downhill, then has to
+    /// decide how big a stride to take. It tries a big stride first; if that overshoots and lands
+    /// somewhere worse, it halves the stride and tries again. This is how many times it is allowed
+    /// to halve before giving up on that direction.
+    /// </para>
+    /// </remarks>
+    public int LineSearchMaxSteps { get; set; } = 20;
+
+    /// <summary>
+    /// Gets or sets the Armijo sufficient-decrease constant used by the line search.
+    /// </summary>
+    /// <value>The Armijo constant, defaulting to 1e-4.</value>
+    /// <remarks>
+    /// <para>
+    /// A trial step is accepted when
+    /// <c>f(x + step·d) &lt;= f(x) + ArmijoConstant · step · ∇f(x)ᵀd</c>. This is the standard
+    /// Armijo condition (Nocedal and Wright, "Numerical Optimization", Algorithm 3.1); 1e-4 is the
+    /// conventional value. It must lie strictly between 0 and 1.
+    /// </para>
+    /// <para><b>For Beginners:</b> A step is only worth taking if it actually improves things by a
+    /// meaningful amount, not just by a hair. This setting says how much improvement counts as
+    /// "meaningful", measured against how much the slope promised. The small default means the
+    /// optimizer is easy to satisfy, which is usually what you want — being fussy here just makes
+    /// it shrink the step more often for little gain.
+    /// </para>
+    /// </remarks>
+    public double ArmijoConstant { get; set; } = 1e-4;
+
+    /// <summary>
+    /// Gets or sets the factor by which the trial step is shrunk on each line search backtrack.
+    /// </summary>
+    /// <value>The contraction factor, defaulting to 0.5 (halving).</value>
+    /// <remarks>
+    /// <para>
+    /// Must lie strictly between 0 and 1. Smaller values shrink the step aggressively and reach an
+    /// acceptable step in fewer evaluations at the cost of possibly overshooting past a good one;
+    /// values closer to 1 search the step length more finely but need more objective evaluations.
+    /// </para>
+    /// <para><b>For Beginners:</b> When a stride turns out to be too big, this is the fraction it
+    /// gets multiplied by to produce the next attempt. The default halves it each time.
+    /// </para>
+    /// </remarks>
+    public double LineSearchContractionFactor { get; set; } = 0.5;
+
+    /// <summary>
+    /// Gets or sets the step length used when the line search fails to find an acceptable step.
+    /// </summary>
+    /// <value>The fallback step, defaulting to 1e-4.</value>
+    /// <remarks>
+    /// <para>
+    /// When no trial step satisfies the Armijo condition within
+    /// <see cref="LineSearchMaxSteps"/> backtracks, the optimizer takes this small step along the
+    /// search direction rather than stalling. Because the direction is guaranteed to be a descent
+    /// direction, a sufficiently small step still makes progress, and continuing lets the curvature
+    /// memory refresh on the next iteration.
+    /// </para>
+    /// <para><b>For Beginners:</b> If every stride length the optimizer tried was unsatisfying, it
+    /// takes one deliberately tiny step rather than stopping dead. Standing still would leave it
+    /// stuck forever; a tiny step at least changes the situation.
+    /// </para>
+    /// </remarks>
+    public double LineSearchFallbackStep { get; set; } = 1e-4;
+
+    /// <summary>
+    /// Gets or sets the smallest curvature value for which a correction pair is stored in memory.
+    /// </summary>
+    /// <value>The minimum curvature, defaulting to 1e-10.</value>
+    /// <remarks>
+    /// <para>
+    /// L-BFGS stores pairs <c>(s, y)</c> where <c>s</c> is the change in position and <c>y</c> the
+    /// change in gradient. The approximation is only valid while the curvature condition
+    /// <c>sᵀy &gt; 0</c> holds; a pair violating it makes the implied inverse-Hessian indefinite,
+    /// so the two-loop recursion can return an ascent direction, and a near-zero <c>sᵀy</c> makes
+    /// its divisions blow up. Pairs whose curvature does not exceed this threshold are discarded
+    /// (Nocedal and Wright, "Numerical Optimization", section 6.1).
+    /// </para>
+    /// <para><b>For Beginners:</b> The optimizer speeds itself up by remembering how the slope
+    /// changed as it moved. Some of those observations are useless or actively misleading — the
+    /// ones where the slope barely changed, or changed the wrong way. This setting is the bar an
+    /// observation has to clear before it is worth remembering.
+    /// </para>
+    /// </remarks>
+    public double MinimumCurvature { get; set; } = 1e-10;
+
+    /// <summary>
+    /// Gets or sets the fraction of the model curvature that a damped correction pair must retain.
+    /// </summary>
+    /// <value>The Powell damping factor, defaulting to 0.2.</value>
+    /// <remarks>
+    /// <para>
+    /// On a nonconvex objective the curvature condition <c>sᵀy &gt; 0</c> is frequently violated, and
+    /// simply discarding those pairs starves the memory until L-BFGS degenerates into steepest
+    /// descent. Powell's damped update repairs the pair instead: it replaces <c>y</c> with a blend
+    /// of <c>y</c> and <c>Bs</c> chosen so that <c>sᵀy ≥ factor · sᵀBs</c> holds by construction
+    /// (Powell, 1978; Nocedal and Wright, "Numerical Optimization", Procedure 18.2). The classical
+    /// value is 0.2.
+    /// </para>
+    /// <para>
+    /// Setting this to zero disables damping, restoring the plain skip-the-pair behaviour governed
+    /// by <see cref="MinimumCurvature"/> alone.
+    /// </para>
+    /// <para><b>For Beginners:</b> The optimizer learns the shape of the surface from how the slope
+    /// changed between steps. On a bumpy, non-bowl-shaped surface some of those observations imply
+    /// an impossible shape. Throwing them all away leaves the optimizer knowing nothing; this
+    /// setting instead nudges each bad observation to the nearest sensible one and keeps it.
+    /// </para>
+    /// </remarks>
+    public double PowellDampingFactor { get; set; } = 0.2;
+
+    /// <summary>
     /// Gets or sets the initial learning rate for the L-BFGS algorithm, which controls the initial
     /// step size during optimization.
     /// </summary>

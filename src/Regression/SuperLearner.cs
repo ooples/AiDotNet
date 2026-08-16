@@ -567,79 +567,74 @@ public class SuperLearner<T> : NonLinearRegressionBase<T>
     {
         int n = X.Rows;
         int m = X.Columns;
-        T zero = NumOps.Zero;
-        T two = NumOps.FromDouble(2.0);
-        T learningRate = NumOps.FromDouble(0.01);
-        T nT = NumOps.FromDouble(n);
-        T epsilon = NumOps.FromDouble(1e-10);
-        T tolerance = NumOps.FromDouble(_options.MetaLearnerTolerance);
 
-        // Initialize weights
-        var weights = new Vector<T>(m);
-        T initWeight = NumOps.Divide(NumOps.One, NumOps.FromDouble(m));
-        for (int j = 0; j < m; j++)
+        // The super learner combines its base models with a CONVEX combination — weights that are
+        // non-negative and sum to one (van der Laan, Polley and Hubbard, 2007). Written out, that
+        // is exactly a convex quadratic program:
+        //
+        //     minimize  ½·wᵀ(XᵀX)w − (Xᵀy)ᵀw     subject to  w ≥ 0,  Σw = 1
+        //
+        // which is ½‖Xw − y‖² expanded, dropping the constant ½‖y‖².
+        //
+        // This replaces a hand-rolled loop that described itself as an "active set method" but was
+        // projected gradient descent with a hardcoded learning rate of 0.01, re-normalizing the
+        // weights to sum to one after every step. That normalization silently changed the problem
+        // being solved — the fixed point of project-then-rescale is not the constrained optimum —
+        // and the gradient was computed with a triple-nested loop that recomputed the full
+        // prediction for every (row, column) pair, costing O(iterations · n · m²) where O(n · m)
+        // per iteration suffices.
+        var quadratic = new Matrix<T>(m, m);
+        var linear = new Vector<T>(m);
+
+        for (int i = 0; i < n; i++)
         {
-            weights[j] = initWeight;
-        }
-
-        // Active set method for NNLS
-        for (int iter = 0; iter < _options.MetaLearnerMaxIterations; iter++)
-        {
-            // Compute gradient
-            var grad = new Vector<T>(m);
             for (int j = 0; j < m; j++)
             {
-                for (int i = 0; i < n; i++)
+                linear[j] = NumOps.Subtract(linear[j], NumOps.Multiply(X[i, j], y[i]));
+                for (int k = 0; k < m; k++)
                 {
-                    T pred = zero;
-                    for (int k = 0; k < m; k++)
-                    {
-                        pred = NumOps.Add(pred, NumOps.Multiply(X[i, k], weights[k]));
-                    }
-                    T residual = NumOps.Subtract(pred, y[i]);
-                    grad[j] = NumOps.Add(grad[j], NumOps.Divide(NumOps.Multiply(NumOps.Multiply(two, X[i, j]), residual), nT));
+                    quadratic[j, k] = NumOps.Add(quadratic[j, k], NumOps.Multiply(X[i, j], X[i, k]));
                 }
-            }
-
-            // Projected gradient descent
-            T maxChange = zero;
-            for (int j = 0; j < m; j++)
-            {
-                T newWeight = NumOps.Subtract(weights[j], NumOps.Multiply(learningRate, grad[j]));
-                // Project to non-negative
-                if (NumOps.LessThan(newWeight, zero))
-                {
-                    newWeight = zero;
-                }
-                T change = NumOps.Abs(NumOps.Subtract(newWeight, weights[j]));
-                if (NumOps.GreaterThan(change, maxChange))
-                {
-                    maxChange = change;
-                }
-                weights[j] = newWeight;
-            }
-
-            // Normalize weights to sum to 1 (optional but often helpful)
-            T sumW = zero;
-            for (int j = 0; j < m; j++)
-            {
-                sumW = NumOps.Add(sumW, weights[j]);
-            }
-            if (NumOps.GreaterThan(sumW, epsilon))
-            {
-                for (int j = 0; j < m; j++)
-                {
-                    weights[j] = NumOps.Divide(weights[j], sumW);
-                }
-            }
-
-            if (NumOps.LessThan(maxChange, tolerance))
-            {
-                break;
             }
         }
 
-        _metaWeights = new Vector<T>(weights);
+        var simplexRow = new Matrix<T>(1, m);
+        for (int j = 0; j < m; j++) simplexRow[0, j] = NumOps.One;
+
+        var simplexTotal = new Vector<T>(1);
+        simplexTotal[0] = NumOps.One;
+
+        var program = new AiDotNet.Solvers.QuadraticProgramming.QuadraticProgram<T>(
+            quadratic,
+            linear,
+            equalityMatrix: simplexRow,
+            equalityBounds: simplexTotal,
+            lowerBounds: new Vector<T>(m));       // all zeros: w >= 0
+
+        var solver = new AiDotNet.Solvers.QuadraticProgramming.ActiveSetQuadraticProgramSolver<T>(
+            new ActiveSetQuadraticProgramSolverOptions
+            {
+                MaxIterations = _options.MetaLearnerMaxIterations,
+                Tolerance = _options.MetaLearnerTolerance,
+            });
+
+        var solution = solver.Solve(program);
+
+        if (solution.Solution is not null)
+        {
+            _metaWeights = solution.Solution;
+        }
+        else
+        {
+            // The simplex constraint always admits feasible points, so this is unreachable for a
+            // well-formed meta-feature matrix; fall back to equal weights rather than leaving the
+            // ensemble with no combination rule at all.
+            var equalWeights = new Vector<T>(m);
+            T uniform = NumOps.Divide(NumOps.One, NumOps.FromDouble(m));
+            for (int j = 0; j < m; j++) equalWeights[j] = uniform;
+            _metaWeights = equalWeights;
+        }
+
         _metaIntercept = NumOps.Zero;
     }
 

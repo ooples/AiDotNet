@@ -1,4 +1,4 @@
-using System.Text;
+﻿using System.Text;
 using AiDotNet.Attributes;
 using AiDotNet.Classification;
 using AiDotNet.Enums;
@@ -185,113 +185,49 @@ public class SupportVectorClassifier<T> : SVMBase<T>
         }
 
         int n = _xTrain.Rows;
-        _alphas = new Vector<T>(n);
         _intercept = new Vector<T>(1);
 
-        // Materialise the training matrix and labels into raw arrays once.
-        // The SMO inner loop runs O(n^2) kernel evaluations, each previously
-        // hammering the Vector{T} indexer through the deferred-materializer
-        // monitor (~99% of train wall-clock per the PR #1184 trace).
+        // Materialise the training matrix and labels into raw arrays once. The kernel evaluations
+        // dominate training, and each one previously hammered the Vector{T} indexer through the
+        // deferred-materializer monitor (~99% of train wall-clock per the PR #1184 trace).
         _xTrainRows = new T[n][];
         for (int i = 0; i < n; i++)
             _xTrainRows[i] = GetRowArray(_xTrain, i);
         _yTrainArr = _yTrain.ToArray();
-        _alphasArr = new T[n];
-        // Capture the freshly-initialized array once so the hot SMO
-        // inner loop doesn't carry a `_alphasArr!` null-forgive on
-        // every write. The field is guaranteed non-null for the scope
-        // of this method.
-        var alphasArr = _alphasArr;
 
-        T C = NumOps.FromDouble(Options.C);
-        T tolerance = NumOps.FromDouble(Options.Tolerance);
-        int maxPasses = Options.MaxIterations < 0 ? 10000 : Options.MaxIterations;
-
-        int passes = 0;
-        while (passes < maxPasses)
+        // The SVM dual is
+        //     minimize  ½·alphaᵀQ·alpha − 1ᵀalpha   subject to  yᵀalpha = 0,  0 ≤ alpha_i ≤ C
+        // with Q_ij = y_i·y_j·K(x_i, x_j). It is solved by the library's shared Sequential Minimal
+        // Optimization solver, which implements Platt's full algorithm: second-choice heuristic,
+        // error cache, and alternation between non-bound and full sweeps.
+        //
+        // This replaces an inlined SIMPLIFIED SMO that chose the partner multiplier at RANDOM (the
+        // CS229 teaching variant). Random pairing converges far more slowly and can stall on
+        // problems the full heuristic handles, and the same simplified loop was duplicated across
+        // the SVM family — one correct implementation now serves all of them.
+        var linear = new Vector<T>(n);
+        var upperBounds = new Vector<T>(n);
+        T penalty = NumOps.FromDouble(Options.C);
+        for (int i = 0; i < n; i++)
         {
-            int numChangedAlphas = 0;
-
-            for (int i = 0; i < n; i++)
-            {
-                T Ei = ComputeError(i);
-                T yi = _yTrain[i];
-                T alphaI = _alphas[i];
-
-                // Check KKT conditions
-                T yiEi = NumOps.Multiply(yi, Ei);
-                bool violatesKKT = (NumOps.Compare(yiEi, NumOps.Negate(tolerance)) < 0 && NumOps.Compare(alphaI, C) < 0)
-                    || (NumOps.Compare(yiEi, tolerance) > 0 && NumOps.Compare(alphaI, NumOps.Zero) > 0);
-
-                if (violatesKKT)
-                {
-                    // Select j randomly
-                    int j = SelectSecondAlpha(i, n);
-
-                    T Ej = ComputeError(j);
-                    T yj = _yTrain[j];
-                    T alphaJ = _alphas[j];
-
-                    // Compute bounds
-                    T L, H;
-                    if (NumOps.Compare(yi, yj) != 0)
-                    {
-                        L = Max(NumOps.Zero, NumOps.Subtract(alphaJ, alphaI));
-                        H = Min(C, NumOps.Add(NumOps.Subtract(C, alphaI), alphaJ));
-                    }
-                    else
-                    {
-                        L = Max(NumOps.Zero, NumOps.Subtract(NumOps.Add(alphaI, alphaJ), C));
-                        H = Min(C, NumOps.Add(alphaI, alphaJ));
-                    }
-
-                    if (NumOps.Compare(L, H) >= 0)
-                        continue;
-
-                    // Compute eta
-                    T Kii = ComputeKernelCached(i, i);
-                    T Kjj = ComputeKernelCached(j, j);
-                    T Kij = ComputeKernelCached(i, j);
-                    T eta = NumOps.Subtract(NumOps.Multiply(NumOps.FromDouble(2.0), Kij),
-                        NumOps.Add(Kii, Kjj));
-
-                    if (NumOps.Compare(eta, NumOps.Zero) >= 0)
-                        continue;
-
-                    // Update alpha_j
-                    T alphaJNew = NumOps.Subtract(alphaJ,
-                        NumOps.Divide(NumOps.Multiply(yj, NumOps.Subtract(Ei, Ej)), eta));
-                    alphaJNew = ClipAlpha(alphaJNew, L, H);
-
-                    if (NumOps.Compare(NumOps.Abs(NumOps.Subtract(alphaJNew, alphaJ)),
-                        NumOps.FromDouble(1e-5)) < 0)
-                        continue;
-
-                    // Update alpha_i
-                    T alphaINew = NumOps.Add(alphaI,
-                        NumOps.Multiply(NumOps.Multiply(yi, yj), NumOps.Subtract(alphaJ, alphaJNew)));
-
-                    // Update intercept
-                    UpdateIntercept(i, j, Ei, Ej, alphaINew, alphaJNew, alphaI, alphaJ, C);
-
-                    _alphas[i] = alphaINew;
-                    _alphas[j] = alphaJNew;
-                    alphasArr[i] = alphaINew;
-                    alphasArr[j] = alphaJNew;
-
-                    numChangedAlphas++;
-                }
-            }
-
-            if (numChangedAlphas == 0)
-            {
-                passes++;
-            }
-            else
-            {
-                passes = 0;
-            }
+            linear[i] = NumOps.Negate(NumOps.One);
+            upperBounds[i] = penalty;
         }
+
+        var solver = new AiDotNet.Solvers.QuadraticProgramming.SequentialMinimalOptimizationSolver<T>(
+            new SequentialMinimalOptimizationOptions
+            {
+                MaxIterations = Options.MaxIterations < 0 ? 1000000 : Options.MaxIterations * n,
+                Tolerance = Options.Tolerance,
+            },
+            _random);
+
+        var (alphas, bias, _) = solver.Solve(
+            ComputeKernelCached, _yTrain, linear, upperBounds);
+
+        _alphas = alphas;
+        _alphasArr = alphas.ToArray();
+        _intercept[0] = bias;
 
         // Extract support vectors
         ExtractSupportVectors();
@@ -308,13 +244,13 @@ public class SupportVectorClassifier<T> : SVMBase<T>
         }
         // Reuse the cached row array for sample i and route through the
         // array-based decision path so the inner kernel loop stays on plain
-        // memory access — see TrainSMO for why.
+        // memory access â€” see TrainSMO for why.
         T prediction = ComputeDecisionFromArray(_xTrainRows[i]);
         return NumOps.Subtract(prediction, _yTrainArr[i]);
     }
 
     /// <summary>
-    /// Computes the decision value for a sample (Vector overload — used by
+    /// Computes the decision value for a sample (Vector overload â€” used by
     /// Predict on user-supplied inputs).
     /// </summary>
     private T ComputeDecision(Vector<T> x)
