@@ -579,7 +579,11 @@ public class GradientEpisodicMemory<T, TInput, TOutput>
 
         // lambda = 0 means "apply the proposed gradient unchanged", which is the correct fallback
         // when no constraint binds and the only safe one if the solve could not complete.
-        if (solution.Solution is null) return new double[n];
+        if (solution.Solution is null ||
+            solution.Status != AiDotNet.Solvers.LinearProgramming.LinearProgramStatus.Optimal)
+        {
+            return new double[n];
+        }
 
         var lambda = new double[n];
         for (int i = 0; i < n; i++)

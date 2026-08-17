@@ -164,7 +164,9 @@ public abstract class RegressionModelTestBase<T> : System.IDisposable
         var pred1 = ToD(model1.Predict(ToT(testX)));
         var pred2 = ToD(model2.Predict(ToT(testX)));
 
-        if (ModelTestHelpers.AllFinite(pred1) && ModelTestHelpers.AllFinite(pred2))
+        Assert.True(
+            ModelTestHelpers.AllFinite(pred1) && ModelTestHelpers.AllFinite(pred2),
+            "Translation-equivariance predictions must be finite.");
         {
             for (int i = 0; i < pred1.Length; i++)
             {
@@ -207,7 +209,9 @@ public abstract class RegressionModelTestBase<T> : System.IDisposable
         var pred1 = ToD(model1.Predict(ToT(testX)));
         var pred2 = ToD(model2.Predict(ToT(testX)));
 
-        if (ModelTestHelpers.AllFinite(pred1) && ModelTestHelpers.AllFinite(pred2))
+        Assert.True(
+            ModelTestHelpers.AllFinite(pred1) && ModelTestHelpers.AllFinite(pred2),
+            "Scaling-equivariance predictions must be finite.");
         {
             for (int i = 0; i < pred1.Length; i++)
             {
@@ -243,7 +247,9 @@ public abstract class RegressionModelTestBase<T> : System.IDisposable
         var trainPred = ToD(model.Predict(ToT(trainX)));
         var testPred = ToD(model.Predict(ToT(testX)));
 
-        if (ModelTestHelpers.AllFinite(trainPred) && ModelTestHelpers.AllFinite(testPred))
+        Assert.True(
+            ModelTestHelpers.AllFinite(trainPred) && ModelTestHelpers.AllFinite(testPred),
+            "Training- and test-error predictions must be finite.");
         {
             double trainMSE = ModelTestHelpers.CalculateMSE(trainY, trainPred);
             double testMSE = ModelTestHelpers.CalculateMSE(testY, testPred);
@@ -283,7 +289,9 @@ public abstract class RegressionModelTestBase<T> : System.IDisposable
         var pred1 = ToD(model1.Predict(ToT(testX)));
         var pred2 = ToD(model2.Predict(ToT(testX)));
 
-        if (ModelTestHelpers.AllFinite(pred1) && ModelTestHelpers.AllFinite(pred2))
+        Assert.True(
+            ModelTestHelpers.AllFinite(pred1) && ModelTestHelpers.AllFinite(pred2),
+            "More-data invariant predictions must be finite.");
         {
             double r2Small = ModelTestHelpers.CalculateR2(testY, pred1);
             double r2Large = ModelTestHelpers.CalculateR2(testY, pred2);
@@ -343,7 +351,9 @@ public abstract class RegressionModelTestBase<T> : System.IDisposable
         var pred1 = ToD(model1.Predict(ToT(testX_real)));
         var pred2 = ToD(model2.Predict(ToT(testX_noisy)));
 
-        if (ModelTestHelpers.AllFinite(pred1) && ModelTestHelpers.AllFinite(pred2))
+        Assert.True(
+            ModelTestHelpers.AllFinite(pred1) && ModelTestHelpers.AllFinite(pred2),
+            "Irrelevant-feature invariant predictions must be finite.");
         {
             double r2Real = ModelTestHelpers.CalculateR2(testY, pred1);
             double r2Noisy = ModelTestHelpers.CalculateR2(testY, pred2);
@@ -385,7 +395,9 @@ public abstract class RegressionModelTestBase<T> : System.IDisposable
         }
 
         var predictions = ToD(model.Predict(ToT(probe)));
-        if (ModelTestHelpers.AllFinite(predictions))
+        Assert.True(
+            ModelTestHelpers.AllFinite(predictions),
+            "Monotonic-response predictions must be finite.");
         {
             int monotoneViolations = 0;
             for (int i = 1; i < predictions.Length; i++)
@@ -419,7 +431,9 @@ public abstract class RegressionModelTestBase<T> : System.IDisposable
         model.Train(ToT(trainX), ToT(trainY));
         var predictions = ToD(model.Predict(ToT(trainX)));
 
-        if (ModelTestHelpers.AllFinite(predictions))
+        Assert.True(
+            ModelTestHelpers.AllFinite(predictions),
+            "Residual-mean predictions must be finite.");
         {
             double residualSum = 0;
             double targetRange = 0;
@@ -471,7 +485,9 @@ public abstract class RegressionModelTestBase<T> : System.IDisposable
         }
 
         var predictions = ToD(model.Predict(ToT(probe)));
-        if (ModelTestHelpers.AllFinite(predictions))
+        Assert.True(
+            ModelTestHelpers.AllFinite(predictions),
+            "Coefficient-sign predictions must be finite.");
         {
             // Each feature should have positive effect (GenerateLinearData uses positive coefficients)
             for (int f = 0; f < nFeatures; f++)
@@ -547,7 +563,9 @@ public abstract class RegressionModelTestBase<T> : System.IDisposable
         var pred1 = ToD(model1.Predict(ToT(testOrig)));
         var pred2 = ToD(model2.Predict(ToT(testPerm)));
 
-        if (ModelTestHelpers.AllFinite(pred1) && ModelTestHelpers.AllFinite(pred2))
+        Assert.True(
+            ModelTestHelpers.AllFinite(pred1) && ModelTestHelpers.AllFinite(pred2),
+            "Feature-permutation predictions must be finite.");
         {
             Assert.True(Math.Abs(pred1[0] - pred2[0]) < Math.Abs(pred1[0]) * 0.2 + 1.0,
                 $"Feature permutation inconsistency: pred_orig={pred1[0]:F4}, pred_permuted={pred2[0]:F4}. " +
@@ -577,7 +595,9 @@ public abstract class RegressionModelTestBase<T> : System.IDisposable
         model.Train(ToT(trainX), ToT(trainY));
         var predictions = ToD(model.Predict(ToT(testX)));
 
-        if (ModelTestHelpers.AllFinite(predictions))
+        Assert.True(
+            ModelTestHelpers.AllFinite(predictions),
+            "Linear-data predictions must be finite.");
         {
             double r2 = ModelTestHelpers.CalculateR2(testY, predictions);
             Assert.True(r2 > 0.0,
@@ -784,7 +804,9 @@ public abstract class RegressionModelTestBase<T> : System.IDisposable
         model.Train(ToT(x), ToT(y));
         var predictions = ToD(model.Predict(ToT(x)));
 
-        if (ModelTestHelpers.AllFinite(predictions))
+        Assert.True(
+            ModelTestHelpers.AllFinite(predictions),
+            "Intercept-recovery predictions must be finite.");
         {
             double meanPred = 0;
             for (int i = 0; i < predictions.Length; i++) meanPred += predictions[i];

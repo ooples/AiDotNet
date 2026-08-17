@@ -46,6 +46,32 @@ public sealed class BranchAndBoundSolver<T>
     private readonly BranchAndBoundSolverOptions _options;
     private readonly ILinearProgramSolver<T> _relaxationSolver;
 
+    private sealed class NodeBounds
+    {
+        public Vector<T> LowerValues { get; }
+        public Vector<T> UpperValues { get; }
+        public bool[] HasLower { get; }
+        public bool[] HasUpper { get; }
+
+        public NodeBounds(int variableCount)
+        {
+            LowerValues = new Vector<T>(variableCount);
+            UpperValues = new Vector<T>(variableCount);
+            HasLower = new bool[variableCount];
+            HasUpper = new bool[variableCount];
+        }
+
+        private NodeBounds(NodeBounds other)
+        {
+            LowerValues = other.LowerValues.Clone();
+            UpperValues = other.UpperValues.Clone();
+            HasLower = (bool[])other.HasLower.Clone();
+            HasUpper = (bool[])other.HasUpper.Clone();
+        }
+
+        public NodeBounds Clone() => new(this);
+    }
+
     /// <summary>
     /// Creates a branch-and-bound solver.
     /// </summary>
@@ -96,12 +122,9 @@ public sealed class BranchAndBoundSolver<T>
         // Each node is the original problem with tightened variable bounds. Explored best-bound
         // first: the most promising relaxation is expanded next, which finds good incumbents early
         // and therefore prunes more.
-        var frontier = new PriorityQueue<(Vector<T> Lower, Vector<T> Upper), T>(
+        var frontier = new PriorityQueue<NodeBounds, T>(
             Comparer<T>.Create((left, right) => NumOps.Compare(left, right)));
-        frontier.Enqueue(
-            (MaterializeLowerBounds(program.Relaxation),
-                MaterializeUpperBounds(program.Relaxation)),
-            NumOps.MinValue);
+        frontier.Enqueue(new NodeBounds(program.Relaxation.VariableCount), NumOps.MinValue);
 
         while (frontier.Count > 0)
         {
@@ -111,10 +134,10 @@ public sealed class BranchAndBoundSolver<T>
                 break;
             }
 
-            var (lower, upper) = frontier.Dequeue();
+            var node = frontier.Dequeue();
             nodesExplored++;
 
-            var relaxation = WithBounds(program.Relaxation, lower, upper);
+            var relaxation = WithBranchBounds(program.Relaxation, node);
             var relaxed = _relaxationSolver.Solve(relaxation);
 
             if (relaxed.Status == LinearProgramStatus.Infeasible)
@@ -170,18 +193,42 @@ public sealed class BranchAndBoundSolver<T>
             T floorValue = NumOps.FromDouble(Math.Floor(NumOps.ToDouble(value)));
             T ceilingValue = NumOps.FromDouble(Math.Ceiling(NumOps.ToDouble(value)));
 
-            var lowerBranchUpper = upper.Clone();
-            lowerBranchUpper[branchVariable] = Minimum(lowerBranchUpper[branchVariable], floorValue);
-            if (!NumOps.GreaterThan(lower[branchVariable], lowerBranchUpper[branchVariable]))
+            var lowerBranch = node.Clone();
+            if (!TryGetUpperBound(program.Relaxation, node, branchVariable, out T currentUpper) ||
+                NumOps.LessThan(floorValue, currentUpper))
             {
-                frontier.Enqueue((lower.Clone(), lowerBranchUpper), relaxed.ObjectiveValue);
+                lowerBranch.UpperValues[branchVariable] = floorValue;
+                lowerBranch.HasUpper[branchVariable] = true;
+            }
+            else
+            {
+                lowerBranch.UpperValues[branchVariable] = currentUpper;
+                lowerBranch.HasUpper[branchVariable] = true;
             }
 
-            var upperBranchLower = lower.Clone();
-            upperBranchLower[branchVariable] = Maximum(upperBranchLower[branchVariable], ceilingValue);
-            if (!NumOps.GreaterThan(upperBranchLower[branchVariable], upper[branchVariable]))
+            if (!TryGetLowerBound(program.Relaxation, node, branchVariable, out T effectiveLower) ||
+                !NumOps.GreaterThan(effectiveLower, lowerBranch.UpperValues[branchVariable]))
             {
-                frontier.Enqueue((upperBranchLower, upper.Clone()), relaxed.ObjectiveValue);
+                frontier.Enqueue(lowerBranch, relaxed.ObjectiveValue);
+            }
+
+            var upperBranch = node.Clone();
+            if (!TryGetLowerBound(program.Relaxation, node, branchVariable, out T currentLower) ||
+                NumOps.GreaterThan(ceilingValue, currentLower))
+            {
+                upperBranch.LowerValues[branchVariable] = ceilingValue;
+                upperBranch.HasLower[branchVariable] = true;
+            }
+            else
+            {
+                upperBranch.LowerValues[branchVariable] = currentLower;
+                upperBranch.HasLower[branchVariable] = true;
+            }
+
+            if (!TryGetUpperBound(program.Relaxation, node, branchVariable, out T effectiveUpper) ||
+                !NumOps.GreaterThan(upperBranch.LowerValues[branchVariable], effectiveUpper))
+            {
+                frontier.Enqueue(upperBranch, relaxed.ObjectiveValue);
             }
         }
 
@@ -251,36 +298,98 @@ public sealed class BranchAndBoundSolver<T>
         return rounded;
     }
 
-    private static Vector<T> MaterializeLowerBounds(LinearProgram<T> program)
+    private static bool TryGetLowerBound(
+        LinearProgram<T> program, NodeBounds node, int variable, out T value)
     {
-        if (program.LowerBounds is not null) return program.LowerBounds.Clone();
+        bool hasProgramBound = program.LowerBounds is null || IsFinite(program.LowerBounds[variable]);
+        T programBound = program.LowerBounds is null ? NumOps.Zero : program.LowerBounds[variable];
 
-        var bounds = new Vector<T>(program.VariableCount);
-        for (int i = 0; i < bounds.Length; i++) bounds[i] = NumOps.Zero;
-        return bounds;
+        if (node.HasLower[variable] && hasProgramBound)
+        {
+            value = Maximum(node.LowerValues[variable], programBound);
+            return true;
+        }
+
+        if (node.HasLower[variable])
+        {
+            value = node.LowerValues[variable];
+            return true;
+        }
+
+        value = programBound;
+        return hasProgramBound;
     }
 
-    private static Vector<T> MaterializeUpperBounds(LinearProgram<T> program)
+    private static bool TryGetUpperBound(
+        LinearProgram<T> program, NodeBounds node, int variable, out T value)
     {
-        if (program.UpperBounds is not null) return program.UpperBounds.Clone();
+        bool hasProgramBound = program.UpperBounds is not null && IsFinite(program.UpperBounds[variable]);
+        T programBound = program.UpperBounds is null ? NumOps.Zero : program.UpperBounds[variable];
 
-        var bounds = new Vector<T>(program.VariableCount);
-        var infinity = NumOps.FromDouble(double.PositiveInfinity);
-        for (int i = 0; i < bounds.Length; i++) bounds[i] = infinity;
-        return bounds;
+        if (node.HasUpper[variable] && hasProgramBound)
+        {
+            value = Minimum(node.UpperValues[variable], programBound);
+            return true;
+        }
+
+        if (node.HasUpper[variable])
+        {
+            value = node.UpperValues[variable];
+            return true;
+        }
+
+        value = programBound;
+        return hasProgramBound;
     }
 
-    private static LinearProgram<T> WithBounds(
-        LinearProgram<T> program, Vector<T> lower, Vector<T> upper)
+    private static LinearProgram<T> WithBranchBounds(LinearProgram<T> program, NodeBounds node)
     {
+        int existingRows = program.InequalityMatrix?.Rows ?? 0;
+        int branchRows = node.HasLower.Count(has => has) + node.HasUpper.Count(has => has);
+        if (branchRows == 0) return program;
+
+        var matrix = new Matrix<T>(existingRows + branchRows, program.VariableCount);
+        var bounds = new Vector<T>(existingRows + branchRows);
+
+        for (int row = 0; row < existingRows; row++)
+        {
+            for (int column = 0; column < program.VariableCount; column++)
+            {
+                matrix[row, column] = program.InequalityMatrix![row, column];
+            }
+            bounds[row] = program.InequalityBounds![row];
+        }
+
+        int nextRow = existingRows;
+        for (int variable = 0; variable < program.VariableCount; variable++)
+        {
+            if (node.HasUpper[variable])
+            {
+                matrix[nextRow, variable] = NumOps.One;
+                bounds[nextRow++] = node.UpperValues[variable];
+            }
+
+            if (node.HasLower[variable])
+            {
+                matrix[nextRow, variable] = NumOps.Negate(NumOps.One);
+                bounds[nextRow++] = NumOps.Negate(node.LowerValues[variable]);
+            }
+        }
+
         return new LinearProgram<T>(
             program.Objective,
-            program.InequalityMatrix,
-            program.InequalityBounds,
+            matrix,
+            bounds,
             program.EqualityMatrix,
             program.EqualityBounds,
-            lower,
-            upper);
+            program.LowerBounds,
+            program.UpperBounds);
+    }
+
+    private static bool IsFinite(T value)
+    {
+        double converted = NumOps.ToDouble(value);
+        return !double.IsNaN(converted) && !double.IsInfinity(converted);
     }
 
     private static T Minimum(T left, T right) => NumOps.LessThan(left, right) ? left : right;

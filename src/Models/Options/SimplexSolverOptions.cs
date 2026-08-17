@@ -8,8 +8,8 @@ namespace AiDotNet.Models.Options;
 /// Every value has a documented default drawn from standard practice, and every one is settable,
 /// so no behaviour of the solver is hard-coded out of the caller's reach.
 /// </para>
-/// <para><b>Reference:</b> Dantzig, <i>Linear Programming and Extensions</i> (1963), with Bland's
-/// anti-cycling rule (1977).</para>
+/// <para><b>Reference:</b> George B. Dantzig, “Maximization of a Linear Function of Variables
+/// Subject to Linear Inequalities” (1947), with Bland's anti-cycling rule (1977).</para>
 /// <para><b>For Beginners:</b> These settings control how accurately and how long the simplex
 /// solver searches the corners of a linear problem before returning.</para>
 /// </remarks>
@@ -19,8 +19,14 @@ public class SimplexSolverOptions : ModelOptions
     private double _tolerance = 1e-9;
     private int _degeneratePivotsBeforeBlandsRule = 20;
 
-    public SimplexSolverOptions() { }
+    /// <summary>Initializes the options with documented defaults.</summary>
+    public SimplexSolverOptions()
+    {
+    }
 
+    /// <summary>Initializes the options by copying another configuration.</summary>
+    /// <param name="other">The configuration to copy.</param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="other"/> is null.</exception>
     public SimplexSolverOptions(SimplexSolverOptions other)
     {
         if (other is null) throw new ArgumentNullException(nameof(other));

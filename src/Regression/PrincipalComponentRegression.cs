@@ -185,6 +185,26 @@ public class PrincipalComponentRegression<T> : RegressionBase<T>
         // Center and scale the data
         (Matrix<T> xScaled, Vector<T> yScaled, _xMean, _xStd, _yMean, _yStd) = RegressionHelper<T>.CenterAndScale(x, y);
 
+        bool hasVaryingFeature = false;
+        for (int i = 0; i < xScaled.Rows && !hasVaryingFeature; i++)
+        {
+            for (int j = 0; j < xScaled.Columns; j++)
+            {
+                if (!NumOps.Equals(xScaled[i, j], NumOps.Zero))
+                {
+                    hasVaryingFeature = true;
+                    break;
+                }
+            }
+        }
+
+        if (!hasVaryingFeature)
+        {
+            throw new ArgumentException(
+                "Principal component regression requires at least one feature with non-zero variance.",
+                nameof(x));
+        }
+
         // Perform PCA
         (Matrix<T> components, Vector<T> explainedVariance) = PerformPCA(xScaled);
 
@@ -235,6 +255,12 @@ public class PrincipalComponentRegression<T> : RegressionBase<T>
         if (x.Rows != y.Length)
         {
             throw new ArgumentException("Number of rows in x must match the length of y.");
+        }
+
+        if (x.Rows < 2 || x.Columns == 0)
+        {
+            throw new ArgumentException(
+                "Principal component regression requires at least two rows and one feature.", nameof(x));
         }
     }
 
@@ -324,15 +350,7 @@ public class PrincipalComponentRegression<T> : RegressionBase<T>
     /// Finally, it transforms the predictions back to the original scale of your target variable.
     /// </para>
     /// </remarks>
-    public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
-    {
-        // Manual Clone for OLS path
-        var clone = new PrincipalComponentRegression<T>(_options, Regularization);
-        clone.Coefficients = new Vector<T>(Coefficients);
-        clone.Intercept = Intercept;
-        clone.TrainingFeatureCount = TrainingFeatureCount;
-        return clone;
-    }
+    public override IFullModel<T, Matrix<T>, Vector<T>> Clone() => CreateNewInstance();
 
     public override IFullModel<T, Matrix<T>, Vector<T>> DeepCopy() => Clone();
 
@@ -534,6 +552,7 @@ public class PrincipalComponentRegression<T> : RegressionBase<T>
         }
 
         newModel._yStd = _yStd;
+        newModel.TrainingFeatureCount = TrainingFeatureCount;
 
         return newModel;
     }

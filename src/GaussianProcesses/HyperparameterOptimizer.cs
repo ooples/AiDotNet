@@ -432,17 +432,27 @@ public class HyperparameterOptimizer<T>
             {
                 string name = names[i];
                 double value = point[i];
+                bool requiresPositive =
+                    name.Contains("variance", StringComparison.OrdinalIgnoreCase) ||
+                    name.Contains("length", StringComparison.OrdinalIgnoreCase) ||
+                    name.Contains("scale", StringComparison.OrdinalIgnoreCase);
 
                 if (parameterBounds is not null && parameterBounds.TryGetValue(name, out var bounds))
                 {
+                    if (requiresPositive && bounds.max < MinimumPositiveHyperparameter)
+                    {
+                        throw new ArgumentException(
+                            $"The upper bound for positive hyperparameter '{name}' must be at least " +
+                            $"{MinimumPositiveHyperparameter}, but was {bounds.max}.",
+                            nameof(parameterBounds));
+                    }
+
                     value = Math.Max(bounds.min, Math.Min(bounds.max, value));
                 }
 
                 // Kernel length scales, signal variances and noise variances are strictly positive
                 // quantities; a non-positive value makes the covariance matrix indefinite.
-                if (name.Contains("variance", StringComparison.OrdinalIgnoreCase) ||
-                    name.Contains("length", StringComparison.OrdinalIgnoreCase) ||
-                    name.Contains("scale", StringComparison.OrdinalIgnoreCase))
+                if (requiresPositive)
                 {
                     value = Math.Max(MinimumPositiveHyperparameter, value);
                 }

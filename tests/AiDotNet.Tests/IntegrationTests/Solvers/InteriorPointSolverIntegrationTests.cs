@@ -563,15 +563,19 @@ public class InteriorPointSolverIntegrationTests
     }
 
     /// <summary>
-    /// Non-negativity is the default lower bound, so a quadratic whose unconstrained minimum is
-    /// negative must be clipped at zero — the classic non-negative least-squares shape.
+    /// An explicit non-negative lower bound clips a quadratic whose unconstrained minimum is
+    /// negative — the classic non-negative least-squares shape. Quadratic programs deliberately
+    /// default to free variables when lower bounds are omitted.
     /// </summary>
-    [Fact]
-    public void Solve_QuadraticWantingNegativeValues_ClipsAtZero()
+    [Fact(Timeout = 120000)]
+    public async Task Solve_QuadraticWantingNegativeValues_ClipsAtZero()
     {
+        await Task.Yield();
+
         var program = new QuadraticProgram<double>(
             quadratic: M(new[,] { { 1.0, 0.0 }, { 0.0, 1.0 } }),
-            linear: V(2, -3));
+            linear: V(2, -3),
+            lowerBounds: V(0, 0));
 
         var solution = Solver().Solve(program);
 

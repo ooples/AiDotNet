@@ -182,8 +182,8 @@ public sealed class AugmentedLagrangianSolver<T>
 
         var point = initialPoint;
 
-        int equalityCount = CountConstraints(problem.EqualityConstraints, point);
-        int inequalityCount = CountConstraints(problem.InequalityConstraints, point);
+        int equalityCount = CountConstraints(problem.EqualityConstraints, point, "equality");
+        int inequalityCount = CountConstraints(problem.InequalityConstraints, point, "inequality");
 
         var equalityMultipliers = new Vector<T>(equalityCount);
         var inequalityMultipliers = new Vector<T>(inequalityCount);
@@ -201,8 +201,31 @@ public sealed class AugmentedLagrangianSolver<T>
                 _options.MaxInnerIterations,
                 NumOps.FromDouble(_options.StationarityTolerance));
 
-            return Report(problem, point, null, null, LinearProgramStatus.Optimal, 1);
+            var (objectiveValue, finalGradient) = problem.Objective(point);
+            ValidateObjectiveGradient(point, finalGradient);
+
+            double gradientNorm = 0.0;
+            for (int i = 0; i < finalGradient.Length; i++)
+            {
+                double component = Math.Abs(NumOps.ToDouble(finalGradient[i]));
+                if (double.IsNaN(component) || double.IsInfinity(component))
+                {
+                    return Report(
+                        point, objectiveValue, null, null, null, null,
+                        LinearProgramStatus.IterationLimit, 1);
+                }
+                gradientNorm = Math.Max(gradientNorm, component);
+            }
+
+            var status = gradientNorm <= _options.StationarityTolerance
+                ? LinearProgramStatus.Optimal
+                : LinearProgramStatus.IterationLimit;
+
+            return Report(point, objectiveValue, null, null, null, null, status, 1);
         }
+
+        Vector<T>? lastEqualityValues = null;
+        Vector<T>? lastInequalityValues = null;
 
         for (int iteration = 1; iteration <= _options.MaxOuterIterations; iteration++)
         {
@@ -219,6 +242,8 @@ public sealed class AugmentedLagrangianSolver<T>
 
             var equality = Evaluate(problem.EqualityConstraints, point, equalityCount);
             var inequality = Evaluate(problem.InequalityConstraints, point, inequalityCount);
+            lastEqualityValues = equality.Values;
+            lastInequalityValues = inequality.Values;
 
             double violation = Violation(equality.Values, inequality.Values);
 
@@ -231,8 +256,10 @@ public sealed class AugmentedLagrangianSolver<T>
                     equalityMultipliers, inequalityMultipliers,
                     equality.Values, inequality.Values, penaltyValue);
 
+                var (objectiveValue, _) = problem.Objective(point);
                 return Report(
-                    problem, point, equalityMultipliers, inequalityMultipliers,
+                    point, objectiveValue, equality.Values, inequality.Values,
+                    equalityMultipliers, inequalityMultipliers,
                     LinearProgramStatus.Optimal, iteration);
             }
 
@@ -255,8 +282,9 @@ public sealed class AugmentedLagrangianSolver<T>
             }
         }
 
+        var (finalObjectiveValue, _) = problem.Objective(point);
         return Report(
-            problem, point,
+            point, finalObjectiveValue, lastEqualityValues, lastInequalityValues,
             equalityCount > 0 ? equalityMultipliers : null,
             inequalityCount > 0 ? inequalityMultipliers : null,
             LinearProgramStatus.IterationLimit,
@@ -287,6 +315,7 @@ public sealed class AugmentedLagrangianSolver<T>
         return point =>
         {
             var (value, gradient) = problem.Objective(point);
+            ValidateObjectiveGradient(point, gradient);
 
             var result = new Vector<T>(gradient.Length);
             for (int i = 0; i < gradient.Length; i++) result[i] = gradient[i];
@@ -294,6 +323,8 @@ public sealed class AugmentedLagrangianSolver<T>
             if (problem.EqualityConstraints is not null && equalityMultipliers.Length > 0)
             {
                 var (values, jacobian) = problem.EqualityConstraints(point);
+                ValidateConstraintBlock(
+                    "equality", point, values, jacobian, equalityMultipliers.Length);
 
                 for (int i = 0; i < equalityMultipliers.Length; i++)
                 {
@@ -315,6 +346,8 @@ public sealed class AugmentedLagrangianSolver<T>
             if (problem.InequalityConstraints is not null && inequalityMultipliers.Length > 0)
             {
                 var (values, jacobian) = problem.InequalityConstraints(point);
+                ValidateConstraintBlock(
+                    "inequality", point, values, jacobian, inequalityMultipliers.Length);
 
                 T twicePenalty = NumOps.Multiply(NumOps.FromDouble(2.0), penalty);
 
@@ -350,6 +383,13 @@ public sealed class AugmentedLagrangianSolver<T>
     /// </summary>
     private static void AccumulateRow(Vector<T> target, Matrix<T> jacobian, int row, T weight)
     {
+        if (jacobian.Columns != target.Length)
+        {
+            throw new ArgumentException(
+                $"A constraint Jacobian has {jacobian.Columns} columns, but the objective gradient " +
+                $"has {target.Length} entries. Both must equal the number of variables.");
+        }
+
         for (int c = 0; c < target.Length; c++)
         {
             target[c] = NumOps.Add(target[c], NumOps.Multiply(weight, jacobian[row, c]));
@@ -437,33 +477,57 @@ public sealed class AugmentedLagrangianSolver<T>
     }
 
     private static int CountConstraints(
-        Func<Vector<T>, (Vector<T> Values, Matrix<T> Jacobian)>? constraints, Vector<T> point)
+        Func<Vector<T>, (Vector<T> Values, Matrix<T> Jacobian)>? constraints,
+        Vector<T> point,
+        string blockName)
     {
         if (constraints is null) return 0;
 
-        var (values, _) = constraints(point);
+        var (values, jacobian) = constraints(point);
+        ValidateConstraintBlock(blockName, point, values, jacobian, values.Length);
         return values.Length;
     }
 
-    private static ConstrainedSolution<T> Report(
-        ConstrainedProblem<T> problem,
+    private static void ValidateObjectiveGradient(Vector<T> point, Vector<T> gradient)
+    {
+        if (gradient.Length != point.Length)
+        {
+            throw new ArgumentException(
+                $"The objective gradient has {gradient.Length} entries, but the point has " +
+                $"{point.Length} variables.");
+        }
+    }
+
+    private static void ValidateConstraintBlock(
+        string blockName,
         Vector<T> point,
+        Vector<T> values,
+        Matrix<T> jacobian,
+        int expectedRows)
+    {
+        if (values.Length != expectedRows || jacobian.Rows != expectedRows ||
+            jacobian.Columns != point.Length)
+        {
+            throw new ArgumentException(
+                $"The {blockName} constraint block returned {values.Length} values and a " +
+                $"{jacobian.Rows}x{jacobian.Columns} Jacobian; expected {expectedRows} values and " +
+                $"a {expectedRows}x{point.Length} Jacobian.");
+        }
+    }
+
+    private static ConstrainedSolution<T> Report(
+        Vector<T> point,
+        T objectiveValue,
+        Vector<T>? equalityValues,
+        Vector<T>? inequalityValues,
         Vector<T>? equalityMultipliers,
         Vector<T>? inequalityMultipliers,
         LinearProgramStatus status,
         int iterations)
     {
-        var (value, _) = problem.Objective(point);
-
-        var equality = problem.EqualityConstraints is null
-            ? null
-            : problem.EqualityConstraints(point).Values;
-        var inequality = problem.InequalityConstraints is null
-            ? null
-            : problem.InequalityConstraints(point).Values;
-
         return new ConstrainedSolution<T>(
-            status, point, value, NumOps.FromDouble(Violation(equality, inequality)), iterations,
+            status, point, objectiveValue,
+            NumOps.FromDouble(Violation(equalityValues, inequalityValues)), iterations,
             equalityMultipliers, inequalityMultipliers);
     }
 

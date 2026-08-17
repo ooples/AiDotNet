@@ -338,12 +338,13 @@ public class StepwiseRegression<T> : RegressionBase<T>
 
         while (_selectedFeatures.Count < Math.Min(_options.MaxFeatures, x.Columns))
         {
-            var (bestFeature, bestScore) = EvaluateFeatures(x, y, remainingFeatures, true);
+            var (bestFeaturePosition, bestScore) = EvaluateFeatures(x, y, remainingFeatures, true);
 
-            if (bestFeature != -1)
+            if (bestFeaturePosition != -1)
             {
+                int bestFeature = remainingFeatures[bestFeaturePosition];
                 _selectedFeatures.Add(bestFeature);
-                remainingFeatures.Remove(bestFeature);
+                remainingFeatures.RemoveAt(bestFeaturePosition);
 
                 if (NumOps.LessThan(bestScore, NumOps.FromDouble(_options.MinImprovement)))
                 {

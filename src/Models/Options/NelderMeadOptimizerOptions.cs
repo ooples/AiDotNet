@@ -35,6 +35,7 @@ public class NelderMeadOptimizerOptions<T, TInput, TOutput> : OptimizationAlgori
 {
     private double _initialSimplexStep = 0.05;
     private double _zeroCoordinateSimplexStep = 0.00025;
+    private double _zeroCoordinateThreshold;
 
     /// <summary>
     /// Gets or sets the relative offset used to place the initial simplex vertices around a single
@@ -121,7 +122,14 @@ public class NelderMeadOptimizerOptions<T, TInput, TOutput> : OptimizationAlgori
     /// the fixed nudge is used instead.
     /// </para>
     /// </remarks>
-    public double ZeroCoordinateThreshold { get; set; } = 0.0;
+    public double ZeroCoordinateThreshold
+    {
+        get => _zeroCoordinateThreshold;
+        set => _zeroCoordinateThreshold = value >= 0 && !double.IsNaN(value) && !double.IsInfinity(value)
+            ? value
+            : throw new ArgumentOutOfRangeException(
+                nameof(value), value, "ZeroCoordinateThreshold must be finite and non-negative.");
+    }
 
     /// <summary>
     /// Gets or sets the initial reflection coefficient, which controls how far to reflect the simplex away from the worst point.

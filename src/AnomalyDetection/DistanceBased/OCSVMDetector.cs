@@ -36,7 +36,7 @@ namespace AiDotNet.AnomalyDetection.DistanceBased;
 /// - Contamination: 0.1 (10%)
 /// </para>
 /// <para>
-/// Reference: SchÃ¶lkopf, B., et al. (2001). "Estimating the Support of a High-Dimensional Distribution."
+/// Reference: Schölkopf, B., et al. (2001). "Estimating the Support of a High-Dimensional Distribution."
 /// </para>
 /// </remarks>
 [ModelDomain(ModelDomain.MachineLearning)]

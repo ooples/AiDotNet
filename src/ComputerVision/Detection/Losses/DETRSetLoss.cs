@@ -427,9 +427,32 @@ public class DETRSetLoss<T> : LossFunctionBase<T>
         // gradient was identically zero, so a model training against it would never move. Fall back
         // to the same mean-absolute-error that the vector CalculateLoss overload documents itself as
         // computing, built from engine ops so the tape can differentiate it.
-        if (predicted.Shape.Length != 3 || predicted.Shape[2] != _numClasses + 4)
+        bool hasDetrLayout =
+            predicted.Shape.Length == 3 &&
+            predicted.Shape[2] == _numClasses + 4 &&
+            target.Shape.Length == 3 &&
+            target.Shape[0] == predicted.Shape[0] &&
+            target.Shape[2] >= 5;
+
+        if (!hasDetrLayout)
         {
-            return ComputeMeanAbsoluteErrorTapeLoss(predicted, target);
+            bool sameElementwiseShape = predicted.Shape.Length == target.Shape.Length;
+            for (int axis = 0; axis < predicted.Shape.Length && sameElementwiseShape; axis++)
+            {
+                sameElementwiseShape = predicted.Shape[axis] == target.Shape[axis];
+            }
+
+            if (sameElementwiseShape)
+            {
+                return ComputeMeanAbsoluteErrorTapeLoss(predicted, target);
+            }
+
+            throw new ArgumentException(
+                $"DETR tape loss requires predicted shape [batch, queries, {_numClasses + 4}] and " +
+                "target shape [the same batch, objects, at least 5], or identical shapes for the " +
+                $"element-wise fallback. Received predicted [{string.Join(", ", predicted.Shape)}] " +
+                $"and target [{string.Join(", ", target.Shape)}].",
+                nameof(target));
         }
 
         int batch = predicted.Shape[0];

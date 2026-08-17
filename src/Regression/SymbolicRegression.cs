@@ -312,7 +312,6 @@ public class SymbolicRegression<T> : NonLinearRegressionBase<T>
         PreprocessingPipeline<T, Matrix<T>, Matrix<T>>? preprocessingPipeline = null)
         : base(options, regularization)
     {
-        _olsIntercept = NumOps.Zero;
         _options = options ?? new SymbolicRegressionOptions();
         var dummyModel = new VectorModel<T>(Vector<T>.Empty());
         _optimizer = new GeneticAlgorithmOptimizer<T, Matrix<T>, Vector<T>>(
@@ -370,44 +369,17 @@ public class SymbolicRegression<T> : NonLinearRegressionBase<T>
     /// </remarks>
     public override bool SupportsParameterInitialization => false;
 
-    private bool _useOLS;
-    private Vector<T>? _olsCoefficients;
-
-
-    private T _olsIntercept;
-
-
-
     protected override void ExtractModelParameters()
     {
-        if (_useOLS) return;
         base.ExtractModelParameters();
     }
 
-    public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
-    {
-        if (_useOLS && _olsCoefficients is not null)
-        {
-            var clone = new SymbolicRegression<T>(null, Regularization);
-            // Manually copy OLS state since base Serialize doesn't include it
-            clone._useOLS = true;
-            clone._olsCoefficients = new Vector<T>(_olsCoefficients);
-            clone._olsIntercept = _olsIntercept;
-            clone.SupportVectors = SupportVectors;
-            clone.Alphas = new Vector<T>(Alphas.Length);
-            clone.B = B;
-            return clone;
-        }
-        return base.Clone();
-    }
+    public override IFullModel<T, Matrix<T>, Vector<T>> Clone() => base.Clone();
 
     public override IFullModel<T, Matrix<T>, Vector<T>> DeepCopy() => Clone();
 
     public override IEnumerable<int> GetActiveFeatureIndices()
     {
-        if (_useOLS && _olsCoefficients is not null)
-            return Enumerable.Range(0, _olsCoefficients.Length);
-
         // Report the features the EVOLVED model actually uses. The base implementation derives
         // active features from Alphas and SupportVectors, which this model never populates — those
         // belong to the kernel models it shares a base class with — so it reported no active
@@ -436,12 +408,6 @@ public class SymbolicRegression<T> : NonLinearRegressionBase<T>
         // `_useOLS = true` was set unconditionally, making the entire symbolic-regression search
         // below unreachable. A caller asking for a discovered symbolic expression received a linear
         // least-squares fit, so no expression was ever evolved. The search now runs.
-        //
-        // `_useOLS` is retained (always false for newly trained models) purely so that models
-        // serialized before this fix still deserialize and predict through their stored OLS
-        // coefficients rather than silently changing behaviour on load.
-        _useOLS = false;
-
         // Preprocess the data using the pipeline if configured
         var preprocessedX = _preprocessingPipeline is not null
             ? _preprocessingPipeline.FitTransform(x)
@@ -539,20 +505,6 @@ public class SymbolicRegression<T> : NonLinearRegressionBase<T>
     /// </remarks>
     public override Vector<T> Predict(Matrix<T> X)
     {
-        // OLS path
-        if (_useOLS && _olsCoefficients is not null)
-        {
-            var predictions = new Vector<T>(X.Rows);
-            for (int i = 0; i < X.Rows; i++)
-            {
-                T pred = _olsIntercept;
-                for (int j = 0; j < Math.Min(X.Columns, _olsCoefficients.Length); j++)
-                    pred = NumOps.Add(pred, NumOps.Multiply(X[i, j], _olsCoefficients[j]));
-                predictions[i] = pred;
-            }
-            return predictions;
-        }
-
         Matrix<T> predictionInput = _preprocessingPipeline is null
             ? X
             : _preprocessingPipeline.Transform(X);
@@ -583,15 +535,6 @@ public class SymbolicRegression<T> : NonLinearRegressionBase<T>
     /// </remarks>
     protected override T PredictSingle(Vector<T> input)
     {
-        // OLS path
-        if (_useOLS && _olsCoefficients is not null)
-        {
-            T pred = _olsIntercept;
-            for (int j = 0; j < Math.Min(input.Length, _olsCoefficients.Length); j++)
-                pred = NumOps.Add(pred, NumOps.Multiply(input[j], _olsCoefficients[j]));
-            return pred;
-        }
-
         if (_bestModel == null)
         {
             throw new InvalidOperationException("The model has not been optimized yet. Please call OptimizeModel first.");

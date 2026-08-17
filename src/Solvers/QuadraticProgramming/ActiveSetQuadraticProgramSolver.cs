@@ -94,9 +94,14 @@ public sealed class ActiveSetQuadraticProgramSolver<T> : IQuadraticProgramSolver
 
         // The working set always contains every equality constraint; inequalities join and leave.
         var workingSet = new List<int>();
+        var inWorkingSet = new bool[inequalityCount];
         for (int i = 0; i < inequalityCount; i++)
         {
-            if (IsActive(inequalityRows, inequalityBounds, i, x, tolerance)) workingSet.Add(i);
+            if (IsActive(inequalityRows, inequalityBounds, i, x, tolerance))
+            {
+                workingSet.Add(i);
+                inWorkingSet[i] = true;
+            }
         }
 
         var inequalityMultipliers = new Vector<T>(inequalityCount);
@@ -155,19 +160,21 @@ public sealed class ActiveSetQuadraticProgramSolver<T> : IQuadraticProgramSolver
 
                 // Dropping the constraint with the most negative multiplier gives the steepest
                 // first-order improvement among the available releases.
+                inWorkingSet[workingSet[mostNegative]] = false;
                 workingSet.RemoveAt(mostNegative);
                 continue;
             }
 
             // Take the largest step along the direction that keeps every constraint satisfied.
             var (stepLength, blockingConstraint) = ComputeStepLength(
-                inequalityRows, inequalityBounds, workingSet, x, step, tolerance);
+                inequalityRows, inequalityBounds, inWorkingSet, x, step, tolerance);
 
             x = (Vector<T>)Engine.Add(x, (Vector<T>)Engine.Multiply(step, stepLength));
 
             if (blockingConstraint >= 0)
             {
                 workingSet.Add(blockingConstraint);
+                inWorkingSet[blockingConstraint] = true;
             }
         }
 
@@ -379,7 +386,7 @@ public sealed class ActiveSetQuadraticProgramSolver<T> : IQuadraticProgramSolver
     private static (T Length, int BlockingConstraint) ComputeStepLength(
         List<Vector<T>> inequalityRows,
         Vector<T> inequalityBounds,
-        List<int> workingSet,
+        bool[] inWorkingSet,
         Vector<T> x,
         Vector<T> step,
         T tolerance)
@@ -389,7 +396,7 @@ public sealed class ActiveSetQuadraticProgramSolver<T> : IQuadraticProgramSolver
 
         for (int i = 0; i < inequalityRows.Count; i++)
         {
-            if (workingSet.Contains(i)) continue;
+            if (inWorkingSet[i]) continue;
 
             // Only constraints the step moves TOWARD can block it.
             T directionalRate = inequalityRows[i].DotProduct(step);

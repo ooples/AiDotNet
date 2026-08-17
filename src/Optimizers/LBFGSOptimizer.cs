@@ -916,15 +916,20 @@ public class LBFGSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
             writer.Write(optionsJson);
 
             writer.Write(_iteration);
+            writer.Write(NumOps.ToDouble(_lbfgsInverseHessianScale));
             writer.Write(_s.Count);
             foreach (var vector in _s)
             {
-                writer.Write(vector.Serialize());
+                byte[] vectorData = vector.Serialize();
+                writer.Write(vectorData.Length);
+                writer.Write(vectorData);
             }
             writer.Write(_y.Count);
             foreach (var vector in _y)
             {
-                writer.Write(vector.Serialize());
+                byte[] vectorData = vector.Serialize();
+                writer.Write(vectorData.Length);
+                writer.Write(vectorData);
             }
 
             return ms.ToArray();
@@ -960,6 +965,7 @@ public class LBFGSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
                 ?? throw new InvalidOperationException("Failed to deserialize optimizer options.");
 
             _iteration = reader.ReadInt32();
+            _lbfgsInverseHessianScale = NumOps.FromDouble(reader.ReadDouble());
 
             int sCount = reader.ReadInt32();
             _s = new List<Vector<T>>(sCount);

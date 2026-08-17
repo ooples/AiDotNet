@@ -223,8 +223,6 @@ public partial class GeneralizedLinearMixedModel<T> : RegressionBase<T>
     /// </remarks>
     public override bool SupportsParameterInitialization => false;
 
-    private bool _useOLS;
-
     public override void Train(Matrix<T> x, Vector<T> y)
     {
         if (_randomEffects.Count == 0)
@@ -236,11 +234,6 @@ public partial class GeneralizedLinearMixedModel<T> : RegressionBase<T>
         // `_useOLS = true` was set unconditionally, making the generalized mixed-effects estimation below
         // unreachable. A caller asking for a generalized linear mixed model received a plain linear fit, so neither the link function nor the random effects had any effect.
         // The real estimation now runs.
-        //
-        // `_useOLS` is retained (always false for newly trained models) purely so that models
-        // serialized before this fix still deserialize and predict through their stored
-        // coefficients rather than silently changing behaviour on load.
-        _useOLS = false;
         TrainingFeatureCount = x.Columns;
 
         _nObservations = x.Rows;
@@ -292,12 +285,6 @@ public partial class GeneralizedLinearMixedModel<T> : RegressionBase<T>
     /// <returns>Predicted values on response scale.</returns>
     public override Vector<T> Predict(Matrix<T> input)
     {
-        // OLS path
-        if (_useOLS)
-        {
-            return base.Predict(input);
-        }
-
         if (_fixedEffects == null)
         {
             throw new InvalidOperationException("Model must be trained before making predictions.");
@@ -1021,21 +1008,7 @@ public partial class GeneralizedLinearMixedModel<T> : RegressionBase<T>
         return newModel;
     }
 
-    public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
-    {
-        if (_useOLS)
-        {
-            var clone = new GeneralizedLinearMixedModel<T>(_options, Regularization);
-            clone._useOLS = true;
-            clone.Coefficients = new Vector<T>(Coefficients);
-            clone.Intercept = Intercept;
-            clone.TrainingFeatureCount = TrainingFeatureCount;
-            foreach (var re in _randomEffects)
-                clone.AddRandomIntercept(re.Name, re.GroupColumnIndex);
-            return clone;
-        }
-        return base.Clone();
-    }
+    public override IFullModel<T, Matrix<T>, Vector<T>> Clone() => base.Clone();
 
     public override IFullModel<T, Matrix<T>, Vector<T>> DeepCopy() => Clone();
 }

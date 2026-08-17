@@ -1,4 +1,5 @@
 using AiDotNet.DecompositionMethods.MatrixDecomposition;
+using AiDotNet.Exceptions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
@@ -91,7 +92,8 @@ public sealed class InteriorPointSolver<T> : ILinearProgramSolver<T>, IQuadratic
     /// </exception>
     public InteriorPointSolver(InteriorPointSolverOptions options)
     {
-        _options = options ?? throw new ArgumentNullException(nameof(options));
+        if (options is null) throw new ArgumentNullException(nameof(options));
+        _options = new InteriorPointSolverOptions(options);
 
         if (options.MaxIterations <= 0)
         {
@@ -114,6 +116,14 @@ public sealed class InteriorPointSolver<T> : ILinearProgramSolver<T>, IQuadratic
         if (options.Regularization < 0.0)
         {
             throw new ArgumentException("Regularization cannot be negative.", nameof(options));
+        }
+
+        if (options.CertificateTolerance <= 0.0 ||
+            double.IsNaN(options.CertificateTolerance) ||
+            double.IsInfinity(options.CertificateTolerance))
+        {
+            throw new ArgumentException(
+                "CertificateTolerance must be a positive finite number.", nameof(options));
         }
     }
 
@@ -157,7 +167,8 @@ public sealed class InteriorPointSolver<T> : ILinearProgramSolver<T>, IQuadratic
             program.EqualityMatrix, program.EqualityBounds,
             program.LowerBounds, program.UpperBounds);
 
-        var standard = LinearProgramStandardForm<T>.Build(linearHalf);
+        var standard = LinearProgramStandardForm<T>.Build(
+            linearHalf, treatMissingLowerBoundsAsUnbounded: true);
         var problem = BuildProblem(standard, program.Quadratic);
         var outcome = Iterate(problem);
 
@@ -673,7 +684,7 @@ public sealed class InteriorPointSolver<T> : ILinearProgramSolver<T>, IQuadratic
                 {
                     kernel = new LuDecomposition<T>(k);
                 }
-                catch (Exception)
+                catch (MatrixFactorizationException)
                 {
                     return null;
                 }
@@ -718,7 +729,7 @@ public sealed class InteriorPointSolver<T> : ILinearProgramSolver<T>, IQuadratic
                 return new NewtonSystem(
                     diagonalInverse, kernel, new LuDecomposition<T>(normalMatrix));
             }
-            catch (Exception)
+            catch (MatrixFactorizationException)
             {
                 return null;
             }
@@ -846,7 +857,7 @@ public sealed class InteriorPointSolver<T> : ILinearProgramSolver<T>, IQuadratic
             // What the equality constraints cannot reach even ignoring non-negativity.
             rangeResidual = Subtract(problem.B, Multiply(problem.A, leastSquaresPrimal));
         }
-        catch (Exception)
+        catch (MatrixFactorizationException)
         {
             // A Gram matrix too ill-conditioned to factor still leaves a usable neutral start; the
             // iteration recovers from a poor start, just more slowly.

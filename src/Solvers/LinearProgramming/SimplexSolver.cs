@@ -258,6 +258,14 @@ public sealed class SimplexSolver<T> : ILinearProgramSolver<T>
                     return NoPoint(LinearProgramStatus.IterationLimit);
                 }
 
+                if (phaseOneStatus == LinearProgramStatus.Unbounded)
+                {
+                    throw new InvalidOperationException(
+                        "Phase one reported an unbounded objective, which is impossible for the " +
+                        "sum of non-negative artificial variables. The tableau is numerically " +
+                        "invalid; rescale the problem data.");
+                }
+
                 // A positive phase-one optimum means no assignment of the real variables can drive
                 // every artificial to zero — the constraints contradict each other.
                 if (NumOps.GreaterThan(phaseOneOptimum, _tolerance))
