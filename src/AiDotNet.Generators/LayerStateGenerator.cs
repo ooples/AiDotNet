@@ -94,8 +94,18 @@ public class LayerStateGenerator : IIncrementalGenerator
     {
         var candidates = context.SyntaxProvider
             .CreateSyntaxProvider(
+                // Any constructor that takes arguments. It used to require a parameter carrying an
+                // ATTRIBUTE, which is the first of the two gates that made this generator only
+                // able to see layers which had already opted in -- a rule that by construction
+                // cannot report the layers that did not. Inference in Analyze is unreachable
+                // without widening this, because a layer with no attributes never arrives here.
+                //
+                // Analyze does the real filtering, and it needs the semantic model to do it: it
+                // rejects a host type that is not a LayerBase-derived class, and declines any
+                // constructor with nothing restorable. A parameterless constructor is excluded
+                // here because it carries no construction state by definition.
                 static (node, _) => node is ConstructorDeclarationSyntax c
-                    && c.ParameterList.Parameters.Any(p => p.AttributeLists.Count > 0),
+                    && c.ParameterList.Parameters.Count > 0,
                 static (ctx, _) => Analyze(ctx))
             .Where(static m => m is not null)
             .Select(static (m, _) => m!);
@@ -109,9 +119,63 @@ public class LayerStateGenerator : IIncrementalGenerator
         if (ctx.SemanticModel.GetDeclaredSymbol(syntax) is not IMethodSymbol ctor) return null;
 
         var marked = ctor.Parameters.Where(HasStateAttribute).ToList();
+        if (marked.Count == 0)
+        {
+            // INFERENCE. A constructor argument the layer stores in a field of the same name IS
+            // construction state, whether or not anyone wrote the attribute. Gating on the
+            // attribute alone meant a layer that stored every argument correctly was discarded
+            // with no factory, no clone and no error -- a green build that had silently opted the
+            // layer out. Requiring an opt-in is precisely what cannot report the layers that did
+            // not opt in.
+            //
+            // Restricted to parameters that are BOTH restorable and backed by a non-nullable
+            // member, which is not an optimisation: those three conditions are exactly the three
+            // that raise ADN0053 / NoBackingMember below, so an inferred parameter cannot reach a
+            // diagnostic. Reporting stays the exclusive province of an explicit [LayerState]
+            // claim, which is the same narrowing ADN0056 already needed.
+            marked = ctor.Parameters.Where(p =>
+                Classify(p.Type) != ValueKind.Unsupported
+                && FindBackingMember(ctor.ContainingType, p, out _, out bool memberIsNullable) is not null
+                && !memberIsNullable).ToList();
+
+            // A factory can only call this constructor if EVERY required argument can be supplied.
+            // Layers whose constructor takes another layer (DenseLoRAAdapter's baseLayer,
+            // QuantizedDenseLayer's source) cannot be rebuilt from string metadata yet, so infer
+            // nothing for them and leave the existing path in place. Emitting a partial factory
+            // would trade a clear "no factory" for a call that cannot compile, and REPORTING it
+            // would be a diagnostic against a layer whose author claimed nothing.
+            if (marked.Count > 0
+                && ctor.Parameters.Any(p => !p.IsOptional && !marked.Contains(p, SymbolEqualityComparer.Default)))
+            {
+                return null;
+            }
+        }
+
+        // A constructor with nothing restorable is still declined: emitting a factory that cannot
+        // rebuild the layer would replace a clear "no factory" with a silent wrong reconstruction.
         if (marked.Count == 0) return null;
 
+        var inferredState = new HashSet<string>(marked.Select(p => p.Name), System.StringComparer.Ordinal);
+
         var type = ctor.ContainingType;
+
+        // An abstract layer has a constructor but cannot be instantiated, so a factory naming it
+        // emits `new AbstractLayer<T>(...)` and fails with CS0144 inside generated source. Declined
+        // silently and before the diagnostic below: an abstract base is not a mistake the author
+        // made, it is a type that is only ever built through a derived class -- and that derived
+        // class gets its own factory.
+        if (type.IsAbstract) return null;
+
+        // A type the generated table cannot NAME. GeneratedLayerFactories is a separate static
+        // class, so a private nested layer (STCConnectorLayer's RegStageBlock) is unreachable from
+        // it however correct its state declarations are. Declined rather than reported: the author
+        // of a private helper layer has done nothing wrong, and ADN0055 firing on it is a
+        // diagnostic about the table's reach rather than about their code.
+        for (var scope = type; scope is not null; scope = scope.ContainingType)
+        {
+            if (scope.DeclaredAccessibility is Accessibility.Private or Accessibility.ProtectedAndInternal)
+                return null;
+        }
 
         // THE HOST TYPE MUST BE ABLE TO CARRY THE GENERATED MEMBER. Analyze accepted any
         // constructor whose parameters carried [LayerState] and then emitted
@@ -122,6 +186,14 @@ public class LayerStateGenerator : IIncrementalGenerator
         // instead.
         if (type.TypeKind != TypeKind.Class || type.IsRecord || !DerivesFromLayerBase(type))
         {
+            // Report ONLY an explicit claim. Now that every parameterized constructor is analysed
+            // rather than only attributed ones, an unguarded report here tells every ordinary
+            // class in the compilation to stop marking parameters it never marked -- measured at
+            // 4,716 errors on the first build after widening the predicate. Declining silently is
+            // the correct answer for a type that made no claim; the diagnostic exists for an
+            // author who wrote [LayerState] somewhere it cannot work.
+            if (!ctor.Parameters.Any(HasStateAttribute)) return null;
+
             return new LayerModel
             {
                 TypeName = type.Name,
@@ -187,7 +259,11 @@ public class LayerStateGenerator : IIncrementalGenerator
         {
             var info = new ParamModel { Name = p.Name, TypeFqn = p.Type.ToDisplayString(FullyQualified) };
 
-            if (HasStateAttribute(p))
+            // Membership rather than the attribute: `marked` is the attributed set when there is
+            // one and the inferred set otherwise, so this one condition serves both. Testing
+            // HasStateAttribute here instead would collect inferred parameters above and then emit
+            // none of them -- the change would appear applied and do nothing.
+            if (inferredState.Contains(p.Name))
             {
                 info.IsState = true;
                 info.Key = StateKey(p) ?? p.Name;
@@ -631,6 +707,16 @@ public class LayerStateGenerator : IIncrementalGenerator
             ValueKind.String => $"state.String(\"{p.Key}\")",
             ValueKind.Int32Array => $"state.Int32Array(\"{p.Key}\")",
             ValueKind.Enum => $"state.Enum<{p.TypeFqn.TrimEnd('?')}>(\"{p.Key}\")",
+            // Component returns null when the key is absent, which is correct for an optional
+            // slot and a nullable-warning error (CS8604) when the constructor parameter is not
+            // nullable. The factory already guards the whole call with state.HasAll(...), so a
+            // null here means the payload disagreed with the layer AFTER that check passed --
+            // worth an exception naming the key rather than a NullReferenceException from inside
+            // the constructor. Not suppressed with `!`: that would hand the constructor a null and
+            // fail somewhere less informative.
+            ValueKind.Component when !p.TypeFqn.EndsWith("?", System.StringComparison.Ordinal) =>
+                $"state.Component<{p.TypeFqn}>(\"{p.Key}\") ?? throw new global::System.InvalidOperationException("
+                    + $"\"Saved state for '{p.Key}' is missing or names a type that could not be loaded.\")",
             ValueKind.Component => $"state.Component<{p.TypeFqn.TrimEnd('?')}>(\"{p.Key}\")",
             _ => "default!",
         };
