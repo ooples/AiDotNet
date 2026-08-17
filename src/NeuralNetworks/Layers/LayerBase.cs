@@ -1723,6 +1723,8 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         // stay correct with NO override of its own: the base already knows the children, so
         // asking each of them the same question is the whole implementation. EnsureInitialized
         // is idempotent, so re-entry through a diamond costs a branch.
+        BringUpUndeclaredSubLayersByChain();
+
         var subs = GetSubLayers();
         if (subs is not null)
         {
@@ -1733,6 +1735,97 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         }
 
         TryApplyPendingParameterRestore();
+    }
+
+    /// <summary>
+    /// Sizes an un-annotated composite's children by walking them in order, taking each one's input
+    /// from the previous one's OUTPUT.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <see cref="DeclaredSubLayerShapes"/> stays authoritative and this runs only when it is empty:
+    /// a composite that states which child receives which width has answered better than any
+    /// traversal can. But the generator emits that declaration only from <c>[SubLayerInput]</c>,
+    /// which exactly two layers in the library carry, so every other composite offered nothing and
+    /// its children stayed placeholders — a fresh <c>TransformerEncoderBlock</c> held its attention
+    /// and both norms but neither feed-forward projection, counting 16,704 against a saved 33,280.
+    /// </para>
+    /// <para>
+    /// Reading OUTPUTS is what makes this exact rather than heuristic. A block's widths are not
+    /// uniform — its feed-forward expands to the FFN width and contracts back — but each child's
+    /// input is, by construction, whatever the child before it produced, so the walk derives the
+    /// expansion without knowing such a thing exists.
+    /// </para>
+    /// <para>
+    /// A child that refuses the shape is SKIPPED, not treated as the end of the walk. Attention
+    /// declines a bare width and is also the first child of every transformer block, so aborting
+    /// there stopped the traversal before it reached the projections that needed it — the walk went
+    /// nowhere while looking like it ran. Its output width is still known, so the chain continues.
+    /// </para>
+    /// <para>
+    /// Sequential composites are what this describes. A branching one resolves a child to the wrong
+    /// width, produces the wrong total, and is reported by the caller's count check exactly as
+    /// today: the failure stays loud, which matters more than breadth here.
+    /// </para>
+    /// </remarks>
+    private void BringUpUndeclaredSubLayersByChain()
+    {
+        var declared = DeclaredSubLayerShapes();
+        if (declared is not null && declared.Count > 0) return;
+
+        var subs = GetSubLayers();
+        if (subs is null || subs.Count == 0) return;
+
+        int[] width;
+        try
+        {
+            width = GetInputShape();
+        }
+        catch (Exception)
+        {
+            // A composite that cannot describe its own input cannot seed the walk.
+            return;
+        }
+
+        if (width is null || width.Length == 0) return;
+
+        for (int i = 0; i < subs.Count; i++)
+        {
+            if (subs[i] is not LayerBase<T> child) continue;
+
+            if (!child.IsShapeResolved && System.Array.TrueForAll(width, d => d > 0))
+            {
+                var batched = new int[width.Length + 1];
+                batched[0] = 1;
+                System.Array.Copy(width, 0, batched, 1, width.Length);
+
+                foreach (var candidate in new[] { width, batched })
+                {
+                    try
+                    {
+                        child.ResolveFromShape(candidate);
+                        break;
+                    }
+                    catch (Exception)
+                    {
+                        // Wrong convention, or a child that does not take a bare width at all.
+                    }
+                }
+            }
+
+            try
+            {
+                var produced = child.GetOutputShape();
+                if (produced is { Length: > 0 } && System.Array.TrueForAll(produced, d => d > 0))
+                    width = produced;
+            }
+            catch (Exception)
+            {
+                // Without this child's output the next input is unknown, so stop rather than
+                // resolve the remaining children against a stale width.
+                return;
+            }
+        }
     }
 
     /// <summary>

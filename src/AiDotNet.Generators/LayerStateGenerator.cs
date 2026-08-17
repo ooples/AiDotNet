@@ -143,7 +143,17 @@ public class LayerStateGenerator : IIncrementalGenerator
                 // it: "no public parameterless constructor". An author who writes [LayerState] on
                 // a Component is asserting their implementation can be rebuilt; inference cannot
                 // assert that on their behalf.
-                and not ValueKind.Component
+                // ...EXCEPT an activation, because the two kinds of component are not alike. An
+                // initialization strategy only decides how weights are first filled, and a restore
+                // overwrites them, so letting it default costs nothing. An ACTIVATION is part of the
+                // forward computation: defaulting it changes what the layer computes. Skipping both
+                // made a TransformerEncoderBlock save GELU and rebuild as ReLU, so every output of
+                // the cloned model differed while its parameters compared byte-identical -- exactly
+                // the silent substitution LayerStateBag.Component refuses to make. The declared
+                // interface is enough to tell the two apart at compile time, and if an activation
+                // turns out not to be rebuildable, that check fails loudly, which is the trade it
+                // asks for.
+                && (Classify(p.Type) is not ValueKind.Component || IsActivation(p.Type, out _))
                 && FindBackingMember(ctor.ContainingType, p, out _, out bool memberIsNullable) is not null
                 && !memberIsNullable).ToList();
 
