@@ -688,6 +688,142 @@ public sealed class ModelStateRegistry<T>
             + "or have the model build its list before Deserialize runs.");
     }
 
+    /// <summary>Declares the options object a model predicts with.</summary>
+    /// <param name="name">A stable name, unique within the model.</param>
+    /// <param name="get">Reads the options instance.</param>
+    /// <remarks>
+    /// <para>
+    /// Restored IN PLACE, like a child model, so a readonly <c>_options</c> field works: what travels
+    /// is the settings, not the identity of the object holding them.
+    /// </para>
+    /// <para>
+    /// Needed because configuration is not merely descriptive -- it decides what the model predicts.
+    /// KNearestNeighborsRegression answers with <c>_options.K</c> neighbours, so a payload that
+    /// carried its training data but not its K restored a model that ran, and answered differently.
+    /// Cloning already carries configuration through the clone plan; this is the serialize half of
+    /// the same contract.
+    /// </para>
+    /// <para>
+    /// SCALARS ONLY, DELIBERATELY. Settings that are objects -- a regularization strategy, a kernel,
+    /// a delegate -- are reproduced by the constructor that built them, and writing them here would
+    /// mean a second, weaker copy of what the clone plan already does properly. Restricting the scope
+    /// is not the same as dropping state silently: the boundary is a property's type, it is the same
+    /// on both sides of the round-trip, and it is stated here rather than discovered from a wrong
+    /// prediction.
+    /// </para>
+    /// </remarks>
+    public void DeclareOptions(string name, Func<ModelOptions?> get)
+        => Add(name,
+            w =>
+            {
+                var options = get();
+                if (options is null) { w.Write(-1); return; }
+
+                var properties = ScalarOptionProperties(options.GetType());
+                w.Write(properties.Count);
+                foreach (var property in properties)
+                {
+                    WriteScalarOption(w, property.GetValue(options));
+                }
+            },
+            r =>
+            {
+                int count = r.ReadInt32();
+                if (count < 0) return;
+
+                var options = get();
+                // The reader must consume its bytes whether or not there is anywhere to put them,
+                // or every later declaration reads from the wrong offset.
+                var properties = options is null
+                    ? new List<System.Reflection.PropertyInfo>()
+                    : ScalarOptionProperties(options.GetType());
+
+                for (int i = 0; i < count; i++)
+                {
+                    var target = i < properties.Count ? properties[i] : null;
+                    var value = ReadScalarOption(r, target?.PropertyType);
+                    if (options is null || target is null) continue;
+                    target.SetValue(options, value);
+                }
+            });
+
+    /// <summary>The settable scalar settings of an options type, in a stable order.</summary>
+    /// <param name="type">The options type.</param>
+    /// <returns>The properties carried by <see cref="DeclareOptions"/>.</returns>
+    /// <remarks>
+    /// Ordered by name so the reader walks what the writer wrote. Reflection order is not specified
+    /// and can differ between runtimes, which would silently pair one setting's bytes with another's.
+    /// </remarks>
+    private static List<System.Reflection.PropertyInfo> ScalarOptionProperties(Type type)
+        => type.GetProperties(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance)
+            .Where(p => p.CanRead && p.CanWrite && p.GetIndexParameters().Length == 0)
+            .Where(p => IsCarriedScalar(p.PropertyType))
+            .OrderBy(p => p.Name, StringComparer.Ordinal)
+            .ToList();
+
+    private static bool IsCarriedScalar(Type type)
+    {
+        var bare = Nullable.GetUnderlyingType(type) ?? type;
+        return bare.IsEnum
+            || bare == typeof(int) || bare == typeof(long) || bare == typeof(double)
+            || bare == typeof(float) || bare == typeof(bool) || bare == typeof(string);
+    }
+
+    // Each value is TAGGED with its own type. The reader must be able to consume a value it has
+    // nowhere to put -- an options object that is null, or a setting that no longer exists -- and
+    // without a tag it would have to guess a width and desynchronise every later declaration.
+    private const byte OptionNull = 0;
+    private const byte OptionBool = 1;
+    private const byte OptionInt = 2;
+    private const byte OptionLong = 3;
+    private const byte OptionDouble = 4;
+    private const byte OptionFloat = 5;
+    private const byte OptionString = 6;
+    private const byte OptionEnum = 7;
+
+    private static void WriteScalarOption(BinaryWriter w, object? value)
+    {
+        switch (value)
+        {
+            case null: w.Write(OptionNull); break;
+            case bool v: w.Write(OptionBool); w.Write(v); break;
+            case int v: w.Write(OptionInt); w.Write(v); break;
+            case long v: w.Write(OptionLong); w.Write(v); break;
+            case double v: w.Write(OptionDouble); w.Write(v); break;
+            case float v: w.Write(OptionFloat); w.Write(v); break;
+            case string v: w.Write(OptionString); w.Write(v); break;
+            // An enum travels as its underlying integer, so renaming a member does not move values.
+            default:
+                w.Write(OptionEnum);
+                w.Write(Convert.ToInt64(value, System.Globalization.CultureInfo.InvariantCulture));
+                break;
+        }
+    }
+
+    private static object? ReadScalarOption(BinaryReader r, Type? target)
+    {
+        byte tag = r.ReadByte();
+        object? value = tag switch
+        {
+            OptionNull => null,
+            OptionBool => r.ReadBoolean(),
+            OptionInt => r.ReadInt32(),
+            OptionLong => r.ReadInt64(),
+            OptionDouble => r.ReadDouble(),
+            OptionFloat => r.ReadSingle(),
+            OptionString => r.ReadString(),
+            OptionEnum => r.ReadInt64(),
+            _ => throw new InvalidOperationException(
+                $"An options payload carries an unknown value tag {tag}."),
+        };
+
+        if (value is null || target is null) return null;
+
+        var bare = Nullable.GetUnderlyingType(target) ?? target;
+        return bare.IsEnum ? Enum.ToObject(bare, value) : Convert.ChangeType(
+            value, bare, System.Globalization.CultureInfo.InvariantCulture);
+    }
+
     /// <summary>Declares an integer vector, such as a set of selected feature indices.</summary>
     /// <param name="name">A stable name, unique within the model.</param>
     /// <param name="get">Reads the current value.</param>
