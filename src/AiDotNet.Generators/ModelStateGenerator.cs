@@ -64,14 +64,17 @@ public class ModelStateGenerator : IIncrementalGenerator
                 predicate: static (node, _) => node is ClassDeclarationSyntax { BaseList: not null },
                 transform: static (ctx, _) =>
                     ctx.SemanticModel.GetDeclaredSymbol((ClassDeclarationSyntax)ctx.Node) as INamedTypeSymbol)
-            .Where(static symbol => symbol is not null)
-            .Select(static (symbol, _) => symbol!);
+            .Where(static symbol => symbol is not null);
 
         context.RegisterSourceOutput(candidates, static (spc, symbol) => Emit(spc, symbol));
     }
 
-    private static void Emit(SourceProductionContext spc, INamedTypeSymbol type)
+    private static void Emit(SourceProductionContext spc, INamedTypeSymbol? type)
     {
+        // A semantic model can legitimately return no declared symbol while the user's
+        // compilation is incomplete. Treat that as no candidate; never assert it away with !.
+        if (type is null) return;
+
         // ABSTRACT BASES ARE INCLUDED. Skipping them meant state declared on a shared base was never
         // generated for anyone: every decision-tree model keeps its structure in
         // DecisionTreeRegressionBase.Root, and no concrete model declares it, so nothing persisted it
