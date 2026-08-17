@@ -134,7 +134,16 @@ public class LayerStateGenerator : IIncrementalGenerator
             // diagnostic. Reporting stays the exclusive province of an explicit [LayerState]
             // claim, which is the same narrowing ADN0056 already needed.
             marked = ctor.Parameters.Where(p =>
-                Classify(p.Type) != ValueKind.Unsupported
+                Classify(p.Type) is not ValueKind.Unsupported
+                // Component is EXCLUDED from inference, though it stays valid as an explicit
+                // claim. A Component is rebuilt by parameterless Activator.CreateInstance, and
+                // whether the concrete implementation has such a constructor is unknowable here --
+                // only the saved payload names the type. Inferring them made Conv1DLayer save
+                // HeInitializationStrategy for `initializationStrategy` and then fail to rebuild
+                // it: "no public parameterless constructor". An author who writes [LayerState] on
+                // a Component is asserting their implementation can be rebuilt; inference cannot
+                // assert that on their behalf.
+                and not ValueKind.Component
                 && FindBackingMember(ctor.ContainingType, p, out _, out bool memberIsNullable) is not null
                 && !memberIsNullable).ToList();
 
