@@ -155,6 +155,26 @@ internal static class ControlMath<T>
     }
 
     /// <summary>
+    /// Adds two vectors.
+    /// </summary>
+    public static Vector<T> Add(Vector<T> left, Vector<T> right)
+    {
+        var result = new Vector<T>(left.Length);
+        for (int i = 0; i < left.Length; i++) result[i] = NumOps.Add(left[i], right[i]);
+        return result;
+    }
+
+    /// <summary>
+    /// Subtracts one vector from another.
+    /// </summary>
+    public static Vector<T> Subtract(Vector<T> left, Vector<T> right)
+    {
+        var result = new Vector<T>(left.Length);
+        for (int i = 0; i < left.Length; i++) result[i] = NumOps.Subtract(left[i], right[i]);
+        return result;
+    }
+
+    /// <summary>
     /// Multiplies two matrices.
     /// </summary>
     public static Matrix<T> Multiply(Matrix<T> left, Matrix<T> right)

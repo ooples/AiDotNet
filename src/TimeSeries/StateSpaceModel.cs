@@ -179,30 +179,26 @@ public partial class StateSpaceModel<T> : TimeSeriesModelBase<T>
         var filteredCovariances = new List<Matrix<T>>();
         var predictedCovariances = new List<Matrix<T>>();
 
-        var currentState = _initialState;
-        var currentCovariance = Matrix<T>.CreateIdentity(_stateSize);
+        // The recursion itself lives in AiDotNet.Control.KalmanFilter<T> so that this batch pass and
+        // any online control loop run identical arithmetic. That shared version also uses Joseph's
+        // covariance form, which stays symmetric positive-semidefinite under rounding where the
+        // shorter P - KCP form can drift indefinite and diverge the filter.
+        var recursion = new AiDotNet.Control.KalmanFilter<T>(
+            _transitionMatrix, _observationMatrix, _processNoise, _observationNoise);
+
+        recursion.Initialize(_initialState, Matrix<T>.CreateIdentity(_stateSize));
 
         for (int t = 0; t < observations.Rows; t++)
         {
-            // Predict
-            var predictedState = _transitionMatrix.Multiply(currentState);
-            var predictedCovariance = _transitionMatrix.Multiply(currentCovariance).Multiply(_transitionMatrix.Transpose()).Add(_processNoise);
+            recursion.Predict();
 
-            predictedStates.Add(predictedState);
-            predictedCovariances.Add(predictedCovariance);
+            predictedStates.Add(recursion.State);
+            predictedCovariances.Add(recursion.Covariance);
 
-            // Update
-            var observationVector = observations.GetRow(t);
-            var predictedObservation = _observationMatrix.Multiply(predictedState);
-            var innovation = observationVector.Subtract(predictedObservation);
-            var innovationCovariance = _observationMatrix.Multiply(predictedCovariance).Multiply(_observationMatrix.Transpose()).Add(_observationNoise);
-            var kalmanGain = predictedCovariance.Multiply(_observationMatrix.Transpose()).Multiply(innovationCovariance.Inverse());
+            recursion.Update(observations.GetRow(t));
 
-            currentState = predictedState.Add(kalmanGain.Multiply(innovation));
-            currentCovariance = predictedCovariance.Subtract(kalmanGain.Multiply(_observationMatrix).Multiply(predictedCovariance));
-
-            filteredStates.Add(currentState);
-            filteredCovariances.Add(currentCovariance);
+            filteredStates.Add(recursion.State);
+            filteredCovariances.Add(recursion.Covariance);
         }
 
         return (filteredStates, predictedStates, filteredCovariances, predictedCovariances);
