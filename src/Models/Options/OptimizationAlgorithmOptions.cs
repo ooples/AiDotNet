@@ -60,11 +60,11 @@ public class OptimizationAlgorithmOptions<T, TInput, TOutput> : ModelOptions
         SignFlipProbability = other.SignFlipProbability;
         FeatureSelectionProbability = other.FeatureSelectionProbability;
         ParameterAdjustmentProbability = other.ParameterAdjustmentProbability;
-        PredictionOptions = other.PredictionOptions;
-        ModelStatsOptions = other.ModelStatsOptions;
+        PredictionOptions = new PredictionStatsOptions(other.PredictionOptions);
+        ModelStatsOptions = new ModelStatsOptions(other.ModelStatsOptions);
         FitDetector = other.FitDetector;
         FitnessCalculator = other.FitnessCalculator;
-        ModelCache = other.ModelCache;
+        ModelCache = other.ModelCache.CreateEmptyCopy();
     }
 
     /// <summary>

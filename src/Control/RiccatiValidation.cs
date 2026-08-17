@@ -78,6 +78,8 @@ internal static class RiccatiValidation<T>
 
         RequireSymmetric(stateCost, "The state cost Q", nameof(stateCost));
         RequireSymmetric(inputCost, "The input cost R", nameof(inputCost));
+        RequirePositiveSemidefinite(stateCost, "The state cost Q", nameof(stateCost));
+        RequirePositiveDefinite(inputCost, "The input cost R", nameof(inputCost));
     }
 
     private static void RequireSymmetric(
@@ -105,5 +107,131 @@ internal static class RiccatiValidation<T>
                 }
             }
         }
+    }
+
+    private static void RequirePositiveSemidefinite(
+        Matrix<T> matrix, string description, string parameterName)
+    {
+        (double smallestEigenvalue, double tolerance) =
+            GetSmallestSymmetricEigenvalue(matrix, parameterName);
+        if (smallestEigenvalue < -tolerance)
+        {
+            throw new ArgumentException(
+                $"{description} must be positive-semidefinite; its smallest eigenvalue is " +
+                $"{smallestEigenvalue:G17}.", parameterName);
+        }
+    }
+
+    private static void RequirePositiveDefinite(
+        Matrix<T> matrix, string description, string parameterName)
+    {
+        (double smallestEigenvalue, double tolerance) =
+            GetSmallestSymmetricEigenvalue(matrix, parameterName);
+        if (smallestEigenvalue <= tolerance)
+        {
+            throw new ArgumentException(
+                $"{description} must be positive-definite; its smallest eigenvalue is " +
+                $"{smallestEigenvalue:G17}.", parameterName);
+        }
+    }
+
+    /// <summary>
+    /// Finds the smallest eigenvalue of a real symmetric matrix with the Jacobi algorithm.
+    /// </summary>
+    /// <remarks>
+    /// Cost matrices are normally tiny, so a dependency-free O(n^3) symmetric eigensolve is both
+    /// cheaper and more reliable here than using inversion as a proxy for definiteness. Averaging
+    /// mirrored entries also keeps the result symmetric after the tolerance-aware symmetry check.
+    /// </remarks>
+    private static (double SmallestEigenvalue, double Tolerance) GetSmallestSymmetricEigenvalue(
+        Matrix<T> matrix, string parameterName)
+    {
+        int size = matrix.Rows;
+        var values = new double[size, size];
+        double scale = 0.0;
+
+        for (int row = 0; row < size; row++)
+        {
+            for (int column = row; column < size; column++)
+            {
+                double left = NumOps.ToDouble(matrix[row, column]);
+                double right = NumOps.ToDouble(matrix[column, row]);
+                if (double.IsNaN(left) || double.IsInfinity(left) ||
+                    double.IsNaN(right) || double.IsInfinity(right))
+                {
+                    throw new ArgumentException(
+                        "Cost matrices must contain only finite values.", parameterName);
+                }
+
+                double value = 0.5 * (left + right);
+                values[row, column] = value;
+                values[column, row] = value;
+                scale = Math.Max(scale, Math.Abs(value));
+            }
+        }
+
+        double typeEpsilon = typeof(T) == typeof(float)
+            ? 1.1920928955078125e-7
+            : 2.2204460492503131e-16;
+        double tolerance = 32.0 * typeEpsilon * scale * Math.Max(1, size);
+        int maximumRotations = Math.Max(1, 50 * size * size);
+
+        for (int rotation = 0; rotation < maximumRotations; rotation++)
+        {
+            int pivotRow = 0;
+            int pivotColumn = 0;
+            double largestOffDiagonal = 0.0;
+            for (int row = 0; row < size; row++)
+            {
+                for (int column = row + 1; column < size; column++)
+                {
+                    double magnitude = Math.Abs(values[row, column]);
+                    if (magnitude > largestOffDiagonal)
+                    {
+                        largestOffDiagonal = magnitude;
+                        pivotRow = row;
+                        pivotColumn = column;
+                    }
+                }
+            }
+
+            if (largestOffDiagonal <= tolerance) break;
+
+            double diagonalDifference = values[pivotColumn, pivotColumn] - values[pivotRow, pivotRow];
+            double angle = 0.5 * Math.Atan2(2.0 * values[pivotRow, pivotColumn], diagonalDifference);
+            double cosine = Math.Cos(angle);
+            double sine = Math.Sin(angle);
+
+            for (int index = 0; index < size; index++)
+            {
+                if (index == pivotRow || index == pivotColumn) continue;
+
+                double rowValue = values[index, pivotRow];
+                double columnValue = values[index, pivotColumn];
+                values[index, pivotRow] = values[pivotRow, index] =
+                    cosine * rowValue - sine * columnValue;
+                values[index, pivotColumn] = values[pivotColumn, index] =
+                    sine * rowValue + cosine * columnValue;
+            }
+
+            double rowDiagonal = values[pivotRow, pivotRow];
+            double columnDiagonal = values[pivotColumn, pivotColumn];
+            double pivot = values[pivotRow, pivotColumn];
+            values[pivotRow, pivotRow] =
+                cosine * cosine * rowDiagonal - 2.0 * sine * cosine * pivot +
+                sine * sine * columnDiagonal;
+            values[pivotColumn, pivotColumn] =
+                sine * sine * rowDiagonal + 2.0 * sine * cosine * pivot +
+                cosine * cosine * columnDiagonal;
+            values[pivotRow, pivotColumn] = values[pivotColumn, pivotRow] = 0.0;
+        }
+
+        double smallest = values[0, 0];
+        for (int index = 1; index < size; index++)
+        {
+            smallest = Math.Min(smallest, values[index, index]);
+        }
+
+        return (smallest, tolerance);
     }
 }

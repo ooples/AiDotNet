@@ -430,6 +430,7 @@ public class NonlinearModelPredictiveControllerIntegrationTests
 
         Assert.Equal(2, plan.Rows);
         Assert.Equal(1, plan.Columns);
+        Assert.InRange(plan[0, 0], -1m, -0.1m);
     }
 
     #endregion

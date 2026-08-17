@@ -29,6 +29,28 @@ namespace AiDotNet.Models.Options;
 /// </remarks>
 public class ModelStatsOptions : ModelOptions
 {
+    /// <summary>Creates model-statistics options with the documented defaults.</summary>
+    public ModelStatsOptions()
+    {
+    }
+
+    /// <summary>Creates an independent copy of another model-statistics configuration.</summary>
+    /// <param name="other">The options to copy.</param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="other"/> is null.</exception>
+    public ModelStatsOptions(ModelStatsOptions other)
+    {
+        if (other is null) throw new ArgumentNullException(nameof(other));
+
+        Seed = other.Seed;
+        ConditionNumberMethod = other.ConditionNumberMethod;
+        MulticollinearityThreshold = other.MulticollinearityThreshold;
+        MaxVIF = other.MaxVIF;
+        MapTopK = other.MapTopK;
+        NdcgTopK = other.NdcgTopK;
+        AcfMaxLag = other.AcfMaxLag;
+        PacfMaxLag = other.PacfMaxLag;
+    }
+
     /// <summary>
     /// Gets or sets the method used to calculate the condition number, which measures how numerically
     /// well-behaved a matrix is.

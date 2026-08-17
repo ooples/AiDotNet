@@ -414,6 +414,10 @@ public class BayesianRegression<T> : RegressionBase<T>
         return result;
     }
 
+    /// <summary>
+    /// Evaluates the Gaussian radial-basis kernel
+    /// <c>K(x,y) = exp(-gamma * ||x-y||^2)</c>.
+    /// </summary>
     private T RbfKernel(Vector<T> left, Vector<T> right)
     {
         var difference = (Vector<T>)Engine.Subtract(left, right);
@@ -422,6 +426,10 @@ public class BayesianRegression<T> : RegressionBase<T>
             NumOps.Multiply(NumOps.FromDouble(_bayesOptions.Gamma), squaredDistance)));
     }
 
+    /// <summary>
+    /// Evaluates the polynomial kernel
+    /// <c>K(x,y) = (gamma * x^T y + coef0)^degree</c>.
+    /// </summary>
     private T PolynomialKernel(Vector<T> left, Vector<T> right)
     {
         T scaledDot = NumOps.Multiply(
@@ -431,6 +439,10 @@ public class BayesianRegression<T> : RegressionBase<T>
             NumOps.FromDouble(_bayesOptions.PolynomialDegree));
     }
 
+    /// <summary>
+    /// Evaluates the sigmoid kernel <c>K(x,y) = tanh(gamma * x^T y + coef0)</c>.
+    /// </summary>
+    /// <remarks>The sigmoid kernel is not positive-semidefinite for every parameter choice.</remarks>
     private T SigmoidKernel(Vector<T> left, Vector<T> right)
     {
         T scaledDot = NumOps.Multiply(
@@ -438,6 +450,9 @@ public class BayesianRegression<T> : RegressionBase<T>
         return MathHelper.Tanh(NumOps.Add(scaledDot, NumOps.FromDouble(_bayesOptions.Coef0)));
     }
 
+    /// <summary>
+    /// Evaluates the Laplacian kernel <c>K(x,y) = exp(-gamma * ||x-y||_1)</c>.
+    /// </summary>
     private T LaplacianKernel(Vector<T> left, Vector<T> right)
     {
         T distance = CalculateManhattanDistance(left, right);
@@ -511,36 +526,6 @@ public class BayesianRegression<T> : RegressionBase<T>
     }
 
     /// <summary>
-    /// Applies the Laplacian kernel transformation to the input matrix.
-    /// </summary>
-    /// <param name="input">The input features matrix.</param>
-    /// <returns>The kernel matrix.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method computes the Laplacian kernel matrix for the input features. The Laplacian kernel is defined as
-    /// K(x, y) = exp(-γ × ||x - y||₁), where ||x - y||₁ is the Manhattan distance between x and y, and γ is the kernel width parameter.
-    /// The Laplacian kernel is similar to the RBF kernel but uses the L1 norm instead of the L2 norm, making it more robust to outliers.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method transforms your data using the Laplacian kernel.
-    /// 
-    /// The Laplacian kernel works by measuring how similar each data point is to every other data point,
-    /// using a measure called the "Manhattan distance" (like walking on a city grid - you can only move
-    /// along streets, not diagonally through buildings).
-    /// 
-    /// This kernel is particularly good at handling outliers (unusual data points that are far from the others)
-    /// because it doesn't penalize large distances as severely as some other kernels.
-    /// 
-    /// The LaplacianGamma parameter controls how quickly similarity decreases with distance:
-    /// - Higher values make distant points seem very different
-    /// - Lower values make even distant points seem somewhat similar
-    /// </para>
-    /// </remarks>
-    private Matrix<T> ApplyLaplacianKernel(Matrix<T> input)
-    {
-        return ApplyCrossKernel(input, input);
-    }
-
-    /// <summary>
     /// Calculates the Manhattan distance between two vectors.
     /// </summary>
     /// <param name="x">The first vector.</param>
@@ -570,110 +555,6 @@ public class BayesianRegression<T> : RegressionBase<T>
         var diff = (Vector<T>)Engine.Subtract(x, y);
         var absDiff = (Vector<T>)Engine.Abs(diff);
         return Engine.Sum(absDiff);
-    }
-
-    /// <summary>
-    /// Applies the Radial Basis Function (RBF) kernel transformation to the input matrix.
-    /// </summary>
-    /// <param name="input">The input features matrix.</param>
-    /// <returns>The kernel matrix.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method computes the RBF kernel matrix for the input features. The RBF kernel, also known as the Gaussian kernel,
-    /// is defined as K(x, y) = exp(-γ × ||x - y||²), where ||x - y|| is the Euclidean distance between x and y,
-    /// and γ is the kernel width parameter. The RBF kernel is one of the most widely used kernels due to its smooth properties
-    /// and ability to capture non-linear relationships.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method transforms your data using the RBF (Radial Basis Function) kernel.
-    /// 
-    /// The RBF kernel (also called the Gaussian kernel) works by measuring how similar each data point is
-    /// to every other data point, based on their distance from each other. Points that are close together
-    /// are considered very similar, while points that are far apart are considered very different.
-    /// 
-    /// This kernel is particularly good at capturing smooth, curved relationships in your data.
-    /// 
-    /// The Gamma parameter controls how quickly similarity decreases with distance:
-    /// - Higher gamma values mean that only very close points are considered similar
-    /// - Lower gamma values mean that even somewhat distant points are considered similar
-    /// 
-    /// The RBF kernel is often a good default choice when you're not sure which kernel to use.
-    /// </para>
-    /// </remarks>
-    private Matrix<T> ApplyRBFKernel(Matrix<T> input)
-    {
-        return ApplyCrossKernel(input, input);
-    }
-
-    /// <summary>
-    /// Applies the Polynomial kernel transformation to the input matrix.
-    /// </summary>
-    /// <param name="input">The input features matrix.</param>
-    /// <returns>The kernel matrix.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method computes the Polynomial kernel matrix for the input features. The Polynomial kernel is defined as
-    /// K(x, y) = (γ × xᵀy + coef0)^degree, where xᵀy is the dot product between x and y, γ is a scaling parameter,
-    /// coef0 is a constant term, and degree is the polynomial degree. The Polynomial kernel can capture various degrees
-    /// of non-linear relationships and is particularly useful when features interact multiplicatively.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method transforms your data using the Polynomial kernel.
-    /// 
-    /// The Polynomial kernel captures interactions between features raised to a certain power (degree).
-    /// It's particularly useful when you believe the relationship in your data involves products
-    /// of features rather than just their individual effects.
-    /// 
-    /// For example, in predicting crop yield, the combination of both temperature AND rainfall
-    /// might be more important than either factor alone. The Polynomial kernel can capture
-    /// these kinds of interactions.
-    /// 
-    /// Parameters that control this kernel:
-    /// - PolynomialDegree: Higher degrees capture more complex interactions but may overfit
-    /// - Gamma: Controls the influence of higher vs. lower degree terms
-    /// - Coef0: Adds a constant term; higher values make the kernel less sensitive to changes in input
-    /// 
-    /// A polynomial degree of 1 is equivalent to linear regression, while higher degrees
-    /// capture progressively more complex relationships.
-    /// </para>
-    /// </remarks>
-    private Matrix<T> ApplyPolynomialKernel(Matrix<T> input)
-    {
-        return ApplyCrossKernel(input, input);
-    }
-
-    /// <summary>
-    /// Applies the Sigmoid kernel transformation to the input matrix.
-    /// </summary>
-    /// <param name="input">The input features matrix.</param>
-    /// <returns>The kernel matrix.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method computes the Sigmoid kernel matrix for the input features. The Sigmoid kernel is defined as
-    /// K(x, y) = tanh(γ × xᵀy + coef0), where xᵀy is the dot product between x and y, γ is a scaling parameter,
-    /// coef0 is a constant term, and tanh is the hyperbolic tangent function. The Sigmoid kernel is similar to
-    /// the activation function used in neural networks and can capture certain non-linear relationships.
-    /// Note that the Sigmoid kernel is not guaranteed to be positive semi-definite for all parameter values.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method transforms your data using the Sigmoid kernel.
-    /// 
-    /// The Sigmoid kernel (also called the Hyperbolic Tangent kernel) creates an S-shaped transformation
-    /// of your data, similar to the activation functions used in neural networks. It produces a value
-    /// between -1 and 1 for each pair of points.
-    /// 
-    /// This kernel can capture certain types of non-linear relationships, particularly those with
-    /// threshold effects or saturation (where the relationship levels off at certain extremes).
-    /// 
-    /// Parameters that control this kernel:
-    /// - Gamma: Controls the steepness of the S-curve
-    /// - Coef0: Shifts the curve horizontally
-    /// 
-    /// The Sigmoid kernel is less commonly used than RBF or Polynomial kernels in regression,
-    /// but can be effective for certain types of data, especially when there are clear
-    /// threshold effects in your variables.
-    /// </para>
-    /// </remarks>
-    private Matrix<T> ApplySigmoidKernel(Matrix<T> input)
-    {
-        return ApplyCrossKernel(input, input);
     }
 
     /// <summary>

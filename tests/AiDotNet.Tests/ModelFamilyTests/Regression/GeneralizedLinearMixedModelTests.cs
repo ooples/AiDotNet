@@ -79,6 +79,21 @@ public class GeneralizedLinearMixedModelTests : RegressionModelTestBase
             Assert.NotSame(sourceEffect, clonedEffect);
             Assert.NotSame(sourceEffect.CovarianceMatrix, clonedEffect.CovarianceMatrix);
             Assert.Equal(sourceEffect.NumberOfGroups, clonedEffect.NumberOfGroups);
+
+            Assert.NotNull(sourceEffect.GroupCoefficients);
+            Assert.NotNull(clonedEffect.GroupCoefficients);
+            Assert.NotSame(sourceEffect.GroupCoefficients, clonedEffect.GroupCoefficients);
+            Assert.Equal(
+                sourceEffect.GroupCoefficients.Keys.OrderBy(key => key),
+                clonedEffect.GroupCoefficients.Keys.OrderBy(key => key));
+
+            foreach (double groupId in sourceEffect.GroupCoefficients.Keys)
+            {
+                Vector<double> sourceBlup = sourceEffect.GroupCoefficients[groupId];
+                Vector<double> clonedBlup = clonedEffect.GroupCoefficients[groupId];
+                Assert.NotSame(sourceBlup, clonedBlup);
+                Assert.Equal(sourceBlup.ToArray(), clonedBlup.ToArray());
+            }
         }
     }
 }

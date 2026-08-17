@@ -246,7 +246,17 @@ public class TimeSeriesIntegrationTests
 
         model.Train(x, y);
 
-        Assert.Equal(20, model.Predict(x).Length);
+        var predictions = model.Predict(x);
+
+        Assert.Equal(20, predictions.Length);
+        for (int i = 0; i < predictions.Length; i++)
+        {
+            Assert.True(double.IsFinite(predictions[i]), $"Prediction[{i}] is {predictions[i]}.");
+        }
+
+        double meanAbsoluteError = Enumerable.Range(0, predictions.Length)
+            .Average(i => Math.Abs(predictions[i] - y[i]));
+        Assert.True(meanAbsoluteError < 1.0, $"Mean absolute error {meanAbsoluteError} is too large.");
     }
 
     #endregion

@@ -419,13 +419,16 @@ public class ModelPredictiveControllerIntegrationTests
         Assert.Equal(LinearProgramStatus.Optimal, controller.LastStatus);
     }
 
-    [Fact]
-    public void Mpc_NonPositiveHorizon_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task Mpc_NonPositiveHorizon_ThrowsAtAssignment()
     {
-        Assert.Throws<ArgumentException>(() => new ModelPredictiveController<double>(
-            DoubleIntegrator(), DoubleIntegratorInput(),
-            Matrix<double>.CreateIdentity(2), Matrix<double>.CreateIdentity(1),
-            new ModelPredictiveControllerOptions<double> { Horizon = 0 }));
+        await Task.Yield();
+
+        var options = new ModelPredictiveControllerOptions<double>();
+
+        Assert.Throws<ArgumentOutOfRangeException>(() => options.Horizon = 0);
+        Assert.Throws<ArgumentOutOfRangeException>(() => options.Horizon = -1);
+        Assert.Equal(10, options.Horizon);
     }
 
     [Fact]

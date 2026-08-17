@@ -488,6 +488,35 @@ public class LinearQuadraticRegulatorIntegrationTests
     }
 
     [Fact(Timeout = 120000)]
+    public async Task Riccati_NegativeInputCost_ThrowsNamedArgument()
+    {
+        await Task.Yield();
+
+        var exception = Assert.Throws<ArgumentException>(() =>
+            new DiscreteAlgebraicRiccatiSolver<double>().Solve(
+                M(new[,] { { 0.2 } }), M(new[,] { { 1.0 } }),
+                M(new[,] { { 0.1 } }), M(new[,] { { -1.0 } })));
+
+        Assert.Equal("inputCost", exception.ParamName);
+        Assert.Contains("positive-definite", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task Riccati_IndefiniteStateCost_ThrowsNamedArgument()
+    {
+        await Task.Yield();
+
+        var exception = Assert.Throws<ArgumentException>(() =>
+            new DiscreteAlgebraicRiccatiSolver<double>().Solve(
+                Matrix<double>.CreateIdentity(2), M(new[,] { { 1.0 }, { 0.0 } }),
+                M(new[,] { { 1.0, 0.0 }, { 0.0, -1.0 } }),
+                Matrix<double>.CreateIdentity(1)));
+
+        Assert.Equal("stateCost", exception.ParamName);
+        Assert.Contains("positive-semidefinite", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact(Timeout = 120000)]
     public async Task RiccatiOptions_CopyPreservesAllConfiguration()
     {
         await Task.Yield();
@@ -535,15 +564,20 @@ public class LinearQuadraticRegulatorIntegrationTests
                 Matrix<double>.CreateIdentity(3), Matrix<double>.CreateIdentity(1)));
     }
 
-    [Fact]
-    public void Riccati_SingularInputCost_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task Riccati_SingularInputCost_ThrowsNamedArgument()
     {
+        await Task.Yield();
+
         // R must be positive definite: a direction of zero control cost would let the controller
         // apply unbounded effort for free, so there is no finite optimum to find.
-        Assert.Throws<InvalidOperationException>(() =>
+        var exception = Assert.Throws<ArgumentException>(() =>
             new DiscreteAlgebraicRiccatiSolver<double>().Solve(
                 Matrix<double>.CreateIdentity(1), M(new[,] { { 1.0 } }),
                 Matrix<double>.CreateIdentity(1), M(new[,] { { 0.0 } })));
+
+        Assert.Equal("inputCost", exception.ParamName);
+        Assert.Contains("positive-definite", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
