@@ -4510,34 +4510,56 @@ public static class LayerHelper<T>
         // previous MaxPool3D+GlobalAvgPool variant, which produced NaNs on the
         // gradient-flow invariant.
         //
-        // At the default 32³ input the spatial dimensions flow
+        // At the paper's 32³ input the spatial dimensions flow
         // 32 → 14 (conv1) → 5 (conv2) → 2 (conv3), i.e. every layer keeps a
         // strictly positive volume. Conv3DLayer infers its input-channel count
         // lazily on the first forward pass, so no channel counts are threaded
         // here. numConvBlocks / baseFilters are retained on the signature for
         // API and serialization compatibility; the paper architecture is fixed
         // at three convolutional layers with the filter counts above.
+        //
+        // voxelResolution is what makes those three kernels fit. The kernels
+        // used to be hard-coded at the paper's sizes and the resolution
+        // parameter went unread, so any grid smaller than the paper's ran out
+        // of volume partway down the stack: at 8³, conv1 leaves 2 and conv2's
+        // 5³ kernel does not fit in 2, giving
+        //
+        //     ArgumentException : Invalid output dimensions (0x0x0). Check
+        //     kernel size, stride, padding, and dilation parameters for input
+        //     size 2x2x2.
+        //
+        // A kernel wider than the volume it reads is the defect, so each kernel
+        // is capped at the volume actually arriving. With no padding the output
+        // extent is (in - kernel)/stride + 1, so a kernel of at most `in` keeps
+        // that at 1 or more however aggressive the stride. At 32³ nothing is
+        // capped and the layer sizes are exactly the paper's.
+        int extent = voxelResolution;
 
         // conv1: 48 filters, 6³ kernel, stride 2, no padding.
+        int kernel1 = Math.Min(6, extent);
         yield return new Conv3DLayer<T>(
             outputChannels: 48,
-            kernelSize: 6,
+            kernelSize: kernel1,
             stride: 2,
             padding: 0,
             activationFunction: new ReLUActivation<T>());
+        extent = (extent - kernel1) / 2 + 1;
 
         // conv2: 160 filters, 5³ kernel, stride 2, no padding.
+        int kernel2 = Math.Min(5, extent);
         yield return new Conv3DLayer<T>(
             outputChannels: 160,
-            kernelSize: 5,
+            kernelSize: kernel2,
             stride: 2,
             padding: 0,
             activationFunction: new ReLUActivation<T>());
+        extent = (extent - kernel2) / 2 + 1;
 
         // conv3: 512 filters, 4³ kernel, stride 1, no padding.
+        int kernel3 = Math.Min(4, extent);
         yield return new Conv3DLayer<T>(
             outputChannels: 512,
-            kernelSize: 4,
+            kernelSize: kernel3,
             stride: 1,
             padding: 0,
             activationFunction: new ReLUActivation<T>());

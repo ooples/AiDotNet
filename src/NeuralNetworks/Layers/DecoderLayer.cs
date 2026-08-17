@@ -735,6 +735,31 @@ public partial class DecoderLayer<T> : LayerBase<T>, IShapeContract
     }
 
     /// <summary>
+    /// Declares the three inputs a transformer decoder block reads.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <c>decoder_input</c> is the sequence being generated, <c>encoder_output</c> is the memory the
+    /// cross-attention sub-layer attends into, and <c>mask</c> is the optional causal mask that stops
+    /// a position from seeing the future (Vaswani et al. 2017, §3.1 and §3.2.3).
+    /// </para>
+    /// <para>
+    /// <see cref="ForwardTracedPorts"/> already reads exactly these three names. Without this
+    /// declaration the layer inherited the base's single unnamed "input" port, so it consumed a
+    /// three-port contract while advertising a one-port one -- anything routing by declared ports
+    /// would wire only the decoder stream and silently drop the encoder memory.
+    /// </para>
+    /// </remarks>
+    private IReadOnlyList<LayerPort>? _decoderInputPortsCache;
+    public override IReadOnlyList<LayerPort> InputPorts =>
+        _decoderInputPortsCache ??=
+        [
+            new LayerPort("decoder_input", GetInputShape(), Role: TensorPortRole.Features),
+            new LayerPort("encoder_output", GetInputShape(), Role: TensorPortRole.EncoderMemory),
+            new LayerPort("mask", GetInputShape(), Required: false, Role: TensorPortRole.Mask),
+        ];
+
+    /// <summary>
     /// Named multi-input forward pass.
     /// </summary>
     protected override Tensor<T> ForwardTracedPorts(IReadOnlyDictionary<string, Tensor<T>> inputs)
