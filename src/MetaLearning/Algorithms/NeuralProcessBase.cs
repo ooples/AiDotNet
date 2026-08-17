@@ -343,10 +343,10 @@ public partial class NeuralProcessModel<T, TInput, TOutput> : MetaLearningModelB
     protected override void RegisterComponents()
     {
         RegisterParameterComponent(new VectorFieldParameterSource<T>(
-            () => _params,
-            value => _params = value));
+            () => _parameters,
+            value => _parameters = value));
     }
-    private Vector<T> _params;
+    private Vector<T> _parameters;
     private readonly Vector<T>? _contextRepresentation;
 
     public Vector<T>? AdaptedSupportFeatures => _contextRepresentation;
@@ -358,24 +358,18 @@ public partial class NeuralProcessModel<T, TInput, TOutput> : MetaLearningModelB
         Vector<T>? contextRepresentation)
         : base(model)
     {
-        _params = parameters;
+        _parameters = parameters;
         _contextRepresentation = contextRepresentation;
     }
 
     public override TOutput Predict(TInput input)
     {
-        InterfaceGuard.Parameterizable(BaseModel).SetParameters(_params);
+        InterfaceGuard.Parameterizable(BaseModel).SetParameters(_parameters);
         return BaseModel.Predict(input);
     }
 
     public override IFullModel<T, TInput, TOutput> WithParameters(Vector<T> parameters)
     {
         return new NeuralProcessModel<T, TInput, TOutput>(BaseModel, parameters, _contextRepresentation);
-    }
-
-    public override IFullModel<T, TInput, TOutput> DeepCopy()
-    {
-        return new NeuralProcessModel<T, TInput, TOutput>(
-            BaseModel.DeepCopy(), _params.Clone(), _contextRepresentation?.Clone());
     }
 }

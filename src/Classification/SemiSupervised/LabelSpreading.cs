@@ -155,6 +155,14 @@ public partial class LabelSpreading<T> : SemiSupervisedClassifierBase<T>
     /// </summary>
     private readonly Random _random;
 
+    /// <summary>The seed this model was built with, kept so a clone can be built the same way.</summary>
+    /// <remarks>
+    /// The Random built from it cannot be read back, so without this the seed is gone the
+    /// moment the constructor returns and the model cannot be rebuilt from its own state.
+    /// </remarks>
+    private readonly int? _seed;
+
+
     #endregion
 
     #region Constructors
@@ -213,6 +221,7 @@ public partial class LabelSpreading<T> : SemiSupervisedClassifierBase<T>
         // Accept provided alpha as-is - zero is valid (means keep original labels, no spreading)
         _alpha = alpha;
 
+        _seed = seed;
         _random = seed.HasValue
             ? RandomHelper.CreateSeededRandom(seed.Value)
             : RandomHelper.CreateSecureRandom();
@@ -908,54 +917,6 @@ public partial class LabelSpreading<T> : SemiSupervisedClassifierBase<T>
 
     #region ICloneable Implementation
 
-    /// <summary>
-    /// Creates a deep copy of this classifier.
-    /// </summary>
-    /// <returns>A new instance with the same parameters and state.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Cloning creates an independent copy that can be modified
-    /// without affecting the original.
-    /// </para>
-    /// </remarks>
-    public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
-    {
-        var clone = new LabelSpreading<T>(
-            _kernel,
-            _maxIterations,
-            _tolerance,
-            _alpha,
-            _random.Next());
-
-        if (_allFeatures is not null)
-        {
-            clone._allFeatures = CloneMatrix(_allFeatures);
-        }
-
-        if (_labelDistributions is not null)
-        {
-            clone._labelDistributions = CloneMatrix(_labelDistributions);
-        }
-
-        if (_initialDistributions is not null)
-        {
-            clone._initialDistributions = CloneMatrix(_initialDistributions);
-        }
-
-        if (_normalizedAffinity is not null)
-        {
-            clone._normalizedAffinity = CloneMatrix(_normalizedAffinity);
-        }
-
-        clone._numLabeled = _numLabeled;
-        clone.NumFeatures = NumFeatures;
-        clone.NumClasses = NumClasses;
-        clone.ClassLabels = ClassLabels?.Clone();
-        clone.TaskType = TaskType;
-
-        return clone;
-    }
-
     #endregion
 
     #region Abstract Method Implementations
@@ -1006,21 +967,6 @@ public partial class LabelSpreading<T> : SemiSupervisedClassifierBase<T>
     private void UnpackParameters(Vector<T> parameters)
     {
         // Non-parametric model - no parameters to set
-    }
-
-    /// <summary>
-    /// Creates a new instance of this classifier with default configuration.
-    /// </summary>
-    /// <returns>A new LabelSpreading instance.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> This is used internally for operations like cloning or serialization
-    /// that need to create a fresh instance of the same type.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        return new LabelSpreading<T>(_kernel, _maxIterations, _tolerance, _alpha, _random.Next());
     }
 
     #endregion

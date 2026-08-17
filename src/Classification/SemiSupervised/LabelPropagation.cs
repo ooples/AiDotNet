@@ -131,6 +131,14 @@ public partial class LabelPropagation<T> : SemiSupervisedClassifierBase<T>
     /// </summary>
     private readonly Random _random;
 
+    /// <summary>The seed this model was built with, kept so a clone can be built the same way.</summary>
+    /// <remarks>
+    /// The Random built from it cannot be read back, so without this the seed is gone the
+    /// moment the constructor returns and the model cannot be rebuilt from its own state.
+    /// </remarks>
+    private readonly int? _seed;
+
+
     #endregion
 
     #region Constructors
@@ -181,6 +189,7 @@ public partial class LabelPropagation<T> : SemiSupervisedClassifierBase<T>
         // Accept provided tolerance as-is - zero is valid (means run until maxIterations)
         _tolerance = tolerance;
 
+        _seed = seed;
         _random = seed.HasValue
             ? RandomHelper.CreateSeededRandom(seed.Value)
             : RandomHelper.CreateSecureRandom();
@@ -957,21 +966,6 @@ public partial class LabelPropagation<T> : SemiSupervisedClassifierBase<T>
     private void UnpackParameters(Vector<T> parameters)
     {
         // Non-parametric model - no parameters to set
-    }
-
-    /// <summary>
-    /// Creates a new instance of this classifier with default configuration.
-    /// </summary>
-    /// <returns>A new LabelPropagation instance.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> This is used internally for operations like cloning or serialization
-    /// that need to create a fresh instance of the same type.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        return new LabelPropagation<T>(_kernel, _maxIterations, _tolerance, _random.Next());
     }
 
     #endregion
