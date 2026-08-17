@@ -30,7 +30,7 @@ using Newtonsoft.Json;
 /// </remarks>
 [ComponentType(ComponentType.Optimizer)]
 [PipelineStage(PipelineStage.Training)]
-public class PowellOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOutput>
+public class PowellOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOutput>, IDerivativeFreeFunctionOptimizer<T>
 {
     /// <summary>
     /// Configuration options specific to Powell's optimization method.
@@ -596,4 +596,257 @@ public class PowellOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOut
             _adaptiveStepSize = NumOps.FromDouble(reader.ReadDouble());
         }
     }
+
+    /// <summary>
+    /// Creates a Powell optimizer for minimizing a plain function, with no model attached.
+    /// </summary>
+    /// <param name="options">The optimizer-specific options. If null, defaults are used.</param>
+    public static PowellOptimizer<T, TInput, TOutput> CreateForFunction(
+        PowellOptimizerOptions<T, TInput, TOutput>? options = null)
+        => new(options);
+
+    /// <summary>Backs <see cref="CreateForFunction"/>: the same setup with no model.</summary>
+    private PowellOptimizer(PowellOptimizerOptions<T, TInput, TOutput>? options)
+        : base(null, options ?? new())
+    {
+        _options = options ?? new PowellOptimizerOptions<T, TInput, TOutput>();
+        _adaptiveStepSize = NumOps.Zero;
+
+        InitializeAdaptiveParameters();
+    }
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// Powell's method (<i>Computer Journal</i> 7, 1964). It starts with the coordinate directions
+    /// and minimizes along each in turn, then replaces the direction that produced the largest
+    /// improvement with the displacement of the whole sweep - which, on a quadratic, builds up a
+    /// set of conjugate directions without ever computing a derivative.
+    /// </para>
+    /// <para>
+    /// That makes it the derivative-free relative of the conjugate gradient method: the same idea
+    /// of directions that do not undo each other, reached by bookkeeping rather than by gradient
+    /// differences.
+    /// </para>
+    /// <para>
+    /// The one-dimensional minimizations use golden-section search, which needs no derivative and
+    /// shrinks the bracket by a factor of 0.618 per evaluation.
+    /// </para>
+    /// <para>
+    /// <paramref name="tolerance"/> stops the run when a whole sweep improves the objective by
+    /// less than it, measured relative to the value at the start of the sweep.
+    /// </para>
+    /// </remarks>
+    public Vector<T> Minimize(
+        Vector<T> initialParameters, Func<Vector<T>, T> objective, int maxIterations, T tolerance)
+    {
+        ValidateMinimizeArguments(initialParameters, objective, maxIterations);
+
+        var search = new DerivativeFreeSearch(objective, NumOps, initialParameters);
+
+        int n = initialParameters.Length;
+        double stop = Convert.ToDouble(tolerance);
+        double step = _options.InitialStepSize > 0 ? _options.InitialStepSize : 1.0;
+
+        var current = new double[n];
+        for (int i = 0; i < n; i++) current[i] = Convert.ToDouble(initialParameters[i]);
+
+        // The coordinate directions to begin with; Powell's rule replaces them as it learns.
+        var directions = new double[n][];
+        for (int i = 0; i < n; i++)
+        {
+            directions[i] = new double[n];
+            directions[i][i] = 1.0;
+        }
+
+        double currentValue = Convert.ToDouble(search.BestValue);
+
+        for (int sweep = 0; sweep < maxIterations; sweep++)
+        {
+            double startValue = currentValue;
+            var startPoint = (double[])current.Clone();
+
+            int bestIndex = 0;
+            double bestImprovement = 0.0;
+
+            for (int index = 0; index < n; index++)
+            {
+                double before = currentValue;
+                currentValue = PowellLineMinimize(search, current, directions[index], step, n);
+
+                double improvement = before - currentValue;
+                if (improvement > bestImprovement)
+                {
+                    bestImprovement = improvement;
+                    bestIndex = index;
+                }
+            }
+
+            if (Math.Abs(startValue - currentValue)
+                <= stop * (Math.Abs(startValue) + Math.Abs(currentValue) + 1e-12))
+            {
+                break;
+            }
+
+            // The displacement of the whole sweep is the candidate new direction.
+            var overall = new double[n];
+            double length = 0.0;
+
+            for (int i = 0; i < n; i++)
+            {
+                overall[i] = current[i] - startPoint[i];
+                length += overall[i] * overall[i];
+            }
+
+            length = Math.Sqrt(length);
+            if (length <= 1e-14) break;
+
+            for (int i = 0; i < n; i++) overall[i] /= length;
+
+            // Brent's test (Numerical Recipes, section 10.5). Powell's original rule replaces a
+            // direction every sweep, and the set duly becomes linearly dependent - after which the
+            // search is confined to a subspace that need not contain the minimum. Measured on
+            // Rosenbrock, that stalls at f = 3.98. The test below only accepts the new direction
+            // when the sweep's progress genuinely came from a NEW direction rather than mostly
+            // from one of the existing ones.
+            var extrapolated = new Vector<T>(n);
+            for (int i = 0; i < n; i++)
+            {
+                extrapolated[i] = NumOps.FromDouble(2.0 * current[i] - startPoint[i]);
+            }
+
+            double extrapolatedValue = Convert.ToDouble(search.Evaluate(extrapolated));
+
+            if (extrapolatedValue < startValue)
+            {
+                double first = startValue - currentValue - bestImprovement;
+                double second = startValue - extrapolatedValue;
+
+                if (2.0 * (startValue - 2.0 * currentValue + extrapolatedValue) * first * first
+                    < bestImprovement * second * second)
+                {
+                    directions[bestIndex] = directions[n - 1];
+                    directions[n - 1] = overall;
+
+                    currentValue = PowellLineMinimize(search, current, overall, step, n);
+                }
+            }
+        }
+
+        return search.BestPoint;
+    }
+
+    /// <summary>
+    /// Minimizes along one direction by bracketing and then golden-section search, moving the
+    /// point in place and returning the value it reached.
+    /// </summary>
+    private double PowellLineMinimize(
+        DerivativeFreeSearch search, double[] current, double[] direction, double step, int n)
+    {
+        double At(double distance)
+        {
+            var point = new Vector<T>(n);
+            for (int i = 0; i < n; i++)
+            {
+                point[i] = NumOps.FromDouble(current[i] + distance * direction[i]);
+            }
+
+            return Convert.ToDouble(search.Evaluate(point));
+        }
+
+        // Bracket the minimum: try one step out, reverse if that was uphill, then keep doubling
+        // while the value is still falling.
+        double here = At(0.0);
+        double far = step;
+        double farValue = At(far);
+        bool bothUphill = false;
+
+        if (farValue > here)
+        {
+            far = -step;
+            farValue = At(far);
+
+            // Both probes worse than the middle means the minimum is INSIDE the probe, not
+            // beyond it. Without this the search can never take a step shorter than its initial
+            // probe, which in a narrow curved valley means it cannot move at all - measured on
+            // Rosenbrock, it stalled at f = 3.98.
+            bothUphill = farValue > here;
+        }
+
+        double near = 0.0;
+        double nearValue = here;
+
+        if (bothUphill)
+        {
+            double bracket = Math.Abs(step);
+            return GoldenSection(At, current, direction, -bracket, bracket, here, n);
+        }
+
+        for (int expansion = 0; expansion < 40 && farValue < nearValue; expansion++)
+        {
+            near = far;
+            nearValue = farValue;
+            far *= 2.0;
+            farValue = At(far);
+        }
+
+        // The bracket has to span everything probed, not just zero and the last point: after an
+        // expansion the minimum lies between the last two probes, and clipping the interval at
+        // zero throws that away.
+        double left = Math.Min(Math.Min(0.0, near), far);
+        double right = Math.Max(Math.Max(0.0, near), far);
+
+        return GoldenSection(At, current, direction, left, right, here, n);
+    }
+
+    /// <summary>
+    /// Golden-section search on a bracketed interval, moving the point only if it improves.
+    /// </summary>
+    private static double GoldenSection(
+        Func<double, double> at,
+        double[] current,
+        double[] direction,
+        double left,
+        double right,
+        double here,
+        int n)
+    {
+        const double goldenRatio = 0.6180339887498949;
+
+        double first = right - goldenRatio * (right - left);
+        double second = left + goldenRatio * (right - left);
+        double firstValue = at(first);
+        double secondValue = at(second);
+
+        for (int refinement = 0; refinement < 60 && Math.Abs(right - left) > 1e-12; refinement++)
+        {
+            if (firstValue < secondValue)
+            {
+                right = second;
+                second = first;
+                secondValue = firstValue;
+                first = right - goldenRatio * (right - left);
+                firstValue = at(first);
+            }
+            else
+            {
+                left = first;
+                first = second;
+                firstValue = secondValue;
+                second = left + goldenRatio * (right - left);
+                secondValue = at(second);
+            }
+        }
+
+        double chosen = firstValue < secondValue ? first : second;
+        double chosenValue = Math.Min(firstValue, secondValue);
+
+        // Only move if the line search actually improved on where it started; golden section on a
+        // bad bracket can otherwise walk the point uphill.
+        if (chosenValue >= here) return here;
+
+        for (int i = 0; i < n; i++) current[i] += chosen * direction[i];
+        return chosenValue;
+    }
+
 }

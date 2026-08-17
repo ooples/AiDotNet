@@ -2646,4 +2646,130 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
 
         Deserialize(serializedData);
     }
+
+    /// <summary>
+    /// Bookkeeping shared by every derivative-free <c>Minimize</c>: it validates the arguments,
+    /// counts evaluations, and remembers the best point seen.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The search methods differ enormously in how they propose points and not at all in what they
+    /// do with the answers, so the second half lives here. Keeping the best point separately also
+    /// matters for correctness: a population method's final population need not contain its best
+    /// member, and an annealing schedule deliberately accepts worse points, so "where it ended" and
+    /// "the best it found" are different questions.
+    /// </para>
+    /// </remarks>
+    protected sealed class DerivativeFreeSearch
+    {
+        private readonly Func<Vector<T>, T> _objective;
+        private readonly INumericOperations<T> _numOps;
+
+        /// <summary>Wraps a caller's objective for a single minimization.</summary>
+        /// <param name="objective">The function being minimized.</param>
+        /// <param name="numOps">Arithmetic for the numeric type in play.</param>
+        /// <param name="start">The starting point, which is evaluated immediately.</param>
+        public DerivativeFreeSearch(
+            Func<Vector<T>, T> objective, INumericOperations<T> numOps, Vector<T> start)
+        {
+            _objective = objective;
+            _numOps = numOps;
+
+            BestPoint = start.Clone();
+            BestValue = Evaluate(start);
+        }
+
+        /// <summary>The lowest point found so far.</summary>
+        public Vector<T> BestPoint { get; private set; }
+
+        /// <summary>Its value.</summary>
+        public T BestValue { get; private set; }
+
+        /// <summary>How many times the objective has been called.</summary>
+        public int Evaluations { get; private set; }
+
+        /// <summary>Evaluates the objective and records the point if it is the best so far.</summary>
+        /// <param name="point">Where to evaluate.</param>
+        /// <returns>The objective there.</returns>
+        public T Evaluate(Vector<T> point)
+        {
+            Evaluations++;
+            T value = _objective(point);
+
+            // A non-finite value is not an improvement however it compares: NaN loses every
+            // comparison, which would silently make it the best point on some orderings.
+            double asDouble = Convert.ToDouble(value);
+            if (double.IsNaN(asDouble)) return value;
+
+            if (Evaluations == 1 || _numOps.LessThan(value, BestValue))
+            {
+                BestValue = value;
+                BestPoint = point.Clone();
+            }
+
+            return value;
+        }
+    }
+
+    /// <summary>
+    /// Validates the arguments every derivative-free <c>Minimize</c> takes.
+    /// </summary>
+    /// <param name="initialParameters">The starting point.</param>
+    /// <param name="objective">The function to minimize.</param>
+    /// <param name="maxIterations">The iteration budget.</param>
+    /// <exception cref="ArgumentNullException">When either reference argument is null.</exception>
+    /// <exception cref="ArgumentException">
+    /// When the starting point is empty or the budget is not positive.
+    /// </exception>
+    protected static void ValidateMinimizeArguments(
+        Vector<T> initialParameters, Func<Vector<T>, T> objective, int maxIterations)
+    {
+        Guard.NotNull(initialParameters);
+        Guard.NotNull(objective);
+
+        if (initialParameters.Length == 0)
+        {
+            throw new ArgumentException(
+                "Initial parameters must contain at least one element.",
+                nameof(initialParameters));
+        }
+
+        if (maxIterations <= 0)
+        {
+            throw new ArgumentException(
+                $"Maximum iterations must be positive, got {maxIterations}.",
+                nameof(maxIterations));
+        }
+    }
+
+    /// <summary>
+    /// A random source for a search, seeded from the options when a seed was given.
+    /// </summary>
+    /// <returns>A generator, reproducible exactly when <c>Options.Seed</c> is set.</returns>
+    /// <remarks>
+    /// Every method here is stochastic, so a run is a random variable. One that cannot be repeated
+    /// cannot be debugged, and a benchmark from a single unrepeatable run says more about its seed
+    /// than about the method.
+    /// </remarks>
+    protected Random CreateSearchRandom()
+        => Options.Seed.HasValue ? new Random(Options.Seed.Value) : new Random();
+
+    /// <summary>
+    /// A standard normal sample, by the Box-Muller transform.
+    /// </summary>
+    /// <param name="random">The generator to draw from.</param>
+    /// <returns>One draw from a Gaussian of mean zero and variance one.</returns>
+    /// <remarks>
+    /// <see cref="Random.NextDouble"/> gives a uniform draw, and every method in this family wants
+    /// Gaussian ones. Box and Muller (1958) is the standard conversion; the small offset keeps the
+    /// logarithm away from zero, which the uniform draw can legitimately return.
+    /// </remarks>
+    protected static double NextGaussian(Random random)
+    {
+        double first = random.NextDouble();
+        double second = random.NextDouble();
+
+        return Math.Sqrt(-2.0 * Math.Log(first + 1e-12)) * Math.Cos(2.0 * Math.PI * second);
+    }
+
 }
