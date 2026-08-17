@@ -360,46 +360,4 @@ public partial class PoissonRegression<T> : RegressionBase<T>
 
         return predictions;
     }
-
-    /// <summary>
-    /// Creates a new instance of the Poisson Regression model with the same configuration.
-    /// </summary>
-    /// <returns>A new instance of the Poisson Regression model.</returns>
-    /// <exception cref="InvalidOperationException">Thrown when the creation fails or required components are null.</exception>
-    /// <remarks>
-    /// <para>
-    /// This method creates a deep copy of the current Poisson Regression model, including its options,
-    /// coefficients, intercept, and regularization settings. The new instance is completely independent of the original,
-    /// allowing modifications without affecting the original model.
-    /// </para>
-    /// <para>
-    /// For Beginners:
-    /// This method creates an exact copy of your trained model.
-    /// 
-    /// Think of it like making a perfect duplicate:
-    /// - It copies all the configuration settings (like maximum iterations and tolerance)
-    /// - It preserves the coefficients (the weights for each feature)
-    /// - It maintains the intercept (the starting point of your model)
-    /// 
-    /// Creating a copy is useful when you want to:
-    /// - Create a backup before further modifying the model
-    /// - Create variations of the same model for different purposes
-    /// - Share the model with others while keeping your original intact
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        var newModel = new PoissonRegression<T>(_options, Regularization);
-
-        // Copy coefficients if they exist
-        if (Coefficients != null)
-        {
-            newModel.Coefficients = Coefficients.Clone();
-        }
-
-        // Copy the intercept
-        newModel.Intercept = Intercept;
-
-        return newModel;
-    }
 }

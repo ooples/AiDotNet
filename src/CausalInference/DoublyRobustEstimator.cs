@@ -826,23 +826,5 @@ public partial class DoublyRobustEstimator<T> : CausalModelBase<T>
         return newModel;
     }
 
-    /// <summary>
-    /// Creates a fitted copy, including the learned propensity and outcome coefficients.
-    /// CausalModelBase's metadata round-trip does not carry these estimator state vectors.
-    /// </summary>
-    public override IFullModel<T, Matrix<T>, Vector<T>> DeepCopy()
-    {
-        var copy = new DoublyRobustEstimator<T>(_trimMin, _trimMax, _useCrossFitting, _numFolds);
-        // Keep estimator state as independent vectors without forcing a generic
-        // parameter flatten/round-trip. (Unlike a neural model these vectors are
-        // small, but direct cloning is both clearer and preserves fitted state.)
-        copy._propensityCoefficients = _propensityCoefficients?.Clone();
-        copy._outcomeCoefficients1 = _outcomeCoefficients1?.Clone();
-        copy._outcomeCoefficients0 = _outcomeCoefficients0?.Clone();
-        copy.NumFeatures = NumFeatures;
-        copy.IsFitted = IsFitted;
-        return copy;
-    }
-
     #endregion
 }

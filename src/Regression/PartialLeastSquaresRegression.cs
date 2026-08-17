@@ -192,15 +192,6 @@ public partial class PartialLeastSquaresRegression<T> : RegressionBase<T>
     /// </remarks>
     public override bool SupportsParameterInitialization => false;
 
-    public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
-    {
-        var clone = new PartialLeastSquaresRegression<T>(_options, Regularization);
-        clone.Coefficients = new Vector<T>(Coefficients);
-        clone.Intercept = Intercept;
-        clone.TrainingFeatureCount = TrainingFeatureCount;
-        return clone;
-    }
-
     /// <summary>
     /// Fits the model with NIPALS, the algorithm PLS is defined by.
     /// </summary>
@@ -543,78 +534,5 @@ public partial class PartialLeastSquaresRegression<T> : RegressionBase<T>
         }
 
         return vip;
-    }
-
-    /// <summary>
-    /// Creates a new instance of the Partial Least Squares Regression model with the same configuration.
-    /// </summary>
-    /// <returns>A new instance of the Partial Least Squares Regression model.</returns>
-    /// <exception cref="InvalidOperationException">Thrown when the creation fails or required components are null.</exception>
-    /// <remarks>
-    /// <para>
-    /// This method creates a deep copy of the current Partial Least Squares Regression model, including its options,
-    /// coefficients, intercept, loadings, scores, weights, and data scaling parameters. The new instance is completely 
-    /// independent of the original, allowing modifications without affecting the original model.
-    /// </para>
-    /// <para>
-    /// For Beginners:
-    /// This method creates an exact copy of your trained model.
-    /// 
-    /// Think of it like making a perfect duplicate:
-    /// - It copies all the configuration settings (like the number of components)
-    /// - It preserves the coefficients and intercept that define your regression model
-    /// - It duplicates all the internal matrices (loadings, scores, weights) that capture the patterns in your data
-    /// - It maintains the scaling information (means and standard deviations) needed to process new data
-    /// 
-    /// Creating a copy is useful when you want to:
-    /// - Create a backup before further modifying the model
-    /// - Create variations of the same model for different purposes
-    /// - Share the model with others while keeping your original intact
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        // Create a new instance with the same options and regularization
-        var newModel = new PartialLeastSquaresRegression<T>(_options, Regularization);
-
-        // Copy coefficients and intercept from base class
-        if (Coefficients != null)
-        {
-            newModel.Coefficients = Coefficients.Clone();
-        }
-        newModel.Intercept = Intercept;
-
-        // Copy PLS-specific components
-        if (_loadings != null)
-        {
-            newModel._loadings = _loadings.Clone();
-        }
-
-        if (_scores != null)
-        {
-            newModel._scores = _scores.Clone();
-        }
-
-        if (_weights != null)
-        {
-            newModel._weights = _weights.Clone();
-        }
-
-        // Copy means and standard deviations used for scaling
-        newModel._yMean = _yMean;
-
-        if (_xMean != null)
-        {
-            newModel._xMean = _xMean.Clone();
-        }
-
-        newModel._yStd = _yStd;
-
-        if (_xStd != null)
-        {
-            newModel._xStd = _xStd.Clone();
-        }
-
-        return newModel;
     }
 }

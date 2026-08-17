@@ -420,45 +420,6 @@ public partial class IsotonicRegression<T> : NonLinearRegressionBase<T>
         return Math.Max(0, left - 1);
     }
 
-    /// <summary>
-    /// Creates a new instance of the IsotonicRegression with the same configuration as the current instance.
-    /// </summary>
-    /// <returns>A new IsotonicRegression instance with the same options and regularization as the current instance.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method creates a new instance of the IsotonicRegression model with the same configuration options
-    /// and regularization settings as the current instance. This is useful for model cloning, ensemble methods, or
-    /// cross-validation scenarios where multiple instances of the same model with identical configurations are needed.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method creates a fresh copy of the model's blueprint.
-    /// 
-    /// When you need multiple versions of the same type of model with identical settings:
-    /// - This method creates a new, empty model with the same configuration
-    /// - It's like making a copy of a recipe before you start cooking
-    /// - The new model has the same settings but no trained data
-    /// - This is useful for techniques that need multiple models, like cross-validation
-    /// 
-    /// For example, when testing your model on different subsets of data,
-    /// you'd want each test to use a model with identical settings.
-    /// </para>
-    /// </remarks>
-    public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
-    {
-        var clone = new IsotonicRegression<T>(Options, Regularization);
-        if (SupportVectors.Rows > 0)
-            clone.SupportVectors = SupportVectors.Clone();
-        if (Alphas.Length > 0)
-            clone.Alphas = new Vector<T>(Alphas);
-        clone.B = B;
-        clone._xValues = new Vector<T>(_xValues);
-        clone._yValues = new Vector<T>(_yValues);
-        clone._trainingFeatureCount = _trainingFeatureCount;
-        clone._olsIntercept = _olsIntercept;
-        if (_olsCoefficients is not null)
-            clone._olsCoefficients = new Vector<T>(_olsCoefficients);
-        return clone;
-    }
-
     protected override IFullModel<T, Matrix<T>, Vector<T>> CreateInstance()
     {
         return new IsotonicRegression<T>(Options, Regularization);

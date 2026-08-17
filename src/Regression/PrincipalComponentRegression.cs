@@ -326,32 +326,6 @@ public partial class PrincipalComponentRegression<T> : RegressionBase<T>
         return explainedVariance.Length;
     }
 
-    /// <summary>
-    /// Makes predictions for the given input data.
-    /// </summary>
-    /// <param name="input">The input features matrix where each row is an example and each column is a feature.</param>
-    /// <returns>A vector of predicted values for each input example.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method scales the input data using the means and standard deviations from the training data,
-    /// applies the regression coefficients, and adjusts the predictions back to the original scale.
-    /// </para>
-    /// <para>
-    /// <b>For Beginners:</b> After training, this method is used to make predictions on new data. It first scales your input data
-    /// the same way the training data was scaled, then applies the learned model to calculate the predicted values.
-    /// Finally, it transforms the predictions back to the original scale of your target variable.
-    /// </para>
-    /// </remarks>
-    public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
-    {
-        // Manual Clone for OLS path
-        var clone = new PrincipalComponentRegression<T>(_options, Regularization);
-        clone.Coefficients = new Vector<T>(Coefficients);
-        clone.Intercept = Intercept;
-        clone.TrainingFeatureCount = TrainingFeatureCount;
-        return clone;
-    }
-
     public override Vector<T> Predict(Matrix<T> input)
     {
         // OLS coefficients are in original space. Use base class prediction.
@@ -422,67 +396,5 @@ public partial class PrincipalComponentRegression<T> : RegressionBase<T>
     {
         // Feature importances are based on the magnitude of the coefficients
         return Coefficients.Transform(NumOps.Abs);
-    }
-
-    /// <summary>
-    /// Creates a new instance of the Principal Component Regression model with the same configuration.
-    /// </summary>
-    /// <returns>A new instance of the Principal Component Regression model.</returns>
-    /// <exception cref="InvalidOperationException">Thrown when the creation fails or required components are null.</exception>
-    /// <remarks>
-    /// <para>
-    /// This method creates a deep copy of the current Principal Component Regression model, including its options,
-    /// principal components, coefficients, intercept, and preprocessing parameters (means and standard deviations).
-    /// The new instance is completely independent of the original, allowing modifications without affecting the original model.
-    /// </para>
-    /// <para>
-    /// <b>For Beginners:</b> This method creates an exact copy of your trained model.
-    /// 
-    /// Think of it like making a perfect copy of your regression model:
-    /// - It duplicates all the configuration settings (like how many components to use)
-    /// - It copies the learned principal components (the patterns found in your data)
-    /// - It preserves the coefficients and intercept (the actual formula for making predictions)
-    /// - It maintains all the scaling information (means and standard deviations) needed to process new data
-    /// 
-    /// Creating a copy is useful when you want to:
-    /// - Create a backup before further modifying the model
-    /// - Create variations of the same model for different purposes
-    /// - Share the model with others while keeping your original intact
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        // Create a new instance with the same options and regularization
-        var newModel = new PrincipalComponentRegression<T>(_options, Regularization);
-
-        // Copy coefficients and intercept from base class
-        if (Coefficients != null)
-        {
-            newModel.Coefficients = Coefficients.Clone();
-        }
-        newModel.Intercept = Intercept;
-
-        // Copy principal components matrix
-        if (_components != null)
-        {
-            newModel._components = _components.Clone();
-        }
-
-        // Copy means and standard deviations used for scaling
-        if (_xMean != null)
-        {
-            newModel._xMean = _xMean.Clone();
-        }
-
-        newModel._yMean = _yMean;
-
-        if (_xStd != null)
-        {
-            newModel._xStd = _xStd.Clone();
-        }
-
-        newModel._yStd = _yStd;
-
-        return newModel;
     }
 }

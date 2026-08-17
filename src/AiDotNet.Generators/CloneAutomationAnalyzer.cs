@@ -312,8 +312,33 @@ public class CloneAutomationAnalyzer : DiagnosticAnalyzer
                     when IsParameterTransfer(call):
                     break;
 
-                // An assignment, a loop, any other call -- work the constructor did not do -- means the
-                // body is not pure reconstruction and the base cannot stand in for it.
+                // COPYING A CONFIGURATION VALUE ONTO THE NEW INSTANCE IS NOT EXTRA WORK EITHER. The
+                // clone plan copies every configuration member, so `clone.ContextLength = ContextLength;`
+                // only restates what CopyConfiguration already did.
+                //
+                // This is the shape that hid the real damage. Requiring the body to be pure
+                // reconstruction meant a single field copy bought silence, and the override that
+                // looked the most deliberate was the most dangerous: AnimateDiffModel rebuilt itself
+                // with `options: null, scheduler: null`, patched three fields back, and dropped its
+                // options and scheduler on every clone -- while the analyzer that exists to find
+                // exactly that stayed quiet because line four was an assignment.
+                //
+                // Restricted to members of a local this body CONSTRUCTED: assigning to anything else
+                // reaches outside the new instance, which the base cannot stand in for.
+                case ExpressionStatementSyntax
+                {
+                    Expression: AssignmentExpressionSyntax
+                    {
+                        Left: MemberAccessExpressionSyntax { Expression: IdentifierNameSyntax target }
+                    }
+                }
+                    when constructed.Contains(target.Identifier.ValueText):
+                    break;
+
+                // A loop, or any other call -- work the constructor did not do -- means the body is
+                // not pure reconstruction and the base cannot stand in for it. Invocations on the new
+                // instance stay disqualifying even when they look like setters: this rule is an
+                // ERROR, and a method can do work no plan reproduces.
                 default:
                     return false;
             }

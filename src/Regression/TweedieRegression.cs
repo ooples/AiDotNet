@@ -603,44 +603,4 @@ public partial class TweedieRegression<T> : RegressionBase<T>
             predictions[i] = NumOps.Add(predictions[i], Intercept);
         return predictions;
     }
-
-    /// <summary>
-    /// Creates a new instance of the Tweedie Regression model with the same configuration.
-    /// </summary>
-    /// <returns>A new instance of the Tweedie Regression model.</returns>
-    /// <remarks>
-    /// <para>
-    /// Creates a deep copy of the current model, including all options and coefficients.
-    /// </para>
-    /// <para>
-    /// For Beginners:
-    /// This method creates an exact copy of your trained model.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        var newOptions = new TweedieRegressionOptions<T>
-        {
-            PowerParameter = _options.PowerParameter,
-            MaxIterations = _options.MaxIterations,
-            Tolerance = _options.Tolerance,
-            LinkFunction = _options.LinkFunction,
-            DecompositionType = _options.DecompositionType,
-            InitialDispersion = _options.InitialDispersion
-        };
-
-        var newModel = new TweedieRegression<T>(newOptions, Regularization);
-
-        // Copy coefficients if they exist
-        if (Coefficients != null)
-        {
-            newModel.Coefficients = Coefficients.Clone();
-        }
-
-        // Copy the intercept and dispersion
-        newModel.Intercept = Intercept;
-        newModel._dispersion = _dispersion;
-
-        return newModel;
-    }
 }
