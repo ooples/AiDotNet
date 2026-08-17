@@ -217,6 +217,21 @@ internal static class ControlMath<T>
     }
 
     /// <summary>
+    /// Scales every entry of a vector.
+    /// </summary>
+    public static Vector<T> Scale(Vector<T> vector, double factor)
+    {
+        T scale = NumOps.FromDouble(factor);
+        var result = new Vector<T>(vector.Length);
+        for (int i = 0; i < vector.Length; i++)
+        {
+            result[i] = NumOps.Multiply(scale, vector[i]);
+        }
+
+        return result;
+    }
+
+    /// <summary>
     /// Transposes a matrix.
     /// </summary>
     public static Matrix<T> Transpose(Matrix<T> matrix)
