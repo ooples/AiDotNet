@@ -2623,37 +2623,4 @@ public partial class GenerativeAdversarialNetwork<T> : ImageGeneratorModelLayout
         T batchSizeT = NumOps.FromDouble(batchSize);
         return Engine.TensorDivideScalar(sum, batchSizeT);
     }
-
-    /// <summary>
-    /// Creates a new instance of the GenerativeAdversarialNetwork with the same configuration as the current instance.
-    /// </summary>
-    /// <returns>A new GenerativeAdversarialNetwork instance with the same architecture as the current instance.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method creates a new instance of the GenerativeAdversarialNetwork with the same generator and
-    /// discriminator architectures as the current instance. This is useful for model cloning, ensemble methods, or
-    /// cross-validation scenarios where multiple instances of the same model with identical configurations are needed.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method creates a fresh copy of the GAN's blueprint.
-    ///
-    /// When you need multiple versions of the same GAN with identical settings:
-    /// - This method creates a new, empty GAN with the same configuration
-    /// - It copies the architecture of both the generator and discriminator networks
-    /// - The new GAN has the same structure but no trained data
-    /// - This is useful for techniques that need multiple models, like ensemble methods
-    ///
-    /// For example, when experimenting with different training approaches,
-    /// you'd want to start with identical model configurations.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new GenerativeAdversarialNetwork<T>(
-            Generator.Architecture,
-            Discriminator.Architecture,
-            Architecture.InputType,
-            generatorOptimizer: null,
-            discriminatorOptimizer: null,
-            _lossFunction);
-    }
 }

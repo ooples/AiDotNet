@@ -19,6 +19,20 @@ public abstract class DeclaredModelLayoutBase<T> : NeuralNetworkBase<T>
         : base(lossFunction, maxGradNorm)
     {
     }
+
+    /// <summary>
+    /// The input type this model was built for, read back from the architecture that carries it.
+    /// </summary>
+    /// <remarks>
+    /// Exists so the clone plan can source an <c>inputType</c> constructor argument. Seven models in
+    /// this family -- the GANs and the image translators -- pass that argument straight into the
+    /// architecture they construct and keep no copy of their own, so every one of them was reported
+    /// unrebuildable over a value it still holds: one level down, where the lookup cannot see it,
+    /// because a member is sourced from a type's own members and its bases, never from a member OF a
+    /// member. Deriving it in the shared base keeps the value in one place instead of adding a second
+    /// copy to each model, which could then disagree with the architecture it was built from.
+    /// </remarks>
+    private InputType _inputType => Architecture.InputType;
 }
 
 [TensorLayout(TensorAxis.Batch, TensorAxis.Features,

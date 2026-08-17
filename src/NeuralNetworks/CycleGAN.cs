@@ -945,36 +945,6 @@ public partial class CycleGAN<T> : ImageTranslationModelLayoutBase<T>
         ResetOptimizerState();
     }
 
-    /// <summary>
-    /// Creates a new instance of the CycleGAN with the same configuration.
-    /// </summary>
-    /// <returns>A new CycleGAN instance with the same architecture and hyperparameters.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method creates a fresh CycleGAN instance with the same network architectures
-    /// and hyperparameters. The new instance has freshly initialized optimizers.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method creates a copy of the CycleGAN structure
-    /// but with new, untrained networks and fresh optimizers.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new CycleGAN<T>(
-            GeneratorAtoB.Architecture,
-            GeneratorBtoA.Architecture,
-            DiscriminatorA.Architecture,
-            DiscriminatorB.Architecture,
-            Architecture.InputType,
-            generatorAtoBOptimizer: null,
-            generatorBtoAOptimizer: null,
-            discriminatorAOptimizer: null,
-            discriminatorBOptimizer: null,
-            _lossFunction,
-            NumOps.ToDouble(_cycleConsistencyLambda),
-            NumOps.ToDouble(_identityLambda));
-    }
-
     /// <inheritdoc />
     /// <remarks>
     /// Streams parameters from each of the four sub-networks in sequence:

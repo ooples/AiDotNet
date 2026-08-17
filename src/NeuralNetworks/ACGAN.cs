@@ -867,18 +867,6 @@ public partial class ACGAN<T> : ImageGeneratorModelLayoutBase<T>
         _discriminatorOptimizer.Deserialize(discriminatorOptimizerData);
     }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new ACGAN<T>(
-            Generator.Architecture,
-            Discriminator.Architecture,
-            _numClasses,
-            Architecture.InputType,
-            null, // Use default optimizer
-            null, // Use default optimizer
-            _lossFunction);
-    }
-
     // UpdateParameters split the vector between Generator and Discriminator; GetExtraTrainableLayers
     // yields the same two in the same order, so the base reproduces the split. Removed under AIDN082.
 }

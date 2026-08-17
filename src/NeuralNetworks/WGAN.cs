@@ -695,19 +695,5 @@ public partial class WGAN<T> : ImageGeneratorModelLayoutBase<T>
         Critic.Deserialize(criticData);
     }
 
-    /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new WGAN<T>(
-            Generator.Architecture,
-            Critic.Architecture,
-            Architecture.InputType,
-            null, // Use default optimizer
-            null, // Use default optimizer
-            _lossFunction,
-            _weightClipValue,
-            _criticIterations);
-    }
-
     // The layer streams this model holds outside Layers are discovered by ModelParameterGenerator and surfaced automatically; the hand-written hook that used to sit here was an override wearing a different name.
 }

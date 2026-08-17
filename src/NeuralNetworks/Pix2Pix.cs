@@ -755,19 +755,6 @@ public partial class Pix2Pix<T> : ImageTranslationModelLayoutBase<T>
         Discriminator.Deserialize(discriminatorData);
     }
 
-    /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new Pix2Pix<T>(
-            Generator.Architecture,
-            Discriminator.Architecture,
-            Architecture.InputType,
-            null, // Use default optimizer
-            null, // Use default optimizer
-            _lossFunction,
-            NumOps.ToDouble(_l1Lambda));
-    }
-
     // UpdateParameters split the vector between Generator and Discriminator; GetExtraTrainableLayers
     // yields the same two in the same order, so the base reproduces the split. Removed under AIDN082.
 }

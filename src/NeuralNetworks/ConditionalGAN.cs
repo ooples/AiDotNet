@@ -918,22 +918,4 @@ public partial class ConditionalGAN<T> : GenerativeAdversarialNetwork<T>
             outputSize: discArch.OutputSize,
             layers: discArch.Layers);
     }
-
-    /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        // Use the stored architectures to avoid double-conditioning. The
-        // generator is stored at its full [noise | condition] width, while the
-        // discriminator is stored before conditioning because its helper expands
-        // it again in the constructor.
-        return new ConditionalGAN<T>(
-            _originalGeneratorArchitecture ?? Generator.Architecture,
-            _originalDiscriminatorArchitecture ?? Discriminator.Architecture,
-            _numConditionClasses,
-            Architecture.InputType,
-            null,
-            null,
-            null,
-            _options);
-    }
 }

@@ -936,21 +936,6 @@ public partial class StyleGAN<T> : ImageGeneratorModelLayoutBase<T>
         _discSecondMoment = SerializationHelper<T>.DeserializeVector(reader);
     }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new StyleGAN<T>(
-            MappingNetwork.Architecture,
-            SynthesisNetwork.Architecture,
-            Discriminator.Architecture,
-            _latentSize,
-            _intermediateLatentSize,
-            Architecture.InputType,
-            _lossFunction,
-            _initialLearningRate,
-            _enableStyleMixing,
-            NumOps.ToDouble(_styleMixingProbability));
-    }
-
     // UpdateParameters split the vector between MappingNetwork, SynthesisNetwork and Discriminator;
     // GetExtraTrainableLayers yields those three in the same order, so the base reproduces the
     // split. Removed under AIDN082.
