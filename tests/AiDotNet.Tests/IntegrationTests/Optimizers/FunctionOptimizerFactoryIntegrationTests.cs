@@ -334,4 +334,134 @@ public class FunctionOptimizerFactoryIntegrationTests
             Assert.Equal(3.0, answer[i], 4);
         }
     }
+
+    /// <summary>
+    /// BFGS reaches Rosenbrock's optimum within the budget a line-searched quasi-Newton method is
+    /// entitled to.
+    /// </summary>
+    /// <remarks>
+    /// Before BFGS had a Minimize override it inherited the base loop, which has no line search at
+    /// all, and needed 51/1911/1166/673 evaluations at 2/5/10/20 variables. With the shared strong
+    /// Wolfe search it needs 65/65/100/145 — and now beats L-BFGS at every size above two, which
+    /// is the ordering the theory predicts, since it keeps the whole curvature history rather
+    /// than ten pairs.
+    /// </remarks>
+    [Theory]
+    [InlineData(2)]
+    [InlineData(5)]
+    [InlineData(10)]
+    [InlineData(20)]
+    [InlineData(50)]
+    public void Bfgs_SolvesRosenbrockWithinALineSearchedBudget(int dimension)
+    {
+        var counter = new CountingObjective(ChainedRosenbrock);
+
+        Vector<double> answer = BFGSOptimizer<double, Tensor<double>, Tensor<double>>
+            .CreateForFunction()
+            .Minimize(RosenbrockStart(dimension), counter.Evaluate, MaxIterations, 1e-8);
+
+        var (objective, _) = ChainedRosenbrock(answer);
+
+        Assert.True(objective < 1e-10, $"Expected the optimum at n = {dimension}; got f = {objective}.");
+
+        Assert.True(
+            counter.Count <= 600,
+            $"BFGS needed {counter.Count} evaluations at n = {dimension}. Above 600 means the " +
+            "line search stopped being applied on the plain-function path.");
+    }
+
+    /// <summary>
+    /// Nonlinear conjugate gradient converges too, and its storage is three vectors regardless of
+    /// the problem size.
+    /// </summary>
+    /// <remarks>
+    /// Two things had to be right for this. The recursion has to remember the DIRECTION rather
+    /// than the step, and the previous GRADIENT has to be the one at the previous point — an
+    /// earlier draft recorded the gradient at the new point, which made every beta zero and turned
+    /// the method into steepest descent: 165066 evaluations at two variables, against 379 now.
+    /// </remarks>
+    [Theory]
+    [InlineData(2)]
+    [InlineData(5)]
+    [InlineData(10)]
+    [InlineData(20)]
+    public void ConjugateGradient_SolvesRosenbrock(int dimension)
+    {
+        var counter = new CountingObjective(ChainedRosenbrock);
+
+        Vector<double> answer = ConjugateGradientOptimizer<double, Tensor<double>, Tensor<double>>
+            .CreateForFunction()
+            .Minimize(RosenbrockStart(dimension), counter.Evaluate, MaxIterations, 1e-8);
+
+        var (objective, _) = ChainedRosenbrock(answer);
+
+        Assert.True(objective < 1e-10, $"Expected the optimum at n = {dimension}; got f = {objective}.");
+
+        Assert.True(
+            counter.Count <= 8000,
+            $"Conjugate gradient needed {counter.Count} evaluations at n = {dimension}. Above " +
+            "8000 means the recursion has degenerated into steepest descent.");
+    }
+
+    /// <summary>
+    /// Conjugate gradient defaults to a much stricter curvature constant than the quasi-Newton
+    /// methods, because its direction is only a descent direction when the search is accurate.
+    /// </summary>
+    [Fact]
+    public void ConjugateGradient_DefaultsToTheStricterCurvatureConstant()
+    {
+        var options = new ConjugateGradientOptimizerOptions<double, Tensor<double>, Tensor<double>>();
+        Assert.Equal(0.1, options.WolfeCurvatureConstant, 12);
+
+        var quasiNewton = new BFGSOptimizerOptions<double, Tensor<double>, Tensor<double>>();
+        Assert.Equal(0.9, quasiNewton.WolfeCurvatureConstant, 12);
+    }
+
+    /// <summary>
+    /// DFP is the weakest of the three and is included as the historical comparison it is: it
+    /// solves the small cases and loses ground as the problem grows, which is the empirical result
+    /// that made BFGS the default.
+    /// </summary>
+    [Theory]
+    [InlineData(2)]
+    [InlineData(5)]
+    public void Dfp_SolvesTheSmallCases(int dimension)
+    {
+        var counter = new CountingObjective(ChainedRosenbrock);
+
+        Vector<double> answer = DFPOptimizer<double, Tensor<double>, Tensor<double>>
+            .CreateForFunction()
+            .Minimize(RosenbrockStart(dimension), counter.Evaluate, MaxIterations, 1e-8);
+
+        var (objective, _) = ChainedRosenbrock(answer);
+
+        Assert.True(objective < 1e-10, $"Expected the optimum at n = {dimension}; got f = {objective}.");
+    }
+
+    /// <summary>
+    /// The line-search options now live on the shared base, so every gradient optimizer has them
+    /// and a caller can tune any of them.
+    /// </summary>
+    [Fact]
+    public void LineSearchOptions_AreSharedAcrossTheGradientFamily()
+    {
+        var bfgs = new BFGSOptimizerOptions<double, Tensor<double>, Tensor<double>>
+        {
+            UseStrongWolfeLineSearch = false,
+            ArmijoConstant = 1e-3,
+            LineSearchMaxZoomSteps = 5,
+        };
+
+        Assert.False(bfgs.UseStrongWolfeLineSearch);
+        Assert.Equal(1e-3, bfgs.ArmijoConstant, 12);
+        Assert.Equal(5, bfgs.LineSearchMaxZoomSteps);
+
+        // And turning the Wolfe search off still reaches the answer, on the backtracking fallback.
+        Vector<double> answer = BFGSOptimizer<double, Tensor<double>, Tensor<double>>
+            .CreateForFunction(bfgs)
+            .Minimize(RosenbrockStart(5), ChainedRosenbrock, MaxIterations, 1e-6);
+
+        Assert.True(ChainedRosenbrock(answer).objective < 1e-6);
+    }
+
 }

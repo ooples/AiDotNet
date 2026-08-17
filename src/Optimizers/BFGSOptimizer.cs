@@ -595,4 +595,151 @@ public class BFGSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
             }
         }
     }
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// BFGS maintains a dense estimate of the INVERSE Hessian, so a step is a matrix-vector
+    /// product rather than a linear solve — which is the difference between O(n^2) and O(n^3) per
+    /// iteration, and the reason nobody implements it the other way round.
+    /// </para>
+    /// <para>
+    /// The estimate starts at the identity and is corrected by the rank-two update of Broyden,
+    /// Fletcher, Goldfarb and Shanno (Nocedal and Wright, "Numerical Optimization", Algorithm 6.1)
+    /// after each accepted step. A step satisfying the strong Wolfe conditions guarantees
+    /// <c>s'y &gt; 0</c>, which is what keeps the estimate positive definite; a pair that fails it
+    /// is discarded rather than used.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is Newton's method without the Hessian. Rather than
+    /// computing the curvature at every step, it works the curvature out from how the slope
+    /// changed over the steps it has already taken — which costs nothing extra, because it
+    /// measured those gradients anyway.
+    /// </para>
+    /// </remarks>
+    public override Vector<T> Minimize(
+        Vector<T> initialParameters,
+        Func<Vector<T>, (T objective, Vector<T> gradient)> objectiveAndGradient,
+        int maxIterations,
+        T tolerance,
+        Func<Vector<T>, Vector<T>>? projection)
+        => MinimizeWithLineSearch(
+            initialParameters, objectiveAndGradient, maxIterations, tolerance, projection,
+            new BfgsDirection(this), "BFGS");
+
+    /// <summary>The BFGS update of the inverse Hessian estimate, as a direction rule.</summary>
+    private sealed class BfgsDirection : ISearchDirectionRule
+    {
+        private readonly BFGSOptimizer<T, TInput, TOutput> _owner;
+        private T[,] _inverse = new T[0, 0];
+        private int _size;
+        private bool _scaled;
+
+        public BfgsDirection(BFGSOptimizer<T, TInput, TOutput> owner) => _owner = owner;
+
+        public void Reset(int parameterCount)
+        {
+            _size = parameterCount;
+            _inverse = new T[parameterCount, parameterCount];
+            _scaled = false;
+
+            for (int i = 0; i < parameterCount; i++)
+            {
+                for (int j = 0; j < parameterCount; j++)
+                {
+                    _inverse[i, j] = i == j ? _owner.NumOps.One : _owner.NumOps.Zero;
+                }
+            }
+        }
+
+        public Vector<T> ComputeDirection(Vector<T> gradient)
+        {
+            var numOps = _owner.NumOps;
+            var direction = new Vector<T>(_size);
+
+            for (int i = 0; i < _size; i++)
+            {
+                T total = numOps.Zero;
+                for (int j = 0; j < _size; j++)
+                {
+                    total = numOps.Add(total, numOps.Multiply(_inverse[i, j], gradient[j]));
+                }
+
+                direction[i] = numOps.Negate(total);
+            }
+
+            return direction;
+        }
+
+        public void Observe(
+            Vector<T> step, Vector<T> gradientChange, Vector<T> gradient, bool satisfiedWolfe)
+        {
+            var numOps = _owner.NumOps;
+
+            T curvature = gradientChange.DotProduct(step);
+            if (!numOps.GreaterThan(curvature, numOps.FromDouble(1e-12)))
+            {
+                // Using a pair with non-positive curvature makes the estimate indefinite, so the
+                // next direction could point uphill. Skipping loses information; using it loses
+                // the property that makes the estimate usable at all.
+                return;
+            }
+
+                        if (!_scaled)
+            {
+                // Nocedal and Wright equation 6.20. The identity has no idea of the problem's
+                // scale, so the first step is wrong by whatever factor the units happen to be;
+                // this rescales it using the only measurement available.
+                T scale = numOps.Divide(curvature, gradientChange.DotProduct(gradientChange));
+
+                for (int i = 0; i < _size; i++)
+                {
+                    for (int j = 0; j < _size; j++)
+                    {
+                        _inverse[i, j] = i == j ? scale : numOps.Zero;
+                    }
+                }
+
+                _scaled = true;
+            }
+
+T rho = numOps.Divide(numOps.One, curvature);
+
+            // (I - rho s y') H (I - rho y s') + rho s s', written out so no matrix is allocated
+            // beyond the one being replaced.
+            var updated = new T[_size, _size];
+
+            for (int i = 0; i < _size; i++)
+            {
+                for (int j = 0; j < _size; j++)
+                {
+                    T total = numOps.Zero;
+
+                    for (int k = 0; k < _size; k++)
+                    {
+                        T leftEntry = numOps.Subtract(
+                            i == k ? numOps.One : numOps.Zero,
+                            numOps.Multiply(rho, numOps.Multiply(step[i], gradientChange[k])));
+
+                        T inner = numOps.Zero;
+                        for (int m = 0; m < _size; m++)
+                        {
+                            T rightEntry = numOps.Subtract(
+                                m == j ? numOps.One : numOps.Zero,
+                                numOps.Multiply(rho, numOps.Multiply(gradientChange[m], step[j])));
+
+                            inner = numOps.Add(inner, numOps.Multiply(_inverse[k, m], rightEntry));
+                        }
+
+                        total = numOps.Add(total, numOps.Multiply(leftEntry, inner));
+                    }
+
+                    updated[i, j] = numOps.Add(
+                        total, numOps.Multiply(rho, numOps.Multiply(step[i], step[j])));
+                }
+            }
+
+            _inverse = updated;
+        }
+    }
+
 }

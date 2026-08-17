@@ -423,4 +423,105 @@ public class ConjugateGradientOptimizer<T, TInput, TOutput> : GradientBasedOptim
         var updated = UpdateParameters(context.GetFlatParameters(), context.GetFlatGradients());
         context.SetFlatParameters(updated);
     }
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// Nonlinear conjugate gradient: the direction is the negative gradient plus a multiple of the
+    /// previous direction, with the multiple given by the Polak-Ribiere formula clamped at zero
+    /// (Polak and Ribiere, 1969). Clamping is what turns a would-be ascent direction into a
+    /// restart, and the method also restarts every <c>n</c> iterations because the conjugacy it
+    /// has accumulated is with respect to a Hessian that has since changed.
+    /// </para>
+    /// <para>
+    /// Storage is three vectors regardless of the problem size, which is what makes this the
+    /// method of choice when even a limited-memory quasi-Newton estimate will not fit.
+    /// </para>
+    /// <para><b>For Beginners:</b> Steepest descent wastes effort by repeatedly undoing its own
+    /// progress. This picks each direction so that it does not spoil the work the previous ones
+    /// did, which on a bowl-shaped problem lets it finish in as many steps as there are variables.
+    /// </para>
+    /// </remarks>
+    public override Vector<T> Minimize(
+        Vector<T> initialParameters,
+        Func<Vector<T>, (T objective, Vector<T> gradient)> objectiveAndGradient,
+        int maxIterations,
+        T tolerance,
+        Func<Vector<T>, Vector<T>>? projection)
+        => MinimizeWithLineSearch(
+            initialParameters, objectiveAndGradient, maxIterations, tolerance, projection,
+            new ConjugateDirection(this), "conjugate gradient");
+
+    /// <summary>The Polak-Ribiere recursion with restarts, as a direction rule.</summary>
+    private sealed class ConjugateDirection : ISearchDirectionRule
+    {
+        private readonly ConjugateGradientOptimizer<T, TInput, TOutput> _owner;
+        private Vector<T>? _previousGradient;
+        private Vector<T>? _previousDirection;
+        private int _size;
+        private int _sinceRestart;
+
+        public ConjugateDirection(ConjugateGradientOptimizer<T, TInput, TOutput> owner)
+            => _owner = owner;
+
+        public void Reset(int parameterCount)
+        {
+            _size = parameterCount;
+            _previousGradient = null;
+            _previousDirection = null;
+            _sinceRestart = 0;
+        }
+
+        public Vector<T> ComputeDirection(Vector<T> gradient)
+        {
+            var numOps = _owner.NumOps;
+
+            // Every n iterations, throw the accumulated direction away. Whatever conjugacy it
+            // encodes is with respect to a Hessian several points out of date.
+            bool restart = _previousGradient is null
+                || _previousDirection is null
+                || _sinceRestart >= _size;
+
+            if (restart)
+            {
+                _sinceRestart = 0;
+                _previousDirection =
+                    (Vector<T>)_owner.Engine.Multiply(gradient, numOps.Negate(numOps.One));
+                _previousGradient = gradient.Clone();
+                return _previousDirection;
+            }
+
+            T previousLengthSquared = _previousGradient!.DotProduct(_previousGradient);
+            if (!numOps.GreaterThan(previousLengthSquared, numOps.FromDouble(1e-30)))
+            {
+                _previousDirection =
+                    (Vector<T>)_owner.Engine.Multiply(gradient, numOps.Negate(numOps.One));
+                _previousGradient = gradient.Clone();
+                return _previousDirection;
+            }
+
+            var change = (Vector<T>)_owner.Engine.Subtract(gradient, _previousGradient);
+            T beta = numOps.Divide(gradient.DotProduct(change), previousLengthSquared);
+
+            // Clamped at zero: a negative beta points the recursion backwards along the previous
+            // direction, which can produce an ascent direction. Clamping is exactly a restart.
+            if (numOps.LessThan(beta, numOps.Zero)) beta = numOps.Zero;
+
+            var direction = new Vector<T>(_size);
+            for (int i = 0; i < _size; i++)
+            {
+                direction[i] = numOps.Add(
+                    numOps.Negate(gradient[i]), numOps.Multiply(beta, _previousDirection![i]));
+            }
+
+            _previousDirection = direction;
+            _previousGradient = gradient.Clone();
+            return direction;
+        }
+
+        public void Observe(
+            Vector<T> step, Vector<T> gradientChange, Vector<T> gradient, bool satisfiedWolfe)
+            => _sinceRestart++;
+    }
+
 }
