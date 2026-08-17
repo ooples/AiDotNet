@@ -251,7 +251,7 @@ public class TimeSeriesIntegrationTests
         Assert.Equal(20, predictions.Length);
         for (int i = 0; i < predictions.Length; i++)
         {
-            Assert.True(double.IsFinite(predictions[i]), $"Prediction[{i}] is {predictions[i]}.");
+            Assert.True(!double.IsNaN(predictions[i]) && !double.IsInfinity(predictions[i]), $"Prediction[{i}] is {predictions[i]}.");
         }
 
         double meanAbsoluteError = Enumerable.Range(0, predictions.Length)

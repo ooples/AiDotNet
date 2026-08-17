@@ -368,7 +368,7 @@ public class OptimizationReviewRegressionTests
         double targetScale = Math.Sqrt(y.ToArray().Average(value => Math.Pow(value - targetMean, 2)));
         double expectedIdentityMappedOutput = (currentPrediction - targetMean) / targetScale;
 
-        Assert.True(double.IsFinite(legacyPrediction));
+        Assert.True(!double.IsNaN(legacyPrediction) && !double.IsInfinity(legacyPrediction));
         Assert.Equal(expectedIdentityMappedOutput, legacyPrediction, 10);
         Assert.NotEqual(currentPrediction, legacyPrediction);
     }

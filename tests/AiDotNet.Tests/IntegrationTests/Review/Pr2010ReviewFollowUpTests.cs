@@ -187,7 +187,7 @@ public class Pr2010ReviewFollowUpTests
 
         for (int i = 0; i < expected.Length; i++)
         {
-            Assert.True(double.IsFinite(expected[i]));
+            Assert.True(!double.IsNaN(expected[i]) && !double.IsInfinity(expected[i]));
             Assert.Equal(7.5, expected[i], 8);
             Assert.Equal(expected[i], actual[i], 12);
         }
@@ -280,7 +280,7 @@ public class Pr2010ReviewFollowUpTests
         restored.Deserialize(legacy);
         Vector<double> prediction = restored.Predict(Column(new[] { 12.0 }));
 
-        Assert.True(double.IsFinite(prediction[0]));
+        Assert.True(!double.IsNaN(prediction[0]) && !double.IsInfinity(prediction[0]));
     }
 
     [Fact(Timeout = 120000)]
