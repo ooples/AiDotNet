@@ -369,26 +369,6 @@ public partial class DiffWaveModel<T> : DiffusionModelBase<T>
 
     #region ICloneable Implementation
 
-    /// <inheritdoc />
-    public override IDiffusionModel<T> Clone()
-    {
-        var clone = new DiffWaveModel<T>(
-            residualChannels: _residualChannels,
-            residualLayers: _residualLayers,
-            dilationCycle: _dilationCycle,
-            melChannels: _melChannels,
-            sampleRate: SampleRate,
-            seed: null);
-
-        if (_lastInputShape is not null)
-        {
-            clone._network.ResolveLayerShapesFor(_lastInputShape);
-            clone._lastInputShape = (int[])_lastInputShape.Clone();
-        }
-        if (!clone.TryShareParametersFrom(this)) clone.SetParameterChunks(GetParameterChunks());
-        return clone;
-    }
-
     #endregion
 
     #region Metadata

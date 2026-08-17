@@ -320,41 +320,6 @@ public partial class DreamGaussianModel<T> : ThreeDDiffusionModelBase<T>
 
     #region ICloneable Implementation
 
-    /// <inheritdoc />
-    public override IDiffusionModel<T> Clone()
-    {
-        EnsureInitialized();
-        // Clone the existing UNet + VAE via their own Clone() methods so
-        // the cloned DreamGaussian preserves whatever config the original
-        // was constructed with — NOT the paper-scale defaults. The
-        // previous Clone() rebuilt both sub-modules with hardcoded
-        // {baseChannels=320, channelMultipliers={1,2,4,4}, 2 res blocks,
-        // 3 attention resolutions} and pushed the small test
-        // scaffold's parameters into them, which (a) reshaped the
-        // parameter vector silently when test sizes ≠ paper sizes and
-        // (b) made the Clone_ShouldProduceIdenticalOutput test
-        // unconditionally Predict at paper scale, blowing the 120 s
-        // xUnit timeout regardless of whether the original used a
-        // smaller test-friendly UNet.
-        var clonedUnet = (UNetNoisePredictor<T>)_unet.Clone();
-        var clonedVae = (StandardVAE<T>)_vae.Clone();
-
-        // Forward the outer-model config (DiffusionModelOptions, Scheduler,
-        // Architecture) too — the previous version only passed the cloned
-        // sub-modules and let the constructor defaults paper-scale-rebuild
-        // everything else, silently changing schedule/options/architecture
-        // on a customized original.
-        return new DreamGaussianModel<T>(
-            architecture: Architecture,
-            options: (DiffusionModelOptions<T>)GetOptions(),
-            scheduler: Scheduler,
-            unet: clonedUnet,
-            vae: clonedVae,
-            conditioner: _conditioner,
-            defaultPointCount: DefaultPointCount,
-            seed: _seed);
-    }
-
     #endregion
 
     #region Metadata
