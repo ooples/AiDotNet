@@ -1870,9 +1870,21 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
     {
         using (ModelPersistenceGuard.InternalOperation())
         {
-            byte[] state = Serialize();
             var copy = (DiffusionModelBase<T>)AiDotNet.Models.CloneEngine.CopyConfiguration(this);
-            copy.Deserialize(state);
+
+            // Copy the weights CHUNK BY CHUNK rather than through Serialize/Deserialize. The
+            // roundtrip funnels every parameter into one MemoryStream, and a ControlNet-scale model
+            // crosses the CLR's ~2 GB single-array ceiling on the way in -- the clone died with
+            // "Array dimensions exceeded supported range" inside BinaryWriter.Write, having
+            // allocated gigabytes first. GetParameterChunks exists precisely so a whole-model
+            // transfer never materialises a flat aggregate.
+            //
+            // Nothing is lost by not serializing. SaveState writes exactly three things: a version
+            // marker, the scheduler config, and the parameters. The scheduler config is already
+            // reproduced by CopyConfiguration above, and LoadState only VALIDATES that it matches
+            // rather than restoring it -- so the parameters were the sole payload this roundtrip
+            // was carrying.
+            copy.SetParameterChunks(GetParameterChunks());
             return copy;
         }
     }
