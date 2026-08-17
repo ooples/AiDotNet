@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.Helpers;
@@ -109,7 +110,14 @@ internal static class Im2Col3DHelper
         // Access the raw backing vectors through AiDotNet.Tensors' friend-assembly API.
         // Views share this storage, so all indexing below honors their physical strides
         // and offsets instead of using detached logical copies.
-        var xData = x.DataVector.GetDataArray();
+        // x is READ here and m is WRITTEN, so they need different accessors. GetDataArray asserts
+        // write permission, and asking for it on the source threw the moment a copy-on-write tensor
+        // arrived -- which is any activation shared with an alias family:
+        //
+        //     InvalidOperationException : Cannot mutate a copy-on-write tensor through DataVector.
+        //
+        // ReadOnlyStorageOf recovers the same backing array without claiming the right to write it.
+        var xData = ReadOnlyStorageOf(x);
         var mData = m.DataVector.GetDataArray();
         int[] xStrides = x.Strides.ToArray();
         int[] mStrides = m.Strides.ToArray();
@@ -238,8 +246,10 @@ internal static class Im2Col3DHelper
             throw new ArgumentException(
                 $"Col2Im3D gradient shape mismatch: expected [{rowsTotal}, {colsPerRow}], got [{m.Shape[0]}, {m.Shape[1]}].");
 
+        // The roles are REVERSED from Im2Col3D: here m carries the incoming gradient and is only
+        // read, while x is the destination this scatter-adds into. Same reasoning as there.
         var xData = x.DataVector.GetDataArray();
-        var mData = m.DataVector.GetDataArray();
+        var mData = ReadOnlyStorageOf(m);
         int[] xStrides = x.Strides.ToArray();
         int[] mStrides = m.Strides.ToArray();
         long xOffset = x.LogicalToStorageIndex(0);
@@ -348,4 +358,37 @@ internal static class Im2Col3DHelper
         });
     }
 
+    /// <summary>
+    /// Recovers a tensor's raw backing array for READING, without asserting the right to write it.
+    /// </summary>
+    /// <param name="t">The tensor to read from.</param>
+    /// <returns>The same storage array <c>DataVector.GetDataArray()</c> returns.</returns>
+    /// <remarks>
+    /// <para>
+    /// <c>GetDataArray</c> is a write-capable accessor: it asserts that the tensor's alias family can
+    /// detach, and throws for a copy-on-write tensor. That is right for a destination and wrong for a
+    /// source, and both im2col directions have one of each. Using it for the source made every
+    /// convolution over a shared activation throw, which is what
+    /// <c>NamedLayerActivations_ShouldBeNonEmpty</c> was reporting.
+    /// </para>
+    /// <para>
+    /// <c>Tensor.Data</c> is a <c>Memory&lt;T&gt;</c> over that same storage, so recovering the array
+    /// from it yields the identical object -- verified directly: for a slice of a [2,3,4] tensor both
+    /// paths return the same 24-element array, and the segment's offset (12) equals
+    /// <c>LogicalToStorageIndex(0)</c> (12). The callers add that offset themselves, so the array is
+    /// used exactly as before and no index arithmetic changes.
+    /// </para>
+    /// </remarks>
+    private static T[] ReadOnlyStorageOf<T>(Tensor<T> t)
+    {
+        if (!MemoryMarshal.TryGetArray((ReadOnlyMemory<T>)t.Data, out ArraySegment<T> segment)
+            || segment.Array is null)
+        {
+            // Not array-backed, so there is no storage to alias. Falling back to the write-capable
+            // accessor keeps the contract rather than inventing a copy whose writes would go nowhere.
+            return t.DataVector.GetDataArray();
+        }
+
+        return segment.Array;
+    }
 }
