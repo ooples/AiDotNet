@@ -505,8 +505,13 @@ public static class CloneEngine
         // generator had just certified, so the plan was right and the rebuild refused it: "every
         // member read, so the constructor could not be matched by name". Two rules for one question
         // is one rule too many; this is the same one.
+        // Decoration at EITHER end, for the same reason: the generator now also sources a member
+        // whose name STARTS with the parameter's (StackingClassifier keeps its `finalEstimator`
+        // factory in _finalEstimatorFactory). Accepting only the suffix here would recreate exactly
+        // the split this comment warns about, with the plan certifying a member the rebuild refuses.
         return trimmed.Length > parameter.Length
-            && trimmed.EndsWith(parameter, StringComparison.OrdinalIgnoreCase);
+            && (trimmed.EndsWith(parameter, StringComparison.OrdinalIgnoreCase)
+                || trimmed.StartsWith(parameter, StringComparison.OrdinalIgnoreCase));
     }
 
 }

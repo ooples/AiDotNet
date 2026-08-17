@@ -544,7 +544,20 @@ public class ClonePlanGenerator : IIncrementalGenerator
                 };
 
                 if (name is null) continue;
-                if (!name.EndsWith(suffix, System.StringComparison.Ordinal)) continue;
+
+                // A STORED ARGUMENT IS DECORATED AT EITHER END. A qualifying prefix is the common
+                // case (_nasSearchSpace, _bayesOptions); a qualifying suffix is the other one --
+                // StackingClassifier takes a `Func<IClassifier<T>> finalEstimator` and keeps it in
+                // _finalEstimatorFactory, which holds exactly what the constructor was given.
+                //
+                // The type check above is what makes this safe rather than loose: the same class
+                // also declares _finalEstimator, and that one is refused on TYPE (a classifier, not
+                // the factory) before its name is ever considered.
+                var bare = name.TrimStart('_');
+                var decorated = name.EndsWith(suffix, System.StringComparison.Ordinal)
+                    || (bare.Length > parameter.Name.Length
+                        && bare.StartsWith(parameter.Name, System.StringComparison.OrdinalIgnoreCase));
+                if (!decorated) continue;
 
                 if (member is IFieldSymbol) fields.Add(name); else properties.Add(name);
             }
