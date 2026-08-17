@@ -112,11 +112,6 @@ public partial class NuSupportVectorClassifier<T> : SVMBase<T>
     private double _nu;
 
     /// <summary>
-    /// Random number generator.
-    /// </summary>
-    private Random? _random;
-
-    /// <summary>
     /// Returns the maximum of two values.
     /// </summary>
     private T Max(T a, T b)
@@ -170,10 +165,6 @@ public partial class NuSupportVectorClassifier<T> : SVMBase<T>
         NumClasses = ClassLabels.Length;
         TaskType = InferTaskType(y);
 
-        _random = Options.Seed.HasValue
-            ? RandomHelper.CreateSeededRandom(Options.Seed.Value)
-            : RandomHelper.CreateSecureRandom();
-
         // Store training data
         _xTrain = new Matrix<T>(x.Rows, x.Columns);
         for (int i = 0; i < x.Rows; i++)
@@ -208,7 +199,7 @@ public partial class NuSupportVectorClassifier<T> : SVMBase<T>
     /// </summary>
     private void TrainNuSMO()
     {
-        if (_xTrain is null || _yTrain is null || _random is null)
+        if (_xTrain is null || _yTrain is null)
         {
             throw new InvalidOperationException("Training data has not been initialized.");
         }
@@ -217,7 +208,7 @@ public partial class NuSupportVectorClassifier<T> : SVMBase<T>
         _intercept = new Vector<T>(1);
 
         // The nu-SVC dual (Scholkopf et al., 2000; Chang and Lin, 2001) is
-        //     minimize  ½·alphaᵀQ·alpha    subject to  yᵀalpha = 0,  sum(alpha) = nu·n,
+        //     minimize  ½·alphaᵀQ·alpha    subject to  yᵀalpha = 0,  sum(alpha) = nu,
         //                                              0 <= alpha_i <= 1/n
         // with Q_ij = y_i·y_j·K(x_i, x_j). It differs from C-SVC in carrying a SECOND equality
         // constraint fixing the total mass, and in having no linear term.
@@ -225,7 +216,7 @@ public partial class NuSupportVectorClassifier<T> : SVMBase<T>
         // The shared solver handles this in its same-label pairing mode: moving two multipliers of
         // the same class in opposite directions leaves both sums invariant, which is precisely
         // LIBSVM's Solver_NU. A feasible starting point is required, since all-zeros satisfies
-        // yᵀalpha = 0 but not sum(alpha) = nu·n.
+        // yᵀalpha = 0 but not sum(alpha) = nu.
         //
         // This replaces an inlined loop that described itself as "simplified optimization -
         // gradient descent on alphas", picked its partner multiplier at RANDOM, and applied a
@@ -240,7 +231,9 @@ public partial class NuSupportVectorClassifier<T> : SVMBase<T>
         var solver = new AiDotNet.Solvers.QuadraticProgramming.SequentialMinimalOptimizationSolver<T>(
             new SequentialMinimalOptimizationOptions
             {
-                MaxIterations = Options.MaxIterations < 0 ? 1000000 : Options.MaxIterations * n,
+                MaxIterations = Options.MaxIterations < 0
+                    ? 1000000
+                    : (int)Math.Min(int.MaxValue, (long)Options.MaxIterations * n),
                 Tolerance = Options.Tolerance,
                 RestrictPairsToSameLabel = true,
             });
@@ -251,6 +244,7 @@ public partial class NuSupportVectorClassifier<T> : SVMBase<T>
 
         _alphas = alphas;
         _intercept[0] = bias;
+        _rho = NumOps.Negate(bias);
 
         ExtractSupportVectors();
     }
@@ -259,14 +253,31 @@ public partial class NuSupportVectorClassifier<T> : SVMBase<T>
     /// Builds a starting point satisfying both nu-SVC equality constraints.
     /// </summary>
     /// <remarks>
-    /// Each class receives half of the total mass nu·n, spread evenly across its members and capped
-    /// at the per-multiplier bound, so that sum(alpha) = nu·n and yᵀalpha = 0 both hold before the
+    /// Each class receives half of the total mass nu, spread evenly across its members and capped
+    /// at the per-multiplier bound, so that sum(alpha) = nu and yᵀalpha = 0 both hold before the
     /// first step. Any leftover mass from the cap is redistributed to members still below it.
     /// </remarks>
     private Vector<T> BuildFeasibleNuStart(int n, T upperBound)
     {
         var alphas = new Vector<T>(n);
-        double half = _nu * n / 2.0;
+        int positiveCount = 0;
+        int negativeCount = 0;
+        for (int i = 0; i < n; i++)
+        {
+            if (NumOps.Equals(_yTrain![i], NumOps.One)) positiveCount++;
+            else if (NumOps.Equals(_yTrain[i], NumOps.Negate(NumOps.One))) negativeCount++;
+        }
+
+        double maximumFeasibleNu = 2.0 * Math.Min(positiveCount, negativeCount) / n;
+        if (_nu > maximumFeasibleNu + 1e-12)
+        {
+            throw new ArgumentException(
+                $"Nu={_nu} is infeasible for this class distribution. With {positiveCount} positive " +
+                $"and {negativeCount} negative samples, Nu must be at most {maximumFeasibleNu}.",
+                nameof(_nu));
+        }
+
+        double half = _nu / 2.0;
 
         foreach (var label in new[] { NumOps.One, NumOps.Negate(NumOps.One) })
         {
@@ -340,53 +351,6 @@ public partial class NuSupportVectorClassifier<T> : SVMBase<T>
             }
         }
         return NumOps.Subtract(sum, _rho);
-    }
-
-    /// <summary>
-    /// Computes rho and intercept.
-    /// </summary>
-    private void ComputeRhoAndIntercept()
-    {
-        if (_xTrain is null || _yTrain is null || _alphas is null || _intercept is null)
-        {
-            throw new InvalidOperationException("Training data has not been initialized.");
-        }
-
-        // Compute rho as average of decision values on support vectors
-        T sumRho = NumOps.Zero;
-        int countSV = 0;
-        T upperBound = NumOps.Divide(NumOps.One, NumOps.FromDouble(_xTrain.Rows));
-
-        for (int i = 0; i < _xTrain.Rows; i++)
-        {
-            // Free support vectors (not at bounds)
-            if (NumOps.Compare(_alphas[i], NumOps.FromDouble(1e-10)) > 0 &&
-                NumOps.Compare(_alphas[i], NumOps.Subtract(upperBound, NumOps.FromDouble(1e-10))) < 0)
-            {
-                T decision = NumOps.Zero;
-                for (int j = 0; j < _xTrain.Rows; j++)
-                {
-                    if (NumOps.Compare(_alphas[j], NumOps.FromDouble(1e-10)) > 0)
-                    {
-                        T kernel = ComputeKernel(GetRow(_xTrain, i), GetRow(_xTrain, j));
-                        decision = NumOps.Add(decision, NumOps.Multiply(NumOps.Multiply(_alphas[j], _yTrain[j]), kernel));
-                    }
-                }
-                sumRho = NumOps.Add(sumRho, NumOps.Subtract(decision, _yTrain[i]));
-                countSV++;
-            }
-        }
-
-        if (countSV > 0)
-        {
-            _rho = NumOps.Divide(sumRho, NumOps.FromDouble(countSV));
-        }
-        else
-        {
-            _rho = NumOps.Zero;
-        }
-
-        _intercept[0] = NumOps.Negate(_rho);
     }
 
     /// <summary>

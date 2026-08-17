@@ -12,8 +12,14 @@ namespace AiDotNet.Models.Options;
 /// </remarks>
 public class SequentialMinimalOptimizationOptions : ModelOptions
 {
-    public SequentialMinimalOptimizationOptions() { }
+    /// <summary>Initializes the options with documented defaults.</summary>
+    public SequentialMinimalOptimizationOptions()
+    {
+    }
 
+    /// <summary>Initializes the options by copying another configuration.</summary>
+    /// <param name="other">The configuration to copy.</param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="other"/> is null.</exception>
     public SequentialMinimalOptimizationOptions(SequentialMinimalOptimizationOptions other)
     {
         if (other is null) throw new ArgumentNullException(nameof(other));
@@ -80,7 +86,7 @@ public class SequentialMinimalOptimizationOptions : ModelOptions
     /// <remarks>
     /// <para>
     /// The nu-parameterized formulations (nu-SVC, nu-SVR) carry <b>two</b> equality constraints
-    /// rather than one: <c>Σ αᵢyᵢ = 0</c> and <c>Σ αᵢ = ν·n</c>. A step that moves α_i by
+    /// rather than one: <c>Σ αᵢyᵢ = 0</c> and a formulation-specific fixed total multiplier mass. A step that moves α_i by
     /// <c>y_i·t</c> and α_j by <c>−y_j·t</c> preserves the first for any pair, but preserves the
     /// second only when the two labels agree — with opposite labels the total drifts by <c>2t</c>.
     /// </para>
@@ -88,7 +94,7 @@ public class SequentialMinimalOptimizationOptions : ModelOptions
     /// Restricting the pair to one class keeps both sums invariant, which is exactly how LIBSVM's
     /// Solver_NU works: it selects the maximal violating pair within each class and takes whichever
     /// is worse. Enable this for nu-parameterized problems and supply a feasible starting point,
-    /// since all-zeros does not satisfy <c>Σ αᵢ = ν·n</c>.
+    /// since all-zeros does not satisfy the fixed-mass constraint.
     /// </para>
     /// <para><b>For Beginners:</b> The nu variants pin down not just the balance between the two
     /// classes but also the total amount of influence handed out. Swapping influence between two

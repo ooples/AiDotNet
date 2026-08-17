@@ -122,7 +122,9 @@ internal sealed class LinearProgramStandardForm<T>
     /// <summary>
     /// Converts a linear program to standard form.
     /// </summary>
-    public static LinearProgramStandardForm<T> Build(LinearProgram<T> program)
+    public static LinearProgramStandardForm<T> Build(
+        LinearProgram<T> program,
+        bool treatMissingLowerBoundsAsUnbounded = false)
     {
         int originalVariableCount = program.VariableCount;
 
@@ -132,13 +134,12 @@ internal sealed class LinearProgramStandardForm<T>
 
         for (int i = 0; i < originalVariableCount; i++)
         {
+            bool lowerIsFinite = program.LowerBounds is null
+                ? !treatMissingLowerBoundsAsUnbounded
+                : IsFinite(program.LowerBounds[i]);
+            bool upperIsFinite = program.UpperBounds is not null && IsFinite(program.UpperBounds[i]);
             T lower = program.LowerBounds is null ? NumOps.Zero : program.LowerBounds[i];
-            T upper = program.UpperBounds is null
-                ? NumOps.FromDouble(double.PositiveInfinity)
-                : program.UpperBounds[i];
-
-            bool lowerIsFinite = IsFinite(lower);
-            bool upperIsFinite = IsFinite(upper);
+            T upper = program.UpperBounds is null ? NumOps.Zero : program.UpperBounds[i];
 
             if (lowerIsFinite)
             {

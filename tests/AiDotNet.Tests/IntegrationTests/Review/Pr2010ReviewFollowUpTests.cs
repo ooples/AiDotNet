@@ -1,0 +1,298 @@
+using System.Reflection;
+using AiDotNet.Classification.SVM;
+using AiDotNet.ComputerVision.Detection.Losses;
+using AiDotNet.Enums;
+using AiDotNet.GaussianProcesses;
+using AiDotNet.Interfaces;
+using AiDotNet.Models.Options;
+using AiDotNet.Optimizers;
+using AiDotNet.Regression;
+using AiDotNet.Solvers.Constrained;
+using AiDotNet.Solvers.InteriorPoint;
+using AiDotNet.Solvers.LinearProgramming;
+using AiDotNet.Solvers.QuadraticProgramming;
+using AiDotNet.Tensors;
+using AiDotNet.Tensors.LinearAlgebra;
+using Xunit;
+
+namespace AiDotNet.Tests.IntegrationTests.Review;
+
+[Trait("Category", "Integration")]
+public class Pr2010ReviewFollowUpTests
+{
+    [Fact(Timeout = 120000)]
+    public async Task NuSvc_RejectsNuThatClassDistributionCannotSupport()
+    {
+        await Task.Yield();
+
+        var x = Column(Enumerable.Range(0, 10).Select(i => (double)i).ToArray());
+        var y = Vector<double>.FromArray(new[] { 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0 });
+        var model = new NuSupportVectorClassifier<double>(
+            new SVMOptions<double> { Kernel = KernelType.Linear, Seed = 42 }, null, nu: 0.5);
+
+        var exception = Assert.Throws<ArgumentException>(() => model.Train(x, y));
+
+        Assert.Contains("must be at most 0.2", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task NuSvc_AsymmetricBoundary_UsesTheSolverBias()
+    {
+        await Task.Yield();
+
+        var x = Column(new[] { 1.0, 2.0, 3.0, 8.0, 9.0, 10.0 });
+        var y = Vector<double>.FromArray(new[] { 0.0, 0.0, 0.0, 1.0, 1.0, 1.0 });
+        var model = new NuSupportVectorClassifier<double>(
+            new SVMOptions<double> { Kernel = KernelType.Linear, MaxIterations = 1000, Seed = 42 },
+            null,
+            nu: 0.5);
+
+        model.Train(x, y);
+        var predictions = model.Predict(x);
+
+        Assert.Equal(y.ToArray(), predictions.ToArray());
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task DetrTapeLoss_RejectsIncompatibleStructuredTargetShape()
+    {
+        await Task.Yield();
+
+        var loss = new DETRSetLoss<double>(numClasses: 2);
+        var predicted = new Tensor<double>([1, 3, 6]);
+        var target = new Tensor<double>([2, 3, 5]);
+
+        var exception = Assert.Throws<ArgumentException>(() => loss.ComputeTapeLoss(predicted, target));
+
+        Assert.Contains("Received predicted", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("and target", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task HyperparameterProjection_RejectsContradictoryPositiveBounds()
+    {
+        await Task.Yield();
+
+        var optimizer = new HyperparameterOptimizer<double>(maxIterations: 2);
+
+        var exception = Assert.Throws<ArgumentException>(() => optimizer.GradientDescent(
+            new Dictionary<string, double> { ["lengthScale"] = 1e-8 },
+            values => (0.0, new Dictionary<string, double> { ["lengthScale"] = 0.0 }),
+            parameterBounds: new Dictionary<string, (double min, double max)>
+            {
+                ["lengthScale"] = (0.0, 1e-9),
+            }));
+
+        Assert.Contains("upper bound", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task PrincipalComponentRegression_HandlesConstantColumnsAndClonesCompleteState()
+    {
+        await Task.Yield();
+
+        var x = new Matrix<double>(8, 3);
+        var y = new Vector<double>(8);
+        for (int i = 0; i < x.Rows; i++)
+        {
+            x[i, 0] = i;
+            x[i, 1] = 5.0;
+            x[i, 2] = i % 2 == 0 ? -1.0 : 1.0;
+            y[i] = 7.5;
+        }
+
+        var model = new PrincipalComponentRegression<double>(
+            new PrincipalComponentRegressionOptions<double> { NumComponents = 2 });
+        model.Train(x, y);
+        var expected = model.Predict(x);
+        var clone = (PrincipalComponentRegression<double>)model.Clone();
+        var actual = clone.Predict(x);
+
+        for (int i = 0; i < expected.Length; i++)
+        {
+            Assert.True(double.IsFinite(expected[i]));
+            Assert.Equal(7.5, expected[i], 8);
+            Assert.Equal(expected[i], actual[i], 12);
+        }
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task StepwiseForwardSelection_PreservesOriginalFeatureIndicesAfterRemoval()
+    {
+        await Task.Yield();
+
+        var x = new Matrix<double>(60, 3);
+        var y = new Vector<double>(60);
+        for (int i = 0; i < x.Rows; i++)
+        {
+            x[i, 0] = (i * 17 % 13) - 6;
+            x[i, 1] = i % 2 == 0 ? -1.0 : 1.0;
+            x[i, 2] = (i % 5) - 2.0;
+            y[i] = 100.0 * x[i, 1] + 10.0 * x[i, 2];
+        }
+
+        var model = new StepwiseRegression<double>(new StepwiseRegressionOptions<double>
+        {
+            Method = StepwiseMethod.Forward,
+            MaxFeatures = 2,
+            MinImprovement = 0.0,
+        });
+        model.Train(x, y);
+
+        var active = model.GetActiveFeatureIndices().ToArray();
+        Assert.Contains(1, active);
+        Assert.Contains(2, active);
+        Assert.Equal(active.Length, active.Distinct().Count());
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task TimeSeriesRoundTrip_PreservesTrendSeasonalClockAndLagSeed()
+    {
+        await Task.Yield();
+
+        var options = new TimeSeriesRegressionOptions<double>
+        {
+            LagOrder = 2,
+            IncludeTrend = true,
+            SeasonalPeriod = 4,
+            AutocorrelationCorrection = false,
+            ModelType = TimeSeriesModelType.AutoRegressive,
+        };
+        var x = new Matrix<double>(32, 1);
+        var y = new Vector<double>(32);
+        for (int i = 0; i < x.Rows; i++)
+        {
+            x[i, 0] = i;
+            y[i] = 20.0 + 1.5 * i + (i % 4 == 1 ? 5.0 : 0.0);
+        }
+
+        var future = new Matrix<double>(5, 1);
+        for (int i = 0; i < future.Rows; i++) future[i, 0] = x.Rows + i;
+
+        var model = new TimeSeriesRegression<double>(options);
+        model.Train(x, y);
+        var expected = model.Predict(future);
+
+        var restored = new TimeSeriesRegression<double>(new TimeSeriesRegressionOptions<double>());
+        restored.Deserialize(model.Serialize());
+        var actual = restored.Predict(future);
+
+        for (int i = 0; i < expected.Length; i++) Assert.Equal(expected[i], actual[i], 10);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task AugmentedLagrangian_UnconstrainedIterationLimitIsNotReportedOptimal()
+    {
+        await Task.Yield();
+
+        var solver = new AugmentedLagrangianSolver<double>(
+            new AugmentedLagrangianSolverOptions { StationarityTolerance = 1e-8 },
+            new FrozenOptimizer());
+        var problem = new ConstrainedProblem<double>(
+            point => (point[0] * point[0], V(2.0 * point[0])));
+
+        var solution = solver.Solve(problem, V(3.0));
+
+        Assert.Equal(LinearProgramStatus.IterationLimit, solution.Status);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task AugmentedLagrangian_RejectsConstraintJacobianWidthMismatch()
+    {
+        await Task.Yield();
+
+        var solver = new AugmentedLagrangianSolver<double>();
+        var problem = new ConstrainedProblem<double>(
+            point => (point[0] * point[0], V(2.0 * point[0])),
+            equalityConstraints: point => (V(point[0]), new Matrix<double>(1, 2)));
+
+        var exception = Assert.Throws<ArgumentException>(() => solver.Solve(problem, V(1.0)));
+
+        Assert.Contains("1x1 Jacobian", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task InteriorPoint_LeavesQuadraticVariableUnboundedBelowByDefault()
+    {
+        await Task.Yield();
+
+        var quadratic = new Matrix<double>(1, 1);
+        quadratic[0, 0] = 1.0;
+        var program = new QuadraticProgram<double>(quadratic, V(1.0));
+
+        var solution = new InteriorPointSolver<double>().Solve(program);
+
+        Assert.Equal(LinearProgramStatus.Optimal, solution.Status);
+        Assert.Equal(-1.0, solution.Solution![0], 5);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task Simplex_UnboundedIntegerTypedProgram_DoesNotMaterializeInfinity()
+    {
+        await Task.Yield();
+
+        var program = new LinearProgram<int>(Vector<int>.FromArray([-1]));
+
+        var solution = new SimplexSolver<int>().Solve(program);
+
+        Assert.Equal(LinearProgramStatus.Unbounded, solution.Status);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task BranchAndBound_DecimalProgramWithoutUpperBounds_DoesNotConvertInfinity()
+    {
+        await Task.Yield();
+
+        var relaxation = new LinearProgram<decimal>(Vector<decimal>.FromArray([1m]));
+        var program = new IntegerProgram<decimal>(relaxation);
+
+        var solution = new BranchAndBoundSolver<decimal>().Solve(program);
+
+        Assert.Equal(LinearProgramStatus.Optimal, solution.Status);
+        Assert.Equal(0m, solution.Solution![0]);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task LbfgsRoundTrip_PreservesAcceptedInverseHessianScale()
+    {
+        await Task.Yield();
+
+        var optimizer = LBFGSOptimizer<double, Tensor<double>, Tensor<double>>.CreateForFunction();
+        optimizer.Minimize(
+            V(4.0),
+            point => (50.0 * point[0] * point[0], V(100.0 * point[0])),
+            maxIterations: 5,
+            tolerance: 1e-12);
+
+        var restored = LBFGSOptimizer<double, Tensor<double>, Tensor<double>>.CreateForFunction();
+        restored.Deserialize(optimizer.Serialize());
+
+        var field = typeof(LBFGSOptimizer<double, Tensor<double>, Tensor<double>>).GetField(
+            "_lbfgsInverseHessianScale", BindingFlags.Instance | BindingFlags.NonPublic);
+        Assert.NotNull(field);
+        double expected = (double)field.GetValue(optimizer)!;
+        double actual = (double)field.GetValue(restored)!;
+
+        Assert.NotEqual(1.0, expected);
+        Assert.Equal(expected, actual, 15);
+    }
+
+    private static Vector<double> V(params double[] values) => Vector<double>.FromArray(values);
+
+    private static Matrix<double> Column(double[] values)
+    {
+        var matrix = new Matrix<double>(values.Length, 1);
+        for (int i = 0; i < values.Length; i++) matrix[i, 0] = values[i];
+        return matrix;
+    }
+
+    private sealed class FrozenOptimizer : IFunctionOptimizer<double>
+    {
+        public Vector<double> Minimize(
+            Vector<double> initialParameters,
+            Func<Vector<double>, (double objective, Vector<double> gradient)> objectiveAndGradient,
+            int maxIterations,
+            double tolerance)
+            => initialParameters.Clone();
+    }
+}

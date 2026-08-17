@@ -4,7 +4,7 @@ namespace AiDotNet.Models.Options;
 /// Configuration for the primal-dual interior-point solver.
 /// </summary>
 /// <remarks>
-/// <para>
+/// <para><b>Reference:</b>
 /// The defaults follow Mehrotra (1992) and the implementation notes in Nocedal and Wright,
 /// <i>Numerical Optimization</i> (2nd ed.), Chapter 14.
 /// </para>
@@ -13,8 +13,28 @@ namespace AiDotNet.Models.Options;
 /// or an accuracy requirement the default does not meet.
 /// </para>
 /// </remarks>
-public class InteriorPointSolverOptions
+public class InteriorPointSolverOptions : ModelOptions
 {
+    /// <summary>Initializes the options with documented defaults.</summary>
+    public InteriorPointSolverOptions()
+    {
+    }
+
+    /// <summary>Initializes the options by copying another configuration.</summary>
+    /// <param name="other">The configuration to copy.</param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="other"/> is null.</exception>
+    public InteriorPointSolverOptions(InteriorPointSolverOptions other)
+    {
+        if (other is null) throw new ArgumentNullException(nameof(other));
+
+        Seed = other.Seed;
+        MaxIterations = other.MaxIterations;
+        Tolerance = other.Tolerance;
+        FractionToBoundary = other.FractionToBoundary;
+        Regularization = other.Regularization;
+        CertificateTolerance = other.CertificateTolerance;
+    }
+
     /// <summary>
     /// Gets or sets the maximum number of interior-point iterations.
     /// </summary>
@@ -26,6 +46,7 @@ public class InteriorPointSolverOptions
     /// hitting even 50 usually means the problem is ill-conditioned rather than large. The default is
     /// deliberately well above the 20-40 iterations a well-scaled problem takes.
     /// </para>
+    /// <para><b>For Beginners:</b> This is a safety ceiling on the number of improvement steps.</para>
     /// </remarks>
     public int MaxIterations { get; set; } = 100;
 
@@ -75,6 +96,8 @@ public class InteriorPointSolverOptions
     /// factorization well-defined. It perturbs the step slightly, which the convergence test then
     /// absorbs.
     /// </para>
+    /// <para><b>For Beginners:</b> This tiny stabilizer keeps redundant constraints from making
+    /// the numerical system impossible to solve.</para>
     /// </remarks>
     public double Regularization { get; set; } = 1e-10;
 
@@ -96,6 +119,8 @@ public class InteriorPointSolverOptions
     /// Because the certificate is checked rather than inferred, a reported <c>Infeasible</c> or
     /// <c>Unbounded</c> comes with a witness — the solver never guesses from slow progress.
     /// </para>
+    /// <para><b>For Beginners:</b> This controls how convincing a mathematical proof of
+    /// infeasibility or unboundedness must be before the solver reports it.</para>
     /// </remarks>
     public double CertificateTolerance { get; set; } = 1e-7;
 }

@@ -110,6 +110,11 @@ public partial class TimeSeriesRegression<T> : RegressionBase<T>
     private List<T> _trainingTargetTail = [];
 
     /// <summary>
+    /// Number of prepared training rows, used to continue trend and seasonal clocks at prediction.
+    /// </summary>
+    private int _trainingRowCount;
+
+    /// <summary>
     /// The regularization strategy used to prevent overfitting.
     /// </summary>
     /// <remarks>
@@ -219,6 +224,7 @@ public partial class TimeSeriesRegression<T> : RegressionBase<T>
 
         // Prepare the data
         Matrix<T> preparedX = PrepareInputData(x, y);
+        _trainingRowCount = preparedX.Rows;
         Vector<T> preparedY = PrepareTargetData(y);
 
         // Train the time series model
@@ -755,12 +761,15 @@ public partial class TimeSeriesRegression<T> : RegressionBase<T>
 
         if (_options.IncludeTrend)
         {
-            features[column++] = NumOps.FromDouble(row + 1);
+            features[column++] = NumOps.FromDouble(_trainingRowCount + row + 1);
         }
 
-        for (int s = 0; s < seasonalFeatures; s++)
+        int seasonalClock = seasonalFeatures > 0
+            ? (_trainingRowCount + row + lagOrder) % _options.SeasonalPeriod
+            : 0;
+        for (int s = 1; s <= seasonalFeatures; s++)
         {
-            features[column++] = row % _options.SeasonalPeriod == s ? NumOps.One : NumOps.Zero;
+            features[column++] = seasonalClock == s ? NumOps.One : NumOps.Zero;
         }
 
         return features;
@@ -835,6 +844,7 @@ public partial class TimeSeriesRegression<T> : RegressionBase<T>
             {
                 writer.Write(NumOps.ToDouble(value));
             }
+            writer.Write(_trainingRowCount);
 
             return ms.ToArray();
         }
@@ -898,6 +908,12 @@ public partial class TimeSeriesRegression<T> : RegressionBase<T>
             for (int i = 0; i < targetTailCount; i++)
             {
                 _trainingTargetTail.Add(NumOps.FromDouble(reader.ReadDouble()));
+            }
+            _trainingRowCount = reader.ReadInt32();
+            if (_trainingRowCount < 0)
+            {
+                throw new InvalidDataException(
+                    $"Serialized training-row count cannot be negative, but was {_trainingRowCount}.");
             }
         }
     }
