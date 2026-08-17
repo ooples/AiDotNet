@@ -2497,6 +2497,32 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     /// deepening this walk.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// True when this layer declares trainable tensors but at least one is still a zero-length
+    /// placeholder, i.e. its weights exist as a declaration but not yet as storage.
+    /// </summary>
+    /// <returns>Whether any registered trainable tensor is unallocated.</returns>
+    /// <remarks>
+    /// Deliberately NOT <c>IsShapeResolved</c>, which the first version of this check used and
+    /// which made it a no-op. That property answers a question about SHAPES -- the comment at its
+    /// declaration says so -- and a DenseLayer built with inputSize and outputSize has both an
+    /// InputShape and an OutputShape while its weight tensor is still <c>[0, 0]</c>. Knowing the
+    /// shape and having allocated the storage are different states, and the one that matters for a
+    /// parameter count is allocation.
+    /// </remarks>
+    private bool HasUnallocatedParameters()
+    {
+        var trainable = GetTrainableParametersUnmaterialized();
+        if (trainable is null || trainable.Count == 0) return false;
+
+        for (int i = 0; i < trainable.Count; i++)
+        {
+            if (trainable[i] is { Length: 0 }) return true;
+        }
+
+        return false;
+    }
+
     private bool HasUnmaterializedChildren()
     {
         var subs = GetSubLayers();
@@ -2504,9 +2530,7 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
 
         for (int i = 0; i < subs.Count; i++)
         {
-            if (subs[i] is LayerBase<T> child
-                && !child.IsShapeResolved
-                && !child.ParametersAreConstructionSized)
+            if (subs[i] is LayerBase<T> child && child.HasUnallocatedParameters())
             {
                 return true;
             }
