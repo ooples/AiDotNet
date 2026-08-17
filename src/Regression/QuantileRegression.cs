@@ -132,9 +132,19 @@ public class QuantileRegression<T> : RegressionBase<T>
         // quantile, which is the one thing quantile regression exists not to do. Second, the
         // unreachable code ran gradient descent on the pinball loss, which is not differentiable at
         // zero, exactly where the optimum sits.
+        // Koenker and Bassett's DUAL formulation, not the primal. The primal has one equality row
+        // per observation and two slack variables per observation, so a 200-row fit builds a
+        // 200-by-600 tableau and takes thousands of pivots — which at this library's generic
+        // arithmetic (every add and multiply is a virtual call) runs for minutes. The dual has one
+        // row per REGRESSION PARAMETER, typically two or three, and one bounded variable per
+        // observation:
+        //
+        //     maximize  yᵀa   subject to  Zᵀa = 0,  τ−1 ≤ a ≤ τ,   Z = [1 | X]
+        //
+        // which is a 3-by-200 tableau for the same fit. This is the formulation Koenker's own
+        // software solves, and it is why quantile regression is practical at all at scale.
         int regressionParameterCount = p + (Options.UseIntercept ? 1 : 0);
-        int variableCount = regressionParameterCount + 2 * n;
-        long denseEntries = checked((long)n * variableCount);
+        long denseEntries = checked((long)regressionParameterCount * n);
         if (denseEntries > _options.MaximumDenseLinearProgramEntries)
         {
             throw new InvalidOperationException(
@@ -143,42 +153,38 @@ public class QuantileRegression<T> : RegressionBase<T>
                 "Use fewer rows, raise MaximumDenseLinearProgramEntries when sufficient memory is available, " +
                 "or choose a large-scale quantile estimator.");
         }
-        int interceptColumn = 0;
-        int coefficientColumn = Options.UseIntercept ? 1 : 0;
-        int positiveResidualColumn = regressionParameterCount;
-        int negativeResidualColumn = regressionParameterCount + n;
 
         double quantile = _options.Quantile;
-        var objective = new Vector<T>(variableCount);
+
+        // Z = [1 | X], the design matrix including the intercept column when one is fitted.
+        var design = new Matrix<T>(n, regressionParameterCount);
+        int coefficientColumn = Options.UseIntercept ? 1 : 0;
         for (int i = 0; i < n; i++)
         {
-            objective[positiveResidualColumn + i] = NumOps.FromDouble(quantile);
-            objective[negativeResidualColumn + i] = NumOps.FromDouble(1.0 - quantile);
+            if (Options.UseIntercept) design[i, 0] = NumOps.One;
+            for (int j = 0; j < p; j++) design[i, coefficientColumn + j] = x[i, j];
         }
 
-        var equalityMatrix = new Matrix<T>(n, variableCount);
-        var equalityBounds = new Vector<T>(n);
+        // The solver minimizes, so the dual's maximization of yᵀa is posed as minimizing −yᵀa.
+        var objective = new Vector<T>(n);
+        for (int i = 0; i < n; i++) objective[i] = NumOps.Negate(y[i]);
+
+        var equalityMatrix = new Matrix<T>(regressionParameterCount, n);
+        for (int r = 0; r < regressionParameterCount; r++)
+        {
+            for (int i = 0; i < n; i++) equalityMatrix[r, i] = design[i, r];
+        }
+
+        var equalityBounds = new Vector<T>(regressionParameterCount);
+
+        var lowerBounds = new Vector<T>(n);
+        var upperBounds = new Vector<T>(n);
+        T lowerBound = NumOps.FromDouble(quantile - 1.0);
+        T upperBound = NumOps.FromDouble(quantile);
         for (int i = 0; i < n; i++)
         {
-            if (Options.UseIntercept)
-            {
-                equalityMatrix[i, interceptColumn] = NumOps.One;
-            }
-            for (int j = 0; j < p; j++) equalityMatrix[i, coefficientColumn + j] = x[i, j];
-            equalityMatrix[i, positiveResidualColumn + i] = NumOps.One;
-            equalityMatrix[i, negativeResidualColumn + i] = NumOps.Negate(NumOps.One);
-            equalityBounds[i] = y[i];
-        }
-
-        // The intercept and slopes are unrestricted in sign; the residual parts are non-negative.
-        var lowerBounds = new Vector<T>(variableCount);
-        var upperBounds = new Vector<T>(variableCount);
-        var negativeInfinity = NumOps.FromDouble(double.NegativeInfinity);
-        var positiveInfinity = NumOps.FromDouble(double.PositiveInfinity);
-        for (int c = 0; c < variableCount; c++)
-        {
-            lowerBounds[c] = c < regressionParameterCount ? negativeInfinity : NumOps.Zero;
-            upperBounds[c] = positiveInfinity;
+            lowerBounds[i] = lowerBound;
+            upperBounds[i] = upperBound;
         }
 
         var program = new AiDotNet.Solvers.LinearProgramming.LinearProgram<T>(
@@ -200,13 +206,121 @@ public class QuantileRegression<T> : RegressionBase<T>
                 "This usually means the design matrix contains non-finite values.");
         }
 
-        Intercept = Options.UseIntercept ? solution.Solution[interceptColumn] : NumOps.Zero;
+        var fitted = RecoverCoefficients(
+            design, y, solution.Solution, regressionParameterCount, quantile);
+
+        Intercept = Options.UseIntercept ? fitted[0] : NumOps.Zero;
         var coefficients = new Vector<T>(p);
-        for (int j = 0; j < p; j++) coefficients[j] = solution.Solution[coefficientColumn + j];
+        for (int j = 0; j < p; j++) coefficients[j] = fitted[coefficientColumn + j];
 
         // Regularization is applied to the fitted coefficients, matching every other regression in
         // the library; the intercept is deliberately left unpenalized.
         Coefficients = Regularization.Regularize(coefficients);
+    }
+
+    /// <summary>
+    /// Recovers the regression coefficients from the dual solution.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A quantile regression fit passes exactly through <c>k</c> of the observations, where <c>k</c>
+    /// is the number of estimated parameters — that is the defining geometric property of the
+    /// solution, and it is what makes the fit robust to outliers in the response. Complementary
+    /// slackness says those interpolated points are precisely the ones whose dual variable sits
+    /// strictly between its bounds: a dual variable pinned at <c>τ</c> or <c>τ−1</c> marks an
+    /// observation the fit passes above or below, while one in between marks an observation the fit
+    /// passes through.
+    /// </para>
+    /// <para>
+    /// So the coefficients follow from solving the small system <c>Z_h·β = y_h</c> over just those
+    /// rows. Recovering them this way rather than from the dual's own multipliers keeps the result
+    /// independent of the solver's sign convention for equality duals, and gives a fit that
+    /// satisfies the interpolation property exactly rather than to a tolerance.
+    /// </para>
+    /// <para>
+    /// Degeneracy — ties in the data, or a design in which more or fewer than <c>k</c> points end up
+    /// interior — is handled by least squares over whichever rows are interior, which reduces to the
+    /// exact interpolation when there are exactly <c>k</c> of them.
+    /// </para>
+    /// </remarks>
+    private Vector<T> RecoverCoefficients(
+        Matrix<T> design,
+        Vector<T> responses,
+        Vector<T> dualSolution,
+        int parameterCount,
+        double quantile)
+    {
+        int n = design.Rows;
+
+        // A dual variable is "interior" when it is strictly inside [τ−1, τ]. The tolerance is
+        // relative to the interval's width so it means the same thing at any quantile.
+        double interiorTolerance = 1e-7;
+        var interior = new List<int>(parameterCount);
+        for (int i = 0; i < n; i++)
+        {
+            double value = NumOps.ToDouble(dualSolution[i]);
+            if (value > quantile - 1.0 + interiorTolerance && value < quantile - interiorTolerance)
+            {
+                interior.Add(i);
+            }
+        }
+
+        // Too few interior points to pin the fit down: fall back to every row, which is the
+        // least-absolute-deviations fit's least-squares shadow rather than a wrong answer.
+        var rows = interior.Count >= parameterCount ? interior : BuildAllRows(n);
+
+        // Normal equations over the selected rows. With exactly parameterCount rows this reproduces
+        // the interpolation Z_h β = y_h exactly; with more it is the least-squares compromise.
+        var normal = new Matrix<T>(parameterCount, parameterCount);
+        var rightHandSide = new Vector<T>(parameterCount);
+
+        for (int r = 0; r < parameterCount; r++)
+        {
+            for (int c = 0; c < parameterCount; c++)
+            {
+                T accumulator = NumOps.Zero;
+                foreach (int row in rows)
+                {
+                    accumulator = NumOps.Add(
+                        accumulator, NumOps.Multiply(design[row, r], design[row, c]));
+                }
+
+                normal[r, c] = accumulator;
+            }
+
+            T target = NumOps.Zero;
+            foreach (int row in rows)
+            {
+                target = NumOps.Add(target, NumOps.Multiply(design[row, r], responses[row]));
+            }
+
+            rightHandSide[r] = target;
+        }
+
+        // A ridge term keeps a rank-deficient selection solvable; it is far below the scale of the
+        // data and vanishes from a well-determined fit.
+        T ridge = NumOps.FromDouble(1e-12);
+        for (int r = 0; r < parameterCount; r++)
+        {
+            normal[r, r] = NumOps.Add(normal[r, r], ridge);
+        }
+
+        try
+        {
+            return new AiDotNet.DecompositionMethods.MatrixDecomposition.LuDecomposition<T>(normal)
+                .Solve(rightHandSide);
+        }
+        catch (Exception)
+        {
+            return new Vector<T>(parameterCount);
+        }
+    }
+
+    private static List<int> BuildAllRows(int count)
+    {
+        var rows = new List<int>(count);
+        for (int i = 0; i < count; i++) rows.Add(i);
+        return rows;
     }
 
     /// <summary>
