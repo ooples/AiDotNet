@@ -5584,7 +5584,24 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         var savedShape = ReadResolvedShape(reader);
         if (savedShape is not null && !IsShapeResolved)
         {
-            ResolveFromShape(savedShape);
+            // The saved shape is what the layer PUBLISHED for itself, and a layer may publish one
+            // sample while its forward requires the batch axis: Conv1DLayer resolves to
+            // [channels, time] and then rejects anything that is not [B, C, T], so restoring it
+            // from its own declaration threw at its own shape. Offer the batched form too rather
+            // than relaxing the layer's rank check, which is deliberate and documented. Same
+            // try-batched-then-bare that CompleteShapeOnlyResolutionIfPending and
+            // LayerCloning.ProbeShapes already use for exactly this split.
+            try
+            {
+                ResolveFromShape(savedShape);
+            }
+            catch (ArgumentException)
+            {
+                var batched = new int[savedShape.Length + 1];
+                batched[0] = 1;
+                System.Array.Copy(savedShape, 0, batched, 1, savedShape.Length);
+                ResolveFromShape(batched);
+            }
         }
 
         if (IsShapeResolved)
