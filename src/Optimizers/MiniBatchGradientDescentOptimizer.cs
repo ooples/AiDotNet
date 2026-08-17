@@ -26,7 +26,7 @@ namespace AiDotNet.Optimizers;
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 [ComponentType(ComponentType.Optimizer)]
 [PipelineStage(PipelineStage.Training)]
-public class MiniBatchGradientDescentOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TInput, TOutput>
+public partial class MiniBatchGradientDescentOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TInput, TOutput>
 {
     /// <summary>
     /// The options specific to the Mini-Batch Gradient Descent algorithm.

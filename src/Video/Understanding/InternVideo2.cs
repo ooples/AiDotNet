@@ -72,7 +72,7 @@ namespace AiDotNet.Video.Understanding;
     Direction = TensorLayoutDirection.Input, BatchOptional = true)]
 [TensorLayout(TensorAxis.Batch, TensorAxis.Features,
     Direction = TensorLayoutDirection.Output, BatchOptional = true)]
-public class InternVideo2<T> : NeuralNetworkBase<T>
+public partial class InternVideo2<T> : NeuralNetworkBase<T>
 {
     private readonly InternVideo2Options _options;
 

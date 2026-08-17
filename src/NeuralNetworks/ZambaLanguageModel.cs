@@ -39,7 +39,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Zamba: A Compact 7B SSM Hybrid Model", "https://arxiv.org/abs/2405.16712", Year = 2024, Authors = "Paolo Glorioso, Quentin Anthony, Yury Tokpanov, James Whittington, Jonathan Pilault, Adam Ibrahim, Beren Millidge")]
-public class ZambaLanguageModel<T> : TokenLanguageModelLayoutBase<T>
+public partial class ZambaLanguageModel<T> : TokenLanguageModelLayoutBase<T>
 {
     private readonly ZambaOptions _options;
     private readonly int _vocabSize;

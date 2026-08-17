@@ -55,7 +55,7 @@ namespace AiDotNet.Finance.Portfolio;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("A Deep Reinforcement Learning Framework for the Financial Portfolio Management Problem", "https://arxiv.org/abs/1706.10059")]
-public class DeepPortfolioManager<T> : PortfolioOptimizerBase<T>
+public partial class DeepPortfolioManager<T> : PortfolioOptimizerBase<T>
 {
     #region Shared Fields
 

@@ -59,7 +59,7 @@ namespace AiDotNet.Finance.Portfolio;
     "https://arxiv.org/abs/2407.15532",
     Year = 2025,
     Authors = "Kamesh Korangi, Christophe Mues, Cristian Bravo")]
-public class GraphAttentionPortfolio<T> : PortfolioOptimizerBase<T>
+public partial class GraphAttentionPortfolio<T> : PortfolioOptimizerBase<T>
 {
     private readonly GraphAttentionPortfolioOptions<T> _options;
 

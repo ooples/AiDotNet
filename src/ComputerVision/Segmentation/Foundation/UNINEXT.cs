@@ -62,7 +62,7 @@ namespace AiDotNet.ComputerVision.Segmentation.Foundation;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Universal Instance Perception as Object Discovery and Retrieval", "https://arxiv.org/abs/2303.06674", Year = 2023, Authors = "Yan et al.")]
-public class UNINEXT<T> : Common.PanopticSegmentationBase<T>
+public partial class UNINEXT<T> : Common.PanopticSegmentationBase<T>
 {
     private readonly UNINEXTOptions _options;
 

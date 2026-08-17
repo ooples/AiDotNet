@@ -58,7 +58,7 @@ namespace AiDotNet.ComputerVision.Segmentation.OpenVocabulary;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("CAT-Seg: Cost Aggregation for Open-Vocabulary Semantic Segmentation", "https://arxiv.org/abs/2303.11797", Year = 2024, Authors = "Cho et al.")]
-public class CATSeg<T> : Common.OpenVocabSegmentationBase<T>
+public partial class CATSeg<T> : Common.OpenVocabSegmentationBase<T>
 {
     private readonly CATSegOptions _options;
     public override ModelOptions GetOptions() => _options;

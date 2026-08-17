@@ -66,7 +66,7 @@ namespace AiDotNet.Regression;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("Improving Regressors using Boosting Techniques", "https://doi.org/10.1145/3321386.3322519", Year = 1997, Authors = "Harris Drucker")]
-public class AdaBoostR2Regression<T> : AsyncDecisionTreeRegressionBase<T>
+public partial class AdaBoostR2Regression<T> : AsyncDecisionTreeRegressionBase<T>
 {
     /// <summary>
     /// Initializes a new instance with default settings.

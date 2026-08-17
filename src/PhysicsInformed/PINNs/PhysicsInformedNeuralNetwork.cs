@@ -93,7 +93,7 @@ namespace AiDotNet.PhysicsInformed.PINNs
         Direction = TensorLayoutDirection.Input, BatchOptional = true)]
     [TensorLayout(TensorAxis.Batch, TensorAxis.Features,
         Direction = TensorLayoutDirection.Output, BatchOptional = true)]
-    public class PhysicsInformedNeuralNetwork<T> : NeuralNetworkBase<T>
+    public partial class PhysicsInformedNeuralNetwork<T> : NeuralNetworkBase<T>
     {
         private readonly PhysicsInformedNeuralNetworkOptions _options;
 

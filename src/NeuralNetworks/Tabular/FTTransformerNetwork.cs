@@ -61,7 +61,7 @@ namespace AiDotNet.NeuralNetworks.Tabular;
     "https://arxiv.org/abs/2106.11959",
     Year = 2021,
     Authors = "Gorishniy, Y., Rubachev, I., Khrulkov, V., & Babenko, A.")]
-public class FTTransformerNetwork<T> : TabularNeuralNetworkBase<T>
+public partial class FTTransformerNetwork<T> : TabularNeuralNetworkBase<T>
 {
     private FTTransformerOptions<T> _options;
 

@@ -67,7 +67,7 @@ namespace AiDotNet.ComputerVision.Segmentation.Panoptic;
     "https://arxiv.org/abs/2504.01955",
     Year = 2025,
     Authors = "Oliver Hahn, Christoph Reich, Nikita Araslanov, Daniel Cremers, Christian Rupprecht, Stefan Roth")]
-public class CUPS<T> : Common.PanopticSegmentationBase<T>
+public partial class CUPS<T> : Common.PanopticSegmentationBase<T>
 {
     private readonly CUPSOptions _options;
     public override ModelOptions GetOptions() => _options;

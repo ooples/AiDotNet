@@ -53,7 +53,7 @@ namespace AiDotNet.ComputerVision.Segmentation.PointCloud;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Mamba3D: Enhancing Local Features for 3D Point Cloud Analysis via State Space Model", "https://arxiv.org/abs/2404.14966", Year = 2024, Authors = "Xu Han, Yuan Tang, Zhaoxuan Wang, Xianzhi Li")]
-public class Sonata<T> : Common.SemanticSegmentationBase<T>
+public partial class Sonata<T> : Common.SemanticSegmentationBase<T>
 {
     private readonly SonataOptions _options;
     public override ModelOptions GetOptions() => _options;

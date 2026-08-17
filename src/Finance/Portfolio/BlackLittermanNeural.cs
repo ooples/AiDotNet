@@ -45,7 +45,7 @@ namespace AiDotNet.Finance.Portfolio;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Global Portfolio Optimization", "https://doi.org/10.2469/faj.v48.n5.28")]
-public class BlackLittermanNeural<T> : PortfolioOptimizerBase<T>
+public partial class BlackLittermanNeural<T> : PortfolioOptimizerBase<T>
 {
     #region Shared Fields
 

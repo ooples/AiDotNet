@@ -60,7 +60,7 @@ namespace AiDotNet.ComputerVision.Segmentation.Semantic;
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 // Citation URL corrected: the arXiv id for this title is 2308.12469, not 2305.02015.
 [ResearchPaper("Diffuse, Attend, and Segment: Unsupervised Zero-Shot Segmentation using Stable Diffusion", "https://arxiv.org/abs/2308.12469", Year = 2023, Authors = "Junjiao Tian, Lavisha Aggarwal, Andrea Colber, Zunzhi You, Eldhose Iype, Haiyang Sheng")]
-public class DiffSeg<T> : Common.SemanticSegmentationBase<T>
+public partial class DiffSeg<T> : Common.SemanticSegmentationBase<T>
 {
     private readonly DiffSegOptions _options;
     public override ModelOptions GetOptions() => _options;

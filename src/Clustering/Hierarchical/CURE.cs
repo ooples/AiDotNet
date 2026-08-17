@@ -58,7 +58,7 @@ namespace AiDotNet.Clustering.Hierarchical;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("CURE: An Efficient Clustering Algorithm for Large Databases", "https://doi.org/10.1145/276304.276312", Year = 1998, Authors = "Sudipto Guha, Rajeev Rastogi, Kyuseok Shim")]
-public class CURE<T> : ClusteringBase<T>
+public partial class CURE<T> : ClusteringBase<T>
 {
     private readonly CUREOptions<T> _options;
 

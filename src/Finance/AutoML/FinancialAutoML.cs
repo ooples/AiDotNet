@@ -44,7 +44,7 @@ namespace AiDotNet.Finance.AutoML;
     "https://arxiv.org/abs/1908.00709",
     Year = 2021,
     Authors = "Xin He, Kaiyong Zhao, Xiaowen Chu")]
-public class FinancialAutoML<T> : SupervisedAutoMLModelBase<T, Tensor<T>, Tensor<T>>
+public partial class FinancialAutoML<T> : SupervisedAutoMLModelBase<T, Tensor<T>, Tensor<T>>
 {
     private readonly FinancialAutoMLOptions<T> _options;
     private readonly FinancialSearchSpace _financeSearchSpace;

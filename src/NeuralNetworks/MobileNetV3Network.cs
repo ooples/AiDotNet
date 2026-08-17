@@ -49,7 +49,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Searching for MobileNetV3", "https://arxiv.org/abs/1905.02244", Year = 2019, Authors = "Andrew Howard, Mark Sandler, Grace Chu, Liang-Chieh Chen, Bo Chen, Mingxing Tan, Weijun Wang, Yukun Zhu, Ruoming Pang, Vijay Vasudevan, Quoc V. Le, Hartwig Adam")]
-public class MobileNetV3Network<T> : ImageClassifierModelLayoutBase<T>
+public partial class MobileNetV3Network<T> : ImageClassifierModelLayoutBase<T>
 {
     private readonly MobileNetV3Options _options;
 

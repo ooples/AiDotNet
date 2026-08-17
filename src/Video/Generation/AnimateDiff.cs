@@ -67,7 +67,7 @@ namespace AiDotNet.Video.Generation;
     Direction = TensorLayoutDirection.Input, BatchOptional = true)]
 [TensorLayout(TensorAxis.Batch, TensorAxis.Frames, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
     Direction = TensorLayoutDirection.Output, BatchOptional = true)]
-public class AnimateDiff<T> : NeuralNetworkBase<T>
+public partial class AnimateDiff<T> : NeuralNetworkBase<T>
 {
     private readonly AnimateDiffOptions _options;
 

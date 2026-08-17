@@ -61,7 +61,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Very Deep Convolutional Networks for Large-Scale Image Recognition", "https://arxiv.org/abs/1409.1556", Year = 2015, Authors = "Karen Simonyan, Andrew Zisserman")]
-public class VGGNetwork<T> : ImageClassifierModelLayoutBase<T>
+public partial class VGGNetwork<T> : ImageClassifierModelLayoutBase<T>
 {
     private readonly VGGOptions _options;
 

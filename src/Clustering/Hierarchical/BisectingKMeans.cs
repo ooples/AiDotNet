@@ -54,7 +54,7 @@ namespace AiDotNet.Clustering.Hierarchical;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
     [ResearchPaper("A Comparison of Document Clustering Techniques", "https://www.cs.cmu.edu/~dunja/KDDpapers/Steinbach_IR.pdf")]
-public class BisectingKMeans<T> : ClusteringBase<T>
+public partial class BisectingKMeans<T> : ClusteringBase<T>
 {
     private readonly BisectingKMeansOptions<T> _options;
 

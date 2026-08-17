@@ -61,7 +61,7 @@ namespace AiDotNet.NeuralNetworks.Tabular;
     "https://arxiv.org/abs/2307.14338",
     Year = 2024,
     Authors = "Yury Gorishniy, Ivan Rubachev, Nikolay Kartashev, Daniil Shlenskii, Akim Kotelnikov, Artem Babenko")]
-public class TabRNetwork<T> : TabularNeuralNetworkBase<T>
+public partial class TabRNetwork<T> : TabularNeuralNetworkBase<T>
 {
     private readonly TabROptions<T> _options;
 

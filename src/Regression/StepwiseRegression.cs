@@ -57,7 +57,7 @@ namespace AiDotNet.Regression;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
     [ResearchPaper("Applied Linear Statistical Models", "https://doi.org/10.1080/00401706.1997.10485117")]
-public class StepwiseRegression<T> : RegressionBase<T>
+public partial class StepwiseRegression<T> : RegressionBase<T>
 {
     /// <summary>
     /// Configuration options for the stepwise regression model.

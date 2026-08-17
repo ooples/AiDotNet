@@ -43,7 +43,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Extreme Learning Machine: Theory and Applications", "https://doi.org/10.1016/j.neucom.2005.12.126", Year = 2006, Authors = "Guang-Bin Huang, Qin-Yu Zhu, Chee-Kheong Siew")]
-public class ExtremeLearningMachine<T> : VectorModelLayoutBase<T>
+public partial class ExtremeLearningMachine<T> : VectorModelLayoutBase<T>
 {
     private readonly ExtremeLearningMachineOptions _options;
 

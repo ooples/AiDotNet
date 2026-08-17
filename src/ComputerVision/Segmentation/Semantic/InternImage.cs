@@ -60,7 +60,7 @@ namespace AiDotNet.ComputerVision.Segmentation.Semantic;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("InternImage: Exploring Large-Scale Vision Foundation Models with Deformable Convolutions", "https://arxiv.org/abs/2211.05778", Year = 2023, Authors = "Wang et al.")]
-public class InternImage<T> : Common.SemanticSegmentationBase<T>
+public partial class InternImage<T> : Common.SemanticSegmentationBase<T>
 {
     private readonly InternImageOptions _options;
 

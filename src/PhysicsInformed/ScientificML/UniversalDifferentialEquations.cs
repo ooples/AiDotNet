@@ -79,7 +79,7 @@ namespace AiDotNet.PhysicsInformed.ScientificML
         Direction = TensorLayoutDirection.Input, BatchOptional = true)]
     [TensorLayout(TensorAxis.Batch, TensorAxis.Features,
         Direction = TensorLayoutDirection.Output, BatchOptional = true)]
-    public class UniversalDifferentialEquation<T> : NeuralNetworkBase<T>
+    public partial class UniversalDifferentialEquation<T> : NeuralNetworkBase<T>
     {
         private readonly UniversalDifferentialEquationsOptions _options;
 

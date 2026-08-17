@@ -52,7 +52,7 @@ namespace AiDotNet.Regression;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("Regression Quantiles", "https://doi.org/10.2307/1913643", Year = 1978, Authors = "Roger Koenker, Gilbert Bassett Jr.")]
-public class QuantileRegression<T> : RegressionBase<T>
+public partial class QuantileRegression<T> : RegressionBase<T>
 {
     /// <summary>
     /// Configuration options for the quantile regression model.

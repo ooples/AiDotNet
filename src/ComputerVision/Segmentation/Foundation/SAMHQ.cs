@@ -60,7 +60,7 @@ namespace AiDotNet.ComputerVision.Segmentation.Foundation;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Segment Anything in High Quality", "https://arxiv.org/abs/2306.01567", Year = 2023, Authors = "Lei Ke, Mingqiao Ye, Martin Danelljan, Yifan Liu, Yu-Wing Tai, Chi-Keung Tang, Fisher Yu")]
-public class SAMHQ<T> : Common.PromptableSegmentationBase<T>
+public partial class SAMHQ<T> : Common.PromptableSegmentationBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Downsamples by 16, not the family's 32 - measured: [1,3,64,64] returns [1,C,4,4].</remarks>

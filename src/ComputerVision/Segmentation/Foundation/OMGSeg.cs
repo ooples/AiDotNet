@@ -59,7 +59,7 @@ namespace AiDotNet.ComputerVision.Segmentation.Foundation;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("OMG-Seg: Is One Model Good Enough For All Segmentation?", "https://arxiv.org/abs/2401.10229", Year = 2024, Authors = "Li et al.")]
-public class OMGSeg<T> : Common.PanopticSegmentationBase<T>
+public partial class OMGSeg<T> : Common.PanopticSegmentationBase<T>
 {
     private readonly OMGSegOptions _options;
 

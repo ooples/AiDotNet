@@ -56,7 +56,7 @@ namespace AiDotNet.ComputerVision.Segmentation.Interactive;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("SegGPT: Segmenting Everything In Context", "https://arxiv.org/abs/2304.03284", Year = 2023, Authors = "Wang et al.")]
-public class SegGPT<T> : Common.PromptableSegmentationBase<T>
+public partial class SegGPT<T> : Common.PromptableSegmentationBase<T>
 {
     private readonly SegGPTOptions _options;
     public override ModelOptions GetOptions() => _options;

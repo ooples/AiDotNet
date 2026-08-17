@@ -61,7 +61,7 @@ namespace AiDotNet.NeuralNetworks.Tabular;
     "https://arxiv.org/abs/2207.01848",
     Year = 2023,
     Authors = "Noah Hollmann, Samuel Müller, Katharina Eggensperger, Frank Hutter")]
-public class TabPFNNetwork<T> : TabularNeuralNetworkBase<T>
+public partial class TabPFNNetwork<T> : TabularNeuralNetworkBase<T>
 {
     private readonly TabPFNOptions<T> _options;
 

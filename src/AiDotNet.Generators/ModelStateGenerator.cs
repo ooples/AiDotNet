@@ -106,9 +106,21 @@ public class ModelStateGenerator : IIncrementalGenerator
             };
             if (memberType is null) continue;
 
-            // Readonly storage cannot be reassigned on restore, so declaring it would produce a
-            // payload nothing could apply.
-            if (member is IFieldSymbol { IsReadOnly: true }) continue;
+            // Readonly storage cannot be REASSIGNED on restore, so declaring it would produce a
+            // payload nothing could apply -- true of a vector or a matrix, and false of anything
+            // restored IN PLACE. DeclareChild already fills a readonly child by calling Deserialize
+            // on the instance the constructor built, and DeclareOptions does the same for settings.
+            //
+            // Excluding on mutability alone hid a real defect: KNearestNeighborsRegression holds
+            // `private readonly KNearestNeighborsOptions _options` and answers with _options.K, and
+            // the field was dropped here before anything could ask what it was -- so the payload
+            // carried the training data, not the K, and the model restored and answered differently.
+            if (member is IFieldSymbol { IsReadOnly: true }
+                && !IsModelOptions(memberType)
+                && !IsSerializableModel(memberType))
+            {
+                continue;
+            }
 
             var classification = ParameterMemberSemanticModel.Classify(member);
 
@@ -321,8 +333,30 @@ public class ModelStateGenerator : IIncrementalGenerator
                    && IsSerializableModel(list.TypeArguments[0]) =>
                 $"state.DeclareChildList<{list.TypeArguments[0].ToDisplayString().TrimEnd('?')}>(\"{id}\", {getter});",
 
+            // THE SETTINGS A MODEL PREDICTS WITH, carried for the same reason a list of children is:
+            // they decide the answer. KNearestNeighborsRegression predicts with _options.K, so a
+            // payload holding its training data but not its K restored a model that ran and answered
+            // differently -- the silent kind of wrong. Only scalar settings travel, which
+            // DeclareOptions states and enforces; anything object-shaped is rebuilt by the
+            // constructor the clone plan already replays.
+            _ when IsModelOptions(memberType) =>
+                $"state.DeclareOptions(\"{id}\", {getter});",
+
             _ => null,
         };
+    }
+
+    /// <summary>Whether a member holds a model's options.</summary>
+    /// <param name="type">The member's type.</param>
+    /// <returns><see langword="true"/> when it derives from <c>ModelOptions</c>.</returns>
+    private static bool IsModelOptions(ITypeSymbol type)
+    {
+        for (var current = type as INamedTypeSymbol; current is not null; current = current.BaseType)
+        {
+            if (current.Name == "ModelOptions") return true;
+        }
+
+        return false;
     }
 
     private static string Render(INamedTypeSymbol type, string numeric, List<(string Name, string Call)> members)

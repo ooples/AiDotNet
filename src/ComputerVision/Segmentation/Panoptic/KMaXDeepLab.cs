@@ -55,7 +55,7 @@ namespace AiDotNet.ComputerVision.Segmentation.Panoptic;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("k-means Mask Transformer", "https://arxiv.org/abs/2207.04044", Year = 2022, Authors = "Yu et al.")]
-public class KMaXDeepLab<T> : Common.PanopticSegmentationBase<T>
+public partial class KMaXDeepLab<T> : Common.PanopticSegmentationBase<T>
 {
     private readonly KMaXDeepLabOptions _options;
     public override ModelOptions GetOptions() => _options;

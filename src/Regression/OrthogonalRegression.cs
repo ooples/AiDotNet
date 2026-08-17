@@ -50,7 +50,7 @@ namespace AiDotNet.Regression;
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
     [ResearchPaper("Total Least Squares and Errors-in-Variables Modeling", "https://doi.org/10.1007/978-94-017-3552-0")]
-public class OrthogonalRegression<T> : RegressionBase<T>
+public partial class OrthogonalRegression<T> : RegressionBase<T>
 {
     /// <summary>
     /// Configuration options for the orthogonal regression model.

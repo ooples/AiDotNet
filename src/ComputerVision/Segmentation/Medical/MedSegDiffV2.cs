@@ -56,7 +56,7 @@ namespace AiDotNet.ComputerVision.Segmentation.Medical;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("MedSegDiff-V2: Diffusion-based Medical Image Segmentation with Transformer", "https://arxiv.org/abs/2301.11798", Year = 2024, Authors = "Wu et al.")]
-public class MedSegDiffV2<T> : Common.MedicalSegmentationBase<T>
+public partial class MedSegDiffV2<T> : Common.MedicalSegmentationBase<T>
 {
     private readonly MedSegDiffV2Options _options;
     public override ModelOptions GetOptions() => _options;

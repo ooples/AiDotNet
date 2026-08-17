@@ -57,7 +57,7 @@ namespace AiDotNet.ComputerVision.Segmentation.InstanceSegmentation;
 [ModelComplexity(ModelComplexity.Medium)]
 [ResearchPaper("Ultralytics YOLO", "https://github.com/ultralytics/ultralytics")]
     [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-public class YOLO26Seg<T> : Common.InstanceSegmentationBase<T>
+public partial class YOLO26Seg<T> : Common.InstanceSegmentationBase<T>
 {
     private readonly YOLO26SegOptions _options;
     public override ModelOptions GetOptions() => _options;

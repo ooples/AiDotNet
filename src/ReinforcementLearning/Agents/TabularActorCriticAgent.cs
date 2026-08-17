@@ -40,7 +40,7 @@ namespace AiDotNet.ReinforcementLearning.Agents.AdvancedRL;
     "https://incompleteideas.net/book/the-book-2nd.html",
     Year = 2018,
     Authors = "Sutton, R. S. & Barto, A. G.")]
-public class TabularActorCriticAgent<T> : ReinforcementLearningAgentBase<T>
+public partial class TabularActorCriticAgent<T> : ReinforcementLearningAgentBase<T>
 {
     private TabularActorCriticOptions<T> _options;
 

@@ -60,7 +60,7 @@ namespace AiDotNet.ComputerVision.Segmentation.Semantic;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("SegNeXt: Rethinking Convolutional Attention Design for Semantic Segmentation", "https://arxiv.org/abs/2209.08575", Year = 2022, Authors = "Guo et al.")]
-public class SegNeXt<T> : Common.SemanticSegmentationBase<T>
+public partial class SegNeXt<T> : Common.SemanticSegmentationBase<T>
 {
     private readonly SegNeXtOptions _options;
 

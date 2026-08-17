@@ -45,7 +45,7 @@ namespace AiDotNet.Finance.Risk;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Machine Learning for Financial Stress Testing", "https://doi.org/10.1016/j.jbankfin.2021.106131")]
-public class NeuralStressTest<T> : RiskModelBase<T>
+public partial class NeuralStressTest<T> : RiskModelBase<T>
 {
     #region Shared Fields
 

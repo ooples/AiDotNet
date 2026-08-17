@@ -70,7 +70,7 @@ namespace AiDotNet.Video.Segmentation;
     Direction = TensorLayoutDirection.Input, BatchOptional = true)]
 [TensorLayout(TensorAxis.Batch, TensorAxis.Frames, TensorAxis.Height, TensorAxis.Width,
     Direction = TensorLayoutDirection.Output, BatchOptional = true)]
-public class Cutie<T> : NeuralNetworkBase<T>
+public partial class Cutie<T> : NeuralNetworkBase<T>
 {
     private readonly CutieOptions _options;
 

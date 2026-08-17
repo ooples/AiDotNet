@@ -56,7 +56,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("SpiralNet++: A Fast and Highly Efficient Mesh Convolution Operator", "https://arxiv.org/abs/1911.05856", Year = 2019, Authors = "Shunwang Gong, Lei Chen, Michael Bronstein, Stefanos Zafeiriou")]
-public class SpiralNet<T> : GraphModelLayoutBase<T>
+public partial class SpiralNet<T> : GraphModelLayoutBase<T>
 {
     /// <summary>
     /// The loss function used to compute training loss.

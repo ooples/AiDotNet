@@ -64,7 +64,7 @@ namespace AiDotNet.Video.Restoration;
     "https://arxiv.org/abs/2201.12288",
     Year = 2022,
     Authors = "Jingyun Liang, Jiezhang Cao, Yuchen Fan, Kai Zhang, Rakesh Ranjan, Yawei Li, Radu Timofte, Luc Van Gool")]
-public class VRT<T> : VideoSuperResolutionBase<T>
+public partial class VRT<T> : VideoSuperResolutionBase<T>
 {
     private readonly VRTOptions _options;
 

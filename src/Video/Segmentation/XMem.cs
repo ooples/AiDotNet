@@ -67,7 +67,7 @@ namespace AiDotNet.Video.Segmentation;
     Direction = TensorLayoutDirection.Input, BatchOptional = true)]
 [TensorLayout(TensorAxis.Batch, TensorAxis.Frames, TensorAxis.Height, TensorAxis.Width,
     Direction = TensorLayoutDirection.Output, BatchOptional = true)]
-public class XMem<T> : NeuralNetworkBase<T>
+public partial class XMem<T> : NeuralNetworkBase<T>
 {
     private readonly XMemOptions _options;
 

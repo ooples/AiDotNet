@@ -55,7 +55,7 @@ namespace AiDotNet.ComputerVision.Segmentation.Mamba;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Vision Mamba: Efficient Visual Representation Learning with Bidirectional State Space Model", "https://arxiv.org/abs/2401.09417", Year = 2024, Authors = "Zhu et al.")]
-public class VisionMamba<T> : Common.SemanticSegmentationBase<T>
+public partial class VisionMamba<T> : Common.SemanticSegmentationBase<T>
 {
     private readonly VisionMambaOptions _options;
     public override ModelOptions GetOptions() => _options;

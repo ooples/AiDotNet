@@ -56,7 +56,7 @@ namespace AiDotNet.ComputerVision.Segmentation.Referring;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("PixelLM: Pixel Reasoning with Large Multimodal Model", "https://arxiv.org/abs/2312.02228", Year = 2024, Authors = "Ren et al.")]
-public class PixelLM<T> : Common.ReferringSegmentationBase<T>
+public partial class PixelLM<T> : Common.ReferringSegmentationBase<T>
 {
     private readonly PixelLMOptions _options;
     public override ModelOptions GetOptions() => _options;

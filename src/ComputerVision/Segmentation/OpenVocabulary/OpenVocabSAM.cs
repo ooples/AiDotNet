@@ -58,7 +58,7 @@ namespace AiDotNet.ComputerVision.Segmentation.OpenVocabulary;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Open-Vocabulary SAM: Segment and Recognize Twenty-thousand Classes Interactively", "https://arxiv.org/abs/2401.02955", Year = 2024, Authors = "Yuan et al.")]
-public class OpenVocabSAM<T> : Common.OpenVocabSegmentationBase<T>
+public partial class OpenVocabSAM<T> : Common.OpenVocabSegmentationBase<T>
 {
     private readonly OpenVocabSAMOptions _options;
     public override ModelOptions GetOptions() => _options;

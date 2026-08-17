@@ -53,7 +53,7 @@ namespace AiDotNet.Regression;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("Learning with Continuous Classes", "https://doi.org/10.1007/BF00153760", Year = 1992, Authors = "J. Ross Quinlan")]
-public class M5ModelTree<T> : AsyncDecisionTreeRegressionBase<T>
+public partial class M5ModelTree<T> : AsyncDecisionTreeRegressionBase<T>
 {
     /// <summary>
     /// The configuration options for the M5 model tree algorithm.

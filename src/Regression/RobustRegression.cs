@@ -53,7 +53,7 @@ namespace AiDotNet.Regression;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
     [ResearchPaper("Robust Statistics", "https://doi.org/10.1002/0471725250")]
-public class RobustRegression<T> : RegressionBase<T>
+public partial class RobustRegression<T> : RegressionBase<T>
 {
     /// <summary>
     /// Gets the configuration options used by this robust regression model.

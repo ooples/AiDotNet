@@ -65,7 +65,7 @@ namespace AiDotNet.ComputerVision.Segmentation.Foundation;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("OneFormer: One Transformer to Rule Universal Image Segmentation", "https://arxiv.org/abs/2211.06220", Year = 2023, Authors = "Jitesh Jain, Jiachen Li, MangTik Chiu, Ali Hassani, Nikita Orlov, Humphrey Shi")]
-public class OneFormer<T> : Common.PanopticSegmentationBase<T>
+public partial class OneFormer<T> : Common.PanopticSegmentationBase<T>
 {
     private readonly OneFormerOptions _options;
 

@@ -59,7 +59,7 @@ namespace AiDotNet.ComputerVision.Segmentation.Semantic;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Vision Transformer Adapter for Dense Predictions", "https://arxiv.org/abs/2205.08534", Year = 2023, Authors = "Chen et al.")]
-public class ViTAdapter<T> : Common.SemanticSegmentationBase<T>
+public partial class ViTAdapter<T> : Common.SemanticSegmentationBase<T>
 {
     private readonly ViTAdapterOptions _options;
 

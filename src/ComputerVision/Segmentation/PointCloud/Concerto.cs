@@ -85,7 +85,7 @@ namespace AiDotNet.ComputerVision.Segmentation.PointCloud;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Concerto: Joint 2D-3D Self-Supervised Learning Emerges Spatial Representations", "https://arxiv.org/abs/2510.23607", Year = 2025)]
-public class Concerto<T> : Common.SemanticSegmentationBase<T>
+public partial class Concerto<T> : Common.SemanticSegmentationBase<T>
 {
     private readonly ConcertoOptions _options;
     public override ModelOptions GetOptions() => _options;

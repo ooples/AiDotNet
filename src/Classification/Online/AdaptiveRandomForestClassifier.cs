@@ -77,7 +77,7 @@ namespace AiDotNet.Classification.Online;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("Adaptive Random Forests for Evolving Data Stream Classification", "https://doi.org/10.1007/s10994-017-5642-8", Year = 2017, Authors = "Heitor Murilo Gomes, Albert Bifet, Jesse Read, Jean Paul Barddal, Fabricio Enembreck, Bernhard Pfharinger, Geoff Holmes, Talel Abdessalem")]
-public class AdaptiveRandomForestClassifier<T> : ClassifierBase<T>, IOnlineClassifier<T>
+public partial class AdaptiveRandomForestClassifier<T> : ClassifierBase<T>, IOnlineClassifier<T>
 {
 
     // Returned a single value described in its own comment as "minimal parameters" for a

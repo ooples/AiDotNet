@@ -38,7 +38,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Transformers are SSMs: Generalized Models and Efficient Algorithms Through Structured State Space Duality", "https://arxiv.org/abs/2405.21060", Year = 2024, Authors = "Tri Dao, Albert Gu")]
-public class Mamba2LanguageModel<T> : TokenLanguageModelLayoutBase<T>
+public partial class Mamba2LanguageModel<T> : TokenLanguageModelLayoutBase<T>
 {
     private readonly Mamba2Options _options;
     private readonly int _vocabSize;

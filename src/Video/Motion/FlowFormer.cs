@@ -58,7 +58,7 @@ namespace AiDotNet.Video.Motion;
     "https://arxiv.org/abs/2203.16194",
     Year = 2022,
     Authors = "Zhaoyang Huang, Xiaoyu Shi, Chao Zhang, Qiang Wang, Ka Chun Cheung, Hongwei Qin, Jifeng Dai, Hongsheng Li")]
-public class FlowFormer<T> : OpticalFlowBase<T>
+public partial class FlowFormer<T> : OpticalFlowBase<T>
 {
     private readonly FlowFormerOptions _options;
 

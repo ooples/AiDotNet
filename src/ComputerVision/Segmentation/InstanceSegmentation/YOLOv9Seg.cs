@@ -61,7 +61,7 @@ namespace AiDotNet.ComputerVision.Segmentation.InstanceSegmentation;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("YOLOv9: Learning What You Want to Learn Using Programmable Gradient Information", "https://arxiv.org/abs/2402.13616", Year = 2024, Authors = "Wang et al.")]
-public class YOLOv9Seg<T> : Common.InstanceSegmentationBase<T>
+public partial class YOLOv9Seg<T> : Common.InstanceSegmentationBase<T>
 {
     private readonly YOLOv9SegOptions _options;
     public override ModelOptions GetOptions() => _options;

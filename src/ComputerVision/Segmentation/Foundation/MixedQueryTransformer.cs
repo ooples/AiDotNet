@@ -61,7 +61,7 @@ namespace AiDotNet.ComputerVision.Segmentation.Foundation;
     Year = 2024,
     Authors = "Pei Wang, Zhaowei Cai, Hao Yang, Ashwin Swaminathan, R. Manmatha, Stefano Soatto")]
     [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-public class MixedQueryTransformer<T> : Common.PanopticSegmentationBase<T>
+public partial class MixedQueryTransformer<T> : Common.PanopticSegmentationBase<T>
 {
     private readonly MixedQueryTransformerOptions _options;
 

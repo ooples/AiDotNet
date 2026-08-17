@@ -64,7 +64,7 @@ namespace AiDotNet.Video.Depth;
     Direction = TensorLayoutDirection.Input, BatchOptional = true)]
 [TensorLayout(TensorAxis.Batch, TensorAxis.Height, TensorAxis.Width,
     Direction = TensorLayoutDirection.Output, BatchOptional = true)]
-public class MiDaS<T> : NeuralNetworkBase<T>
+public partial class MiDaS<T> : NeuralNetworkBase<T>
 {
     private readonly MiDaSOptions _options;
 

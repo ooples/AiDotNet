@@ -206,7 +206,7 @@ public partial class BaseClassesIntegrationTests
         }
     }
 
-    private sealed class TestDeepAgent : DeepReinforcementLearningAgentBase<double>
+    private sealed partial class TestDeepAgent : DeepReinforcementLearningAgentBase<double>
     {
         private readonly INeuralNetwork<double> _network;
 

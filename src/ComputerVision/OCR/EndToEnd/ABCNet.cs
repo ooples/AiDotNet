@@ -74,7 +74,7 @@ namespace AiDotNet.ComputerVision.OCR.EndToEnd;
     Direction = TensorLayoutDirection.Input, BatchOptional = true)]
 [TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Classes,
     Direction = TensorLayoutDirection.Output, BatchOptional = true)]
-public class ABCNet<T> : NeuralNetworkBase<T>, ICompositeLoss<T>
+public partial class ABCNet<T> : NeuralNetworkBase<T>, ICompositeLoss<T>
 {
     /// <summary>Coordinates the Bezier head regresses: 8 control points, (x, y) each.</summary>
     public const int BezierCoordinateCount = 16;

@@ -61,7 +61,7 @@ namespace AiDotNet.ComputerVision.Segmentation.Semantic;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("SegFormer: Simple and Efficient Design for Semantic Segmentation with Transformers", "https://arxiv.org/abs/2105.15203", Year = 2021, Authors = "Enze Xie, Wenhai Wang, Zhiding Yu, Anima Anandkumar, Jose M. Alvarez, Ping Luo")]
-public class SegFormer<T> : Common.SemanticSegmentationBase<T>
+public partial class SegFormer<T> : Common.SemanticSegmentationBase<T>
 {
     private readonly SegFormerOptions _options;
 

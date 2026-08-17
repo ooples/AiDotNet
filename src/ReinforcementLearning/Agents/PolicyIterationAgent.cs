@@ -43,7 +43,7 @@ namespace AiDotNet.ReinforcementLearning.Agents.DynamicProgramming;
     "https://incompleteideas.net/book/the-book-2nd.html",
     Year = 2018,
     Authors = "Sutton, R. S. & Barto, A. G.")]
-public class PolicyIterationAgent<T> : ReinforcementLearningAgentBase<T>
+public partial class PolicyIterationAgent<T> : ReinforcementLearningAgentBase<T>
 {
     private PolicyIterationOptions<T> _options;
 

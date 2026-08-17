@@ -74,7 +74,7 @@ namespace AiDotNet.Classification.Online;
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("A Comparison of Event Models for Naive Bayes Text Classification", "https://www.cs.cmu.edu/~knigam/papers/multinomial-aaaiws98.pdf")]
-public class OnlineNaiveBayesClassifier<T> : ClassifierBase<T>, IOnlineClassifier<T>,
+public partial class OnlineNaiveBayesClassifier<T> : ClassifierBase<T>, IOnlineClassifier<T>,
     IParameterizable<T, Matrix<T>, Vector<T>>
 {
 

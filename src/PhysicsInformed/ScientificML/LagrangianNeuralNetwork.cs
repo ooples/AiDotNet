@@ -74,7 +74,7 @@ namespace AiDotNet.PhysicsInformed.ScientificML
         Direction = TensorLayoutDirection.Input, BatchOptional = true)]
     [TensorLayout(TensorAxis.Batch, TensorAxis.Features,
         Direction = TensorLayoutDirection.Output, BatchOptional = true)]
-    public class LagrangianNeuralNetwork<T> : NeuralNetworkBase<T>
+    public partial class LagrangianNeuralNetwork<T> : NeuralNetworkBase<T>
     {
         private readonly LagrangianNeuralNetworkOptions _options;
 

@@ -49,7 +49,7 @@ namespace AiDotNet.Finance.Risk;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("SAINT: Improved Neural Networks for Tabular Data via Row Attention and Contrastive Pre-Training", "https://arxiv.org/abs/2106.01342", Year = 2021, Authors = "Gowthami Somepalli, Micah Goldblum, Avi Schwarzschild, C. Bayan Bruss, Tom Goldstein")]
-public class SAINT<T> : RiskModelBase<T>
+public partial class SAINT<T> : RiskModelBase<T>
 {
     #region Shared Fields
 

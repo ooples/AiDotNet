@@ -56,7 +56,7 @@ namespace AiDotNet.ComputerVision.Segmentation.OpenVocabulary;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Mask-Adapter: The Devil is in the Masks for Open-Vocabulary Segmentation", "https://arxiv.org/abs/2412.04533", Year = 2025, Authors = "Yongkang Li, Tianheng Cheng, Wenyu Liu, Xinggang Wang")]
-public class MaskAdapter<T> : Common.OpenVocabSegmentationBase<T>
+public partial class MaskAdapter<T> : Common.OpenVocabSegmentationBase<T>
 {
     private readonly MaskAdapterOptions _options;
     public override ModelOptions GetOptions() => _options;

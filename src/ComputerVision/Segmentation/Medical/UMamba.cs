@@ -56,7 +56,7 @@ namespace AiDotNet.ComputerVision.Segmentation.Medical;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("U-Mamba: Enhancing Long-range Dependency for Biomedical Image Segmentation", "https://arxiv.org/abs/2401.04722", Year = 2024, Authors = "Ma et al.")]
-public class UMamba<T> : Common.MedicalSegmentationBase<T>
+public partial class UMamba<T> : Common.MedicalSegmentationBase<T>
 {
     private readonly UMambaOptions _options;
     public override ModelOptions GetOptions() => _options;

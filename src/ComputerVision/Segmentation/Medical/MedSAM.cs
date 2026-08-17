@@ -57,7 +57,7 @@ namespace AiDotNet.ComputerVision.Segmentation.Medical;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Segment Anything in Medical Images", "https://doi.org/10.1038/s41467-024-44824-z", Year = 2024, Authors = "Jun Ma, Yuting He, Feifei Li, Lin Han, Chenyu You, Bo Wang")]
-public class MedSAM<T> : Common.MedicalSegmentationBase<T>
+public partial class MedSAM<T> : Common.MedicalSegmentationBase<T>
 {
     private readonly MedSAMOptions _options;
     public override ModelOptions GetOptions() => _options;

@@ -52,7 +52,7 @@ namespace AiDotNet.ComputerVision.Segmentation.Efficient;
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("RepViT-SAM: Towards Real-Time Segmenting Anything", "https://arxiv.org/abs/2312.05760", Year = 2024, Authors = "Ao Wang, Hui Chen, Zijia Lin, Jungong Han, Guiguang Ding")]
-public class RepViTSAM<T> : Common.PromptableSegmentationBase<T>
+public partial class RepViTSAM<T> : Common.PromptableSegmentationBase<T>
 {
     private readonly RepViTSAMOptions _options;
     public override ModelOptions GetOptions() => _options;

@@ -52,7 +52,7 @@ namespace AiDotNet.ComputerVision.Segmentation.Efficient;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("EfficientSAM: Leveraged Masked Image Pretraining for Efficient Segment Anything", "https://arxiv.org/abs/2312.00863", Year = 2024, Authors = "Yunyang Xiong, Bala Varadarajan, Lemeng Wu, Xiaoyu Xiang, Fanyi Xiao, Chenchen Zhu, Xiaoliang Dai, Dilin Wang, Fei Sun, Forrest Iandola, Raghuraman Krishnamoorthi, Vikas Chandra")]
-public class EfficientSAM<T> : Common.PromptableSegmentationBase<T>
+public partial class EfficientSAM<T> : Common.PromptableSegmentationBase<T>
 {
     private readonly EfficientSAMOptions _options;
     public override ModelOptions GetOptions() => _options;

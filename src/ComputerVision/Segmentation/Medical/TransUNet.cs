@@ -57,7 +57,7 @@ namespace AiDotNet.ComputerVision.Segmentation.Medical;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("TransUNet: Transformers Make Strong Encoders for Medical Image Segmentation", "https://arxiv.org/abs/2102.04306", Year = 2021, Authors = "Jieneng Chen, Yongyi Lu, Qihang Yu, Xiangde Luo, Ehsan Adeli, Yan Wang, Le Lu, Alan L. Yuille, Yuyin Zhou")]
-public class TransUNet<T> : Common.MedicalSegmentationBase<T>
+public partial class TransUNet<T> : Common.MedicalSegmentationBase<T>
 {
     private readonly TransUNetOptions _options;
     public override ModelOptions GetOptions() => _options;

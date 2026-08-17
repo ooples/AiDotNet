@@ -37,7 +37,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Gated Linear Attention Transformers with Hardware-Efficient Training", "https://arxiv.org/abs/2312.06635", Year = 2024, Authors = "Songlin Yang, Bailin Wang, Yikang Shen, Rameswar Panda, Yoon Kim")]
-public class GLALanguageModel<T> : TokenLanguageModelLayoutBase<T>
+public partial class GLALanguageModel<T> : TokenLanguageModelLayoutBase<T>
 {
     private readonly GLAOptions _options;
     private readonly int _vocabSize;

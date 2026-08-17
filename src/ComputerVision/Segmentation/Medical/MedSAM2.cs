@@ -56,7 +56,7 @@ namespace AiDotNet.ComputerVision.Segmentation.Medical;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Medical SAM 2: Segment Medical Images As Video Via Segment Anything Model 2", "https://arxiv.org/abs/2408.00874", Year = 2024, Authors = "Zhu et al.")]
-public class MedSAM2<T> : Common.MedicalSegmentationBase<T>
+public partial class MedSAM2<T> : Common.MedicalSegmentationBase<T>
 {
     private readonly MedSAM2Options _options;
     public override ModelOptions GetOptions() => _options;

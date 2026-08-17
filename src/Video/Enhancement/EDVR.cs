@@ -56,7 +56,7 @@ namespace AiDotNet.Video.Enhancement;
     "https://arxiv.org/abs/1905.02716",
     Year = 2019,
     Authors = "Xintao Wang, Kelvin C.K. Chan, Ke Yu, Chao Dong, Chen Change Loy")]
-public class EDVR<T> : VideoSuperResolutionBase<T>
+public partial class EDVR<T> : VideoSuperResolutionBase<T>
 {
     private readonly EDVROptions _options;
 

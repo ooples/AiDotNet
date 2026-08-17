@@ -60,7 +60,7 @@ namespace AiDotNet.ComputerVision.Segmentation.Foundation;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Mask DINO: Towards A Unified Transformer-based Framework for Object Detection and Segmentation", "https://arxiv.org/abs/2206.02777", Year = 2023, Authors = "Feng Li, Hao Zhang, Huaizhe Xu, Shilong Liu, Lei Zhang, Lionel M. Ni, Heung-Yeung Shum")]
-public class MaskDINO<T> : Common.PanopticSegmentationBase<T>
+public partial class MaskDINO<T> : Common.PanopticSegmentationBase<T>
 {
     private readonly MaskDINOOptions _options;
 

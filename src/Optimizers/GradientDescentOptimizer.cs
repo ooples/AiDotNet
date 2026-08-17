@@ -29,7 +29,7 @@ namespace AiDotNet.Optimizers;
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 [ComponentType(ComponentType.Optimizer)]
 [PipelineStage(PipelineStage.Training)]
-public class GradientDescentOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TInput, TOutput>
+public partial class GradientDescentOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TInput, TOutput>
 {
     /// <summary>
     /// Options specific to the Gradient Descent optimizer.

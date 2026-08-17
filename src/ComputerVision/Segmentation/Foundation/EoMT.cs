@@ -59,7 +59,7 @@ namespace AiDotNet.ComputerVision.Segmentation.Foundation;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Your ViT is Secretly an Image Segmentation Model", "https://arxiv.org/abs/2503.19108", Year = 2025, Authors = "Tommie Kerssies, Niccolò Cavagnero, Alexander Hermans, Narges Norouzi, Giuseppe Averta, Bastian Leibe, Gijs Dubbelman, Daan de Geus")]
-public class EoMT<T> : Common.PanopticSegmentationBase<T>
+public partial class EoMT<T> : Common.PanopticSegmentationBase<T>
 {
     /// <inheritdoc />
     /// <remarks>

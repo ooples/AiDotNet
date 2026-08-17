@@ -60,7 +60,7 @@ namespace AiDotNet.ComputerVision.Segmentation.Semantic;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("ViT-CoMer: Vision Transformer with Convolutional Multi-scale Feature Interaction for Dense Predictions", "https://arxiv.org/abs/2403.07392", Year = 2024, Authors = "Xia et al.")]
-public class ViTCoMer<T> : Common.SemanticSegmentationBase<T>
+public partial class ViTCoMer<T> : Common.SemanticSegmentationBase<T>
 {
     /// <inheritdoc />
     /// <remarks>

@@ -52,7 +52,7 @@ namespace AiDotNet.ComputerVision.Segmentation.Efficient;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Fast Segment Anything", "https://arxiv.org/abs/2306.12156", Year = 2023, Authors = "Xu Zhao, Wenchao Ding, Yongqi An, Yinglong Du, Tao Yu, Min Li, Ming Tang, Jinqiao Wang")]
-public class FastSAM<T> : Common.PromptableSegmentationBase<T>
+public partial class FastSAM<T> : Common.PromptableSegmentationBase<T>
 {
     private readonly FastSAMOptions _options;
     public override ModelOptions GetOptions() => _options;

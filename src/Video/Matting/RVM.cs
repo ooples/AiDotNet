@@ -65,7 +65,7 @@ namespace AiDotNet.Video.Matting;
     Direction = TensorLayoutDirection.Input, BatchOptional = true)]
 [TensorLayout(TensorAxis.Batch, TensorAxis.Frames, TensorAxis.Height, TensorAxis.Width,
     Direction = TensorLayoutDirection.Output, BatchOptional = true)]
-public class RVM<T> : NeuralNetworkBase<T>
+public partial class RVM<T> : NeuralNetworkBase<T>
 {
     private readonly RVMOptions _options;
 

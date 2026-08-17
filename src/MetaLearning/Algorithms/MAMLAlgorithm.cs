@@ -55,7 +55,7 @@ namespace AiDotNet.MetaLearning.Algorithms;
     Authors = "Chelsea Finn, Pieter Abbeel, Sergey Levine")]
 [ComponentType(ComponentType.MetaLearner)]
 [PipelineStage(PipelineStage.Training)]
-public class MAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
+public partial class MAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
     private readonly MAMLOptions<T, TInput, TOutput> _mamlOptions;
 

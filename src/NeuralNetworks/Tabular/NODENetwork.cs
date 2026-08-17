@@ -64,7 +64,7 @@ namespace AiDotNet.NeuralNetworks.Tabular;
     "https://arxiv.org/abs/1909.06312",
     Year = 2020,
     Authors = "Popov, S., Morozov, S., & Babenko, A.")]
-public class NODENetwork<T> : TabularNeuralNetworkBase<T>
+public partial class NODENetwork<T> : TabularNeuralNetworkBase<T>
 {
     private readonly NODEOptions<T> _options;
 

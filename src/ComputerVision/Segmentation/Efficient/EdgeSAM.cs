@@ -55,7 +55,7 @@ namespace AiDotNet.ComputerVision.Segmentation.Efficient;
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("EdgeSAM: Prompt-In-the-Loop Distillation for On-Device Deployment of SAM", "https://arxiv.org/abs/2312.06660", Year = 2024, Authors = "Chong Zhou, Xiangtai Li, Chen Change Loy, Bo Dai")]
-public class EdgeSAM<T> : Common.PromptableSegmentationBase<T>
+public partial class EdgeSAM<T> : Common.PromptableSegmentationBase<T>
 {
     private readonly EdgeSAMOptions _options;
     public override ModelOptions GetOptions() => _options;

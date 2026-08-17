@@ -54,7 +54,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Unsupervised Representation Learning with Deep Convolutional Generative Adversarial Networks", "https://arxiv.org/abs/1511.06434", Year = 2016, Authors = "Alec Radford, Luke Metz, Soumith Chintala")]
-public class DCGAN<T> : GenerativeAdversarialNetwork<T>
+public partial class DCGAN<T> : GenerativeAdversarialNetwork<T>
 {
     private readonly DCGANOptions _options;
     private readonly int _latentSize;

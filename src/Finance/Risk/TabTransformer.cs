@@ -48,7 +48,7 @@ namespace AiDotNet.Finance.Risk;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("TabTransformer: Tabular Data Modeling Using Contextual Embeddings", "https://arxiv.org/abs/2012.06678", Year = 2021, Authors = "Xin Huang, Ashish Khetan, Milan Cvitkovic, Zohar Karnin")]
-public class TabTransformer<T> : RiskModelBase<T>
+public partial class TabTransformer<T> : RiskModelBase<T>
 {
     #region Shared Fields
 

@@ -66,7 +66,7 @@ namespace AiDotNet.NeuralNetworks.Tabular;
     "https://arxiv.org/abs/2012.06678",
     Year = 2020,
     Authors = "Xin Huang, Ashish Khetan, Milan Cvitkovic, Zohar Karnin")]
-public class TabTransformerNetwork<T> : TabularNeuralNetworkBase<T>
+public partial class TabTransformerNetwork<T> : TabularNeuralNetworkBase<T>
 {
     private readonly TabTransformerOptions<T> _options;
 

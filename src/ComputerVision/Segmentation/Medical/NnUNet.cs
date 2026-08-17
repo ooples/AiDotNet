@@ -56,7 +56,7 @@ namespace AiDotNet.ComputerVision.Segmentation.Medical;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("nnU-Net: a self-configuring method for deep learning-based biomedical image segmentation", "https://doi.org/10.1038/s41592-020-01008-z", Year = 2021, Authors = "Fabian Isensee, Paul F. Jaeger, Simon A. A. Kohl, Jens Petersen, Klaus H. Maier-Hein")]
-public class NnUNet<T> : Common.MedicalSegmentationBase<T>
+public partial class NnUNet<T> : Common.MedicalSegmentationBase<T>
 {
     private readonly NnUNetOptions _options;
     public override ModelOptions GetOptions() => _options;

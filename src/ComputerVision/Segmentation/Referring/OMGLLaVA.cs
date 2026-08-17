@@ -59,7 +59,7 @@ namespace AiDotNet.ComputerVision.Segmentation.Referring;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("OMG-LLaVA: Bridging Image-Level, Object-Level, Pixel-Level Reasoning and Understanding", "https://arxiv.org/abs/2406.19389", Year = 2024, Authors = "Zhang et al.")]
-public class OMGLLaVA<T> : Common.ReferringSegmentationBase<T>
+public partial class OMGLLaVA<T> : Common.ReferringSegmentationBase<T>
 {
     private readonly OMGLLaVAOptions _options;
     public override ModelOptions GetOptions() => _options;

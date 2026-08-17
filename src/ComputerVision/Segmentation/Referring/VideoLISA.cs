@@ -59,7 +59,7 @@ namespace AiDotNet.ComputerVision.Segmentation.Referring;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("One Token to Seg Them All: Language Instructed Reasoning Segmentation in Videos", "https://arxiv.org/abs/2409.19603", Year = 2024, Authors = "Zechen Bai, Tong He, Haiyang Mei, Pichao Wang, Ziteng Gao, Joya Chen, Lei Liu, Zheng Zhang, Mike Zheng Shou")]
-public class VideoLISA<T> : Common.ReferringSegmentationBase<T>
+public partial class VideoLISA<T> : Common.ReferringSegmentationBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Does NOT downsample: measured [1,3,64,64] -> [1,C,64,64].</remarks>
