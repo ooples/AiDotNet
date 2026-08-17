@@ -321,8 +321,6 @@ public sealed class ModelPredictiveController<T>
         Matrix<T> stateCost, Matrix<T> inputCost)
     {
         int stateRows = _horizon * _stateCount;
-        int inputColumns = _horizon * _inputCount;
-
         // Q̄ = blockdiag(Q, ..., Q, P_f): the terminal cost replaces Q in the final block.
         var stackedStateCost = new Matrix<T>(stateRows, stateRows);
         for (int k = 0; k < _horizon; k++)
@@ -362,8 +360,6 @@ public sealed class ModelPredictiveController<T>
         var linearFactor = ControlMath<T>.Scale(
             ControlMath<T>.Multiply(weightedResponse, _prediction), 2.0);
 
-        _ = inputColumns;
-
         return (hessian, linearFactor);
     }
 
@@ -376,21 +372,33 @@ public sealed class ModelPredictiveController<T>
 
         var linear = ControlMath<T>.Multiply(_linearFactor, state);
 
-        // Bounds must always be supplied explicitly: an omitted lower bound means zero, not
-        // unbounded, so leaving them out would silently forbid negative inputs.
-        var lowerBounds = new Vector<T>(variableCount);
-        var upperBounds = new Vector<T>(variableCount);
+        // A null quadratic-program bound means unbounded. Preserve that representation instead of
+        // manufacturing IEEE infinities, because generic numeric types such as decimal cannot
+        // represent them.
+        Vector<T>? lowerBounds = null;
+        Vector<T>? upperBounds = null;
 
-        T negativeInfinity = NumOps.FromDouble(double.NegativeInfinity);
-        T positiveInfinity = NumOps.FromDouble(double.PositiveInfinity);
-
-        for (int k = 0; k < _horizon; k++)
+        if (_inputLower is not null)
         {
-            for (int i = 0; i < _inputCount; i++)
+            lowerBounds = new Vector<T>(variableCount);
+            for (int k = 0; k < _horizon; k++)
             {
-                int index = k * _inputCount + i;
-                lowerBounds[index] = _inputLower is null ? negativeInfinity : _inputLower[i];
-                upperBounds[index] = _inputUpper is null ? positiveInfinity : _inputUpper[i];
+                for (int i = 0; i < _inputCount; i++)
+                {
+                    lowerBounds[k * _inputCount + i] = _inputLower[i];
+                }
+            }
+        }
+
+        if (_inputUpper is not null)
+        {
+            upperBounds = new Vector<T>(variableCount);
+            for (int k = 0; k < _horizon; k++)
+            {
+                for (int i = 0; i < _inputCount; i++)
+                {
+                    upperBounds[k * _inputCount + i] = _inputUpper[i];
+                }
             }
         }
 
@@ -473,6 +481,11 @@ public sealed class ModelPredictiveController<T>
 
     private static bool IsFinite(T value)
     {
+        if (NumOps.Equals(value, NumOps.MinValue) || NumOps.Equals(value, NumOps.MaxValue))
+        {
+            return false;
+        }
+
         double asDouble = NumOps.ToDouble(value);
         return !double.IsInfinity(asDouble) && !double.IsNaN(asDouble);
     }

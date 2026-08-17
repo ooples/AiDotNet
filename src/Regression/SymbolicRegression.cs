@@ -540,7 +540,8 @@ public class SymbolicRegression<T> : NonLinearRegressionBase<T>
             throw new InvalidOperationException("The model has not been optimized yet. Please call OptimizeModel first.");
         }
 
-        Matrix<T> predictionInput = Matrix<T>.FromVector(input);
+        var predictionInput = new Matrix<T>(1, input.Length);
+        predictionInput.SetRow(0, input);
         if (_preprocessingPipeline is not null)
         {
             predictionInput = _preprocessingPipeline.Transform(predictionInput);

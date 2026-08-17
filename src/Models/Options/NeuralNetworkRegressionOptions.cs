@@ -362,24 +362,21 @@ public class NeuralNetworkRegressionOptions<T, TInput, TOutput> : NonLinearRegre
     public ILossFunction<T> LossFunction { get; set; } = new MeanSquaredErrorLoss<T>();
 
     /// <summary>
-    /// Gets or sets the optimization algorithm used to update the network weights during training.
+    /// Gets or sets the factory that creates the optimization algorithm used to update network weights.
     /// </summary>
-    /// <value>The optimizer instance, defaulting to null (in which case a default optimizer will be used).</value>
+    /// <value>A per-model optimizer factory, defaulting to null (in which case Adam is used).</value>
     /// <remarks>
     /// <para>
-    /// The optimizer determines how the network's weights are updated based on the calculated gradients during
-    /// backpropagation. Different optimization algorithms have various properties regarding convergence speed,
-    /// stability, and ability to navigate complex error surfaces. Common choices include Stochastic Gradient
-    /// Descent (SGD), Adam, RMSProp, and AdaGrad. If this property is left null, a default optimizer
-    /// (typically SGD with momentum) will be used. Advanced optimizers often adapt learning rates per-parameter
-    /// or incorporate momentum to accelerate training and help escape local minima.
+    /// The factory is called once for every model instance, including clones. This ownership boundary prevents
+    /// mutable momentum, cache, and model-reference state from leaking between otherwise independent models.
+    /// If this property is null, the model creates its documented default Adam optimizer.
     /// </para>
     /// <para><b>For Beginners:</b> This setting determines the algorithm used to update the
     /// network's internal connections during training.
     /// 
     /// The default value of null means:
-    /// - The system will choose a standard optimizer for you
-    /// - This is usually basic Stochastic Gradient Descent (SGD) or SGD with momentum
+    /// - The system will create a fresh Adam optimizer for each model
+    /// - Cloning the model never shares optimizer state
     /// 
     /// Think of the optimizer like a navigation strategy:
     /// - Basic SGD is like always walking directly downhill
@@ -400,5 +397,5 @@ public class NeuralNetworkRegressionOptions<T, TInput, TOutput> : NonLinearRegre
     /// explore different optimizers as you gain experience.
     /// </para>
     /// </remarks>
-    public IOptimizer<T, TInput, TOutput>? Optimizer { get; set; }
+    public Func<IFullModel<T, TInput, TOutput>, IOptimizer<T, TInput, TOutput>>? OptimizerFactory { get; set; }
 }

@@ -812,22 +812,24 @@ public abstract class NonLinearRegressionBase<T> : INonLinearRegression<T>, ICon
     /// </remarks>
     public virtual IEnumerable<int> GetActiveFeatureIndices()
     {
+        T activityTolerance = SupportVectorSelectionTolerance;
+
         // Create a set to store the active feature indices
         // This set will automatically remove duplicate indices and ensure that we only return unique values
-        var activeIndices = new HashSet<int>(); activeIndices = new HashSet<int>();
+        var activeIndices = new HashSet<int>();
 
         // Identify features that have non-zero weight in support vectors with non-zero alpha
         for (int i = 0; i < Alphas.Length; i++)
         {
             // Skip if the alpha coefficient is effectively zero
-            if (NumOps.LessThan(NumOps.Abs(Alphas[i]), NumOps.FromDouble(1e-5)))
+            if (NumOps.LessThan(NumOps.Abs(Alphas[i]), activityTolerance))
                 continue;
 
             // Check each feature in this support vector
             for (int j = 0; j < SupportVectors.Columns; j++)
             {
                 // If the feature has a non-zero value, consider it active
-                if (!NumOps.LessThan(NumOps.Abs(SupportVectors[i, j]), NumOps.FromDouble(1e-5)))
+                if (!NumOps.LessThan(NumOps.Abs(SupportVectors[i, j]), activityTolerance))
                 {
                     activeIndices.Add(j);
                 }
@@ -866,15 +868,17 @@ public abstract class NonLinearRegressionBase<T> : INonLinearRegression<T>, ICon
                 $"Feature index must be between 0 and {SupportVectors.Columns - 1}.");
         }
 
+        T activityTolerance = SupportVectorSelectionTolerance;
+
         // Check if the feature has a non-zero value in any support vector with non-zero alpha
         for (int i = 0; i < Alphas.Length; i++)
         {
             // Skip if the alpha coefficient is effectively zero
-            if (NumOps.LessThan(NumOps.Abs(Alphas[i]), NumOps.FromDouble(1e-5)))
+            if (NumOps.LessThan(NumOps.Abs(Alphas[i]), activityTolerance))
                 continue;
 
             // Check if this feature has a non-zero value in this support vector
-            if (!NumOps.LessThan(NumOps.Abs(SupportVectors[i, featureIndex]), NumOps.FromDouble(1e-5)))
+            if (!NumOps.LessThan(NumOps.Abs(SupportVectors[i, featureIndex]), activityTolerance))
             {
                 return true;
             }

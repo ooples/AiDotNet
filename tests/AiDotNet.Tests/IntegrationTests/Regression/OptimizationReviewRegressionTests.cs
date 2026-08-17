@@ -1,6 +1,8 @@
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Enums;
+using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
+using AiDotNet.Optimizers;
 using AiDotNet.Regression;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
@@ -42,12 +44,14 @@ public class OptimizationReviewRegressionTests
             UseIntercept = false,
         });
         var x = Column(new[] { 1.0, 2.0, 3.0, 4.0 });
-        var y = Vector<double>.FromArray(new[] { 2.0, 4.0, 6.0, 8.0 });
+        // y = 2x + 5. With no intercept, median regression selects the weighted-median
+        // through-origin slope 11/3 instead of the unconstrained slope 2 and intercept 5.
+        var y = Vector<double>.FromArray(new[] { 7.0, 9.0, 11.0, 13.0 });
 
         model.Train(x, y);
         var prediction = model.Predict(Column(new[] { 5.0 }));
 
-        Assert.Equal(10.0, prediction[0], 8);
+        Assert.Equal(55.0 / 3.0, prediction[0], 8);
     }
 
     [Fact(Timeout = 120000)]
@@ -134,6 +138,21 @@ public class OptimizationReviewRegressionTests
     }
 
     [Fact(Timeout = 120000)]
+    public async Task BayesianRegression_RejectsMatrixShapeLargerThanRemainingPayload()
+    {
+        await Task.Yield();
+
+        var model = new BayesianRegression<double>();
+        byte[] payload = model.Serialize();
+        int baseLength = BitConverter.ToInt32(payload, 0);
+        int firstMatrixHeader = sizeof(int) + baseLength;
+        BitConverter.GetBytes(int.MaxValue).CopyTo(payload, firstMatrixHeader);
+        BitConverter.GetBytes(int.MaxValue).CopyTo(payload, firstMatrixHeader + sizeof(int));
+
+        Assert.Throws<InvalidDataException>(() => new BayesianRegression<double>().Deserialize(payload));
+    }
+
+    [Fact(Timeout = 120000)]
     public async Task NeuralNetworkRegression_CloneAndRoundTrip_PreservePredictionScaleAndActivations()
     {
         await Task.Yield();
@@ -167,9 +186,59 @@ public class OptimizationReviewRegressionTests
 
         for (int i = 0; i < expected.Length; i++)
         {
+            Assert.InRange(expected[i], 50.0, 160.0);
             Assert.Equal(expected[i], cloned[i], 10);
             Assert.Equal(expected[i], roundTripped[i], 10);
         }
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task NeuralNetworkRegression_CloneCreatesAnOwnedOptimizer()
+    {
+        await Task.Yield();
+
+        var owners = new List<IFullModel<double, Matrix<double>, Vector<double>>>();
+        var options = new NeuralNetworkRegressionOptions<double, Matrix<double>, Vector<double>>
+        {
+            LayerSizes = [1, 2, 1],
+            OptimizerFactory = owner =>
+            {
+                owners.Add(owner);
+                return new AdamOptimizer<double, Matrix<double>, Vector<double>>(owner);
+            },
+        };
+
+        var model = new NeuralNetworkRegression<double>(options);
+        var clone = (NeuralNetworkRegression<double>)model.Clone();
+
+        Assert.Equal(2, owners.Count);
+        Assert.Same(model, owners[0]);
+        Assert.Same(clone, owners[1]);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task NeuralNetworkRegression_DeserializeAcceptsPayloadBeforeScalingTrailer()
+    {
+        await Task.Yield();
+
+        var model = new NeuralNetworkRegression<double>(
+            new NeuralNetworkRegressionOptions<double, Matrix<double>, Vector<double>>
+            {
+                LayerSizes = [1, 2, 1],
+            });
+        byte[] current = model.Serialize();
+        const int trailerBytes = sizeof(int) + sizeof(int) + sizeof(double) + sizeof(double);
+        byte[] legacy = current.Take(current.Length - trailerBytes).ToArray();
+        var restored = new NeuralNetworkRegression<double>(
+            new NeuralNetworkRegressionOptions<double, Matrix<double>, Vector<double>>
+            {
+                LayerSizes = [1, 2, 1],
+            });
+
+        restored.Deserialize(legacy);
+        Vector<double> prediction = restored.Predict(Column(new[] { 1.0 }));
+
+        Assert.True(double.IsFinite(prediction[0]));
     }
 
     private static Matrix<double> Column(double[] values)

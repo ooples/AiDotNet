@@ -897,6 +897,19 @@ public partial class TimeSeriesRegression<T> : RegressionBase<T>
             // OLS state
             _useOLS = reader.ReadBoolean();
 
+            // Older payloads end after the OLS flag. The recursive-forecasting state was added as
+            // an append-only tail so those models retain their historical one-step behavior.
+            if (ms.Position == ms.Length)
+            {
+                _trainingTargetTail = new List<T>();
+                _trainingRowCount = 0;
+                return;
+            }
+            if (ms.Length - ms.Position < sizeof(int))
+            {
+                throw new InvalidDataException("The serialized training-target tail header is truncated.");
+            }
+
             int targetTailCount = reader.ReadInt32();
             if (targetTailCount < 0 || targetTailCount > Math.Max(_options.LagOrder, 1))
             {
@@ -905,6 +918,11 @@ public partial class TimeSeriesRegression<T> : RegressionBase<T>
             }
 
             _trainingTargetTail = new List<T>(targetTailCount);
+            long requiredTailBytes = checked((long)targetTailCount * sizeof(double) + sizeof(int));
+            if (requiredTailBytes > ms.Length - ms.Position)
+            {
+                throw new InvalidDataException("The serialized training-target tail is truncated.");
+            }
             for (int i = 0; i < targetTailCount; i++)
             {
                 _trainingTargetTail.Add(NumOps.FromDouble(reader.ReadDouble()));

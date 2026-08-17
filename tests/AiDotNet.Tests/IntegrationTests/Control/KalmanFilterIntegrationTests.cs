@@ -408,6 +408,51 @@ public class KalmanFilterIntegrationTests
 
     #region Validation
 
+    [Fact(Timeout = 120000)]
+    public async Task Filter_NullRequiredMatrices_ThrowNamedArguments()
+    {
+        await Task.Yield();
+
+        var identity = Matrix<double>.CreateIdentity(1);
+
+        Assert.Equal("transition", Assert.Throws<ArgumentNullException>(
+            () => new KalmanFilter<double>(null, identity, identity, identity)).ParamName);
+        Assert.Equal("observation", Assert.Throws<ArgumentNullException>(
+            () => new KalmanFilter<double>(identity, null, identity, identity)).ParamName);
+        Assert.Equal("processNoise", Assert.Throws<ArgumentNullException>(
+            () => new KalmanFilter<double>(identity, identity, null, identity)).ParamName);
+        Assert.Equal("measurementNoise", Assert.Throws<ArgumentNullException>(
+            () => new KalmanFilter<double>(identity, identity, identity, null)).ParamName);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task Filter_SingularInnovationCovariance_ThrowsNamedDiagnostic()
+    {
+        await Task.Yield();
+
+        var filter = new KalmanFilter<double>(
+            Matrix<double>.CreateIdentity(1), Matrix<double>.CreateIdentity(1),
+            Matrix<double>.CreateIdentity(1), M(new[,] { { 0.0 } }));
+        filter.Initialize(V(0.0), M(new[,] { { 0.0 } }));
+
+        var exception = Assert.Throws<InvalidOperationException>(() => filter.Update(V(0.0)));
+
+        Assert.Contains("innovation covariance", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task SteadyStateGain_ValidatesAllMatrixDimensions()
+    {
+        await Task.Yield();
+
+        var exception = Assert.Throws<ArgumentException>(() =>
+            KalmanFilter<double>.SteadyStateGain(
+                Matrix<double>.CreateIdentity(2), M(new[,] { { 1.0, 0.0 } }),
+                Matrix<double>.CreateIdentity(2), Matrix<double>.CreateIdentity(2)));
+
+        Assert.Equal("measurementNoise", exception.ParamName);
+    }
+
     [Fact]
     public void Filter_NonSquareTransition_Throws()
     {

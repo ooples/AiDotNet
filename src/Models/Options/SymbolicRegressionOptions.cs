@@ -46,9 +46,17 @@ public class SymbolicRegressionOptions : NonLinearRegressionOptions
     /// Absolute coefficient magnitude below which an evolved feature is reported as inactive.
     /// Default: 1e-8.
     /// </summary>
+    /// <value>A non-negative reporting threshold, defaulting to 1e-8.</value>
     /// <remarks>
+    /// <para>
     /// This affects feature reporting only; it does not change the evolved model's predictions.
-    /// Increase it to produce a sparser feature-importance view for noisy searches.
+    /// The 1e-8 default is an engineering noise floor: it is comfortably above double-precision
+    /// round-off accumulated by the coefficient fit while far below a coefficient that materially
+    /// changes ordinary-scale predictions.
+    /// </para>
+    /// <para><b>For Beginners:</b> Tiny fitted coefficients usually mean a feature contributes only
+    /// numerical noise. Raise this to show fewer features as active; lower it when very small effects
+    /// are meaningful in your domain.</para>
     /// </remarks>
     public double ActiveCoefficientTolerance { get; set; } = 1e-8;
 

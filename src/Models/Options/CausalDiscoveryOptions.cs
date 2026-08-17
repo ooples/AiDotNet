@@ -212,11 +212,19 @@ public class CausalDiscoveryOptions : ModelOptions
     /// </remarks>
     public double? LearningRate { get; set; }
 
+    private double? _tCdfAttentionLearningRateMultiplier;
+
     /// <summary>
     /// Multiplier applied to TCDF's attention-logit learning rate after its dimension-squared
     /// Jacobian compensation. Default: null (100).
     /// </summary>
+    /// <value>
+    /// A positive finite multiplier, or <see langword="null"/> to use TCDF's default of 100.
+    /// </value>
     /// <remarks>
+    /// <para><b>For Beginners:</b> This changes only how quickly TCDF learns which time lags deserve
+    /// attention. Leave it unset unless attention learns much slower or faster than the convolution
+    /// filters.</para>
     /// <para>
     /// TCDF's sigmoid-plus-softmax attention path has substantially smaller gradients than its
     /// convolution filters. Increase this value when attention remains diffuse, or decrease it
@@ -224,7 +232,22 @@ public class CausalDiscoveryOptions : ModelOptions
     /// used as the unmodified base learning rate.
     /// </para>
     /// </remarks>
-    public double? TCdfAttentionLearningRateMultiplier { get; set; }
+    public double? TCdfAttentionLearningRateMultiplier
+    {
+        get => _tCdfAttentionLearningRateMultiplier;
+        set
+        {
+            if (value.HasValue &&
+                (value.Value <= 0.0 || double.IsNaN(value.Value) || double.IsInfinity(value.Value)))
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(value), value,
+                    "TCdfAttentionLearningRateMultiplier must be positive and finite.");
+            }
+
+            _tCdfAttentionLearningRateMultiplier = value;
+        }
+    }
 
     /// <summary>
     /// Maximum lag order for time-series causal discovery methods. Default: null (3).

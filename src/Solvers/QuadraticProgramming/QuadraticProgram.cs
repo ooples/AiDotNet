@@ -1,4 +1,5 @@
 using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
 using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.Solvers.QuadraticProgramming;
@@ -140,21 +141,37 @@ public sealed class QuadraticProgram<T>
         }
 
         var numOps = MathHelper.GetNumericOperations<T>();
+        double symmetryTolerance = GetSymmetryTolerance();
         for (int i = 0; i < quadratic.Rows; i++)
         {
-            for (int j = i + 1; j < quadratic.Columns; j++)
+            for (int j = 0; j < quadratic.Columns; j++)
             {
                 double left = numOps.ToDouble(quadratic[i, j]);
+                if (double.IsNaN(left) || double.IsInfinity(left))
+                {
+                    throw new ArgumentException(
+                        $"The quadratic term entry ({i}, {j}) must be finite.", nameof(quadratic));
+                }
+
+                if (j <= i) continue;
+
                 double right = numOps.ToDouble(quadratic[j, i]);
                 double scale = Math.Max(1.0, Math.Max(Math.Abs(left), Math.Abs(right)));
-                if (double.IsNaN(left) || double.IsNaN(right) ||
-                    double.IsInfinity(left) || double.IsInfinity(right) ||
-                    Math.Abs(left - right) > 1e-12 * scale)
+                if (Math.Abs(left - right) > symmetryTolerance * scale)
                 {
                     throw new ArgumentException(
                         $"The quadratic term must be symmetric; entries ({i}, {j}) and ({j}, {i}) differ.",
                         nameof(quadratic));
                 }
+            }
+        }
+
+        for (int i = 0; i < linear.Length; i++)
+        {
+            double value = numOps.ToDouble(linear[i]);
+            if (double.IsNaN(value) || double.IsInfinity(value))
+            {
+                throw new ArgumentException($"The linear objective entry {i} must be finite.", nameof(linear));
             }
         }
 
@@ -166,6 +183,14 @@ public sealed class QuadraticProgram<T>
             nameof(equalityMatrix), nameof(equalityBounds));
         ValidateBounds(lowerBounds, linear.Length, nameof(lowerBounds));
         ValidateBounds(upperBounds, linear.Length, nameof(upperBounds));
+        ValidateFiniteConstraintBlock(
+            inequalityMatrix, inequalityBounds, nameof(inequalityMatrix), nameof(inequalityBounds), numOps);
+        ValidateFiniteConstraintBlock(
+            equalityMatrix, equalityBounds, nameof(equalityMatrix), nameof(equalityBounds), numOps);
+        ValidateFiniteVector(lowerBounds, nameof(lowerBounds), allowInfinity: true, numOps);
+        ValidateFiniteVector(upperBounds, nameof(upperBounds), allowInfinity: true, numOps);
+        ValidateDirectionalInfinity(lowerBounds, nameof(lowerBounds), rejectPositiveInfinity: true, numOps);
+        ValidateDirectionalInfinity(upperBounds, nameof(upperBounds), rejectPositiveInfinity: false, numOps);
         if (lowerBounds is not null && upperBounds is not null)
         {
             for (int i = 0; i < linear.Length; i++)
@@ -179,14 +204,14 @@ public sealed class QuadraticProgram<T>
             }
         }
 
-        Quadratic = quadratic;
-        Linear = linear;
-        InequalityMatrix = inequalityMatrix;
-        InequalityBounds = inequalityBounds;
-        EqualityMatrix = equalityMatrix;
-        EqualityBounds = equalityBounds;
-        LowerBounds = lowerBounds;
-        UpperBounds = upperBounds;
+        Quadratic = quadratic.Clone();
+        Linear = linear.Clone();
+        InequalityMatrix = inequalityMatrix?.Clone();
+        InequalityBounds = inequalityBounds?.Clone();
+        EqualityMatrix = equalityMatrix?.Clone();
+        EqualityBounds = equalityBounds?.Clone();
+        LowerBounds = lowerBounds?.Clone();
+        UpperBounds = upperBounds?.Clone();
     }
 
     private static void ValidateConstraintBlock(
@@ -227,6 +252,80 @@ public sealed class QuadraticProgram<T>
         {
             throw new ArgumentException(
                 $"{name} has {bounds.Length} entries but there are {variableCount} variables.", name);
+        }
+    }
+
+    private static double GetSymmetryTolerance()
+    {
+        // Compare in the precision of T, not in an arbitrary double policy. Eight ULPs allows
+        // routine operation ordering noise while still rejecting materially asymmetric objectives.
+        if (typeof(T) == typeof(float)) return 8.0 * 1.1920928955078125e-7;
+        if (typeof(T) == typeof(double)) return 8.0 * 2.2204460492503131e-16;
+        if (typeof(T) == typeof(decimal)) return 0.0;
+        return 1e-12;
+    }
+
+    private static void ValidateFiniteConstraintBlock(
+        Matrix<T>? matrix,
+        Vector<T>? bounds,
+        string matrixName,
+        string boundsName,
+        INumericOperations<T> numOps)
+    {
+        if (matrix is not null)
+        {
+            for (int row = 0; row < matrix.Rows; row++)
+            {
+                for (int column = 0; column < matrix.Columns; column++)
+                {
+                    double value = numOps.ToDouble(matrix[row, column]);
+                    if (double.IsNaN(value) || double.IsInfinity(value))
+                    {
+                        throw new ArgumentException(
+                            $"{matrixName}[{row}, {column}] must be finite.", matrixName);
+                    }
+                }
+            }
+        }
+
+        ValidateFiniteVector(bounds, boundsName, allowInfinity: false, numOps);
+    }
+
+    private static void ValidateFiniteVector(
+        Vector<T>? vector,
+        string name,
+        bool allowInfinity,
+        INumericOperations<T> numOps)
+    {
+        if (vector is null) return;
+        for (int i = 0; i < vector.Length; i++)
+        {
+            double value = numOps.ToDouble(vector[i]);
+            if (double.IsNaN(value) || (!allowInfinity && double.IsInfinity(value)))
+            {
+                throw new ArgumentException($"{name}[{i}] has an invalid value {value}.", name);
+            }
+        }
+    }
+
+    private static void ValidateDirectionalInfinity(
+        Vector<T>? vector,
+        string name,
+        bool rejectPositiveInfinity,
+        INumericOperations<T> numOps)
+    {
+        if (vector is null) return;
+        for (int i = 0; i < vector.Length; i++)
+        {
+            double value = numOps.ToDouble(vector[i]);
+            if ((rejectPositiveInfinity && double.IsPositiveInfinity(value)) ||
+                (!rejectPositiveInfinity && double.IsNegativeInfinity(value)))
+            {
+                string direction = rejectPositiveInfinity ? "positive" : "negative";
+                throw new ArgumentException(
+                    $"{name}[{i}] cannot be {direction} infinity because it makes the bound infeasible.",
+                    name);
+            }
         }
     }
 }

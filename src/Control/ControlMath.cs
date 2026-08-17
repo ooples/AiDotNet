@@ -1,6 +1,8 @@
 using AiDotNet.DecompositionMethods.MatrixDecomposition;
+using AiDotNet.Exceptions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.Control;
@@ -18,6 +20,7 @@ namespace AiDotNet.Control;
 internal static class ControlMath<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+    private static IEngine Engine => AiDotNetEngine.Current;
 
     /// <summary>
     /// Inverts a square matrix, or returns <c>null</c> when it is singular.
@@ -38,7 +41,7 @@ internal static class ControlMath<T>
         {
             inverse = new LuDecomposition<T>(matrix).Invert();
         }
-        catch (Exception)
+        catch (MatrixFactorizationException)
         {
             return null;
         }
@@ -124,146 +127,55 @@ internal static class ControlMath<T>
     /// Subtracts one matrix from another.
     /// </summary>
     public static Matrix<T> Subtract(Matrix<T> left, Matrix<T> right)
-    {
-        var result = new Matrix<T>(left.Rows, left.Columns);
-        for (int r = 0; r < left.Rows; r++)
-        {
-            for (int c = 0; c < left.Columns; c++)
-            {
-                result[r, c] = NumOps.Subtract(left[r, c], right[r, c]);
-            }
-        }
-
-        return result;
-    }
+        => Engine.MatrixSubtract(left, right);
 
     /// <summary>
     /// Adds two matrices.
     /// </summary>
     public static Matrix<T> Add(Matrix<T> left, Matrix<T> right)
-    {
-        var result = new Matrix<T>(left.Rows, left.Columns);
-        for (int r = 0; r < left.Rows; r++)
-        {
-            for (int c = 0; c < left.Columns; c++)
-            {
-                result[r, c] = NumOps.Add(left[r, c], right[r, c]);
-            }
-        }
-
-        return result;
-    }
+        => Engine.MatrixAdd(left, right);
 
     /// <summary>
     /// Adds two vectors.
     /// </summary>
     public static Vector<T> Add(Vector<T> left, Vector<T> right)
-    {
-        var result = new Vector<T>(left.Length);
-        for (int i = 0; i < left.Length; i++) result[i] = NumOps.Add(left[i], right[i]);
-        return result;
-    }
+        => (Vector<T>)Engine.Add(left, right);
 
     /// <summary>
     /// Subtracts one vector from another.
     /// </summary>
     public static Vector<T> Subtract(Vector<T> left, Vector<T> right)
-    {
-        var result = new Vector<T>(left.Length);
-        for (int i = 0; i < left.Length; i++) result[i] = NumOps.Subtract(left[i], right[i]);
-        return result;
-    }
+        => (Vector<T>)Engine.Subtract(left, right);
 
     /// <summary>
     /// Multiplies two matrices.
     /// </summary>
     public static Matrix<T> Multiply(Matrix<T> left, Matrix<T> right)
-    {
-        var result = new Matrix<T>(left.Rows, right.Columns);
-        for (int r = 0; r < left.Rows; r++)
-        {
-            for (int c = 0; c < right.Columns; c++)
-            {
-                T accumulator = NumOps.Zero;
-                for (int k = 0; k < left.Columns; k++)
-                {
-                    accumulator = NumOps.Add(
-                        accumulator, NumOps.Multiply(left[r, k], right[k, c]));
-                }
-
-                result[r, c] = accumulator;
-            }
-        }
-
-        return result;
-    }
+        => (Matrix<T>)Engine.MatrixMultiply(left, right);
 
     /// <summary>
     /// Scales every entry of a matrix.
     /// </summary>
     public static Matrix<T> Scale(Matrix<T> matrix, double factor)
-    {
-        T scale = NumOps.FromDouble(factor);
-        var result = new Matrix<T>(matrix.Rows, matrix.Columns);
-        for (int r = 0; r < matrix.Rows; r++)
-        {
-            for (int c = 0; c < matrix.Columns; c++)
-            {
-                result[r, c] = NumOps.Multiply(scale, matrix[r, c]);
-            }
-        }
-
-        return result;
-    }
+        => Engine.MatrixMultiplyScalar(matrix, NumOps.FromDouble(factor));
 
     /// <summary>
     /// Scales every entry of a vector.
     /// </summary>
     public static Vector<T> Scale(Vector<T> vector, double factor)
-    {
-        T scale = NumOps.FromDouble(factor);
-        var result = new Vector<T>(vector.Length);
-        for (int i = 0; i < vector.Length; i++)
-        {
-            result[i] = NumOps.Multiply(scale, vector[i]);
-        }
-
-        return result;
-    }
+        => vector.Multiply(NumOps.FromDouble(factor));
 
     /// <summary>
     /// Transposes a matrix.
     /// </summary>
     public static Matrix<T> Transpose(Matrix<T> matrix)
-    {
-        var result = new Matrix<T>(matrix.Columns, matrix.Rows);
-        for (int r = 0; r < matrix.Rows; r++)
-        {
-            for (int c = 0; c < matrix.Columns; c++) result[c, r] = matrix[r, c];
-        }
-
-        return result;
-    }
+        => Engine.MatrixTranspose(matrix);
 
     /// <summary>
     /// Multiplies a matrix by a vector.
     /// </summary>
     public static Vector<T> Multiply(Matrix<T> matrix, Vector<T> vector)
-    {
-        var result = new Vector<T>(matrix.Rows);
-        for (int r = 0; r < matrix.Rows; r++)
-        {
-            T accumulator = NumOps.Zero;
-            for (int c = 0; c < matrix.Columns; c++)
-            {
-                accumulator = NumOps.Add(accumulator, NumOps.Multiply(matrix[r, c], vector[c]));
-            }
-
-            result[r] = accumulator;
-        }
-
-        return result;
-    }
+        => Engine.MatrixVectorMultiply(matrix, vector);
 
     /// <summary>
     /// Copies an <c>n</c>-by-<c>n</c> block out of a larger matrix.

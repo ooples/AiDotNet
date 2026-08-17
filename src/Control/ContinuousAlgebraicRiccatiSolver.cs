@@ -1,4 +1,5 @@
 using AiDotNet.DecompositionMethods.MatrixDecomposition;
+using AiDotNet.Exceptions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
@@ -230,7 +231,7 @@ public sealed class ContinuousAlgebraicRiccatiSolver<T>
     /// one of them can be rank-deficient on its own.
     /// </para>
     /// </remarks>
-    private static Matrix<T> ExtractSolution(Matrix<T> sign, int n)
+    internal static Matrix<T> ExtractSolution(Matrix<T> sign, int n)
     {
         var shifted = ControlMath<T>.Add(sign, Matrix<T>.CreateIdentity(2 * n));
 
@@ -253,19 +254,41 @@ public sealed class ContinuousAlgebraicRiccatiSolver<T>
                 ControlMath<T>.Multiply(lowerRightTransposed, lowerLeft)),
             -1.0);
 
-        var factored = new LuDecomposition<T>(normalMatrix);
-
-        var solution = new Matrix<T>(n, n);
-        for (int c = 0; c < n; c++)
+        try
         {
-            var column = new Vector<T>(n);
-            for (int r = 0; r < n; r++) column[r] = rightHandSide[r, c];
+            var factored = new LuDecomposition<T>(normalMatrix);
+            var solution = new Matrix<T>(n, n);
 
-            var solved = factored.Solve(column);
-            for (int r = 0; r < n; r++) solution[r, c] = solved[r];
+            for (int c = 0; c < n; c++)
+            {
+                var column = new Vector<T>(n);
+                for (int r = 0; r < n; r++) column[r] = rightHandSide[r, c];
+
+                var solved = factored.Solve(column);
+                for (int r = 0; r < n; r++)
+                {
+                    double value = NumOps.ToDouble(solved[r]);
+                    if (double.IsNaN(value) || double.IsInfinity(value))
+                    {
+                        throw new MatrixFactorizationException(
+                            "The stable invariant-subspace least-squares solve returned a " +
+                            "non-finite value.");
+                    }
+
+                    solution[r, c] = solved[r];
+                }
+            }
+
+            return ControlMath<T>.Symmetrize(solution);
         }
-
-        return ControlMath<T>.Symmetrize(solution);
+        catch (MatrixFactorizationException exception)
+        {
+            throw new InvalidOperationException(
+                "The Hamiltonian's stable invariant subspace is rank-deficient, so the " +
+                "continuous-time Riccati equation has no finite stabilizing solution. Check that " +
+                "(A, B) is stabilizable and that the cost matrices state a well-posed problem.",
+                exception);
+        }
     }
 
     /// <summary>

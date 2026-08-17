@@ -19,6 +19,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [Unreleased]
+
+### Breaking Changes
+
+* `QuantileRegressionOptions<T>.LearningRate` was removed because quantile regression now uses an exact linear-program solver rather than gradient descent; there is no learning-rate replacement. `QuantileRegressionOptions<T>.MaxIterations` moved to `SolverOptions.MaxIterations`, alongside the other simplex controls.
+* `NeuralNetworkRegressionOptions<T, TInput, TOutput>.Optimizer` was replaced by `OptimizerFactory`. The factory receives the model it will optimize and creates one optimizer per model, preventing clones from sharing mutable optimizer state.
+
 ## [0.231.0](https://github.com/ooples/AiDotNet/compare/v0.230.0...v0.231.0) (2026-07-17)
 
 

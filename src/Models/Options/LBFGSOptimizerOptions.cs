@@ -44,6 +44,27 @@ public class LBFGSOptimizerOptions<T, TInput, TOutput> : GradientBasedOptimizerO
         MaxIterations = 1000;
     }
 
+    /// <summary>Creates a complete copy of another L-BFGS configuration.</summary>
+    /// <param name="other">The options to copy.</param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="other"/> is null.</exception>
+    public LBFGSOptimizerOptions(LBFGSOptimizerOptions<T, TInput, TOutput> other)
+        : base(other)
+    {
+        BatchSize = other.BatchSize;
+        MemorySize = other.MemorySize;
+        LineSearchMaxSteps = other.LineSearchMaxSteps;
+        ArmijoConstant = other.ArmijoConstant;
+        LineSearchContractionFactor = other.LineSearchContractionFactor;
+        LineSearchFallbackStep = other.LineSearchFallbackStep;
+        MinimumCurvature = other.MinimumCurvature;
+        PowellDampingFactor = other.PowellDampingFactor;
+        InitialLearningRate = other.InitialLearningRate;
+        MinLearningRate = other.MinLearningRate;
+        MaxLearningRate = other.MaxLearningRate;
+        LearningRateIncreaseFactor = other.LearningRateIncreaseFactor;
+        LearningRateDecreaseFactor = other.LearningRateDecreaseFactor;
+    }
+
     /// <summary>
     /// Gets or sets the batch size for gradient computation.
     /// </summary>

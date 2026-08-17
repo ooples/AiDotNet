@@ -84,7 +84,9 @@ public partial class VectorModel<T> : ModelBase<T, Matrix<T>, Vector<T>>, IInter
     /// Relative singular-value tolerance used by the rank-revealing SVD fallback.
     /// </summary>
     /// <remarks>
-    /// This matches the scale-aware tolerance convention used by NumPy and MATLAB pseudoinverses.
+    /// The fixed multiplier is a deliberate double-precision policy: combined with
+    /// <c>max(rows, columns) * sigmaMax</c>, it rejects numerically meaningless singular directions
+    /// while preserving useful rank for the small and moderately conditioned systems targeted here.
     /// </remarks>
     private const double PseudoInverseTolerance = 1e-12;
 

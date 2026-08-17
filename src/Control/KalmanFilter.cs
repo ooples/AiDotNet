@@ -100,55 +100,8 @@ public sealed class KalmanFilter<T>
         Matrix<T> measurementNoise,
         Matrix<T>? control = null)
     {
-        if (transition is null) throw new ArgumentNullException(nameof(transition));
-        if (observation is null) throw new ArgumentNullException(nameof(observation));
-        if (processNoise is null) throw new ArgumentNullException(nameof(processNoise));
-        if (measurementNoise is null) throw new ArgumentNullException(nameof(measurementNoise));
-
-        if (transition.Rows != transition.Columns)
-        {
-            throw new ArgumentException(
-                $"The transition matrix A must be square; it is {transition.Rows}-by-" +
-                $"{transition.Columns}.", nameof(transition));
-        }
-
-        int stateCount = transition.Rows;
-        if (stateCount == 0)
-        {
-            throw new ArgumentException(
-                "The system must have at least one state.", nameof(transition));
-        }
-
-        if (observation.Columns != stateCount)
-        {
-            throw new ArgumentException(
-                $"The observation matrix C must have one column per state: expected {stateCount} " +
-                $"columns, but it has {observation.Columns}.", nameof(observation));
-        }
-
-        int measurementCount = observation.Rows;
-        if (measurementCount == 0)
-        {
-            throw new ArgumentException(
-                "The system must produce at least one measurement; with none there is nothing to " +
-                "filter.", nameof(observation));
-        }
-
-        if (processNoise.Rows != stateCount || processNoise.Columns != stateCount)
-        {
-            throw new ArgumentException(
-                $"The process noise covariance Q must be {stateCount}-by-{stateCount}; it is " +
-                $"{processNoise.Rows}-by-{processNoise.Columns}.", nameof(processNoise));
-        }
-
-        if (measurementNoise.Rows != measurementCount ||
-            measurementNoise.Columns != measurementCount)
-        {
-            throw new ArgumentException(
-                $"The measurement noise covariance R must be {measurementCount}-by-" +
-                $"{measurementCount} to match the rows of C; it is {measurementNoise.Rows}-by-" +
-                $"{measurementNoise.Columns}.", nameof(measurementNoise));
-        }
+        var (stateCount, measurementCount) = ValidateSystemMatrices(
+            transition, observation, processNoise, measurementNoise);
 
         if (control is not null && control.Rows != stateCount)
         {
@@ -157,11 +110,11 @@ public sealed class KalmanFilter<T>
                 $"but it has {control.Rows}.", nameof(control));
         }
 
-        _transition = transition;
-        _observation = observation;
-        _processNoise = processNoise;
-        _measurementNoise = measurementNoise;
-        _control = control;
+        _transition = transition.Clone();
+        _observation = observation.Clone();
+        _processNoise = processNoise.Clone();
+        _measurementNoise = measurementNoise.Clone();
+        _control = control?.Clone();
 
         StateCount = stateCount;
         MeasurementCount = measurementCount;
@@ -241,8 +194,8 @@ public sealed class KalmanFilter<T>
                 $"{covariance.Rows}-by-{covariance.Columns}.", nameof(covariance));
         }
 
-        State = state;
-        Covariance = covariance;
+        State = state.Clone();
+        Covariance = covariance.Clone();
     }
 
     /// <summary>
@@ -381,8 +334,7 @@ public sealed class KalmanFilter<T>
         Matrix<T> measurementNoise,
         AlgebraicRiccatiSolverOptions? options = null)
     {
-        if (transition is null) throw new ArgumentNullException(nameof(transition));
-        if (observation is null) throw new ArgumentNullException(nameof(observation));
+        ValidateSystemMatrices(transition, observation, processNoise, measurementNoise);
 
         var transitionTransposed = ControlMath<T>.Transpose(transition);
         var observationTransposed = ControlMath<T>.Transpose(observation);
@@ -407,6 +359,65 @@ public sealed class KalmanFilter<T>
             ControlMath<T>.Multiply(
                 ControlMath<T>.Multiply(transition, covariance), observationTransposed),
             innovationInverse);
+    }
+
+    private static (int StateCount, int MeasurementCount) ValidateSystemMatrices(
+        Matrix<T> transition,
+        Matrix<T> observation,
+        Matrix<T> processNoise,
+        Matrix<T> measurementNoise)
+    {
+        if (transition is null) throw new ArgumentNullException(nameof(transition));
+        if (observation is null) throw new ArgumentNullException(nameof(observation));
+        if (processNoise is null) throw new ArgumentNullException(nameof(processNoise));
+        if (measurementNoise is null) throw new ArgumentNullException(nameof(measurementNoise));
+
+        if (transition.Rows != transition.Columns)
+        {
+            throw new ArgumentException(
+                $"The transition matrix A must be square; it is {transition.Rows}-by-" +
+                $"{transition.Columns}.", nameof(transition));
+        }
+
+        int stateCount = transition.Rows;
+        if (stateCount == 0)
+        {
+            throw new ArgumentException(
+                "The system must have at least one state.", nameof(transition));
+        }
+
+        if (observation.Columns != stateCount)
+        {
+            throw new ArgumentException(
+                $"The observation matrix C must have one column per state: expected {stateCount} " +
+                $"columns, but it has {observation.Columns}.", nameof(observation));
+        }
+
+        int measurementCount = observation.Rows;
+        if (measurementCount == 0)
+        {
+            throw new ArgumentException(
+                "The system must produce at least one measurement; with none there is nothing to " +
+                "filter.", nameof(observation));
+        }
+
+        if (processNoise.Rows != stateCount || processNoise.Columns != stateCount)
+        {
+            throw new ArgumentException(
+                $"The process noise covariance Q must be {stateCount}-by-{stateCount}; it is " +
+                $"{processNoise.Rows}-by-{processNoise.Columns}.", nameof(processNoise));
+        }
+
+        if (measurementNoise.Rows != measurementCount ||
+            measurementNoise.Columns != measurementCount)
+        {
+            throw new ArgumentException(
+                $"The measurement noise covariance R must be {measurementCount}-by-" +
+                $"{measurementCount} to match the rows of C; it is {measurementNoise.Rows}-by-" +
+                $"{measurementNoise.Columns}.", nameof(measurementNoise));
+        }
+
+        return (stateCount, measurementCount);
     }
 
     /// <summary>

@@ -37,6 +37,12 @@ namespace AiDotNet.Control;
 /// possible trade-off and hands you a matrix. From then on, controlling the system is multiplying
 /// the current state by that matrix and negating it.
 /// </para>
+/// <para><b>API boundary:</b> Control algorithms intentionally use this standalone, strongly typed
+/// API rather than <c>AiModelBuilder</c>/<c>AiModelResult</c>. They are online state-feedback
+/// components, not fitted prediction models: callers provide the physical system matrices once and
+/// then submit one current-state vector per control step while reading control-specific diagnostics.
+/// Keeping this boundary explicit avoids forcing real-time control state into the training facade.
+/// </para>
 /// </remarks>
 /// <example>
 /// <code>

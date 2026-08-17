@@ -29,6 +29,34 @@ namespace AiDotNet.Models.Options;
 /// </remarks>
 public class GradientBasedOptimizerOptions<T, TInput, TOutput> : OptimizationAlgorithmOptions<T, TInput, TOutput>
 {
+    /// <summary>Creates gradient optimizer options with the documented defaults.</summary>
+    public GradientBasedOptimizerOptions()
+    {
+    }
+
+    /// <summary>Copies every shared and gradient-specific optimizer setting.</summary>
+    /// <param name="other">The options to copy.</param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="other"/> is null.</exception>
+    public GradientBasedOptimizerOptions(GradientBasedOptimizerOptions<T, TInput, TOutput> other)
+        : base(other)
+    {
+        GradientCache = other.GradientCache;
+        _lossFunction = other._lossFunction;
+        LossFunctionExplicitlySet = other.LossFunctionExplicitlySet;
+        Regularization = other.Regularization;
+        DataSampler = other.DataSampler;
+        ShuffleData = other.ShuffleData;
+        DropLastBatch = other.DropLastBatch;
+        RandomSeed = other.RandomSeed;
+        EnableGradientClipping = other.EnableGradientClipping;
+        GradientClippingMethod = other.GradientClippingMethod;
+        MaxGradientNorm = other.MaxGradientNorm;
+        MaxGradientValue = other.MaxGradientValue;
+        LearningRateScheduler = other.LearningRateScheduler;
+        SchedulerStepMode = other.SchedulerStepMode;
+        UseTrainingLossAsFitness = other.UseTrainingLossAsFitness;
+    }
+
     /// <summary>
     /// Gets or sets the gradient cache to use for storing and retrieving computed gradients.
     /// </summary>

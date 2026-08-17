@@ -33,6 +33,36 @@ namespace AiDotNet.Models.Options;
 /// </remarks>
 public class NelderMeadOptimizerOptions<T, TInput, TOutput> : OptimizationAlgorithmOptions<T, TInput, TOutput>
 {
+    /// <summary>Creates Nelder-Mead options with the documented defaults.</summary>
+    public NelderMeadOptimizerOptions()
+    {
+    }
+
+    /// <summary>Creates a complete copy of another Nelder-Mead configuration.</summary>
+    /// <param name="other">The options to copy.</param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="other"/> is null.</exception>
+    public NelderMeadOptimizerOptions(NelderMeadOptimizerOptions<T, TInput, TOutput> other)
+        : base(other)
+    {
+        InitialSimplexStep = other.InitialSimplexStep;
+        ZeroCoordinateSimplexStep = other.ZeroCoordinateSimplexStep;
+        ZeroCoordinateThreshold = other.ZeroCoordinateThreshold;
+        InitialAlpha = other.InitialAlpha;
+        InitialBeta = other.InitialBeta;
+        InitialGamma = other.InitialGamma;
+        InitialDelta = other.InitialDelta;
+        MinAlpha = other.MinAlpha;
+        MaxAlpha = other.MaxAlpha;
+        MinBeta = other.MinBeta;
+        MaxBeta = other.MaxBeta;
+        MinGamma = other.MinGamma;
+        MaxGamma = other.MaxGamma;
+        MinDelta = other.MinDelta;
+        MaxDelta = other.MaxDelta;
+        UseAdaptiveParameters = other.UseAdaptiveParameters;
+        AdaptationRate = other.AdaptationRate;
+    }
+
     private double _initialSimplexStep = 0.05;
     private double _zeroCoordinateSimplexStep = 0.00025;
     private double _zeroCoordinateThreshold;
