@@ -148,9 +148,22 @@ public static class DeserializationHelper
             // GeneratedLayerFactories stayed unresolved: SetParameters then received a layer whose
             // ParameterCount is 0 and rejected the saved vector. The generated path is now the
             // majority path, which makes this the common case rather than an edge one.
-            PreResolveLazyShape((ILayer<T>)generatedLayer, inputShape);
+            // Pattern-matched rather than cast: TryCreate's out parameter is now `object?`, so the
+            // cast would be the compiler pointing at a real hole. A factory that returned true
+            // while handing back null, or something that is not an ILayer<T>, is a generator bug
+            // and saying so beats a NullReferenceException three frames away.
+            if (generatedLayer is not ILayer<T> generatedAsLayer)
+            {
+                throw new InvalidOperationException(
+                    $"The generated factory for '{layerType}' reported success but produced "
+                        + (generatedLayer is null
+                            ? "null."
+                            : $"a {generatedLayer.GetType().Name}, which is not an ILayer<{typeof(T).Name}>."));
+            }
 
-            return (ILayer<T>)generatedLayer;
+            PreResolveLazyShape(generatedAsLayer, inputShape);
+
+            return generatedAsLayer;
         }
 
         // The registry, for the same reason the clone path consults it (LayerCloning.cs:309): the

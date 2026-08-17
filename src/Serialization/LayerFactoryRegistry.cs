@@ -105,7 +105,7 @@ public static class LayerFactoryRegistry<T>
         LayerStateBag state,
         object? scalarActivation,
         object? vectorActivation,
-        out object layer)
+        out object? layer)
     {
         if (Registered.TryGetValue(genericDefinition, out var factory)
             && factory(state, scalarActivation, vectorActivation) is { } registered)
@@ -144,9 +144,9 @@ public static class LayerFactoryRegistry<T>
         LayerStateBag state,
         object? scalarActivation,
         object? vectorActivation,
-        out object layer)
+        out object? layer)
     {
-        layer = null!;
+        layer = null;
 
         foreach (var ctor in closedType.GetConstructors(BindingFlags.Public | BindingFlags.Instance)
                      .OrderByDescending(c => c.GetParameters().Count(p => state.Has(p.Name ?? string.Empty))))

@@ -646,7 +646,7 @@ public class LayerStateGenerator : IIncrementalGenerator
         sb.AppendLine("        global::AiDotNet.Serialization.LayerStateBag state,");
         sb.AppendLine("        object? scalarActivation,");
         sb.AppendLine("        object? vectorActivation,");
-        sb.AppendLine("        out object layer)");
+        sb.AppendLine("        out object? layer)");
         sb.AppendLine("    {");
 
         foreach (var model in models.Where(m => m.TypeParameters.Count == 1))
@@ -664,7 +664,7 @@ public class LayerStateGenerator : IIncrementalGenerator
             {
                 sb.AppendLine($"            if (!state.HasAll({string.Join(", ", required)}))");
                 sb.AppendLine("            {");
-                sb.AppendLine("                layer = null!;");
+                sb.AppendLine("                layer = null;");
                 sb.AppendLine("                return false;");
                 sb.AppendLine("            }");
                 sb.AppendLine();
@@ -675,7 +675,7 @@ public class LayerStateGenerator : IIncrementalGenerator
             sb.AppendLine();
         }
 
-        sb.AppendLine("        layer = null!;");
+        sb.AppendLine("        layer = null;");
         sb.AppendLine("        return false;");
         sb.AppendLine("    }");
         sb.AppendLine("}");
