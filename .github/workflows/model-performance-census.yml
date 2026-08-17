@@ -175,7 +175,7 @@ jobs:
           dotnet-version: '10.0.x'
 
       - name: Download immutable test bundle
-        uses: actions/download-artifact@95815c38cf2ff2164869cbab79da8d1f422bc89e # v4
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v4
         with:
           name: perf-test-bundle
           path: test-bundle
@@ -220,7 +220,7 @@ jobs:
           dotnet-version: '10.0.x'
 
       - name: Download all shard records
-        uses: actions/download-artifact@95815c38cf2ff2164869cbab79da8d1f422bc89e # v4
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v4
         with:
           pattern: model-performance-*
           path: artifacts/model-performance/all
