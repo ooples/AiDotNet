@@ -1,4 +1,4 @@
-﻿using AiDotNet.Helpers;
+using AiDotNet.Helpers;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Initialization;
 using AiDotNet.Interfaces;
@@ -2475,6 +2475,46 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     /// slot is cleared only after every value has been distributed successfully, making replay
     /// atomic from the caller's perspective.
     /// </summary>
+    /// <summary>
+    /// True when a child cannot yet size its own parameters, so this layer's parameter count is
+    /// provisional rather than final.
+    /// </summary>
+    /// <returns>Whether any direct child is still an unmaterialized placeholder.</returns>
+    /// <remarks>
+    /// <para>
+    /// A composite's parameter surface IS its children's, but both readiness gates below test only
+    /// the PARENT: `IsShapeResolved || ParametersAreConstructionSized`. A TransformerEncoderBlock
+    /// knows its own hidden and FFN widths from its constructor, so it answers true to that while
+    /// its LayerNormalizationLayer and DenseLayer children are still zero-sized placeholders --
+    /// they declare no parameter shapes, so nothing lets them materialize on their own. The block
+    /// then counts only the attention weights and rejects a correct payload with
+    /// "Expected 4256 parameters, but got 12608".
+    /// </para>
+    /// <para>
+    /// Direct children only, deliberately. A recursive walk would cost O(depth) on a path taken by
+    /// every restore, and the shape that occurs here is a composite over leaves. If a grandchild
+    /// ever needs this, prefer making the intermediate layer report its own children rather than
+    /// deepening this walk.
+    /// </para>
+    /// </remarks>
+    private bool HasUnmaterializedChildren()
+    {
+        var subs = GetSubLayers();
+        if (subs is null) return false;
+
+        for (int i = 0; i < subs.Count; i++)
+        {
+            if (subs[i] is LayerBase<T> child
+                && !child.IsShapeResolved
+                && !child.ParametersAreConstructionSized)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     private bool TryApplyPendingParameterRestore()
     {
         if (_pendingParameterRestore is null || _applyingPendingParameterRestore) return false;
@@ -2486,7 +2526,11 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
             // real shape has materialized, however, retaining an incompatible restore would hide a
             // corrupt checkpoint indefinitely. Fail at that boundary instead of running with the
             // layer's freshly initialized values.
-            if (IsShapeResolved || ParametersAreConstructionSized)
+            // Same widening as the deferral above, and for the same reason: while a child is
+            // still a placeholder this count is provisional, so a mismatch is not yet
+            // evidence of a corrupt checkpoint. Once every child is up the original
+            // protection applies unchanged.
+            if ((IsShapeResolved || ParametersAreConstructionSized) && !HasUnmaterializedChildren())
             {
                 throw new ArgumentException(
                     $"Deferred restore for {GetType().Name} contains {_pendingParameterRestore.Length} " +
@@ -6446,7 +6490,10 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
             return;
         }
 
-        if (!shapeKnown && !currentLayoutMatches)
+        // A parent knowing its own shape says nothing about whether its children have
+        // allocated, and the count folds theirs. Deferring is already the designed answer for
+        // "cannot answer yet"; the payload replays when the first real input materializes them.
+        if ((!shapeKnown || HasUnmaterializedChildren()) && !currentLayoutMatches)
         {
             if (Parameters.Length != 0)
             {
