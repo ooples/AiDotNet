@@ -70,7 +70,8 @@ public sealed class ContinuousAlgebraicRiccatiSolver<T>
     /// </exception>
     public ContinuousAlgebraicRiccatiSolver(AlgebraicRiccatiSolverOptions options)
     {
-        _options = options ?? throw new ArgumentNullException(nameof(options));
+        if (options is null) throw new ArgumentNullException(nameof(options));
+        _options = new AlgebraicRiccatiSolverOptions(options);
 
         if (options.MaxIterations <= 0)
         {

@@ -11,8 +11,26 @@ namespace AiDotNet.Models.Options;
 /// ill-posed rather than merely large.
 /// </para>
 /// </remarks>
-public class AlgebraicRiccatiSolverOptions
+public class AlgebraicRiccatiSolverOptions : ModelOptions
 {
+    /// <summary>Initializes the options with documented defaults.</summary>
+    public AlgebraicRiccatiSolverOptions()
+    {
+    }
+
+    /// <summary>Initializes the options by copying another configuration.</summary>
+    /// <param name="other">The configuration to copy.</param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="other"/> is null.</exception>
+    public AlgebraicRiccatiSolverOptions(AlgebraicRiccatiSolverOptions other)
+    {
+        if (other is null) throw new ArgumentNullException(nameof(other));
+
+        Seed = other.Seed;
+        MaxIterations = other.MaxIterations;
+        Tolerance = other.Tolerance;
+        UseSignFunctionScaling = other.UseSignFunctionScaling;
+    }
+
     /// <summary>
     /// Gets or sets the maximum number of iterations.
     /// </summary>

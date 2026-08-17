@@ -14,8 +14,36 @@ namespace AiDotNet.Models.Options;
 /// right.
 /// </para>
 /// </remarks>
-public class ModelPredictiveControllerOptions<T>
+public class ModelPredictiveControllerOptions<T> : ModelOptions
 {
+    /// <summary>Initializes the options with documented defaults.</summary>
+    public ModelPredictiveControllerOptions()
+    {
+    }
+
+    /// <summary>Initializes the options by copying another configuration.</summary>
+    /// <param name="other">The configuration to copy.</param>
+    /// <remarks>
+    /// <para>
+    /// The bound vectors and terminal cost are carried across by reference. They are treated as
+    /// immutable problem data — a caller who mutates a bound vector after handing it over has changed
+    /// the problem, and no copy here would make that safe.
+    /// </para>
+    /// </remarks>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="other"/> is null.</exception>
+    public ModelPredictiveControllerOptions(ModelPredictiveControllerOptions<T> other)
+    {
+        if (other is null) throw new ArgumentNullException(nameof(other));
+
+        Seed = other.Seed;
+        Horizon = other.Horizon;
+        InputLowerBounds = other.InputLowerBounds;
+        InputUpperBounds = other.InputUpperBounds;
+        StateLowerBounds = other.StateLowerBounds;
+        StateUpperBounds = other.StateUpperBounds;
+        TerminalCost = other.TerminalCost;
+    }
+
     /// <summary>
     /// Gets or sets how many steps ahead the controller plans.
     /// </summary>

@@ -120,7 +120,9 @@ public sealed class ModelPredictiveController<T>
     {
         RiccatiValidation<T>.Validate(stateMatrix, inputMatrix, stateCost, inputCost);
 
-        _options = options ?? new ModelPredictiveControllerOptions<T>();
+        _options = options is null
+            ? new ModelPredictiveControllerOptions<T>()
+            : new ModelPredictiveControllerOptions<T>(options);
         _solver = solver ?? new InteriorPointSolver<T>();
 
         if (_options.Horizon <= 0)

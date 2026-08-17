@@ -3,8 +3,27 @@ namespace AiDotNet.Models.Options;
 /// <summary>
 /// Configuration for the linear matrix inequality solver.
 /// </summary>
-public class LinearMatrixInequalityOptions
+public class LinearMatrixInequalityOptions : ModelOptions
 {
+    /// <summary>Initializes the options with documented defaults.</summary>
+    public LinearMatrixInequalityOptions()
+    {
+    }
+
+    /// <summary>Initializes the options by copying another configuration.</summary>
+    /// <param name="other">The configuration to copy.</param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="other"/> is null.</exception>
+    public LinearMatrixInequalityOptions(LinearMatrixInequalityOptions other)
+    {
+        if (other is null) throw new ArgumentNullException(nameof(other));
+
+        Seed = other.Seed;
+        MaxIterations = other.MaxIterations;
+        Margin = other.Margin;
+        InitialStepSize = other.InitialStepSize;
+        PowerIterations = other.PowerIterations;
+    }
+
     /// <summary>
     /// Gets or sets the maximum number of subgradient iterations.
     /// </summary>

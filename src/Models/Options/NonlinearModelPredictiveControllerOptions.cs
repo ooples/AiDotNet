@@ -6,8 +6,38 @@ namespace AiDotNet.Models.Options;
 /// Configuration for the nonlinear model predictive controller.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-public class NonlinearModelPredictiveControllerOptions<T>
+public class NonlinearModelPredictiveControllerOptions<T> : ModelOptions
 {
+    /// <summary>Initializes the options with documented defaults.</summary>
+    public NonlinearModelPredictiveControllerOptions()
+    {
+    }
+
+    /// <summary>Initializes the options by copying another configuration.</summary>
+    /// <param name="other">The configuration to copy.</param>
+    /// <remarks>
+    /// <para>
+    /// The bound vectors and terminal cost are carried across by reference, as immutable problem
+    /// data.
+    /// </para>
+    /// </remarks>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="other"/> is null.</exception>
+    public NonlinearModelPredictiveControllerOptions(
+        NonlinearModelPredictiveControllerOptions<T> other)
+    {
+        if (other is null) throw new ArgumentNullException(nameof(other));
+
+        Seed = other.Seed;
+        Horizon = other.Horizon;
+        SqpIterations = other.SqpIterations;
+        StepSize = other.StepSize;
+        Tolerance = other.Tolerance;
+        InputLowerBounds = other.InputLowerBounds;
+        InputUpperBounds = other.InputUpperBounds;
+        TerminalCost = other.TerminalCost;
+        WarmStart = other.WarmStart;
+    }
+
     /// <summary>
     /// Gets or sets how many steps ahead the controller plans.
     /// </summary>

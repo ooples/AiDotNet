@@ -80,7 +80,8 @@ public sealed class LinearMatrixInequalitySolver<T>
     /// <exception cref="ArgumentException">Thrown when a setting is out of range.</exception>
     public LinearMatrixInequalitySolver(LinearMatrixInequalityOptions options)
     {
-        _options = options ?? throw new ArgumentNullException(nameof(options));
+        if (options is null) throw new ArgumentNullException(nameof(options));
+        _options = new LinearMatrixInequalityOptions(options);
 
         if (options.MaxIterations <= 0)
         {

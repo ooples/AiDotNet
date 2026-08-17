@@ -115,7 +115,9 @@ public sealed class NonlinearModelPredictiveController<T>
         _stateCost = stateCost ?? throw new ArgumentNullException(nameof(stateCost));
         _inputCost = inputCost ?? throw new ArgumentNullException(nameof(inputCost));
 
-        _options = options ?? new NonlinearModelPredictiveControllerOptions<T>();
+        _options = options is null
+            ? new NonlinearModelPredictiveControllerOptions<T>()
+            : new NonlinearModelPredictiveControllerOptions<T>(options);
         _solver = solver ?? new InteriorPointSolver<T>();
 
         if (_stateCost.Rows != _stateCost.Columns)
