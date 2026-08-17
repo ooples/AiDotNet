@@ -46,7 +46,6 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     private IReadOnlyList<TInput>? _queryStrategyPool;
     private int _queryStrategyBatchSize = 10;
     private double _queryStrategyDiversityWeight = 0.5;
-    private IAudioEnhancer<T>? _configuredAudioEnhancer;
     private RetrievalAugmentedGeneration.VectorSearch.ISimilarityMetric<T>? _configuredSimilarityMetric;
 
 
@@ -526,9 +525,14 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     /// </remarks>
     public IAiModelBuilder<T, TInput, TOutput> ConfigureAudioEnhancer(IAudioEnhancer<T> enhancer)
     {
-        _configuredAudioEnhancer = enhancer;
+        if (enhancer is null)
+        {
+            throw new ArgumentNullException(nameof(enhancer));
+        }
+
         // Apply enhancement as a composable, fitted preprocessing step over audio-tensor inputs; its Fit
         // estimates the noise profile from the training audio so train and inference are cleaned consistently.
+        // The pipeline step IS the configuration — no separate _configuredAudioEnhancer mirror (AIDN096).
         _dataPipeline.AddPreprocessingStep(
             new Preprocessing.Audio.AudioEnhancementTransformer<T, TInput>(enhancer), "audio_enhancer");
         _preprocessingPipeline = _dataPipeline.PreprocessingPipeline;

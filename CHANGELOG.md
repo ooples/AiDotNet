@@ -19,6 +19,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [Unreleased]
+
+### Changed
+
+- **Breaking (pre-1.0):** `IAiModelBuilder<T, TInput, TOutput>` now declares
+  `ConfigureSegmentationVisualization`. External implementations of the public interface must add
+  the method; implementations can forward the supplied configuration to their result defaults or
+  return `this` after storing it for their renderer.
+
+---
+
 ## [0.231.0](https://github.com/ooples/AiDotNet/compare/v0.230.0...v0.231.0) (2026-07-17)
 
 
