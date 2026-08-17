@@ -146,6 +146,8 @@ public sealed class LinearProgram<T>
             equalityMatrix, equalityBounds, nameof(equalityMatrix), nameof(equalityBounds), numOps);
         ValidateFiniteVector(lowerBounds, nameof(lowerBounds), allowInfinity: true, numOps);
         ValidateFiniteVector(upperBounds, nameof(upperBounds), allowInfinity: true, numOps);
+        ValidateDirectionalInfinity(lowerBounds, nameof(lowerBounds), rejectPositiveInfinity: true, numOps);
+        ValidateDirectionalInfinity(upperBounds, nameof(upperBounds), rejectPositiveInfinity: false, numOps);
         if (lowerBounds is not null && upperBounds is not null)
         {
             for (int i = 0; i < objective.Length; i++)
@@ -159,13 +161,15 @@ public sealed class LinearProgram<T>
             }
         }
 
-        Objective = objective;
-        InequalityMatrix = inequalityMatrix;
-        InequalityBounds = inequalityBounds;
-        EqualityMatrix = equalityMatrix;
-        EqualityBounds = equalityBounds;
-        LowerBounds = lowerBounds;
-        UpperBounds = upperBounds;
+        // A problem descriptor is an immutable value object. Own every supplied buffer so callers
+        // cannot change a queued or cached optimization problem after construction.
+        Objective = objective.Clone();
+        InequalityMatrix = inequalityMatrix?.Clone();
+        InequalityBounds = inequalityBounds?.Clone();
+        EqualityMatrix = equalityMatrix?.Clone();
+        EqualityBounds = equalityBounds?.Clone();
+        LowerBounds = lowerBounds?.Clone();
+        UpperBounds = upperBounds?.Clone();
     }
 
     private static void ValidateConstraintBlock(
@@ -250,6 +254,27 @@ public sealed class LinearProgram<T>
             if (double.IsNaN(value) || (!allowInfinity && double.IsInfinity(value)))
             {
                 throw new ArgumentException($"{name}[{i}] has an invalid value {value}.", name);
+            }
+        }
+    }
+
+    private static void ValidateDirectionalInfinity(
+        Vector<T>? vector,
+        string name,
+        bool rejectPositiveInfinity,
+        INumericOperations<T> numOps)
+    {
+        if (vector is null) return;
+        for (int i = 0; i < vector.Length; i++)
+        {
+            double value = numOps.ToDouble(vector[i]);
+            if ((rejectPositiveInfinity && double.IsPositiveInfinity(value)) ||
+                (!rejectPositiveInfinity && double.IsNegativeInfinity(value)))
+            {
+                string direction = rejectPositiveInfinity ? "positive" : "negative";
+                throw new ArgumentException(
+                    $"{name}[{i}] cannot be {direction} infinity because it makes the bound infeasible.",
+                    name);
             }
         }
     }

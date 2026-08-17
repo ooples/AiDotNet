@@ -44,7 +44,8 @@ public class LinearAssignmentSolverIntegrationTests
             if (value < 0)
             {
                 throw new ArgumentException(
-                    "The branch-and-bound brute-force oracle requires non-negative costs.",
+                    "The assignment brute-force oracle requires non-negative costs; its " +
+                    "runningCost >= best prune is invalid otherwise.",
                     nameof(cost));
             }
         }

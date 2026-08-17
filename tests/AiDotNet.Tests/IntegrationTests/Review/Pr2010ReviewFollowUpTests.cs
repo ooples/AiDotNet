@@ -181,6 +181,119 @@ public class Pr2010ReviewFollowUpTests
     }
 
     [Fact(Timeout = 120000)]
+    public async Task TimeSeriesDeserialize_AcceptsPayloadBeforeRecursiveStateTrailer()
+    {
+        await Task.Yield();
+
+        var options = new TimeSeriesRegressionOptions<double>
+        {
+            LagOrder = 2,
+            ModelType = TimeSeriesModelType.AutoRegressive,
+        };
+        var model = new TimeSeriesRegression<double>(options);
+        var x = Column(Enumerable.Range(0, 12).Select(i => (double)i).ToArray());
+        var y = Vector<double>.FromArray(Enumerable.Range(0, 12).Select(i => 3.0 * i + 2.0).ToArray());
+        model.Train(x, y);
+
+        byte[] current = model.Serialize();
+        int appendedBytes = sizeof(int) + options.LagOrder * sizeof(double) + sizeof(int);
+        byte[] legacy = current.Take(current.Length - appendedBytes).ToArray();
+        var restored = new TimeSeriesRegression<double>();
+
+        restored.Deserialize(legacy);
+        Vector<double> prediction = restored.Predict(Column(new[] { 12.0 }));
+
+        Assert.True(double.IsFinite(prediction[0]));
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task LinearProgram_OwnsInputsAndRejectsWrongDirectionInfinity()
+    {
+        await Task.Yield();
+
+        var objective = V(1.0, 2.0);
+        var constraints = new Matrix<double>(1, 2);
+        constraints[0, 0] = 3.0;
+        var bounds = V(4.0);
+        var program = new LinearProgram<double>(objective, constraints, bounds);
+
+        objective[0] = 99.0;
+        constraints[0, 0] = 99.0;
+        bounds[0] = 99.0;
+
+        Assert.Equal(1.0, program.Objective[0]);
+        Assert.Equal(3.0, program.InequalityMatrix![0, 0]);
+        Assert.Equal(4.0, program.InequalityBounds![0]);
+        Assert.Throws<ArgumentException>(() => new LinearProgram<double>(
+            V(1.0), lowerBounds: V(double.PositiveInfinity)));
+        Assert.Throws<ArgumentException>(() => new LinearProgram<double>(
+            V(1.0), upperBounds: V(double.NegativeInfinity)));
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task QuadraticProgram_ValidatesEntireObjectiveAndOwnsInputs()
+    {
+        await Task.Yield();
+
+        var quadratic = Matrix<double>.CreateIdentity(2);
+        var linear = V(1.0, 2.0);
+        var program = new QuadraticProgram<double>(quadratic, linear);
+        quadratic[0, 0] = 99.0;
+        linear[0] = 99.0;
+
+        Assert.Equal(1.0, program.Quadratic[0, 0]);
+        Assert.Equal(1.0, program.Linear[0]);
+
+        var nonFiniteDiagonal = Matrix<double>.CreateIdentity(2);
+        nonFiniteDiagonal[1, 1] = double.NaN;
+        Assert.Throws<ArgumentException>(() => new QuadraticProgram<double>(nonFiniteDiagonal, V(0.0, 0.0)));
+        Assert.Throws<ArgumentException>(() => new QuadraticProgram<double>(
+            Matrix<double>.CreateIdentity(2), V(0.0, double.PositiveInfinity)));
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task OptimizerOptionCopies_PreserveInheritedAndAlgorithmSpecificSettings()
+    {
+        await Task.Yield();
+
+        var lbfgs = new LBFGSOptimizerOptions<double, Matrix<double>, Vector<double>>
+        {
+            Seed = 71,
+            MaxIterations = 29,
+            Tolerance = 3e-7,
+            MemorySize = 13,
+            LineSearchMaxSteps = 17,
+            PowellDampingFactor = 0.35,
+        };
+        var lbfgsCopy = new LBFGSOptimizerOptions<double, Matrix<double>, Vector<double>>(lbfgs);
+
+        Assert.Equal(lbfgs.Seed, lbfgsCopy.Seed);
+        Assert.Equal(lbfgs.MaxIterations, lbfgsCopy.MaxIterations);
+        Assert.Equal(lbfgs.Tolerance, lbfgsCopy.Tolerance);
+        Assert.Equal(lbfgs.MemorySize, lbfgsCopy.MemorySize);
+        Assert.Equal(lbfgs.LineSearchMaxSteps, lbfgsCopy.LineSearchMaxSteps);
+        Assert.Equal(lbfgs.PowellDampingFactor, lbfgsCopy.PowellDampingFactor);
+
+        var nelderMead = new NelderMeadOptimizerOptions<double, Matrix<double>, Vector<double>>
+        {
+            Seed = 83,
+            MaxIterations = 31,
+            Tolerance = 7e-8,
+            InitialSimplexStep = 0.12,
+            UseAdaptiveParameters = true,
+            AdaptationRate = 0.07,
+        };
+        var nelderMeadCopy = new NelderMeadOptimizerOptions<double, Matrix<double>, Vector<double>>(nelderMead);
+
+        Assert.Equal(nelderMead.Seed, nelderMeadCopy.Seed);
+        Assert.Equal(nelderMead.MaxIterations, nelderMeadCopy.MaxIterations);
+        Assert.Equal(nelderMead.Tolerance, nelderMeadCopy.Tolerance);
+        Assert.Equal(nelderMead.InitialSimplexStep, nelderMeadCopy.InitialSimplexStep);
+        Assert.Equal(nelderMead.UseAdaptiveParameters, nelderMeadCopy.UseAdaptiveParameters);
+        Assert.Equal(nelderMead.AdaptationRate, nelderMeadCopy.AdaptationRate);
+    }
+
+    [Fact(Timeout = 120000)]
     public async Task AugmentedLagrangian_UnconstrainedIterationLimitIsNotReportedOptimal()
     {
         await Task.Yield();

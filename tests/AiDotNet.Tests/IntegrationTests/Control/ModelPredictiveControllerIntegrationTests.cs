@@ -37,6 +37,17 @@ public class ModelPredictiveControllerIntegrationTests
         return matrix;
     }
 
+    private static Matrix<decimal> M(decimal[,] values)
+    {
+        var matrix = new Matrix<decimal>(values.GetLength(0), values.GetLength(1));
+        for (int r = 0; r < values.GetLength(0); r++)
+        {
+            for (int c = 0; c < values.GetLength(1); c++) matrix[r, c] = values[r, c];
+        }
+
+        return matrix;
+    }
+
     private static Matrix<double> DoubleIntegrator() =>
         M(new[,] { { 1.0, 1.0 }, { 0.0, 1.0 } });
 
@@ -346,9 +357,11 @@ public class ModelPredictiveControllerIntegrationTests
     /// must be reported, not papered over. A caller running real equipment needs to distinguish a
     /// plan from a guess.
     /// </summary>
-    [Fact]
-    public void Mpc_UnreachableStateConstraint_ReportsInfeasibility()
+    [Fact(Timeout = 120000)]
+    public async Task Mpc_UnreachableStateConstraint_ReportsInfeasibility()
     {
+        await Task.Yield();
+
         var controller = new ModelPredictiveController<double>(
             DoubleIntegrator(), DoubleIntegratorInput(),
             Matrix<double>.CreateIdentity(2), Matrix<double>.CreateIdentity(1),
@@ -366,6 +379,7 @@ public class ModelPredictiveControllerIntegrationTests
         var exception = Assert.Throws<InvalidOperationException>(
             () => controller.ComputeControl(V(500.0, 50.0)));
 
+        Assert.Equal(LinearProgramStatus.Infeasible, controller.LastStatus);
         Assert.Contains("could not be solved", exception.Message, StringComparison.Ordinal);
     }
 
@@ -449,10 +463,8 @@ public class ModelPredictiveControllerIntegrationTests
     }
 
     /// <summary>
-    /// Inputs must be free to go negative. An omitted lower bound means zero rather than unbounded
-    /// in the underlying quadratic program, so a controller that forgot to state the bound
-    /// explicitly would be silently unable to push in one direction — and would look like it was
-    /// merely tuned badly.
+    /// Inputs must be free to go negative. This verifies that the MPC preserves the quadratic
+    /// program's null-as-unbounded contract rather than materializing a numeric zero lower bound.
     /// </summary>
     [Fact]
     public void Mpc_WithNoBoundsConfigured_StillCommandsNegativeInputs()
@@ -467,6 +479,47 @@ public class ModelPredictiveControllerIntegrationTests
             input[0] < -1e-6,
             $"A positive displacement needs a negative input to correct it, but the controller " +
             $"commanded {input[0]}.");
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task Mpc_DecimalWithNoBounds_DoesNotRequireInfinity()
+    {
+        await Task.Yield();
+
+        var controller = new ModelPredictiveController<decimal>(
+            M(new decimal[,] { { 0.5m } }), M(new decimal[,] { { 1m } }),
+            M(new decimal[,] { { 1m } }), M(new decimal[,] { { 1m } }),
+            new ModelPredictiveControllerOptions<decimal> { Horizon = 3 });
+
+        var input = controller.ComputeControl(Vector<decimal>.FromArray(new[] { 2m }));
+
+        Assert.True(input[0] < 0m, $"Expected a corrective negative input, got {input[0]}.");
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task MpcOptions_CopyDeepCopiesMutableBoundsAndCost()
+    {
+        await Task.Yield();
+
+        var original = new ModelPredictiveControllerOptions<double>
+        {
+            Seed = 9,
+            Horizon = 4,
+            InputLowerBounds = V(-2.0),
+            InputUpperBounds = V(2.0),
+            StateLowerBounds = V(-3.0, -4.0),
+            StateUpperBounds = V(3.0, 4.0),
+            TerminalCost = Matrix<double>.CreateIdentity(2),
+        };
+
+        var copy = new ModelPredictiveControllerOptions<double>(original);
+        original.InputLowerBounds[0] = -99.0;
+        original.TerminalCost[0, 0] = 99.0;
+
+        Assert.Equal(9, copy.Seed);
+        Assert.Equal(4, copy.Horizon);
+        Assert.Equal(-2.0, copy.InputLowerBounds[0]);
+        Assert.Equal(1.0, copy.TerminalCost[0, 0]);
     }
 
     #endregion

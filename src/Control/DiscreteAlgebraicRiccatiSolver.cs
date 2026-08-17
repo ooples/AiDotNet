@@ -63,7 +63,8 @@ public sealed class DiscreteAlgebraicRiccatiSolver<T>
     /// </exception>
     public DiscreteAlgebraicRiccatiSolver(AlgebraicRiccatiSolverOptions options)
     {
-        _options = options ?? throw new ArgumentNullException(nameof(options));
+        if (options is null) throw new ArgumentNullException(nameof(options));
+        _options = new AlgebraicRiccatiSolverOptions(options);
 
         if (options.MaxIterations <= 0)
         {

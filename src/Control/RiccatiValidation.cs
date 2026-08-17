@@ -1,3 +1,5 @@
+using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
 using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.Control;
@@ -16,6 +18,8 @@ namespace AiDotNet.Control;
 /// </remarks>
 internal static class RiccatiValidation<T>
 {
+    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+
     /// <summary>
     /// Validates the four matrices of a linear-quadratic problem against each other.
     /// </summary>
@@ -70,6 +74,36 @@ internal static class RiccatiValidation<T>
             throw new ArgumentException(
                 $"The input cost R must be {inputCount}-by-{inputCount} to match the columns of B; " +
                 $"it is {inputCost.Rows}-by-{inputCost.Columns}.", nameof(inputCost));
+        }
+
+        RequireSymmetric(stateCost, "The state cost Q", nameof(stateCost));
+        RequireSymmetric(inputCost, "The input cost R", nameof(inputCost));
+    }
+
+    private static void RequireSymmetric(
+        Matrix<T> matrix, string description, string parameterName)
+    {
+        double tolerance = typeof(T) == typeof(float) ? 1e-5 :
+            typeof(T) == typeof(double) ? 1e-12 : 0.0;
+
+        for (int row = 0; row < matrix.Rows; row++)
+        {
+            for (int column = row + 1; column < matrix.Columns; column++)
+            {
+                double left = NumOps.ToDouble(matrix[row, column]);
+                double right = NumOps.ToDouble(matrix[column, row]);
+                double difference = Math.Abs(left - right);
+                double scale = Math.Max(1.0, Math.Max(Math.Abs(left), Math.Abs(right)));
+
+                if (double.IsNaN(difference) || double.IsInfinity(difference) ||
+                    difference > tolerance * scale)
+                {
+                    throw new ArgumentException(
+                        $"{description} must be symmetric; entry ({row}, {column}) is " +
+                        $"{matrix[row, column]} while entry ({column}, {row}) is " +
+                        $"{matrix[column, row]}.", parameterName);
+                }
+            }
         }
     }
 }

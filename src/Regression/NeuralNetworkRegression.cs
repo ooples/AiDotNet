@@ -53,6 +53,9 @@ namespace AiDotNet.Regression;
     [ResearchPaper("Learning Internal Representations by Error Propagation", "https://doi.org/10.21236/ADA164453")]
 public class NeuralNetworkRegression<T> : NonLinearRegressionBase<T>
 {
+    private const int TargetScalingTrailerMagic = 0x4E4E5254; // "NNRT"
+    private const int TargetScalingTrailerVersion = 1;
+
     /// <summary>
     /// Configuration options for the neural network regression model.
     /// </summary>
@@ -149,7 +152,7 @@ public class NeuralNetworkRegression<T> : NonLinearRegressionBase<T>
         _targetMean = NumOps.Zero;
         _targetScale = NumOps.One;   // identity mapping until Train computes the real values
         _options = options ?? new NeuralNetworkRegressionOptions<T, Matrix<T>, Vector<T>>();
-        _optimizer = _options.Optimizer ?? new AdamOptimizer<T, Matrix<T>, Vector<T>>(this, new AdamOptimizerOptions<T, Matrix<T>, Vector<T>>
+        _optimizer = _options.OptimizerFactory?.Invoke(this) ?? new AdamOptimizer<T, Matrix<T>, Vector<T>>(this, new AdamOptimizerOptions<T, Matrix<T>, Vector<T>>
         {
             InitialLearningRate = 0.001,
             Beta1 = 0.9,
@@ -944,9 +947,6 @@ public class NeuralNetworkRegression<T> : NonLinearRegressionBase<T>
             }
         }
 
-        writer.Write(NumOps.ToDouble(_targetMean));
-        writer.Write(NumOps.ToDouble(_targetScale));
-
         // OLS state
         writer.Write(_useOLS);
         if (_useOLS && _olsCoefficients is not null)
@@ -957,6 +957,13 @@ public class NeuralNetworkRegression<T> : NonLinearRegressionBase<T>
             writer.Write(NumOps.ToDouble(_olsIntercept));
         }
         else { writer.Write(0); }
+
+        // Append new state after the legacy payload. The magic/version pair makes the extension
+        // self-identifying while allowing pre-scaling payloads to deserialize unchanged.
+        writer.Write(TargetScalingTrailerMagic);
+        writer.Write(TargetScalingTrailerVersion);
+        writer.Write(NumOps.ToDouble(_targetMean));
+        writer.Write(NumOps.ToDouble(_targetScale));
 
         return ms.ToArray();
     }
@@ -1054,9 +1061,6 @@ public class NeuralNetworkRegression<T> : NonLinearRegressionBase<T>
             _biases.Add(new Vector<T>(biasData));
         }
 
-        _targetMean = NumOps.FromDouble(reader.ReadDouble());
-        _targetScale = NumOps.FromDouble(reader.ReadDouble());
-
         // OLS state
         _useOLS = reader.ReadBoolean();
         int olsCount = reader.ReadInt32();
@@ -1066,6 +1070,36 @@ public class NeuralNetworkRegression<T> : NonLinearRegressionBase<T>
             for (int j = 0; j < olsCount; j++)
                 _olsCoefficients[j] = NumOps.FromDouble(reader.ReadDouble());
             _olsIntercept = NumOps.FromDouble(reader.ReadDouble());
+        }
+
+        _targetMean = NumOps.Zero;
+        _targetScale = NumOps.One;
+        if (ms.Position != ms.Length)
+        {
+            const int trailerHeaderBytes = sizeof(int) + sizeof(int);
+            const int trailerValueBytes = sizeof(double) + sizeof(double);
+            if (ms.Length - ms.Position < trailerHeaderBytes)
+            {
+                throw new InvalidDataException("The neural-regression target-scaling trailer is truncated.");
+            }
+
+            int magic = reader.ReadInt32();
+            int version = reader.ReadInt32();
+            if (magic != TargetScalingTrailerMagic)
+            {
+                throw new InvalidDataException("The neural-regression payload has an unknown trailing section.");
+            }
+            if (version != TargetScalingTrailerVersion)
+            {
+                throw new InvalidDataException($"Unsupported neural-regression target-scaling version {version}.");
+            }
+            if (ms.Length - ms.Position != trailerValueBytes)
+            {
+                throw new InvalidDataException("The neural-regression target-scaling trailer has an invalid length.");
+            }
+
+            _targetMean = NumOps.FromDouble(reader.ReadDouble());
+            _targetScale = NumOps.FromDouble(reader.ReadDouble());
         }
     }
 
@@ -1141,7 +1175,7 @@ public class NeuralNetworkRegression<T> : NonLinearRegressionBase<T>
             HiddenVectorActivation = source.HiddenVectorActivation,
             OutputVectorActivation = source.OutputVectorActivation,
             LossFunction = source.LossFunction,
-            Optimizer = source.Optimizer,
+            OptimizerFactory = source.OptimizerFactory,
         };
     }
 }

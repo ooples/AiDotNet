@@ -144,12 +144,16 @@ public partial class StateSpaceModel<T> : TimeSeriesModelBase<T>
         _maxIterations = options.MaxIterations;
         _tolerance = options.Tolerance;
         _transitionMatrix = Matrix<T>.CreateIdentity(_stateSize);
-        _observationMatrix = Matrix<T>.CreateIdentity(_observationSize);
+        _observationMatrix = new Matrix<T>(_observationSize, _stateSize);
+        for (int i = 0; i < Math.Min(_observationSize, _stateSize); i++)
+        {
+            _observationMatrix[i, i] = NumOps.One;
+        }
         _processNoise = Matrix<T>.CreateIdentity(_stateSize);
         _observationNoise = Matrix<T>.CreateIdentity(_observationSize);
         _initialState = new Vector<T>(_stateSize);
         _previousTransitionMatrix = Matrix<T>.CreateIdentity(_stateSize);
-        _previousObservationMatrix = Matrix<T>.CreateIdentity(_observationSize);
+        _previousObservationMatrix = _observationMatrix.Clone();
         _smoothedStates = new List<Vector<T>>();
     }
 

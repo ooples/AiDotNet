@@ -124,7 +124,7 @@ public class QuadraticProgramSolverIntegrationTests
     /// X = (1, −1), the unconstrained optimum is (y₀ − y₁) / 2. Thus y = (−1, 1)
     /// gives −1 and is clipped to 0, while y = (2, −2) gives 2 and remains unchanged.
     /// </summary>
-    [Theory]
+    [Theory(Timeout = 120000)]
     [InlineData(-1.0, 1.0, 0.0)]     // unconstrained optimum is negative -> clipped to the bound
     [InlineData(2.0, -2.0, 2.0)]     // unconstrained optimum is positive -> unchanged
     public async Task Solve_NonNegativeLeastSquares_RespectsBound(double y0, double y1, double expected)

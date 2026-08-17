@@ -199,7 +199,7 @@ public class BayesianRegression<T> : RegressionBase<T>
         {
             // Kernel Bayesian regression operates in the n-dimensional dual feature space. Keep
             // an owned copy of the centres so prediction can build K(test, train), not K(test,test).
-            _kernelTrainingFeatures = CopyMatrix(x);
+            _kernelTrainingFeatures = x.Clone();
             x = ApplyKernel(_kernelTrainingFeatures);
             if (Options.UseIntercept)
             {
@@ -379,15 +379,9 @@ public class BayesianRegression<T> : RegressionBase<T>
     /// </remarks>
     private Matrix<T> ApplyKernel(Matrix<T> input)
     {
-        return _bayesOptions.KernelType switch
-        {
-            KernelType.RBF => ApplyRBFKernel(input),
-            KernelType.Polynomial => ApplyPolynomialKernel(input),
-            KernelType.Sigmoid => ApplySigmoidKernel(input),
-            KernelType.Linear => input,// Linear kernel (no change)
-            KernelType.Laplacian => ApplyLaplacianKernel(input),
-            _ => throw new ArgumentException($"Unsupported kernel type: {_bayesOptions.KernelType}"),
-        };
+        return _bayesOptions.KernelType == KernelType.Linear
+            ? input
+            : ApplyCrossKernel(input, input);
     }
 
     /// <summary>Computes K(left, right) for prediction against the fitted kernel centres.</summary>
@@ -451,16 +445,6 @@ public class BayesianRegression<T> : RegressionBase<T>
             NumOps.Multiply(NumOps.FromDouble(_bayesOptions.LaplacianGamma), distance)));
     }
 
-    private static Matrix<T> CopyMatrix(Matrix<T> source)
-    {
-        var copy = new Matrix<T>(source.Rows, source.Columns);
-        for (int r = 0; r < source.Rows; r++)
-        {
-            for (int c = 0; c < source.Columns; c++) copy[r, c] = source[r, c];
-        }
-        return copy;
-    }
-
     public override byte[] Serialize()
     {
         using var stream = new MemoryStream();
@@ -500,6 +484,26 @@ public class BayesianRegression<T> : RegressionBase<T>
         int rows = reader.ReadInt32();
         int columns = reader.ReadInt32();
         if (rows < 0 || columns < 0) throw new InvalidDataException("Invalid Bayesian matrix shape.");
+
+        long elementCount;
+        long requiredBytes;
+        try
+        {
+            elementCount = checked((long)rows * columns);
+            requiredBytes = checked(elementCount * sizeof(double));
+        }
+        catch (OverflowException exception)
+        {
+            throw new InvalidDataException("The Bayesian matrix shape is too large.", exception);
+        }
+
+        Stream stream = reader.BaseStream;
+        if (!stream.CanSeek || requiredBytes > stream.Length - stream.Position)
+        {
+            throw new InvalidDataException(
+                $"The Bayesian matrix payload is truncated: shape {rows}x{columns} requires {requiredBytes} bytes.");
+        }
+
         var matrix = new Matrix<T>(rows, columns);
         for (int r = 0; r < rows; r++)
             for (int c = 0; c < columns; c++) matrix[r, c] = NumOps.FromDouble(reader.ReadDouble());
@@ -533,29 +537,7 @@ public class BayesianRegression<T> : RegressionBase<T>
     /// </remarks>
     private Matrix<T> ApplyLaplacianKernel(Matrix<T> input)
     {
-        int n = input.Rows;
-        var output = new Matrix<T>(n, n);
-        var gamma = NumOps.FromDouble(_bayesOptions.LaplacianGamma); // Kernel width parameter
-
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = i; j < n; j++) // We only need to compute half of the matrix due to symmetry
-            {
-                if (i == j)
-                {
-                    output[i, j] = NumOps.One; // The kernel of a point with itself is always 1
-                }
-                else
-                {
-                    var distance = CalculateManhattanDistance(input.GetRow(i), input.GetRow(j));
-                    var kernelValue = NumOps.Exp(NumOps.Negate(NumOps.Multiply(gamma, distance)));
-                    output[i, j] = kernelValue;
-                    output[j, i] = kernelValue; // The kernel matrix is symmetric
-                }
-            }
-        }
-
-        return output;
+        return ApplyCrossKernel(input, input);
     }
 
     /// <summary>
@@ -619,22 +601,7 @@ public class BayesianRegression<T> : RegressionBase<T>
     /// </remarks>
     private Matrix<T> ApplyRBFKernel(Matrix<T> input)
     {
-        int n = input.Rows;
-        var result = new Matrix<T>(n, n);
-        var gamma = NumOps.FromDouble(_bayesOptions.Gamma);
-
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = i; j < n; j++)
-            {
-                var diff = input.GetRow(i).Subtract(input.GetRow(j));
-                var squaredDistance = diff.DotProduct(diff);
-                var value = NumOps.Exp(NumOps.Multiply(NumOps.Negate(gamma), squaredDistance));
-                result[i, j] = result[j, i] = value;
-            }
-        }
-
-        return result;
+        return ApplyCrossKernel(input, input);
     }
 
     /// <summary>
@@ -670,23 +637,7 @@ public class BayesianRegression<T> : RegressionBase<T>
     /// </remarks>
     private Matrix<T> ApplyPolynomialKernel(Matrix<T> input)
     {
-        int n = input.Rows;
-        var result = new Matrix<T>(n, n);
-        var gamma = NumOps.FromDouble(_bayesOptions.Gamma);
-        var coef0 = NumOps.FromDouble(_bayesOptions.Coef0);
-        var degree = _bayesOptions.PolynomialDegree;
-
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = i; j < n; j++)
-            {
-                var dot = input.GetRow(i).DotProduct(input.GetRow(j));
-                var value = NumOps.Power(NumOps.Add(NumOps.Multiply(gamma, dot), coef0), NumOps.FromDouble(degree));
-                result[i, j] = result[j, i] = value;
-            }
-        }
-
-        return result;
+        return ApplyCrossKernel(input, input);
     }
 
     /// <summary>
@@ -722,22 +673,7 @@ public class BayesianRegression<T> : RegressionBase<T>
     /// </remarks>
     private Matrix<T> ApplySigmoidKernel(Matrix<T> input)
     {
-        int n = input.Rows;
-        var result = new Matrix<T>(n, n);
-        var gamma = NumOps.FromDouble(_bayesOptions.Gamma);
-        var coef0 = NumOps.FromDouble(_bayesOptions.Coef0);
-
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = i; j < n; j++)
-            {
-                var dot = input.GetRow(i).DotProduct(input.GetRow(j));
-                var value = MathHelper.Tanh(NumOps.Add(NumOps.Multiply(gamma, dot), coef0));
-                result[i, j] = result[j, i] = value;
-            }
-        }
-
-        return result;
+        return ApplyCrossKernel(input, input);
     }
 
     /// <summary>

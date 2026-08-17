@@ -225,6 +225,30 @@ public class TimeSeriesIntegrationTests
         Assert.NotNull(model);
     }
 
+    [Fact(Timeout = 120000)]
+    public async Task StateSpaceModel_DifferentStateAndObservationSizes_Trains()
+    {
+        await Task.Yield();
+
+        var model = new StateSpaceModel<double>(new StateSpaceModelOptions<double>
+        {
+            StateSize = 2,
+            ObservationSize = 1,
+            MaxIterations = 2,
+        });
+        var x = new Matrix<double>(20, 1);
+        var y = new Vector<double>(20);
+        for (int i = 0; i < 20; i++)
+        {
+            x[i, 0] = i;
+            y[i] = 2.0 + 0.25 * i;
+        }
+
+        model.Train(x, y);
+
+        Assert.Equal(20, model.Predict(x).Length);
+    }
+
     #endregion
 
     #region VectorAutoRegressionModel Tests

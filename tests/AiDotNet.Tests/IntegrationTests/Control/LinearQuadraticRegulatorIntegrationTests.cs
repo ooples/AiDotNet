@@ -425,9 +425,88 @@ public class LinearQuadraticRegulatorIntegrationTests
         Assert.InRange(continuous.Iterations, 1, 30);
     }
 
+    [Fact(Timeout = 120000)]
+    public async Task ContinuousRiccati_ScalingChangesOnlyThePath()
+    {
+        await Task.Yield();
+
+        var state = M(new[,] { { -1000.0, 1.0 }, { 0.0, -0.001 } });
+        var input = M(new[,] { { 1.0 }, { 1.0 } });
+        var stateCost = Matrix<double>.CreateIdentity(2);
+        var inputCost = Matrix<double>.CreateIdentity(1);
+
+        var scaled = new ContinuousAlgebraicRiccatiSolver<double>(
+            new AlgebraicRiccatiSolverOptions { UseSignFunctionScaling = true })
+            .Solve(state, input, stateCost, inputCost);
+        var unscaled = new ContinuousAlgebraicRiccatiSolver<double>(
+            new AlgebraicRiccatiSolverOptions { UseSignFunctionScaling = false })
+            .Solve(state, input, stateCost, inputCost);
+
+        Assert.True(scaled.Converged);
+        Assert.True(unscaled.Converged);
+        Assert.True(scaled.Iterations <= unscaled.Iterations);
+        for (int row = 0; row < 2; row++)
+        {
+            for (int column = 0; column < 2; column++)
+            {
+                Assert.Equal(unscaled.Solution[row, column], scaled.Solution[row, column], 8);
+            }
+        }
+    }
+
     #endregion
 
     #region Validation
+
+    [Fact(Timeout = 120000)]
+    public async Task ContinuousRiccati_RankDeficientInvariantSubspace_ThrowsNamedDiagnostic()
+    {
+        await Task.Yield();
+
+        var rankDeficientSign = M(new[,] { { 0.0, 0.0 }, { 0.0, -1.0 } });
+
+        var exception = Assert.Throws<InvalidOperationException>(
+            () => ContinuousAlgebraicRiccatiSolver<double>.ExtractSolution(
+                rankDeficientSign, n: 1));
+
+        Assert.Contains("rank-deficient", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task Riccati_AsymmetricCost_ThrowsNamedArgument()
+    {
+        await Task.Yield();
+
+        var exception = Assert.Throws<ArgumentException>(() =>
+            new DiscreteAlgebraicRiccatiSolver<double>().Solve(
+                Matrix<double>.CreateIdentity(2), M(new[,] { { 1.0 }, { 1.0 } }),
+                M(new[,] { { 1.0, 0.25 }, { 0.0, 1.0 } }),
+                Matrix<double>.CreateIdentity(1)));
+
+        Assert.Equal("stateCost", exception.ParamName);
+        Assert.Contains("symmetric", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task RiccatiOptions_CopyPreservesAllConfiguration()
+    {
+        await Task.Yield();
+
+        var original = new AlgebraicRiccatiSolverOptions
+        {
+            Seed = 42,
+            MaxIterations = 17,
+            Tolerance = 2e-9,
+            UseSignFunctionScaling = false,
+        };
+
+        var copy = new AlgebraicRiccatiSolverOptions(original);
+
+        Assert.Equal(original.Seed, copy.Seed);
+        Assert.Equal(original.MaxIterations, copy.MaxIterations);
+        Assert.Equal(original.Tolerance, copy.Tolerance);
+        Assert.Equal(original.UseSignFunctionScaling, copy.UseSignFunctionScaling);
+    }
 
     [Fact]
     public void Riccati_NonSquareStateMatrix_Throws()

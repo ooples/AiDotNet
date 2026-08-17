@@ -62,8 +62,6 @@ namespace AiDotNet.Regression;
 public class SupportVectorRegression<T> : NonLinearRegressionBase<T>
 {
     /// <inheritdoc/>
-    protected override T SupportVectorSelectionTolerance => NumOps.FromDouble(_options.Tolerance);
-
     /// <summary>
     /// Configuration options for the Support Vector Regression model.
     /// </summary>
