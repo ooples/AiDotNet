@@ -36,7 +36,7 @@ namespace AiDotNet.DistributedTraining;
 /// <typeparam name="T">The numeric type for operations</typeparam>
 /// <typeparam name="TInput">The input type for the model</typeparam>
 /// <typeparam name="TOutput">The output type for the model</typeparam>
-public abstract class ShardedModelBase<T, TInput, TOutput> :
+public abstract partial class ShardedModelBase<T, TInput, TOutput> :
     IShardedModel<T, TInput, TOutput>,
     IParameterizable<T, TInput, TOutput>,
     IGradientComputable<T, TInput, TOutput>,
@@ -68,6 +68,7 @@ public abstract class ShardedModelBase<T, TInput, TOutput> :
     /// </remarks>
     protected virtual void RegisterGeneratedState(AiDotNet.Models.ModelStateRegistry<T> state)
     {
+        RegisterGeneratedStateCore(state);
     }
 
     /// <summary>The declared state, registered once and lazily so it runs after the constructor.</summary>

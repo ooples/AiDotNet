@@ -20,7 +20,7 @@ namespace AiDotNet.AdversarialRobustness.Safety;
 /// on the actual classification logic in your subclass.</para>
 /// </remarks>
 /// <typeparam name="T">The numeric data type used for calculations.</typeparam>
-public abstract class ContentClassifierBase<T> : IContentClassifier<T>, IModelSerializer, IModelShape
+public abstract partial class ContentClassifierBase<T> : IContentClassifier<T>, IModelSerializer, IModelShape
 {
     // --- declared state (ModelStateRegistry) ---
     // Identical in every model base because these bases are siblings over the same interfaces rather
@@ -48,6 +48,7 @@ public abstract class ContentClassifierBase<T> : IContentClassifier<T>, IModelSe
     /// </remarks>
     protected virtual void RegisterGeneratedState(AiDotNet.Models.ModelStateRegistry<T> state)
     {
+        RegisterGeneratedStateCore(state);
     }
 
     /// <summary>The declared state, registered once and lazily so it runs after the constructor.</summary>

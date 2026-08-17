@@ -23,7 +23,7 @@ namespace AiDotNet.FineTuning;
 /// <typeparam name="T">The numeric data type used for calculations.</typeparam>
 /// <typeparam name="TInput">The input data type for the model.</typeparam>
 /// <typeparam name="TOutput">The output data type for the model.</typeparam>
-public abstract class FineTuningBase<T, TInput, TOutput> : IFineTuning<T, TInput, TOutput>, IModelShape
+public abstract partial class FineTuningBase<T, TInput, TOutput> : IFineTuning<T, TInput, TOutput>, IModelShape
 {
     // --- declared state (ModelStateRegistry) ---
     // Identical in every model base because these bases are siblings over the same interfaces rather
@@ -51,6 +51,7 @@ public abstract class FineTuningBase<T, TInput, TOutput> : IFineTuning<T, TInput
     /// </remarks>
     protected virtual void RegisterGeneratedState(AiDotNet.Models.ModelStateRegistry<T> state)
     {
+        RegisterGeneratedStateCore(state);
     }
 
     /// <summary>The declared state, registered once and lazily so it runs after the constructor.</summary>

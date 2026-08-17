@@ -36,7 +36,7 @@ namespace AiDotNet.Optimizers;
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 /// <typeparam name="TInput">The type of input data for the model.</typeparam>
 /// <typeparam name="TOutput">The type of output data for the model.</typeparam>
-public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, TOutput>, IModelShape
+public abstract partial class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, TOutput>, IModelShape
 {
     // --- declared state (ModelStateRegistry) ---
     // Identical in every model base because these bases are siblings over the same interfaces rather
@@ -64,6 +64,7 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
     /// </remarks>
     protected virtual void RegisterGeneratedState(AiDotNet.Models.ModelStateRegistry<T> state)
     {
+        RegisterGeneratedStateCore(state);
     }
 
     /// <summary>The declared state, registered once and lazily so it runs after the constructor.</summary>

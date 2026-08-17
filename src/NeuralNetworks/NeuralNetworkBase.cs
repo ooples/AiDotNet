@@ -38,7 +38,7 @@ namespace AiDotNet.NeuralNetworks;
 /// This class provides the foundation for building different types of neural networks.
 /// </para>
 /// </remarks>
-public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpretableModel<T>, IInputGradientComputable<T>, IConfigurableModel<T>, IModelShape, IDisposable,
+public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpretableModel<T>, IInputGradientComputable<T>, IConfigurableModel<T>, IModelShape, IDisposable,
     IParameterizable<T, Tensor<T>, Tensor<T>>, IFeatureAware, IGradientComputable<T, Tensor<T>, Tensor<T>>,
     ISupportsLossFunction<T>, AiDotNet.Models.Parameters.IParameterManifestProvider,
     AiDotNet.Models.Parameters.IParameterLayoutSource,
@@ -72,6 +72,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// </remarks>
     protected virtual void RegisterGeneratedState(AiDotNet.Models.ModelStateRegistry<T> state)
     {
+        RegisterGeneratedStateCore(state);
     }
 
     /// <summary>The declared state, registered once and lazily so it runs after the constructor.</summary>

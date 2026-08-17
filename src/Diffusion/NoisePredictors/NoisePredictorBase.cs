@@ -29,7 +29,7 @@ namespace AiDotNet.Diffusion.NoisePredictors;
 /// extend this base class.
 /// </para>
 /// </remarks>
-public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape,
+public abstract partial class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape,
     AiDotNet.Models.Parameters.IParameterLayoutSource,
     AiDotNet.Models.Parameters.IParameterManifestProvider,
     AiDotNet.Models.Parameters.IParameterSurfaceLifecycle, IDisposable
@@ -60,6 +60,7 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape,
     /// </remarks>
     protected virtual void RegisterGeneratedState(AiDotNet.Models.ModelStateRegistry<T> state)
     {
+        RegisterGeneratedStateCore(state);
     }
 
     /// <summary>The declared state, registered once and lazily so it runs after the constructor.</summary>

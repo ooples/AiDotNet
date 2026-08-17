@@ -18,7 +18,7 @@ namespace AiDotNet.AdversarialRobustness.Attacks;
 /// <remarks>
 /// <para><b>For Beginners:</b> This provides AI safety functionality. Default values follow the original paper settings.</para>
 /// </remarks>
-public abstract class AdversarialAttackBase<T, TInput, TOutput> : IAdversarialAttack<T, TInput, TOutput>, IModelShape
+public abstract partial class AdversarialAttackBase<T, TInput, TOutput> : IAdversarialAttack<T, TInput, TOutput>, IModelShape
 {
     // --- declared state (ModelStateRegistry) ---
     // Identical in every model base because these bases are siblings over the same interfaces rather
@@ -46,6 +46,7 @@ public abstract class AdversarialAttackBase<T, TInput, TOutput> : IAdversarialAt
     /// </remarks>
     protected virtual void RegisterGeneratedState(AiDotNet.Models.ModelStateRegistry<T> state)
     {
+        RegisterGeneratedStateCore(state);
     }
 
     /// <summary>The declared state, registered once and lazily so it runs after the constructor.</summary>

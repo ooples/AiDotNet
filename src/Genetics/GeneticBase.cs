@@ -29,7 +29,7 @@ namespace AiDotNet.Genetics;
 /// the entire genetic algorithm framework.
 /// </para>
 /// </remarks>
-public abstract class GeneticBase<T, TInput, TOutput> :
+public abstract partial class GeneticBase<T, TInput, TOutput> :
     IGeneticAlgorithm<T, TInput, TOutput, ModelIndividual<T, TInput, TOutput, ModelParameterGene<T>>, ModelParameterGene<T>>
 {
     // --- declared state (ModelStateRegistry) ---
@@ -58,6 +58,7 @@ public abstract class GeneticBase<T, TInput, TOutput> :
     /// </remarks>
     protected virtual void RegisterGeneratedState(AiDotNet.Models.ModelStateRegistry<T> state)
     {
+        RegisterGeneratedStateCore(state);
     }
 
     /// <summary>The declared state, registered once and lazily so it runs after the constructor.</summary>

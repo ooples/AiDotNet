@@ -23,7 +23,7 @@ namespace AiDotNet.Diffusion.VAE;
 /// They are essential for efficient latent diffusion models like Stable Diffusion.
 /// </para>
 /// </remarks>
-public abstract class VAEModelBase<T> : IVAEModel<T>, IModelShape,
+public abstract partial class VAEModelBase<T> : IVAEModel<T>, IModelShape,
     AiDotNet.Models.Parameters.IParameterManifestProvider,
     AiDotNet.Models.Parameters.IParameterSurfaceLifecycle
 {
@@ -53,6 +53,7 @@ public abstract class VAEModelBase<T> : IVAEModel<T>, IModelShape,
     /// </remarks>
     protected virtual void RegisterGeneratedState(AiDotNet.Models.ModelStateRegistry<T> state)
     {
+        RegisterGeneratedStateCore(state);
     }
 
     /// <summary>The declared state, registered once and lazily so it runs after the constructor.</summary>

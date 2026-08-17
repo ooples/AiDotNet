@@ -32,7 +32,7 @@ namespace AiDotNet.ReinforcementLearning.Agents;
 /// their own unique learning logic while sharing common functionality.
 /// </para>
 /// </remarks>
-public abstract class ReinforcementLearningAgentBase<T> : IRLAgent<T>, IConfigurableModel<T>, IModelShape, IDisposable,
+public abstract partial class ReinforcementLearningAgentBase<T> : IRLAgent<T>, IConfigurableModel<T>, IModelShape, IDisposable,
     AiDotNet.Models.Parameters.IParameterManifestProvider
 {
     // --- declared state (ModelStateRegistry) ---
@@ -61,6 +61,7 @@ public abstract class ReinforcementLearningAgentBase<T> : IRLAgent<T>, IConfigur
     /// </remarks>
     protected virtual void RegisterGeneratedState(AiDotNet.Models.ModelStateRegistry<T> state)
     {
+        RegisterGeneratedStateCore(state);
     }
 
     /// <summary>The declared state, registered once and lazily so it runs after the constructor.</summary>

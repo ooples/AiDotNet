@@ -30,7 +30,7 @@ namespace AiDotNet.Regression;
 /// functionality.
 /// </para>
 /// </remarks>
-public abstract class RegressionBase<T> : IRegression<T>, IConfigurableModel<T>, IModelShape,
+public abstract partial class RegressionBase<T> : IRegression<T>, IConfigurableModel<T>, IModelShape,
     IParameterizable<T, Matrix<T>, Vector<T>>, IFeatureAware, IGradientComputable<T, Matrix<T>, Vector<T>>,
     IParameterManifestProvider
 {
@@ -397,6 +397,7 @@ public abstract class RegressionBase<T> : IRegression<T>, IConfigurableModel<T>,
     /// </remarks>
     protected virtual void RegisterGeneratedState(AiDotNet.Models.ModelStateRegistry<T> state)
     {
+        RegisterGeneratedStateCore(state);
     }
 
     private ModelStateRegistry<T> State

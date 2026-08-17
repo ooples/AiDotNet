@@ -73,6 +73,7 @@ public abstract partial class SurvivalModelBase<T> : ISurvivalModel<T>, IModelSh
     /// </remarks>
     protected virtual void RegisterGeneratedState(AiDotNet.Models.ModelStateRegistry<T> state)
     {
+        RegisterGeneratedStateCore(state);
     }
 
     /// <summary>The declared state, registered once and lazily so it runs after the constructor.</summary>

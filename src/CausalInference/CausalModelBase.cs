@@ -31,7 +31,7 @@ namespace AiDotNet.CausalInference;
 /// - Managing fitted model state
 /// </para>
 /// </remarks>
-public abstract class CausalModelBase<T> : ICausalModel<T>, IModelShape, IParameterManifestProvider
+public abstract partial class CausalModelBase<T> : ICausalModel<T>, IModelShape, IParameterManifestProvider
 {
     // --- declared state (ModelStateRegistry) ---
     // Identical in every model base because these bases are siblings over the same interfaces rather
@@ -59,6 +59,7 @@ public abstract class CausalModelBase<T> : ICausalModel<T>, IModelShape, IParame
     /// </remarks>
     protected virtual void RegisterGeneratedState(AiDotNet.Models.ModelStateRegistry<T> state)
     {
+        RegisterGeneratedStateCore(state);
     }
 
     /// <summary>The declared state, registered once and lazily so it runs after the constructor.</summary>

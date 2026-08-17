@@ -20,7 +20,7 @@ namespace AiDotNet.AutoML
     /// <typeparam name="T">The numeric type used for calculations</typeparam>
     /// <typeparam name="TInput">The input data type</typeparam>
     /// <typeparam name="TOutput">The output data type</typeparam>
-    public abstract class AutoMLModelBase<T, TInput, TOutput> : IAutoMLModel<T, TInput, TOutput>, IModelShape
+    public abstract partial class AutoMLModelBase<T, TInput, TOutput> : IAutoMLModel<T, TInput, TOutput>, IModelShape
     {
     // --- declared state (ModelStateRegistry) ---
     // Identical in every model base because these bases are siblings over the same interfaces rather
@@ -48,6 +48,7 @@ namespace AiDotNet.AutoML
     /// </remarks>
     protected virtual void RegisterGeneratedState(AiDotNet.Models.ModelStateRegistry<T> state)
     {
+        RegisterGeneratedStateCore(state);
     }
 
     /// <summary>The declared state, registered once and lazily so it runs after the constructor.</summary>

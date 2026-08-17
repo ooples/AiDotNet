@@ -34,7 +34,7 @@ namespace AiDotNet.DistributedTraining;
 /// <typeparam name="T">The numeric type for operations</typeparam>
 /// <typeparam name="TInput">The input type for the model</typeparam>
 /// <typeparam name="TOutput">The output type for the model</typeparam>
-public abstract class ShardedOptimizerBase<T, TInput, TOutput> : IShardedOptimizer<T, TInput, TOutput>, IModelShape
+public abstract partial class ShardedOptimizerBase<T, TInput, TOutput> : IShardedOptimizer<T, TInput, TOutput>, IModelShape
 {
     // --- declared state (ModelStateRegistry) ---
     // Identical in every model base because these bases are siblings over the same interfaces rather
@@ -62,6 +62,7 @@ public abstract class ShardedOptimizerBase<T, TInput, TOutput> : IShardedOptimiz
     /// </remarks>
     protected virtual void RegisterGeneratedState(AiDotNet.Models.ModelStateRegistry<T> state)
     {
+        RegisterGeneratedStateCore(state);
     }
 
     /// <summary>The declared state, registered once and lazily so it runs after the constructor.</summary>

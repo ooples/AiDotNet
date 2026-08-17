@@ -20,7 +20,7 @@ namespace AiDotNet.Clustering.Base;
 /// Provides a base implementation for clustering algorithms that group similar data points together.
 /// </summary>
 /// <typeparam name="T">The numeric data type used for calculations (e.g., float, double).</typeparam>
-public abstract class ClusteringBase<T> : IClustering<T>, IConfigurableModel<T>, IModelShape,
+public abstract partial class ClusteringBase<T> : IClustering<T>, IConfigurableModel<T>, IModelShape,
     IParameterizable<T, Matrix<T>, Vector<T>>, IFeatureAware, IGradientComputable<T, Matrix<T>, Vector<T>>,
     IParameterManifestProvider
 {
@@ -50,6 +50,7 @@ public abstract class ClusteringBase<T> : IClustering<T>, IConfigurableModel<T>,
     /// </remarks>
     protected virtual void RegisterGeneratedState(AiDotNet.Models.ModelStateRegistry<T> state)
     {
+        RegisterGeneratedStateCore(state);
     }
 
     /// <summary>The declared state, registered once and lazily so it runs after the constructor.</summary>

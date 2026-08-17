@@ -19,7 +19,7 @@ namespace AiDotNet.Classification.MultiLabel;
 /// traditional classification which assigns exactly one label.</para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
-public abstract class MultiLabelClassifierBase<T> : IMultiLabelClassifier<T>, IConfigurableModel<T>, IModelShape,
+public abstract partial class MultiLabelClassifierBase<T> : IMultiLabelClassifier<T>, IConfigurableModel<T>, IModelShape,
     IParameterManifestProvider
 {
     // --- declared state (ModelStateRegistry) ---
@@ -48,6 +48,7 @@ public abstract class MultiLabelClassifierBase<T> : IMultiLabelClassifier<T>, IC
     /// </remarks>
     protected virtual void RegisterGeneratedState(AiDotNet.Models.ModelStateRegistry<T> state)
     {
+        RegisterGeneratedStateCore(state);
     }
 
     /// <summary>The declared state, registered once and lazily so it runs after the constructor.</summary>

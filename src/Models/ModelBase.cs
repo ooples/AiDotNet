@@ -28,7 +28,7 @@ namespace AiDotNet.Models;
 /// only needs to implement its core prediction and training logic.
 /// </para>
 /// </remarks>
-public abstract class ModelBase<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>,
+public abstract partial class ModelBase<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>,
     IParameterizable<T, TInput, TOutput>, IFeatureAware, IGradientComputable<T, TInput, TOutput>,
     IParameterManifestProvider, IParameterChunkSource<T>
 {
@@ -137,6 +137,7 @@ public abstract class ModelBase<T, TInput, TOutput> : IFullModel<T, TInput, TOut
     /// </remarks>
     protected virtual void RegisterGeneratedState(AiDotNet.Models.ModelStateRegistry<T> state)
     {
+        RegisterGeneratedStateCore(state);
     }
 
     /// <summary>The declared state, registered once and lazily so it runs after the constructor.</summary>

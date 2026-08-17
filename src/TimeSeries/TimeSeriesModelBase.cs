@@ -47,7 +47,7 @@ namespace AiDotNet.TimeSeries;
 /// - Website traffic prediction
 /// </para>
 /// </remarks>
-public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, IConfigurableModel<T>, IModelShape,
+public abstract partial class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, IConfigurableModel<T>, IModelShape,
     ITrainingEpochReporter<T>, AiDotNet.Models.Parameters.IParameterManifestProvider
 {
     // --- declared state (ModelStateRegistry) ---
@@ -76,6 +76,7 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, IConfigurabl
     /// </remarks>
     protected virtual void RegisterGeneratedState(AiDotNet.Models.ModelStateRegistry<T> state)
     {
+        RegisterGeneratedStateCore(state);
     }
 
     /// <summary>The declared state, registered once and lazily so it runs after the constructor.</summary>

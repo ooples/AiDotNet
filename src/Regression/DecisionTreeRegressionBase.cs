@@ -28,7 +28,7 @@ namespace AiDotNet.Regression;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
-public abstract class DecisionTreeRegressionBase<T> : ITreeBasedRegression<T>, IConfigurableModel<T>, IModelShape
+public abstract partial class DecisionTreeRegressionBase<T> : ITreeBasedRegression<T>, IConfigurableModel<T>, IModelShape
 {
     // --- declared state (ModelStateRegistry) ---
     // Identical in every model base because these bases are siblings over the same interfaces rather
@@ -56,6 +56,7 @@ public abstract class DecisionTreeRegressionBase<T> : ITreeBasedRegression<T>, I
     /// </remarks>
     protected virtual void RegisterGeneratedState(AiDotNet.Models.ModelStateRegistry<T> state)
     {
+        RegisterGeneratedStateCore(state);
     }
 
     /// <summary>The declared state, registered once and lazily so it runs after the constructor.</summary>

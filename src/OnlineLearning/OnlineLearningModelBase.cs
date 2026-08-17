@@ -30,7 +30,7 @@ namespace AiDotNet.OnlineLearning;
 /// - Standard IFullModel interface implementation
 /// </para>
 /// </remarks>
-public abstract class OnlineLearningModelBase<T> : IOnlineLearningModel<T>, IModelShape, IParameterManifestProvider
+public abstract partial class OnlineLearningModelBase<T> : IOnlineLearningModel<T>, IModelShape, IParameterManifestProvider
 {
     // --- declared state (ModelStateRegistry) ---
     // Identical in every model base because these bases are siblings over the same interfaces rather
@@ -58,6 +58,7 @@ public abstract class OnlineLearningModelBase<T> : IOnlineLearningModel<T>, IMod
     /// </remarks>
     protected virtual void RegisterGeneratedState(AiDotNet.Models.ModelStateRegistry<T> state)
     {
+        RegisterGeneratedStateCore(state);
     }
 
     /// <summary>The declared state, registered once and lazily so it runs after the constructor.</summary>

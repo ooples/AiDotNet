@@ -26,7 +26,7 @@ namespace AiDotNet.Regression;
 /// questions and answers based on numerical data.
 /// </para>
 /// </remarks>
-public abstract class AsyncDecisionTreeRegressionBase<T> : IAsyncTreeBasedModel<T>, IConfigurableModel<T>, IModelShape
+public abstract partial class AsyncDecisionTreeRegressionBase<T> : IAsyncTreeBasedModel<T>, IConfigurableModel<T>, IModelShape
 {
     // --- declared state (ModelStateRegistry) ---
     // Identical in every model base because these bases are siblings over the same interfaces rather
@@ -54,6 +54,7 @@ public abstract class AsyncDecisionTreeRegressionBase<T> : IAsyncTreeBasedModel<
     /// </remarks>
     protected virtual void RegisterGeneratedState(AiDotNet.Models.ModelStateRegistry<T> state)
     {
+        RegisterGeneratedStateCore(state);
     }
 
     /// <summary>The declared state, registered once and lazily so it runs after the constructor.</summary>

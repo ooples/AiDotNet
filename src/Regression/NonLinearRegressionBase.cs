@@ -27,7 +27,7 @@ namespace AiDotNet.Regression;
 /// straight line.
 /// </para>
 /// </remarks>
-public abstract class NonLinearRegressionBase<T> : INonLinearRegression<T>, IConfigurableModel<T>, IModelShape,
+public abstract partial class NonLinearRegressionBase<T> : INonLinearRegression<T>, IConfigurableModel<T>, IModelShape,
     IParameterizable<T, Matrix<T>, Vector<T>>, IFeatureAware, IGradientComputable<T, Matrix<T>, Vector<T>>
 {
     // --- declared state (ModelStateRegistry) ---
@@ -56,6 +56,7 @@ public abstract class NonLinearRegressionBase<T> : INonLinearRegression<T>, ICon
     /// </remarks>
     protected virtual void RegisterGeneratedState(AiDotNet.Models.ModelStateRegistry<T> state)
     {
+        RegisterGeneratedStateCore(state);
     }
 
     /// <summary>The declared state, registered once and lazily so it runs after the constructor.</summary>
