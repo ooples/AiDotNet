@@ -2817,6 +2817,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             JitCompiledFunction = BuildCompiledPredictFunction(optimizationResult.BestSolution),
             AllowNondeterminism = _allowNondeterminism,
             AugmentationConfig = _augmentationConfig,
+            SegmentationVisualization = _segmentationVisualizationConfig,
             ReasoningConfig = _reasoningConfig,
             DeploymentConfiguration = deploymentConfig,
             BiasDetector = _biasDetector,
@@ -3162,7 +3163,11 @@ public partial class AiModelBuilder<T, TInput, TOutput>
 
         RunImageSpaceTrainingLoop(imageTrainable, typedLoader, raysPerBatch, imageEpochs, optimizerOptions, cancellationToken);
 
-        var result = new AiModelResult<T, TInput, TOutput> { Model = _model };
+        var result = new AiModelResult<T, TInput, TOutput>
+        {
+            Model = _model,
+            SegmentationVisualization = _segmentationVisualizationConfig,
+        };
         return Task.FromResult(result);
     }
 
@@ -5487,6 +5492,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             JitCompiledFunction = BuildCompiledPredictFunction(optimizationResult.BestSolution),
             AllowNondeterminism = _allowNondeterminism,
             AugmentationConfig = _augmentationConfig,
+            SegmentationVisualization = _segmentationVisualizationConfig,
             ReasoningConfig = _reasoningConfig,
             KnowledgeGraph = _knowledgeGraph,
             GraphStore = _graphStore,

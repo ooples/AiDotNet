@@ -1590,6 +1590,33 @@ public interface IAiModelBuilder<T, TInput, TOutput>
     IAiModelBuilder<T, TInput, TOutput> ConfigureAugmentation(AugmentationConfig<T, TInput>? config);
 
     /// <summary>
+    /// Configures how segmentation results are drawn as an overlay on the source image.
+    /// </summary>
+    /// <param name="config">Visualization settings. If null, defaults are used (alpha 0.5, contours
+    /// and labels on).</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> After segmenting an image you usually want to see the result — the original
+    /// picture with each detected region tinted a distinct colour. This sets how that overlay looks;
+    /// the drawing itself is done by
+    /// <c>SegmentationRenderer.DrawSegmentationMasks</c>/<c>Render</c> when you render a prediction.
+    /// </para>
+    /// <para>
+    /// Labels and scores need per-instance classes and scores, so
+    /// <c>SegmentationRenderer.Render(image, SegmentationOutput, config)</c> honours them. The
+    /// mask-only <c>DrawSegmentationMasks</c> overload requires <c>ShowLabels</c> and
+    /// <c>ShowScores</c> to be disabled and rejects those flags rather than silently ignoring them.
+    /// </para>
+    /// <para>
+    /// The settings ride through to the built result, so they only need to be stated once here rather
+    /// than repeated at every render call.
+    /// </para>
+    /// </remarks>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureSegmentationVisualization(
+        ComputerVision.Segmentation.Common.SegmentationVisualizationConfig? config = null);
+
+    /// <summary>
     /// Configures AutoML with a caller-supplied AutoML model implementation (the advanced overload; the
     /// <see cref="ConfigureAutoML(AutoMLOptions{T,TInput,TOutput})"/> overload takes a budget preset instead).
     /// </summary>

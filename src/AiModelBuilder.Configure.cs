@@ -233,7 +233,6 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     public IAiModelBuilder<T, TInput, TOutput> ConfigureFitnessCalculator(IFitnessCalculator<T, TInput, TOutput> calculator)
     {
         _trainingCore.ConfigureFitnessCalculator(calculator);
-        _fitnessCalculator = _trainingCore.FitnessCalculator;
         return this;
     }
 
@@ -250,7 +249,6 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     public IAiModelBuilder<T, TInput, TOutput> ConfigureFitDetector(IFitDetector<T, TInput, TOutput> detector)
     {
         _trainingCore.ConfigureFitDetector(detector);
-        _fitDetector = _trainingCore.FitDetector;
         return this;
     }
 
@@ -1526,6 +1524,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             JitCompiledFunction = BuildCompiledPredictFunction(optimizationResult.BestSolution),
             AllowNondeterminism = _allowNondeterminism,
             AugmentationConfig = _augmentationConfig,
+            SegmentationVisualization = _segmentationVisualizationConfig,
             ReasoningConfig = _reasoningConfig,
             DeploymentConfiguration = deploymentConfig,
             BiasDetector = _biasDetector,
@@ -1875,6 +1874,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             PostprocessingPipeline = _postprocessingPipeline,
             JitCompilationConfig = _jitCompilationConfig,
             AllowNondeterminism = _allowNondeterminism,
+            SegmentationVisualization = _segmentationVisualizationConfig,
             LoRAConfiguration = _loraConfiguration,
             BiasDetector = _biasDetector,
             FairnessEvaluator = _fairnessEvaluator,
@@ -2175,6 +2175,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             JitCompiledFunction = BuildCompiledPredictFunction(optimizationResult.BestSolution),
             AllowNondeterminism = _allowNondeterminism,
             AugmentationConfig = _augmentationConfig,
+            SegmentationVisualization = _segmentationVisualizationConfig,
             ReasoningConfig = _reasoningConfig,
             KnowledgeGraph = _knowledgeGraph,
             GraphStore = _graphStore,
@@ -2551,6 +2552,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             JitCompilationConfig = _jitCompilationConfig,
             JitCompiledFunction = BuildCompiledPredictFunction(optimizationResult.BestSolution),
             AllowNondeterminism = _allowNondeterminism,
+            SegmentationVisualization = _segmentationVisualizationConfig,
             ReasoningConfig = _reasoningConfig,
             KnowledgeGraph = _knowledgeGraph,
             GraphStore = _graphStore,
