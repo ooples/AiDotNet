@@ -225,8 +225,8 @@ public class SystemIdentificationIntegrationTests
     [Fact]
     public void Dmdc_RankDeficientData_ReportsTheReducedRank()
     {
-        // Every input is the same, so the input direction carries no independent information and the
-        // stacked data cannot have full row rank.
+        // The input is exactly the first state row, so the stacked snapshot matrix has one linearly
+        // dependent row and rank exactly two rather than its maximum of three.
         var trueA = M(new[,] { { 0.9, 0.0 }, { 0.0, 0.8 } });
         var trueB = M(new[,] { { 1.0 }, { 1.0 } });
 
@@ -238,19 +238,19 @@ public class SystemIdentificationIntegrationTests
         var current = new[] { 1.0, 2.0 };
         for (int k = 0; k < snapshots; k++)
         {
-            const double ConstantInput = 1.0;
+            double dependentInput = current[0];
 
             var next = new[]
             {
-                trueA[0, 0] * current[0] + trueB[0, 0] * ConstantInput,
-                trueA[1, 1] * current[1] + trueB[1, 0] * ConstantInput,
+                trueA[0, 0] * current[0] + trueB[0, 0] * dependentInput,
+                trueA[1, 1] * current[1] + trueB[1, 0] * dependentInput,
             };
 
             states[0, k] = current[0];
             states[1, k] = current[1];
             nextStates[0, k] = next[0];
             nextStates[1, k] = next[1];
-            inputs[0, k] = ConstantInput;
+            inputs[0, k] = dependentInput;
 
             current = next;
         }
@@ -258,13 +258,12 @@ public class SystemIdentificationIntegrationTests
         var result = new DynamicModeDecompositionWithControl<double>()
             .Identify(states, nextStates, inputs);
 
-        Assert.True(
-            result.Rank <= 3,
-            $"The stacked data has three rows, so the rank cannot exceed three; got {result.Rank}.");
+        Assert.Equal(2, result.Rank);
 
         Assert.True(
-            result.SingularValues.Length > 0 && result.SingularValues[0] > 0.0,
-            "The singular values must be reported so a caller can judge the fit.");
+            result.SingularValues.Length == 3 &&
+            result.SingularValues[2] < result.SingularValues[0] * 1e-10,
+            "The dependent stacked row must collapse the third singular value.");
     }
 
     /// <summary>

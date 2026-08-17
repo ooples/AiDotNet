@@ -167,14 +167,12 @@ public abstract class RegressionModelTestBase<T> : System.IDisposable
         Assert.True(
             ModelTestHelpers.AllFinite(pred1) && ModelTestHelpers.AllFinite(pred2),
             "Translation-equivariance predictions must be finite.");
+        for (int i = 0; i < pred1.Length; i++)
         {
-            for (int i = 0; i < pred1.Length; i++)
-            {
-                double actualShift = pred2[i] - pred1[i];
-                Assert.True(Math.Abs(actualShift - shift) < shift * 0.3,
-                    $"Translation equivariance violated: predicted shift = {actualShift:F2}, expected ~{shift}. " +
-                    $"pred_original={pred1[i]:F4}, pred_shifted={pred2[i]:F4}");
-            }
+            double actualShift = pred2[i] - pred1[i];
+            Assert.True(Math.Abs(actualShift - shift) < shift * 0.3,
+                $"Translation equivariance violated: predicted shift = {actualShift:F2}, expected ~{shift}. " +
+                $"pred_original={pred1[i]:F4}, pred_shifted={pred2[i]:F4}");
         }
     }
 
@@ -212,16 +210,14 @@ public abstract class RegressionModelTestBase<T> : System.IDisposable
         Assert.True(
             ModelTestHelpers.AllFinite(pred1) && ModelTestHelpers.AllFinite(pred2),
             "Scaling-equivariance predictions must be finite.");
+        for (int i = 0; i < pred1.Length; i++)
         {
-            for (int i = 0; i < pred1.Length; i++)
+            if (Math.Abs(pred1[i]) > 0.01)
             {
-                if (Math.Abs(pred1[i]) > 0.01)
-                {
-                    double ratio = pred2[i] / pred1[i];
-                    Assert.True(ratio > scale * 0.5 && ratio < scale * 2.0,
-                        $"Scaling equivariance violated at sample {i}: ratio = {ratio:F2}, expected ~{scale}. " +
-                        $"pred_original={pred1[i]:F4}, pred_scaled={pred2[i]:F4}");
-                }
+                double ratio = pred2[i] / pred1[i];
+                Assert.True(ratio > scale * 0.5 && ratio < scale * 2.0,
+                    $"Scaling equivariance violated at sample {i}: ratio = {ratio:F2}, expected ~{scale}. " +
+                    $"pred_original={pred1[i]:F4}, pred_scaled={pred2[i]:F4}");
             }
         }
     }
@@ -250,15 +246,13 @@ public abstract class RegressionModelTestBase<T> : System.IDisposable
         Assert.True(
             ModelTestHelpers.AllFinite(trainPred) && ModelTestHelpers.AllFinite(testPred),
             "Training- and test-error predictions must be finite.");
-        {
-            double trainMSE = ModelTestHelpers.CalculateMSE(trainY, trainPred);
-            double testMSE = ModelTestHelpers.CalculateMSE(testY, testPred);
+        double trainMSE = ModelTestHelpers.CalculateMSE(trainY, trainPred);
+        double testMSE = ModelTestHelpers.CalculateMSE(testY, testPred);
 
-            // Training MSE should generally be ≤ test MSE (allow 2x slack for variance)
-            Assert.True(trainMSE <= testMSE * 2.0 + 1e-10,
-                $"Training MSE ({trainMSE:F4}) is much higher than test MSE ({testMSE:F4}). " +
-                "This suggests the model is not actually fitting the training data.");
-        }
+        // Training MSE should generally be ≤ test MSE (allow 2x slack for variance)
+        Assert.True(trainMSE <= testMSE * 2.0 + 1e-10,
+            $"Training MSE ({trainMSE:F4}) is much higher than test MSE ({testMSE:F4}). " +
+            "This suggests the model is not actually fitting the training data.");
     }
 
     // =====================================================
@@ -270,6 +264,8 @@ public abstract class RegressionModelTestBase<T> : System.IDisposable
     public async Task MoreData_ShouldNotDegrade_R2()
     {
         await Task.Yield();
+        if (!IdentityLinkInvariantsApplicable) return;
+        if (!PredictiveQualityInvariantsApplicable) return;
         using var _arena = TensorArena.Create();
         var rng1 = ModelTestHelpers.CreateSeededRandom(42);
         var model1 = CreateModel();
@@ -292,15 +288,13 @@ public abstract class RegressionModelTestBase<T> : System.IDisposable
         Assert.True(
             ModelTestHelpers.AllFinite(pred1) && ModelTestHelpers.AllFinite(pred2),
             "More-data invariant predictions must be finite.");
-        {
-            double r2Small = ModelTestHelpers.CalculateR2(testY, pred1);
-            double r2Large = ModelTestHelpers.CalculateR2(testY, pred2);
+        double r2Small = ModelTestHelpers.CalculateR2(testY, pred1);
+        double r2Large = ModelTestHelpers.CalculateR2(testY, pred2);
 
-            // Model with 4x data should be at least as good (allow 0.15 margin for stochasticity)
-            Assert.True(r2Large >= r2Small - 0.15,
-                $"4x more data made R² worse: R²(30)={r2Small:F4}, R²(120)={r2Large:F4}. " +
-                "Model may not be correctly learning from additional data.");
-        }
+        // Model with 4x data should be at least as good (allow 0.15 margin for stochasticity)
+        Assert.True(r2Large >= r2Small - 0.15,
+            $"4x more data made R² worse: R²(30)={r2Small:F4}, R²(120)={r2Large:F4}. " +
+            "Model may not be correctly learning from additional data.");
     }
 
     // =====================================================
@@ -312,6 +306,8 @@ public abstract class RegressionModelTestBase<T> : System.IDisposable
     public async Task IrrelevantFeature_ShouldNotImprove_Predictions()
     {
         await Task.Yield();
+        if (!IdentityLinkInvariantsApplicable) return;
+        if (!PredictiveQualityInvariantsApplicable) return;
         using var _arena = TensorArena.Create();
         if (Features < 2)
         {
@@ -354,15 +350,13 @@ public abstract class RegressionModelTestBase<T> : System.IDisposable
         Assert.True(
             ModelTestHelpers.AllFinite(pred1) && ModelTestHelpers.AllFinite(pred2),
             "Irrelevant-feature invariant predictions must be finite.");
-        {
-            double r2Real = ModelTestHelpers.CalculateR2(testY, pred1);
-            double r2Noisy = ModelTestHelpers.CalculateR2(testY, pred2);
+        double r2Real = ModelTestHelpers.CalculateR2(testY, pred1);
+        double r2Noisy = ModelTestHelpers.CalculateR2(testY, pred2);
 
-            // Adding noise feature should not improve R² substantially
-            Assert.True(r2Noisy <= r2Real + 0.15,
-                $"Adding irrelevant noise feature improved R²: clean={r2Real:F4}, noisy={r2Noisy:F4}. " +
-                "Model may be overfitting to noise.");
-        }
+        // Adding noise feature should not improve R² substantially
+        Assert.True(r2Noisy <= r2Real + 0.15,
+            $"Adding irrelevant noise feature improved R²: clean={r2Real:F4}, noisy={r2Noisy:F4}. " +
+            "Model may be overfitting to noise.");
     }
 
     // =====================================================
@@ -398,18 +392,16 @@ public abstract class RegressionModelTestBase<T> : System.IDisposable
         Assert.True(
             ModelTestHelpers.AllFinite(predictions),
             "Monotonic-response predictions must be finite.");
+        int monotoneViolations = 0;
+        for (int i = 1; i < predictions.Length; i++)
         {
-            int monotoneViolations = 0;
-            for (int i = 1; i < predictions.Length; i++)
-            {
-                if (predictions[i] < predictions[i - 1])
-                    monotoneViolations++;
-            }
-            Assert.True(monotoneViolations <= 1,
-                $"Monotonicity violated {monotoneViolations}/4 times. " +
-                $"Predictions: [{string.Join(", ", Enumerable.Range(0, predictions.Length).Select(i => predictions[i].ToString("F2")))}]. " +
-                "Model failed to learn positive coefficient direction.");
+            if (predictions[i] < predictions[i - 1])
+                monotoneViolations++;
         }
+        Assert.True(monotoneViolations <= 1,
+            $"Monotonicity violated {monotoneViolations}/4 times. " +
+            $"Predictions: [{string.Join(", ", Enumerable.Range(0, predictions.Length).Select(i => predictions[i].ToString("F2")))}]. " +
+            "Model failed to learn positive coefficient direction.");
     }
 
     // =====================================================
@@ -434,24 +426,21 @@ public abstract class RegressionModelTestBase<T> : System.IDisposable
         Assert.True(
             ModelTestHelpers.AllFinite(predictions),
             "Residual-mean predictions must be finite.");
+        double residualSum = 0;
+        double minY = double.MaxValue, maxY = double.MinValue;
+        for (int i = 0; i < trainY.Length; i++)
         {
-            double residualSum = 0;
-            double targetRange = 0;
-            double minY = double.MaxValue, maxY = double.MinValue;
-            for (int i = 0; i < trainY.Length; i++)
-            {
-                residualSum += trainY[i] - predictions[i];
-                if (trainY[i] < minY) minY = trainY[i];
-                if (trainY[i] > maxY) maxY = trainY[i];
-            }
-            targetRange = maxY - minY;
-            double meanResidual = residualSum / trainY.Length;
-
-            // Mean residual should be small relative to the target range
-            Assert.True(Math.Abs(meanResidual) < targetRange * 0.1,
-                $"Mean residual = {meanResidual:F4} is large relative to target range {targetRange:F4}. " +
-                "Model has systematic prediction bias.");
+            residualSum += trainY[i] - predictions[i];
+            if (trainY[i] < minY) minY = trainY[i];
+            if (trainY[i] > maxY) maxY = trainY[i];
         }
+        double targetRange = maxY - minY;
+        double meanResidual = residualSum / trainY.Length;
+
+        // Mean residual should be small relative to the target range
+        Assert.True(Math.Abs(meanResidual) < targetRange * 0.1,
+            $"Mean residual = {meanResidual:F4} is large relative to target range {targetRange:F4}. " +
+            "Model has systematic prediction bias.");
     }
 
     // =====================================================
@@ -488,25 +477,23 @@ public abstract class RegressionModelTestBase<T> : System.IDisposable
         Assert.True(
             ModelTestHelpers.AllFinite(predictions),
             "Coefficient-sign predictions must be finite.");
+        // Each feature should have positive effect (GenerateLinearData uses positive coefficients)
+        for (int f = 0; f < nFeatures; f++)
         {
-            // Each feature should have positive effect (GenerateLinearData uses positive coefficients)
-            for (int f = 0; f < nFeatures; f++)
-            {
-                double effect = predictions[1 + f] - predictions[0];
-                Assert.True(effect > 0,
-                    $"Feature x{f} effect = {effect:F4}, expected positive. " +
-                    "Model learned wrong sign.");
-            }
+            double effect = predictions[1 + f] - predictions[0];
+            Assert.True(effect > 0,
+                $"Feature x{f} effect = {effect:F4}, expected positive. " +
+                "Model learned wrong sign.");
+        }
 
-            // If multiple features, x1 should have larger effect than x0
-            // (GenerateLinearData uses increasing coefficients)
-            if (nFeatures >= 2)
-            {
-                double effectX0 = predictions[1] - predictions[0];
-                double effectX1 = predictions[2] - predictions[0];
-                Assert.True(effectX1 > effectX0,
-                    $"Feature x1 effect ({effectX1:F4}) should be larger than x0 ({effectX0:F4}).");
-            }
+        // If multiple features, x1 should have larger effect than x0
+        // (GenerateLinearData uses increasing coefficients)
+        if (nFeatures >= 2)
+        {
+            double effectX0 = predictions[1] - predictions[0];
+            double effectX1 = predictions[2] - predictions[0];
+            Assert.True(effectX1 > effectX0,
+                $"Feature x1 effect ({effectX1:F4}) should be larger than x0 ({effectX0:F4}).");
         }
     }
 
@@ -566,11 +553,9 @@ public abstract class RegressionModelTestBase<T> : System.IDisposable
         Assert.True(
             ModelTestHelpers.AllFinite(pred1) && ModelTestHelpers.AllFinite(pred2),
             "Feature-permutation predictions must be finite.");
-        {
-            Assert.True(Math.Abs(pred1[0] - pred2[0]) < Math.Abs(pred1[0]) * 0.2 + 1.0,
-                $"Feature permutation inconsistency: pred_orig={pred1[0]:F4}, pred_permuted={pred2[0]:F4}. " +
-                "Swapping feature columns and correspondingly swapping test inputs should give ~same prediction.");
-        }
+        Assert.True(Math.Abs(pred1[0] - pred2[0]) < Math.Abs(pred1[0]) * 0.2 + 1.0,
+            $"Feature permutation inconsistency: pred_orig={pred1[0]:F4}, pred_permuted={pred2[0]:F4}. " +
+            "Swapping feature columns and correspondingly swapping test inputs should give ~same prediction.");
     }
 
     // =====================================================
@@ -598,12 +583,10 @@ public abstract class RegressionModelTestBase<T> : System.IDisposable
         Assert.True(
             ModelTestHelpers.AllFinite(predictions),
             "Linear-data predictions must be finite.");
-        {
-            double r2 = ModelTestHelpers.CalculateR2(testY, predictions);
-            Assert.True(r2 > 0.0,
-                $"R² = {r2:F4} on linear data — model is worse than predicting the mean. " +
-                "Either the model is not learning, or Train/Predict has a bug.");
-        }
+        double r2 = ModelTestHelpers.CalculateR2(testY, predictions);
+        Assert.True(r2 > 0.0,
+            $"R² = {r2:F4} on linear data — model is worse than predicting the mean. " +
+            "Either the model is not learning, or Train/Predict has a bug.");
     }
 
     // =====================================================
@@ -807,15 +790,13 @@ public abstract class RegressionModelTestBase<T> : System.IDisposable
         Assert.True(
             ModelTestHelpers.AllFinite(predictions),
             "Intercept-recovery predictions must be finite.");
-        {
-            double meanPred = 0;
-            for (int i = 0; i < predictions.Length; i++) meanPred += predictions[i];
-            meanPred /= predictions.Length;
+        double meanPred = 0;
+        for (int i = 0; i < predictions.Length; i++) meanPred += predictions[i];
+        meanPred /= predictions.Length;
 
-            Assert.True(Math.Abs(meanPred - constant) < constant * 0.3,
-                $"Mean prediction = {meanPred:F4} on constant data (y={constant}). " +
-                "Intercept/bias term may be broken.");
-        }
+        Assert.True(Math.Abs(meanPred - constant) < constant * 0.3,
+            $"Mean prediction = {meanPred:F4} on constant data (y={constant}). " +
+            "Intercept/bias term may be broken.");
     }
 
     // =====================================================

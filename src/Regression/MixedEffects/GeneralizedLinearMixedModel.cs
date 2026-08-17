@@ -1008,7 +1008,72 @@ public partial class GeneralizedLinearMixedModel<T> : RegressionBase<T>
         return newModel;
     }
 
-    public override IFullModel<T, Matrix<T>, Vector<T>> Clone() => base.Clone();
+    public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
+    {
+        var clone = new GeneralizedLinearMixedModel<T>(_options, Regularization)
+        {
+            Coefficients = Coefficients.Clone(),
+            Intercept = Intercept,
+            TrainingFeatureCount = TrainingFeatureCount,
+            _fixedEffects = _fixedEffects?.Clone(),
+            _varianceDecomposition = CloneVarianceDecomposition(_varianceDecomposition),
+            _dispersion = _dispersion,
+            _logLikelihood = _logLikelihood,
+            _nObservations = _nObservations,
+            _nFixedParams = _nFixedParams,
+        };
+
+        foreach (var randomEffect in _randomEffects)
+        {
+            clone._randomEffects.Add(CloneRandomEffect(randomEffect));
+        }
+
+        return clone;
+    }
+
+    private static RandomEffect<T> CloneRandomEffect(RandomEffect<T> source)
+    {
+        RandomEffect<T> clone = source.RandomSlopeColumns is null
+            ? new RandomEffect<T>(source.Name, source.GroupColumnIndex)
+            : new RandomEffect<T>(
+                source.Name,
+                source.GroupColumnIndex,
+                (int[])source.RandomSlopeColumns.Clone(),
+                source.IsRandomIntercept);
+
+        clone.IsRandomIntercept = source.IsRandomIntercept;
+        clone.CovarianceMatrix = source.CovarianceMatrix?.Clone();
+        clone.GroupCoefficients = source.GroupCoefficients?.ToDictionary(
+            pair => pair.Key,
+            pair => pair.Value.Clone());
+        return clone;
+    }
+
+    private static VarianceDecomposition<T>? CloneVarianceDecomposition(
+        VarianceDecomposition<T>? source)
+    {
+        if (source is null) return null;
+
+        return new VarianceDecomposition<T>
+        {
+            ResidualVariance = CloneVarianceComponent(source.ResidualVariance),
+            RandomEffectVariances = source.RandomEffectVariances
+                .Select(CloneVarianceComponent)
+                .ToList(),
+        };
+    }
+
+    private static VarianceComponent<T> CloneVarianceComponent(VarianceComponent<T> source)
+        => new()
+        {
+            Name = source.Name,
+            Variance = source.Variance,
+            StandardError = source.StandardError,
+            ConfidenceIntervalLower = source.ConfidenceIntervalLower,
+            ConfidenceIntervalUpper = source.ConfidenceIntervalUpper,
+            CovarianceMatrix = source.CovarianceMatrix?.Clone(),
+            CorrelationMatrix = source.CorrelationMatrix?.Clone(),
+        };
 
     public override IFullModel<T, Matrix<T>, Vector<T>> DeepCopy() => Clone();
 }

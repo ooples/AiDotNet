@@ -1157,25 +1157,6 @@ public class NeuralNetworkRegression<T> : NonLinearRegressionBase<T>
     private static NeuralNetworkRegressionOptions<T, Matrix<T>, Vector<T>> CopyOptions(
         NeuralNetworkRegressionOptions<T, Matrix<T>, Vector<T>> source)
     {
-        return new NeuralNetworkRegressionOptions<T, Matrix<T>, Vector<T>>
-        {
-            Seed = source.Seed,
-            MaxIterations = source.MaxIterations,
-            Tolerance = source.Tolerance,
-            KernelType = source.KernelType,
-            Gamma = source.Gamma,
-            Coef0 = source.Coef0,
-            PolynomialDegree = source.PolynomialDegree,
-            LayerSizes = [.. source.LayerSizes],
-            Epochs = source.Epochs,
-            BatchSize = source.BatchSize,
-            LearningRate = source.LearningRate,
-            HiddenActivationFunction = source.HiddenActivationFunction,
-            OutputActivationFunction = source.OutputActivationFunction,
-            HiddenVectorActivation = source.HiddenVectorActivation,
-            OutputVectorActivation = source.OutputVectorActivation,
-            LossFunction = source.LossFunction,
-            OptimizerFactory = source.OptimizerFactory,
-        };
+        return new NeuralNetworkRegressionOptions<T, Matrix<T>, Vector<T>>(source);
     }
 }

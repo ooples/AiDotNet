@@ -141,7 +141,7 @@ public sealed class QuadraticProgram<T>
         }
 
         var numOps = MathHelper.GetNumericOperations<T>();
-        double symmetryTolerance = GetSymmetryTolerance();
+        double symmetryTolerance = GetSymmetryTolerance(numOps);
         for (int i = 0; i < quadratic.Rows; i++)
         {
             for (int j = 0; j < quadratic.Columns; j++)
@@ -255,14 +255,34 @@ public sealed class QuadraticProgram<T>
         }
     }
 
-    private static double GetSymmetryTolerance()
+    private static double GetSymmetryTolerance(INumericOperations<T> numOps)
     {
         // Compare in the precision of T, not in an arbitrary double policy. Eight ULPs allows
         // routine operation ordering noise while still rejecting materially asymmetric objectives.
         if (typeof(T) == typeof(float)) return 8.0 * 1.1920928955078125e-7;
         if (typeof(T) == typeof(double)) return 8.0 * 2.2204460492503131e-16;
         if (typeof(T) == typeof(decimal)) return 0.0;
-        return 1e-12;
+
+        // Measure the actual representable spacing around one through the numeric abstraction.
+        // This gives Half, fixed-point, and user-defined numeric types their own precision policy
+        // without teaching the solver an ever-growing list of concrete CLR types.
+        T one = numOps.One;
+        if (numOps.Compare(numOps.FromDouble(1.5), one) == 0) return 0.0;
+
+        double epsilon = 1.0;
+        for (int iteration = 0; iteration < 1074; iteration++)
+        {
+            double candidate = epsilon / 2.0;
+            if (candidate == 0.0 ||
+                numOps.Compare(numOps.FromDouble(1.0 + candidate), one) == 0)
+            {
+                break;
+            }
+
+            epsilon = candidate;
+        }
+
+        return 8.0 * epsilon;
     }
 
     private static void ValidateFiniteConstraintBlock(

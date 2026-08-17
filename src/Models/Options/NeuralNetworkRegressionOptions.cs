@@ -37,6 +37,37 @@ namespace AiDotNet.Models.Options;
 /// </remarks>
 public class NeuralNetworkRegressionOptions<T, TInput, TOutput> : NonLinearRegressionOptions
 {
+    /// <summary>Creates neural-regression options with the documented defaults.</summary>
+    public NeuralNetworkRegressionOptions()
+    {
+    }
+
+    /// <summary>Creates an independent copy of another neural-regression configuration.</summary>
+    /// <param name="other">The options to copy.</param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="other"/> is null.</exception>
+    public NeuralNetworkRegressionOptions(NeuralNetworkRegressionOptions<T, TInput, TOutput> other)
+    {
+        if (other is null) throw new ArgumentNullException(nameof(other));
+
+        Seed = other.Seed;
+        MaxIterations = other.MaxIterations;
+        Tolerance = other.Tolerance;
+        KernelType = other.KernelType;
+        Gamma = other.Gamma;
+        Coef0 = other.Coef0;
+        PolynomialDegree = other.PolynomialDegree;
+        LayerSizes = [.. other.LayerSizes];
+        Epochs = other.Epochs;
+        BatchSize = other.BatchSize;
+        LearningRate = other.LearningRate;
+        HiddenActivationFunction = other.HiddenActivationFunction;
+        OutputActivationFunction = other.OutputActivationFunction;
+        HiddenVectorActivation = other.HiddenVectorActivation;
+        OutputVectorActivation = other.OutputVectorActivation;
+        LossFunction = other.LossFunction;
+        OptimizerFactory = other.OptimizerFactory;
+    }
+
     /// <summary>
     /// Gets or sets the sizes of each layer in the neural network, including input, hidden, and output layers.
     /// </summary>

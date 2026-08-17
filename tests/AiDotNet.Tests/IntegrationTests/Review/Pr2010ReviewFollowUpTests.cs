@@ -1,4 +1,3 @@
-using System.Reflection;
 using AiDotNet.Classification.SVM;
 using AiDotNet.ComputerVision.Detection.Losses;
 using AiDotNet.Enums;
@@ -84,6 +83,84 @@ public class Pr2010ReviewFollowUpTests
             }));
 
         Assert.Contains("upper bound", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task HyperparameterProjection_RejectsNonFiniteAndInvertedBounds()
+    {
+        await Task.Yield();
+
+        var optimizer = new HyperparameterOptimizer<double>(maxIterations: 2);
+        Func<Dictionary<string, double>,
+            (double Loss, Dictionary<string, double> Gradient)> objective =
+            _ => (0.0, new Dictionary<string, double> { ["offset"] = 0.0 });
+
+        Assert.Throws<ArgumentException>(() => optimizer.GradientDescent(
+            new Dictionary<string, double> { ["offset"] = 0.0 },
+            objective,
+            parameterBounds: new Dictionary<string, (double min, double max)>
+            {
+                ["offset"] = (double.NaN, 1.0),
+            }));
+
+        Assert.Throws<ArgumentException>(() => optimizer.GradientDescent(
+            new Dictionary<string, double> { ["offset"] = 0.0 },
+            objective,
+            parameterBounds: new Dictionary<string, (double min, double max)>
+            {
+                ["offset"] = (2.0, 1.0),
+            }));
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task ControlOptions_CopyConstructorsPreserveSeedAndOwnMutableValues()
+    {
+        await Task.Yield();
+
+        var lmi = new LinearMatrixInequalityOptions
+        {
+            Seed = 17,
+            MaxIterations = 123,
+            Margin = 1e-6,
+            InitialStepSize = 0.25,
+            PowerIterations = 44,
+        };
+        var lmiCopy = new LinearMatrixInequalityOptions(lmi);
+
+        Assert.Equal(lmi.Seed, lmiCopy.Seed);
+        Assert.Equal(lmi.MaxIterations, lmiCopy.MaxIterations);
+        Assert.Equal(lmi.Margin, lmiCopy.Margin);
+        Assert.Equal(lmi.InitialStepSize, lmiCopy.InitialStepSize);
+        Assert.Equal(lmi.PowerIterations, lmiCopy.PowerIterations);
+
+        var lower = V(-2.0);
+        var terminal = Matrix<double>.CreateIdentity(1);
+        var nonlinear = new NonlinearModelPredictiveControllerOptions<double>
+        {
+            Seed = 23,
+            Horizon = 7,
+            SqpIterations = 3,
+            StepSize = 0.5,
+            Tolerance = 1e-7,
+            InputLowerBounds = lower,
+            InputUpperBounds = V(2.0),
+            TerminalCost = terminal,
+            WarmStart = false,
+        };
+        var nonlinearCopy = new NonlinearModelPredictiveControllerOptions<double>(nonlinear);
+
+        lower[0] = -99.0;
+        terminal[0, 0] = 99.0;
+
+        Assert.Equal(23, nonlinearCopy.Seed);
+        Assert.Equal(7, nonlinearCopy.Horizon);
+        Assert.Equal(3, nonlinearCopy.SqpIterations);
+        Assert.Equal(0.5, nonlinearCopy.StepSize);
+        Assert.Equal(1e-7, nonlinearCopy.Tolerance);
+        Assert.Equal(-2.0, nonlinearCopy.InputLowerBounds![0]);
+        Assert.Equal(2.0, nonlinearCopy.InputUpperBounds![0]);
+        Assert.Equal(1.0, nonlinearCopy.TerminalCost![0, 0]);
+        Assert.False(nonlinearCopy.WarmStart);
     }
 
     [Fact(Timeout = 120000)]
@@ -366,28 +443,32 @@ public class Pr2010ReviewFollowUpTests
     }
 
     [Fact(Timeout = 120000)]
-    public async Task LbfgsRoundTrip_PreservesAcceptedInverseHessianScale()
+    public async Task LbfgsRoundTrip_PreservesSubsequentOptimizationBehavior()
     {
         await Task.Yield();
 
+        Func<Vector<double>, (double objective, Vector<double> gradient)> objective = point =>
+            (0.5 * point[0] * point[0] + 25.0 * point[1] * point[1],
+                V(point[0], 50.0 * point[1]));
+
         var optimizer = LBFGSOptimizer<double, Tensor<double>, Tensor<double>>.CreateForFunction();
         optimizer.Minimize(
-            V(4.0),
-            point => (50.0 * point[0] * point[0], V(100.0 * point[0])),
+            V(4.0, 2.0),
+            objective,
             maxIterations: 5,
             tolerance: 1e-12);
 
         var restored = LBFGSOptimizer<double, Tensor<double>, Tensor<double>>.CreateForFunction();
         restored.Deserialize(optimizer.Serialize());
 
-        var field = typeof(LBFGSOptimizer<double, Tensor<double>, Tensor<double>>).GetField(
-            "_lbfgsInverseHessianScale", BindingFlags.Instance | BindingFlags.NonPublic);
-        Assert.NotNull(field);
-        double expected = (double)field.GetValue(optimizer)!;
-        double actual = (double)field.GetValue(restored)!;
+        var expected = optimizer.Minimize(V(-3.0, 1.5), objective, 3, 1e-12);
+        var actual = restored.Minimize(V(-3.0, 1.5), objective, 3, 1e-12);
 
-        Assert.NotEqual(1.0, expected);
-        Assert.Equal(expected, actual, 15);
+        Assert.Equal(expected.Length, actual.Length);
+        for (int i = 0; i < expected.Length; i++)
+        {
+            Assert.Equal(expected[i], actual[i], 15);
+        }
     }
 
     private static Vector<double> V(params double[] values) => Vector<double>.FromArray(values);

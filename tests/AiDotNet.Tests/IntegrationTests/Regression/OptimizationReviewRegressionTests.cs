@@ -1,6 +1,9 @@
 using AiDotNet.ActivationFunctions;
+using AiDotNet.Caching;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
+using AiDotNet.LossFunctions;
+using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.Optimizers;
 using AiDotNet.Regression;
@@ -146,6 +149,21 @@ public class OptimizationReviewRegressionTests
         byte[] payload = model.Serialize();
         int baseLength = BitConverter.ToInt32(payload, 0);
         int firstMatrixHeader = sizeof(int) + baseLength;
+        BitConverter.GetBytes(1_000_000).CopyTo(payload, firstMatrixHeader);
+        BitConverter.GetBytes(1_000).CopyTo(payload, firstMatrixHeader + sizeof(int));
+
+        Assert.Throws<InvalidDataException>(() => new BayesianRegression<double>().Deserialize(payload));
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task BayesianRegression_RejectsOverflowingMatrixShape()
+    {
+        await Task.Yield();
+
+        var model = new BayesianRegression<double>();
+        byte[] payload = model.Serialize();
+        int baseLength = BitConverter.ToInt32(payload, 0);
+        int firstMatrixHeader = sizeof(int) + baseLength;
         BitConverter.GetBytes(int.MaxValue).CopyTo(payload, firstMatrixHeader);
         BitConverter.GetBytes(int.MaxValue).CopyTo(payload, firstMatrixHeader + sizeof(int));
 
@@ -217,28 +235,142 @@ public class OptimizationReviewRegressionTests
     }
 
     [Fact(Timeout = 120000)]
+    public async Task NeuralNetworkRegressionOptions_CopyPreservesEverySettingAndOwnsLayerSizes()
+    {
+        await Task.Yield();
+
+        Func<IFullModel<double, Matrix<double>, Vector<double>>, IOptimizer<double, Matrix<double>, Vector<double>>>
+            optimizerFactory = owner => new AdamOptimizer<double, Matrix<double>, Vector<double>>(owner);
+        var original = new NeuralNetworkRegressionOptions<double, Matrix<double>, Vector<double>>
+        {
+            Seed = 17,
+            MaxIterations = 19,
+            Tolerance = 0.002,
+            KernelType = KernelType.Polynomial,
+            Gamma = 0.3,
+            Coef0 = 0.7,
+            PolynomialDegree = 4,
+            LayerSizes = [2, 5, 1],
+            Epochs = 23,
+            BatchSize = 7,
+            LearningRate = 0.04,
+            HiddenActivationFunction = new TanhActivation<double>(),
+            OutputActivationFunction = new IdentityActivation<double>(),
+            LossFunction = new MeanSquaredErrorLoss<double>(),
+            OptimizerFactory = optimizerFactory,
+        };
+
+        var copy = new NeuralNetworkRegressionOptions<double, Matrix<double>, Vector<double>>(original);
+        original.LayerSizes[0] = 99;
+
+        Assert.Equal(17, copy.Seed);
+        Assert.Equal(19, copy.MaxIterations);
+        Assert.Equal(0.002, copy.Tolerance);
+        Assert.Equal(KernelType.Polynomial, copy.KernelType);
+        Assert.Equal(0.3, copy.Gamma);
+        Assert.Equal(0.7, copy.Coef0);
+        Assert.Equal(4, copy.PolynomialDegree);
+        Assert.Equal([2, 5, 1], copy.LayerSizes);
+        Assert.NotSame(original.LayerSizes, copy.LayerSizes);
+        Assert.Equal(23, copy.Epochs);
+        Assert.Equal(7, copy.BatchSize);
+        Assert.Equal(0.04, copy.LearningRate);
+        Assert.Same(original.HiddenActivationFunction, copy.HiddenActivationFunction);
+        Assert.Same(original.OutputActivationFunction, copy.OutputActivationFunction);
+        Assert.Same(original.LossFunction, copy.LossFunction);
+        Assert.Same(optimizerFactory, copy.OptimizerFactory);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task OptimizationOptions_CopyOwnsNestedSettingsAndCacheConfiguration()
+    {
+        await Task.Yield();
+
+        var original = new OptimizationAlgorithmOptions<double, Matrix<double>, Vector<double>>
+        {
+            Seed = 31,
+            PredictionOptions = new PredictionStatsOptions
+            {
+                ConfidenceLevel = 0.91,
+                LearningCurveSteps = 13,
+            },
+            ModelStatsOptions = new ModelStatsOptions
+            {
+                Seed = 37,
+                ConditionNumberMethod = ConditionNumberMethod.L1Norm,
+                MulticollinearityThreshold = 0.72,
+                MaxVIF = 6,
+                MapTopK = 8,
+                NdcgTopK = 9,
+                AcfMaxLag = 11,
+                PacfMaxLag = 12,
+            },
+            ModelCache = new DefaultModelCache<double, Matrix<double>, Vector<double>>(
+                capacity: 3, CacheEvictionPolicy.LRU, enabled: false),
+        };
+
+        var copy = new OptimizationAlgorithmOptions<double, Matrix<double>, Vector<double>>(original);
+        original.PredictionOptions.ConfidenceLevel = 0.5;
+        original.ModelStatsOptions.MaxVIF = 99;
+
+        Assert.NotSame(original.PredictionOptions, copy.PredictionOptions);
+        Assert.Equal(0.91, copy.PredictionOptions.ConfidenceLevel);
+        Assert.Equal(13, copy.PredictionOptions.LearningCurveSteps);
+        Assert.NotSame(original.ModelStatsOptions, copy.ModelStatsOptions);
+        Assert.Equal(37, copy.ModelStatsOptions.Seed);
+        Assert.Equal(ConditionNumberMethod.L1Norm, copy.ModelStatsOptions.ConditionNumberMethod);
+        Assert.Equal(0.72, copy.ModelStatsOptions.MulticollinearityThreshold);
+        Assert.Equal(6, copy.ModelStatsOptions.MaxVIF);
+        Assert.Equal(8, copy.ModelStatsOptions.MapTopK);
+        Assert.Equal(9, copy.ModelStatsOptions.NdcgTopK);
+        Assert.Equal(11, copy.ModelStatsOptions.AcfMaxLag);
+        Assert.Equal(12, copy.ModelStatsOptions.PacfMaxLag);
+        Assert.NotSame(original.ModelCache, copy.ModelCache);
+
+        var copiedCache = Assert.IsType<DefaultModelCache<double, Matrix<double>, Vector<double>>>(
+            copy.ModelCache);
+        Assert.Equal(3, copiedCache.Capacity);
+        Assert.Equal(CacheEvictionPolicy.LRU, copiedCache.EvictionPolicy);
+        Assert.False(copiedCache.Enabled);
+    }
+
+    [Fact(Timeout = 120000)]
     public async Task NeuralNetworkRegression_DeserializeAcceptsPayloadBeforeScalingTrailer()
     {
         await Task.Yield();
 
-        var model = new NeuralNetworkRegression<double>(
-            new NeuralNetworkRegressionOptions<double, Matrix<double>, Vector<double>>
-            {
-                LayerSizes = [1, 2, 1],
-            });
+        var options = new NeuralNetworkRegressionOptions<double, Matrix<double>, Vector<double>>
+        {
+            Seed = 42,
+            LayerSizes = [1, 3, 1],
+            Epochs = 8,
+            BatchSize = 4,
+        };
+        var model = new NeuralNetworkRegression<double>(options);
+        var x = Column(new[] { -2.0, -1.0, 0.0, 1.0 });
+        var y = Vector<double>.FromArray(new[] { 90.0, 100.0, 110.0, 120.0 });
+        var probe = Column(new[] { 0.5 });
+
+        model.Train(x, y);
+        double currentPrediction = model.Predict(probe)[0];
         byte[] current = model.Serialize();
         const int trailerBytes = sizeof(int) + sizeof(int) + sizeof(double) + sizeof(double);
         byte[] legacy = current.Take(current.Length - trailerBytes).ToArray();
         var restored = new NeuralNetworkRegression<double>(
             new NeuralNetworkRegressionOptions<double, Matrix<double>, Vector<double>>
             {
-                LayerSizes = [1, 2, 1],
+                LayerSizes = [1, 3, 1],
             });
 
         restored.Deserialize(legacy);
-        Vector<double> prediction = restored.Predict(Column(new[] { 1.0 }));
+        double legacyPrediction = restored.Predict(probe)[0];
+        double targetMean = y.ToArray().Average();
+        double targetScale = Math.Sqrt(y.ToArray().Average(value => Math.Pow(value - targetMean, 2)));
+        double expectedIdentityMappedOutput = (currentPrediction - targetMean) / targetScale;
 
-        Assert.True(double.IsFinite(prediction[0]));
+        Assert.True(double.IsFinite(legacyPrediction));
+        Assert.Equal(expectedIdentityMappedOutput, legacyPrediction, 10);
+        Assert.NotEqual(currentPrediction, legacyPrediction);
     }
 
     private static Matrix<double> Column(double[] values)

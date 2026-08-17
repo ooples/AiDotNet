@@ -25,6 +25,8 @@ namespace AiDotNet.Models.Options;
 /// </remarks>
 public class ModelPredictiveControllerOptions<T> : ModelOptions
 {
+    private int _horizon = 10;
+
     /// <summary>Creates options with the documented defaults.</summary>
     public ModelPredictiveControllerOptions()
     {
@@ -65,7 +67,14 @@ public class ModelPredictiveControllerOptions<T> : ModelOptions
     /// <para><b>For Beginners:</b> Increase this when the controller reacts too late to a future
     /// limit. Decrease it when each control step is too expensive to compute.</para>
     /// </remarks>
-    public int Horizon { get; set; } = 10;
+    public int Horizon
+    {
+        get => _horizon;
+        set => _horizon = value > 0
+            ? value
+            : throw new ArgumentOutOfRangeException(
+                nameof(value), value, "Horizon must be a positive number of steps.");
+    }
 
     /// <summary>
     /// Gets or sets the lower bound on each control input, or <c>null</c> for unbounded below.

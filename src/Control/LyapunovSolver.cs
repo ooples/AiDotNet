@@ -1,4 +1,5 @@
 using AiDotNet.DecompositionMethods.MatrixDecomposition;
+using AiDotNet.Exceptions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.LinearAlgebra;
@@ -229,7 +230,7 @@ public sealed class LyapunovSolver<T>
         {
             solved = new LuDecomposition<T>(system).Solve(rightHandSide);
         }
-        catch (Exception)
+        catch (MatrixFactorizationException)
         {
             throw BuildSingularException(continuous);
         }
