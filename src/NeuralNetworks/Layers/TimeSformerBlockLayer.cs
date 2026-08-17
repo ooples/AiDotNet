@@ -158,6 +158,48 @@ public sealed partial class TimeSformerBlockLayer<T> : LayerBase<T>, IShapeContr
         return Forward(input, _configuredFrames);
     }
 
+    private bool _materializingSublayers;
+
+    /// <summary>
+    /// Materializes this block's lazily sized children before its parameter surface is read or
+    /// written.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The base recursion asks every registered child to materialize itself, which suffices for a
+    /// child sized by its own constructor arguments. The feed-forward projections are not: a dense
+    /// layer sizes its weights from the shape of its first input, and the only object that knows
+    /// what that shape will be is this block. The base can ask, but cannot answer — which is what
+    /// <see cref="MaterializeLazySublayers"/> exists to do.
+    /// </para>
+    /// <para>
+    /// Without this override the block reports its pre-forward parameter count, and a vector
+    /// captured from a block that has run a forward pass is rejected by one that has not.
+    /// </para>
+    /// </remarks>
+    protected override void EnsureParametersMaterialized()
+    {
+        base.EnsureParametersMaterialized();
+
+        // The dummy forward runs this same layer, which materializes again on the way in; without
+        // the guard that is unbounded recursion rather than a second visit.
+        if (_materializingSublayers) return;
+
+        _materializingSublayers = true;
+        try
+        {
+            MaterializeLazySublayers();
+        }
+        finally
+        {
+            _materializingSublayers = false;
+        }
+
+        // Re-run the base so the now-sized children are counted, and any payload parked while the
+        // layout was still short is applied.
+        base.EnsureParametersMaterialized();
+    }
+
     private void MaterializeLazySublayers()
     {
         bool wasTraining = IsTrainingMode;
