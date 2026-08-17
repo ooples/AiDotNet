@@ -15,4 +15,10 @@ public class LinearMixedModelTests : RegressionModelTestBase
         model.AddRandomIntercept("group", groupColumnIndex: 0);
         return model;
     }
+
+    /// <summary>
+    /// Column 0 is the grouping column, so it is a factor rather than a predictor and has no fixed
+    /// effect of its own - the same convention lme4 uses for <c>y ~ x + (1|group)</c>.
+    /// </summary>
+    protected override ISet<int> StructuralFeatureIndices => new HashSet<int> { 0 };
 }

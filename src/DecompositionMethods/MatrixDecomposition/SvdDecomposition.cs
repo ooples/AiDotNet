@@ -68,16 +68,72 @@ public class SvdDecomposition<T> : MatrixDecompositionBase<T>
     public Matrix<T> Vt { get; private set; } = new Matrix<T>(0, 0);
 
     private readonly SvdAlgorithmType _algorithm = SvdAlgorithmType.GolubReinsch;
+    private readonly double? _relativeTolerance;
+
+    /// <summary>
+    /// Gets the relative cutoff below which a singular value is treated as zero.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A singular value counts as zero when it is at or below <c>RelativeTolerance * S[0]</c>,
+    /// the largest singular value. The default is <c>max(rows, columns) * 2.22e-16</c>, matching
+    /// the convention LAPACK's <c>gelsd</c> and SciPy's <c>lstsq</c> use for <c>rcond</c>.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> A rank-deficient matrix - one whose columns repeat information - has
+    /// singular values that are mathematically zero. Computed in floating point they come out as
+    /// something like 1e-32 instead, and dividing by that produces an answer around 1e+32. This
+    /// cutoff is what stops that: anything small enough to be rounding noise is treated as the
+    /// zero it was meant to be, which yields the minimum-norm solution instead of a meaningless
+    /// enormous one.
+    /// </para>
+    /// </remarks>
+    public double RelativeTolerance { get; private set; }
+
+    /// <summary>
+    /// Gets the number of singular values above <see cref="RelativeTolerance"/>: the numerical
+    /// rank of the decomposed matrix.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> How many genuinely independent directions the matrix contains. A rank
+    /// below the column count means some columns are combinations of others, so a least-squares
+    /// fit has infinitely many equally good answers rather than one.
+    /// </para>
+    /// </remarks>
+    public int Rank { get; private set; }
 
     /// <summary>
     /// Initializes a new instance of the SVD decomposition for the specified matrix.
     /// </summary>
     /// <param name="matrix">The matrix to decompose.</param>
     /// <param name="svdAlgorithm">The algorithm to use for SVD computation.</param>
-    public SvdDecomposition(Matrix<T> matrix, SvdAlgorithmType svdAlgorithm = SvdAlgorithmType.GolubReinsch)
+    /// <param name="relativeTolerance">
+    /// The cutoff below which a singular value counts as zero, as a multiple of the largest
+    /// singular value. When null, <c>max(rows, columns) * 2.22e-16</c> is used, which is the
+    /// LAPACK and SciPy default. Pass 0 to invert every non-zero singular value; that reproduces
+    /// an exact-arithmetic pseudoinverse and is almost never what a floating-point computation
+    /// wants.
+    /// </param>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// Thrown when <paramref name="relativeTolerance"/> is negative.
+    /// </exception>
+    public SvdDecomposition(
+        Matrix<T> matrix,
+        SvdAlgorithmType svdAlgorithm = SvdAlgorithmType.GolubReinsch,
+        double? relativeTolerance = null)
         : base(matrix)
     {
+        if (relativeTolerance.HasValue && relativeTolerance.Value < 0.0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(relativeTolerance),
+                relativeTolerance,
+                "The relative tolerance must be zero or positive.");
+        }
+
         _algorithm = svdAlgorithm;
+        _relativeTolerance = relativeTolerance;
 
         Decompose();
     }
@@ -88,6 +144,35 @@ public class SvdDecomposition<T> : MatrixDecompositionBase<T>
     protected override void Decompose()
     {
         (U, S, Vt) = ComputeDecomposition(A, _algorithm);
+
+        // The LAPACK and SciPy default: relative to the largest singular value, and scaled by the
+        // size of the matrix because each dimension contributes rounding to the smallest one.
+        RelativeTolerance = _relativeTolerance
+            ?? Math.Max(A.Rows, A.Columns) * 2.220446049250313e-16;
+
+        var cutoff = SingularValueCutoff();
+
+        Rank = 0;
+        for (int i = 0; i < S.Length; i++)
+        {
+            if (NumOps.GreaterThan(S[i], cutoff)) Rank++;
+        }
+    }
+
+    /// <summary>
+    /// The absolute value at or below which a singular value counts as zero.
+    /// </summary>
+    private T SingularValueCutoff()
+    {
+        if (S.Length == 0) return NumOps.Zero;
+
+        T largest = S[0];
+        for (int i = 1; i < S.Length; i++)
+        {
+            if (NumOps.GreaterThan(S[i], largest)) largest = S[i];
+        }
+
+        return NumOps.Multiply(NumOps.FromDouble(RelativeTolerance), largest);
     }
 
     /// <summary>
@@ -125,9 +210,14 @@ public class SvdDecomposition<T> : MatrixDecompositionBase<T>
     public override Vector<T> Solve(Vector<T> b)
     {
         var x = new Vector<T>(Vt.Columns);
+        T cutoff = SingularValueCutoff();
+
         for (int i = 0; i < S.Length; i++)
         {
-            if (!NumOps.Equals(S[i], NumOps.Zero))
+            // A singular value at or below the cutoff is a mathematical zero that floating point
+            // reported as something tiny. Inverting it would multiply rounding noise by 1e+32; the
+            // pseudoinverse drops it instead, and that is what makes this the MINIMUM-NORM answer.
+            if (NumOps.GreaterThan(S[i], cutoff))
             {
                 // VECTORIZED: Use dot product for U column with b
                 Vector<T> uCol = U.GetColumn(i);

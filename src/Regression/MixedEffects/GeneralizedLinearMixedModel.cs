@@ -646,6 +646,61 @@ public partial class GeneralizedLinearMixedModel<T> : RegressionBase<T>
 
                 re.SetGroupEffect(groupId, blupVector);
             }
+
+            CentreRandomIntercepts(re, groups);
+        }
+    }
+
+    /// <summary>
+    /// Recentres a random intercept's BLUPs so they average zero across groups.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A random effect is DEFINED as a mean-zero deviation around the fixed intercept. The
+    /// alternating scheme here - estimate BLUPs from the residuals, then refit the fixed effects
+    /// against the response minus those BLUPs - has no term that enforces that, so it can settle at
+    /// a fixed point where the overall level is split between the two.
+    /// </para>
+    /// <para>
+    /// Measured, that is exactly what happened: shifting every response by 1000 moved the fixed
+    /// intercept by only 499.99, leaving the other half in per-group intercepts. Those do not
+    /// transfer to a group the model has not seen, so predictions for new groups lost half the
+    /// shift. Subtracting the mean here puts the level back where it belongs; the next
+    /// UpdateFixedEffects picks it up, because it fits against the response minus the recentred
+    /// BLUPs.
+    /// </para>
+    /// </remarks>
+    private void CentreRandomIntercepts(RandomEffect<T> re, Dictionary<double, List<int>> groups)
+    {
+        if (!re.IsRandomIntercept || groups.Count == 0) return;
+
+        double total = 0.0;
+        int counted = 0;
+
+        foreach (double groupId in groups.Keys)
+        {
+            var blup = re.GetGroupEffect(groupId);
+            if (blup.Length == 0) continue;
+
+            total += NumOps.ToDouble(blup[0]);
+            counted++;
+        }
+
+        if (counted == 0) return;
+
+        double mean = total / counted;
+        if (mean == 0.0) return;
+
+        foreach (double groupId in groups.Keys)
+        {
+            var blup = re.GetGroupEffect(groupId);
+            if (blup.Length == 0) continue;
+
+            var centred = new Vector<T>(blup.Length);
+            for (int j = 0; j < blup.Length; j++) centred[j] = blup[j];
+            centred[0] = NumOps.Subtract(centred[0], NumOps.FromDouble(mean));
+
+            re.SetGroupEffect(groupId, centred);
         }
     }
 

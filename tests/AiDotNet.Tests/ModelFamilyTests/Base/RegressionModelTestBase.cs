@@ -132,6 +132,31 @@ public abstract class RegressionModelTestBase<T> : System.IDisposable
     protected virtual int TestSamples => 30;
     protected virtual int Features => 3;
 
+    /// <summary>
+    /// Column indices that the model consumes as STRUCTURE rather than as predictors, and which
+    /// therefore have no fixed effect of their own.
+    /// </summary>
+    /// <remarks>
+    /// A mixed model given <c>y ~ x + (1|group)</c> treats the grouping column as a factor, not as
+    /// a numeric predictor — exactly as lme4 does — so asserting that it has a positive marginal
+    /// effect asks the model for something it is not meant to provide. Naming those columns here
+    /// keeps the invariant enforced on every genuine predictor instead of switching it off wholesale.
+    /// </remarks>
+    protected virtual ISet<int> StructuralFeatureIndices => new HashSet<int>();
+
+    /// <summary>
+    /// Whether the model is expected to reproduce the ORDER of the generating coefficients, not
+    /// merely their signs.
+    /// </summary>
+    /// <remarks>
+    /// GenerateLinearData uses increasing coefficients, so a linear fit's marginal effects come out
+    /// in the same order anywhere you probe them. A nonlinear model has no such guarantee: its
+    /// marginal effect varies from point to point, and at one probe location the ordering can
+    /// invert while the fit as a whole is perfectly good. The sign assertions still apply and are
+    /// the substantive check; this only governs the comparison between two features.
+    /// </remarks>
+    protected virtual bool CoefficientOrderingInvariantApplicable => true;
+
     // =====================================================
     // MATHEMATICAL INVARIANT: Translation Equivariance
     // Shifting all targets by constant C must shift predictions by C.
@@ -477,23 +502,36 @@ public abstract class RegressionModelTestBase<T> : System.IDisposable
         Assert.True(
             ModelTestHelpers.AllFinite(predictions),
             "Coefficient-sign predictions must be finite.");
-        // Each feature should have positive effect (GenerateLinearData uses positive coefficients)
+        // Each feature should have positive effect (GenerateLinearData uses positive coefficients).
+        // Structural columns are skipped: a mixed model's grouping column is a factor rather than
+        // a predictor, so it has no fixed effect to check the sign of.
+        var structural = StructuralFeatureIndices;
+
         for (int f = 0; f < nFeatures; f++)
         {
+            if (structural.Contains(f)) continue;
+
             double effect = predictions[1 + f] - predictions[0];
             Assert.True(effect > 0,
                 $"Feature x{f} effect = {effect:F4}, expected positive. " +
                 "Model learned wrong sign.");
         }
 
-        // If multiple features, x1 should have larger effect than x0
-        // (GenerateLinearData uses increasing coefficients)
-        if (nFeatures >= 2)
+        // GenerateLinearData uses increasing coefficients, so a later predictor should outweigh an
+        // earlier one. Compare the first two columns that are actually predictors.
+        var predictors = Enumerable.Range(0, nFeatures).Where(f => !structural.Contains(f)).ToArray();
+
+        if (predictors.Length >= 2 && CoefficientOrderingInvariantApplicable)
         {
-            double effectX0 = predictions[1] - predictions[0];
-            double effectX1 = predictions[2] - predictions[0];
-            Assert.True(effectX1 > effectX0,
-                $"Feature x1 effect ({effectX1:F4}) should be larger than x0 ({effectX0:F4}).");
+            int lower = predictors[0];
+            int upper = predictors[1];
+
+            double effectLower = predictions[1 + lower] - predictions[0];
+            double effectUpper = predictions[1 + upper] - predictions[0];
+
+            Assert.True(effectUpper > effectLower,
+                $"Feature x{upper} effect ({effectUpper:F4}) should be larger than "
+                + $"x{lower} ({effectLower:F4}).");
         }
     }
 

@@ -46,6 +46,12 @@ public class GeneralizedLinearMixedModelTests : RegressionModelTestBase
     /// </summary>
     protected override bool PredictiveQualityInvariantsApplicable => false;
 
+    /// <summary>
+    /// Column 0 is the grouping column, so it is a factor rather than a predictor and has no fixed
+    /// effect of its own - the same convention lme4 uses for <c>y ~ x + (1|group)</c>.
+    /// </summary>
+    protected override ISet<int> StructuralFeatureIndices => new HashSet<int> { 0 };
+
     [Fact(Timeout = 120000)]
     public async Task TrainedClone_PreservesAndOwnsCompleteFittedState()
     {
