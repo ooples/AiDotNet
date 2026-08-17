@@ -66,7 +66,7 @@ public class ClonePlanGenerator : IIncrementalGenerator
                     && !c.Modifiers.Any(m => m.ValueText == "abstract")
                     && !c.Modifiers.Any(m => m.ValueText == "static"),
                 static (ctx, _) => (INamedTypeSymbol?)ctx.SemanticModel.GetDeclaredSymbol(ctx.Node))
-            .Where(static s => s is not null && IsCloneable(s!));
+            .Where(static symbol => IsCloneable(symbol));
 
         var collected = candidates.Collect();
         context.RegisterSourceOutput(collected, static (spc, types) => Execute(spc, types!));
@@ -82,8 +82,12 @@ public class ClonePlanGenerator : IIncrementalGenerator
     /// consumer's own subclass is included automatically -- which is the point of the feature. A
     /// name-based rule would silently exclude anyone who named their class differently.
     /// </remarks>
-    private static bool IsCloneable(INamedTypeSymbol symbol)
+    private static bool IsCloneable(INamedTypeSymbol? symbol)
     {
+        // Roslyn normally supplies a symbol for a class declaration, but incomplete/error
+        // compilations are valid generator inputs. Keep that nullable boundary explicit instead
+        // of hiding it with null-forgiving syntax before this callback.
+        if (symbol is null) return false;
         if (!IsNameableFromGeneratedCode(symbol)) return false;
 
         // Anything the library treats as a model. The base-name list below predates this and covers
