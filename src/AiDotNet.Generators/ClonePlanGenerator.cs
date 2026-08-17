@@ -617,7 +617,8 @@ public class ClonePlanGenerator : IIncrementalGenerator
         if (parameter.Type.SpecialType is not SpecialType.None) return null;
         if (parameter.Type.TypeKind == TypeKind.Enum) return null;
 
-        string? found = null;
+        var fields = new List<string>();
+        var properties = new List<string>();
 
         for (var current = type; current is not null; current = current.BaseType)
         {
@@ -633,13 +634,22 @@ public class ClonePlanGenerator : IIncrementalGenerator
                 };
 
                 if (name is null) continue;
-                if (found is not null) return null;
 
-                found = name;
+                if (member is IFieldSymbol) fields.Add(name); else properties.Add(name);
             }
         }
 
-        return found;
+        // A property and its own backing field are one value here too, for the same reason they are
+        // in FindByNameSuffix: counting them separately made a type that occurs exactly once look
+        // like it occurred twice, and "not unique" then refused it. The projector a self-supervised
+        // method is built with is stored as _projector and read back through Projector, so the pair
+        // alone was enough to lose it.
+        properties.RemoveAll(p => fields.Any(
+            f => string.Equals(f.TrimStart('_'), p, System.StringComparison.OrdinalIgnoreCase)));
+
+        if (fields.Count + properties.Count != 1) return null;
+
+        return fields.Count == 1 ? fields[0] : properties[0];
     }
 
     /// <summary>
