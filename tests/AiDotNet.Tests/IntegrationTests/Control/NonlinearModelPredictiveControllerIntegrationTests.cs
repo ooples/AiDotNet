@@ -311,13 +311,13 @@ public class NonlinearModelPredictiveControllerIntegrationTests
 
         for (int step = 0; step < 30; step++)
         {
-            warm.ComputeControl(state);
+            var warmInput = warm.ComputeControl(state);
             cold.ComputeControl(state);
 
             warmTotal += warm.LastIterationCount;
             coldTotal += cold.LastIterationCount;
 
-            state = AdvancePendulum(state, warm.ComputeControl(state)[0]);
+            state = AdvancePendulum(state, warmInput[0]);
         }
 
         Assert.True(
@@ -348,26 +348,32 @@ public class NonlinearModelPredictiveControllerIntegrationTests
             Matrix<double>.CreateIdentity(1), Matrix<double>.CreateIdentity(1)));
     }
 
-    [Fact]
-    public void Nmpc_ZeroSqpIterations_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task Nmpc_ZeroSqpIterations_Throws()
     {
+        await Task.Yield();
+
         // Zero corrections would return the initial guess untouched, which is not a control law.
-        Assert.Throws<ArgumentException>(() => BuildTrivial(
-            new NonlinearModelPredictiveControllerOptions<double> { SqpIterations = 0 }));
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            new NonlinearModelPredictiveControllerOptions<double> { SqpIterations = 0 });
     }
 
-    [Fact]
-    public void Nmpc_StepSizeAboveOne_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task Nmpc_StepSizeAboveOne_Throws()
     {
-        Assert.Throws<ArgumentException>(() => BuildTrivial(
-            new NonlinearModelPredictiveControllerOptions<double> { StepSize = 1.5 }));
+        await Task.Yield();
+
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            new NonlinearModelPredictiveControllerOptions<double> { StepSize = 1.5 });
     }
 
-    [Fact]
-    public void Nmpc_NonPositiveHorizon_Throws()
+    [Fact(Timeout = 120000)]
+    public async Task Nmpc_NonPositiveHorizon_Throws()
     {
-        Assert.Throws<ArgumentException>(() => BuildTrivial(
-            new NonlinearModelPredictiveControllerOptions<double> { Horizon = 0 }));
+        await Task.Yield();
+
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            new NonlinearModelPredictiveControllerOptions<double> { Horizon = 0 });
     }
 
     [Fact]
@@ -399,6 +405,31 @@ public class NonlinearModelPredictiveControllerIntegrationTests
             inputCost: Matrix<double>.CreateIdentity(1));
 
         Assert.Throws<InvalidOperationException>(() => controller.ComputeControl(V(1.0)));
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task Nmpc_DecimalWithoutInputBounds_DoesNotMaterializeInfinity()
+    {
+        await Task.Yield();
+
+        var controller = new NonlinearModelPredictiveController<decimal>(
+            dynamics: (state, input) =>
+                Vector<decimal>.FromArray([state[0] + input[0]]),
+            jacobians: (state, input) =>
+                (Matrix<decimal>.CreateIdentity(1), Matrix<decimal>.CreateIdentity(1)),
+            stateCost: Matrix<decimal>.CreateIdentity(1),
+            inputCost: Matrix<decimal>.CreateIdentity(1),
+            options: new NonlinearModelPredictiveControllerOptions<decimal>
+            {
+                Horizon = 2,
+                SqpIterations = 1,
+                WarmStart = false,
+            });
+
+        var plan = controller.ComputePlan(Vector<decimal>.FromArray([1m]));
+
+        Assert.Equal(2, plan.Rows);
+        Assert.Equal(1, plan.Columns);
     }
 
     #endregion

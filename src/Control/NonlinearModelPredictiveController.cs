@@ -243,7 +243,7 @@ public sealed class NonlinearModelPredictiveController<T>
             // where the system would actually go rather than where a previous linear model predicted.
             var trajectory = Simulate(state, inputs);
 
-            var correction = SolveCorrection(state, inputs, trajectory);
+            var correction = SolveCorrection(inputs, trajectory);
 
             double change = ApplyCorrection(inputs, correction);
 
@@ -331,8 +331,7 @@ public sealed class NonlinearModelPredictiveController<T>
     /// correction point toward the origin rather than merely toward the nominal plan.
     /// </para>
     /// </remarks>
-    private Vector<T> SolveCorrection(
-        Vector<T> state, Vector<T>[] inputs, Vector<T>[] trajectory)
+    private Vector<T> SolveCorrection(Vector<T>[] inputs, Vector<T>[] trajectory)
     {
         var stateJacobians = new Matrix<T>[_horizon];
         var inputJacobians = new Matrix<T>[_horizon];
@@ -435,11 +434,12 @@ public sealed class NonlinearModelPredictiveController<T>
         }
 
         // Bounds move with the nominal plan: the correction must land the total input in range.
-        var lowerBounds = new Vector<T>(variableCount);
-        var upperBounds = new Vector<T>(variableCount);
-
-        T negativeInfinity = NumOps.FromDouble(double.NegativeInfinity);
-        T positiveInfinity = NumOps.FromDouble(double.PositiveInfinity);
+        Vector<T>? lowerBounds = _options.InputLowerBounds is null
+            ? null
+            : new Vector<T>(variableCount);
+        Vector<T>? upperBounds = _options.InputUpperBounds is null
+            ? null
+            : new Vector<T>(variableCount);
 
         for (int k = 0; k < _horizon; k++)
         {
@@ -447,13 +447,17 @@ public sealed class NonlinearModelPredictiveController<T>
             {
                 int index = k * _inputCount + i;
 
-                lowerBounds[index] = _options.InputLowerBounds is null
-                    ? negativeInfinity
-                    : NumOps.Subtract(_options.InputLowerBounds[i], inputs[k][i]);
+                if (lowerBounds is not null)
+                {
+                    lowerBounds[index] = NumOps.Subtract(
+                        _options.InputLowerBounds![i], inputs[k][i]);
+                }
 
-                upperBounds[index] = _options.InputUpperBounds is null
-                    ? positiveInfinity
-                    : NumOps.Subtract(_options.InputUpperBounds[i], inputs[k][i]);
+                if (upperBounds is not null)
+                {
+                    upperBounds[index] = NumOps.Subtract(
+                        _options.InputUpperBounds![i], inputs[k][i]);
+                }
             }
         }
 
@@ -472,8 +476,6 @@ public sealed class NonlinearModelPredictiveController<T>
                 $"{solution.Status}). Check that R is positive definite and that the input bounds " +
                 "are not contradictory.");
         }
-
-        _ = state;
 
         return solution.Solution;
     }

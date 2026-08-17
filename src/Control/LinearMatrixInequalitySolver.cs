@@ -60,6 +60,7 @@ namespace AiDotNet.Control;
 /// </example>
 public sealed class LinearMatrixInequalitySolver<T>
 {
+    private const double MatrixValidationTolerance = 1e-10;
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
     private readonly LinearMatrixInequalityOptions _options;
@@ -81,26 +82,6 @@ public sealed class LinearMatrixInequalitySolver<T>
     public LinearMatrixInequalitySolver(LinearMatrixInequalityOptions options)
     {
         _options = options ?? throw new ArgumentNullException(nameof(options));
-
-        if (options.MaxIterations <= 0)
-        {
-            throw new ArgumentException("MaxIterations must be positive.", nameof(options));
-        }
-
-        if (options.InitialStepSize <= 0.0)
-        {
-            throw new ArgumentException("InitialStepSize must be positive.", nameof(options));
-        }
-
-        if (options.PowerIterations <= 0)
-        {
-            throw new ArgumentException("PowerIterations must be positive.", nameof(options));
-        }
-
-        if (options.Margin < 0.0)
-        {
-            throw new ArgumentException("Margin cannot be negative.", nameof(options));
-        }
     }
 
     /// <summary>
@@ -136,6 +117,8 @@ public sealed class LinearMatrixInequalitySolver<T>
             throw new ArgumentException("F0 must have at least one row.", nameof(constantTerm));
         }
 
+        ValidateSymmetric(constantTerm, nameof(constantTerm), "F0");
+
         if (basis.Count == 0)
         {
             throw new ArgumentException(
@@ -157,6 +140,8 @@ public sealed class LinearMatrixInequalitySolver<T>
                     $"Basis matrix {i} must be {size}-by-{size} to match F0; it is " +
                     $"{basis[i].Rows}-by-{basis[i].Columns}.", nameof(basis));
             }
+
+            ValidateSymmetric(basis[i], nameof(basis), $"Basis matrix {i}");
         }
 
         int variableCount = basis.Count;
@@ -176,7 +161,7 @@ public sealed class LinearMatrixInequalitySolver<T>
 
         var best = current;
         double bestSmallest = double.NegativeInfinity;
-        var bestMatrix = Assemble(constantTerm, basis, current);
+        Matrix<T>? bestMatrix = null;
 
         int iteration;
         for (iteration = 1; iteration <= _options.MaxIterations; iteration++)
@@ -190,7 +175,7 @@ public sealed class LinearMatrixInequalitySolver<T>
 
             double smallest = -largest;
 
-            if (smallest > bestSmallest)
+            if (bestMatrix is null || smallest > bestSmallest)
             {
                 bestSmallest = smallest;
                 best = Copy(current);
@@ -229,6 +214,11 @@ public sealed class LinearMatrixInequalitySolver<T>
             current = next;
         }
 
+        if (bestMatrix is null)
+        {
+            throw new InvalidOperationException("The LMI search did not execute an iteration.");
+        }
+
         // Feasibility is confirmed by factorizing the matrix rather than trusting the eigenvalue
         // estimate that drove the search.
         bool feasible = IsPositiveSemidefinite(bestMatrix);
@@ -241,6 +231,34 @@ public sealed class LinearMatrixInequalitySolver<T>
             bestMatrix,
             NumOps.FromDouble(bestSmallest),
             Math.Min(iteration, _options.MaxIterations));
+    }
+
+    private static void ValidateSymmetric(Matrix<T> matrix, string parameterName, string displayName)
+    {
+        for (int row = 0; row < matrix.Rows; row++)
+        {
+            for (int column = row; column < matrix.Columns; column++)
+            {
+                double upper = NumOps.ToDouble(matrix[row, column]);
+                double lower = NumOps.ToDouble(matrix[column, row]);
+                if (double.IsNaN(upper) || double.IsInfinity(upper) ||
+                    double.IsNaN(lower) || double.IsInfinity(lower))
+                {
+                    throw new ArgumentException(
+                        $"{displayName} must contain only finite values; entries ({row}, {column}) " +
+                        $"and ({column}, {row}) were {upper} and {lower}.", parameterName);
+                }
+
+                double scale = Math.Max(1.0, Math.Max(Math.Abs(upper), Math.Abs(lower)));
+                if (Math.Abs(upper - lower) > MatrixValidationTolerance * scale)
+                {
+                    throw new ArgumentException(
+                        $"{displayName} must be symmetric within tolerance " +
+                        $"{MatrixValidationTolerance}; entries ({row}, {column}) and " +
+                        $"({column}, {row}) were {upper} and {lower}.", parameterName);
+                }
+            }
+        }
     }
 
     private static Vector<T> Copy(Vector<T> source)
@@ -389,7 +407,8 @@ public sealed class LinearMatrixInequalitySolver<T>
     /// performed, not on how accurately an iterative eigenvalue estimate has converged.
     /// </para>
     /// </remarks>
-    internal static bool IsPositiveSemidefinite(Matrix<T> matrix, double tolerance = 1e-10)
+    internal static bool IsPositiveSemidefinite(
+        Matrix<T> matrix, double tolerance = MatrixValidationTolerance)
     {
         int size = matrix.Rows;
         var factor = new double[size, size];

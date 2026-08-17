@@ -60,6 +60,40 @@ public class LyapunovAndLmiIntegrationTests
         return true;
     }
 
+    private static bool IsPositiveSemidefinite(Matrix<double> matrix, double tolerance = 1e-9)
+    {
+        int n = matrix.Rows;
+        var factor = new double[n, n];
+
+        for (int row = 0; row < n; row++)
+        {
+            for (int column = 0; column <= row; column++)
+            {
+                double value = matrix[row, column];
+                for (int k = 0; k < column; k++)
+                {
+                    value -= factor[row, k] * factor[column, k];
+                }
+
+                if (row == column)
+                {
+                    if (value < -tolerance) return false;
+                    factor[row, column] = Math.Sqrt(Math.Max(value, 0.0));
+                }
+                else if (factor[column, column] <= tolerance)
+                {
+                    if (Math.Abs(value) > tolerance) return false;
+                }
+                else
+                {
+                    factor[row, column] = value / factor[column, column];
+                }
+            }
+        }
+
+        return true;
+    }
+
     #region Lyapunov: closed forms
 
     /// <summary>
@@ -334,8 +368,10 @@ public class LyapunovAndLmiIntegrationTests
     /// Starting from an infeasible point, the search must move to a feasible one.
     /// </summary>
     [Fact]
-    public void Lmi_FromAnInfeasibleStart_ReachesFeasibility()
+    public async Task Lmi_FromAnInfeasibleStart_ReachesFeasibility()
     {
+        await Task.Yield();
+
         var constantTerm = M(new[,] { { -1.0, 0.0 }, { 0.0, -1.0 } });
         var basis = new List<Matrix<double>>
         {
@@ -348,7 +384,7 @@ public class LyapunovAndLmiIntegrationTests
             .Solve(constantTerm, basis);
 
         Assert.Equal(LinearMatrixInequalityStatus.Feasible, result.Status);
-        Assert.True(IsPositiveDefinite(result.Matrix, tolerance: -1e-9));
+        Assert.True(IsPositiveSemidefinite(result.Matrix));
     }
 
     /// <summary>
@@ -509,11 +545,26 @@ public class LyapunovAndLmiIntegrationTests
     }
 
     [Fact]
-    public void Lmi_NonPositiveIterationLimit_Throws()
+    public async Task Lmi_NonPositiveIterationLimit_Throws()
     {
-        Assert.Throws<ArgumentException>(() =>
-            new LinearMatrixInequalitySolver<double>(
-                new LinearMatrixInequalityOptions { MaxIterations = 0 }));
+        await Task.Yield();
+
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            new LinearMatrixInequalityOptions { MaxIterations = 0 });
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task Lmi_AsymmetricInput_IsRejectedBeforeSearch()
+    {
+        await Task.Yield();
+
+        var asymmetric = M(new[,] { { 1.0, 2.0 }, { 0.0, 1.0 } });
+        var basis = new List<Matrix<double>> { Matrix<double>.CreateIdentity(2) };
+
+        var exception = Assert.Throws<ArgumentException>(() =>
+            new LinearMatrixInequalitySolver<double>().Solve(asymmetric, basis));
+
+        Assert.Contains("symmetric", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     #endregion

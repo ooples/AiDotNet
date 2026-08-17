@@ -439,6 +439,16 @@ public class HyperparameterOptimizer<T>
 
                 if (parameterBounds is not null && parameterBounds.TryGetValue(name, out var bounds))
                 {
+                    if (double.IsNaN(bounds.min) || double.IsInfinity(bounds.min) ||
+                        double.IsNaN(bounds.max) || double.IsInfinity(bounds.max) ||
+                        bounds.min > bounds.max)
+                    {
+                        throw new ArgumentException(
+                            $"The bounds for hyperparameter '{name}' must be finite and ordered " +
+                            $"(minimum <= maximum), but were [{bounds.min}, {bounds.max}].",
+                            nameof(parameterBounds));
+                    }
+
                     if (requiresPositive && bounds.max < MinimumPositiveHyperparameter)
                     {
                         throw new ArgumentException(

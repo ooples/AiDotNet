@@ -1,5 +1,6 @@
 global using AiDotNet.Factories;
 using AiDotNet.Autodiff;
+using AiDotNet.Exceptions;
 using AiDotNet.Helpers;
 using AiDotNet.Models.Parameters;
 using Newtonsoft.Json;
@@ -502,7 +503,7 @@ public abstract class RegressionBase<T> : IRegression<T>, IConfigurableModel<T>,
                     var cholesky = new CholeskyDecomposition<T>(a);
                     return cholesky.Solve(b);
                 }
-                catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
+                catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or MatrixFactorizationException)
                 {
                     try
                     {
@@ -529,7 +530,7 @@ public abstract class RegressionBase<T> : IRegression<T>, IConfigurableModel<T>,
 
                         return result;
                     }
-                    catch (Exception ex2) when (ex2 is ArgumentException or InvalidOperationException)
+                    catch (Exception ex2) when (ex2 is ArgumentException or InvalidOperationException or MatrixFactorizationException)
                     {
                         // Most robust fallback (handles singular/ill-conditioned matrices).
                         var svd = new SvdDecomposition<T>(a);
