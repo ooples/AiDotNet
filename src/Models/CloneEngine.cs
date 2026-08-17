@@ -237,6 +237,20 @@ public static class CloneEngine
                     satisfied = false;
                     break;
                 }
+
+                // A member may hold the argument MORE GENERALLY than the constructor takes it: a
+                // time series model keeps its ARModelOptions in the base's Options property, and its
+                // own hand-written clone downcast on the way back in. The plan may now source such a
+                // member, so the runtime value is what decides whether this constructor really fits
+                // -- without this the call reaches Invoke and throws instead of moving on to the
+                // next candidate, which is the whole point of recording more than one.
+                if (arguments[i] is not null
+                    && !ReferenceEquals(arguments[i], Type.Missing)
+                    && !parameterInfos[i].ParameterType.IsInstanceOfType(arguments[i]))
+                {
+                    satisfied = false;
+                    break;
+                }
             }
 
             // OptionalParamBinding is what turns a Type.Missing slot into the declared default.

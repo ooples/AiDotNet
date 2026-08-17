@@ -680,8 +680,31 @@ public class ClonePlanGenerator : IIncrementalGenerator
             }
         }
 
-        return from.AllInterfaces.Any(i =>
-            SymbolEqualityComparer.Default.Equals(i.WithNullableAnnotation(NullableAnnotation.None), to));
+        if (from.AllInterfaces.Any(i =>
+            SymbolEqualityComparer.Default.Equals(i.WithNullableAnnotation(NullableAnnotation.None), to)))
+        {
+            return true;
+        }
+
+        // THE MEMBER MAY HOLD THE ARGUMENT MORE GENERALLY THAN THE CONSTRUCTOR TAKES IT. A time
+        // series model passes its ARModelOptions to the base and reads it back off the base's
+        // Options property, whose type is the general options base -- the model's own clone did
+        // `new ARModel<T>((ARModelOptions<T>)Options)`, downcasting exactly this way. Refusing the
+        // pair left three models unrebuildable over a value they never stopped holding.
+        //
+        // Safe because it is the RUNTIME value that settles it: CloneEngine now skips a candidate
+        // constructor whose argument is not an instance of the parameter type, so a member that
+        // happens to hold something else moves on to the next candidate instead of throwing.
+        for (var b = (to as INamedTypeSymbol)?.BaseType; b is not null; b = b.BaseType)
+        {
+            if (SymbolEqualityComparer.Default.Equals(b.WithNullableAnnotation(NullableAnnotation.None), from))
+            {
+                return true;
+            }
+        }
+
+        return to.AllInterfaces.Any(i =>
+            SymbolEqualityComparer.Default.Equals(i.WithNullableAnnotation(NullableAnnotation.None), from));
     }
 
 }
