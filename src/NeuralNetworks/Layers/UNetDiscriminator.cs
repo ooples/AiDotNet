@@ -394,12 +394,7 @@ public partial class UNetDiscriminator<T> : LayerBase<T>, IShapeContract
 
     private Tensor<T> ApplyLeakyReLU(Tensor<T> input)
     {
-        var output = TensorAllocator.Rent<T>(input._shape);
-        for (int i = 0; i < input.Length; i++)
-        {
-            output.Data.Span[i] = _leakyReLU.Activate(input.Data.Span[i]);
-        }
-        return output;
+        return Engine.LeakyReLU(input, _leakyReLU.Alpha);
     }
 
     private Tensor<T> BackwardLeakyReLU(Tensor<T> forwardInput, Tensor<T> gradient)
@@ -624,12 +619,7 @@ public partial class UNetConvBlock<T> : LayerBase<T>, IShapeContract
 
     private Tensor<T> ApplyLeakyReLU(Tensor<T> input)
     {
-        var output = TensorAllocator.Rent<T>(input._shape);
-        for (int i = 0; i < input.Length; i++)
-        {
-            output.Data.Span[i] = _leakyReLU.Activate(input.Data.Span[i]);
-        }
-        return output;
+        return Engine.LeakyReLU(input, _leakyReLU.Alpha);
     }
 
     private Tensor<T> BackwardLeakyReLU(Tensor<T> forwardInput, Tensor<T> gradient)
@@ -923,12 +913,7 @@ public partial class UNetUpBlock<T> : LayerBase<T>, IShapeContract
 
     private Tensor<T> ApplyLeakyReLU(Tensor<T> input)
     {
-        var output = TensorAllocator.Rent<T>(input._shape);
-        for (int i = 0; i < input.Length; i++)
-        {
-            output.Data.Span[i] = _leakyReLU.Activate(input.Data.Span[i]);
-        }
-        return output;
+        return Engine.LeakyReLU(input, _leakyReLU.Alpha);
     }
 
     private Tensor<T> BackwardLeakyReLU(Tensor<T> forwardInput, Tensor<T> gradient)

@@ -365,6 +365,113 @@ public sealed class ParameterComponentRegistry<T> : IParameterManifestProvider
         }
     }
 
+    /// <summary>
+    /// Restores every checkpoint slot whose stable identity and shape still match the live model.
+    /// </summary>
+    /// <remarks>
+    /// This is the safe checkpoint path for fitted models whose constructor-time state layout can
+    /// differ from their post-fit layout. A positional flat restore cannot recover after one field
+    /// grows, disappears, or changes shape: every later value shifts into the wrong field even when
+    /// the total count happens to agree. Stable-ID matching makes each field independent and leaves
+    /// model-specific deserialization in control of slots whose topology it reconstructed itself.
+    /// </remarks>
+    public void SetMatchingParameters(
+        Vector<T> parameters,
+        ParameterLayoutSnapshot checkpointLayout)
+    {
+        if (parameters is null) throw new ArgumentNullException(nameof(parameters));
+        if (checkpointLayout is null) throw new ArgumentNullException(nameof(checkpointLayout));
+        if (checkpointLayout.ParameterCount != parameters.Length)
+        {
+            throw new ArgumentException(
+                $"Checkpoint layout describes {checkpointLayout.ParameterCount?.ToString() ?? "an unresolved number of"} " +
+                $"values, but the payload contains {parameters.Length}.",
+                nameof(parameters));
+        }
+
+        lock (_surfaceGate)
+        {
+            PrepareSources(ParameterSurfaceIntent.Restore);
+            var target = CaptureLayout();
+            var checkpointSlots = new Dictionary<string, ParameterSlotDescriptor>(StringComparer.Ordinal);
+            for (int i = 0; i < checkpointLayout.Slots.Count; i++)
+                checkpointSlots.Add(checkpointLayout.Slots[i].StableId, checkpointLayout.Slots[i]);
+
+            for (int entryIndex = 0; entryIndex < target.Entries.Count; entryIndex++)
+            {
+                var item = target.Entries[entryIndex];
+                var source = item.Entry.Source;
+                if (source is null || !item.ParameterCount.HasValue) continue;
+
+                // A replaceable fitted vector/tensor can learn its width directly from its named
+                // checkpoint slot. Unlike the ordinary flat restore, this remains unambiguous even
+                // when several independent fitted fields are resizable.
+                if (source is IVariableLengthParameterSource<T> variable && variable.CanResizeOnRestore
+                    && checkpointSlots.TryGetValue(item.Entry.StableId, out var variableSlot)
+                    && variableSlot.ParameterCount is long variableCount
+                    && variableSlot.Offset is long variableOffset
+                    && variableCount > 0)
+                {
+                    var variableValues = new Vector<T>(checked((int)variableCount));
+                    parameters.AsSpan()
+                        .Slice(checked((int)variableOffset), checked((int)variableCount))
+                        .CopyTo(variableValues.AsWritableSpan());
+                    source.SetParameters(variableValues);
+                    continue;
+                }
+
+                int targetCount = checked((int)item.ParameterCount.Value);
+                if (targetCount == 0) continue;
+                var payload = new Vector<T>(targetCount);
+                int payloadOffset = 0;
+                bool completeMatch = true;
+
+                for (int slotIndex = 0; slotIndex < item.LocalSlots.Count; slotIndex++)
+                {
+                    var localSlot = item.LocalSlots[slotIndex];
+                    if (!localSlot.ParameterCount.HasValue)
+                    {
+                        completeMatch = false;
+                        break;
+                    }
+
+                    int count = checked((int)localSlot.ParameterCount.Value);
+                    if (count == 0) continue;
+                    string stableId = localSlot.StableId == "$"
+                        ? item.Entry.StableId
+                        : item.Entry.StableId + "/" + localSlot.StableId;
+                    if (!checkpointSlots.TryGetValue(stableId, out var checkpointSlot)
+                        || checkpointSlot.ParameterCount != count
+                        || !ShapesEqual(localSlot.Shape, checkpointSlot.Shape)
+                        || !checkpointSlot.Offset.HasValue)
+                    {
+                        completeMatch = false;
+                        break;
+                    }
+
+                    parameters.AsSpan()
+                        .Slice(checked((int)checkpointSlot.Offset.Value), count)
+                        .CopyTo(payload.AsWritableSpan().Slice(payloadOffset, count));
+                    payloadOffset += count;
+                }
+
+                if (completeMatch && payloadOffset == targetCount)
+                    source.SetParameters(payload);
+            }
+        }
+    }
+
+    private static bool ShapesEqual(IReadOnlyList<int>? left, IReadOnlyList<int>? right)
+    {
+        if (left is null || right is null) return left is null && right is null;
+        if (left.Count != right.Count) return false;
+        for (int i = 0; i < left.Count; i++)
+        {
+            if (left[i] != right[i]) return false;
+        }
+        return true;
+    }
+
     private void SetParametersCore(Vector<T> parameters)
     {
 

@@ -41,6 +41,7 @@ public partial class UPRNet<T> : FrameInterpolationBase<T>
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private bool _useNativeMode;
     private bool _customArchitecture;
+    private bool _paperShapesResolved;
     private bool _disposed;
 
     private readonly List<ILayer<T>> _featureStage0 = [];
@@ -170,6 +171,85 @@ public partial class UPRNet<T> : FrameInterpolationBase<T>
     private void Bind(List<ILayer<T>> destination, int count, ref int index)
     {
         for (int i = 0; i < count; i++) destination.Add(Layers[index++]);
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// The public <see cref="Layers"/> list is UPR-Net's stable serialization order, not a linear
+    /// execution chain. Resolve its shared modules against the real feature/motion/synthesis graph;
+    /// otherwise the base sequential walk feeds the six-channel frame pair directly to the
+    /// three-channel feature extractor and then carries unrelated branch widths into later modules.
+    /// Only this graph topology is model-specific; each layer still owns its normal automatic shape
+    /// and parameter materialization.
+    /// </remarks>
+    protected override void ResolveLazyLayerShapes()
+    {
+        if (_customArchitecture)
+        {
+            base.ResolveLazyLayerShapes();
+            return;
+        }
+
+        if (_paperShapesResolved || !_useNativeMode || Layers.Count == 0) return;
+        EnsurePaperBindings();
+
+        // Spatial values are only a cheap shape probe; UPR-Net's parameter tensors depend on the
+        // channel widths below, while the real input retains arbitrary valid H/W at runtime.
+        const int full = 16;
+        var stage0 = ResolveStageShapes(_featureStage0, [3, full, full]);
+        var stage1 = ResolveStageShapes(_featureStage1, stage0);
+        var stage2 = ResolveStageShapes(_featureStage2, stage1);
+
+        // radius-4 correlation (81), two warped 64-channel features, recurrent feature (64), flow (4)
+        ResolveStageShapes(_motionEstimator, [277, stage2[1], stage2[2]]);
+
+        // Synthesis inputs follow the released graph's concatenations. The returned shapes drive
+        // the next branch, so deconvolution scaling is derived by the layers rather than duplicated.
+        var synth0 = ResolveStageShapes(_synthEncoder0, [19, full, full]);
+        var synth1 = ResolveStageShapes(_synthEncoder1, [64, stage0[1], stage0[2]]);
+        var synth2 = ResolveStageShapes(_synthEncoder2, [128, stage1[1], stage1[2]]);
+        var decoder1 = ResolveStageShapes(_synthDecoder1, [256, stage2[1], stage2[2]]);
+        var decoder2 = ResolveStageShapes(_synthDecoder2,
+            [decoder1[0] + synth1[0], decoder1[1], decoder1[2]]);
+        var decoder0 = ResolveStageShapes(_synthDecoder0,
+            [decoder2[0] + synth0[0], decoder2[1], decoder2[2]]);
+        _synthPrediction!.ResolveFromShape(decoder0);
+        MarkLayerShapesResolved();
+        _paperShapesResolved = true;
+    }
+
+    private static int[] ResolveStageShapes(IReadOnlyList<ILayer<T>> layers, int[] inputShape)
+    {
+        int[] current = inputShape;
+        foreach (var layer in layers)
+        {
+            if (layer is LayerBase<T> layerBase)
+            {
+                // UPR-Net carries per-sample CHW shapes between graph branches. PReLU's published
+                // channel axis is the NCHW axis (1), however, so give that layer the batch axis it
+                // expects and remove it again before continuing the per-sample graph walk.
+                bool addBatchAxis = layer is PReLULayer<T> && current.Length == 3;
+                layerBase.ResolveFromShape(addBatchAxis
+                    ? [1, current[0], current[1], current[2]]
+                    : current);
+
+                var resolved = layer.GetOutputShape();
+                if (addBatchAxis && resolved is { Length: 4 })
+                    current = [resolved[1], resolved[2], resolved[3]];
+                else
+                    current = resolved ?? [];
+            }
+            else
+            {
+                current = layer.GetOutputShape() ?? [];
+            }
+
+            if (current.Length == 0 || current.Any(axis => axis <= 0))
+                throw new InvalidOperationException(
+                    $"UPR-Net shape resolution stopped at {layer.GetType().Name}; " +
+                    "the paper graph requires a concrete per-sample output shape.");
+        }
+        return current;
     }
 
     /// <summary>Runs the standard midpoint graph. Use <see cref="Interpolate"/> for arbitrary time.</summary>

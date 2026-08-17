@@ -1187,11 +1187,15 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, IConfigurabl
             var parameterSnapshot = Components.Count > 0
                 ? _parameterRegistry.GetParameters()
                 : ModelParameters;
+            var parameterLayout = Components.Count > 0
+                ? _parameterRegistry.ParameterLayout
+                : ParameterLayout;
             writer.Write(parameterSnapshot.Length);
             for (int i = 0; i < parameterSnapshot.Length; i++)
             {
                 writer.Write(Convert.ToDouble(parameterSnapshot[i]));
             }
+            WriteParameterCheckpointLayout(writer, parameterLayout);
 
             // Serialize evaluation metrics
             writer.Write(LastEvaluationMetrics.Count);
@@ -1265,6 +1269,7 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, IConfigurabl
             // Deserialize trained state
             IsTrained = reader.ReadBoolean();
             Vector<T>? parameterSnapshot = null;
+            AiDotNet.Models.Parameters.ParameterLayoutSnapshot? checkpointLayout = null;
             bool restoreParametersAfterCore = false;
 
             // Deserialize model parameters if trained
@@ -1276,6 +1281,7 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, IConfigurabl
                 {
                     parameterSnapshot[i] = NumOps.FromDouble(reader.ReadDouble());
                 }
+                checkpointLayout = ReadParameterCheckpointLayout(reader);
                 // Deserialize evaluation metrics
                 int metricsCount = reader.ReadInt32();
                 LastEvaluationMetrics.Clear();
@@ -1316,10 +1322,8 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, IConfigurabl
                     if (!_legacyModelParametersRegistered)
                         ModelParameters = parameterSnapshot.Clone();
 
-                    var readiness = _parameterRegistry.ParameterLayout.Readiness;
-                    if (readiness == AiDotNet.Models.Parameters.ParameterReadiness.ShapeDeferred ||
-                        readiness == AiDotNet.Models.Parameters.ParameterReadiness.ShapeResolvedUnmaterialized ||
-                        _parameterRegistry.ParameterCount != parameterSnapshot.Length)
+                    var currentLayout = _parameterRegistry.ParameterLayout;
+                    if (checkpointLayout is null || !LayoutsMatch(currentLayout, checkpointLayout))
                     {
                         restoreParametersAfterCore = true;
                     }
@@ -1334,14 +1338,108 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, IConfigurabl
             DeserializeCore(reader);
 
             // Deferred sources and layouts whose construction-time size differs from the saved
-            // manifest cannot accept the vector until model-specific state has materialized them.
-            if (restoreParametersAfterCore && parameterSnapshot is not null)
-                _parameterRegistry.SetParameters(parameterSnapshot);
+            // manifest cannot accept one positional vector. Restore only the fields whose stable
+            // identity and shape still match; model-specific deserialization owns the rest.
+            if (restoreParametersAfterCore && parameterSnapshot is not null && checkpointLayout is not null)
+                _parameterRegistry.SetMatchingParameters(parameterSnapshot, checkpointLayout);
         }
         catch (Exception ex)
         {
             throw new InvalidOperationException("Failed to deserialize model data. The data may be corrupted or incompatible with this model version.", ex);
         }
+    }
+
+    private static void WriteParameterCheckpointLayout(
+        BinaryWriter writer,
+        AiDotNet.Models.Parameters.ParameterLayoutSnapshot layout)
+    {
+        writer.Write(layout.Slots.Count);
+        for (int i = 0; i < layout.Slots.Count; i++)
+        {
+            var slot = layout.Slots[i];
+            if (!slot.ParameterCount.HasValue || !slot.Offset.HasValue)
+            {
+                throw new InvalidOperationException(
+                    $"Cannot serialize unresolved parameter slot '{slot.StableId}'.");
+            }
+
+            writer.Write(slot.StableId);
+            writer.Write(slot.ParameterCount.Value);
+            if (slot.Shape is null)
+            {
+                writer.Write(-1);
+            }
+            else
+            {
+                writer.Write(slot.Shape.Count);
+                for (int axis = 0; axis < slot.Shape.Count; axis++) writer.Write(slot.Shape[axis]);
+            }
+        }
+    }
+
+    private static AiDotNet.Models.Parameters.ParameterLayoutSnapshot ReadParameterCheckpointLayout(
+        BinaryReader reader)
+    {
+        int slotCount = reader.ReadInt32();
+        if (slotCount < 0)
+            throw new InvalidDataException("A parameter checkpoint cannot contain a negative slot count.");
+
+        var slots = new List<AiDotNet.Models.Parameters.ParameterSlotDescriptor>(slotCount);
+        long offset = 0;
+        for (int i = 0; i < slotCount; i++)
+        {
+            string stableId = reader.ReadString();
+            long count = reader.ReadInt64();
+            if (count < 0)
+                throw new InvalidDataException($"Parameter slot '{stableId}' has a negative size.");
+            int rank = reader.ReadInt32();
+            int[]? shape = null;
+            if (rank >= 0)
+            {
+                shape = new int[rank];
+                for (int axis = 0; axis < rank; axis++) shape[axis] = reader.ReadInt32();
+            }
+
+            slots.Add(new AiDotNet.Models.Parameters.ParameterSlotDescriptor(
+                stableId,
+                AiDotNet.Models.Parameters.ParameterSlotRole.Trainable,
+                count == 0
+                    ? AiDotNet.Models.Parameters.ParameterReadiness.ParameterFree
+                    : AiDotNet.Models.Parameters.ParameterReadiness.Materialized,
+                count,
+                offset,
+                shape));
+            offset = checked(offset + count);
+        }
+        return new AiDotNet.Models.Parameters.ParameterLayoutSnapshot(slots);
+    }
+
+    private static bool LayoutsMatch(
+        AiDotNet.Models.Parameters.ParameterLayoutSnapshot current,
+        AiDotNet.Models.Parameters.ParameterLayoutSnapshot checkpoint)
+    {
+        if (current.Slots.Count != checkpoint.Slots.Count) return false;
+        for (int i = 0; i < current.Slots.Count; i++)
+        {
+            var left = current.Slots[i];
+            var right = checkpoint.Slots[i];
+            if (!string.Equals(left.StableId, right.StableId, StringComparison.Ordinal)
+                || left.ParameterCount != right.ParameterCount
+                || !CheckpointShapesMatch(left.Shape, right.Shape))
+                return false;
+        }
+        return true;
+    }
+
+    private static bool CheckpointShapesMatch(IReadOnlyList<int>? left, IReadOnlyList<int>? right)
+    {
+        if (left is null || right is null) return left is null && right is null;
+        if (left.Count != right.Count) return false;
+        for (int i = 0; i < left.Count; i++)
+        {
+            if (left[i] != right[i]) return false;
+        }
+        return true;
     }
 
     /// <summary>

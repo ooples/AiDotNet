@@ -14004,6 +14004,28 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
 
     #region INeuralNetworkModel Implementation
 
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<Type, bool>
+        SequentialActivationFoldEligibility = new();
+
+    /// <summary>
+    /// Returns whether the declared <see cref="Layers"/> list can safely be probed as one chain.
+    /// </summary>
+    /// <remarks>
+    /// A custom lazy-shape resolver is an executable declaration that the model owns topology the
+    /// base sequential resolver cannot represent (branches, shared stages, multiple roots, or input
+    /// transforms). Speculatively forwarding its public serialization-order list can materialize a
+    /// lazy first layer against the wrong input before the probe fails, permanently corrupting the
+    /// real graph. Such models go straight to the observer path, which records their actual forward.
+    /// </remarks>
+    private bool CanFoldDeclaredLayersForActivations() =>
+        SequentialActivationFoldEligibility.GetOrAdd(GetType(), static modelType =>
+        {
+            var resolver = modelType.GetMethod(
+                nameof(ResolveLazyLayerShapes),
+                BindingFlags.Instance | BindingFlags.NonPublic);
+            return resolver?.DeclaringType == typeof(NeuralNetworkBase<T>);
+        });
+
     /// <summary>
     /// Gets the intermediate activations from each layer when processing the given input with named keys.
     /// </summary>
@@ -14025,26 +14047,29 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // is the fallback: models the fold already serves pay nothing, and a model the fold cannot
         // serve gets an answer instead of an exception.
         var activations = new Dictionary<string, Tensor<T>>();
-        try
+        if (CanFoldDeclaredLayersForActivations())
         {
-            var current = input;
-            for (int i = 0; i < Layers.Count; i++)
+            try
             {
-                current = Layers[i].Forward(current);
-                activations[$"Layer_{i}_{Layers[i].GetType().Name}"] = current.Clone();
-            }
+                var current = input;
+                for (int i = 0; i < Layers.Count; i++)
+                {
+                    current = Layers[i].Forward(current);
+                    activations[$"Layer_{i}_{Layers[i].GetType().Name}"] = current.Clone();
+                }
 
-            // AN EMPTY RESULT IS ALSO A FAILURE TO ANSWER, not an answer of "no activations".
-            // Layers is empty for every model that keeps its real layers somewhere else -- an echo
-            // state network's reservoir and readout, InfoGAN's generator / discriminator / Q trio --
-            // and the fold then completes without throwing and reports nothing. Falling through
-            // covers that case with the same machinery as the branched one.
-            if (activations.Count > 0) return activations;
-        }
-        catch (Exception)
-        {
-            // The fold is invalid for this topology. Fall through and record what the model itself does.
-            activations.Clear();
+                // AN EMPTY RESULT IS ALSO A FAILURE TO ANSWER, not an answer of "no activations".
+                // Layers is empty for every model that keeps its real layers somewhere else -- an echo
+                // state network's reservoir and readout, InfoGAN's generator / discriminator / Q trio --
+                // and the fold then completes without throwing and reports nothing. Falling through
+                // covers that case with the same machinery as the branched one.
+                if (activations.Count > 0) return activations;
+            }
+            catch (Exception)
+            {
+                // The fold is invalid for this topology. Fall through and record what the model itself does.
+                activations.Clear();
+            }
         }
 
         // The observer is already wired into LayerBase.Forward and composes with an enclosing trace,

@@ -30,9 +30,9 @@ namespace AiDotNet.Diffusion.NoisePredictors;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-// Rank 4 [Batch, Channels, Height, Width] - the standard diffusion feature-map layout, matching the
-// _inChannels/_outChannels/_spatialSize the block is constructed with. OutputAxesFor below is
-// HAND-WRITTEN: the channel count is a constructor argument, so no probe could derive it.
+// Rank 4 [Batch, Channels, Height, Width] - the standard diffusion feature-map layout. The
+// constructor's spatial size is nominal architecture metadata; runtime H/W remain polymorphic.
+// OutputAxesFor below is HAND-WRITTEN because the output channel count is a constructor argument.
 [TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
     Direction = TensorLayoutDirection.Input)]
 [TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
@@ -150,7 +150,8 @@ public partial class DiffusionResBlock<T> : LayerBase<T>, IShapeContract
         // so kernel tensors stay unallocated until the first Forward() call — diffusion
         // U-Nets contain dozens of these blocks and eager allocation OOMs CI.
         _norm1 = new GroupNormalizationLayer<T>(groups1, inChannels, epsilon);
-        _conv1 = new ConvolutionalLayer<T>(
+        _conv1 = ConvolutionalLayer<T>.WithInputDepth(
+            inputDepth: inChannels,
             outputDepth: outChannels,
             kernelSize: 3,
             stride: 1,
@@ -173,7 +174,8 @@ public partial class DiffusionResBlock<T> : LayerBase<T>, IShapeContract
 
         // Second block: GroupNorm(out) → SiLU → Conv3x3(out→out)
         _norm2 = new GroupNormalizationLayer<T>(groups2, outChannels, epsilon);
-        _conv2 = new ConvolutionalLayer<T>(
+        _conv2 = ConvolutionalLayer<T>.WithInputDepth(
+            inputDepth: outChannels,
             outputDepth: outChannels,
             kernelSize: 3,
             stride: 1,
@@ -184,7 +186,8 @@ public partial class DiffusionResBlock<T> : LayerBase<T>, IShapeContract
         // Skip connection: 1x1 conv if channels differ
         if (inChannels != outChannels)
         {
-            _skipConv = new ConvolutionalLayer<T>(
+            _skipConv = ConvolutionalLayer<T>.WithInputDepth(
+                inputDepth: inChannels,
                 outputDepth: outChannels,
                 kernelSize: 1,
                 stride: 1,
@@ -193,13 +196,11 @@ public partial class DiffusionResBlock<T> : LayerBase<T>, IShapeContract
                 initializationStrategy: InitializationStrategies<T>.Lazy);
         }
 
-        // Resolve every lazy child's declared parameter shape without allocating
-        // its storage. This gives ParameterCount / SetParameters an exact manifest
-        // before the first forward while retaining foundation-scale lazy memory use.
-        _conv1.ResolveShapesOnly([inChannels, spatialSize, spatialSize]);
+        // A timestep projection has one architecture-fixed feature width, so shape-only
+        // resolution is authoritative here. The convolutions deliberately use the channel-only
+        // WithInputDepth contract above: convolution parameters do not depend on H/W, and pinning
+        // those axes would make a valid variable-resolution U-Net shape walk return stale extents.
         _timeMlp?.ResolveShapesOnly([timeEmbedDim]);
-        _conv2.ResolveShapesOnly([outChannels, spatialSize, spatialSize]);
-        _skipConv?.ResolveShapesOnly([inChannels, spatialSize, spatialSize]);
 
         RegisterSubLayer(_norm1);
         RegisterSubLayer(_conv1);
@@ -208,10 +209,10 @@ public partial class DiffusionResBlock<T> : LayerBase<T>, IShapeContract
         RegisterSubLayer(_conv2);
         if (_skipConv is not null) RegisterSubLayer(_skipConv);
 
-        // Shape-only resolution records the exact parameter manifest without allocating
-        // foundation-scale weights. Registering those resolved children makes ParameterCount,
-        // GetParameters, and SetParameters share one stable order; actual storage remains lazy
-        // until a parameter value is requested or the first forward executes.
+        // Channel declarations record the exact convolution parameter manifest without allocating
+        // foundation-scale weights. Registering the children makes ParameterCount, GetParameters,
+        // and SetParameters share one stable order; actual storage remains lazy until a parameter
+        // value is requested or the first forward executes.
     }
 
     /// <summary>

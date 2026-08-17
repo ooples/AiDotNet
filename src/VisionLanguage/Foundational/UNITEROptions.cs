@@ -40,6 +40,11 @@ public class UNITEROptions : FoundationalVLMOptions
         OnnxOptions = other.OnnxOptions;
         LearningRate = other.LearningRate;
         WeightDecay = other.WeightDecay;
+        WarmupSteps = other.WarmupSteps;
+        TotalTrainingSteps = other.TotalTrainingSteps;
+        WarmupInitialLearningRate = other.WarmupInitialLearningRate;
+        EndLearningRate = other.EndLearningRate;
+        MaxGradientNorm = other.MaxGradientNorm;
         ImageMaskProbability = other.ImageMaskProbability;
         TextMaskProbability = other.TextMaskProbability;
         MaxImageRegions = other.MaxImageRegions;
@@ -53,6 +58,32 @@ public class UNITEROptions : FoundationalVLMOptions
 
     /// <summary>Gets or sets the maximum number of image regions.</summary>
     public int MaxImageRegions { get; set; } = 36;
+
+    /// <summary>Gets or sets the number of linear learning-rate warmup steps.</summary>
+    /// <remarks>The official all-data UNITER-base pre-training recipe uses 10,000 steps.</remarks>
+    public int WarmupSteps { get; set; } = 10_000;
+
+    /// <summary>Gets or sets the training horizon used by the post-warmup linear decay.</summary>
+    /// <remarks>The official all-data UNITER-base pre-training recipe uses 200,000 steps.</remarks>
+    public int TotalTrainingSteps { get; set; } = 200_000;
+
+    /// <summary>
+    /// Gets or sets the learning rate at the first warmup update, or <see langword="null"/> to
+    /// derive the first positive increment from <see cref="FoundationalVLMOptions.LearningRate"/>
+    /// and <see cref="WarmupSteps"/>.
+    /// </summary>
+    /// <remarks>
+    /// The derived default avoids an inert first optimizer step while continuing to scale correctly
+    /// when an advanced user customizes either the peak rate or the warmup duration.
+    /// </remarks>
+    public double? WarmupInitialLearningRate { get; set; }
+
+    /// <summary>Gets or sets the final learning rate after linear decay.</summary>
+    public double EndLearningRate { get; set; } = 0.0;
+
+    /// <summary>Gets or sets the global gradient-norm clipping threshold.</summary>
+    /// <remarks>The official all-data UNITER-base pre-training recipe uses 5.0.</remarks>
+    public double MaxGradientNorm { get; set; } = 5.0;
 
     public UNITEROptions()
     {

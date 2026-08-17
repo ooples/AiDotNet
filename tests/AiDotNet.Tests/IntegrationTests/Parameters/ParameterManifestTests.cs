@@ -634,6 +634,38 @@ public class ParameterManifestTests
     }
 
     [Fact]
+    public async Task MatchingRestore_UsesStableIdsWhenAnEarlierSlotChangesShape()
+    {
+        await Task.Yield();
+        Tensor<double>? changed = new(new[] { 2 });
+        Tensor<double>? unchanged = new(new[] { 2 });
+        changed[0] = -1;
+        changed[1] = -2;
+        unchanged[0] = -3;
+        unchanged[1] = -4;
+
+        var registry = new ParameterComponentRegistry<double>();
+        registry.Register("changed", new TensorFieldParameterSource<double>(() => changed));
+        registry.Register("unchanged", new TensorFieldParameterSource<double>(() => unchanged));
+
+        var checkpointLayout = new ParameterLayoutSnapshot(new[]
+        {
+            new ParameterSlotDescriptor(
+                "changed", ParameterSlotRole.Trainable, ParameterReadiness.Materialized,
+                parameterCount: 3, offset: 0, shape: new[] { 3 }),
+            new ParameterSlotDescriptor(
+                "unchanged", ParameterSlotRole.Trainable, ParameterReadiness.Materialized,
+                parameterCount: 2, offset: 3, shape: new[] { 2 })
+        });
+        var checkpoint = new Vector<double>(new[] { 10d, 11d, 12d, 20d, 21d });
+
+        registry.SetMatchingParameters(checkpoint, checkpointLayout);
+
+        Assert.Equal(new[] { -1d, -2d }, changed.ToArray());
+        Assert.Equal(new[] { 20d, 21d }, unchanged.ToArray());
+    }
+
+    [Fact]
     public async Task ResizableTensorFieldRestore_RejectsAmbiguousOrNonDivisibleShapes()
     {
         await Task.Yield();
