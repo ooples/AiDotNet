@@ -1095,23 +1095,6 @@ public partial class MMDiTNoisePredictor<T> : NoisePredictorBase<T>
 
     #region ICloneable Implementation
 
-    /// <inheritdoc />
-    public override INoisePredictor<T> Clone()
-    {
-        var clone = new MMDiTNoisePredictor<T>(
-            inputChannels: _inputChannels,
-            hiddenSize: _hiddenSize,
-            numJointLayers: _numJointLayers,
-            numSingleLayers: _numSingleLayers,
-            numHeads: _numHeads,
-            patchSize: _patchSize,
-            contextDim: _contextDim,
-            mlpRatio: _mlpRatio);
-
-        ProbeMaterializeAndCopyInto(clone);
-        return clone;
-    }
-
     /// <summary>
     /// Materializes <paramref name="clone"/> through one throwaway probe forward (the same path the
     /// source's weights resolved on) and then copies this predictor's weights into it.

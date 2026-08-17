@@ -677,6 +677,24 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape,
     }
 
     /// <summary>
+    /// The chunk surface's slots: the same walk as <see cref="EnumerateParameterValueSlots"/> but
+    /// covering every component <c>GetOwnParameterStateChunks</c> emits, so the chunk pair is
+    /// symmetric where the flat pair is the narrower trainable-only optimizer view.
+    /// </summary>
+    private IEnumerable<LayerBase<T>.ParameterStateWriteTarget> EnumerateParameterStateValueSlots()
+    {
+        foreach (var layer in ReflectInstanceLayers(this))
+        {
+            if (layer is not LayerBase<T> lb) continue;
+            foreach (var target in lb.GetOwnParameterStateWriteTargets())
+            {
+                if (target.ScalarCount == 0) continue;
+                yield return target;
+            }
+        }
+    }
+
+    /// <summary>
     /// Brings lazily-built layers into existence before their parameters are read or written.
     /// Does nothing by default, which is correct for the predictors that build eagerly.
     /// </summary>
@@ -837,20 +855,37 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape,
     }
 
     /// <summary>
-    /// Collects this predictor's reflectable trainable weight tensors (skipping null / empty),
-    /// summing their lengths, and reports whether that sum equals <see cref="ParameterCount"/> — i.e.
-    /// whether reflection sees the FULL parameter set. Only then is the flat-free per-tensor chunk
-    /// path (used by both <see cref="GetParameterChunks"/> and <see cref="SetParameterChunks"/>) safe;
-    /// otherwise those fall back to the legacy flat path so a predictor with non-LayerBase weight
-    /// storage (or unresolved lazy weights) round-trips correctly rather than dropping weights. Both
-    /// callers use this same walk on the same instance, so Get and Set agree on order by construction.
+    /// Collects the slots backing this predictor's CHUNK surface (skipping null / empty), summing
+    /// their lengths, and reports whether that sum equals <see cref="ParameterCount"/> — i.e. whether
+    /// reflection sees the FULL parameter set. Only then is the flat-free per-tensor chunk path (used
+    /// by both <see cref="GetParameterChunks"/> and <see cref="SetParameterChunks"/>) safe; otherwise
+    /// those fall back to the legacy flat path so a predictor with non-LayerBase weight storage (or
+    /// unresolved lazy weights) round-trips correctly rather than dropping weights. Both callers use
+    /// this same walk on the same instance, so Get and Set agree on order by construction.
     /// </summary>
+    /// <remarks>
+    /// The walk must be the STATE surface, not the trainable-only one. ParameterCount and the
+    /// declared manifest both count buffers, so collecting trainable slots made the gate compare
+    /// 88,860 against 95,116: it could never pass, every predictor silently collapsed to a single
+    /// flat blob (the failure mode the ParameterCount remarks warn about), and the resulting stream
+    /// was then too wide for the trainable-only SetParameters that consumed it.
+    /// </remarks>
     private bool TryCollectReflectedParameterSlots(
-        out List<LayerBase<T>.TrainableParameterValueSlot> slots)
+        out List<LayerBase<T>.ParameterStateWriteTarget> slots)
     {
-        slots = new List<LayerBase<T>.TrainableParameterValueSlot>();
+        slots = new List<LayerBase<T>.ParameterStateWriteTarget>();
+
+        // Ready the parameter structure BEFORE walking it. The completeness gate below compares the
+        // reflected total against ParameterCount, whose getter readies the structure as a side effect
+        // -- so without this call the walk runs against a still-lazy graph while the comparand is
+        // materialized, the totals cannot agree, and the caller silently drops to the flat path. On a
+        // freshly cloned predictor that path then threw "Expected 88860 parameters, got 95116": the
+        // copy's own weights had never been brought up. Readying first leaves the fallback for what it
+        // was meant for -- genuinely non-LayerBase weight storage.
+        EnsureParametersReadyGuarded();
+
         long total = 0;
-        foreach (var slot in EnumerateParameterValueSlots())
+        foreach (var slot in EnumerateParameterStateValueSlots())
         {
             slots.Add(slot);
             total += slot.ScalarCount;
@@ -889,7 +924,7 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape,
             // only tensor REFERENCES (no flat aggregate / no per-tensor data copy), so this stays
             // flat-free — matching the buffer-then-single-SetParameters atomicity of the legacy branch
             // and VAEModelBase/DiffusionModelBase without reintroducing the flat-vector OOM.
-            var pairs = new List<(Tensor<T> Src, LayerBase<T>.TrainableParameterValueSlot Dst)>(slots.Count);
+            var pairs = new List<(Tensor<T> Src, LayerBase<T>.ParameterStateWriteTarget Dst)>(slots.Count);
             foreach (var dst in slots)
             {
                 if (!e.MoveNext())
@@ -1990,9 +2025,17 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape,
     {
         using (ModelPersistenceGuard.InternalOperation())
         {
-            byte[] state = Serialize();
             var copy = (NoisePredictorBase<T>)AiDotNet.Models.CloneEngine.CopyConfiguration(this);
-            copy.Deserialize(state);
+
+            // Copy the weights CHUNK BY CHUNK rather than through Serialize/Deserialize. The
+            // roundtrip funnels every parameter into one MemoryStream, and a foundation-scale
+            // predictor crosses the CLR's ~2 GB single-array ceiling on the way in. That cost is
+            // why eleven predictors grew their own hand-written Clone() overrides, and those
+            // overrides are where cloning defects accumulated -- one of them decided whether to
+            // copy weights at all from a flag that records "a forward has run", so a freshly
+            // constructed model was cloned with its weights discarded. Making the base both
+            // correct and cheap is what lets those overrides be deleted rather than each fixed.
+            copy.SetParameterChunks(GetParameterChunks());
             return copy;
         }
     }

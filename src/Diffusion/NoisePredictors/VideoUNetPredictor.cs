@@ -1355,51 +1355,6 @@ public partial class VideoUNetPredictor<T> : NoisePredictorBase<T>
 
     #region ICloneable Implementation
 
-    /// <inheritdoc />
-    public override INoisePredictor<T> Clone()
-    {
-        var clone = new VideoUNetPredictor<T>(
-            _inputChannels,
-            _outputChannels,
-            _baseChannels,
-            _channelMultipliers,
-            _numResBlocks,
-            _attentionResolutions,
-            _numTemporalLayers,
-            _contextDim,
-            _numHeads,
-            _supportsImageConditioning,
-            _inputHeight,
-            _inputWidth,
-            _numFrames,
-            _clipTokenLength,
-            LossFunction);
-
-        // Resolve the SOURCE's lazy layers so each source layer reports its real
-        // parameter shape below. The source's resolving forward packs its OWN
-        // (correct) weights, so the source stays self-consistent.
-        TriggerLazyShapeResolution();
-
-        // Materialize the clone with the same execution path, then copy values into its existing
-        // tensors. This preserves layer-owned caches and avoids relying on SetParameters to infer
-        // a lazy tensor's shape from a flat length (which is ambiguous for grouped/deconvolutional
-        // kernels and caused output-divergent clones).
-        clone.TriggerLazyShapeResolution();
-        using (var srcEnum = EnumerateLayersInParameterOrder().GetEnumerator())
-        using (var cloneEnum = clone.EnumerateLayersInParameterOrder().GetEnumerator())
-        {
-            while (srcEnum.MoveNext() && cloneEnum.MoveNext())
-            {
-                var srcLayer = srcEnum.Current;
-                var cloneLayer = cloneEnum.Current;
-                if (srcLayer is null || cloneLayer is null)
-                    continue;
-                cloneLayer.SetParameters(srcLayer.GetParameters());
-            }
-        }
-        return clone;
-    }
-
     /// <summary>
     /// Runs a single dummy forward through the network at the configured
     /// spatial / frame size so every lazy layer (time-embedding MLPs,

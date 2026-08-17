@@ -1348,52 +1348,6 @@ public partial class UNetNoisePredictor<T> : NoisePredictorBase<T>
 
     #region ICloneable Implementation
 
-    /// <inheritdoc />
-    public override INoisePredictor<T> Clone()
-    {
-        var clone = new UNetNoisePredictor<T>(
-            architecture: _architecture,
-            inputChannels: _inputChannels,
-            outputChannels: _outputChannels,
-            baseChannels: _baseChannels,
-            channelMultipliers: _channelMultipliers,
-            numResBlocks: _numResBlocks,
-            attentionResolutions: _attentionResolutions,
-            contextDim: _contextDim,
-            numHeads: _numHeads,
-            inputHeight: _inputHeight,
-            lossFunction: LossFunction);
-
-        // Keep default paper-scale lazy constructors lazy. Already-materialized
-        // eager tensors are still copied, but lazy tensors are resolved only
-        // after a forward pass or explicit SetParameters has established
-        // runtime weight state.
-        if (_preserveMaterializedParameters)
-        {
-            clone.TriggerLazyShapeResolution();
-            // Preserve the complete trainable tensor graph. A per-layer
-            // GetParameters/SetParameters round-trip is not equivalent here:
-            // composite U-Net layers expose nested tensors through
-            // ITrainableLayer, and flattening only the parent layer can leave
-            // inference-visible child state at the clone's initialization.
-            // COW also avoids allocating a second foundation-scale parameter
-            // vector; the chunk fallback remains the safe eager path when the
-            // materialized source/clone graphs do not line up exactly.
-            if (!clone.TryShareParametersFrom(this))
-                clone.SetParameterChunks(GetParameterChunks());
-        }
-        else
-        {
-            if (_layersInitialized)
-            {
-                clone.EnsureLayersInitialized();
-            }
-
-            CopyMaterializedParametersTo(clone);
-        }
-        return clone;
-    }
-
     private void CopyMaterializedParametersTo(UNetNoisePredictor<T> clone)
         => CopyMaterializedParametersTo(clone, this);
 

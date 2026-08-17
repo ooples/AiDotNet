@@ -78,13 +78,4 @@ public class EMMDiTPredictor<T> : MMDiTNoisePredictor<T>
         _emmSeed = seed;
     }
 
-    /// <inheritdoc />
-    public override INoisePredictor<T> Clone()
-    {
-        var clone = new EMMDiTPredictor<T>(_emmInputChannels, _emmContextDim, _emmSeed);
-        // #1711: MMDiT LazyDense weights resolve via the FORWARD path; ProbeMaterializeAndCopyInto
-        // probe-forwards the clone then copies, instead of a naive re-RNG-initializing copy.
-        ProbeMaterializeAndCopyInto(clone);
-        return clone;
-    }
 }

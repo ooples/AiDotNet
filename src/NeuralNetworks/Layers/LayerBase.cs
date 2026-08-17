@@ -5998,6 +5998,112 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     }
 
     /// <summary>
+    /// The WRITABLE counterpart to <see cref="GetOwnParameterStateChunks"/>: one slot per component
+    /// that method yields a chunk for, in the same order, so a state chunk stream can be restored
+    /// through the slot API.
+    /// </summary>
+    /// <remarks>
+    /// Needed because the two public surfaces are deliberately different widths — the flat
+    /// GetParameters/SetParameters pair is the trainable-only optimizer view, while the chunk pair
+    /// carries the complete persistent state including buffers (see IParameterChunkSource). Restoring
+    /// chunks through the TRAINABLE slot list silently dropped every buffer and, when the widths
+    /// disagreed, threw "Expected 88860 parameters, got 95116" on a clone. Going through slots rather
+    /// than writing ParameterChunk.Tensor directly is what keeps fp16-resident and sparse components
+    /// correct: for those, the chunk carries a transient snapshot, so writing it would update nothing.
+    /// </remarks>
+    internal IReadOnlyList<ParameterStateWriteTarget> GetOwnParameterStateWriteTargets()
+    {
+        // Same materialization the chunk reader performs, so the two surfaces see one graph.
+        if (_pendingParameterRestore is not null)
+            EnsureParametersMaterialized();
+        else
+            EnsureOwnParametersMaterialized();
+
+        var components = GetOrderedParameterComponents();
+        var targets = new List<ParameterStateWriteTarget>();
+        for (int i = 0; i < components.Length; i++)
+        {
+            var component = components[i];
+
+            // Mirrors EnumerateParameterStateChunks' component switch, branch for branch. A layer
+            // still on the legacy flat vector contributes its whole Parameters surface as ONE chunk
+            // and owns no per-component value slot -- that is why a slots-only walk came up short.
+            if (component.Kind == DeclaredParameterComponentKind.Legacy)
+            {
+                if (Parameters.Length > 0) targets.Add(new ParameterStateWriteTarget(this));
+                continue;
+            }
+
+            if (component.Kind is DeclaredParameterComponentKind.Trainable
+                or DeclaredParameterComponentKind.Buffer)
+            {
+                if (ParameterComponentScalarCount(component) == 0) continue;
+                targets.Add(new ParameterStateWriteTarget(ValueSlot(component)));
+            }
+        }
+        return targets;
+    }
+
+    /// <summary>
+    /// One writable destination on the state-chunk surface: either a component's value slot or a
+    /// layer's legacy flat <see cref="Parameters"/> vector, which has no slot of its own.
+    /// </summary>
+    internal readonly struct ParameterStateWriteTarget
+    {
+        private readonly TrainableParameterValueSlot _slot;
+        private readonly LayerBase<T>? _legacyOwner;
+
+        internal ParameterStateWriteTarget(TrainableParameterValueSlot slot)
+        {
+            _slot = slot;
+            _legacyOwner = null;
+            ScalarCount = slot.ScalarCount;
+        }
+
+        internal ParameterStateWriteTarget(LayerBase<T> legacyOwner)
+        {
+            _slot = default;
+            _legacyOwner = legacyOwner;
+            ScalarCount = legacyOwner.Parameters.Length;
+        }
+
+        internal long ScalarCount { get; }
+
+        /// <summary>Reads this destination, matching the chunk reader's payload for the component.</summary>
+        internal Tensor<T> Snapshot()
+        {
+            var owner = _legacyOwner;
+            if (owner is null) return _slot.Snapshot();
+            return new Tensor<T>(new[] { owner.Parameters.Length }, owner.Parameters);
+        }
+
+        /// <summary>Writes this destination in place.</summary>
+        internal void CopyFrom(Tensor<T> source)
+        {
+            if (source is null) throw new ArgumentNullException(nameof(source));
+
+            var owner = _legacyOwner;
+            if (owner is null)
+            {
+                // Through the slot, never the chunk tensor: fp16-resident and sparse components hand
+                // out a transient snapshot, so writing that would update nothing.
+                _slot.CopyFrom(source);
+                return;
+            }
+
+            if (source.Length != owner.Parameters.Length)
+            {
+                throw new ArgumentException(
+                    $"Source tensor has {source.Length} values but the legacy parameter surface " +
+                    $"requires {owner.Parameters.Length}.", nameof(source));
+            }
+
+            var span = source.AsSpan();
+            for (int i = 0; i < span.Length; i++) owner.Parameters[i] = span[i];
+        }
+    }
+
+    /// <summary>
     /// Produces the authoritative value tensors used by copy-on-write validation. Ordinary slots
     /// return their existing tensor; resident fp16 slots return a transient full-precision snapshot.
     /// </summary>

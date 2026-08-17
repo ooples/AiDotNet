@@ -90,15 +90,4 @@ public class SiTPredictor<T> : DiTNoisePredictor<T>
         _sitSeed = seed;
     }
 
-    /// <inheritdoc />
-    public override INoisePredictor<T> Clone()
-    {
-        var clone = new SiTPredictor<T>(_sitInputChannels, _sitHiddenSize, _sitNumLayers, _sitNumHeads, _sitSeed);
-        // #1711: DiT LazyDense weights resolve via the FORWARD path, so a naive
-        // SetParameters(GetParameters()) / COW clone re-RNG-initializes on its first forward and
-        // diverges from the source. Use the base DiT clone semantics (probe-forward + copy), which
-        // also no-ops cleanly when the source has no materialized weights.
-        ProbeMaterializeAndCopyInto(clone);
-        return clone;
-    }
 }

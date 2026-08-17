@@ -551,36 +551,6 @@ public partial class UViTNoisePredictor<T> : NoisePredictorBase<T>
 
     #endregion
 
-    /// <inheritdoc />
-    public override INoisePredictor<T> Clone()
-    {
-        var clone = new UViTNoisePredictor<T>(
-            inputChannels: _inputChannels,
-            hiddenSize: _hiddenSize,
-            numLayers: _numLayers,
-            numHeads: _numHeads,
-            patchSize: _patchSize,
-            contextDim: _contextDim);
-        // The block attention layers only allocate weights on the first Forward; a fresh clone has
-        // resolved shapes but unallocated weights, so SetParameters/SetParameterChunks would land into
-        // nothing and the clone would re-RNG-init on its first real forward, diverging from the source.
-        // When the source has been materialized, probe-forward the clone through the same path first so
-        // the weights exist, THEN copy. Mirrors MMDiTXNoisePredictor.Clone.
-        if (_patchEmbed.IsInitialized)
-        {
-            int probeSpatial = (int)System.Math.Sqrt(_maxPatches) * _patchSize;
-            var probe = new Tensor<T>(new[] { 1, _inputChannels, probeSpatial, probeSpatial });
-            clone.PredictNoise(probe, timestep: 0, conditioning: null);
-        }
-        // _posEmbed is a random-init Tensor<T> field that is NOT part of Get/SetParameters and is not a
-        // trainable layer, so neither the COW share nor the SetParameters fallback below copies it —
-        // without this the clone keeps its own RNG-drawn positional embedding and diverges from the
-        // source. Copy-on-write share it (O(1) until either side writes).
-        if (_posEmbed is not null) clone._posEmbed = (Tensor<T>)_posEmbed.CloneShared();
-        if (!clone.TryShareParametersFrom(this)) clone.SetParameterChunks(GetParameterChunks());
-        return clone;
-    }
-
     protected override Vector<T> GetParameterGradients()
     {
         var allGrads = new List<T>();
