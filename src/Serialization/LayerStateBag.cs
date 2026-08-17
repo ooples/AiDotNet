@@ -1,4 +1,4 @@
-﻿using System.Globalization;
+using System.Globalization;
 
 namespace AiDotNet.Serialization;
 
@@ -73,9 +73,12 @@ public readonly struct LayerStateBag
     /// <summary><c>true</c> when a value is present for <paramref name="key"/>.</summary>
     public bool Has(string key) => TryRaw(key, out _);
 
-    private bool TryRaw(string key, out object value)
+    // [NotNullWhen(true)] states the contract the body already keeps: value is non-null on
+    // every true return. Without it each caller sees object? and needs its own suppression,
+    // which is how `null!` spreads outward from one place that knew better.
+    private bool TryRaw(string key, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out object? value)
     {
-        value = null!;
+        value = null;
         if (_values is null || !_values.TryGetValue(key, out var v) || v is null) return false;
         value = v;
         return true;
