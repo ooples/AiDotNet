@@ -209,7 +209,12 @@ public partial class TabDDPMGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
         }
 
         // Timestep projection is always internal
-        _timestepProjection = new FullyConnectedLayer<T>(_options.TimestepEmbeddingDimension,
+        // Embedding dimension in, embedding dimension out - the caller reads the result back
+        // as a vector of that same length. Stated explicitly rather than left lazy, because a
+        // lazy weight here resolves against whichever tensor reaches the layer first.
+        _timestepProjection = new FullyConnectedLayer<T>(
+            _options.TimestepEmbeddingDimension,
+            _options.TimestepEmbeddingDimension,
             new SiLUActivation<T>() as IActivationFunction<T>);
     }
 
@@ -238,12 +243,17 @@ public partial class TabDDPMGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
 
         if (_numNumericalFeatures > 0)
         {
-            _numericalOutputHead = new FullyConnectedLayer<T>(_numNumericalFeatures, identity);
+            // lastHidden is the width the denoiser stack actually emits, and it was computed just
+            // above and then discarded. Left lazy, this head instead resolved its input from the
+            // first tensor to arrive and then met the real hidden activation.
+            _numericalOutputHead = new FullyConnectedLayer<T>(
+                lastHidden, _numNumericalFeatures, identity);
         }
 
         if (_totalCategoricalWidth > 0)
         {
-            _categoricalOutputHead = new FullyConnectedLayer<T>(_totalCategoricalWidth, identity);
+            _categoricalOutputHead = new FullyConnectedLayer<T>(
+                lastHidden, _totalCategoricalWidth, identity);
         }
     }
 

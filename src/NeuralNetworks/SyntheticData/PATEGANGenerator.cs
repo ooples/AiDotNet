@@ -265,11 +265,15 @@ public partial class PATEGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
             for (int i = 0; i < dims.Length; i++)
             {
                 int layerInput = i == 0 ? _dataWidth : dims[i - 1];
-                layers.Add(new FullyConnectedLayer<T>(dims[i], identity));
+
+                // Both sizes, not just the output. The single-argument constructor leaves the
+                // weight lazy and lets the first forward decide the input width, which on this
+                // network resolves to the data width and then meets a hidden activation.
+                layers.Add(new FullyConnectedLayer<T>(layerInput, dims[i], identity));
             }
 
             int lastDim = dims.Length > 0 ? dims[^1] : _dataWidth;
-            var output = new FullyConnectedLayer<T>(1, identity);
+            var output = new FullyConnectedLayer<T>(lastDim, 1, identity);
 
             _teacherLayers.Add(layers);
             _teacherOutputs.Add(output);
@@ -287,12 +291,12 @@ public partial class PATEGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
         for (int i = 0; i < dims.Length; i++)
         {
             int layerInput = i == 0 ? _dataWidth : dims[i - 1];
-            _studentLayers.Add(new FullyConnectedLayer<T>(dims[i], identity));
+            _studentLayers.Add(new FullyConnectedLayer<T>(layerInput, dims[i], identity));
             _studentDropoutLayers.Add(new DropoutLayer<T>(_options.StudentDropout));
         }
 
         int lastDim = dims.Length > 0 ? dims[^1] : _dataWidth;
-        _studentLayers.Add(new FullyConnectedLayer<T>(1, identity));
+        _studentLayers.Add(new FullyConnectedLayer<T>(lastDim, 1, identity));
     }
 
     #endregion
