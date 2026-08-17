@@ -414,16 +414,6 @@ namespace AiDotNet.AutoML.NAS
             var config = AttentiveSample(context);
             return ConfigToArchitecture(config);
         }
-
-        protected override AutoMLModelBase<T, Tensor<T>, Tensor<T>> CreateInstanceForCopy()
-        {
-            return new AttentiveNAS<T>(
-                _nasSearchSpace,
-                elasticDepths: new List<int>(_elasticDepths),
-                elasticWidthMultipliers: new List<double>(_elasticWidthMultipliers),
-                elasticKernelSizes: new List<int>(_elasticKernelSizes),
-                attentionHiddenSize: _attentionHiddenSize);
-        }
     }
 
 }

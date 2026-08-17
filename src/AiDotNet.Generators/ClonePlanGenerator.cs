@@ -529,6 +529,9 @@ public class ClonePlanGenerator : IIncrementalGenerator
 
         for (var current = type; current is not null; current = current.BaseType)
         {
+            var fields = new List<string>();
+            var properties = new List<string>();
+
             foreach (var member in current.GetMembers())
             {
                 var name = member switch
@@ -543,11 +546,22 @@ public class ClonePlanGenerator : IIncrementalGenerator
                 if (name is null) continue;
                 if (!name.EndsWith(suffix, System.StringComparison.Ordinal)) continue;
 
-                // Two matches AT THE SAME LEVEL are genuinely ambiguous, and neither is chosen.
-                if (found is not null) return null;
-
-                found = name;
+                if (member is IFieldSymbol) fields.Add(name); else properties.Add(name);
             }
+
+            // A PROPERTY AND ITS OWN BACKING FIELD ARE ONE VALUE, NOT TWO CANDIDATES. Counting them
+            // separately is what made the pair ambiguous, and the ambiguity rule then refused BOTH.
+            // Every NAS model is shaped this way -- AttentiveNAS declares `_nasSearchSpace` and
+            // exposes `NasSearchSpace => _nasSearchSpace` beside it -- so all eight were reported
+            // unrebuildable over a parameter they do store, by the very lookup written to find it.
+            // The field is preferred because it is the slot the constructor assigned.
+            properties.RemoveAll(p => fields.Any(
+                f => string.Equals(f.TrimStart('_'), p, System.StringComparison.OrdinalIgnoreCase)));
+
+            // Anything still standing alongside another is genuinely ambiguous, and neither is chosen.
+            var matches = fields.Count + properties.Count;
+            if (matches > 1) return null;
+            if (matches == 1) found = fields.Count == 1 ? fields[0] : properties[0];
 
             // Most-derived wins. AttentiveNAS keeps its searchSpace in _nasSearchSpace while a base
             // also exposes SearchSpace; both hold it, and the one the constructor assigned is the one

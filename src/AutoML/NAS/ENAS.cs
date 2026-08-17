@@ -348,15 +348,5 @@ namespace AiDotNet.AutoML.NAS
         {
             return SampleArchitecture().architecture;
         }
-
-        protected override AutoMLModelBase<T, Tensor<T>, Tensor<T>> CreateInstanceForCopy()
-        {
-            return new ENAS<T>(
-                _nasSearchSpace,
-                _numNodes,
-                _controllerHiddenSize,
-                baselineDecay: _ops.ToDouble(_baselineDecay),
-                entropyWeight: _ops.ToDouble(_entropyWeight));
-        }
     }
 }

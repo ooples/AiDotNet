@@ -265,17 +265,5 @@ namespace AiDotNet.AutoML.NAS
         {
             return DeriveArchitecture();
         }
-
-        protected override AutoMLModelBase<T, Tensor<T>, Tensor<T>> CreateInstanceForCopy()
-        {
-            return new FBNet<T>(
-                _nasSearchSpace,
-                _numLayers,
-                targetPlatform: _targetPlatform,
-                latencyWeight: _ops.ToDouble(_latencyWeight),
-                initialTemperature: _initialTemperature,
-                inputChannels: _inputChannels,
-                spatialSize: _spatialSize);
-        }
     }
 }

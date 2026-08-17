@@ -431,16 +431,6 @@ namespace AiDotNet.AutoML.NAS
 
             return _ops.FromDouble(Math.Max(0, Math.Min(1.0, normalizedCapacity)));
         }
-
-        protected override AutoMLModelBase<T, Tensor<T>, Tensor<T>> CreateInstanceForCopy()
-        {
-            return new OnceForAll<T>(
-                _nasSearchSpace,
-                elasticDepths: new List<int>(_elasticDepths),
-                elasticWidths: new List<double>(_elasticWidths),
-                elasticKernelSizes: new List<int>(_elasticKernelSizes),
-                elasticExpansionRatios: new List<int>(_elasticExpansionRatios));
-        }
     }
 
 }

@@ -284,15 +284,5 @@ namespace AiDotNet.AutoML.NAS
         {
             return DeriveArchitecture();
         }
-
-        protected override AutoMLModelBase<T, Tensor<T>, Tensor<T>> CreateInstanceForCopy()
-        {
-            return new ProxylessNAS<T>(
-                _nasSearchSpace,
-                _numNodes,
-                targetPlatform: _targetPlatform,
-                latencyWeight: _ops.ToDouble(_latencyWeight),
-                useBinarization: _useBinarization);
-        }
     }
 }

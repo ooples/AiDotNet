@@ -177,14 +177,5 @@ namespace AiDotNet.AutoML.NAS
         {
             return DeriveArchitecture();
         }
-
-        protected override AutoMLModelBase<T, Tensor<T>, Tensor<T>> CreateInstanceForCopy()
-        {
-            return new GDAS<T>(
-                _nasSearchSpace,
-                _numNodes,
-                initialTemperature: _ops.ToDouble(_initialTemperature),
-                finalTemperature: _ops.ToDouble(_finalTemperature));
-        }
     }
 }

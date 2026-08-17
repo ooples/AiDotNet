@@ -234,14 +234,5 @@ namespace AiDotNet.AutoML.NAS
         {
             return DeriveArchitecture();
         }
-
-        protected override AutoMLModelBase<T, Tensor<T>, Tensor<T>> CreateInstanceForCopy()
-        {
-            return new PCDARTS<T>(
-                _nasSearchSpace,
-                _numNodes,
-                channelSamplingRatio: _channelSamplingRatio,
-                useEdgeNormalization: _useEdgeNormalization);
-        }
     }
 }
