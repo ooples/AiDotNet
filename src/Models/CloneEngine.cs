@@ -269,6 +269,29 @@ public static class CloneEngine
             Type.EmptyTypes,
             modifiers: null);
 
+        // A CONSTRUCTOR WHOSE PARAMETERS ARE ALL OPTIONAL IS A PARAMETERLESS ONE TO EVERY CALLER
+        // BUT REFLECTION. Type.EmptyTypes matches only a true zero-parameter constructor, so a type
+        // declaring `(options = null, regularization = null)` -- which most regressors do -- looked
+        // to this fallback like it had no constructor at all, and the clone failed with a message
+        // telling the reader to add one it already had. The loop above already binds this shape for
+        // a recorded candidate; the fallback now agrees with it.
+        if (constructor is null)
+        {
+            var withOptionalArguments = type
+                .GetConstructors(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance)
+                .FirstOrDefault(c => c.GetParameters().Length > 0
+                    && c.GetParameters().All(p => p.IsOptional));
+
+            if (withOptionalArguments is not null)
+            {
+                var defaults = new object?[withOptionalArguments.GetParameters().Length];
+                for (int i = 0; i < defaults.Length; i++) defaults[i] = Type.Missing;
+
+                return withOptionalArguments.Invoke(
+                    BindingFlags.OptionalParamBinding, binder: null, defaults, culture: null);
+            }
+        }
+
         if (constructor is null)
         {
             // SAY WHAT ACTUALLY HAPPENED. This used to read "has no parameterless constructor. Add
