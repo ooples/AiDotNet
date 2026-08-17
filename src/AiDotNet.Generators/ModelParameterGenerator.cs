@@ -1011,9 +1011,60 @@ public class ModelParameterGenerator : IIncrementalGenerator
             }
         }
 
-        return kind == ParameterMemberSemanticModel.Kind.Fitted
-            ? "global::AiDotNet.Models.Parameters.ParameterAvailability.Fit"
-            : "global::AiDotNet.Models.Parameters.ParameterAvailability.Construction";
+        if (kind == ParameterMemberSemanticModel.Kind.Fitted)
+            return "global::AiDotNet.Models.Parameters.ParameterAvailability.Fit";
+
+        // A buffer holding no value at construction is produced by Fit, and calling it
+        // "Construction" is simply false. The distinction is not cosmetic: an ABSENT buffer is
+        // normalized by availability, and Construction sends it to ConditionalAbsent — "an optional
+        // branch that is switched off" — so a freshly built model reported a concrete zero-parameter
+        // surface instead of one whose parameters had not been fitted yet. That is exactly the
+        // ambiguity ParameterCountContractTests rejects, and it failed all eight of the classifiers
+        // that store fit-produced state this way (the five NaiveBayes variants, KNeighbors, Voting,
+        // SelfTraining) while SupportVectorClassifier — structurally identical, but annotated
+        // [Buffer(Availability = Fit)] by hand — passed.
+        //
+        // Derived rather than annotated, for the same reason ParametersAreConstructionSized is: the
+        // declaration already answers the question. A buffer that is nullable and has no initializer
+        // holds null until something assigns it, and for a buffer that something is Fit. Anything
+        // with a construction-time value keeps Construction, so this only reclassifies members for
+        // which Construction could not have been true.
+        if (kind == ParameterMemberSemanticModel.Kind.Buffer && !HasConstructionValue(member))
+            return "global::AiDotNet.Models.Parameters.ParameterAvailability.Fit";
+
+        return "global::AiDotNet.Models.Parameters.ParameterAvailability.Construction";
+    }
+
+    /// <summary>
+    /// Whether a member already holds a value once the constructor has run.
+    /// </summary>
+    /// <remarks>
+    /// Deliberately conservative: it answers true unless the member is BOTH nullable-annotated and
+    /// without an initializer. A non-nullable member always has some value, and an initialized one
+    /// has it before Fit is ever called, so neither can be described as fit-produced.
+    /// </remarks>
+    private static bool HasConstructionValue(ISymbol member)
+    {
+        var nullability = member switch
+        {
+            IFieldSymbol field => field.NullableAnnotation,
+            IPropertySymbol property => property.NullableAnnotation,
+            _ => NullableAnnotation.None
+        };
+
+        if (nullability != NullableAnnotation.Annotated) return true;
+
+        foreach (var reference in member.DeclaringSyntaxReferences)
+        {
+            switch (reference.GetSyntax())
+            {
+                case VariableDeclaratorSyntax { Initializer: not null }:
+                case PropertyDeclarationSyntax { Initializer: not null }:
+                    return true;
+            }
+        }
+
+        return false;
     }
 
     private static string GenerateSource(INamedTypeSymbol classSymbol, string elem,
