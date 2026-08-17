@@ -194,7 +194,7 @@ public class CloneAutomationAnalyzer : DiagnosticAnalyzer
               + "records which one this instance was built with."
             : "These constructor parameters have no member holding their value: "
               + string.Join(", ", candidates[0].Parameters
-                  .Where(p => p.RefKind != RefKind.None || ClonePlanGenerator.FindSource(type, p) is null)
+                  .Where(p => p.RefKind != RefKind.None || ClonePlanGenerator.FindAnySource(type, p) is null)
                   .Select(p => $"'{p.Name}'"))
               + ".";
 

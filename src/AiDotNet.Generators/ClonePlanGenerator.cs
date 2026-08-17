@@ -411,15 +411,43 @@ public class ClonePlanGenerator : IIncrementalGenerator
 
         foreach (var constructor in constructors.OrderByDescending(c => c.Parameters.Length))
         {
-            var mapped = new List<string>(constructor.Parameters.Length);
+            var mapped = new string?[constructor.Parameters.Length];
             var satisfied = true;
 
-            foreach (var parameter in constructor.Parameters)
+            // RESOLVE BY ELIMINATION, IN TWO PASSES. A parameter named after a member takes it
+            // first; only then does the type fallback run, and it ignores anything already spoken
+            // for. Resolving each parameter in isolation made a constructor with two arguments of
+            // one type unresolvable even when only one was ambiguous: a self-supervised method
+            // takes a studentProjector and a teacherProjector, the teacher matches the base's
+            // TeacherProjector by name, and the student -- which is the only projector left -- was
+            // still refused as "not unique" because the claimed member was counted against it.
+            for (int i = 0; i < constructor.Parameters.Length; i++)
             {
                 // ref/out cannot be reproduced from reading a stored value.
-                if (parameter.RefKind != RefKind.None) { satisfied = false; break; }
+                if (constructor.Parameters[i].RefKind != RefKind.None) { satisfied = false; break; }
 
-                var member = FindSource(type, parameter);
+                mapped[i] = FindSource(type, constructor.Parameters[i]);
+            }
+
+            var claimed = new HashSet<string>(System.StringComparer.Ordinal);
+            foreach (var already in mapped)
+            {
+                if (already is not null) claimed.Add(already);
+            }
+
+            for (int i = 0; satisfied && i < constructor.Parameters.Length; i++)
+            {
+                if (mapped[i] is not null) continue;
+
+                var parameter = constructor.Parameters[i];
+
+                // Ignoring claimed members is a PREFERENCE, not a rule. Two parameters may legitimately
+                // read the same member, and banning it outright took the GAN family's resolutions away:
+                // a parameter that used to source a member by type now found it spoken for and refused
+                // the whole constructor. Falling back to the unrestricted search makes this strictly
+                // additive -- it can only resolve parameters that were unresolvable before.
+                var member = FindUniqueByType(type, parameter, claimed)
+                    ?? FindUniqueByType(type, parameter, NothingClaimed);
 
                 if (member is null)
                 {
@@ -432,14 +460,26 @@ public class ClonePlanGenerator : IIncrementalGenerator
                     // an ONNX model from being rebuilt as a native one.
                     if (!parameter.IsOptional) { satisfied = false; break; }
 
-                    mapped.Add(UseDefault);
+                    mapped[i] = UseDefault;
                     continue;
                 }
 
-                mapped.Add(member);
+                mapped[i] = member;
+                claimed.Add(member);
             }
 
-            if (satisfied) candidates.Add(mapped);
+            if (!satisfied) continue;
+
+            var resolved = new List<string>(mapped.Length);
+            foreach (var member in mapped)
+            {
+                // Only reachable with every slot decided: pass one leaves a name or null, and pass
+                // two replaces every remaining null with a member or the default sentinel, or the
+                // constructor was abandoned above.
+                resolved.Add(member ?? UseDefault);
+            }
+
+            candidates.Add(resolved);
         }
 
         return candidates.Count == 0 ? null : candidates;
@@ -500,7 +540,9 @@ public class ClonePlanGenerator : IIncrementalGenerator
             }
         }
 
-        return FindByNameSuffix(type, parameter) ?? FindUniqueByType(type, parameter);
+        // The type fallback is NOT tried here. It runs in a second pass over the whole constructor,
+        // once every name match is known, so it can ignore members another parameter already claimed.
+        return FindByNameSuffix(type, parameter);
     }
 
     /// <summary>
@@ -610,7 +652,22 @@ public class ClonePlanGenerator : IIncrementalGenerator
     /// unique match is a coincidence rather than a correspondence.
     /// </para>
     /// </remarks>
-    private static string? FindUniqueByType(INamedTypeSymbol type, IParameterSymbol parameter)
+    /// <summary>
+    /// Name-then-type sourcing for a parameter considered on its own, with nothing claimed.
+    /// </summary>
+    /// <remarks>
+    /// For the analyzer, which reports which parameters block a model and must answer that per
+    /// parameter. The plan itself resolves a constructor as a whole, so it uses the two passes.
+    /// </remarks>
+    internal static string? FindAnySource(INamedTypeSymbol type, IParameterSymbol parameter)
+        => FindSource(type, parameter) ?? FindUniqueByType(type, parameter, NothingClaimed);
+
+    private static readonly HashSet<string> NothingClaimed = new(System.StringComparer.Ordinal);
+
+    private static string? FindUniqueByType(
+        INamedTypeSymbol type,
+        IParameterSymbol parameter,
+        HashSet<string> claimed)
     {
         // A lone int or string field matching a lone int or string parameter says nothing: those
         // types recur, and the match would be luck. Richer types are genuinely identifying.
@@ -634,6 +691,10 @@ public class ClonePlanGenerator : IIncrementalGenerator
                 };
 
                 if (name is null) continue;
+
+                // Spoken for by a parameter that matched it by name, so it is not evidence about
+                // this one -- that is what lets the last unclaimed member of a repeated type resolve.
+                if (claimed.Contains(name)) continue;
 
                 if (member is IFieldSymbol) fields.Add(name); else properties.Add(name);
             }
