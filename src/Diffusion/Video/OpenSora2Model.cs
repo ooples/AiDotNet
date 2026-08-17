@@ -162,19 +162,6 @@ public partial class OpenSora2Model<T> : VideoDiffusionModelBase<T>
         return _predictor.PredictNoise(latents, timestep, imageEmbedding);
     }
 
-
-
-    public override IDiffusionModel<T> Clone()
-    {
-        EnsureInitialized();
-                return new OpenSora2Model<T>(
-            predictor: (DiTNoisePredictor<T>)_predictor.Clone(),
-            temporalVAE: (TemporalVAE<T>)_temporalVAE.Clone(),
-            conditioner: _conditioner,
-            defaultNumFrames: DefaultNumFrames,
-            defaultFPS: DefaultFPS);
-    }
-
     public override ModelMetadata<T> GetModelMetadata()
     {
         var metadata = new ModelMetadata<T>

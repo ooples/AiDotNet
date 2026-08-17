@@ -162,22 +162,6 @@ public partial class Wan22Model<T> : VideoDiffusionModelBase<T>
         return _predictor.PredictNoise(latents, timestep, imageEmbedding);
     }
 
-
-
-    public override IDiffusionModel<T> Clone()
-    {
-        EnsureInitialized();
-                return new Wan22Model<T>(
-            architecture: Architecture,
-            options: Options as DiffusionModelOptions<T>,
-            scheduler: Scheduler,
-            predictor: (DiTNoisePredictor<T>)_predictor.Clone(),
-            temporalVAE: (TemporalVAE<T>)_temporalVAE.Clone(),
-            conditioner: _conditioner,
-            defaultNumFrames: DefaultNumFrames,
-            defaultFPS: DefaultFPS);
-    }
-
     public override ModelMetadata<T> GetModelMetadata()
     {
         var metadata = new ModelMetadata<T>

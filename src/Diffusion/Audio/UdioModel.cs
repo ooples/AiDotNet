@@ -214,15 +214,6 @@ public partial class UdioModel<T> : AudioDiffusionModelBase<T>
 
     #region ICloneable Implementation
 
-    /// <inheritdoc />
-    public override IDiffusionModel<T> Clone()
-    {
-        EnsureInitialized();
-        return new UdioModel<T>(dit: (DiTNoisePredictor<T>)_dit.Clone(),
-            audioVAE: (AudioVAE<T>)_audioVAE.Clone(),
-            conditioner: _conditioner);
-    }
-
     #endregion
 
     #region Metadata

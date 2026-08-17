@@ -187,13 +187,6 @@ public partial class LuminaT2XModel<T> : LatentDiffusionModelBase<T>
 
     #region ICloneable
 
-    /// <inheritdoc />
-    public override IDiffusionModel<T> Clone()
-    {
-        EnsureInitialized();
-                        return new LuminaT2XModel<T>(dit: (DiTNoisePredictor<T>)_dit.Clone(), vae: (StandardVAE<T>)_vae.Clone(), conditioner: _conditioner);
-    }
-
     #endregion
 
     #region Metadata

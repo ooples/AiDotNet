@@ -349,18 +349,6 @@ public partial class Mochi1Model<T> : VideoDiffusionModelBase<T>
 
     #region ICloneable Implementation
 
-    /// <inheritdoc />
-    public override IDiffusionModel<T> Clone()
-    {
-        EnsureInitialized();
-                return new Mochi1Model<T>(
-            dit: (DiTNoisePredictor<T>)_dit.Clone(),
-            temporalVAE: (TemporalVAE<T>)_temporalVAE.Clone(),
-            conditioner: _conditioner,
-            defaultNumFrames: DefaultNumFrames,
-            defaultFPS: DefaultFPS);
-    }
-
     #endregion
 
     #region Metadata

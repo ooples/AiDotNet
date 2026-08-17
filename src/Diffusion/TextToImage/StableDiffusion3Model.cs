@@ -293,22 +293,6 @@ public partial class StableDiffusion3Model<T> : LatentDiffusionModelBase<T>
 
     #region ICloneable Implementation
 
-    /// <inheritdoc />
-    public override IDiffusionModel<T> Clone()
-    {
-        var (hiddenSize, numLayers, numHeads) = _variant switch
-        {
-            SD3Variant.Large or SD3Variant.LargeTurbo => (2432, 38, 38),
-            _ => (1536, 24, 24)
-        };
-
-                        return new StableDiffusion3Model<T>(
-            mmdit: (MMDiTNoisePredictor<T>)_mmdit.Clone(),
-            vae: (StandardVAE<T>)_vae.Clone(),
-            conditioner: _conditioner,
-            variant: _variant);
-    }
-
     #endregion
 
     #region Metadata

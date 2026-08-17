@@ -166,19 +166,6 @@ public partial class FlowVidModel<T> : VideoDiffusionModelBase<T>
         return _predictor.PredictNoise(latents, timestep, imageEmbedding);
     }
 
-
-
-    public override IDiffusionModel<T> Clone()
-    {
-        EnsureInitialized();
-                return new FlowVidModel<T>(
-            predictor: (VideoUNetPredictor<T>)_predictor.Clone(),
-            temporalVAE: (TemporalVAE<T>)_temporalVAE.Clone(),
-            conditioner: _conditioner,
-            defaultNumFrames: DefaultNumFrames,
-            defaultFPS: DefaultFPS);
-    }
-
     public override ModelMetadata<T> GetModelMetadata()
     {
         var metadata = new ModelMetadata<T>

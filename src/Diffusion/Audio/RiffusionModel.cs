@@ -576,24 +576,6 @@ public partial class RiffusionModel<T> : LatentDiffusionModelBase<T>
 
     #region ICloneable Implementation
 
-    /// <inheritdoc />
-    public override IDiffusionModel<T> Clone()
-    {
-        EnsureParameterShapesResolved();
-
-        // Preserve the actual injected architecture instead of rebuilding the
-        // default full-size SD 1.5 spectrogram stack.
-        var clonedUnet = (UNetNoisePredictor<T>)_unet.Clone();
-        var clonedVae = (StandardVAE<T>)_vae.Clone();
-
-        return new RiffusionModel<T>(
-            unet: clonedUnet,
-            vae: clonedVae,
-            conditioner: _conditioner,
-            spectrogramConfig: _spectrogramConfig,
-            seed: _seed);
-    }
-
     /// <summary>
     /// Materializes lazy submodule weights before state-dict style operations.
     /// </summary>
