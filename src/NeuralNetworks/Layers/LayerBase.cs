@@ -1740,6 +1740,63 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     /// The chunked model surface uses this boundary so asking for the first chunk does not bring an
     /// entire paper-scale hierarchy into memory before the iterator can yield.
     /// </summary>
+    /// <summary>
+    /// Finishes an initialization that <see cref="ResolveShapesOnly"/> deliberately left half-done,
+    /// for a caller that is about to read or write the parameter surface.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <see cref="ResolveShapesOnly"/> resolves the dimensions WITHOUT allocating, because eager
+    /// initialization would consume RNG state and perturb subsequent training. That leaves a state
+    /// no other flag describes: <see cref="IsShapeResolved"/> is true while the weights are still
+    /// placeholders, and <see cref="ResolveFromShape"/> — the one entry point that would allocate —
+    /// returns immediately on exactly that condition. A restore then arrived at a Conv1DLayer whose
+    /// shape claimed to be known and whose kernels were still [0,0,0,0], so the base compared 5,632
+    /// incoming values against a surface of 0 and rejected the payload.
+    /// </para>
+    /// <para>
+    /// Only on the parameter-surface path, never for ordinary shape queries — deferring allocation
+    /// is the entire point of <see cref="ResolveShapesOnly"/> and this must not undo it. Here the
+    /// RNG concern does not apply: the caller is about to overwrite these weights with restored
+    /// values, so the freshly initialized ones never survive to influence training.
+    /// </para>
+    /// <para>
+    /// Both shape conventions are tried because <see cref="InputShape"/> describes one sample for
+    /// some layers and the full batched input for others: Conv1DLayer resolves to [channels, length]
+    /// but reads <c>input.Shape[2]</c>, so the bare shape throws on rank and only the batched form
+    /// initializes it. Asking the layer rather than assuming is what keeps this in the base.
+    /// </para>
+    /// </remarks>
+    private void CompleteShapeOnlyResolutionIfPending()
+    {
+        if (!_shapeOnlyResolutionPendingFirstForward) return;
+
+        var resolved = InputShape;
+        if (resolved is null || resolved.Length == 0) return;
+        for (int i = 0; i < resolved.Length; i++)
+        {
+            if (resolved[i] <= 0) return;
+        }
+
+        var batched = new int[resolved.Length + 1];
+        batched[0] = 1;
+        System.Array.Copy(resolved, 0, batched, 1, resolved.Length);
+
+        foreach (var candidate in new[] { batched, resolved })
+        {
+            try
+            {
+                EnsureInitializedFromInput(new Tensor<T>(candidate));
+                return;
+            }
+            catch (Exception)
+            {
+                // Wrong convention for this layer; try the other. If neither works the layer keeps
+                // whatever it had and the caller's count check reports the shortfall as before.
+            }
+        }
+    }
+
     private void EnsureOwnParametersMaterialized()
     {
         // NOT gated on IsInitialized. The base declares `public virtual bool IsInitialized => true;`
@@ -1761,6 +1818,7 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
             && declaredParameterCount > 0;
         if (IsShapeResolved || ParametersAreConstructionSized || hasCountableDeclaredParameters)
         {
+            CompleteShapeOnlyResolutionIfPending();
             EnsureInitializationSerialized();
             // #1715: register the just-materialized streaming weights with the pool so transparent
             // auto-eviction can page them out — the forward path does this via
