@@ -646,7 +646,39 @@ public sealed class ModelStateRegistry<T>
         }
         catch (MissingMethodException)
         {
-            // Falls through to the same message; the cause is the same either way.
+            // Falls through to the optional-argument attempt below.
+        }
+
+        // A CONSTRUCTOR WHOSE PARAMETERS ARE ALL OPTIONAL IS CALLABLE WITH NO ARGUMENTS, but
+        // Activator's parameterless lookup cannot see it. DecisionTreeRegression declares exactly
+        // one constructor, `(DecisionTreeOptions? options = null, IRegularization? regularization =
+        // null)`, so `new DecisionTreeRegression<T>()` compiles while reflection reported the type as
+        // having no constructor at all -- and RandomForestRegression, whose payload holds trees a
+        // freshly constructed clone has none of, failed its round-trip on that alone.
+        //
+        // CloneEngine already binds this shape with OptionalParamBinding, which turns a Type.Missing
+        // slot into the declared default. Doing the same here fixes every child type of this shape,
+        // rather than asking each one to declare a second, empty constructor.
+        var withOptionalArguments = typeof(TChild)
+            .GetConstructors(System.Reflection.BindingFlags.Public
+                | System.Reflection.BindingFlags.NonPublic
+                | System.Reflection.BindingFlags.Instance)
+            .FirstOrDefault(c => c.GetParameters().Length > 0
+                && c.GetParameters().All(p => p.IsOptional));
+
+        if (withOptionalArguments is not null)
+        {
+            var arguments = new object?[withOptionalArguments.GetParameters().Length];
+            for (int i = 0; i < arguments.Length; i++) arguments[i] = Type.Missing;
+
+            if (withOptionalArguments.Invoke(
+                    System.Reflection.BindingFlags.OptionalParamBinding,
+                    binder: null,
+                    arguments,
+                    culture: null) is TChild built)
+            {
+                return built;
+            }
         }
 
         throw new InvalidOperationException(
