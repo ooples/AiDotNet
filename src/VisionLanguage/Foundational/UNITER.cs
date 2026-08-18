@@ -106,6 +106,7 @@ public class UNITER<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionModel<
         : base(architecture)
     {
         _options = options ?? new UNITEROptions();
+        _options.Validate();
         _useNativeMode = true;
         _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
             this,

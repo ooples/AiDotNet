@@ -486,8 +486,7 @@ public abstract class DiffusionModelTestBase<TNum> : IAsyncLifetime
         var input = CreateRandomTensor(InputShape, rng);
 
         var output = PredictModel(model, input);
-        int expectedLength = OutputShape.Aggregate(1, (product, dimension) => product * dimension);
-        Assert.Equal(expectedLength, output.Length);
+        Assert.Equal(OutputShape, output.Shape.ToArray());
     }
 
     // =====================================================
@@ -639,8 +638,8 @@ public abstract class DiffusionModelTestBase<TNum> : IAsyncLifetime
         var input = CreateRandomTensor(InputShape, rng);
 
         var original = PredictModel(model, input);
-        var cloned = model.Clone();
-        var clonedDiffusion = Assert.IsAssignableFrom<IDiffusionModel<TNum>>(cloned);
+        using var clonedDiffusion =
+            Assert.IsAssignableFrom<IDiffusionModel<TNum>>(model.Clone());
         var clonedOutput = PredictModel(clonedDiffusion, input);
 
         Assert.Equal(original.Length, clonedOutput.Length);

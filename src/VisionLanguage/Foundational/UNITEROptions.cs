@@ -85,6 +85,42 @@ public class UNITEROptions : FoundationalVLMOptions
     /// <remarks>The official all-data UNITER-base pre-training recipe uses 5.0.</remarks>
     public double MaxGradientNorm { get; set; } = 5.0;
 
+    /// <summary>Validates the native optimizer and learning-rate schedule contract.</summary>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// Thrown when a rate is non-finite or outside its valid range, the training horizon is
+    /// invalid, warmup exceeds that horizon, or gradient clipping is not positive.
+    /// </exception>
+    public void Validate()
+    {
+        if (!double.IsFinite(LearningRate) || LearningRate <= 0.0)
+            throw new ArgumentOutOfRangeException(nameof(LearningRate), LearningRate,
+                "LearningRate must be finite and greater than zero.");
+        if (!double.IsFinite(WeightDecay) || WeightDecay < 0.0)
+            throw new ArgumentOutOfRangeException(nameof(WeightDecay), WeightDecay,
+                "WeightDecay must be finite and non-negative.");
+        if (WarmupSteps < 0)
+            throw new ArgumentOutOfRangeException(nameof(WarmupSteps), WarmupSteps,
+                "WarmupSteps must be non-negative.");
+        if (TotalTrainingSteps <= 0)
+            throw new ArgumentOutOfRangeException(nameof(TotalTrainingSteps), TotalTrainingSteps,
+                "TotalTrainingSteps must be greater than zero.");
+        if (WarmupSteps > TotalTrainingSteps)
+            throw new ArgumentOutOfRangeException(nameof(WarmupSteps), WarmupSteps,
+                "WarmupSteps cannot exceed TotalTrainingSteps.");
+        if (WarmupInitialLearningRate is double warmupRate
+            && (!double.IsFinite(warmupRate) || warmupRate < 0.0))
+        {
+            throw new ArgumentOutOfRangeException(nameof(WarmupInitialLearningRate), warmupRate,
+                "WarmupInitialLearningRate must be finite and non-negative when specified.");
+        }
+        if (!double.IsFinite(EndLearningRate) || EndLearningRate < 0.0)
+            throw new ArgumentOutOfRangeException(nameof(EndLearningRate), EndLearningRate,
+                "EndLearningRate must be finite and non-negative.");
+        if (!double.IsFinite(MaxGradientNorm) || MaxGradientNorm <= 0.0)
+            throw new ArgumentOutOfRangeException(nameof(MaxGradientNorm), MaxGradientNorm,
+                "MaxGradientNorm must be finite and greater than zero.");
+    }
+
     public UNITEROptions()
     {
         FusionType = FusionType.SingleStream;

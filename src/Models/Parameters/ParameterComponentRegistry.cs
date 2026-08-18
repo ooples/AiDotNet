@@ -395,7 +395,16 @@ public sealed class ParameterComponentRegistry<T> : IParameterManifestProvider
             var target = CaptureLayout();
             var checkpointSlots = new Dictionary<string, ParameterSlotDescriptor>(StringComparer.Ordinal);
             for (int i = 0; i < checkpointLayout.Slots.Count; i++)
-                checkpointSlots.Add(checkpointLayout.Slots[i].StableId, checkpointLayout.Slots[i]);
+            {
+                var slot = checkpointLayout.Slots[i];
+                ValidateCheckpointSlotGeometry(slot, parameters.Length, nameof(checkpointLayout));
+                checkpointSlots.Add(slot.StableId, slot);
+            }
+
+            // Build the complete restore plan before mutating any source. Besides making malformed
+            // checkpoint geometry fail atomically, this validates every narrowing conversion and
+            // every slice used by a later source write.
+            var pending = new List<(IParameterSource<T> Source, Vector<T> Payload)>();
 
             for (int entryIndex = 0; entryIndex < target.Entries.Count; entryIndex++)
             {
@@ -416,7 +425,7 @@ public sealed class ParameterComponentRegistry<T> : IParameterManifestProvider
                     parameters.AsSpan()
                         .Slice(checked((int)variableOffset), checked((int)variableCount))
                         .CopyTo(variableValues.AsWritableSpan());
-                    source.SetParameters(variableValues);
+                    pending.Add((source, variableValues));
                     continue;
                 }
 
@@ -442,7 +451,7 @@ public sealed class ParameterComponentRegistry<T> : IParameterManifestProvider
                         : item.Entry.StableId + "/" + localSlot.StableId;
                     if (!checkpointSlots.TryGetValue(stableId, out var checkpointSlot)
                         || checkpointSlot.ParameterCount != count
-                        || !ShapesEqual(localSlot.Shape, checkpointSlot.Shape)
+                        || !ParameterShapeComparer.AreEqual(localSlot.Shape, checkpointSlot.Shape)
                         || !checkpointSlot.Offset.HasValue)
                     {
                         completeMatch = false;
@@ -456,20 +465,35 @@ public sealed class ParameterComponentRegistry<T> : IParameterManifestProvider
                 }
 
                 if (completeMatch && payloadOffset == targetCount)
-                    source.SetParameters(payload);
+                    pending.Add((source, payload));
             }
+
+            for (int i = 0; i < pending.Count; i++)
+                pending[i].Source.SetParameters(pending[i].Payload);
         }
     }
 
-    private static bool ShapesEqual(IReadOnlyList<int>? left, IReadOnlyList<int>? right)
+    private static void ValidateCheckpointSlotGeometry(
+        ParameterSlotDescriptor slot,
+        int payloadLength,
+        string parameterName)
     {
-        if (left is null || right is null) return left is null && right is null;
-        if (left.Count != right.Count) return false;
-        for (int i = 0; i < left.Count; i++)
+        if (!slot.ParameterCount.HasValue || !slot.Offset.HasValue)
         {
-            if (left[i] != right[i]) return false;
+            throw new ArgumentException(
+                $"Checkpoint slot '{slot.StableId}' has unresolved range geometry.",
+                parameterName);
         }
-        return true;
+
+        long count = slot.ParameterCount.Value;
+        long offset = slot.Offset.Value;
+        if (count < 0 || offset < 0 || offset > payloadLength || count > payloadLength - offset)
+        {
+            throw new ArgumentException(
+                $"Checkpoint slot '{slot.StableId}' describes offset {offset} and count {count}, " +
+                $"which do not fit a {payloadLength}-value payload.",
+                parameterName);
+        }
     }
 
     private void SetParametersCore(Vector<T> parameters)

@@ -202,7 +202,8 @@ public partial class StableVideoSR<T> : VideoSuperResolutionBase<T>
     /// </remarks>
     protected override void RegisterComponents()
     {
-        RegisterParameterComponent("diffusion/core", _diffusionCore);
+        if (_diffusionCore is not null)
+            RegisterParameterComponent("diffusion/core", _diffusionCore);
     }
 
     protected override void InitializeLayers()

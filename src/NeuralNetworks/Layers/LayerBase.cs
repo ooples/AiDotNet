@@ -7134,6 +7134,10 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         for (int i = 0; i < parameters.Count; i++)
             _registeredTensors[i] = parameters[i];
 
+        // Runtime-registry layers can keep their execution handles in dictionaries or other
+        // containers that the generator cannot rewrite. Give the same adoption hook used by the
+        // declaration-driven path a chance to update those handles after the registry is rebound.
+        AdoptTrainableParameterTensors(parameters);
         _cachedParameterCount = -1;
         BumpParameterEpoch();
     }

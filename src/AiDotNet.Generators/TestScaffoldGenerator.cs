@@ -5694,6 +5694,25 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputHeight: 16, inputWidth: 16, inputDepth: 3, outputSize: 3), " +
                     "new AiDotNet.Video.Options.MoGOptions { NumFeatures = 8, NumResBlocks = 1 })";
             }
+            else if (model.ClassName == "UniVSTModel" && model.TypeParameterCount == 1)
+            {
+                // UniVST steers a frozen Stable Diffusion v1.5 pipeline. Production correctly keeps
+                // that paper-scale default, but a generated conformance fixture only needs the same
+                // UNet/VAE topology to verify the public contracts. Inject bounded implementations
+                // through the model's public extension points so every invariant retains real
+                // convolution, residual, attention, encode and decode paths without an 80-second
+                // single forward consuming the shard's entire timeout budget.
+                constructorExpr = $"new {typeName}<double>(" +
+                    "predictor: new AiDotNet.Diffusion.NoisePredictors.UNetNoisePredictor<double>(" +
+                    "inputChannels: 4, outputChannels: 4, baseChannels: 32, " +
+                    "channelMultipliers: new[] { 1, 2 }, numResBlocks: 1, " +
+                    "attentionResolutions: new[] { 1 }, contextDim: 0, numHeads: 4, " +
+                    "inputHeight: 16, seed: 42), " +
+                    "vae: new AiDotNet.Diffusion.VAE.StandardVAE<double>(" +
+                    "inputChannels: 3, latentChannels: 4, baseChannels: 16, " +
+                    "channelMultipliers: new[] { 1, 2 }, numResBlocksPerLevel: 1, seed: 42), " +
+                    "seed: 42)";
+            }
             else if (model.ClassName == "StableVideoSR" && model.TypeParameterCount == 1)
             {
                 // Keep the released 256-channel, nine-temporal-module architecture intact. The
@@ -11320,7 +11339,10 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // [LatentChannels, H, W] latent and fail on 12288 vs 16384 — the same trap VideoCLIP
             // documents above. Pin a LATENT-shaped fixture (4 = the SD v1.5 latent depth this model
             // defaults to) so the declared domain stays truthful without misstating the contract.
-            sb.AppendLine("    protected override int[] InputShape => new[] { 4, 32, 32 };");
+            // The UNet is fully convolutional; 16x16 still traverses every down/up stage while
+            // keeping this smoke contract comfortably below the per-test CI deadline under shard load.
+            sb.AppendLine("    protected override int[] InputShape => new[] { 4, 16, 16 };");
+            sb.AppendLine("    protected override int[] OutputShape => new[] { 4, 16, 16 };");
         }
         else if (model.ClassName == "VideoGigaGAN")
         {

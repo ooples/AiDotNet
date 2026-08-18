@@ -395,6 +395,12 @@ internal static class Program
 
     private static int RunSelfTest()
     {
+        static int Fail(string check)
+        {
+            Console.Error.WriteLine($"ModelPerfProbe self-test failed: {check}");
+            return 1;
+        }
+
         string directory = Path.Combine(Path.GetTempPath(), "aidotnet-perf-selftest-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(directory);
         try
@@ -413,7 +419,8 @@ internal static class Program
             var diagnostics = new List<Diagnostic>();
             ValidateCoverage(records, 1, diagnostics);
             ValidateRecords(records, diagnostics);
-            if (records.Count != 1 || diagnostics.Count != 0) return 1;
+            if (records.Count != 1 || diagnostics.Count != 0)
+                return Fail("valid record loading and validation");
 
             string timeout = """
             {"schemaVersion":1,"status":"timeout","fixture":"SlowFixture","model":"","precision":"System.Single",
@@ -428,19 +435,19 @@ internal static class Program
             if (diagnostics.Count != 1
                 || diagnostics[0].Metric != "status"
                 || !diagnostics[0].Message.Contains("backward", StringComparison.Ordinal))
-                return 1;
+                return Fail("timeout phase diagnostic");
             BaselineDocument generatedBaseline = BuildBaseline(records);
             if (generatedBaseline.SchemaVersion != CurrentBaselineSchemaVersion
                 || generatedBaseline.Entries.Length != 1
                 || !generatedBaseline.Entries[0].Environment.EndsWith("|test-cpu", StringComparison.Ordinal))
-                return 1;
+                return Fail("generated baseline schema and processor-qualified environment key");
 
             diagnostics.Clear();
             CompareBaseline(records, new BaselineDocument { SchemaVersion = 1 }, new Options(), diagnostics);
             if (diagnostics.Count != 1
                 || diagnostics[0].Metric != "baseline"
                 || !diagnostics[0].Message.Contains("not comparable", StringComparison.Ordinal))
-                return 1;
+                return Fail("incompatible baseline schema warning");
 
             // Expensive models are not training hot-path outliers when their train/forward ratio
             // matches their peers; a cheap-forward model with extreme training amplification is.
@@ -474,13 +481,15 @@ internal static class Program
             };
             diagnostics.Clear();
             DetectCohortOutliers(comparable, diagnostics);
-            if (diagnostics.Count != 0) return 1;
+            if (diagnostics.Count != 0)
+                return Fail("comparable cohort remains silent");
 
             var amplified = comparable.ToArray();
             amplified[^1] = Synthetic(6, 50_000, 500, 150_000_000);
             diagnostics.Clear();
             DetectCohortOutliers(amplified, diagnostics);
-            if (!diagnostics.Any(d => d.Metric == "trainingAmplification")) return 1;
+            if (!diagnostics.Any(d => d.Metric == "trainingAmplification"))
+                return Fail("training amplification detection");
             Console.WriteLine("ModelPerfProbe self-test passed.");
             return 0;
         }

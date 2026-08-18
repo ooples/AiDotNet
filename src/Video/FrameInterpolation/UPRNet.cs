@@ -208,7 +208,8 @@ public partial class UPRNet<T> : FrameInterpolationBase<T>
         var synth0 = ResolveStageShapes(_synthEncoder0, [19, full, full]);
         var synth1 = ResolveStageShapes(_synthEncoder1, [64, stage0[1], stage0[2]]);
         var synth2 = ResolveStageShapes(_synthEncoder2, [128, stage1[1], stage1[2]]);
-        var decoder1 = ResolveStageShapes(_synthDecoder1, [256, stage2[1], stage2[2]]);
+        var decoder1 = ResolveStageShapes(_synthDecoder1,
+            [synth2[0] + stage2[0] * 2, stage2[1], stage2[2]]);
         var decoder2 = ResolveStageShapes(_synthDecoder2,
             [decoder1[0] + synth1[0], decoder1[1], decoder1[2]]);
         var decoder0 = ResolveStageShapes(_synthDecoder0,

@@ -48,4 +48,30 @@ public sealed class UNITEROptionsContractTests
         Assert.Equal(source.EndLearningRate, copy.EndLearningRate);
         Assert.Equal(source.MaxGradientNorm, copy.MaxGradientNorm);
     }
+
+    [Fact]
+    public async Task Validate_RejectsEveryInvalidOptimizationBoundary()
+    {
+        await Task.Yield();
+        var cases = new (Action<UNITEROptions> Mutate, string ParameterName)[]
+        {
+            (options => options.LearningRate = 0.0, nameof(UNITEROptions.LearningRate)),
+            (options => options.WeightDecay = -0.01, nameof(UNITEROptions.WeightDecay)),
+            (options => options.WarmupSteps = -1, nameof(UNITEROptions.WarmupSteps)),
+            (options => options.TotalTrainingSteps = 0, nameof(UNITEROptions.TotalTrainingSteps)),
+            (options => options.WarmupSteps = options.TotalTrainingSteps + 1, nameof(UNITEROptions.WarmupSteps)),
+            (options => options.WarmupInitialLearningRate = double.NaN,
+                nameof(UNITEROptions.WarmupInitialLearningRate)),
+            (options => options.EndLearningRate = -1e-6, nameof(UNITEROptions.EndLearningRate)),
+            (options => options.MaxGradientNorm = 0.0, nameof(UNITEROptions.MaxGradientNorm))
+        };
+
+        foreach (var (mutate, parameterName) in cases)
+        {
+            var options = new UNITEROptions();
+            mutate(options);
+            var error = Assert.Throws<ArgumentOutOfRangeException>(options.Validate);
+            Assert.Equal(parameterName, error.ParamName);
+        }
+    }
 }

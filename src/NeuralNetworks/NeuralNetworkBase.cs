@@ -14004,27 +14004,17 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
 
     #region INeuralNetworkModel Implementation
 
-    private static readonly System.Collections.Concurrent.ConcurrentDictionary<Type, bool>
-        SequentialActivationFoldEligibility = new();
-
     /// <summary>
-    /// Returns whether the declared <see cref="Layers"/> list can safely be probed as one chain.
+    /// Gets whether <see cref="Layers"/> is the model's complete, literal execution chain.
     /// </summary>
     /// <remarks>
-    /// A custom lazy-shape resolver is an executable declaration that the model owns topology the
-    /// base sequential resolver cannot represent (branches, shared stages, multiple roots, or input
-    /// transforms). Speculatively forwarding its public serialization-order list can materialize a
-    /// lazy first layer against the wrong input before the probe fails, permanently corrupting the
-    /// real graph. Such models go straight to the observer path, which records their actual forward.
+    /// This is deliberately an explicit opt-in. A serialization-order layer list does not prove a
+    /// sequential graph: combined-stream, encoder/decoder, shared-stage, and input-transforming
+    /// models can all inherit the base lazy-shape resolver while owning non-linear execution
+    /// boundaries. The safe default records the model's actual forward. A plain-chain base may
+    /// override this only when forwarding <c>Layers[0..n]</c> exactly reproduces <see cref="Predict"/>.
     /// </remarks>
-    private bool CanFoldDeclaredLayersForActivations() =>
-        SequentialActivationFoldEligibility.GetOrAdd(GetType(), static modelType =>
-        {
-            var resolver = modelType.GetMethod(
-                nameof(ResolveLazyLayerShapes),
-                BindingFlags.Instance | BindingFlags.NonPublic);
-            return resolver?.DeclaringType == typeof(NeuralNetworkBase<T>);
-        });
+    protected virtual bool SupportsSequentialActivationFold => false;
 
     /// <summary>
     /// Gets the intermediate activations from each layer when processing the given input with named keys.
@@ -14047,7 +14037,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // is the fallback: models the fold already serves pay nothing, and a model the fold cannot
         // serve gets an answer instead of an exception.
         var activations = new Dictionary<string, Tensor<T>>();
-        if (CanFoldDeclaredLayersForActivations())
+        if (SupportsSequentialActivationFold)
         {
             try
             {

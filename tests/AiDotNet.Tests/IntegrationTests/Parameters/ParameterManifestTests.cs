@@ -666,6 +666,38 @@ public class ParameterManifestTests
     }
 
     [Fact]
+    public async Task MatchingRestore_RejectsInvalidGeometryBeforeMutatingAnySource()
+    {
+        await Task.Yield();
+        Tensor<double>? first = new(new[] { 2 });
+        Tensor<double>? second = new(new[] { 2 });
+        first[0] = -1;
+        first[1] = -2;
+        second[0] = -3;
+        second[1] = -4;
+
+        var registry = new ParameterComponentRegistry<double>();
+        registry.Register("first", new TensorFieldParameterSource<double>(() => first));
+        registry.Register("second", new TensorFieldParameterSource<double>(() => second));
+        var malformed = new ParameterLayoutSnapshot(new[]
+        {
+            new ParameterSlotDescriptor(
+                "first", ParameterSlotRole.Trainable, ParameterReadiness.Materialized,
+                parameterCount: 2, offset: 0, shape: new[] { 2 }),
+            new ParameterSlotDescriptor(
+                "second", ParameterSlotRole.Trainable, ParameterReadiness.Materialized,
+                parameterCount: 2, offset: 3, shape: new[] { 2 })
+        });
+
+        var error = Assert.Throws<ArgumentException>(() =>
+            registry.SetMatchingParameters(new Vector<double>(new[] { 10d, 11d, 12d, 13d }), malformed));
+
+        Assert.Contains("second", error.Message, StringComparison.Ordinal);
+        Assert.Equal(new[] { -1d, -2d }, first.ToArray());
+        Assert.Equal(new[] { -3d, -4d }, second.ToArray());
+    }
+
+    [Fact]
     public async Task ResizableTensorFieldRestore_RejectsAmbiguousOrNonDivisibleShapes()
     {
         await Task.Yield();

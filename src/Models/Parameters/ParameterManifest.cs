@@ -319,6 +319,22 @@ public sealed class ParameterSlotDescriptor
     };
 }
 
+/// <summary>Shared structural comparisons for parameter-manifest shapes.</summary>
+internal static class ParameterShapeComparer
+{
+    /// <summary>Returns whether two optional shape declarations are element-for-element equal.</summary>
+    internal static bool AreEqual(IReadOnlyList<int>? left, IReadOnlyList<int>? right)
+    {
+        if (left is null || right is null) return left is null && right is null;
+        if (left.Count != right.Count) return false;
+        for (int i = 0; i < left.Count; i++)
+        {
+            if (left[i] != right[i]) return false;
+        }
+        return true;
+    }
+}
+
 /// <summary>A single deterministic snapshot consumed by count, vector, restore and checkpoint code.</summary>
 public sealed class ParameterLayoutSnapshot
 {

@@ -2503,10 +2503,13 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         {
             foreach (var chunk in EnumerateParameterChunks(network))
             {
-                trainingBudgetParameterCount = trainingBudgetParameterCount >= long.MaxValue - chunk.Length
+                if (chunk.Length <= 0) continue;
+                parameterCount = parameterCount >= long.MaxValue - chunk.Length
                     ? long.MaxValue
-                    : trainingBudgetParameterCount + chunk.Length;
+                    : parameterCount + chunk.Length;
+                parameterSlots++;
             }
+            trainingBudgetParameterCount = parameterCount;
         }
 
         int trainingIterations = ResolveConformanceTrainingIterations(

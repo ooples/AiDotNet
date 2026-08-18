@@ -438,6 +438,12 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, IConfigurabl
     /// </summary>
     private double _autoGuardThreshold = 1e15;
 
+    // A negative, model-specific marker cannot be confused with a valid legacy LagOrder. Version 1
+    // introduced the stable-ID checkpoint layout between the parameter values and metric records.
+    private const int SerializationMagic = unchecked((int)0xA1D07E51);
+    private const int CurrentSerializationVersion = 1;
+    private const int MaxCheckpointTensorRank = 32;
+
     public void Train(Matrix<T> x, Vector<T> y) => Train(x, y, CancellationToken.None);
 
     public void Train(Matrix<T> x, Vector<T> y, CancellationToken callerToken)
@@ -1164,6 +1170,9 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, IConfigurabl
         using var ms = new MemoryStream();
         using var writer = new BinaryWriter(ms);
 
+        writer.Write(SerializationMagic);
+        writer.Write(CurrentSerializationVersion);
+
         // Serialize common options
         writer.Write(Options.LagOrder);
         writer.Write(Options.IncludeTrend);
@@ -1259,8 +1268,27 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, IConfigurabl
             using var ms = new MemoryStream(data);
             using var reader = new BinaryReader(ms);
 
+            // Versioned streams begin with a marker that cannot be a valid lag order. A legacy
+            // stream begins directly with LagOrder and remains readable without probing later
+            // metric/core bytes as though they were a newly inserted field.
+            int firstValue = reader.ReadInt32();
+            int serializationVersion = 0;
+            if (firstValue == SerializationMagic)
+            {
+                serializationVersion = reader.ReadInt32();
+                if (serializationVersion <= 0 || serializationVersion > CurrentSerializationVersion)
+                {
+                    throw new InvalidDataException(
+                        $"Unsupported time-series serialization version {serializationVersion}.");
+                }
+                Options.LagOrder = reader.ReadInt32();
+            }
+            else
+            {
+                Options.LagOrder = firstValue;
+            }
+
             // Deserialize common options
-            Options.LagOrder = reader.ReadInt32();
             Options.IncludeTrend = reader.ReadBoolean();
             Options.SeasonalPeriod = reader.ReadInt32();
             Options.AutocorrelationCorrection = reader.ReadBoolean();
@@ -1276,12 +1304,19 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, IConfigurabl
             if (IsTrained)
             {
                 int parameterCount = reader.ReadInt32();
+                long remainingValueBytes = reader.BaseStream.Length - reader.BaseStream.Position;
+                if (parameterCount < 0 || parameterCount > remainingValueBytes / sizeof(double))
+                {
+                    throw new InvalidDataException(
+                        $"Time-series checkpoint declares invalid parameter count {parameterCount}.");
+                }
                 parameterSnapshot = new Vector<T>(parameterCount);
                 for (int i = 0; i < parameterCount; i++)
                 {
                     parameterSnapshot[i] = NumOps.FromDouble(reader.ReadDouble());
                 }
-                checkpointLayout = ReadParameterCheckpointLayout(reader);
+                if (serializationVersion >= 1)
+                    checkpointLayout = ReadParameterCheckpointLayout(reader, parameterCount);
                 // Deserialize evaluation metrics
                 int metricsCount = reader.ReadInt32();
                 LastEvaluationMetrics.Clear();
@@ -1323,7 +1358,17 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, IConfigurabl
                         ModelParameters = parameterSnapshot.Clone();
 
                     var currentLayout = _parameterRegistry.ParameterLayout;
-                    if (checkpointLayout is null || !LayoutsMatch(currentLayout, checkpointLayout))
+                    if (checkpointLayout is null)
+                    {
+                        // Legacy checkpoints predate stable IDs. Preserve their positional restore
+                        // when the construction-time width is already exact; otherwise defer until
+                        // DeserializeCore materializes its fitted state.
+                        if (currentLayout.ParameterCount == parameterSnapshot.Length)
+                            _parameterRegistry.SetParameters(parameterSnapshot);
+                        else
+                            restoreParametersAfterCore = true;
+                    }
+                    else if (!LayoutsMatch(currentLayout, checkpointLayout))
                     {
                         restoreParametersAfterCore = true;
                     }
@@ -1340,8 +1385,13 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, IConfigurabl
             // Deferred sources and layouts whose construction-time size differs from the saved
             // manifest cannot accept one positional vector. Restore only the fields whose stable
             // identity and shape still match; model-specific deserialization owns the rest.
-            if (restoreParametersAfterCore && parameterSnapshot is not null && checkpointLayout is not null)
-                _parameterRegistry.SetMatchingParameters(parameterSnapshot, checkpointLayout);
+            if (restoreParametersAfterCore && parameterSnapshot is not null)
+            {
+                if (checkpointLayout is null)
+                    _parameterRegistry.SetParameters(parameterSnapshot);
+                else
+                    _parameterRegistry.SetMatchingParameters(parameterSnapshot, checkpointLayout);
+            }
         }
         catch (Exception ex)
         {
@@ -1364,7 +1414,9 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, IConfigurabl
             }
 
             writer.Write(slot.StableId);
+            writer.Write((int)slot.Role);
             writer.Write(slot.ParameterCount.Value);
+            writer.Write(slot.Offset.Value);
             if (slot.Shape is null)
             {
                 writer.Write(-1);
@@ -1378,21 +1430,47 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, IConfigurabl
     }
 
     private static AiDotNet.Models.Parameters.ParameterLayoutSnapshot ReadParameterCheckpointLayout(
-        BinaryReader reader)
+        BinaryReader reader,
+        int payloadLength)
     {
         int slotCount = reader.ReadInt32();
         if (slotCount < 0)
             throw new InvalidDataException("A parameter checkpoint cannot contain a negative slot count.");
 
+        const int minimumSlotBytes = 1 + sizeof(int) + sizeof(long) + sizeof(long) + sizeof(int);
+        long remainingBytes = reader.BaseStream.Length - reader.BaseStream.Position;
+        if (slotCount > remainingBytes / minimumSlotBytes)
+        {
+            throw new InvalidDataException(
+                $"Parameter checkpoint declares {slotCount} slots, which cannot fit in " +
+                $"the remaining {remainingBytes} bytes.");
+        }
+
         var slots = new List<AiDotNet.Models.Parameters.ParameterSlotDescriptor>(slotCount);
-        long offset = 0;
         for (int i = 0; i < slotCount; i++)
         {
             string stableId = reader.ReadString();
+            int rawRole = reader.ReadInt32();
+            if (!Enum.IsDefined(typeof(AiDotNet.Models.Parameters.ParameterSlotRole), rawRole))
+                throw new InvalidDataException($"Parameter slot '{stableId}' has unknown role {rawRole}.");
+            var role = (AiDotNet.Models.Parameters.ParameterSlotRole)rawRole;
             long count = reader.ReadInt64();
             if (count < 0)
                 throw new InvalidDataException($"Parameter slot '{stableId}' has a negative size.");
+            long offset = reader.ReadInt64();
+            if (offset < 0 || offset > payloadLength || count > payloadLength - offset)
+            {
+                throw new InvalidDataException(
+                    $"Parameter slot '{stableId}' has offset {offset} and count {count}, which do " +
+                    $"not fit a {payloadLength}-value payload.");
+            }
             int rank = reader.ReadInt32();
+            if (rank < -1 || rank > MaxCheckpointTensorRank
+                || rank > (reader.BaseStream.Length - reader.BaseStream.Position) / sizeof(int))
+            {
+                throw new InvalidDataException(
+                    $"Parameter slot '{stableId}' has invalid tensor rank {rank}.");
+            }
             int[]? shape = null;
             if (rank >= 0)
             {
@@ -1402,16 +1480,22 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, IConfigurabl
 
             slots.Add(new AiDotNet.Models.Parameters.ParameterSlotDescriptor(
                 stableId,
-                AiDotNet.Models.Parameters.ParameterSlotRole.Trainable,
+                role,
                 count == 0
                     ? AiDotNet.Models.Parameters.ParameterReadiness.ParameterFree
                     : AiDotNet.Models.Parameters.ParameterReadiness.Materialized,
                 count,
                 offset,
                 shape));
-            offset = checked(offset + count);
         }
-        return new AiDotNet.Models.Parameters.ParameterLayoutSnapshot(slots);
+        var snapshot = new AiDotNet.Models.Parameters.ParameterLayoutSnapshot(slots);
+        if (snapshot.ParameterCount != payloadLength)
+        {
+            throw new InvalidDataException(
+                $"Parameter layout describes {snapshot.ParameterCount?.ToString() ?? "an unresolved count"} " +
+                $"values, but the payload contains {payloadLength}.");
+        }
+        return snapshot;
     }
 
     private static bool LayoutsMatch(
@@ -1424,20 +1508,10 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, IConfigurabl
             var left = current.Slots[i];
             var right = checkpoint.Slots[i];
             if (!string.Equals(left.StableId, right.StableId, StringComparison.Ordinal)
+                || left.Role != right.Role
                 || left.ParameterCount != right.ParameterCount
-                || !CheckpointShapesMatch(left.Shape, right.Shape))
+                || !AiDotNet.Models.Parameters.ParameterShapeComparer.AreEqual(left.Shape, right.Shape))
                 return false;
-        }
-        return true;
-    }
-
-    private static bool CheckpointShapesMatch(IReadOnlyList<int>? left, IReadOnlyList<int>? right)
-    {
-        if (left is null || right is null) return left is null && right is null;
-        if (left.Count != right.Count) return false;
-        for (int i = 0; i < left.Count; i++)
-        {
-            if (left[i] != right[i]) return false;
         }
         return true;
     }
