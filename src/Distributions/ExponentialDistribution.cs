@@ -20,7 +20,7 @@ namespace AiDotNet.Distributions;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-internal class ExponentialDistribution<T> : DistributionBase<T>
+public class ExponentialDistribution<T> : DistributionBase<T>
 {
     private T _rate;  // λ (lambda)
 

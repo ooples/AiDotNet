@@ -23,7 +23,7 @@ namespace AiDotNet.Distributions;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-internal class BetaDistribution<T> : DistributionBase<T>
+public class BetaDistribution<T> : DistributionBase<T>
 {
     private T _alpha;
     private T _beta;
