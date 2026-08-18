@@ -225,7 +225,12 @@ public class TapePathAlgorithmFidelityTests
         for (int s = 0; s < 4; s++)
         {
             x -= Lr * (g[0] + rho * ((x - z) + u));
-            z = (x + u) * (1.0 - strengthOverRho);   // L2 prox at Strength/rho
+            // L2 prox at Strength/rho. The penalty implied by L2Regularization's gradient
+            // (grad + Strength*w) is (Strength/2)*||w||^2, so prox_{g/rho}(v) solves
+            // Strength*z + rho*(z-v) = 0, i.e. z = v/(1 + Strength/rho). This previously read
+            // v*(1 - Strength/rho), which is just the first-order expansion 1/(1+s) ~= 1-s and
+            // disagrees past the 10 decimal places this test asserts to.
+            z = (x + u) / (1.0 + strengthOverRho);
             u += x - z;
             expected[s] = x;
         }

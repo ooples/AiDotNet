@@ -216,6 +216,36 @@ public class ADMMOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
     private void UpdateZ(Vector<T> x)
     {
         var xPlusU = (Vector<T>)Engine.Add(x, _u);
+
+        // L2 needs its proximal operator computed here rather than borrowed from the regularizer.
+        //
+        // The penalty is fixed by this library's own L2 gradient, which is grad + Strength*w
+        // (L2Regularization.Regularize(gradient, coefficients)). That is the gradient of
+        // g(w) = (Strength/2)*||w||^2 -- the same convention as PyTorch's weight_decay. ADMM's z-step is
+        // prox_{g/rho}(v) = argmin_z g(z) + (rho/2)*||z-v||^2, so Strength*z + rho*(z-v) = 0, giving
+        //
+        //     z = v / (1 + Strength/rho)
+        //
+        // L2Regularization.Regularize(v) instead returns v*(1-Strength), which is only the first-order
+        // expansion of that: 1/(1+s) = 1 - s + s^2 - ... So the two agree for small s and diverge as s
+        // grows, and once s >= 1 the shrinkage crosses zero and FLIPS THE SIGN of every coordinate while
+        // the prox stays positive and bounded. With Strength rescaled to Strength/rho that happens
+        // whenever Strength >= Rho, so the z-step was wrong for any run with rho != 1.
+        //
+        // Fixed at this call site on purpose. Regularize(Vector) is the shrinkage API roughly twenty
+        // regression models call, and ProximalGradientDescentOptimizer documents why redefining it is
+        // not an option: "changing Regularize would change every model that regularizes." L1's
+        // Regularize IS its own prox (soft-thresholding), so that path already agrees and is untouched;
+        // ElasticNet and custom regularizers keep their existing behaviour.
+        if (_regularization is L2Regularization<T, TInput, TOutput>)
+        {
+            double rho = _options.Rho;
+            double strength = _regularization.GetOptions().Strength;
+            double scaled = (rho > 0.0 && !double.IsInfinity(rho)) ? strength / rho : strength;
+            _z = (Vector<T>)Engine.Multiply(xPlusU, NumOps.FromDouble(1.0 / (1.0 + scaled)));
+            return;
+        }
+
         _z = ProximalOperator.Regularize(xPlusU);
     }
 

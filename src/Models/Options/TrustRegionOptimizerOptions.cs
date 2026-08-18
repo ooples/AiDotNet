@@ -130,7 +130,17 @@ public class TrustRegionOptimizerOptions<T, TInput, TOutput> : GradientBasedOpti
     /// Gets or sets whether the trust region is resized (and unsuccessful steps rejected) after every step.
     /// Default: <c>true</c>.
     /// </summary>
+    /// <value>
+    /// <c>true</c> to resize the radius from the actual-versus-predicted reduction ratio and reject steps
+    /// that fail <see cref="AcceptanceThreshold"/>; <c>false</c> to hold the radius at
+    /// <see cref="InitialTrustRegionRadius"/> for the whole run. Defaults to <c>true</c>.
+    /// </value>
     /// <remarks>
+    /// <para><b>For Beginners:</b> A trust region is a limit on how far one step may move the parameters.
+    /// Left on (the default), that limit grows when the steps are turning out well and shrinks when they
+    /// are not, and a step that makes things worse is thrown away instead of applied. Turn it off only if
+    /// you need every step to use the same fixed limit — for example to let the compiled fused kernel run
+    /// this optimizer, which cannot measure whether a step helped.</para>
     /// <para>
     /// Resizing the region from the ratio of actual to predicted reduction is the trust-region method —
     /// without it, "trust region" just names a fixed cap on the step length. Leaving this on is what makes

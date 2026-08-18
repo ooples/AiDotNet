@@ -781,6 +781,15 @@ public class ProximalGradientDescentOptimizer<T, TInput, TOutput> : GradientBase
     /// <inheritdoc />
     public override void Step(TapeStepContext<T> context)
     {
+        // Snapshot before the tensors are mutated, for the same reason UpdateSolution and
+        // UpdateParameters do it: the proximal operator is not invertible, so the saved pre-update
+        // state is the only thing ReverseUpdate can return. This override steps the tensors itself
+        // instead of routing through UpdateParameters — which is where the sibling optimizers get
+        // their snapshot for free — so without this line a tape-trained session leaves
+        // _previousParameters either null, making ReverseUpdate throw about a step it did take, or
+        // holding a stale vector from some earlier eager step, which it would hand back silently.
+        _previousParameters = new Vector<T>(context.GetFlatParameters());
+
         // GPU-resident ISTA step: when the regularizer is L1 (the canonical
         // proximal-gradient case), one proximal_l1_update kernel does
         // tmp = param - lr*grad; param = sign(tmp)*max(|tmp| - strength, 0),
