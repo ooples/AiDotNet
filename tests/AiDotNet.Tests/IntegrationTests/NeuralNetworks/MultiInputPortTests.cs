@@ -217,9 +217,29 @@ public class MultiInputPortTests
         Assert.Equal("decoder_input", layer.InputPorts[0].Name);
         Assert.True(layer.InputPorts[0].Required);
         Assert.Equal("encoder_output", layer.InputPorts[1].Name);
-        Assert.True(layer.InputPorts[1].Required);
         Assert.Equal("mask", layer.InputPorts[2].Name);
+
+        // The point of declaring the ports is that a router can find the encoder memory, so the
+        // ROLES are what this test is really about -- the base's single unnamed "input" port carried
+        // none of this.
+        Assert.Equal(TensorPortRole.Features, layer.InputPorts[0].Role);
+        Assert.Equal(TensorPortRole.EncoderMemory, layer.InputPorts[1].Role);
+        Assert.Equal(TensorPortRole.Mask, layer.InputPorts[2].Role);
+
+        // encoder_output is NOT required, and asserting that it was is what this test originally got
+        // wrong. DecoderLayer has a documented single-input path -- Forward(Tensor) uses its one
+        // tensor as both decoder input and encoder memory, which is what a decoder-only stack needs.
+        // Marking the port required made that path unreachable on a lazily constructed layer, since
+        // binding the contract threw "port 'encoder_output' is not ready: shape [-1] must be
+        // concrete before execution" before any forward could resolve the shape. Optional here means
+        // "supply it to route encoder memory separately", not "this layer ignores it".
+        Assert.False(layer.InputPorts[1].Required);
         Assert.False(layer.InputPorts[2].Required);
+
+        // And the single-input path has to actually work, which is the regression this pins.
+        var single = layer.Forward(Tensor<double>.CreateRandom([1, 4, 8]));
+        Assert.NotNull(single);
+        Assert.True(single.Length > 0);
     }
 
     #endregion
