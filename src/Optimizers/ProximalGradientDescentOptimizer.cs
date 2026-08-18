@@ -35,8 +35,96 @@ namespace AiDotNet.Optimizers;
 /// </remarks>
 [ComponentType(ComponentType.Optimizer)]
 [PipelineStage(PipelineStage.Training)]
-public class ProximalGradientDescentOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TInput, TOutput>
+public class ProximalGradientDescentOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TInput, TOutput>, Fused.IFusedOptimizerSpec
 {
+    /// <summary>
+    /// Describes this optimizer for the compiled fused-training kernel.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// What can be fused depends entirely on the proximal operator, because the proximal operator IS the
+    /// algorithm — the gradient step in front of it is plain SGD. Two regularizers have kernels:
+    /// </para>
+    /// <list type="bullet">
+    /// <item><description>
+    /// <see cref="NoRegularization{T, TInput, TOutput}"/>, or an L1/L2 regularizer whose strength is zero —
+    /// the prox is the identity, so the tape step reduces to <c>param -= lr*grad</c> and
+    /// <see cref="Tensors.Engines.Compilation.OptimizerType.SGD"/> reproduces it exactly.
+    /// </description></item>
+    /// <item><description>
+    /// <see cref="L1Regularization{T, TInput, TOutput}"/> — the canonical proximal case (ISTA), fused by
+    /// <see cref="Tensors.Engines.Compilation.OptimizerType.ProximalL1"/>.
+    /// </description></item>
+    /// </list>
+    /// <para>
+    /// The L1 case needs one conversion. The kernel writes the textbook ISTA step,
+    /// <c>z = param - lr*grad; param = sign(z)*max(|z| - lr*l1, 0)</c>, thresholding at <c>lr*l1</c>
+    /// because that is the prox of <c>l1*||x||_1</c> for a step of size <c>lr</c>. This library's
+    /// <c>IRegularization.Regularize(Vector)</c> is defined the other way round — it soft-thresholds at the
+    /// raw <c>Strength</c>, with no step size in it — and that is what the eager path applies. So the spec
+    /// passes <c>L1 = Strength/lr</c>, which makes the kernel's <c>lr*l1</c> collapse back to <c>Strength</c>
+    /// and the two paths agree element for element. Fidelity here is to what the eager optimizer does, not to
+    /// the textbook scaling; changing <c>Regularize</c> would change every model that regularizes.
+    /// </para>
+    /// <para>
+    /// That conversion is only stable while <c>lr</c> is the same number the kernel later multiplies by, so
+    /// the L1 case declines whenever the learning rate can move underneath it — an attached schedule or
+    /// adaptive learning rates — and whenever <c>lr</c> is not a positive finite number to divide by. The
+    /// no-regularization case has no such coupling and honours schedules normally.
+    /// </para>
+    /// <para>
+    /// Every other regularizer (L2, ElasticNet, and any custom one) declines. Their prox is a different
+    /// function and no kernel implements it; folding an L2 penalty into the gradient instead would only
+    /// shrink coordinates toward zero rather than setting them there, which is a different algorithm.
+    /// </para>
+    /// </remarks>
+    bool Fused.IFusedOptimizerSpec.TryGetFusedOptimizerConfig(out Fused.FusedOptimizerConfig config)
+    {
+        config = default;
+        if (_options.UseAdaptiveLearningRate) return false;
+        if (!TryGetFusedLrSchedule(out var schedule)) return false;
+
+        double lr = GetCurrentLearningRate();
+
+        // A zero-strength L1 or L2 prox is the identity function, exactly like no regularizer at all:
+        // sign(x)*max(|x| - 0, 0) == x and x*(1 - 0) == x.
+        bool identityProx = _regularization is NoRegularization<T, TInput, TOutput>
+            || ((_regularization is L1Regularization<T, TInput, TOutput>
+                    || _regularization is L2Regularization<T, TInput, TOutput>)
+                && _regularization.GetOptions().Strength == 0.0);
+
+        if (identityProx)
+        {
+            config = new Fused.FusedOptimizerConfig(
+                Tensors.Engines.Compilation.OptimizerType.SGD,
+                (float)lr,
+                0f, 0f, 0f, 0f, schedule);
+            return true;
+        }
+
+        if (_regularization is L1Regularization<T, TInput, TOutput>)
+        {
+            // The threshold conversion below only holds for the lr the kernel is configured with.
+            if (schedule is not null) return false;
+            if (!(lr > 0.0) || double.IsInfinity(lr)) return false;
+
+            double strength = _regularization.GetOptions().Strength;
+            config = new Fused.FusedOptimizerConfig(
+                Tensors.Engines.Compilation.OptimizerType.ProximalL1,
+                (float)lr,
+                0f, 0f, 0f, 0f, schedule)
+            {
+                Extras = new Tensors.Engines.Compilation.FusedOptimizerExtras
+                {
+                    L1 = (float)(strength / lr),
+                },
+            };
+            return true;
+        }
+
+        return false;
+    }
+
     /// <summary>
     /// Configuration options specific to Proximal Gradient Descent optimization.
     /// </summary>
@@ -138,10 +226,68 @@ public class ProximalGradientDescentOptimizer<T, TInput, TOutput> : GradientBase
         : base(model, options ?? new())
     {
         _options = options ?? new ProximalGradientDescentOptimizerOptions<T, TInput, TOutput>();
-        _regularization = _options.Regularization ?? new NoRegularization<T, TInput, TOutput>();
+        _regularization = BuildProximalOperator(_options);
 
         InitializeAdaptiveParameters();
     }
+
+    /// <summary>
+    /// Resolves the proximal operator from the options, applying <c>RegularizationStrength</c> when the
+    /// caller set one.
+    /// </summary>
+    /// <param name="options">The optimizer's options.</param>
+    /// <returns>The regularizer whose <c>Regularize</c> is this optimizer's proximal operator.</returns>
+    /// <remarks>
+    /// <para>
+    /// <c>RegularizationStrength</c> used to be read by nothing at all. A caller who set it — or who tuned
+    /// the facade's <c>regularization</c> hyperparameter, which maps onto exactly this property — got the
+    /// default L2 operator at strength 0.01 regardless, which is the failure mode where the knob turns and
+    /// the model does not change.
+    /// </para>
+    /// <para>
+    /// It is nullable so that the two ways of expressing a strength cannot contradict each other: the
+    /// regularizer carries its own, and this overrides it only when explicitly set. A non-null value
+    /// rebuilds the L1 or L2 operator at that strength; any other regularizer is used as configured,
+    /// because its strength may not be its only parameter (ElasticNet's L1/L2 ratio, for instance) and
+    /// silently reconstructing it would drop the rest.
+    /// </para>
+    /// </remarks>
+    private static IRegularization<T, TInput, TOutput> BuildProximalOperator(
+        ProximalGradientDescentOptimizerOptions<T, TInput, TOutput> options)
+    {
+        var configured = options.Regularization ?? new NoRegularization<T, TInput, TOutput>();
+        double? strength = options.RegularizationStrength;
+        if (strength is null)
+        {
+            return configured;
+        }
+
+        // Copy the configured options and override only Strength. Constructing a fresh
+        // RegularizationOptions would reset Type to None and L1Ratio to its default, so anything reading
+        // GetOptions() for metadata would see a regularizer that describes itself wrongly — harmless while
+        // only Strength is read, and a trap the moment something else is.
+        var rescaled = CloneWithStrength(configured.GetOptions(), strength.Value);
+        return configured switch
+        {
+            L1Regularization<T, TInput, TOutput> => new L1Regularization<T, TInput, TOutput>(rescaled),
+            L2Regularization<T, TInput, TOutput> => new L2Regularization<T, TInput, TOutput>(rescaled),
+            _ => configured,
+        };
+    }
+
+    /// <summary>
+    /// Copies regularization options, replacing only the strength.
+    /// </summary>
+    /// <param name="source">The options to copy.</param>
+    /// <param name="strength">The strength the copy should carry.</param>
+    /// <returns>A copy identical to <paramref name="source"/> apart from its strength.</returns>
+    internal static RegularizationOptions CloneWithStrength(RegularizationOptions source, double strength)
+        => new RegularizationOptions
+        {
+            Type = source.Type,
+            Strength = strength,
+            L1Ratio = source.L1Ratio,
+        };
 
     /// <summary>
     /// Initializes the adaptive parameters used by the Proximal Gradient Descent algorithm.
@@ -360,7 +506,9 @@ public class ProximalGradientDescentOptimizer<T, TInput, TOutput> : GradientBase
         if (_previousParameters == null || _previousParameters.Length != updatedParameters.Length)
         {
             throw new InvalidOperationException(
-                "Proximal GD optimizer state is not initialized. ReverseUpdate must be called after UpdateSolution.");
+                "Proximal GD optimizer state is not initialized. ReverseUpdate must be called after a step " +
+                "(UpdateSolution or UpdateParameters), which is what records the pre-update parameters it " +
+                "returns.");
         }
 
         // === Vectorized Reverse PGD Update (Phase B: US-GPU-015) ===
@@ -441,6 +589,9 @@ public class ProximalGradientDescentOptimizer<T, TInput, TOutput> : GradientBase
         if (options is ProximalGradientDescentOptimizerOptions<T, TInput, TOutput> pgdOptions)
         {
             _options = pgdOptions;
+            // The proximal operator is derived from the options, so it has to be re-derived with them —
+            // otherwise a reconfigured optimizer keeps running the regularizer it was constructed with.
+            _regularization = BuildProximalOperator(_options);
         }
         else
         {
@@ -547,6 +698,9 @@ public class ProximalGradientDescentOptimizer<T, TInput, TOutput> : GradientBase
             string optionsJson = reader.ReadString();
             _options = JsonConvert.DeserializeObject<ProximalGradientDescentOptimizerOptions<T, TInput, TOutput>>(optionsJson)
                 ?? throw new InvalidOperationException("Failed to deserialize optimizer options.");
+            // Same reason as UpdateOptions: a restored optimizer that kept the constructor's operator would
+            // resume training with a different algorithm from the one that was serialized.
+            _regularization = BuildProximalOperator(_options);
 
             _iteration = reader.ReadInt32();
         }
@@ -583,9 +737,59 @@ public class ProximalGradientDescentOptimizer<T, TInput, TOutput> : GradientBase
         return $"{baseKey}_PGD_{_options.InitialLearningRate}_{_regularization.GetType().Name}_{_options.Tolerance}_{_iteration}";
     }
 
+    /// <summary>
+    /// Applies one proximal-gradient step to a flat parameter vector: a gradient step, then the proximal
+    /// operator.
+    /// </summary>
+    /// <param name="parameters">The current parameters.</param>
+    /// <param name="gradient">The gradient at those parameters.</param>
+    /// <returns>The updated parameters.</returns>
+    /// <remarks>
+    /// <para>
+    /// Without this override the vector path inherited the base class's plain <c>param -= lr*grad</c> and
+    /// never applied the proximal operator at all — so a caller who asked for proximal gradient descent got
+    /// gradient descent, silently, with the regularizer they configured having no effect on the result. The
+    /// prox is not an add-on to PGD; it is the half of the algorithm that makes it PGD.
+    /// </para>
+    /// <para>
+    /// This is the same update <see cref="Step"/> applies on the tape path, so both eager paths and the fused
+    /// kernel now agree.
+    /// </para>
+    /// </remarks>
+    public override Vector<T> UpdateParameters(Vector<T> parameters, Vector<T> gradient)
+    {
+        if (parameters.Length != gradient.Length)
+        {
+            throw new ArgumentException(
+                $"Parameter vector length ({parameters.Length}) must match gradient vector length ({gradient.Length}).",
+                nameof(gradient));
+        }
+
+        // Snapshot before stepping, exactly as UpdateSolution does. ReverseUpdate hands this vector back —
+        // the proximal operator is not invertible, so the saved pre-update state is the only answer it
+        // has. Without this, a session that only ever called UpdateParameters would make ReverseUpdate
+        // throw an error naming UpdateSolution (no longer the only stepping path), and a session that
+        // called UpdateSolution earlier would get a stale snapshot from that older step, silently.
+        _previousParameters = new Vector<T>(parameters);
+
+        var gradientStep = (Vector<T>)Engine.Multiply(gradient, CurrentLearningRate);
+        var stepped = (Vector<T>)Engine.Subtract(parameters, gradientStep);
+
+        return _regularization.Regularize(stepped);
+    }
+
     /// <inheritdoc />
     public override void Step(TapeStepContext<T> context)
     {
+        // Snapshot before the tensors are mutated, for the same reason UpdateSolution and
+        // UpdateParameters do it: the proximal operator is not invertible, so the saved pre-update
+        // state is the only thing ReverseUpdate can return. This override steps the tensors itself
+        // instead of routing through UpdateParameters — which is where the sibling optimizers get
+        // their snapshot for free — so without this line a tape-trained session leaves
+        // _previousParameters either null, making ReverseUpdate throw about a step it did take, or
+        // holding a stale vector from some earlier eager step, which it would hand back silently.
+        _previousParameters = new Vector<T>(context.GetFlatParameters());
+
         // GPU-resident ISTA step: when the regularizer is L1 (the canonical
         // proximal-gradient case), one proximal_l1_update kernel does
         // tmp = param - lr*grad; param = sign(tmp)*max(|tmp| - strength, 0),
