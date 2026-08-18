@@ -31,6 +31,32 @@ public static class SegmentationTensorOps
     }
 
     /// <summary>
+    /// Removes the leading batch dimension from a class-index map, returning [H, W].
+    /// </summary>
+    /// <typeparam name="T">The tensor element type.</typeparam>
+    /// <param name="classMap">A class map shaped [H,W] or [B,H,W].</param>
+    /// <returns>The unbatched [H,W] class map. For a batched map, batch index 0 is selected.</returns>
+    public static Tensor<T> EnsureUnbatchedClassMap<T>(Tensor<T> classMap)
+    {
+        if (classMap is null) throw new ArgumentNullException(nameof(classMap));
+        if (classMap.Rank == 2) return classMap;
+        if (classMap.Rank != 3)
+            throw new ArgumentException(
+                $"Class map must be [H,W] or [B,H,W]; got rank {classMap.Rank}.",
+                nameof(classMap));
+        if (classMap.Shape[0] <= 0)
+            throw new ArgumentException("A batched class map must contain at least one batch.", nameof(classMap));
+
+        int height = classMap.Shape[1];
+        int width = classMap.Shape[2];
+        var result = new Tensor<T>([height, width]);
+        for (int row = 0; row < height; row++)
+            for (int col = 0; col < width; col++)
+                result[row, col] = classMap[0, row, col];
+        return result;
+    }
+
+    /// <summary>
     /// Computes argmax along the class dimension, producing a per-pixel class index map.
     /// </summary>
     /// <typeparam name="T">The numeric type.</typeparam>
