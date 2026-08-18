@@ -138,7 +138,7 @@ public class ProximalGradientDescentOptimizer<T, TInput, TOutput> : GradientBase
         : base(model, options ?? new())
     {
         _options = options ?? new ProximalGradientDescentOptimizerOptions<T, TInput, TOutput>();
-        _regularization = _options.Regularization ?? new NoRegularization<T, TInput, TOutput>();
+        _regularization = ResolveRegularization(_options);
 
         InitializeAdaptiveParameters();
     }
@@ -170,7 +170,7 @@ public class ProximalGradientDescentOptimizer<T, TInput, TOutput> : GradientBase
         : base(null, options ?? new())
     {
         _options = options ?? new ProximalGradientDescentOptimizerOptions<T, TInput, TOutput>();
-        _regularization = _options.Regularization ?? new NoRegularization<T, TInput, TOutput>();
+        _regularization = ResolveRegularization(_options);
 
         InitializeAdaptiveParameters();
     }
@@ -667,8 +667,53 @@ public class ProximalGradientDescentOptimizer<T, TInput, TOutput> : GradientBase
                 param[i] = regularized[i];
         }
     }
+
+    /// <summary>
+    /// Builds the proximal operator this optimizer applies after each gradient step.
+    /// </summary>
+    /// <param name="options">The optimizer options.</param>
+    /// <returns>The explicit regularizer if one was given, otherwise one built from the strength.</returns>
+    /// <remarks>
+    /// <para>
+    /// <see cref="ProximalGradientDescentOptimizerOptions{T, TInput, TOutput}.RegularizationStrength"/>
+    /// used to be inert. It was declared, documented at length, and never read by anything: the
+    /// proximal step came only from <c>Regularization</c>, which defaults to null, so an optimizer
+    /// configured with a strength alone applied NO proximal step and quietly behaved as plain
+    /// gradient descent. A proximal method whose proximal step does nothing is not a wrong answer
+    /// with a warning attached -- it is the wrong algorithm, reported as the right one.
+    /// </para>
+    /// <para>
+    /// The <c>?? new NoRegularization(...)</c> it used to fall back to was dead code:
+    /// <c>GradientBasedOptimizerOptions.Regularization</c> is non-nullable and defaults to
+    /// <c>L2Regularization</c>, so the null branch was unreachable and every default-constructed
+    /// proximal optimizer applied an L2 shrink. L2 is SMOOTH -- it has no corner, so it can never
+    /// return an exact zero, which is the one thing a proximal gradient method exists to do.
+    /// Measured on the lesson-5.2 problem, the default optimizer shrank 1.79999995 to 1.78199995,
+    /// a plain 0.99 scaling, and converged to 0.9519232857 where the L1 answer is exactly 0.
+    /// </para>
+    /// <para>
+    /// The strength now takes precedence when set, because it is the knob this optimizer's own
+    /// options expose and a caller who sets it must get it whatever the inherited default says. A
+    /// caller who leaves it at 0 still gets whatever <c>Regularization</c> holds, so nothing changes
+    /// for code that was configuring the regularizer directly.
+    /// </para>
+    /// </remarks>
+    private static IRegularization<T, TInput, TOutput> ResolveRegularization(
+        ProximalGradientDescentOptimizerOptions<T, TInput, TOutput> options)
+    {
+        // RegularizationStrength, when set, is authoritative: it is the knob this optimizer's own
+        // options expose, so a caller who sets it must get it whatever the inherited default says.
+        if (options.RegularizationStrength > 0.0)
+        {
+            return new AiDotNet.Regularization.L1Regularization<T, TInput, TOutput>(
+                new RegularizationOptions
+                {
+                    Type = RegularizationType.L1,
+                    Strength = options.RegularizationStrength,
+                    L1Ratio = 1.0,
+                });
+        }
+
+        return options.Regularization ?? new NoRegularization<T, TInput, TOutput>();
+    }
 }
-
-
-
-

@@ -102,7 +102,16 @@ public class ProximalGradientDescentOptimizerOptions<T, TInput, TOutput> : Gradi
     /// Finding the right regularization strength often requires experimentation with different values.
     /// </para>
     /// </remarks>
-    public double RegularizationStrength { get; set; } = 0.01;
+    /// <remarks>
+    /// <para>
+    /// Defaults to 0, meaning no proximal shrinkage. That is what this optimizer has always
+    /// ACTUALLY done -- the value was never read, and the proximal step came only from
+    /// <c>Regularization</c>, which defaults to null. Documenting the default as 0.01 while
+    /// applying 0 made the discrepancy invisible. The value is now read; the default states what
+    /// happens.
+    /// </para>
+    /// </remarks>
+    public double RegularizationStrength { get; set; } = 0.0;
 
     /// <summary>
     /// Gets or sets the step size for the proximal operator component of the algorithm.
