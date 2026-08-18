@@ -9,16 +9,10 @@ namespace AiDotNet.Video.Options;
 /// </summary>
 /// <remarks>
 /// <para>
-/// UPR-Net (Ma et al., 2023) uses a unified pyramid recurrent architecture:
-/// - Unified pyramid: a single encoder-decoder pyramid that performs both optical flow estimation
-///   and frame synthesis in one pass, avoiding redundant feature computation and sharing
-///   multi-scale representations between the two tasks
-/// - Recurrent refinement: at each pyramid level, a ConvLSTM recurrently refines flow and frame
-///   predictions, iterating until convergence rather than using a fixed number of steps
-/// - Bidirectional estimation: simultaneously estimates forward and backward flows with shared
-///   weights, using consistency checks between the two directions to detect occlusions
-/// - Lightweight design: the unified architecture removes the need for separate flow and
-///   synthesis networks, reducing parameters significantly while maintaining quality
+/// UPR-Net (Jin et al., 2023) recurrently reuses one feature pyramid, one
+/// partial-correlation motion estimator, and one synthesis network across image-pyramid levels.
+/// The recurrence is across levels; the released architecture has no ConvLSTM and no per-level
+/// copies of the motion or synthesis weights.
 /// </para>
 /// <para>
 /// <b>For Beginners:</b> UPR-Net combines motion estimation and frame creation into a single
@@ -46,11 +40,8 @@ public class UPRNetOptions : NeuralNetworkOptions
             throw new ArgumentNullException(nameof(other));
 
         Variant = other.Variant;
-        NumFeatures = other.NumFeatures;
         NumPyramidLevels = other.NumPyramidLevels;
-        NumRecurrentIters = other.NumRecurrentIters;
-        NumResBlocks = other.NumResBlocks;
-        LSTMHiddenDim = other.LSTMHiddenDim;
+        NumLevelsSkipped = other.NumLevelsSkipped;
         ModelPath = other.ModelPath;
         OnnxOptions = other.OnnxOptions;
         LearningRate = other.LearningRate;
@@ -62,9 +53,6 @@ public class UPRNetOptions : NeuralNetworkOptions
     /// <summary>Gets or sets the model variant.</summary>
     public VideoModelVariant Variant { get; set; } = VideoModelVariant.Base;
 
-    /// <summary>Gets or sets the number of feature channels.</summary>
-    public int NumFeatures { get; set; } = 64;
-
     /// <summary>
     /// Gets or sets the number of pyramid levels. Default 3 — the base UPR-Net trains with a
     /// 3-level image pyramid (Jin et al., CVPR 2023, §4.1: "3-level image pyramids during training …
@@ -75,20 +63,19 @@ public class UPRNetOptions : NeuralNetworkOptions
     public int NumPyramidLevels { get; set; } = 3;
 
     /// <summary>
-    /// Gets or sets the number of recurrent refinement passes PER pyramid level. Default 1 to match
-    /// UPR-Net (Jin et al., CVPR 2023): each pyramid level performs a SINGLE bi-directional flow
-    /// estimation + frame synthesis, and the "recurrent"/iterative refinement happens ACROSS levels
-    /// (the coarse-to-fine pyramid traversal with weight sharing), not by repeating the module within a
-    /// level. Values &gt; 1 add extra per-level passes beyond the paper's design (more compute, not more
-    /// fidelity). Total refinement passes = NumPyramidLevels x NumRecurrentIters.
+    /// Gets or sets the number of finest pyramid levels whose motion estimation is skipped.
+    /// Zero is the paper's base-model default.
     /// </summary>
-    public int NumRecurrentIters { get; set; } = 1;
+    public int NumLevelsSkipped { get; set; }
 
-    /// <summary>Gets or sets the number of residual blocks per pyramid level.</summary>
-    public int NumResBlocks { get; set; } = 2;
-
-    /// <summary>Gets or sets the ConvLSTM hidden dimension.</summary>
-    public int LSTMHiddenDim { get; set; } = 64;
+    /// <summary>Validates paper-architecture options.</summary>
+    public void Validate()
+    {
+        if (NumPyramidLevels < 1)
+            throw new ArgumentOutOfRangeException(nameof(NumPyramidLevels));
+        if (NumLevelsSkipped < 0 || NumLevelsSkipped > NumPyramidLevels)
+            throw new ArgumentOutOfRangeException(nameof(NumLevelsSkipped));
+    }
 
     #endregion
 

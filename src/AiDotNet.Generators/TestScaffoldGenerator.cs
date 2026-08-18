@@ -3357,6 +3357,18 @@ public class TestScaffoldGenerator : IIncrementalGenerator
          : 128;
 
     /// <summary>
+    /// Resolves the input fixture from the architecture that the generated constructor actually
+    /// instantiates. The class-family size remains the fallback for constructors without explicit
+    /// literal image dimensions.
+    /// </summary>
+    private static bool TryGetVisionFixtureSpatialSize(
+        string constructorExpression,
+        out int height,
+        out int width)
+        => GeneratedVisionFixtureContract.TryGetArchitectureSpatialSize(
+            constructorExpression, out height, out width);
+
+    /// <summary>
     /// Checks if a type IS exactly <c>NeuralNetworkArchitecture&lt;T&gt;</c> (not a derived type).
     /// Uses <see cref="SymbolEqualityComparer"/> for cross-assembly robustness, with a
     /// metadata-name fallback when the resolved compilation symbol is unavailable.
@@ -5682,34 +5694,46 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputHeight: 16, inputWidth: 16, inputDepth: 3, outputSize: 3), " +
                     "new AiDotNet.Video.Options.MoGOptions { NumFeatures = 8, NumResBlocks = 1 })";
             }
+            else if (model.ClassName == "UniVSTModel" && model.TypeParameterCount == 1)
+            {
+                // UniVST steers a frozen Stable Diffusion v1.5 pipeline. Production correctly keeps
+                // that paper-scale default, but a generated conformance fixture only needs the same
+                // UNet/VAE topology to verify the public contracts. Inject bounded implementations
+                // through the model's public extension points so every invariant retains real
+                // convolution, residual, attention, encode and decode paths without an 80-second
+                // single forward consuming the shard's entire timeout budget.
+                constructorExpr = $"new {typeName}<double>(" +
+                    "predictor: new AiDotNet.Diffusion.NoisePredictors.UNetNoisePredictor<double>(" +
+                    "inputChannels: 4, outputChannels: 4, baseChannels: 32, " +
+                    "channelMultipliers: new[] { 1, 2 }, numResBlocks: 1, " +
+                    "attentionResolutions: new[] { 1 }, contextDim: 0, numHeads: 4, " +
+                    "inputHeight: 16, seed: 42), " +
+                    "vae: new AiDotNet.Diffusion.VAE.StandardVAE<double>(" +
+                    "inputChannels: 3, latentChannels: 4, baseChannels: 16, " +
+                    "channelMultipliers: new[] { 1, 2 }, numResBlocksPerLevel: 1, seed: 42), " +
+                    "seed: 42)";
+            }
             else if (model.ClassName == "StableVideoSR" && model.TypeParameterCount == 1)
             {
-                // Timeout escalation for this fixture, in order: FP32 first (already the case - the
-                // scaffold derives from VideoSuperResolutionTestBase<float>), then iteration capping
-                // (HeavyTrainingTimeoutClassNames, which brought MoreData_ShouldNotDegrade from a 120 s
-                // timeout down to 41 s), and only then SHRINKING - which is this branch.
-                //
-                // Capping alone could not rescue three probes because the scaffold was constructing the
-                // model with NO options, i.e. at production scale: NumDenoisingSteps = 20 (a 20-step
-                // diffusion denoise loop per forward), NumFeatures = 320, NumTemporalLayers = 4. That is
-                // what made a single train step cost ~8-10 s, so Training_ShouldReduceLoss still timed
-                // out at 15 steps, TrainingError_ShouldNotExceedTestError straddled the 120 s gate
-                // (1 m 39 s, then a timeout), and LossStrictlyDecreasesOnMemorizationTask needed more
-                // warm-up steps than the 180 s gate allows.
-                //
-                // Shrink through the PUBLIC options only, exactly as the BiomedCLIP / OpenCLIP /
-                // SigLIP2 fixtures above do, and as the MoG fixture already does for 20-step diffusion
-                // at production scale. The denoise-loop depth is the dominant term, so it drops hardest;
-                // ScaleFactor and LatentDim are deliberately left at their defaults so the
-                // super-resolution output contract (and the TemporalDim / SuperResolved shape
-                // invariants that assert on it) is unchanged. Every training assertion still runs
-                // against the real forward/backward path.
+                // Keep the released 256-channel, nine-temporal-module architecture intact. The
+                // generated conformance fixture may bound repeated denoising/CFG passes just as it
+                // bounds input geometry and training repetitions, but it must not replace the paper
+                // graph with a narrower model. One conditioned denoising pass exercises the entire
+                // graph once per sample without duplicating it for classifier-free guidance. This
+                // also keeps the fixture compatible with the native paper-contract validation
+                // introduced alongside the Tensors 0.127 integration.
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.FourDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
-                    "inputFrames: 4, inputDepth: 3, inputHeight: 32, inputWidth: 32, outputSize: 4), " +
-                    "new AiDotNet.Video.Options.StableVideoSROptions { NumDenoisingSteps = 2, " +
-                    "NumFeatures = 64, NumTemporalLayers = 2 })";
+                    // An 8x8 probe is the minimum geometry that still traverses all four spatial
+                    // levels and the four-frame temporal path. It keeps the exact 733M-parameter
+                    // graph inside both the steady-forward and total census budgets.
+                    "inputFrames: 4, inputDepth: 3, inputHeight: 8, inputWidth: 8, outputSize: 4), " +
+                    "new AiDotNet.Video.Options.StableVideoSROptions { " +
+                    "NumDenoisingSteps = 1, GuidanceScale = 1.0 }, " +
+                    "conditioner: new AiDotNet.Diffusion.Conditioning.CLIPTextConditioner<double>(" +
+                    "AiDotNet.Tokenization.ClipTokenizerFactory.CreateSimple(), " +
+                    "AiDotNet.Enums.CLIPVariant.StableDiffusionX4Upscaler))";
             }
             else if (model.ClassName == "OpenCLIP" && model.TypeParameterCount == 1)
             {
@@ -11278,7 +11302,16 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         bool isVisionModel = (model.Domains.Contains(1) || model.Domains.Contains(11))
             && !model.ExtendsForecastingModelBase;
         bool isAudioModel = model.Domains.Contains(3); // Audio=3 (was incorrectly 4)
-        if (model.ClassName == "VideoCLIP")
+        if (model.ClassName == "StableVideoSR")
+        {
+            // Keep this in lockstep with the bounded constructor above. The exact released
+            // 256-channel/nine-temporal-module graph accepts arbitrary divisible geometry;
+            // 8x8 is the minimum geometry that still traverses every spatial and four-frame
+            // temporal stage, then the public 4x contract produces 32x32 frames.
+            sb.AppendLine("    protected override int[] InputShape => new[] { 4, 3, 8, 8 };");
+            sb.AppendLine("    protected override int[] OutputShape => new[] { 4, 3, 32, 32 };");
+        }
+        else if (model.ClassName == "VideoCLIP")
         {
             // VideoCLIP consumes an unbatched temporal clip [frames, C, H, W]
             // and emits one embedding. Pin the generated contract explicitly
@@ -11306,7 +11339,10 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // [LatentChannels, H, W] latent and fail on 12288 vs 16384 — the same trap VideoCLIP
             // documents above. Pin a LATENT-shaped fixture (4 = the SD v1.5 latent depth this model
             // defaults to) so the declared domain stays truthful without misstating the contract.
-            sb.AppendLine("    protected override int[] InputShape => new[] { 4, 32, 32 };");
+            // The UNet is fully convolutional; 16x16 still traverses every down/up stage while
+            // keeping this smoke contract comfortably below the per-test CI deadline under shard load.
+            sb.AppendLine("    protected override int[] InputShape => new[] { 4, 16, 16 };");
+            sb.AppendLine("    protected override int[] OutputShape => new[] { 4, 16, 16 };");
         }
         else if (model.ClassName == "VideoGigaGAN")
         {
@@ -11860,19 +11896,10 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         }
         else if (model.ClassName == "MetaCLIP")
         {
-            // Shard M MedS-Meta, SHRINK rung. Float and caps are both already applied to all three
-            // (MedSAM/MedSAM2 carry MoreData 2/6 + tolerance, MetaCLIP the full 5/15 set) and their
-            // probes still overran the 120/180 s gate. Neither exposes a usable width knob —
-            // MedSAMModelSize declares only ViTBase, and MetaCLIPOptions only MaxEntriesPerConcept — so
-            // resolution is the lever.
-            // It is set HERE rather than through GetVisionSpatialSize: entries added to that helper had
-            // no effect for these models (verified three times — the emitted fixture stayed at 128px),
-            // whereas this branch is evaluated BEFORE the generic `else if (isVisionModel)` fallback
-            // that was producing {3,128,128}, so it deterministically wins.
-            // 64px quarters the feature map while staying above the stride floor that collapsed a 32px
-            // XDecoder fixture to a 1x1 map and silently produced zero gradients. OutputShape keeps the
-            // vision family's {4} contract. Production ImageSize defaults are untouched.
-            sb.AppendLine("    protected override int[] InputShape => new[] { 3, 64, 64 };");
+            // Keep the generated tensor in lockstep with the bounded public-options constructor,
+            // which declares ImageSize=32/PatchSize=2. Supplying 64px here silently quadruples the
+            // visual token count and makes every attention map 16x larger.
+            sb.AppendLine("    protected override int[] InputShape => new[] { 3, 32, 32 };");
             sb.AppendLine("    protected override int[] OutputShape => new[] { 4 };");
         }
         else if (model.ClassName == "OpenVocabSAM")
@@ -12290,8 +12317,18 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // backbone's strided 3x3 conv → max-pool stem sees the shape it
             // expects per the standard CV literature
             // (He et al. 2016 ResNet, Tan & Le 2019 EfficientNet, etc.).
-            int spatial = GetVisionSpatialSize(model.ClassName);
-            sb.AppendLine($"    protected override int[] InputShape => new[] {{ 1, 3, {spatial}, {spatial} }};");
+            if (TryGetVisionFixtureSpatialSize(constructorExpr, out int height, out int width))
+            {
+                sb.AppendLine($"    protected override int[] InputShape => new[] {{ 1, 3, {height}, {width} }};");
+            }
+            else
+            {
+                int spatial = GetVisionSpatialSize(model.ClassName);
+                if (baseClassName.IndexOf("Diffusion", System.StringComparison.Ordinal) >= 0)
+                    sb.AppendLine($"    protected override int[] InputShape => new[] {{ 1, 3, {spatial}, {spatial} }};");
+                else
+                    sb.AppendLine($"    protected override int[] InputShape => ResolveModelDeclaredInputShape(new[] {{ 1, 3, {spatial}, {spatial} }});");
+            }
             sb.AppendLine("    protected override int[] OutputShape => new[] { 4 };");
         }
         else if (model.ClassName == "RegionCLIP" || model.ClassName == "RemoteCLIP" || model.ClassName == "SigLIP")
@@ -12322,10 +12359,21 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         }
         else if (isVisionModel)
         {
-            // Must match the architecture's inputHeight/inputWidth emitted above. Use
-            // the same helper so the two emission sites cannot drift apart.
-            int spatial = GetVisionSpatialSize(model.ClassName);
-            sb.AppendLine($"    protected override int[] InputShape => new[] {{ 3, {spatial}, {spatial} }};");
+            // The emitted constructor is authoritative. Selecting a second size from the class
+            // name can feed a bounded patch model thousands of extra tokens and manufacture a
+            // quadratic attention outlier unrelated to either the smoke topology or paper default.
+            if (TryGetVisionFixtureSpatialSize(constructorExpr, out int height, out int width))
+            {
+                sb.AppendLine($"    protected override int[] InputShape => new[] {{ 3, {height}, {width} }};");
+            }
+            else
+            {
+                int spatial = GetVisionSpatialSize(model.ClassName);
+                if (baseClassName.IndexOf("Diffusion", System.StringComparison.Ordinal) >= 0)
+                    sb.AppendLine($"    protected override int[] InputShape => new[] {{ 3, {spatial}, {spatial} }};");
+                else
+                    sb.AppendLine($"    protected override int[] InputShape => ResolveModelDeclaredInputShape(new[] {{ 3, {spatial}, {spatial} }});");
+            }
             sb.AppendLine("    protected override int[] OutputShape => new[] { 4 };");
 
             // Paper-scale vision / vision-language encoders use the original
@@ -13082,6 +13130,14 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 sb.AppendLine("    protected override int[] InputShape => new[] { 1, 64, 32 };");
                 sb.AppendLine("    protected override int[] OutputShape => new[] { 1, 64, 64 };");
                 sb.AppendLine("    protected override int VariableLengthAxis => 1;");
+            }
+            else if (model.ClassName == "SileroVad")
+            {
+                // One Silero streaming decision consumes exactly one 512-sample frame at 16 kHz.
+                // The generic [1,64,32] audio tensor represents four such decisions and therefore
+                // overstates recurrent work while violating the public streaming input contract.
+                sb.AppendLine("    protected override int[] InputShape => new[] { 1, 512 };");
+                sb.AppendLine("    protected override int[] OutputShape => new[] { 1, 1 };");
             }
             else
             {
@@ -14646,7 +14702,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // comparison used [C, H] instead of [H, W] and reported nonsense such as "AVID
             // fixture [.., 3, 32]". Anchoring to the close brace/bracket restricts this to
             // genuine 3-element [C, H, W] fixtures, which is the only form the check is valid for.
-            @"InputShape\s*=>\s*(?:new\s*\[\]\s*\{|\[)\s*\d+\s*,\s*(\d+)\s*,\s*(\d+)\s*(?:\}|\])");
+            @"InputShape\s*=>\s*(?:ResolveModelDeclaredInputShape\s*\(\s*)?(?:new\s*\[\]\s*\{|\[)\s*\d+\s*,\s*(\d+)\s*,\s*(\d+)\s*(?:\}|\])\s*\)?");
         if (archMatch.Success && shapeMatch.Success)
         {
             int archH = int.Parse(archMatch.Groups[1].Value);

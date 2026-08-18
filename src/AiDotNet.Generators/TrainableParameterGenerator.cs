@@ -150,6 +150,17 @@ public class TrainableParameterGenerator : IIncrementalGenerator
             {
                 if (member is not IFieldSymbol field) continue;
 
+                // COMPILER-GENERATED BACKING FIELDS ARE NOT MEMBERS THE AUTHOR WROTE. An auto-property
+                // is backed by a field literally named `<Prop>k__BackingField`, which is not a legal
+                // C# identifier, so emitting it produced source that could not compile at all
+                // ("Invalid expression term '<'"). The property is the member; its backing store is an
+                // implementation detail of the language.
+                //
+                // This generator already filters them correctly elsewhere -- the guard existed and this
+                // loop simply never reached it, which is why the defect stayed invisible until a class
+                // holding auto-properties was first made partial.
+                if (field.IsImplicitlyDeclared) continue;
+
                 var classification = ParameterMemberSemanticModel.Classify(field);
 
                 // Check for [TrainableParameter]
@@ -195,7 +206,8 @@ public class TrainableParameterGenerator : IIncrementalGenerator
                             // unannotated nullable tensor into the graph.
                             Optional: optional || explicitNullable, Nullable: explicitNullable,
                             Shape: shape, Condition: condition,
-                            LowPrecisionBacking: lowPrecisionBacking));
+                            LowPrecisionBacking: lowPrecisionBacking,
+                            IsReadOnly: field.IsReadOnly));
                     }
                     else if (TryGetTensorCollection(field.Type, classSymbol, out var collectionKind))
                     {
@@ -711,7 +723,12 @@ public class TrainableParameterGenerator : IIncrementalGenerator
             {
                 sb.AppendLine("        EnsureSubLayersRegistered();");
             }
-            sb.AppendLine("        if (IsShapeResolved || ParametersAreConstructionSized) EnsureInitializationSerialized();");
+            // A declared parameter shape can be complete even when unrelated data axes remain
+            // deferred. Channel-pinned convolution factories are the canonical example: their
+            // kernels are fully sized, but image/video extents correctly stay dynamic. Use the
+            // shared readiness state rather than repeating the older whole-input-shape gate, so
+            // the optimizer view and the flat parameter surface materialize at the same boundary.
+            sb.AppendLine("        if (OwnParameterReadiness == AiDotNet.Models.Parameters.ParameterReadiness.ShapeResolvedUnmaterialized) EnsureInitializationSerialized();");
             if (hasOptional || hasCollections)
             {
                 sb.AppendLine($"        var __params = new System.Collections.Generic.List<Tensor<{GetTypeParamName(classSymbol)}>>({paramFields.Count});");
@@ -769,6 +786,29 @@ public class TrainableParameterGenerator : IIncrementalGenerator
             // or a post-increment cursor (optional path).
             void EmitFieldAssign(ParameterFieldInfo pf, string indexExpr, string idxLabel)
             {
+                // A READONLY field cannot be REASSIGNED outside its constructor, so the assignment below
+                // does not compile for one (CS0191). Skipping such a field instead would be far worse:
+                // these are genuine trainable weights, and dropping them from the surface is exactly the
+                // silent weight loss this generator exists to prevent.
+                //
+                // So the VALUES are copied into the tensor the constructor already built. That is not
+                // merely a workaround for readonly -- it is the better restore in general, because
+                // replacing the tensor breaks the REFERENCE IDENTITY the tape and ParameterBuffer align
+                // on, which is the hazard CifAlignmentLayer's own remarks describe. A shape
+                // disagreement is a real disagreement and says so rather than silently resizing.
+                if (pf.IsReadOnly)
+                {
+                    sb.AppendLine("        {");
+                    sb.AppendLine($"            var __src = parameters[{indexExpr}] ?? throw new System.ArgumentNullException(nameof(parameters), \"Parameter at index {idxLabel} is null.\");");
+                    sb.AppendLine($"            if (__src.Length != {pf.Name}.Length)");
+                    sb.AppendLine($"                throw new System.ArgumentException($\"Parameter at index {idxLabel} has {{__src.Length}} values but '{pf.Name}' holds {{{pf.Name}.Length}}.\", nameof(parameters));");
+                    sb.AppendLine($"            for (int __c = 0; __c < {pf.Name}.Length; __c++) {{ {pf.Name}[__c] = __src[__c]; }}");
+                    sb.AppendLine("        }");
+                    if (pf.LowPrecisionBacking is not null)
+                        sb.AppendLine($"        {pf.LowPrecisionBacking} = null;");
+                    return;
+                }
+
                 bool needsCast = pf.TypeName is not null
                     && !(pf.TypeName.StartsWith(TensorTypeName + "<") || pf.TypeName == TensorTypeName);
                 if (needsCast)
@@ -1948,7 +1988,8 @@ public class TrainableParameterGenerator : IIncrementalGenerator
         string? Shape = null,
         ParameterCollectionKind CollectionKind = ParameterCollectionKind.Direct,
         string? Condition = null,
-        string? LowPrecisionBacking = null);
+        string? LowPrecisionBacking = null,
+        bool IsReadOnly = false);
     private record struct GradientFieldInfo(string Name, bool IsNullable);
     private record struct SubLayerFieldInfo(string Name, bool IsNullable, bool IsCollection, string? InputShape = null);
 }

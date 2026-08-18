@@ -180,6 +180,45 @@ public static class ClipTokenizerFactory
     }
 
     /// <summary>
+    /// Creates an offline CLIP test tokenizer whose embedding-table shape is
+    /// exactly <paramref name="vocabSize"/>.
+    /// </summary>
+    /// <param name="vocabSize">Required vocabulary-table size.</param>
+    /// <param name="corpus">Optional small corpus used for functional tokens.</param>
+    /// <returns>
+    /// A functional test tokenizer padded with inert reserved tokens to the
+    /// requested size. It is shape-compatible, but it is not a substitute for
+    /// the released CLIP vocabulary and merge ranks when loading checkpoints.
+    /// </returns>
+    /// <remarks>
+    /// Paper-fidelity and performance fixtures need the real embedding-table
+    /// dimensions without downloading model assets during CI. Padding only the
+    /// unused tail preserves deterministic tokenization of the supplied corpus
+    /// while ensuring parameter counts and checkpoint layouts are not silently
+    /// measured against a tiny test vocabulary.
+    /// </remarks>
+    public static BpeTokenizer CreateShapeCompatibleForTesting(
+        int vocabSize = DefaultVocabSize,
+        IEnumerable<string>? corpus = null)
+    {
+        if (vocabSize <= 0)
+            throw new ArgumentOutOfRangeException(nameof(vocabSize), vocabSize,
+                "Vocabulary size must be positive.");
+
+        var tokenizer = CreateSimple(corpus, vocabSize);
+        if (tokenizer.VocabularySize > vocabSize)
+            throw new ArgumentException(
+                $"The trained test vocabulary contains {tokenizer.VocabularySize} tokens, " +
+                $"which exceeds the requested shape of {vocabSize}.",
+                nameof(vocabSize));
+
+        for (int index = tokenizer.VocabularySize; index < vocabSize; index++)
+            tokenizer.Vocabulary.AddToken($"<|reserved_clip_{index:D8}|>");
+
+        return tokenizer;
+    }
+
+    /// <summary>
     /// Gets the default encoding options for CLIP text encoding.
     /// </summary>
     /// <param name="maxLength">The maximum sequence length. Default is 77.</param>

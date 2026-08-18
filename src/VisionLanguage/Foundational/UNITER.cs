@@ -106,6 +106,7 @@ public partial class UNITER<T> : VisionLanguageModelBase<T>, IVisionLanguageFusi
         : base(architecture)
     {
         _options = options ?? new UNITEROptions();
+        _options.Validate();
         _useNativeMode = true;
         _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
             this,
@@ -122,7 +123,16 @@ public partial class UNITER<T> : VisionLanguageModelBase<T>, IVisionLanguageFusi
                 Beta2 = 0.98,
                 Epsilon = 1e-6,
                 EnableGradientClipping = true,
-                MaxGradientNorm = 2.0,
+                MaxGradientNorm = _options.MaxGradientNorm,
+                SchedulerStepMode = AiDotNet.LearningRateSchedulers.SchedulerStepMode.StepPerBatch,
+                LearningRateScheduler = new AiDotNet.LearningRateSchedulers.LinearWarmupScheduler(
+                    baseLearningRate: _options.LearningRate,
+                    warmupSteps: _options.WarmupSteps,
+                    totalSteps: _options.TotalTrainingSteps,
+                    warmupInitLr: _options.WarmupInitialLearningRate
+                        ?? _options.LearningRate / System.Math.Max(1, _options.WarmupSteps),
+                    decayMode: AiDotNet.LearningRateSchedulers.LinearWarmupScheduler.DecayMode.Linear,
+                    endLr: _options.EndLearningRate),
             });
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;

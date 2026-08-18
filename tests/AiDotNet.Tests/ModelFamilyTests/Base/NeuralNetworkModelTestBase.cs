@@ -219,6 +219,31 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         s_declaredInputShapeCache = new();
     private static readonly System.Collections.Concurrent.ConcurrentDictionary<Type, int[]>
         s_effectiveInputShapeCache = new();
+    private static readonly int[] s_missingDeclaredInputShape = [];
+
+    private (int[] Shape, ModelInputShapeConstraint? Constraint) TryGetArchitectureInputShape()
+    {
+        try
+        {
+            using var arena = TensorArena.Create();
+            using var network = CreateNetwork();
+            int[]? shape = network.GetArchitecture()?.GetInputShape();
+            if (shape is null || shape.Length == 0 || shape.Any(axis => axis <= 0))
+                return (s_missingDeclaredInputShape, null);
+
+            ModelInputShapeConstraint? constraint = network is NeuralNetworkBase<T> concrete
+                ? concrete.GetInputShapeConstraint()
+                : null;
+            return ((int[])shape.Clone(), constraint);
+        }
+        catch (Exception ex) when (
+            ex is ArgumentException or InvalidOperationException
+            or NotSupportedException or NotImplementedException
+            or AiDotNet.Exceptions.TensorShapeMismatchException)
+        {
+            return (s_missingDeclaredInputShape, null);
+        }
+    }
 
     /// <summary>
     /// The fixture declaration after applying the model's generated input-geometry contract. This
@@ -257,47 +282,58 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
     /// </remarks>
     private int[] DeclaredInputShape => s_declaredInputShapeCache.GetOrAdd(GetType(), _ =>
     {
-        try
+        var architecture = TryGetArchitectureInputShape();
+        if (ReferenceEquals(architecture.Shape, s_missingDeclaredInputShape))
         {
-            using var arena = TensorArena.Create();
-            using var network = CreateNetwork();
-
-            var perSample = network.GetArchitecture()?.GetInputShape();
-            if (perSample is null || perSample.Length == 0) return s_fallbackInputShape;
-
-            var declared = new int[perSample.Length + 1];
-            declared[0] = 1;
-            for (int i = 0; i < perSample.Length; i++)
-            {
-                // An unresolved or degenerate axis is not a contract; keep the old probe rather
-                // than build a tensor the model certainly cannot consume.
-                if (perSample[i] <= 0) return s_fallbackInputShape;
-                declared[i + 1] = perSample[i];
-            }
-
-            ClampFreeAxes(declared, perSample.Length);
-
-            if (network is NeuralNetworkBase<T> concrete)
-                declared = ApplyInputShapeConstraint(declared, concrete.GetInputShapeConstraint());
-
-            return declared;
-        }
-        catch (Exception ex) when (
-            ex is ArgumentException or InvalidOperationException
-            or NotSupportedException or NotImplementedException
-            or AiDotNet.Exceptions.TensorShapeMismatchException)
-        {
-            // Same narrow catch as the output-shape warm-up: a model that cannot be constructed or
-            // cannot describe itself keeps the historical probe, and the failure is reported by
-            // whichever invariant depends on it rather than from inside a property getter.
             return s_fallbackInputShape;
         }
+
+        var perSample = architecture.Shape;
+        var declared = new int[perSample.Length + 1];
+        declared[0] = 1;
+        Array.Copy(perSample, 0, declared, 1, perSample.Length);
+        ClampFreeAxes(declared, perSample.Length);
+
+        if (architecture.Constraint is { } constraint)
+            declared = ApplyInputShapeConstraint(declared, constraint);
+
+        return declared;
     });
 
     private static int[] ApplyInputShapeConstraint(
         int[] declared,
         ModelInputShapeConstraint constraint)
         => InputContractShapeResolver.Conform(declared, constraint);
+
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<Type, int[]>
+        s_generatedDeclaredInputShapeCache = new();
+
+    /// <summary>
+    /// Replaces a generated fixture's guessed trailing axes with the architecture declared by the
+    /// exact model instance that the fixture constructs.
+    /// </summary>
+    /// <remarks>
+    /// Parameterless model constructors do not expose their architecture literal to the source
+    /// generator. Asking the constructed model closes that gap without a model-name override. The
+    /// fallback is retained when a model cannot describe itself, and the result is cached once per
+    /// generated fixture type so repeated invariants do not repeatedly construct a network.
+    /// </remarks>
+    protected int[] ResolveModelDeclaredInputShape(int[] fallback)
+    {
+        int[] declared = s_generatedDeclaredInputShapeCache.GetOrAdd(GetType(), _ =>
+        {
+            return TryGetArchitectureInputShape().Shape;
+        });
+
+        if (ReferenceEquals(declared, s_missingDeclaredInputShape))
+            return (int[])fallback.Clone();
+
+        int[] conformed = AiDotNet.Generators.GeneratedVisionFixtureContract.ConformToDeclaredShape(
+            fallback,
+            declared);
+        ClampFreeAxes(conformed, conformed.Length - 1);
+        return conformed;
+    }
 
     /// <summary>
     /// Caller-declared output shape. Subclasses can override this for paper-
@@ -521,6 +557,28 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         INeuralNetworkModel<T> network,
         int requestedIterations)
     {
+        long parameterCount = 0;
+        foreach (var chunk in EnumerateParameterChunks(network))
+        {
+            parameterCount = parameterCount >= long.MaxValue - chunk.Length
+                ? long.MaxValue
+                : parameterCount + chunk.Length;
+        }
+
+        return ResolveConformanceTrainingIterations(parameterCount, requestedIterations);
+    }
+
+    /// <summary>
+    /// Applies the shared conformance budget to an already measured parameter count.
+    /// </summary>
+    /// <remarks>
+    /// The performance census uses this overload so its three iteration projections do not walk a
+    /// foundation-scale parameter surface three additional times merely to repeat the same count.
+    /// </remarks>
+    protected static int ResolveConformanceTrainingIterations(
+        long parameterCount,
+        int requestedIterations)
+    {
         Assert.True(requestedIterations > 0,
             $"Requested training iterations must be > 0; got {requestedIterations}.");
 
@@ -533,13 +591,6 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         // across machines, unlike elapsed-time early exits.
         const int MaximumConformanceSteps = 10;
         const long ParameterUpdateBudget = 75_000_000L;
-        long parameterCount = 0;
-        foreach (var chunk in EnumerateParameterChunks(network))
-        {
-            parameterCount = parameterCount >= long.MaxValue - chunk.Length
-                ? long.MaxValue
-                : parameterCount + chunk.Length;
-        }
 
         int boundedRequest = System.Math.Min(requestedIterations, MaximumConformanceSteps);
         if (parameterCount <= 0) return boundedRequest;
@@ -2332,7 +2383,11 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         // Registered parameters and persistent buffers remain pinned across Reset.
         _arena.Reset();
 
-        const int steadyForwardSamples = 3;
+        // Three samples stabilize percentiles for ordinary models. Once cold forward exceeds ten
+        // seconds, one warmed production request is already a long-duration sample; duplicating it
+        // twice adds up to minutes of harness time without increasing architecture or path coverage.
+        // Record the chosen count so the measurement contract remains explicit.
+        int steadyForwardSamples = coldForwardTimer.Elapsed >= TimeSpan.FromSeconds(10) ? 1 : 3;
         var steadyForwardMs = new double[steadyForwardSamples];
         for (int i = 0; i < steadyForwardSamples; i++)
         {
@@ -2427,22 +2482,42 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         int requestedTrainingIterations = TrainingIterations;
         int requestedTrainingReduceLossIterations = checked(TrainingIterations * 3);
         int requestedMoreDataIterations = MoreDataLongIterations;
-        int trainingIterations = ResolveConformanceTrainingIterations(network, requestedTrainingIterations);
-        int trainingReduceLossIterations = ResolveConformanceTrainingIterations(
-            network, requestedTrainingReduceLossIterations);
-        int moreDataIterations = ResolveConformanceTrainingIterations(network, requestedMoreDataIterations);
-
         long parameterCount = 0;
         int parameterSlots = 0;
+        long trainingBudgetParameterCount = 0;
+        WritePerformanceProgress(outputDirectory!, performanceFileName, "parameter-enumeration");
         if (network is AiDotNet.NeuralNetworks.NeuralNetworkBase<T> parameterNetwork)
         {
-            WritePerformanceProgress(outputDirectory!, performanceFileName, "parameter-enumeration");
-            foreach (var chunk in parameterNetwork.GetParameterStateChunks())
+            // Census metadata needs scalar and slot counts, not parameter values. The canonical
+            // readiness-aware manifest describes the same ordered surface without traversing every
+            // live tensor in a foundation-scale nested component.
+            foreach (var slot in parameterNetwork.ParameterLayout.Slots)
             {
-                parameterCount = checked(parameterCount + chunk.Tensor.Length);
+                if (slot.MaterializedParameterCount <= 0) continue;
+                parameterCount = checked(parameterCount + slot.MaterializedParameterCount);
                 parameterSlots++;
             }
+            trainingBudgetParameterCount = parameterCount;
         }
+        else
+        {
+            foreach (var chunk in EnumerateParameterChunks(network))
+            {
+                if (chunk.Length <= 0) continue;
+                parameterCount = parameterCount >= long.MaxValue - chunk.Length
+                    ? long.MaxValue
+                    : parameterCount + chunk.Length;
+                parameterSlots++;
+            }
+            trainingBudgetParameterCount = parameterCount;
+        }
+
+        int trainingIterations = ResolveConformanceTrainingIterations(
+            trainingBudgetParameterCount, requestedTrainingIterations);
+        int trainingReduceLossIterations = ResolveConformanceTrainingIterations(
+            trainingBudgetParameterCount, requestedTrainingReduceLossIterations);
+        int moreDataIterations = ResolveConformanceTrainingIterations(
+            trainingBudgetParameterCount, requestedMoreDataIterations);
 
         totalTimer.Stop();
         process.Refresh();
@@ -2470,6 +2545,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
             osPlatform = GetPerformanceOsPlatform(),
             processArchitecture = System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture.ToString(),
             processorCount = Environment.ProcessorCount,
+            processorModel = GetPerformanceProcessorModel(),
             machineName = Environment.MachineName,
             runId = Environment.GetEnvironmentVariable("GITHUB_RUN_ID"),
             commit = Environment.GetEnvironmentVariable("GITHUB_SHA"),
@@ -2479,6 +2555,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
             constructMs = constructTimer.Elapsed.TotalMilliseconds,
             targetPreparationMs,
             coldForwardMs = coldForwardTimer.Elapsed.TotalMilliseconds,
+            steadyForwardSamples,
             steadyForwardMedianMs = steadyForwardMs[steadyForwardSamples / 2],
             steadyForwardP95Ms = steadyForwardMs[steadyForwardSamples - 1],
             tapeForwardMs,
@@ -2617,6 +2694,44 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
                 System.Runtime.InteropServices.OSPlatform.OSX)) return "macos";
         return "unknown";
     }
+
+    private static string GetPerformanceProcessorModel()
+    {
+        string? processorIdentifier = Environment.GetEnvironmentVariable("PROCESSOR_IDENTIFIER");
+        if (!string.IsNullOrWhiteSpace(processorIdentifier))
+            return NormalizePerformanceEnvironmentValue(processorIdentifier);
+
+        try
+        {
+            const string cpuInfoPath = "/proc/cpuinfo";
+            if (File.Exists(cpuInfoPath))
+            {
+                foreach (string line in File.ReadLines(cpuInfoPath))
+                {
+                    if (!line.StartsWith("model name", StringComparison.OrdinalIgnoreCase)
+                        && !line.StartsWith("hardware", StringComparison.OrdinalIgnoreCase))
+                        continue;
+
+                    int separator = line.IndexOf(':');
+                    if (separator >= 0 && separator + 1 < line.Length)
+                        return NormalizePerformanceEnvironmentValue(line.Substring(separator + 1));
+                }
+            }
+        }
+        catch (IOException)
+        {
+            // Environment identity is diagnostic metadata; an unavailable procfs must not fail a model.
+        }
+        catch (UnauthorizedAccessException)
+        {
+            // Sandboxed runners may deny procfs access. The explicit unknown value remains comparable.
+        }
+
+        return "unknown";
+    }
+
+    private static string NormalizePerformanceEnvironmentValue(string value) =>
+        value.Trim().Replace('|', '/');
 
     // =====================================================
     // MATHEMATICAL INVARIANT: Gradient Flow

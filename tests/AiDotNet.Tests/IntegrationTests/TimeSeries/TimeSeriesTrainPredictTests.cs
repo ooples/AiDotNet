@@ -572,6 +572,66 @@ public class TimeSeriesTrainPredictTests
         }
     }
 
+    [Fact(Timeout = 120000)]
+    public async Task ARModel_Deserialize_PreservesPreVersionedCheckpointCompatibility()
+    {
+        await Task.Yield();
+        var (x, y) = CreateStationaryData(100);
+        var model = new ARModel<double>(new ARModelOptions<double> { AROrder = 3, MaxIterations = 100 });
+        model.Train(x, y);
+        var expected = model.Predict(x);
+
+        byte[] legacyPayload = ConvertVersionedTimeSeriesPayloadToLegacy(model.Serialize());
+        var restored = new ARModel<double>(new ARModelOptions<double> { AROrder = 3 });
+        restored.Deserialize(legacyPayload);
+        var actual = restored.Predict(x);
+
+        Assert.Equal(expected.Length, actual.Length);
+        for (int i = 5; i < expected.Length; i++)
+            Assert.Equal(expected[i], actual[i], precision: 8);
+    }
+
+    private static byte[] ConvertVersionedTimeSeriesPayloadToLegacy(byte[] payload)
+    {
+        using var input = new MemoryStream(payload);
+        using var reader = new BinaryReader(input);
+        _ = reader.ReadInt32(); // serialization magic
+        int version = reader.ReadInt32();
+        if (version != 1)
+            throw new InvalidDataException($"Expected time-series checkpoint version 1, got {version}.");
+
+        long legacyStart = input.Position;
+        _ = reader.ReadInt32(); // LagOrder
+        _ = reader.ReadBoolean();
+        _ = reader.ReadInt32();
+        _ = reader.ReadBoolean();
+        _ = reader.ReadInt32();
+        bool isTrained = reader.ReadBoolean();
+        if (!isTrained)
+            throw new InvalidDataException("The compatibility fixture must be trained.");
+
+        int parameterCount = reader.ReadInt32();
+        input.Position = checked(input.Position + (long)parameterCount * sizeof(double));
+        long layoutStart = input.Position;
+        int slotCount = reader.ReadInt32();
+        for (int i = 0; i < slotCount; i++)
+        {
+            _ = reader.ReadString();
+            _ = reader.ReadInt32(); // role
+            _ = reader.ReadInt64(); // count
+            _ = reader.ReadInt64(); // offset
+            int rank = reader.ReadInt32();
+            if (rank >= 0)
+                input.Position = checked(input.Position + (long)rank * sizeof(int));
+        }
+        long layoutEnd = input.Position;
+
+        using var legacy = new MemoryStream(payload.Length);
+        legacy.Write(payload, checked((int)legacyStart), checked((int)(layoutStart - legacyStart)));
+        legacy.Write(payload, checked((int)layoutEnd), checked(payload.Length - (int)layoutEnd));
+        return legacy.ToArray();
+    }
+
     #endregion
 
     #region Cross-Model Consistency Tests

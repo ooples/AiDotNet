@@ -1,4 +1,6 @@
 using AiDotNet.Attributes;
+using AiDotNet.ActivationFunctions;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
@@ -7,6 +9,9 @@ using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Onnx;
 using AiDotNet.Optimizers;
 using AiDotNet.Tokenization;
+using AiDotNet.Tokenization.Algorithms;
+using AiDotNet.Tokenization.HuggingFace;
+using AiDotNet.Tokenization.Models;
 using AiDotNet.Tokenization.Interfaces;
 using AiDotNet.VisionLanguage.Interfaces;
 
@@ -55,6 +60,7 @@ namespace AiDotNet.VisionLanguage.Encoders;
 )]
 public partial class MedCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageModel<T>
 {
+    private const int MedClipExtrasFormatVersion = 1;
     private readonly MedCLIPOptions _options;
 
     public override ModelOptions GetOptions() => _options;
@@ -63,6 +69,7 @@ public partial class MedCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVision
     private readonly ITokenizer? _tokenizer;
     private bool _useNativeMode;
     private bool _disposed;
+    private readonly LearnableLogitScaleLayer<T> _logitScale;
 
     public MedCLIP(
         NeuralNetworkArchitecture<T> architecture,
@@ -71,12 +78,13 @@ public partial class MedCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVision
     )
         : base(architecture)
     {
-        _options = options ?? new MedCLIPOptions();
+        _options = options is null ? new MedCLIPOptions() : new MedCLIPOptions(options);
+        _logitScale = new LearnableLogitScaleLayer<T>(_options.Temperature);
         SyncImageSizeWithArchitecture();
         _useNativeMode = false;
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
-        base.EmbeddingDim = _options.VisionEmbeddingDim;
+        base.EmbeddingDim = _options.ProjectionDim;
         if (string.IsNullOrWhiteSpace(imageEncoderModelPath))
             throw new ArgumentException(
                 "Image encoder model path cannot be null or empty.",
@@ -95,7 +103,7 @@ public partial class MedCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVision
                 throw new FileNotFoundException($"Text ONNX not found: {tp}", tp);
             OnnxTextEncoder = new OnnxModel<T>(tp, _options.OnnxOptions);
         }
-        _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize);
+        _tokenizer = CreateTokenizer();
         InitializeLayers();
     }
 
@@ -106,14 +114,15 @@ public partial class MedCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVision
     )
         : base(architecture)
     {
-        _options = options ?? new MedCLIPOptions();
+        _options = options is null ? new MedCLIPOptions() : new MedCLIPOptions(options);
+        _logitScale = new LearnableLogitScaleLayer<T>(_options.Temperature);
         SyncImageSizeWithArchitecture();
         _useNativeMode = true;
         _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
-        base.EmbeddingDim = _options.VisionEmbeddingDim;
-        _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize);
+        base.EmbeddingDim = _options.ProjectionDim;
+        _tokenizer = CreateTokenizer();
         InitializeLayers();
     }
 
@@ -125,13 +134,26 @@ public partial class MedCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVision
             _options.ImageSize = h;
     }
 
-    public int EmbeddingDimension => _options.VisionEmbeddingDim;
+    public int EmbeddingDimension => _options.ProjectionDim;
     int IVisualEncoder<T>.ImageSize => _options.ImageSize;
     int IVisualEncoder<T>.ImageChannels => 3;
     public int MaxSequenceLength => _options.MaxSequenceLength;
     public int TextEmbeddingDimension => _options.TextEmbeddingDim;
     public int ProjectionDimension => _options.ProjectionDim;
-    public T Temperature => NumOps.FromDouble(_options.Temperature);
+    /// <summary>Gets the number of ResNet-50 bottleneck blocks.</summary>
+    public int VisionBottleneckBlockCount => Layers.Count(layer => layer is BottleneckBlock<T>);
+    /// <summary>Gets the number of ClinicalBERT transformer blocks.</summary>
+    public int TextTransformerBlockCount =>
+        TextEncoderLayers.Count(layer => layer is TransformerEncoderBlock<T>);
+    /// <summary>Gets whether the ClinicalBERT embedding stack retains token-type embeddings.</summary>
+    public bool UsesTokenTypeEmbeddings =>
+        TextEncoderLayers.Any(layer => layer is LearnedTokenTypeEmbeddingLayer<T>);
+    /// <summary>Gets whether both reference 512-dimensional projections are bias-free.</summary>
+    public bool UsesBiasFreeReferenceProjections =>
+        Layers.LastOrDefault() is BiasFreeLinearLayer<T> &&
+        TextEncoderLayers.LastOrDefault() is BiasFreeLinearLayer<T>;
+    /// <summary>Gets the current learned temperature (the reciprocal of the clamped logit scale).</summary>
+    public T Temperature => NumOps.Divide(NumOps.One, _logitScale.Scale);
 
     public Tensor<T> EncodeImage(Tensor<T> image)
     {
@@ -152,9 +174,34 @@ public partial class MedCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVision
         if (IsOnnxMode && OnnxTextEncoder is not null)
             return L2Normalize(OnnxTextEncoder.Run(t));
         var c = t;
-        foreach (var l in TextEncoderLayers)
+        var semanticStates = new List<Tensor<T>>(3);
+        int encoderBlock = 0;
+        // The projection runs after the reference implementation's three-state pooling.
+        for (int i = 0; i < TextEncoderLayers.Count - 1; i++)
+        {
+            var l = TextEncoderLayers[i];
             c = l.Forward(c);
-        return L2Normalize(c);
+            if (l is TransformerEncoderBlock<T>)
+            {
+                encoderBlock++;
+                if (encoderBlock is 1 or 2 || encoderBlock == _options.NumTextLayers)
+                    semanticStates.Add(c);
+            }
+        }
+
+        if (semanticStates.Count == 0)
+            throw new InvalidOperationException("MedCLIP clinical text encoder produced no hidden states.");
+
+        Tensor<T>? pooled = null;
+        foreach (var state in semanticStates)
+        {
+            int tokenAxis = state.Rank == 3 ? 1 : 0;
+            var layerPooled = Engine.ReduceMean(state, [tokenAxis], keepDims: false);
+            pooled = pooled is null ? layerPooled : Engine.TensorAdd(pooled, layerPooled);
+        }
+        pooled = Engine.TensorMultiplyScalar(
+            pooled!, NumOps.FromDouble(1.0 / semanticStates.Count));
+        return L2Normalize(TextEncoderLayers[^1].Forward(pooled));
     }
 
     public Tensor<T>[] EncodeTexts(string[] texts)
@@ -168,14 +215,68 @@ public partial class MedCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVision
     public T ComputeSimilarity(Tensor<T> image, string text) =>
         CosineSimilarity(EncodeImage(image), EncodeText(text));
 
+    /// <summary>
+    /// Computes MedCLIP's bidirectional semantic matching objective for decoupled
+    /// image/report batches. Semantic scores are converted to row-wise soft targets;
+    /// the same target matrix supervises image-to-text and text-to-image logits.
+    /// </summary>
+    public T ComputeSemanticMatchingLoss(
+        Tensor<T> imageEmbeddings,
+        Tensor<T> textEmbeddings,
+        Tensor<T> semanticScores)
+        => ComputeSemanticMatchingLossTensor(imageEmbeddings, textEmbeddings, semanticScores)[0];
+
+    /// <summary>
+    /// Computes the tape-connected MedCLIP semantic objective. Unlike the scalar convenience
+    /// overload, this form preserves gradients through both encoders and the learned temperature.
+    /// </summary>
+    public Tensor<T> ComputeSemanticMatchingLossTensor(
+        Tensor<T> imageEmbeddings,
+        Tensor<T> textEmbeddings,
+        Tensor<T> semanticScores)
+    {
+        if (imageEmbeddings.Rank != 2 || textEmbeddings.Rank != 2 || semanticScores.Rank != 2)
+            throw new ArgumentException("Semantic matching expects rank-2 embedding and score matrices.");
+        int imageCount = imageEmbeddings.Shape[0];
+        int textCount = textEmbeddings.Shape[0];
+        if (imageEmbeddings.Shape[1] != textEmbeddings.Shape[1] ||
+            semanticScores.Shape[0] != imageCount || semanticScores.Shape[1] != textCount)
+            throw new ArgumentException("Embedding and semantic-score matrix shapes are inconsistent.");
+
+        imageEmbeddings = L2Normalize(imageEmbeddings);
+        textEmbeddings = L2Normalize(textEmbeddings);
+        var textTranspose = Engine.TensorPermute(textEmbeddings, [1, 0]);
+        var logits = _logitScale.Forward(Engine.TensorMatMul(imageEmbeddings, textTranspose));
+        var boundedScores = Engine.TensorClamp(
+            semanticScores, NumOps.FromDouble(-1.0), NumOps.One);
+        var imageToText = SoftTargetCrossEntropyTensor(logits, boundedScores);
+        var textToImage = SoftTargetCrossEntropyTensor(
+            Engine.TensorPermute(logits, [1, 0]),
+            Engine.TensorPermute(boundedScores, [1, 0]));
+        return Engine.TensorMultiplyScalar(
+            Engine.TensorAdd(imageToText, textToImage),
+            NumOps.FromDouble(0.5 * _options.SemanticMatchingWeight));
+    }
+
+    private Tensor<T> SoftTargetCrossEntropyTensor(Tensor<T> logits, Tensor<T> scores)
+    {
+        // The text-to-image branch supplies transposed tensor views.  The CPU
+        // softmax kernels require contiguous storage, so materialize those
+        // views here while preserving the tensor-engine operation graph.
+        var targets = Engine.Softmax(scores.Contiguous(), axis: -1);
+        var logProbabilities = Engine.TensorLogSoftmax(logits.Contiguous(), axis: -1);
+        var perRow = Engine.ReduceSum(
+            Engine.TensorMultiply(targets, logProbabilities), [1], keepDims: false);
+        return Engine.TensorNegate(Engine.ReduceMean(perRow, [0], keepDims: false));
+    }
+
     public Dictionary<string, T> ZeroShotClassify(Tensor<T> image, string[] labels)
     {
         var ie = EncodeImage(image);
         var te = EncodeTexts(labels);
         var logits = new Tensor<T>([labels.Length]);
-        double temp = _options.Temperature;
         for (int i = 0; i < labels.Length; i++)
-            logits[i] = NumOps.FromDouble(NumOps.ToDouble(CosineSimilarity(ie, te[i])) / temp);
+            logits[i] = NumOps.Multiply(CosineSimilarity(ie, te[i]), _logitScale.Scale);
         var probs = Softmax(logits);
         var r = new Dictionary<string, T>();
         for (int i = 0; i < labels.Length; i++)
@@ -190,33 +291,60 @@ public partial class MedCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVision
         if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
         {
             Layers.AddRange(Architecture.Layers);
-            return;
+        }
+        else
+        {
+            BuildReferenceResNet50VisionEncoder();
+        }
+        BuildReferenceClinicalBertTextEncoder();
+    }
+
+    private void BuildReferenceResNet50VisionEncoder()
+    {
+        // The official default is torchvision ResNet-50 with stage depths [3,4,6,3]
+        // and a 2048 -> 512 projection replacing the classifier.
+        Layers.Add(new ConvolutionalLayer<T>(64, kernelSize: 7, stride: 2, padding: 3,
+            activationFunction: new IdentityActivation<T>()));
+        Layers.Add(new BatchNormalizationLayer<T>());
+        Layers.Add(new ActivationLayer<T>((IActivationFunction<T>)new ReLUActivation<T>()));
+        Layers.Add(new MaxPoolingLayer<T>(poolSize: 3, stride: 2));
+
+        int[] stageDepths = [3, 4, 6, 3];
+        int[] stageWidths = [64, 128, 256, 512];
+        for (int stage = 0; stage < stageDepths.Length; stage++)
+        {
+            for (int block = 0; block < stageDepths[stage]; block++)
+            {
+                int stride = stage > 0 && block == 0 ? 2 : 1;
+                Layers.Add(new BottleneckBlock<T>(stageWidths[stage], stride));
+            }
         }
 
-        int patchSize = Math.Max(1, _options.ImageSize / 16);
-        Layers.Add(
-            new PatchEmbeddingLayer<T>(
-                patchSize,
-                _options.VisionEmbeddingDim,
-                expectedInputChannels: 3
-            )
-        );
+        Layers.Add(AdaptiveAveragePoolingLayer<T>.GlobalPool());
+        Layers.Add(new FlattenLayer<T>());
+        Layers.Add(new BiasFreeLinearLayer<T>(2048, _options.ProjectionDim));
+    }
 
-        int blockSize = _options.DropoutRate > 0 ? 6 : 5;
-        int visionLayerCount = 2 + _options.NumVisionLayers * blockSize;
-        SplitDualStreamLayers(
-            LayerHelper<T>.CreateDefaultOpenCLIPLayers(
-                _options.VisionEmbeddingDim,
+    private void BuildReferenceClinicalBertTextEncoder()
+    {
+        TextEncoderLayers.Add(new EmbeddingLayer<T>(_options.VocabSize, _options.TextEmbeddingDim));
+        TextEncoderLayers.Add(new LearnedPositionalEmbeddingLayer<T>(
+            _options.MaxSequenceLength, _options.TextEmbeddingDim));
+        TextEncoderLayers.Add(new LearnedTokenTypeEmbeddingLayer<T>(
+            tokenTypeCount: 2, _options.TextEmbeddingDim));
+        TextEncoderLayers.Add(new LayerNormalizationLayer<T>(_options.TextEmbeddingDim));
+        TextEncoderLayers.Add(new DropoutLayer<T>(_options.DropoutRate));
+        for (int i = 0; i < _options.NumTextLayers; i++)
+        {
+            TextEncoderLayers.Add(new TransformerEncoderBlock<T>(
                 _options.TextEmbeddingDim,
-                _options.ProjectionDim,
-                _options.NumVisionLayers,
-                _options.NumTextLayers,
-                _options.NumVisionHeads,
                 _options.NumTextHeads,
-                _options.DropoutRate
-            ),
-            visionLayerCount
-        );
+                _options.TextEmbeddingDim * 4,
+                _options.DropoutRate,
+                new GELUActivation<T>()));
+        }
+        TextEncoderLayers.Add(new BiasFreeLinearLayer<T>(
+            _options.TextEmbeddingDim, _options.ProjectionDim));
     }
 
     protected override Tensor<T> PredictCore(Tensor<T> input)
@@ -246,11 +374,29 @@ public partial class MedCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVision
         }
     }
 
-    // This forwarded to a helper the base now calls from its own
-    // GetExtraTrainableLayers, so the override restated it. Removed under AIDN082.
+    /// <inheritdoc />
+    protected override IEnumerable<LayerBase<T>?> GetExtraTrainableLayers() =>
+        EnumerateMedClipExtraLayers();
 
-    protected override Tensor<T> PreprocessImage(Tensor<T> image) =>
-        NormalizeImage(image, _options.ImageMean, _options.ImageStd);
+    private IEnumerable<LayerBase<T>?> EnumerateMedClipExtraLayers()
+    {
+        foreach (var layer in EnumerateTextEncoderTrainableLayers()) yield return layer;
+        yield return _logitScale;
+    }
+
+    protected override Tensor<T> PreprocessImage(Tensor<T> image)
+    {
+        var normalized = NormalizeImage(image, _options.ImageMean, _options.ImageStd);
+        if (normalized.Rank != 3)
+            return normalized;
+
+        // The native ResNet path is batch-first. Model-family fixtures and the public single-image
+        // API also accept [C,H,W]; preserve that contract by materializing an explicit batch of one
+        // before global pooling. Without it, Flatten interprets C as the batch dimension and the
+        // reference 2048-wide projection receives [2048,1] instead of [1,2048].
+        return Engine.Reshape(normalized,
+            [1, normalized.Shape[0], normalized.Shape[1], normalized.Shape[2]]);
+    }
 
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
 
@@ -265,6 +411,21 @@ public partial class MedCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVision
             Complexity = _options.NumVisionLayers + _options.NumTextLayers,
         };
         m.AdditionalInfo["Architecture"] = "MedCLIP";
+        m.AdditionalInfo["VisionEncoder"] = $"{_options.VisionBackbone} ({_options.VisionModelId})";
+        m.AdditionalInfo["TextEncoder"] = $"ClinicalBERT ({_options.TextModelId})";
+        m.AdditionalInfo["TextPooling"] =
+            $"mean(hidden_state_1, hidden_state_2, hidden_state_{_options.NumTextLayers})";
+        m.AdditionalInfo["VisionTopology"] =
+            $"{_options.VisionBackbone} bottleneck depths [3,4,6,3]; " +
+            $"{_options.VisionEmbeddingDim}->{_options.ProjectionDim} bias-free projection";
+        m.AdditionalInfo["TextTopology"] =
+            $"ClinicalBERT {_options.NumTextLayers} layers, {_options.NumTextHeads} heads, " +
+            $"hidden size {_options.TextEmbeddingDim}; " +
+            $"{_options.TextEmbeddingDim}->{_options.ProjectionDim} bias-free projection";
+        m.AdditionalInfo["LogitScale"] = "learned log(1/0.07), clamped to [0,log(100)]";
+        m.AdditionalInfo["ImageNormalization"] =
+            $"mean [{string.Join(",", _options.ImageMean.Select(value => value.ToString("R", System.Globalization.CultureInfo.InvariantCulture)))}]; " +
+            $"std [{string.Join(",", _options.ImageStd.Select(value => value.ToString("R", System.Globalization.CultureInfo.InvariantCulture)))}]";
         m.AdditionalInfo["Domain"] = _options.Domain.ToString();
         m.AdditionalInfo["SemanticMatchingWeight"] = _options.SemanticMatchingWeight.ToString();
         return m;
@@ -281,6 +442,11 @@ public partial class MedCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVision
         writer.Write(_options.ProjectionDim);
         writer.Write(_options.Temperature);
         writer.Write(_options.SemanticMatchingWeight);
+        writer.Write(MedClipExtrasFormatVersion);
+        writer.Write(TextEncoderLayers.Count);
+        foreach (var layer in TextEncoderLayers)
+            SerializationHelper<T>.SerializeVector(writer, layer.GetParameters());
+        SerializationHelper<T>.SerializeVector(writer, _logitScale.GetParameters());
     }
 
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
@@ -298,6 +464,27 @@ public partial class MedCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVision
         _options.ProjectionDim = reader.ReadInt32();
         _options.Temperature = reader.ReadDouble();
         _options.SemanticMatchingWeight = reader.ReadDouble();
+        int formatVersion = reader.ReadInt32();
+        if (formatVersion != MedClipExtrasFormatVersion)
+            throw new InvalidDataException(
+                $"Unsupported MedCLIP payload version {formatVersion}; " +
+                $"expected {MedClipExtrasFormatVersion}.");
+        int layerCount = reader.ReadInt32();
+        if (layerCount != TextEncoderLayers.Count)
+            throw new InvalidDataException(
+                $"Serialized MedCLIP text layer count {layerCount} does not match topology {TextEncoderLayers.Count}.");
+        foreach (var layer in TextEncoderLayers)
+        {
+            var values = SerializationHelper<T>.DeserializeVector(reader);
+            if (values.Length != layer.ParameterCount)
+                throw new InvalidDataException(
+                    $"Serialized MedCLIP layer has {values.Length} parameters; expected {layer.ParameterCount}.");
+            layer.SetParameters(values);
+        }
+        var logScale = SerializationHelper<T>.DeserializeVector(reader);
+        if (logScale.Length != _logitScale.ParameterCount)
+            throw new InvalidDataException("Serialized MedCLIP logit-scale parameter count is invalid.");
+        _logitScale.SetParameters(logScale);
         if (!_useNativeMode && _options.ImageEncoderModelPath is { } p && !string.IsNullOrEmpty(p))
             OnnxImageEncoder = new OnnxModel<T>(p, _options.OnnxOptions);
         if (_options.TextEncoderModelPath is { } t2 && !string.IsNullOrEmpty(t2))
@@ -314,6 +501,24 @@ public partial class MedCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVision
         for (int i = 0; i < sl; i++)
             tk[i] = NumOps.FromDouble(enc.TokenIds[i]);
         return tk;
+    }
+
+    private ITokenizer CreateTokenizer()
+    {
+        if (!string.IsNullOrWhiteSpace(_options.TokenizerDirectory))
+            return HuggingFaceTokenizerLoader.LoadFromDirectory(_options.TokenizerDirectory!);
+
+        // Offline/randomly initialized models use a deterministic BERT-compatible fallback.
+        // A pretrained MedCLIP checkpoint must set TokenizerDirectory so token IDs match
+        // emilyalsentzer/Bio_ClinicalBERT exactly.
+        return WordPieceTokenizer.Train(
+            [
+                "chest radiograph with no acute cardiopulmonary abnormality",
+                "pneumonia pleural effusion cardiomegaly atelectasis",
+                "medical image and clinical report"
+            ],
+            vocabSize: _options.VocabSize,
+            specialTokens: SpecialTokens.Bert());
     }
 
     private void ThrowIfDisposed()

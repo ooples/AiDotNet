@@ -15,6 +15,8 @@ namespace AiDotNet.Tools.ModelPerfProbe;
 /// </summary>
 internal static class Program
 {
+    private const int CurrentBaselineSchemaVersion = 2;
+
     private static readonly string[] RequiredMetrics =
     {
         "constructMs", "targetPreparationMs", "coldForwardMs", "steadyForwardMedianMs", "steadyForwardP95Ms",
@@ -135,17 +137,26 @@ internal static class Program
         ICollection<Diagnostic> diagnostics)
     {
         if (baseline is null) return;
+        if (baseline.SchemaVersion != CurrentBaselineSchemaVersion)
+        {
+            diagnostics.Add(Diagnostic.Warning("<census>", "baseline",
+                $"baseline schema {baseline.SchemaVersion} is not comparable to schema " +
+                $"{CurrentBaselineSchemaVersion}; refresh the environment-qualified baseline"));
+            return;
+        }
+
         var index = baseline.Entries.ToDictionary(
             entry => (entry.Fixture, entry.Environment),
             entry => entry,
             new FixtureEnvironmentComparer());
 
+        var missingByEnvironment = new Dictionary<string, int>(StringComparer.Ordinal);
         foreach (CensusRecord record in records.Where(r => r.Status == "ok"))
         {
             if (!index.TryGetValue((record.Fixture, record.Environment), out BaselineEntry? prior))
             {
-                diagnostics.Add(Diagnostic.Warning(record.Fixture, "baseline",
-                    $"no environment-qualified baseline for {record.Environment}"));
+                missingByEnvironment.TryGetValue(record.Environment, out int missingCount);
+                missingByEnvironment[record.Environment] = missingCount + 1;
                 continue;
             }
 
@@ -170,6 +181,13 @@ internal static class Program
                 }
             }
         }
+
+        foreach ((string environment, int missingCount) in missingByEnvironment)
+        {
+            diagnostics.Add(Diagnostic.Warning("<census>", "baseline",
+                $"no environment-qualified baseline for {environment}; " +
+                $"skipped {missingCount} fixture comparison(s)"));
+        }
     }
 
     private static void DetectCohortOutliers(
@@ -177,10 +195,17 @@ internal static class Program
         ICollection<Diagnostic> diagnostics)
     {
         foreach (IGrouping<string, CensusRecord> cohort in records
-                     .Where(r => r.Status == "ok" && r.ParameterCount > 0 && r.Metric("trainStepMs") > 0.0)
+                     .Where(r => r.Status == "ok"
+                         && r.ParameterCount > 0
+                         && r.Metric("trainStepMs") > 0.0
+                         && r.Metric("steadyForwardMedianMs") > 0.0)
                      .GroupBy(r => r.Cohort))
         {
-            double[] values = cohort.Select(r => Math.Log(1.0 + r.Metric("trainStepMs"))).OrderBy(v => v).ToArray();
+            // Parameter-decade peers can have radically different sequence and spatial work.
+            // Compare the training overhead relative to each model's own serving forward; absolute
+            // forward, train, wall, and memory ceilings below still catch end-to-end slowness.
+            double[] values = cohort.Select(r => Math.Log(1.0 + TrainingAmplification(r)))
+                .OrderBy(v => v).ToArray();
             if (values.Length < 5) continue;
             double median = Median(values);
             double mad = Median(values.Select(v => Math.Abs(v - median)).OrderBy(v => v).ToArray());
@@ -188,11 +213,13 @@ internal static class Program
 
             foreach (CensusRecord record in cohort)
             {
-                double robustZ = 0.6745 * (Math.Log(1.0 + record.Metric("trainStepMs")) - median) / mad;
+                double amplification = TrainingAmplification(record);
+                double robustZ = 0.6745 * (Math.Log(1.0 + amplification) - median) / mad;
                 if (robustZ > 6.0)
                 {
-                    diagnostics.Add(Diagnostic.Warning(record.Fixture, "trainStepMs",
-                        $"robust cohort outlier (z={robustZ:F1}, cohort={cohort.Key})"));
+                    diagnostics.Add(Diagnostic.Warning(record.Fixture, "trainingAmplification",
+                        $"training is {amplification:F1}x its steady forward " +
+                        $"(robust z={robustZ:F1}, cohort={cohort.Key})"));
                 }
             }
         }
@@ -218,6 +245,9 @@ internal static class Program
             }
         }
     }
+
+    private static double TrainingAmplification(CensusRecord record)
+        => record.Metric("trainStepMs") / record.Metric("steadyForwardMedianMs");
 
     private static void ValidateAbsoluteCeilings(
         IReadOnlyList<CensusRecord> records,
@@ -328,7 +358,7 @@ internal static class Program
 
     private static BaselineDocument BuildBaseline(IReadOnlyList<CensusRecord> records) => new()
     {
-        SchemaVersion = 1,
+        SchemaVersion = CurrentBaselineSchemaVersion,
         GeneratedUtc = DateTimeOffset.UtcNow,
         Entries = records.Where(record => record.Status == "ok").Select(record => new BaselineEntry
         {
@@ -365,13 +395,19 @@ internal static class Program
 
     private static int RunSelfTest()
     {
+        static int Fail(string check)
+        {
+            Console.Error.WriteLine($"ModelPerfProbe self-test failed: {check}");
+            return 1;
+        }
+
         string directory = Path.Combine(Path.GetTempPath(), "aidotnet-perf-selftest-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(directory);
         try
         {
             string record = """
             {"schemaVersion":1,"status":"ok","fixture":"F","model":"M","precision":"System.Single",
-             "parameterCount":10,"engine":"Cpu","framework":".NET","os":"test","processArchitecture":"X64","processorCount":1,
+             "parameterCount":10,"engine":"Cpu","frameworkMajor":10,"osPlatform":"test","processArchitecture":"X64","processorCount":1,"processorModel":"test-cpu",
              "constructMs":1,"targetPreparationMs":0,"coldForwardMs":2,"steadyForwardMedianMs":1,"steadyForwardP95Ms":1,
              "tapeForwardMs":1,"tapeEntries":2,"backwardMs":2,"trainStepMs":3,"allocatedBytes":4,"wallMs":5,
              "runnerElapsedMs":6,"peakWorkingSetBytes":104857600,"peakPrivateMemoryBytes":125829120,
@@ -383,7 +419,8 @@ internal static class Program
             var diagnostics = new List<Diagnostic>();
             ValidateCoverage(records, 1, diagnostics);
             ValidateRecords(records, diagnostics);
-            if (records.Count != 1 || diagnostics.Count != 0) return 1;
+            if (records.Count != 1 || diagnostics.Count != 0)
+                return Fail("valid record loading and validation");
 
             string timeout = """
             {"schemaVersion":1,"status":"timeout","fixture":"SlowFixture","model":"","precision":"System.Single",
@@ -398,8 +435,61 @@ internal static class Program
             if (diagnostics.Count != 1
                 || diagnostics[0].Metric != "status"
                 || !diagnostics[0].Message.Contains("backward", StringComparison.Ordinal))
-                return 1;
-            if (BuildBaseline(records).Entries.Length != 1) return 1;
+                return Fail("timeout phase diagnostic");
+            BaselineDocument generatedBaseline = BuildBaseline(records);
+            if (generatedBaseline.SchemaVersion != CurrentBaselineSchemaVersion
+                || generatedBaseline.Entries.Length != 1
+                || !generatedBaseline.Entries[0].Environment.EndsWith("|test-cpu", StringComparison.Ordinal))
+                return Fail("generated baseline schema and processor-qualified environment key");
+
+            diagnostics.Clear();
+            CompareBaseline(records, new BaselineDocument { SchemaVersion = 1 }, new Options(), diagnostics);
+            if (diagnostics.Count != 1
+                || diagnostics[0].Metric != "baseline"
+                || !diagnostics[0].Message.Contains("not comparable", StringComparison.Ordinal))
+                return Fail("incompatible baseline schema warning");
+
+            // Expensive models are not training hot-path outliers when their train/forward ratio
+            // matches their peers; a cheap-forward model with extreme training amplification is.
+            CensusRecord Synthetic(int index, double trainMs, double forwardMs, long parameters)
+                => new()
+                {
+                    Fixture = $"Synthetic{index}",
+                    Model = "Synthetic",
+                    Status = "ok",
+                    Environment = "test",
+                    Cohort = "System.Single|10^8",
+                    Phase = "",
+                    Error = "",
+                    ParameterCount = parameters,
+                    Metrics = new Dictionary<string, double>
+                    {
+                        ["trainStepMs"] = trainMs,
+                        ["steadyForwardMedianMs"] = forwardMs,
+                        ["peakWorkingSetBytes"] = parameters * (20.0 + index * 0.25),
+                    },
+                };
+
+            var comparable = new[]
+            {
+                Synthetic(0, 90, 50, 100_000_000),
+                Synthetic(1, 95, 50, 110_000_000),
+                Synthetic(2, 100, 50, 120_000_000),
+                Synthetic(3, 105, 50, 130_000_000),
+                Synthetic(4, 110, 50, 140_000_000),
+                Synthetic(5, 10_000, 5_000, 150_000_000),
+            };
+            diagnostics.Clear();
+            DetectCohortOutliers(comparable, diagnostics);
+            if (diagnostics.Count != 0)
+                return Fail("comparable cohort remains silent");
+
+            var amplified = comparable.ToArray();
+            amplified[^1] = Synthetic(6, 50_000, 500, 150_000_000);
+            diagnostics.Clear();
+            DetectCohortOutliers(amplified, diagnostics);
+            if (!diagnostics.Any(d => d.Metric == "trainingAmplification"))
+                return Fail("training amplification detection");
             Console.WriteLine("ModelPerfProbe self-test passed.");
             return 0;
         }
@@ -495,8 +585,10 @@ internal static class Program
             if (string.IsNullOrWhiteSpace(frameworkKey)) frameworkKey = Text("framework");
             string osKey = Text("osPlatform");
             if (string.IsNullOrWhiteSpace(osKey)) osKey = Text("os");
+            string processorModel = Text("processorModel");
+            if (string.IsNullOrWhiteSpace(processorModel)) processorModel = "unknown";
             string environment = string.Join("|", frameworkKey, osKey, Text("processArchitecture"),
-                Text("engine"), Text("processorCount"));
+                Text("engine"), Text("processorCount"), processorModel);
             int magnitude = parameters <= 0 ? 0 : (int)Math.Floor(Math.Log10(parameters));
             var metrics = new Dictionary<string, double>(StringComparer.Ordinal);
             foreach (string metric in RequiredMetrics.Concat(new[]
