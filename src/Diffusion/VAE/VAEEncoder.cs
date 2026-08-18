@@ -192,8 +192,11 @@ public partial class VAEEncoder<T> : LayerBase<T>, IShapeContract
     private Tensor<T>? _inputConvOutput;
     private readonly Tensor<T>?[] _downBlockOutputs;
     private Tensor<T>? _midBlock1Output;
+    [AiDotNet.Attributes.Scratch]
     private Tensor<T>? _midBlock2Output;
+    [AiDotNet.Attributes.Scratch]
     private Tensor<T>? _normOutOutput;
+    [AiDotNet.Attributes.Scratch]
     private Tensor<T>? _siluOutput;
 
     /// <inheritdoc />

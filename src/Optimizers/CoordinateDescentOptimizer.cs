@@ -35,11 +35,13 @@ public partial class CoordinateDescentOptimizer<T, TInput, TOutput> : GradientBa
     /// <summary>
     /// Vector of learning rates for each coordinate (variable) in the optimization problem.
     /// </summary>
+    [AiDotNet.Attributes.Buffer]
     private Vector<T> _learningRates;
 
     /// <summary>
     /// Vector of momentum values for each coordinate (variable) in the optimization problem.
     /// </summary>
+    [AiDotNet.Attributes.Buffer]
     private Vector<T> _momentums;
 
     /// <summary>

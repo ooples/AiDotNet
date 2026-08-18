@@ -153,12 +153,19 @@ public partial class VAEResBlock<T> : LayerBase<T>, IShapeContract
     /// <summary>
     /// Cached intermediate values for backward pass.
     /// </summary>
+    [AiDotNet.Attributes.Scratch]
     private Tensor<T>? _norm1Output;
+    [AiDotNet.Attributes.Scratch]
     private Tensor<T>? _silu1Output;
+    [AiDotNet.Attributes.Scratch]
     private Tensor<T>? _conv1Output;
+    [AiDotNet.Attributes.Scratch]
     private Tensor<T>? _norm2Output;
+    [AiDotNet.Attributes.Scratch]
     private Tensor<T>? _silu2Output;
+    [AiDotNet.Attributes.Scratch]
     private Tensor<T>? _conv2Output;
+    [AiDotNet.Attributes.Scratch]
     private Tensor<T>? _skipOutput;
 
     /// <inheritdoc />

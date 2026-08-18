@@ -125,6 +125,7 @@ public partial class RRDBLayer<T> : LayerBase<T>, IShapeContract
     /// <summary>
     /// Cached output from RDB3 for backpropagation.
     /// </summary>
+    [AiDotNet.Attributes.Scratch]
     private Tensor<T>? _rdb3Output;
 
     /// <summary>

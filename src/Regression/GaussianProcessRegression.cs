@@ -65,11 +65,13 @@ public partial class GaussianProcessRegression<T> : NonLinearRegressionBase<T>
     /// <summary>
     /// The kernel matrix (also known as the covariance matrix) that represents the similarity between all training points.
     /// </summary>
+    [AiDotNet.Attributes.Buffer]
     private Matrix<T> _kernelMatrix;
 
     /// <summary>
     /// The vector of coefficients used for making predictions.
     /// </summary>
+    [AiDotNet.Attributes.Buffer]
     private Vector<T> _alpha;
 
     /// <summary>

@@ -1084,7 +1084,9 @@ public static class CompiledTapeTrainingStep<T>
     // containing #557, the IsAvailable probe returns false and the FP16 path is skipped at runtime.
     private static object? _mpPlan;
     private static int[]? _mpKey;
+    [AiDotNet.Attributes.Scratch]
     private static Tensor<float>? _mpInput;
+    [AiDotNet.Attributes.Scratch]
     private static Tensor<float>? _mpTarget;
     // Fused-Adam mixed-precision plan (traces against the fused path's persistent input/target).
     private static object? _mpAdamPlan;

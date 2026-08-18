@@ -57,6 +57,7 @@ public class AdversarialPromptDefense<T, TInput, TOutput> : IAdversarialDefense<
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
     private AdversarialDefenseOptions<T> _options;
+    [AiDotNet.Attributes.Scratch]
     private Vector<T>? _defensePrompt;
     private readonly int _promptLength;
     private readonly double _promptLearningRate;

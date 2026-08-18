@@ -55,6 +55,7 @@ public sealed class PNDMScheduler<T> : NoiseSchedulerBase<T>
     /// <summary>
     /// Current sample being processed (for Runge-Kutta steps).
     /// </summary>
+    [AiDotNet.Attributes.Scratch]
     private Vector<T>? _currentSample;
 
     /// <summary>

@@ -44,6 +44,7 @@ public class InducingPointKernel<T> : IKernelFunction<T>
     /// <summary>
     /// The inducing point locations.
     /// </summary>
+    [AiDotNet.Attributes.Buffer]
     private Matrix<T> _inducingPoints;
 
     /// <summary>

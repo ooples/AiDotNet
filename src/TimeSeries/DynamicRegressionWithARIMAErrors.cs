@@ -183,6 +183,7 @@ public partial class DynamicRegressionWithARIMAErrors<T> : TimeSeriesModelBase<T
     /// The model learns these coefficients from your historical data to quantify relationships
     /// between external factors and what you're predicting.
     /// </remarks>
+    [AiDotNet.Attributes.Scratch]
     private Vector<T> _regressionCoefficients;
 
     /// <summary>

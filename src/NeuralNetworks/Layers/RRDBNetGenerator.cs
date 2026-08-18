@@ -186,6 +186,7 @@ public partial class RRDBNetGenerator<T> : LayerBase<T>, IShapeContract
     /// <summary>
     /// Cached conv1 output for trunk residual.
     /// </summary>
+    [AiDotNet.Attributes.Scratch]
     private Tensor<T>? _conv1Output;
 
     /// <summary>

@@ -142,6 +142,7 @@ public partial class DropoutLayer<T> : LayerBase<T>, IShapeContract
     /// neurons for each training example.
     /// </para>
     /// </remarks>
+    [AiDotNet.Attributes.Scratch]
     private Tensor<T>? _dropoutMask;
 
     /// <summary>

@@ -50,7 +50,9 @@ public sealed class RecurrentPolicyAgent<T> : IPortfolioAgent<T>
     private readonly AdamOptimizer<T, Matrix<T>, Vector<T>> _optimizer;
 
     // Per-episode recurrent state (eager act path).
+    [AiDotNet.Attributes.Scratch]
     private Tensor<T> _h = null!;
+    [AiDotNet.Attributes.Scratch]
     private Tensor<T> _c = null!;
 
     // Current-episode rollout.

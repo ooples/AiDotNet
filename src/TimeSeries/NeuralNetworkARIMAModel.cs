@@ -92,6 +92,7 @@ public partial class NeuralNetworkARIMAModel<T> : TimeSeriesModelBase<T>
     /// which past values are most important for making accurate predictions.
     /// </para>
     /// </remarks>
+    [AiDotNet.Attributes.Scratch]
     private Vector<T> _arParameters;
 
     /// <summary>
@@ -112,6 +113,7 @@ public partial class NeuralNetworkARIMAModel<T> : TimeSeriesModelBase<T>
     /// the MA component might suggest adding some correction to today's prediction.
     /// </para>
     /// </remarks>
+    [AiDotNet.Attributes.Scratch]
     private Vector<T> _maParameters;
 
     /// <summary>

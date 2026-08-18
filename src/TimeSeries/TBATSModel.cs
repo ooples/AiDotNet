@@ -80,11 +80,13 @@ public partial class TBATSModel<T> : TimeSeriesModelBase<T>
     /// <summary>
     /// The autoregressive (AR) coefficients for the ARMA error model.
     /// </summary>
+    [AiDotNet.Attributes.Buffer]
     private Vector<T> _arCoefficients;
 
     /// <summary>
     /// The moving average (MA) coefficients for the ARMA error model.
     /// </summary>
+    [AiDotNet.Attributes.Buffer]
     private Vector<T> _maCoefficients;
 
     /// <summary>

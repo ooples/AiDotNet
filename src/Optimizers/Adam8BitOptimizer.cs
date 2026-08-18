@@ -125,6 +125,7 @@ public partial class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimi
     /// <summary>
     /// Full-precision first moment vector (used when CompressBothMoments is false).
     /// </summary>
+    [AiDotNet.Attributes.Buffer]
     private Vector<T>? _mFullPrecision;
 
     /// <summary>

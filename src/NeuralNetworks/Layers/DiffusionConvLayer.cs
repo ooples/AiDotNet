@@ -170,6 +170,7 @@ public partial class DiffusionConvLayer<T> : LayerBase<T>, IShapeContract
     /// <summary>
     /// Cached diffused features for backward pass [numVertices, InputChannels * NumTimeScales].
     /// </summary>
+    [AiDotNet.Attributes.Scratch]
     private Tensor<T>? _diffusedFeatures;
 
     /// <summary>

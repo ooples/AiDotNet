@@ -35,6 +35,7 @@ public partial class ConjugateGradientOptimizer<T, TInput, TOutput> : GradientBa
     /// <summary>
     /// The direction vector from the previous iteration.
     /// </summary>
+    [AiDotNet.Attributes.Buffer]
     private Vector<T>? _previousDirection;
 
     /// <summary>

@@ -160,7 +160,9 @@ public partial class ExtendedLSTMLayer<T> : LayerBase<T>, IShapeContract
     // ever updates. Standardization (mean 0, var 1) with fixed gamma/beta keeps
     // the layer output unit-scale without introducing extra trainable parameters
     // (which would change the serialized parameter layout).
+    [AiDotNet.Attributes.Scratch]
     private Tensor<T>? _outputNormGamma;
+    [AiDotNet.Attributes.Scratch]
     private Tensor<T>? _outputNormBeta;
 
     // Gradients

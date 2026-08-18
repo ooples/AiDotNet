@@ -89,7 +89,9 @@ namespace AiDotNet.PhysicsInformed.PINNs
         private readonly bool _usesDefaultOptimizer;
 
         // Trainable parameters (the unknowns we're trying to find)
+        [AiDotNet.Attributes.Buffer]
         private Vector<T> _parameters;
+        [AiDotNet.Attributes.Buffer]
         private Vector<T>? _parameterGradients;
 
         // Current PDE with parameters applied

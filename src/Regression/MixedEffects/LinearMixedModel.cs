@@ -89,6 +89,7 @@ public partial class LinearMixedModel<T> : RegressionBase<T>
     /// <summary>
     /// Fixed effects coefficients.
     /// </summary>
+    [AiDotNet.Attributes.Buffer]
     private Vector<T>? _fixedEffects;
 
     /// <summary>

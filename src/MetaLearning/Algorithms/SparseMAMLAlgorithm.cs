@@ -99,6 +99,7 @@ public partial class SparseMAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T
     private readonly int _paramDim;
 
     /// <summary>phi — one learned logit per parameter; the gate is its sigmoid.</summary>
+    [AiDotNet.Attributes.Buffer]
     private Vector<T> _gateLogits;
 
     /// <summary>

@@ -38,6 +38,7 @@ namespace AiDotNet.Diffusion.Schedulers;
 public sealed class DPMSolverSDEScheduler<T> : NoiseSchedulerBase<T>
 {
     private Vector<T>? _sigmas;
+    [AiDotNet.Attributes.Scratch]
     private Vector<T>? _previousDerivative;
     private readonly Random _random;
 

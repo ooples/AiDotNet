@@ -389,15 +389,23 @@ public abstract class TabDPTBase<T> : IParameterSource<T>
         private readonly double _dropoutRate;
 
         // Attention weights
+        [AiDotNet.Attributes.Scratch]
         private Tensor<TBlock> _queryWeights;
+        [AiDotNet.Attributes.Scratch]
         private Tensor<TBlock> _keyWeights;
+        [AiDotNet.Attributes.Scratch]
         private Tensor<TBlock> _valueWeights;
+        [AiDotNet.Attributes.Scratch]
         private Tensor<TBlock> _outputWeights;
 
         // Attention gradients
+        [AiDotNet.Attributes.Scratch]
         private Tensor<TBlock> _queryGrad;
+        [AiDotNet.Attributes.Scratch]
         private Tensor<TBlock> _keyGrad;
+        [AiDotNet.Attributes.Scratch]
         private Tensor<TBlock> _valueGrad;
+        [AiDotNet.Attributes.Scratch]
         private Tensor<TBlock> _outputGrad;
 
         // Feed-forward layers

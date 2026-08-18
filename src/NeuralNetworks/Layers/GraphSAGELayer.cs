@@ -174,6 +174,7 @@ public partial class GraphSAGELayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
     /// <summary>
     /// Cached reshaped adjacency matrix for backward pass.
     /// </summary>
+    [AiDotNet.Attributes.Scratch]
     private Tensor<T>? _adjForBatch;
 
     /// <inheritdoc/>

@@ -121,6 +121,7 @@ public class GaussianProcessClassifier<T> : IGaussianProcessClassifier<T>
     /// calculate uncertainties. Higher values on the diagonal indicate more certainty at those points.
     /// </para>
     /// </remarks>
+    [AiDotNet.Attributes.Buffer]
     private Matrix<T> _W;
 
     /// <summary>

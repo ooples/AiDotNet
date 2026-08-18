@@ -463,6 +463,7 @@ public partial class SpiralConvLayer<T> : LayerBase<T>, IShapeContract
     /// <summary>
     /// Cached gathered neighbor features for backward pass.
     /// </summary>
+    [AiDotNet.Attributes.Scratch]
     private Tensor<T>? _gatheredFeatures;
 
     #endregion

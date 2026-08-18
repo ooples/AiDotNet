@@ -122,6 +122,7 @@ public partial class SpectralNormalizationLayer<T> : LayerBase<T>, IShapeContrac
     /// <summary>
     /// Original weights stored during Forward, to be restored after Backward.
     /// </summary>
+    [AiDotNet.Attributes.Scratch]
     private Vector<T>? _originalParameters;
 
     /// <summary>

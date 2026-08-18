@@ -369,6 +369,7 @@ public partial class EchoStateNetwork<T> : SequenceModelLayoutBase<T>
     /// <summary>
     /// The current state of the reservoir.
     /// </summary>
+    [AiDotNet.Attributes.Buffer]
     private Vector<T> _currentState;
 
     /// <summary>

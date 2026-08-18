@@ -40,21 +40,25 @@ public partial class CMAESOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInpu
     /// <summary>
     /// The mean of the current distribution.
     /// </summary>
+    [AiDotNet.Attributes.Buffer]
     private Vector<T> _mean;
 
     /// <summary>
     /// The covariance matrix of the distribution.
     /// </summary>
+    [AiDotNet.Attributes.Buffer]
     private Matrix<T> _C;
 
     /// <summary>
     /// Evolution path for covariance matrix adaptation.
     /// </summary>
+    [AiDotNet.Attributes.Buffer]
     private Vector<T> _pc;
 
     /// <summary>
     /// Evolution path for step-size adaptation.
     /// </summary>
+    [AiDotNet.Attributes.Buffer]
     private Vector<T> _ps;
 
     /// <summary>

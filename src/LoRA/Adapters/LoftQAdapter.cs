@@ -167,6 +167,7 @@ public partial class LoftQAdapter<T> : LoRAAdapterBase<T>
     /// <summary>
     /// Cached dequantized weights for forward pass.
     /// </summary>
+    [AiDotNet.Attributes.Scratch]
     private Matrix<T>? _dequantizedWeights;
 
     /// <summary>

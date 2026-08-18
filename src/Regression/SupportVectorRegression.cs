@@ -176,6 +176,7 @@ public partial class SupportVectorRegression<T> : NonLinearRegressionBase<T>
     }
 
     private bool _useOLS;
+    [AiDotNet.Attributes.Buffer]
     private Vector<T>? _olsCoefficients;
 
 

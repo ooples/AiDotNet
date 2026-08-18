@@ -177,9 +177,11 @@ public partial class RWKV7Block<T> : LayerBase<T>, IShapeContract
     internal Tensor<T> OutputProjectionWeights => _outputWeights;
 
     /// <summary>v_first handed in for THIS forward pass; null when this block is the first layer.</summary>
+    [AiDotNet.Attributes.Scratch]
     private Tensor<T>? _incomingVFirst;
 
     /// <summary>v_first this block publishes for the next one. Per-pass, never carried across calls.</summary>
+    [AiDotNet.Attributes.Scratch]
     private Tensor<T>? _publishedVFirst;
 
     /// <summary>

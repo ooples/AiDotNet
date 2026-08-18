@@ -81,6 +81,7 @@ public partial class WorldModelsAgent<T> : DeepReinforcementLearningAgentBase<T>
 
     // M: RNN for temporal modeling
     private INeuralNetwork<T> _rnnNetwork;
+    [AiDotNet.Attributes.Scratch]
     private Vector<T> _rnnHiddenState;
 
     // C: Controller (simple linear policy)

@@ -33,11 +33,13 @@ public partial class BayesianOptimizer<T, TInput, TOutput> : OptimizerBase<T, TI
     /// <summary>
     /// A matrix storing the points that have been sampled during the optimization process.
     /// </summary>
+    [AiDotNet.Attributes.Buffer]
     private Matrix<T> _sampledPoints;
 
     /// <summary>
     /// A vector storing the corresponding function values for the sampled points.
     /// </summary>
+    [AiDotNet.Attributes.Buffer]
     private Vector<T> _sampledValues;
 
     /// <summary>

@@ -43,11 +43,13 @@ public partial class ADMMOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
     /// <summary>
     /// The auxiliary variable in ADMM algorithm.
     /// </summary>
+    [AiDotNet.Attributes.Buffer]
     private Vector<T> _z;
 
     /// <summary>
     /// The dual variable in ADMM algorithm.
     /// </summary>
+    [AiDotNet.Attributes.Buffer]
     private Vector<T> _u;
 
     /// <summary>

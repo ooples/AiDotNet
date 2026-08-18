@@ -217,6 +217,7 @@ public partial class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     /// <summary>
     /// Cached reshaped adjacency matrix (3D) for backward pass.
     /// </summary>
+    [AiDotNet.Attributes.Scratch]
     private Tensor<T>? _adjForBatch;
 
     /// <summary>

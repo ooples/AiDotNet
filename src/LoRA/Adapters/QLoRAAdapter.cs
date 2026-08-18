@@ -156,6 +156,7 @@ public partial class QLoRAAdapter<T> : LoRAAdapterBase<T>
     /// Weights are dequantized at the start of forward pass and cached to avoid repeated dequantization.
     /// Cleared after backward pass to save memory.
     /// </remarks>
+    [AiDotNet.Attributes.Scratch]
     private Matrix<T>? _dequantizedWeights;
 
     /// <summary>

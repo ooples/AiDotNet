@@ -530,8 +530,11 @@ public partial class UNetConvBlock<T> : LayerBase<T>, IShapeContract
     private readonly bool _downsample;
 
     private Tensor<T>? _lastInput;
+    [AiDotNet.Attributes.Scratch]
     private Tensor<T>? _conv1Output;      // After LeakyReLU (input to conv2)
+    [AiDotNet.Attributes.Scratch]
     private Tensor<T>? _conv1RawOutput;   // Before LeakyReLU (for backward)
+    [AiDotNet.Attributes.Scratch]
     private Tensor<T>? _conv2RawOutput;   // Before LeakyReLU (for backward)
 
     private readonly int _outChannels;

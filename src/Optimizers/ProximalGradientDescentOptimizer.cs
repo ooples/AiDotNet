@@ -106,6 +106,7 @@ public partial class ProximalGradientDescentOptimizer<T, TInput, TOutput> : Grad
     /// <summary>
     /// Stores the pre-update parameters for approximate reverse updates.
     /// </summary>
+    [AiDotNet.Attributes.Buffer]
     private Vector<T>? _previousParameters;
 
     /// <summary>

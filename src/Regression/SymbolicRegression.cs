@@ -371,6 +371,7 @@ public partial class SymbolicRegression<T> : NonLinearRegressionBase<T>
     public override bool SupportsParameterInitialization => false;
 
     private bool _useOLS;
+    [AiDotNet.Attributes.Buffer]
     private Vector<T>? _olsCoefficients;
 
 

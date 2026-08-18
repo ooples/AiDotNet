@@ -119,6 +119,7 @@ public partial class SplineRegression<T> : NonLinearRegressionBase<T>
     /// The coefficients are what the model learns when you train it on your data.
     /// </para>
     /// </remarks>
+    [AiDotNet.Attributes.Buffer]
     private Vector<T> _coefficients;
 
     /// <summary>

@@ -159,6 +159,7 @@ public partial class DirectionalGraphLayer<T> : LayerBase<T>, IGraphConvolutionL
     /// <summary>
     /// The adjacency matrix reshaped to 3D for batched operations.
     /// </summary>
+    [AiDotNet.Attributes.Scratch]
     private Tensor<T>? _adjForBatch;
 
     /// <summary>

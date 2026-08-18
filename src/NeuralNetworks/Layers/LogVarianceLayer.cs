@@ -158,6 +158,7 @@ public partial class LogVarianceLayer<T> : LayerBase<T>, IShapeContract
     /// Think of it as saving an intermediate result that will be reused later.
     /// </para>
     /// </remarks>
+    [AiDotNet.Attributes.Scratch]
     private Tensor<T>? _meanValues;
 
     /// <summary>

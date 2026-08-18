@@ -312,6 +312,7 @@ public partial class SpikingLayer<T> : LayerBase<T>, IShapeContract
     /// This is the key internal state that determines when neurons fire.
     /// </para>
     /// </remarks>
+    [AiDotNet.Attributes.Buffer]
     private Tensor<T> _membranePotential;
 
     /// <summary>
@@ -333,6 +334,7 @@ public partial class SpikingLayer<T> : LayerBase<T>, IShapeContract
     /// This prevents unrealistically rapid firing and better matches biological neurons.
     /// </para>
     /// </remarks>
+    [AiDotNet.Attributes.Buffer]
     private Tensor<T> _refractoryCountdown;
 
     /// <summary>
@@ -353,6 +355,7 @@ public partial class SpikingLayer<T> : LayerBase<T>, IShapeContract
     /// similar to how real neurons in the brain work.
     /// </para>
     /// </remarks>
+    [AiDotNet.Attributes.Buffer]
     private Tensor<T> _spikes;
 
     /// <summary>
@@ -471,6 +474,7 @@ public partial class SpikingLayer<T> : LayerBase<T>, IShapeContract
     /// This adaptation mimics how real neurons get "tired" when stimulated continuously.
     /// </para>
     /// </remarks>
+    [AiDotNet.Attributes.Buffer]
     private Tensor<T>? _adaptationVariable;
 
     /// <summary>
@@ -587,6 +591,7 @@ public partial class SpikingLayer<T> : LayerBase<T>, IShapeContract
     /// This is part of the most detailed biophysical model of neuron behavior.
     /// </para>
     /// </remarks>
+    [AiDotNet.Attributes.Buffer]
     private Tensor<T>? _nGate;
 
     /// <summary>
@@ -607,6 +612,7 @@ public partial class SpikingLayer<T> : LayerBase<T>, IShapeContract
     /// These channels are primarily responsible for generating the spike.
     /// </para>
     /// </remarks>
+    [AiDotNet.Attributes.Buffer]
     private Tensor<T>? _mGate;
 
     /// <summary>
@@ -628,6 +634,7 @@ public partial class SpikingLayer<T> : LayerBase<T>, IShapeContract
     /// This inactivation mechanism is crucial for the neuron to return to its resting state.
     /// </para>
     /// </remarks>
+    [AiDotNet.Attributes.Buffer]
     private Tensor<T>? _hGate;
 
     /// <summary>

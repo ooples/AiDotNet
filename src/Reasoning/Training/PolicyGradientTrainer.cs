@@ -147,6 +147,7 @@ internal class PolicyGradientTrainer<T>
     private readonly double _entropyCoefficient;
     private readonly bool _useBaseline;
 
+    [AiDotNet.Attributes.Buffer]
     private Vector<T>? _baseline;  // Running average of returns
 
     /// <summary>

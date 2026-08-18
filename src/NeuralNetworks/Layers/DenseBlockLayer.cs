@@ -76,7 +76,9 @@ public partial class DenseBlockLayer<T> : LayerBase<T>, ILayerSerializationExtra
     private Tensor<T>? _bn1Out;
     private Tensor<T>? _relu1Out;
     private Tensor<T>? _conv1Out;
+    [AiDotNet.Attributes.Scratch]
     private Tensor<T>? _bn2Out;
+    [AiDotNet.Attributes.Scratch]
     private Tensor<T>? _relu2Out;
 
     // GPU cached tensors for backward pass

@@ -123,7 +123,9 @@ public partial class EdgeConditionalConvolutionalLayer<T> : LayerBase<T>, IGraph
     /// Edge features tensor.
     /// </summary>
     private Tensor<T>? _edgeFeatures;
+    [AiDotNet.Attributes.Scratch]
     private Tensor<T>? _normalizedAdjacencyMatrix;
+    [AiDotNet.Attributes.Scratch]
     private Tensor<T>? _normalizedEdgeFeatures;
 
     /// <summary>

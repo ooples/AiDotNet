@@ -96,7 +96,9 @@ public partial class DiffusionResBlock<T> : LayerBase<T>, IShapeContract
     // tensors per ResBlock at SD 320×64×64 shapes; pooling these eliminates
     // ~40 MB of per-ResBlock allocation churn (≈22 ResBlocks per UNet
     // forward → ~880 MB removed from each Predict's GC pressure).
+    [AiDotNet.Attributes.Scratch]
     private Tensor<T>? _preAllocatedNorm1Out;
+    [AiDotNet.Attributes.Scratch]
     private Tensor<T>? _preAllocatedNorm2Out;
 
     private static bool ShapeEquals(int[] a, int[] b)

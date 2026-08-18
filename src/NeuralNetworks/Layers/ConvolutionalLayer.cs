@@ -327,6 +327,7 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>, IShapeContract
     /// the first iteration) never touches this cache at all because plan replay
     /// runs traced engine ops directly without invoking <c>layer.Forward()</c>.</para>
     /// </summary>
+    [AiDotNet.Attributes.Scratch]
     private Tensor<T>? _biasReshaped4D;
 
     /// <summary>
@@ -334,6 +335,7 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>, IShapeContract
     /// <see cref="_biasReshaped4D"/> was populated. Optimizers may either rebind the
     /// tensor or update its storage in place, so both signals are required.
     /// </summary>
+    [AiDotNet.Attributes.Scratch]
     private Tensor<T>? _biasReshaped4DSource;
     private int _biasReshaped4DVersion = -1;
 
