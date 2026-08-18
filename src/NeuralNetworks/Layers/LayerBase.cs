@@ -5328,6 +5328,7 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         // format: one authoritative shape+value contract is safer than retaining an ambiguous
         // count-only payload that forced hundreds of layer-specific restore overrides.
         writer.Write(ParameterSerializationMagic);
+        WriteResolvedInputShape(writer);
         WriteParameterLayout(writer);
         writer.Write(parameters.Length);
         for (int i = 0; i < parameters.Length; i++)
@@ -5366,6 +5367,8 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
                 "regenerated with the shape-aware layer serialization format.");
         }
 
+        ReadAndApplyResolvedInputShape(reader);
+
         var layout = ParameterLayoutNode.Read(reader);
         ApplyParameterLayout(layout);
 
@@ -5378,7 +5381,87 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         SetParameters(parameters);
     }
 
-    private const int ParameterSerializationMagic = unchecked((int)0xA1D07E01);
+    // Bumped from 0xA1D07E01 when the resolved input shape joined the payload. An older stream now
+    // fails loudly on the magic check rather than misreading the shape block as a layout node.
+    private const int ParameterSerializationMagic = unchecked((int)0xA1D07E02);
+
+    /// <summary>
+    /// Persists the layer's resolved input shape ahead of the parameter layout.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A lazy layer learns its parameter shapes from the first tensor it sees, so a freshly
+    /// constructed one has no parameters at all. Deserialize hands over values with no forward pass,
+    /// and <see cref="ApplyParameterLayout"/> cannot size such a layer -- its own comment says so,
+    /// and concludes that skipping the rebind is safe because "the restored values are carried by
+    /// the parameter vector and land when the layer materializes".
+    /// </para>
+    /// <para>
+    /// For a layer that is never run again before being asked for its parameters, they never land.
+    /// Measured across the generated model-family fixtures, 34 layers round-tripped to a smaller
+    /// parameter surface than they were saved with -- FullyConnectedLayer 40 to 8, AttentionLayer,
+    /// Conv1DLayer, GRULayer, BatchNormalizationLayer and the rest -- and the restored values were
+    /// discarded in silence.
+    /// </para>
+    /// <para>
+    /// The shape is what was missing, and the writer already knows it. Every one of these layers can
+    /// rebuild its full parameter surface from its input shape, because that is exactly what their
+    /// first forward does; persisting it lets the reader trigger that same construction directly.
+    /// This is cheaper and far more general than a restore override per layer, which is the outcome
+    /// the format comment above was written to avoid.
+    /// </para>
+    /// </remarks>
+    private void WriteResolvedInputShape(BinaryWriter writer)
+    {
+        var shape = InputShape;
+
+        // Rank 0 means "nothing useful to say" -- an unresolved layer, or one whose input shape
+        // still carries a sentinel. The reader treats that as no information rather than guessing.
+        if (!IsShapeResolved || shape is null || shape.Length == 0 || ShapeContainsSentinel(shape))
+        {
+            writer.Write(0);
+            return;
+        }
+
+        writer.Write(shape.Length);
+        for (int i = 0; i < shape.Length; i++) writer.Write(shape[i]);
+    }
+
+    /// <summary>
+    /// Reads the persisted input shape and, if this layer is still unresolved, builds from it.
+    /// </summary>
+    /// <remarks>
+    /// Resolution runs the layer's own first-forward path, so it produces exactly the parameter
+    /// surface a real forward would have. A layer that rejects the shape -- one expecting a richer
+    /// rank than the writer recorded, say -- throws <see cref="ArgumentException"/>, which is the
+    /// documented contract failure for a shape mismatch and is swallowed here: the restore then
+    /// proceeds exactly as it did before this block existed. Any other exception is a real fault and
+    /// propagates.
+    /// </remarks>
+    private void ReadAndApplyResolvedInputShape(BinaryReader reader)
+    {
+        int rank = reader.ReadInt32();
+        if (rank <= 0) return;
+
+        var shape = new int[rank];
+        for (int i = 0; i < rank; i++) shape[i] = reader.ReadInt32();
+
+        if (IsShapeResolved) return;
+
+        for (int i = 0; i < rank; i++)
+        {
+            if (shape[i] <= 0) return;
+        }
+
+        try
+        {
+            ResolveFromShape(shape);
+        }
+        catch (ArgumentException)
+        {
+            // Leave the layer unresolved; the pre-existing restore path still applies below.
+        }
+    }
 
     /// <summary>
     /// Gets all trainable parameters of the layer as a single vector.
