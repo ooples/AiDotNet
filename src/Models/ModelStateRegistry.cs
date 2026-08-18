@@ -578,6 +578,77 @@ public sealed class ModelStateRegistry<T>
                 if (values is not null) get()?.SetParameters(values);
             });
 
+    /// <summary>Declares a list of layers the model owns directly, such as a conv stack.</summary>
+    /// <typeparam name="TLayer">The layer type.</typeparam>
+    /// <param name="name">A stable name, unique within the model.</param>
+    /// <param name="get">Reads the layers, in a stable order.</param>
+    /// <remarks>
+    /// <para>
+    /// A model that keeps layers in a plain <c>List</c> had no way to declare them: every existing
+    /// overload takes a vector, a matrix, a tensor or an <c>IModelSerializer</c>, and a layer is none
+    /// of those. So the generator skipped the member silently and the layers' weights travelled
+    /// nowhere. DeepANT lost both convolution layers this way -- they came back as the
+    /// placeholder-shaped shells its deserialization constructor builds, 96 kernel values collapsed
+    /// to 1, and the model's prediction changed sign across a round-trip.
+    /// </para>
+    /// <para>
+    /// Networks do not hit this, because their layers belong to the network base; it is models on
+    /// other bases, holding layers directly, that had no declaration to make.
+    /// </para>
+    /// <para>
+    /// RESTORED IN PLACE, like <see cref="DeclareChildList{TChild}"/> and for the same reason: the
+    /// parent's constructor builds these layers at their configured widths, so how many there are and
+    /// how wide they are is configuration that the constructor already replays. Only the learned
+    /// values need to travel, and each layer's own <c>Serialize</c>/<c>Deserialize</c> pair already
+    /// carries its parameter layout, resolved shape and buffers.
+    /// </para>
+    /// <para>
+    /// A count mismatch is therefore a real disagreement about configuration rather than something to
+    /// paper over: the extra payloads are consumed so the reader stays aligned for whatever follows,
+    /// and the surplus layers keep their constructed values.
+    /// </para>
+    /// </remarks>
+    public void DeclareLayerList<TLayer>(string name, Func<List<TLayer>?> get)
+        where TLayer : AiDotNet.NeuralNetworks.Layers.LayerBase<T>
+        => Add(name,
+            w =>
+            {
+                var layers = get();
+                if (layers is null) { w.Write(-1); return; }
+                w.Write(layers.Count);
+                foreach (var layer in layers)
+                {
+                    using var ms = new MemoryStream();
+                    using (var lw = new BinaryWriter(ms, System.Text.Encoding.UTF8, leaveOpen: true))
+                    {
+                        layer?.Serialize(lw);
+                    }
+
+                    var bytes = ms.ToArray();
+                    w.Write(bytes.Length);
+                    w.Write(bytes);
+                }
+            },
+            r =>
+            {
+                int count = r.ReadInt32();
+                if (count < 0) return;
+                var layers = get();
+                for (int i = 0; i < count; i++)
+                {
+                    int length = r.ReadInt32();
+                    var bytes = r.ReadBytes(length);
+
+                    // Length-framed per layer so an unreadable or surplus payload costs only that
+                    // layer, never the alignment of the entries that follow it.
+                    if (layers is null || i >= layers.Count || length == 0) { continue; }
+
+                    using var ms = new MemoryStream(bytes);
+                    using var lr = new BinaryReader(ms, System.Text.Encoding.UTF8, leaveOpen: true);
+                    layers[i]?.Deserialize(lr);
+                }
+            });
+
     /// <summary>Declares a list of nested models, such as an agent's per-actor target networks.</summary>
     /// <typeparam name="TChild">The child type.</typeparam>
     /// <param name="name">A stable name, unique within the model.</param>

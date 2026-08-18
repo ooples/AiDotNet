@@ -120,9 +120,32 @@ public class ModelStateGenerator : IIncrementalGenerator
             // `private readonly KNearestNeighborsOptions _options` and answers with _options.K, and
             // the field was dropped here before anything could ask what it was -- so the payload
             // carried the training data, not the K, and the model restored and answered differently.
+            // A LIST OF LAYERS belongs with them: DeclareLayerList restores each layer through its own
+            // Deserialize, on the instance the constructor built, so the list reference is never
+            // reassigned and readonly is no obstacle. Excluding it dropped DeepANT's `private readonly
+            // List<ConvLayerTensor<T>> _convLayers` before the type was ever consulted, which is the
+            // same shape as the KNearestNeighbors defect above: the payload carried everything except
+            // the part that decides the answer.
             if (member is IFieldSymbol { IsReadOnly: true }
                 && !IsModelOptions(memberType)
-                && !IsSerializableModel(memberType))
+                && !IsSerializableModel(memberType)
+                && !IsLayerList(memberType))
+            {
+                continue;
+            }
+
+            // ONE OWNER PER PIECE OF STATE. A model that still hand-writes its serialization already
+            // carries its layers, so declaring them too would write the same state twice and restore it
+            // twice. The two halves cannot be assumed to agree: a hand-written DeserializeCore
+            // typically rebuilds its layers through a placeholder constructor, so a declared restore
+            // landing on those same layers would be applying trained values to whatever shape the
+            // placeholder happened to have.
+            //
+            // Skipping here makes the migration INCREMENTAL rather than a flag day: deleting a model's
+            // hand-written pair is the single act that switches it onto declared state, with no other
+            // edit and no window in which both mechanisms own the same fields. ADN0060 is what makes
+            // that deletion happen; this is what makes it safe.
+            if (IsLayerList(memberType) && DeclaresHandWrittenSerialization(type))
             {
                 continue;
             }
@@ -225,6 +248,41 @@ public class ModelStateGenerator : IIncrementalGenerator
             || type.Name is "IModelSerializer" or "IFullModel" or "INeuralNetwork")
         {
             return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>Whether the type still persists state by hand, and so already owns its layers.</summary>
+    /// <remarks>
+    /// Checks the type's OWN members, not inherited ones: an inherited hook is the base doing the work,
+    /// which is exactly the state this asks about being declared rather than hand-written.
+    /// </remarks>
+    private static bool DeclaresHandWrittenSerialization(INamedTypeSymbol type)
+        => type.GetMembers().Any(m => m is IMethodSymbol
+        {
+            Name: "SerializeCore" or "DeserializeCore"
+                or "SerializeModelSpecificData" or "DeserializeModelSpecificData"
+                or "SerializeNetworkSpecificData" or "DeserializeNetworkSpecificData",
+        });
+
+    /// <summary>Whether a type is a <c>List</c> of layers, which restores in place.</summary>
+    private static bool IsLayerList(ITypeSymbol type)
+        => type is INamedTypeSymbol { Name: "List", TypeArguments.Length: 1 } list
+           && IsLayer(list.TypeArguments[0]);
+
+    /// <summary>Whether a type is a layer, i.e. derives from LayerBase.</summary>
+    /// <remarks>
+    /// Tested by walking the base chain rather than by interface, because a layer's identity is its
+    /// base class: ILayer is implemented by wrappers and adapters that are not themselves storage, and
+    /// DeclareLayerList restores THROUGH LayerBase.Serialize/Deserialize, so the declaration is only
+    /// sound for something that actually inherits that pair.
+    /// </remarks>
+    private static bool IsLayer(ITypeSymbol type)
+    {
+        for (var t = type as INamedTypeSymbol; t is not null; t = t.BaseType)
+        {
+            if (t.Name == "LayerBase") return true;
         }
 
         return false;
@@ -360,6 +418,21 @@ public class ModelStateGenerator : IIncrementalGenerator
             _ when memberType is INamedTypeSymbol { Name: "List", TypeArguments.Length: 1 } list
                    && IsSerializableModel(list.TypeArguments[0]) =>
                 $"state.DeclareChildList<{list.TypeArguments[0].ToDisplayString().TrimEnd('?')}>(\"{id}\", {getter});",
+
+            // A list of LAYERS the model owns directly. Networks never reach this arm -- their layers
+            // belong to the network base -- but a model on another base that keeps a conv stack or an
+            // encoder stack in a plain List had NO declaration available at all: every other arm wants
+            // a vector, a matrix, a tensor or an IModelSerializer, and a layer is none of those. So the
+            // member was skipped in silence and the layers' learned values travelled nowhere. DeepANT
+            // came back holding the placeholder-shaped convolutions its deserialization constructor
+            // builds -- 96 kernel values collapsed to 1 -- and its prediction changed sign across a
+            // round trip while every other declared member restored perfectly.
+            //
+            // Restored in place, like the child list above: the constructor already builds these at
+            // their configured widths, so only the learned values need to travel.
+            _ when memberType is INamedTypeSymbol { Name: "List", TypeArguments.Length: 1 } layerList
+                   && IsLayer(layerList.TypeArguments[0]) =>
+                $"state.DeclareLayerList<{layerList.TypeArguments[0].ToDisplayString().TrimEnd('?')}>(\"{id}\", {getter});",
 
             // THE SETTINGS A MODEL PREDICTS WITH, carried for the same reason a list of children is:
             // they decide the answer. KNearestNeighborsRegression predicts with _options.K, so a

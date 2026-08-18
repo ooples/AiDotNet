@@ -1414,7 +1414,30 @@ public abstract partial class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, ICon
     /// while each model type handles its specialized data.
     /// </para>
     /// </remarks>
-    protected abstract void SerializeCore(BinaryWriter writer);
+    /// <remarks>
+    /// VIRTUAL, NOT ABSTRACT, AND EMPTY BY DEFAULT. Declared state already round-trips without this
+    /// method: <see cref="Serialize"/> ends with
+    /// <c>ModelStateEnvelope.Append(DeclaredState, ...)</c> and <see cref="Deserialize"/> begins with
+    /// <c>ModelStateEnvelope.Extract(DeclaredState, ...)</c>, so every member the model declares --
+    /// by hand in <c>RegisterState</c> or via the generated <c>RegisterGeneratedState</c> -- is
+    /// written and read by the base.
+    /// <para>
+    /// While this pair was ABSTRACT every time series model was FORCED to hand-write both halves,
+    /// which is the population ADN0060 exists to eliminate and could not report: the analyzer
+    /// deliberately exempts an override of an abstract method, because deleting an override the base
+    /// demands is impossible. The models were not choosing to hand-write serialization; the base was
+    /// requiring it. Most of those bodies now duplicate what the envelope already carries, and a
+    /// duplicate is two places to forget the same field.
+    /// </para>
+    /// <para>
+    /// Override this ONLY for state that genuinely cannot be declared. Prefer declaring it: a
+    /// declared member is carried by name, tolerates reordering, and cannot desynchronise a reader
+    /// from a writer.
+    /// </para>
+    /// </remarks>
+    protected virtual void SerializeCore(BinaryWriter writer)
+    {
+    }
 
     /// <summary>
     /// Deserializes model-specific data from the binary reader.
@@ -1438,7 +1461,15 @@ public abstract partial class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, ICon
     /// while each model type handles its specialized data.
     /// </para>
     /// </remarks>
-    protected abstract void DeserializeCore(BinaryReader reader);
+    /// <remarks>
+    /// Virtual and empty by default, for the reason given on <see cref="SerializeCore"/>: declared
+    /// state is restored by <c>ModelStateEnvelope.Extract(DeclaredState, ...)</c> before this runs,
+    /// so a model that declares its members needs no body here at all. Override only for state that
+    /// cannot be declared, and keep it in exact lockstep with <see cref="SerializeCore"/>.
+    /// </remarks>
+    protected virtual void DeserializeCore(BinaryReader reader)
+    {
+    }
 
     /// <summary>
     /// Gets metadata about the time series model.
