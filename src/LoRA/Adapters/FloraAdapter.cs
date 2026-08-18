@@ -27,7 +27,9 @@ public partial class FloraAdapter<T> : LoRAAdapterBase<T>
     private readonly int _resamplingInterval;
     private readonly int _rank;
     private int _currentStep;
+    [AiDotNet.Attributes.Buffer]
     private Matrix<T>? _compressedMomentum;
+    [AiDotNet.Attributes.Buffer]
     private Matrix<T>? _compressedSecondMoment;
     private readonly Random _random;
     private readonly double _momentumDecay;

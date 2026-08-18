@@ -120,11 +120,17 @@ public partial class DeformableConvolutionalLayer<T> : LayerBase<T>, IShapeContr
     private Tensor<T>? _maskBias;
 
     // Gradients
+    [AiDotNet.Attributes.Scratch]
     private Tensor<T>? _weightGradients;
+    [AiDotNet.Attributes.Scratch]
     private Tensor<T>? _biasGradients;
+    [AiDotNet.Attributes.Scratch]
     private Tensor<T>? _offsetWeightGradients;
+    [AiDotNet.Attributes.Scratch]
     private Tensor<T>? _offsetBiasGradients;
+    [AiDotNet.Attributes.Scratch]
     private Tensor<T>? _maskWeightGradients;
+    [AiDotNet.Attributes.Scratch]
     private Tensor<T>? _maskBiasGradients;
 
     // Pending parameters buffer — holds the flat Vector<T> from a

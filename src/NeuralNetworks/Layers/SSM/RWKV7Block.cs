@@ -303,42 +303,77 @@ public partial class RWKV7Block<T> : LayerBase<T>, IShapeContract
 
     // ============ Gradients ============
 
+    [AiDotNet.Attributes.Scratch]
     private Tensor<T>? _timeMixRGrad;
+    [AiDotNet.Attributes.Scratch]
     private Tensor<T>? _timeMixKGrad;
+    [AiDotNet.Attributes.Scratch]
     private Tensor<T>? _timeMixVGrad;
+    [AiDotNet.Attributes.Scratch]
     private Tensor<T>? _timeMixAGrad;
+    [AiDotNet.Attributes.Scratch]
     private Tensor<T>? _timeMixBGrad;
+    [AiDotNet.Attributes.Scratch]
     private Tensor<T>? _receptanceWeightsGrad;
+    [AiDotNet.Attributes.Scratch]
     private Tensor<T>? _keyWeightsGrad;
+    [AiDotNet.Attributes.Scratch]
     private Tensor<T>? _valueWeightsGrad;
+    [AiDotNet.Attributes.Scratch]
     private Tensor<T>? _outputWeightsGrad;
+    [AiDotNet.Attributes.Scratch]
     private Tensor<T>? _w1Grad;
+    [AiDotNet.Attributes.Scratch]
     private Tensor<T>? _w2Grad;
+    [AiDotNet.Attributes.Scratch]
     private Tensor<T>? _aBiasGrad;
+    [AiDotNet.Attributes.Scratch]
     private Tensor<T>? _a1Grad;
+    [AiDotNet.Attributes.Scratch]
     private Tensor<T>? _a2Grad;
+    [AiDotNet.Attributes.Scratch]
     private Tensor<T>? _bBiasGrad;
     // Must exist and sit at the same index as _kk/_ka in GetAllParameterTensors: the two lists are
     // zipped positionally by UpdateParameters and GetParameterGradients.
+    [AiDotNet.Attributes.Scratch]
     private Tensor<T>? _v0Grad;
+    [AiDotNet.Attributes.Scratch]
     private Tensor<T>? _v1Grad;
+    [AiDotNet.Attributes.Scratch]
     private Tensor<T>? _v2Grad;
+    [AiDotNet.Attributes.Scratch]
     private Tensor<T>? _rkGrad;
+    [AiDotNet.Attributes.Scratch]
     private Tensor<T>? _timeMixGGrad;
+    [AiDotNet.Attributes.Scratch]
     private Tensor<T>? _g1Grad;
+    [AiDotNet.Attributes.Scratch]
     private Tensor<T>? _g2Grad;
+    [AiDotNet.Attributes.Scratch]
     private Tensor<T>? _kkGrad;
+    [AiDotNet.Attributes.Scratch]
     private Tensor<T>? _kaGrad;
+    [AiDotNet.Attributes.Scratch]
     private Tensor<T>? _groupNormGammaGrad;
+    [AiDotNet.Attributes.Scratch]
     private Tensor<T>? _groupNormBetaGrad;
+    [AiDotNet.Attributes.Scratch]
     private Tensor<T>? _channelMixRGrad;
+    [AiDotNet.Attributes.Scratch]
     private Tensor<T>? _channelMixKGrad;
+    [AiDotNet.Attributes.Scratch]
     private Tensor<T>? _channelKeyWeightsGrad;
+    [AiDotNet.Attributes.Scratch]
     private Tensor<T>? _channelValueWeightsGrad;
+    [AiDotNet.Attributes.Scratch]
     private Tensor<T>? _channelReceptanceWeightsGrad;
+    [AiDotNet.Attributes.Scratch]
     private Tensor<T>? _normGamma1Grad;
+    [AiDotNet.Attributes.Scratch]
     private Tensor<T>? _normBeta1Grad;
+    [AiDotNet.Attributes.Scratch]
     private Tensor<T>? _normGamma2Grad;
+    [AiDotNet.Attributes.Scratch]
     private Tensor<T>? _normBeta2Grad;
 
     // Recurrent state for autoregressive inference

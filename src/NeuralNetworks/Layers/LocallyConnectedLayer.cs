@@ -184,11 +184,13 @@ public partial class LocallyConnectedLayer<T> : LayerBase<T>, IShapeContract
     /// <summary>
     /// Stores the gradients for the weights calculated during the backward pass.
     /// </summary>
+    [AiDotNet.Attributes.Scratch]
     private Tensor<T>? _weightGradients;
 
     /// <summary>
     /// Stores the gradients for the biases calculated during the backward pass.
     /// </summary>
+    [AiDotNet.Attributes.Scratch]
     private Tensor<T>? _biasGradients;
 
     // GPU cached tensors for backward pass

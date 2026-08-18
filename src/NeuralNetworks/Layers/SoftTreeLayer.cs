@@ -99,8 +99,11 @@ public partial class SoftTreeLayer<T> : LayerBase<T>, IShapeContract
     private Tensor<T> _leafValues;     // [numLeaves, outputDim]
 
     // Gradients
+    [AiDotNet.Attributes.Scratch]
     private Tensor<T>? _splitWeightsGrad;
+    [AiDotNet.Attributes.Scratch]
     private Tensor<T>? _splitBiasesGrad;
+    [AiDotNet.Attributes.Scratch]
     private Tensor<T>? _leafValuesGrad;
 
     // Caches for backward pass

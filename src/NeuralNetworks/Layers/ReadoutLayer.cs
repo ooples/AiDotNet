@@ -114,6 +114,7 @@ public partial class ReadoutLayer<T> : LayerBase<T>, IShapeContract
     /// gradients for all weight parameters during the backward pass. These gradients are used
     /// to update the weights during the parameter update step.
     /// </remarks>
+    [AiDotNet.Attributes.Scratch]
     private Tensor<T> _weightGradients;
 
     /// <summary>
@@ -124,6 +125,7 @@ public partial class ReadoutLayer<T> : LayerBase<T>, IShapeContract
     /// gradients for all bias parameters during the backward pass. These gradients are used
     /// to update the biases during the parameter update step.
     /// </remarks>
+    [AiDotNet.Attributes.Scratch]
     private Tensor<T> _biasGradients;
 
     /// <summary>

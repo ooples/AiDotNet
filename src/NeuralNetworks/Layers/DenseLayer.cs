@@ -274,6 +274,7 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IShap
     /// <see cref="_weights"/> is a freed placeholder; each forward upcasts this to fp32 transiently for the
     /// matmul. Halves resident weight memory. Null in the normal full-precision path.
     /// </summary>
+    [AiDotNet.Attributes.Scratch]
     private Tensor<Half>? _weightsHalf;
 
     // The fp16-resident upcast machinery (downcast-once + reused SIMD upcast buffer) lives in

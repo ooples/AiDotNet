@@ -162,8 +162,11 @@ public partial class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T
     /// the first forward downcasts them. Upcast transiently per forward via
     /// <see cref="LayerBase{T}.UpcastResidentWeight"/> (shared SIMD scratch). Null on the normal fp32 path.
     /// </summary>
+    [AiDotNet.Attributes.Scratch]
     private Tensor<Half>? _queryWeightsHalf;
+    [AiDotNet.Attributes.Scratch]
     private Tensor<Half>? _keyWeightsHalf;
+    [AiDotNet.Attributes.Scratch]
     private Tensor<Half>? _valueWeightsHalf;
 
     /// <summary>
@@ -229,6 +232,7 @@ public partial class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T
     /// per-projection path produces, then upcast transiently per forward via
     /// <see cref="LayerBase{T}.UpcastResidentWeight"/> (shared SIMD scratch). Null on the normal fp32 path.
     /// </summary>
+    [AiDotNet.Attributes.Scratch]
     private Tensor<Half>? _fusedQkvWeightsHalf;
 
     /// <summary>

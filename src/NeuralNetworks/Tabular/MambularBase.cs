@@ -400,6 +400,7 @@ public abstract class MambularBase<T> : IParameterSource<T>
         private readonly Tensor<T> _convWeight;
 
         // Delta (discretization)
+        [AiDotNet.Attributes.Scratch]
         private readonly Tensor<T> _deltaProj;
 
         /// <summary>

@@ -194,21 +194,25 @@ public partial class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
     /// <summary>
     /// Gradient of the weight tensor for the value transformation.
     /// </summary>
+    [AiDotNet.Attributes.Scratch]
     private Tensor<T>? _dWv;
 
     /// <summary>
     /// Gradient of the weight tensor for the key transformation.
     /// </summary>
+    [AiDotNet.Attributes.Scratch]
     private Tensor<T>? _dWk;
 
     /// <summary>
     /// Gradient of the weight tensor for the query transformation.
     /// </summary>
+    [AiDotNet.Attributes.Scratch]
     private Tensor<T>? _dWq;
 
     /// <summary>
     /// Gradient of the weight tensor for the output projection.
     /// </summary>
+    [AiDotNet.Attributes.Scratch]
     private Tensor<T>? _dWo;
 
     // GPU cached tensors for backward pass

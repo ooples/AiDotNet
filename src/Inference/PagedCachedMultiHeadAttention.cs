@@ -92,9 +92,13 @@ public partial class PagedCachedMultiHeadAttention<T> : LayerBase<T>, IContextAw
     // Weight matrices as [inDim, outDim] tensors for the batched-GEMM projection path (Engine.TensorMatMul,
     // which routes to the optimized BLAS/GPU kernels). Built lazily from the Matrix weights and invalidated
     // alongside the float kernel-weight caches when the weights change.
+    [AiDotNet.Attributes.Scratch]
     private Tensor<T>? _wqTensor;
+    [AiDotNet.Attributes.Scratch]
     private Tensor<T>? _wkTensor;
+    [AiDotNet.Attributes.Scratch]
     private Tensor<T>? _wvTensor;
+    [AiDotNet.Attributes.Scratch]
     private Tensor<T>? _woTensor;
 
     internal bool EnableWeightOnlyQuantization { get; set; }
