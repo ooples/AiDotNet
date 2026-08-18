@@ -119,6 +119,7 @@ public partial class GraphIsomorphismLayer<T> : LayerBase<T>, IGraphConvolutionL
     /// <summary>
     /// The adjacency matrix defining graph structure.
     /// </summary>
+    [AiDotNet.Attributes.FittedParameter]
     private Tensor<T>? _adjacencyMatrix;
 
     /// <summary>

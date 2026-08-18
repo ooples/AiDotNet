@@ -85,13 +85,11 @@ public partial class KaplanMeierEstimator<T> : SurvivalModelBase<T>
     /// <summary>
     /// Stores the number at risk at each event time.
     /// </summary>
-    [AiDotNet.Attributes.FittedParameter]
     private Vector<int>? _numberAtRisk;
 
     /// <summary>
     /// Stores the number of events at each event time.
     /// </summary>
-    [AiDotNet.Attributes.FittedParameter]
     private Vector<int>? _numberEvents;
 
     /// <summary>

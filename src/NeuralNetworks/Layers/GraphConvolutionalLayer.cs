@@ -212,6 +212,7 @@ public partial class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     /// This matrix tells the layer which nodes should share information with each other.
     /// </para>
     /// </remarks>
+    [AiDotNet.Attributes.FittedParameter]
     private Tensor<T>? _adjacencyMatrix;
 
     /// <summary>

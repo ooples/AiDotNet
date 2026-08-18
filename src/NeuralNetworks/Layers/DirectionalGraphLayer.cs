@@ -154,6 +154,7 @@ public partial class DirectionalGraphLayer<T> : LayerBase<T>, IGraphConvolutionL
     /// <summary>
     /// The adjacency matrix defining graph structure (interpreted as directed).
     /// </summary>
+    [AiDotNet.Attributes.FittedParameter]
     private Tensor<T>? _adjacencyMatrix;
 
     /// <summary>
