@@ -12621,7 +12621,29 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// that other networks might not have.
     /// </para>
     /// </remarks>
-    protected abstract void SerializeNetworkSpecificData(BinaryWriter writer);
+    /// <remarks>
+    /// VIRTUAL, NOT ABSTRACT, AND EMPTY BY DEFAULT — for the same reason as the time series base.
+    /// Declared state already round-trips without this method: <see cref="Serialize"/> returns
+    /// <c>ModelStateEnvelope.Append(DeclaredState, ...)</c> and <see cref="Deserialize"/> begins with
+    /// the matching <c>Extract</c>, so every member a network declares — by hand in
+    /// <c>RegisterState</c> or through the generated <c>RegisterGeneratedState</c> — is written and
+    /// read by the base.
+    /// <para>
+    /// While this pair was ABSTRACT, all 947 networks in this library were REQUIRED to hand-write both
+    /// halves. That is the population ADN0060 exists to eliminate and could not report, because the
+    /// analyzer deliberately exempts an override of an abstract method: deleting an override the base
+    /// demands is impossible. Those networks were not choosing to hand-write serialization — the base
+    /// was requiring it, and a hand-written pair is two places to forget the same field.
+    /// </para>
+    /// <para>
+    /// Override this ONLY for state that genuinely cannot be declared, and prefer declaring it: a
+    /// declared member travels by name, tolerates reordering, and cannot desynchronise a reader from
+    /// a writer.
+    /// </para>
+    /// </remarks>
+    protected virtual void SerializeNetworkSpecificData(BinaryWriter writer)
+    {
+    }
 
     /// <summary>
     /// Deserializes network-specific data that was not covered by the general deserialization process.
@@ -12639,7 +12661,16 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// that were stored during serialization.
     /// </para>
     /// </remarks>
-    protected abstract void DeserializeNetworkSpecificData(BinaryReader reader);
+    /// <remarks>
+    /// Virtual and empty by default, for the reason given on
+    /// <see cref="SerializeNetworkSpecificData"/>: declared state is restored by
+    /// <c>ModelStateEnvelope.Extract(DeclaredState, ...)</c> before this runs, so a network that
+    /// declares its members needs no body here at all. Override only for state that cannot be
+    /// declared, and keep it in exact lockstep with its writing half.
+    /// </remarks>
+    protected virtual void DeserializeNetworkSpecificData(BinaryReader reader)
+    {
+    }
 
     /// <summary>
     /// Creates a new neural network with the specified parameters.
