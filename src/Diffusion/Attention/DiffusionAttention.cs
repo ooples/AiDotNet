@@ -397,6 +397,7 @@ public partial class DiffusionCrossAttention<T> : LayerBase<T>, IShapeContract
     /// <summary>
     /// Cached input for backward pass.
     /// </summary>
+    [AiDotNet.Attributes.Scratch]
     private Tensor<T>? _lastInput;
 
     /// <summary>

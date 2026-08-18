@@ -765,6 +765,7 @@ public abstract class TabDPTBase<T> : IParameterSource<T>
         private Tensor<TBlock> _featureValue;
         private Tensor<TBlock> _featureOutput;
 
+        [AiDotNet.Attributes.Scratch]
         private Tensor<TBlock>? _inputCache;
 
         /// <summary>The four projections, in serialization order.</summary>

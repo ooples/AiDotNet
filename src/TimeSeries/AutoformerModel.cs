@@ -1257,14 +1257,21 @@ internal partial class AutoformerDecoderLayer<T> : NeuralNetworks.Layers.LayerBa
 
     // Feed-forward parameters
     private Tensor<T> _ff1Weight;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _ff1Bias;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _ff2Weight;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _ff2Bias;
 
     // Layer normalization
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _layerNorm1Gamma;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _layerNorm1Beta;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _layerNorm2Gamma;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _layerNorm2Beta;
     [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _layerNorm3Gamma;

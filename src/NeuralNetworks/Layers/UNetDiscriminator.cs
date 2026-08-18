@@ -529,6 +529,7 @@ public partial class UNetConvBlock<T> : LayerBase<T>, IShapeContract
     private readonly LeakyReLUActivation<T> _leakyReLU;
     private readonly bool _downsample;
 
+    [AiDotNet.Attributes.Scratch]
     private Tensor<T>? _lastInput;
     [AiDotNet.Attributes.Scratch]
     private Tensor<T>? _conv1Output;      // After LeakyReLU (input to conv2)
@@ -711,6 +712,7 @@ public partial class UNetUpBlock<T> : LayerBase<T>, IShapeContract
     private readonly LeakyReLUActivation<T> _leakyReLU;
     private readonly int _skipChannels;
 
+    [AiDotNet.Attributes.Scratch]
     private Tensor<T>? _lastInput;
     [Scratch]
     private Tensor<T>? _lastSkip;

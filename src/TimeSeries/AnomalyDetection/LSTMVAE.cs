@@ -601,7 +601,9 @@ internal partial class LSTMDecoderTensor<T> : NeuralNetworks.Layers.LayerBase<T>
     private readonly int _hiddenSize;
 
     // LSTM weights (Tensor-based)
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _weights;      // [hiddenSize, latentDim]
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _bias;         // [hiddenSize]
 
     // Output projection weights
@@ -612,6 +614,7 @@ internal partial class LSTMDecoderTensor<T> : NeuralNetworks.Layers.LayerBase<T>
 
     // Gradient accumulators
     private Tensor<T> _weightsGrad;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _biasGrad;
     [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _outputWeightsGrad;

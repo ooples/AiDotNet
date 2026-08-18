@@ -57,6 +57,7 @@ public partial class RelationModule<T> : ModelBase<T, Tensor<T>, Tensor<T>>
     // NumOps inherited from ModelBase
 
     private readonly int _hiddenDimension;
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T> _weights;
     private bool _isTraining;
 

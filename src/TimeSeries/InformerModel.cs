@@ -1494,14 +1494,21 @@ internal partial class InformerDecoderLayerTensor<T> : NeuralNetworks.Layers.Lay
 
     // FFN
     private  Tensor<T> _ffn1;
+    [AiDotNet.Attributes.TrainableParameter]
     private  Tensor<T> _ffn1Bias;
+    [AiDotNet.Attributes.TrainableParameter]
     private  Tensor<T> _ffn2;
+    [AiDotNet.Attributes.TrainableParameter]
     private  Tensor<T> _ffn2Bias;
 
     // Layer norms
+    [AiDotNet.Attributes.TrainableParameter]
     private  Tensor<T> _layerNorm1Gamma;
+    [AiDotNet.Attributes.TrainableParameter]
     private  Tensor<T> _layerNorm1Beta;
+    [AiDotNet.Attributes.TrainableParameter]
     private  Tensor<T> _layerNorm2Gamma;
+    [AiDotNet.Attributes.TrainableParameter]
     private  Tensor<T> _layerNorm2Beta;
     [AiDotNet.Attributes.TrainableParameter]
     private  Tensor<T> _layerNorm3Gamma;
