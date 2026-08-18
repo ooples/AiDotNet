@@ -672,12 +672,30 @@ public sealed class InteriorPointSolver<T> : ILinearProgramSolver<T>, IQuadratic
             }
             else
             {
+                // K = Q + Z⁻¹S, regularized on the diagonal for the same reason the normal matrix
+                // below is. Z⁻¹S is strictly positive in exact arithmetic, so K looks safely definite
+                // — but Q is routinely SINGULAR here, because the standard-form rewrite splits every
+                // free variable into z⁺ − z⁻ and the projected Hessian picks up the matching
+                // [[Q, −Q], [−Q, Q]] structure, which is rank deficient by construction. As the
+                // iterates near the boundary the smallest s_i/x_i fall towards zero, and K becomes
+                // numerically singular along exactly those split directions.
+                //
+                // Without this the LU throws, Build returns null, and the caller abandons the solve
+                // at whatever point it had reached. Measured on a two-variable QP with one equality
+                // and one inequality (min 2x₁² + x₂² subject to x₁ + x₂ = 30, x₂ ≤ 15): with free
+                // variables the solver stopped after 20 iterations at (16.876, 13.124) costing
+                // 741.82 against a true optimum of (15, 15) costing 675, and raising MaxIterations
+                // from 100 to 2000 changed nothing because the exit was the failed factorization
+                // rather than the iteration cap. Declaring x ≥ 0 on the same problem — which avoids
+                // the split — reached the optimum in 10 iterations.
+                T kernelDelta = NumOps.FromDouble(regularization);
                 var k = new Matrix<T>(n, n);
                 for (int i = 0; i < n; i++)
                 {
                     for (int j = 0; j < n; j++) k[i, j] = problem.Q[i, j];
 
-                    k[i, i] = NumOps.Add(k[i, i], NumOps.Divide(s[i], x[i]));
+                    k[i, i] = NumOps.Add(
+                        NumOps.Add(k[i, i], NumOps.Divide(s[i], x[i])), kernelDelta);
                 }
 
                 try
