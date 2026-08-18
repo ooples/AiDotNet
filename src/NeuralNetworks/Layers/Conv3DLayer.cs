@@ -202,26 +202,31 @@ public partial class Conv3DLayer<T> : LayerBase<T>, IShapeContract
     /// <summary>
     /// Cached gradient for kernels computed during backward pass.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _kernelsGradient;
 
     /// <summary>
     /// Cached gradient for biases computed during backward pass.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _biasesGradient;
 
     /// <summary>
     /// Cached input from the last forward pass, needed for backward computation.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastInput;
 
     /// <summary>
     /// Cached output from the last forward pass (before activation), needed for backward computation.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastPreActivation;
 
     /// <summary>
     /// Cached output from the last forward pass (after activation).
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastOutput;
 
     /// <summary>
@@ -247,27 +252,39 @@ public partial class Conv3DLayer<T> : LayerBase<T>, IShapeContract
     #endregion
 
     #region GPU Training Fields
+    [ExternalState]
     private Tensor<T>? _gpuLastInput;
+    [ExternalState]
     private Tensor<T>? _gpuLastOutput;
 
     // GPU weight buffers
+    [ExternalState]
     private Tensor<T>? _gpuKernels;
+    [ExternalState]
     private Tensor<T>? _gpuBiases;
 
     // GPU gradient buffers
+    [ExternalState]
     private Tensor<T>? _gpuKernelsGradient;
+    [ExternalState]
     private Tensor<T>? _gpuBiasesGradient;
 
     // GPU velocity buffers (SGD momentum)
+    [ExternalState]
     private Tensor<T>? _gpuKernelsVelocity;
+    [ExternalState]
     private Tensor<T>? _gpuBiasesVelocity;
 
     // GPU Adam first moment buffers
+    [ExternalState]
     private Tensor<T>? _gpuKernelsM;
+    [ExternalState]
     private Tensor<T>? _gpuBiasesM;
 
     // GPU Adam second moment buffers
+    [ExternalState]
     private Tensor<T>? _gpuKernelsV;
+    [ExternalState]
     private Tensor<T>? _gpuBiasesV;
     #endregion
 

@@ -146,26 +146,31 @@ public partial class GraphGenerationModel<T> : GraphModelLayoutBase<T>
     /// <summary>
     /// Cached latent mean from last forward pass.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastMean;
 
     /// <summary>
     /// Cached latent log-variance from last forward pass.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastLogVar;
 
     /// <summary>
     /// Cached sampled latent representation.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastLatent;
 
     /// <summary>
     /// Cached encoder output before variational layer.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastEncoderOutput;
 
     /// <summary>
     /// Cached input adjacency matrix.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _cachedAdjacencyMatrix;
 
     /// <summary>
@@ -176,11 +181,13 @@ public partial class GraphGenerationModel<T> : GraphModelLayoutBase<T>
     /// <summary>
     /// Gradient for mean weights.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _meanWeightsGradient;
 
     /// <summary>
     /// Gradient for log-variance weights.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _logVarWeightsGradient;
 
     /// <summary>

@@ -121,27 +121,45 @@ public partial class MixtureOfMambaLayer<T> : LayerBase<T>, IShapeContract
     private Tensor<T> _outputProjectionBias;
 
     // Cached values for backward pass
+    [Scratch]
     private Tensor<T>? _lastInput;
+    [Scratch]
     private Tensor<T>? _lastOutput;
+    [Scratch]
     private Tensor<T>? _lastRouterLogits;
+    [Scratch]
     private Tensor<T>? _lastRouterWeightsResult;
     private int[,]? _lastTopKIndices;
+    [Scratch]
     private Tensor<T>? _lastExpertOutputs;
+    [Scratch]
     private Tensor<T>? _lastGate;
+    [Scratch]
     private Tensor<T>? _lastGateRaw;
+    [Scratch]
     private Tensor<T>? _lastMoEOutput;
     private int[]? _originalInputShape;
 
     // Gradients
+    [Scratch]
     private Tensor<T>? _routerWeightsGradient;
+    [Scratch]
     private Tensor<T>? _routerBiasGradient;
+    [Scratch]
     private Tensor<T>? _expertAGradient;
+    [Scratch]
     private Tensor<T>? _expertBGradient;
+    [Scratch]
     private Tensor<T>? _expertCGradient;
+    [Scratch]
     private Tensor<T>? _expertDGradient;
+    [Scratch]
     private Tensor<T>? _outputGateWeightsGradient;
+    [Scratch]
     private Tensor<T>? _outputGateBiasGradient;
+    [Scratch]
     private Tensor<T>? _outputProjectionWeightsGradient;
+    [Scratch]
     private Tensor<T>? _outputProjectionBiasGradient;
 
     /// <inheritdoc />

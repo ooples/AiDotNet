@@ -40,6 +40,7 @@ public partial class ConjugateGradientOptimizer<T, TInput, TOutput> : GradientBa
     /// <summary>
     /// The gradient vector from the previous iteration.
     /// </summary>
+    [Scratch]
     private new Vector<T> _previousGradient;
 
     /// <summary>

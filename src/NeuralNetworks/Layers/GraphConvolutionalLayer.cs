@@ -180,6 +180,7 @@ public partial class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     /// <summary>
     /// Stores the input tensor from the last forward pass for use in the backward pass.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastInput;
 
     /// <summary>
@@ -190,6 +191,7 @@ public partial class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     /// <summary>
     /// Stores the output tensor from the last forward pass for use in the backward pass.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastOutput;
 
     /// <summary>
@@ -251,11 +253,13 @@ public partial class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     /// <summary>
     /// Stores the gradients for the weights calculated during the backward pass.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _weightsGradient;
 
     /// <summary>
     /// Stores the gradients for the bias calculated during the backward pass.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _biasGradient;
 
     /// <summary>
@@ -278,6 +282,7 @@ public partial class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     /// to have similar properties while still maintaining their unique characteristics.
     /// </para>
     /// </remarks>
+    [Scratch]
     private Tensor<T>? _lastNodeFeatures;
 
     /// <summary>

@@ -1,4 +1,5 @@
 using AiDotNet.Models.Options;
+using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks.Layers;
 
@@ -88,7 +89,9 @@ public abstract class FTTransformerBase<T> : IParameterSource<T>
     protected readonly int NumCategoricalFeatures;
 
     // Cache for backward pass
+    [Scratch]
     private Tensor<T>? _tokenizedCache;
+    [Scratch]
     private readonly List<Tensor<T>> _layerOutputsCache;
 
     /// <summary>

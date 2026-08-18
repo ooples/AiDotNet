@@ -144,6 +144,7 @@ public partial class MaxPoolingLayer<T> : LayerBase<T>, IShapeContract
     /// <summary>
     /// Stores the last input tensor from the forward pass for use in autodiff backward pass.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastInput;
 
     /// <summary>

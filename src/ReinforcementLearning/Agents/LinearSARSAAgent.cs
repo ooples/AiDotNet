@@ -59,6 +59,7 @@ public partial class LinearSARSAAgent<T> : ReinforcementLearningAgentBase<T>
     private Matrix<T> _weights;  // Weight matrix: [ActionSize x FeatureSize]
     private double _epsilon;
     private int _lastAction = -1;
+    [Scratch]
     private Vector<T>? _lastState = null;
 
     /// <summary>

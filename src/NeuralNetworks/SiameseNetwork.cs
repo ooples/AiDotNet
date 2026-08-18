@@ -118,6 +118,7 @@ public partial class SiameseNetwork<T> : DeclaredModelLayoutBase<T>, IAuxiliaryL
     /// Cache for embedding pairs and their similarity labels during training.
     /// Used to compute contrastive auxiliary loss.
     /// </summary>
+    [Scratch]
     private List<(Vector<T> embedding1, Vector<T> embedding2, T label)> _cachedEmbeddingPairs;
 
     /// <summary>

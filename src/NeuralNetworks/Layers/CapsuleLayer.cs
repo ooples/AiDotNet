@@ -155,15 +155,20 @@ public partial class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, ISh
 
     private Tensor<T> _bias;
     private Tensor<T>? _transformationMatrixGradient;
+    [Scratch]
     private Tensor<T>? _biasGradient;
+    [Scratch]
     private Tensor<T>? _lastInput;
 
     /// <summary>
     /// Stores the original input shape for any-rank tensor support.
     /// </summary>
     private int[]? _originalInputShape;
+    [Scratch]
     private Tensor<T>? _lastOutput;
+    [Scratch]
     private Tensor<T>? _lastPreSquash;
+    [Scratch]
     private Tensor<T>? _lastCouplingCoefficients;
 
     public override bool SupportsTraining => true;

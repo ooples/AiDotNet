@@ -117,17 +117,20 @@ public partial class SparseLinearLayer<T> : LayerBase<T>, IShapeContract
     /// <summary>
     /// Stored input from forward pass for backpropagation.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastInput;
 
     /// <summary>
     /// Stored pre-activation output for gradient computation.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastOutput;
 
     /// <summary>
     /// Gradient for weights, stored during backward pass.
     /// Stored as dense matrix for gradient accumulation, then sparsified.
     /// </summary>
+    [Scratch]
     private Matrix<T>? _weightsGradient;
 
     /// <summary>
@@ -135,6 +138,7 @@ public partial class SparseLinearLayer<T> : LayerBase<T>, IShapeContract
     /// <see cref="_biases"/>'s shape so gradient layout stays consistent
     /// across the manual backprop path and tape-mode.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _biasesGradient;
 
     /// <summary>

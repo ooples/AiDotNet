@@ -280,11 +280,13 @@ public partial class GenerativeAdversarialNetwork<T> : ImageGeneratorModelLayout
     /// <summary>
     /// Stores the last real batch for feature matching computation.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastRealBatch;
 
     /// <summary>
     /// Stores the last fake batch for feature matching computation.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastFakeBatch;
 
     /// <summary>

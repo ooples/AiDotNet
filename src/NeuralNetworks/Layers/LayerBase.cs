@@ -1,5 +1,6 @@
 ﻿using AiDotNet.Helpers;
 using AiDotNet.ActivationFunctions;
+using AiDotNet.Attributes;
 using AiDotNet.Initialization;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks.Graph;
@@ -191,6 +192,7 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     /// known. This is deliberately separate from <see cref="Parameters"/>: pending state is not a
     /// live parameter slot and therefore must not be counted or returned by <see cref="GetParameters"/>.
     /// </summary>
+    [Scratch]
     private Vector<T>? _pendingParameterRestore;
 
     /// <summary>Length of a parked lazy-restore payload, or zero for ordinary own storage.</summary>
@@ -4702,6 +4704,7 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     /// IOutputDerivative (e.g., GELU, SiLU, ELU). Without this, the fallback computes
     /// f'(f(x)) instead of the correct f'(x).
     /// </summary>
+    [Scratch]
     private readonly Stack<Tensor<T>> _preActivationCache = new();
 
     /// <summary>

@@ -52,7 +52,9 @@ public class GANDALFRegression<T> : GANDALFBase<T>
     private readonly FullyConnectedLayer<T> _regressionHead;
 
     // Cache for backward pass
+    [Scratch]
     private Tensor<T>? _backboneOutputCache;
+    [Scratch]
     private Tensor<T>? _predictionsCache;
 
     /// <summary>

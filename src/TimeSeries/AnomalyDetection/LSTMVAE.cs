@@ -602,7 +602,9 @@ internal partial class LSTMDecoderTensor<T> : NeuralNetworks.Layers.LayerBase<T>
     private Tensor<T> _outputWeightsGrad;
     private Tensor<T> _outputBiasGrad;
 
+    [Scratch]
     private Tensor<T>? _lastLatent;
+    [Scratch]
     private Tensor<T>? _lastHidden;
 
     public override bool SupportsTraining => true;

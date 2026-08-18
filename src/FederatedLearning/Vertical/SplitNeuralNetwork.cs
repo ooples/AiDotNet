@@ -42,8 +42,11 @@ public class SplitNeuralNetwork<T> : FederatedLearningComponentBase<T>, ISplitMo
     private Tensor<T>? _attentionWeights;
 
     // Cached for backward pass
+    [Scratch]
     private Tensor<T>? _lastTopInput;
+    [Scratch]
     private Tensor<T>? _lastTopHidden;
+    [Scratch]
     private IReadOnlyList<Tensor<T>>? _lastPartyEmbeddings;
 
     /// <inheritdoc/>

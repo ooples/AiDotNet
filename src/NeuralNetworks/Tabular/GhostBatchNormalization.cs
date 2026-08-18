@@ -56,7 +56,9 @@ public class GhostBatchNormalization<T>
     private Vector<T>? _betaGrad;
 
     // Cache for backward pass
+    [Scratch]
     private Tensor<T>? _inputCache;
+    [Scratch]
     private Tensor<T>? _normalizedCache;
 
     // Training vs inference mode. Propagated by the owning composite layer

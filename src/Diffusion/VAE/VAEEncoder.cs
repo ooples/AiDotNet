@@ -187,6 +187,7 @@ public partial class VAEEncoder<T> : LayerBase<T>, IShapeContract
     /// <summary>
     /// Cached intermediate values for backward pass.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastInput;
     private Tensor<T>? _inputConvOutput;
     private readonly Tensor<T>?[] _downBlockOutputs;

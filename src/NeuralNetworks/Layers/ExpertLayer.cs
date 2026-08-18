@@ -145,6 +145,7 @@ public partial class ExpertLayer<T> : LayerBase<T>, IShapeContract
     /// <summary>
     /// Stores the pre-activation output for use in backpropagation.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastPreActivationOutput;
 
     /// <summary>

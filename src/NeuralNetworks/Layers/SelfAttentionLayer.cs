@@ -182,6 +182,7 @@ public partial class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T
     /// sequence of input embeddings that were processed in the most recent forward pass.
     /// The tensor is null before the first forward pass or after a reset.
     /// </remarks>
+    [Scratch]
     private Tensor<T>? _lastInput;
 
     /// <summary>
@@ -201,6 +202,7 @@ public partial class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T
     /// so reuse is safe across the multi-step denoise loop. NOT used while a gradient
     /// tape is active (training needs the recorded allocating op).
     /// </summary>
+    [Scratch]
     private Tensor<T>? _sdpaOutScratch;
 
     /// <summary>
@@ -247,6 +249,7 @@ public partial class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T
     /// It holds the sequence of output embeddings that were produced in the most recent forward pass.
     /// The tensor is null before the first forward pass or after a reset.
     /// </remarks>
+    [Scratch]
     private Tensor<T>? _lastOutput;
 
     /// <summary>
@@ -257,6 +260,7 @@ public partial class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T
     /// These weights represent how much each position attends to every other position in the sequence.
     /// The tensor is null before the first forward pass or after a reset.
     /// </remarks>
+    [Scratch]
     private Tensor<T>? _lastAttentionScores;
 
     /// <summary>
@@ -268,6 +272,7 @@ public partial class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T
     /// the parameter update step. The tensor is null before the first backward pass or after a reset.
     /// Shape: [embeddingDimension, embeddingDimension]
     /// </remarks>
+    [Scratch]
     private Tensor<T>? _queryWeightsGradient;
 
     /// <summary>
@@ -279,6 +284,7 @@ public partial class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T
     /// the parameter update step. The tensor is null before the first backward pass or after a reset.
     /// Shape: [embeddingDimension, embeddingDimension]
     /// </remarks>
+    [Scratch]
     private Tensor<T>? _keyWeightsGradient;
 
     /// <summary>
@@ -290,6 +296,7 @@ public partial class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T
     /// the parameter update step. The tensor is null before the first backward pass or after a reset.
     /// Shape: [embeddingDimension, embeddingDimension]
     /// </remarks>
+    [Scratch]
     private Tensor<T>? _valueWeightsGradient;
 
     /// <summary>
@@ -301,6 +308,7 @@ public partial class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T
     /// the parameter update step. The tensor is null before the first backward pass or after a reset.
     /// Shape: [embeddingDimension]
     /// </remarks>
+    [Scratch]
     private Tensor<T>? _outputBiasGradient;
 
     private Tensor<T>? _queryWeightsVelocity;
@@ -309,10 +317,15 @@ public partial class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T
     private Tensor<T>? _outputBiasVelocity;
 
     // GPU cached tensors for backward pass
+    [ExternalState]
     private Tensor<T>? _gpuInput2D;
+    [ExternalState]
     private Tensor<T>? _gpuQ;
+    [ExternalState]
     private Tensor<T>? _gpuK;
+    [ExternalState]
     private Tensor<T>? _gpuV;
+    [ExternalState]
     private Tensor<T>? _gpuAttentionWeights;
     private int _gpuBatchSize;
     private int _gpuSequenceLength;

@@ -178,11 +178,13 @@ public partial class LambdaLayer<T> : LayerBase<T>, IShapeContract
     /// <summary>
     /// Stores the input tensor from the last forward pass for use in the backward pass.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastInput;
 
     /// <summary>
     /// Stores the output tensor from the last forward pass for use in the backward pass.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastOutput;
 
     /// <summary>

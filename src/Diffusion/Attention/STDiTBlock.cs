@@ -49,6 +49,7 @@ public partial class STDiTBlock<T> : LayerBase<T>, IShapeContract
     private readonly LayerNormalizationLayer<T> _crossNorm;
     private readonly LayerNormalizationLayer<T> _ffnNorm;
 
+    [Scratch]
     private Tensor<T>? _lastInput;
     private Tensor<T>? _afterSpatial;
     private Tensor<T>? _afterTemporal;

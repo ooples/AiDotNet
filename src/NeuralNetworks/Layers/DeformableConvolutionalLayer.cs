@@ -135,17 +135,24 @@ public partial class DeformableConvolutionalLayer<T> : LayerBase<T>, IShapeContr
     // then runs with random initial weights instead of the loaded
     // checkpoint. OnFirstForward replays the buffer once weights are
     // allocated, then clears the field.
+    [Scratch]
     private Vector<T>? _pendingParameters;
 
     // Cached values for backward pass
+    [Scratch]
     private Tensor<T>? _lastInput;
+    [Scratch]
     private Tensor<T>? _lastOffsets;
+    [Scratch]
     private Tensor<T>? _lastMask;
 
     // GPU caching for backward pass
+    [ExternalState]
     private Tensor<T>? _gpuInput;
     private int[]? _gpuInputShape;
+    [ExternalState]
     private Tensor<T>? _gpuOffsets;
+    [ExternalState]
     private Tensor<T>? _gpuMask;
 
     #endregion
@@ -153,39 +160,69 @@ public partial class DeformableConvolutionalLayer<T> : LayerBase<T>, IShapeContr
     #region GPU Weight Storage Fields
 
     // Main conv weights - GPU tensors for GPU-resident training
+    [ExternalState]
     private Tensor<T>? _gpuWeights;
+    [ExternalState]
     private Tensor<T>? _gpuBias;
+    [ExternalState]
     private Tensor<T>? _gpuWeightGradient;
+    [ExternalState]
     private Tensor<T>? _gpuBiasGradient;
+    [ExternalState]
     private Tensor<T>? _gpuWeightVelocity;
+    [ExternalState]
     private Tensor<T>? _gpuBiasVelocity;
+    [ExternalState]
     private Tensor<T>? _gpuWeightM;
+    [ExternalState]
     private Tensor<T>? _gpuWeightV;
+    [ExternalState]
     private Tensor<T>? _gpuBiasM;
+    [ExternalState]
     private Tensor<T>? _gpuBiasV;
 
     // Offset weights - GPU tensors
+    [ExternalState]
     private Tensor<T>? _gpuOffsetWeights;
+    [ExternalState]
     private Tensor<T>? _gpuOffsetBias;
+    [ExternalState]
     private Tensor<T>? _gpuOffsetWeightGradient;
+    [ExternalState]
     private Tensor<T>? _gpuOffsetBiasGradient;
+    [ExternalState]
     private Tensor<T>? _gpuOffsetWeightVelocity;
+    [ExternalState]
     private Tensor<T>? _gpuOffsetBiasVelocity;
+    [ExternalState]
     private Tensor<T>? _gpuOffsetWeightM;
+    [ExternalState]
     private Tensor<T>? _gpuOffsetWeightV;
+    [ExternalState]
     private Tensor<T>? _gpuOffsetBiasM;
+    [ExternalState]
     private Tensor<T>? _gpuOffsetBiasV;
 
     // Mask weights - GPU tensors (only used if _useModulation)
+    [ExternalState]
     private Tensor<T>? _gpuMaskWeights;
+    [ExternalState]
     private Tensor<T>? _gpuMaskBias;
+    [ExternalState]
     private Tensor<T>? _gpuMaskWeightGradient;
+    [ExternalState]
     private Tensor<T>? _gpuMaskBiasGradient;
+    [ExternalState]
     private Tensor<T>? _gpuMaskWeightVelocity;
+    [ExternalState]
     private Tensor<T>? _gpuMaskBiasVelocity;
+    [ExternalState]
     private Tensor<T>? _gpuMaskWeightM;
+    [ExternalState]
     private Tensor<T>? _gpuMaskWeightV;
+    [ExternalState]
     private Tensor<T>? _gpuMaskBiasM;
+    [ExternalState]
     private Tensor<T>? _gpuMaskBiasV;
 
     #endregion

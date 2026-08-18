@@ -124,8 +124,11 @@ public partial class BidirectionalLayer<T> : LayerBase<T>, IShapeContract
     private readonly LayerBase<T> _backwardLayer;
     private readonly bool _mergeMode;
 
+    [Scratch]
     private Tensor<T>? _lastInput;
+    [Scratch]
     private Tensor<T>? _lastForwardOutput;
+    [Scratch]
     private Tensor<T>? _lastBackwardOutput;
 
     /// <summary>
@@ -171,8 +174,11 @@ public partial class BidirectionalLayer<T> : LayerBase<T>, IShapeContract
         _forwardLayer.SupportsGpuTraining && _backwardLayer.SupportsGpuTraining;
 
     #region GPU Training Fields
+    [ExternalState]
     private Tensor<T>? _gpuLastInput;
+    [ExternalState]
     private Tensor<T>? _gpuLastForwardOutput;
+    [ExternalState]
     private Tensor<T>? _gpuLastBackwardOutput;
     #endregion
 

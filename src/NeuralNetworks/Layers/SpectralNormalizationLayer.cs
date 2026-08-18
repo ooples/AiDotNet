@@ -110,11 +110,13 @@ public partial class SpectralNormalizationLayer<T> : LayerBase<T>, IShapeContrac
     /// <summary>
     /// Cached input from the last forward pass.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastInput;
 
     /// <summary>
     /// Cached output from the last forward pass.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastOutput;
 
     /// <summary>

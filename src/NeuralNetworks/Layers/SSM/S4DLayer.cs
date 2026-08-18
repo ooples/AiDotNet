@@ -110,26 +110,44 @@ public partial class S4DLayer<T> : LayerBase<T>, IShapeContract
     private Tensor<T> _logDelta;
 
     // Cached values for backward pass
+    [Scratch]
     private Tensor<T>? _lastInput;
+    [Scratch]
     private Tensor<T>? _lastOutput;
+    [Scratch]
     private Tensor<T>? _lastProjectedInput;
+    [Scratch]
     private Tensor<T>? _lastHiddenStatesReal;
+    [Scratch]
     private Tensor<T>? _lastHiddenStatesImag;
+    [Scratch]
     private Tensor<T>? _lastScanOutputReal;
     private int[]? _originalInputShape;
 
     // Gradients
+    [Scratch]
     private Tensor<T>? _aRealGradient;
+    [Scratch]
     private Tensor<T>? _aImagGradient;
+    [Scratch]
     private Tensor<T>? _bRealGradient;
+    [Scratch]
     private Tensor<T>? _bImagGradient;
+    [Scratch]
     private Tensor<T>? _cRealGradient;
+    [Scratch]
     private Tensor<T>? _cImagGradient;
+    [Scratch]
     private Tensor<T>? _dParamGradient;
+    [Scratch]
     private Tensor<T>? _inputProjectionWeightsGradient;
+    [Scratch]
     private Tensor<T>? _inputProjectionBiasGradient;
+    [Scratch]
     private Tensor<T>? _outputProjectionWeightsGradient;
+    [Scratch]
     private Tensor<T>? _outputProjectionBiasGradient;
+    [Scratch]
     private Tensor<T>? _logDeltaGradient;
 
     /// <inheritdoc />
@@ -477,7 +495,9 @@ public partial class S4DLayer<T> : LayerBase<T>, IShapeContract
     }
 
     // Cached values for kernel-based backward
+    [Scratch]
     private Tensor<T>? _cachedKernel = null;
+    [Scratch]
     private Tensor<T>? _cachedKernelDelta;
 
     private Tensor<T> ComplexRecurrentScan(Tensor<T> x, int batchSize, int seqLen)

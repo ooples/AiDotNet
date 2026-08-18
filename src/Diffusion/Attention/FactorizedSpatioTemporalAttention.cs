@@ -43,6 +43,7 @@ public partial class FactorizedSpatioTemporalAttention<T> : LayerBase<T>, IShape
     private readonly TemporalSelfAttention<T> _temporalAttention;
     private readonly LayerNormalizationLayer<T> _spatialNorm;
     private readonly LayerNormalizationLayer<T> _temporalNorm;
+    [Scratch]
     private Tensor<T>? _lastInput;
 
     /// <inheritdoc />

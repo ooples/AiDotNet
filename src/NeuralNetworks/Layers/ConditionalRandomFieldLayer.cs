@@ -76,16 +76,21 @@ public partial class ConditionalRandomFieldLayer<T> : LayerBase<T>, IShapeContra
 
     private Tensor<T> _endScores;
 
+    [Scratch]
     private Tensor<T>? _lastInput;
 
     /// <summary>
     /// Stores the original input shape for any-rank tensor support.
     /// </summary>
     private int[]? _originalInputShape;
+    [Scratch]
     private Tensor<T>? _lastOutput;
 
+    [Scratch]
     private Tensor<T>? _transitionMatrixGradient;
+    [Scratch]
     private Tensor<T>? _startScoresGradient;
+    [Scratch]
     private Tensor<T>? _endScoresGradient;
 
     private readonly int _numClasses;

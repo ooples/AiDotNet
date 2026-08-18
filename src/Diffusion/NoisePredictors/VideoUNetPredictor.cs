@@ -151,6 +151,7 @@ public partial class VideoUNetPredictor<T> : NoisePredictorBase<T>
     /// <summary>
     /// Cached input for backward pass.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastInput;
 
     /// <summary>

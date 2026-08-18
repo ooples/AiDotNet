@@ -90,6 +90,7 @@ public partial class UViTNoisePredictor<T> : NoisePredictorBase<T>
 
     // Position embeddings
     private Tensor<T>? _posEmbed;
+    [Scratch]
     private Tensor<T>? _lastInput;
 
     /// <inheritdoc />

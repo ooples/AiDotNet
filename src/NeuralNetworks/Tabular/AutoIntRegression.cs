@@ -54,7 +54,9 @@ public class AutoIntRegression<T> : AutoIntBase<T>
     private readonly FullyConnectedLayer<T> _regressionHead;
 
     // Cache
+    [Scratch]
     private Tensor<T>? _backboneOutputCache;
+    [Scratch]
     private Tensor<T>? _predictionsCache;
 
     /// <summary>

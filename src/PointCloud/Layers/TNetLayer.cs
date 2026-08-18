@@ -66,8 +66,10 @@ public partial class TNetLayer<T> : LayerBase<T>, IShapeContract
     private readonly List<ILayer<T>> _mlpLayers;
     private readonly List<ILayer<T>> _fcLayers;
     private readonly MaxPoolingLayer<T> _maxPooling;
+    [Scratch]
     private Tensor<T>? _lastInput;
     private Matrix<T>? _transformMatrix;
+    [Scratch]
     private Tensor<T>? _lastTransformVector;
 
     /// <summary>

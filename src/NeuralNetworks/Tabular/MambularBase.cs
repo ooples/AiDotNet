@@ -1,4 +1,5 @@
 using AiDotNet.ActivationFunctions;
+using AiDotNet.Attributes;
 using System;
 using System.Collections.Generic;
 using AiDotNet.Models.Parameters;
@@ -58,7 +59,9 @@ public abstract class MambularBase<T> : IParameterSource<T>
     protected int MLPOutputDimension { get; }
 
     // Caches
+    [Scratch]
     private Tensor<T>? _embeddedFeaturesCache;
+    [Scratch]
     private Tensor<T>? _mambaOutputCache;
 
     /// <summary>Built once on first parameter access, then reused.</summary>

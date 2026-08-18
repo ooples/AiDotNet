@@ -40,6 +40,7 @@ public partial class DFPOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBa
     /// <summary>
     /// The gradient from the previous iteration.
     /// </summary>
+    [Scratch]
     private new Vector<T> _previousGradient;
 
     /// <summary>

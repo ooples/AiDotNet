@@ -64,7 +64,9 @@ public class FeatureTokenizer<T>
     private Tensor<T>? _clsTokenGrad;
 
     // Cache for backward pass
+    [Scratch]
     private Tensor<T>? _inputCache;
+    [Scratch]
     private Matrix<int>? _categoricalIndicesCache;
 
     /// <summary>

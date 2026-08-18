@@ -126,11 +126,13 @@ public partial class AutoencoderKL<T> : VAEModelBase<T>
     /// <summary>
     /// Cached mean from last encoding.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _cachedMean;
 
     /// <summary>
     /// Cached log variance from last encoding.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _cachedLogVar;
 
     /// <summary>

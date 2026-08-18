@@ -120,11 +120,13 @@ public partial class XLoRAAdapter<T> : LoRAAdapterBase<T>
     /// <summary>
     /// Temporary storage for gating weights during forward pass (needed for backward pass).
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastGatingWeights;
 
     /// <summary>
     /// Temporary storage for the last input during forward pass (needed for backward pass).
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastInput;
 
     /// <summary>Construction state: the 'numberOfExperts' the layer was built with.</summary>

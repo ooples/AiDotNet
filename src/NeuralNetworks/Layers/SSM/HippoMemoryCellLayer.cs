@@ -75,6 +75,7 @@ public partial class HippoMemoryCellLayer<T> : LayerBase<T>, IShapeContract
 
     private readonly Tensor<T>? _ltiTransition;
     private readonly Tensor<T>? _ltiInput;
+    [Scratch]
     private readonly Dictionary<int, (Tensor<T> A, Tensor<T> B)> _legsZohCache = new();
 
     /// <inheritdoc />

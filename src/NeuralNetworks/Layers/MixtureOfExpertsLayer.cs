@@ -211,6 +211,7 @@ public partial class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLaye
     /// later if you don't remember what was said.
     /// </para>
     /// </remarks>
+    [Scratch]
     private Tensor<T>? _lastInput;
 
     /// <summary>
@@ -240,6 +241,7 @@ public partial class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLaye
     /// - Whether experts are being used balanced or if some are overloaded
     /// </para>
     /// </remarks>
+    [Scratch]
     private Tensor<T>? _lastRoutingWeights;
 
     /// <summary>
@@ -261,11 +263,13 @@ public partial class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLaye
     /// so you can give appropriate feedback to each person.
     /// </para>
     /// </remarks>
+    [Scratch]
     private List<Tensor<T>>? _lastExpertOutputs;
 
     /// <summary>
     /// Cached combined output before activation from the most recent forward pass.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastPreActivation;
 
 
@@ -286,6 +290,7 @@ public partial class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLaye
     /// - This is a technical requirement for proper backpropagation through softmax
     /// </para>
     /// </remarks>
+    [Scratch]
     private Tensor<T>? _lastRoutingLogits;
 
     /// <summary>

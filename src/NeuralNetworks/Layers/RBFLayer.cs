@@ -129,6 +129,7 @@ public partial class RBFLayer<T> : LayerBase<T>, IShapeContract
     /// batch of input vectors that were processed in the most recent forward pass. The tensor
     /// is null before the first forward pass or after a reset.
     /// </remarks>
+    [Scratch]
     private Tensor<T>? _lastInput;
 
     /// <summary>
@@ -139,6 +140,7 @@ public partial class RBFLayer<T> : LayerBase<T>, IShapeContract
     /// It holds the batch of output vectors that were produced in the most recent forward pass.
     /// The tensor is null before the first forward pass or after a reset.
     /// </remarks>
+    [Scratch]
     private Tensor<T>? _lastOutput;
 
     /// <summary>
@@ -149,6 +151,7 @@ public partial class RBFLayer<T> : LayerBase<T>, IShapeContract
     /// It has the same shape as the _centers tensor and is used to update the centers during
     /// the parameter update step. The tensor is null before the first backward pass or after a reset.
     /// </remarks>
+    [Scratch]
     private Tensor<T>? _centersGradient;
 
     /// <summary>
@@ -159,6 +162,7 @@ public partial class RBFLayer<T> : LayerBase<T>, IShapeContract
     /// It has the same shape as the _widths tensor and is used to update the widths during
     /// the parameter update step. The tensor is null before the first backward pass or after a reset.
     /// </remarks>
+    [Scratch]
     private Tensor<T>? _widthsGradient;
 
     /// <summary>

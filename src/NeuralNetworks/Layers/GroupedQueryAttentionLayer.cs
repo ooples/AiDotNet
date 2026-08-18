@@ -112,22 +112,36 @@ public partial class GroupedQueryAttentionLayer<T> : LayerBase<T>, IShapeContrac
     private ALiBiPositionalBiasLayer<T>? _alibiLayer;
 
     // Cached values for backward pass
+    [Scratch]
     private Tensor<T>? _lastInput;
+    [Scratch]
     private Tensor<T>? _lastOutput;
+    [Scratch]
     private Tensor<T>? _lastProjectedQueries;
+    [Scratch]
     private Tensor<T>? _lastProjectedKeys;
+    [Scratch]
     private Tensor<T>? _lastProjectedValues;
+    [Scratch]
     private Tensor<T>? _lastExpandedKeys;
+    [Scratch]
     private Tensor<T>? _lastExpandedValues;
+    [Scratch]
     private Tensor<T>? _lastAttentionWeights;
+    [Scratch]
     private Tensor<T>? _lastAttentionContext;
     private int[]? _originalInputShape;
 
     // Gradients
+    [Scratch]
     private Tensor<T>? _queryWeightsGradient;
+    [Scratch]
     private Tensor<T>? _keyWeightsGradient;
+    [Scratch]
     private Tensor<T>? _valueWeightsGradient;
+    [Scratch]
     private Tensor<T>? _outputWeightsGradient;
+    [Scratch]
     private Tensor<T>? _outputBiasGradient;
 
     /// <inheritdoc />

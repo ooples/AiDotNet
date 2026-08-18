@@ -1,4 +1,5 @@
 using AiDotNet.Engines;
+using AiDotNet.Attributes;
 using System.Collections.Generic;
 using AiDotNet.Models.Parameters;
 using AiDotNet.LinearAlgebra;
@@ -73,8 +74,11 @@ public abstract class GANDALFBase<T> : IParameterSource<T>
     private readonly List<Tensor<T>?> _treeLeafValuesGrad;
 
     // Cache for backward pass
+    [Scratch]
     private Tensor<T>? _inputCache;
+    [Scratch]
     private Tensor<T>? _gatingWeightsCache;
+    [Scratch]
     private List<Tensor<T>>? _routingProbsCache;  // Per tree routing probabilities
 
     /// <summary>

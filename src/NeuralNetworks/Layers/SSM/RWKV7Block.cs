@@ -259,28 +259,44 @@ public partial class RWKV7Block<T> : LayerBase<T>, IShapeContract
 
     // ============ Cached values for backward ============
 
+    [Scratch]
     private Tensor<T>? _lastInput;
+    [Scratch]
     private Tensor<T>? _lastOutput;
+    [Scratch]
     private Tensor<T>? _lastTimeMixOutput;
+    [Scratch]
     private Tensor<T>? _lastChannelMixOutput;
+    [Scratch]
     private Tensor<T>? _lastNormed1;
+    [Scratch]
     private Tensor<T>? _lastNormed2;
+    [Scratch]
     private Tensor<T>? _lastAfterTimeMix;
     private int[]? _originalInputShape;
 
     // Time mixing forward caches
+    [Scratch]
     private Tensor<T>? _cachedWkvOut;
+    [Scratch]
     private Tensor<T>? _cachedR;       // [batch, seqLen, modelDim] receptance projection
+    [Scratch]
     private Tensor<T>? _cachedK;       // [batch, seqLen, modelDim] key projection
+    [Scratch]
     private Tensor<T>? _cachedV;       // [batch, seqLen, modelDim] value projection
+    [Scratch]
     private Tensor<T>? _cachedTimeMixNormed1; // [batch, seqLen, modelDim] normed input to time mixing
     // WKV pre-gate values are reconstructed from _cachedWkvGated / sigmoid(r) during backward
+    [Scratch]
     private Tensor<T>? _cachedWkvGated;    // [batch, seqLen, modelDim] after gate, before groupNorm
     // Previous tokens per timestep reconstructed from _cachedTimeMixNormed1 during backward
 
     // Channel mixing forward caches
+    [Scratch]
     private Tensor<T>? _cachedChannelRGate;   // [batch, seqLen, modelDim] sigmoid(W_r * rInput)
+    [Scratch]
     private Tensor<T>? _cachedChannelSiLU;    // [batch, seqLen, ffnDim] SiLU(W_k * kInput)
+    [Scratch]
     private Tensor<T>? _cachedChannelVProj;   // [batch, seqLen, modelDim] W_v * SiLU(k)
 
     // ============ Gradients ============

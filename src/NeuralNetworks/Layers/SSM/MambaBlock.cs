@@ -131,33 +131,57 @@ public partial class MambaBlock<T> : LayerBase<T>, IShapeContract
     private Tensor<T> _outputProjectionBias;
 
     // Cached values for backward pass
+    [Scratch]
     private Tensor<T>? _lastInput;
+    [Scratch]
     private Tensor<T>? _lastOutput;
+    [Scratch]
     private Tensor<T>? _lastXBranch;
+    [Scratch]
     private Tensor<T>? _lastZBranch;
+    [Scratch]
     private Tensor<T>? _lastConvOutput;
+    [Scratch]
     private Tensor<T>? _lastSiluOutput;
+    [Scratch]
     private Tensor<T>? _lastScanOutput;
+    [Scratch]
     private Tensor<T>? _lastGatedOutput;
+    [Scratch]
     private Tensor<T>? _lastDelta;
+    [Scratch]
     private Tensor<T>? _lastDeltaPreSoftplus;
+    [Scratch]
     private Tensor<T>? _lastB;
+    [Scratch]
     private Tensor<T>? _lastC;
+    [Scratch]
     private Tensor<T>? _lastHiddenStates;
     private Tensor<T>? _initialHiddenState;
     private int[]? _originalInputShape;
 
     // Gradients
+    [Scratch]
     private Tensor<T>? _inputProjectionWeightsGradient;
+    [Scratch]
     private Tensor<T>? _inputProjectionBiasGradient;
+    [Scratch]
     private Tensor<T>? _convWeightsGradient;
+    [Scratch]
     private Tensor<T>? _convBiasGradient;
+    [Scratch]
     private Tensor<T>? _xProjectionWeightsGradient;
+    [Scratch]
     private Tensor<T>? _dtProjectionWeightsGradient;
+    [Scratch]
     private Tensor<T>? _dtProjectionBiasGradient;
+    [Scratch]
     private Tensor<T>? _aLogGradient;
+    [Scratch]
     private Tensor<T>? _dParamGradient;
+    [Scratch]
     private Tensor<T>? _outputProjectionWeightsGradient;
+    [Scratch]
     private Tensor<T>? _outputProjectionBiasGradient;
 
     /// <inheritdoc />

@@ -148,16 +148,19 @@ public partial class MeshEdgeConvLayer<T> : LayerBase<T>, IShapeContract
     /// <summary>
     /// Cached weight gradients from backward pass.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _weightsGradient;
 
     /// <summary>
     /// Cached bias gradients from backward pass.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _biasesGradient;
 
     /// <summary>
     /// Cached input from the last forward pass.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastInput;
 
     /// <summary>
@@ -168,11 +171,13 @@ public partial class MeshEdgeConvLayer<T> : LayerBase<T>, IShapeContract
     /// <summary>
     /// Cached output before activation from the last forward pass.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastPreActivation;
 
     /// <summary>
     /// Cached output after activation from the last forward pass.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastOutput;
 
     #endregion

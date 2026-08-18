@@ -131,6 +131,7 @@ public class ElasticWeightConsolidation<T, TInput, TOutput> : ContinualLearningS
     private Vector<T>? _consolidatedParameters;
 
     // Cached gradients for Fisher computation
+    [Scratch]
     private readonly List<Vector<T>> _gradientCache;
 
     /// <summary>

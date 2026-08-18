@@ -83,19 +83,27 @@ public partial class DecoderLayer<T> : LayerBase<T>, IShapeContract
     /// <summary>
     /// Stores the last input tensor processed by the layer.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastInput;
 
     /// <summary>
     /// Stores the last encoder output tensor used by the layer.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastEncoderOutput;
 
     // GPU cached tensors for backward pass
+    [ExternalState]
     private Tensor<T>? _gpuDecoderInput;
+    [ExternalState]
     private Tensor<T>? _gpuEncoderOutput;
+    [ExternalState]
     private Tensor<T>? _gpuNormalized1;
+    [ExternalState]
     private Tensor<T>? _gpuNormalized2;
+    [ExternalState]
     private Tensor<T>? _gpuResidual1;
+    [ExternalState]
     private Tensor<T>? _gpuResidual2;
 
     /// <summary>
@@ -106,11 +114,13 @@ public partial class DecoderLayer<T> : LayerBase<T>, IShapeContract
     /// <summary>
     /// Stores the gradient with respect to the input from the last backward pass.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastInputGradient;
 
     /// <summary>
     /// Stores the gradient with respect to the encoder output from the last backward pass.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastEncoderOutputGradient;
 
     /// <summary>

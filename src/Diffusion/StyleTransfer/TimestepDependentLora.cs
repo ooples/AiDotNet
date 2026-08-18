@@ -1,4 +1,5 @@
 using AiDotNet.DecompositionMethods.MatrixDecomposition;
+using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.LinearAlgebra;
 
@@ -84,6 +85,7 @@ public sealed class TimestepDependentLora<T>
     private readonly Vector<T> _singularInit;
 
     // Cached [inputDim, outputDim] delta for _cachedTimestep. Invalidated by InvalidateCache().
+    [Scratch]
     private Tensor<T>? _cachedDelta;
     private int _cachedTimestep = -1;
 

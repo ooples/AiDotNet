@@ -71,6 +71,7 @@ public partial class DenseBlockLayer<T> : LayerBase<T>, ILayerSerializationExtra
     private readonly ConvolutionalLayer<T> _conv3x3;
     private readonly IActivationFunction<T> _relu;
 
+    [Scratch]
     private Tensor<T>? _lastInput;
     private Tensor<T>? _bn1Out;
     private Tensor<T>? _relu1Out;
@@ -79,8 +80,11 @@ public partial class DenseBlockLayer<T> : LayerBase<T>, ILayerSerializationExtra
     private Tensor<T>? _relu2Out;
 
     // GPU cached tensors for backward pass
+    [ExternalState]
     private Tensor<T>? _gpuBn1Out;
+    [ExternalState]
     private Tensor<T>? _gpuConv1Out;
+    [ExternalState]
     private Tensor<T>? _gpuBn2Out;
 
     public override bool SupportsTraining => true;
@@ -306,6 +310,7 @@ public partial class DenseBlockLayer<T> : LayerBase<T>, ILayerSerializationExtra
         _conv3x3.UpdateParameters(learningRate);
     }
 
+    [Scratch]
     private Vector<T>? _pendingParameters;
 
     private void ApplyParameters(Vector<T> parameters)
@@ -398,6 +403,7 @@ public partial class DenseBlockLayer<T> : LayerBase<T>, ILayerSerializationExtra
     /// called pre-OnFirstForward. Replayed inside OnFirstForward once
     /// _bn1 / _bn2 have their running-state arrays sized.
     /// </summary>
+    [Scratch]
     private Vector<T>? _pendingExtraParameters;
 
     private void ApplyExtraParametersUnsafe(Vector<T> extraParameters)

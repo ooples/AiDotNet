@@ -88,6 +88,7 @@ public partial class VideoCLIPNeuralNetwork<T> : MultimodalModelLayoutBase<T>, I
     private readonly List<ILayer<T>> _projectionLayers = [];
     private Tensor<T>? _visionClsToken;
     private Tensor<T>? _visionPositionalEmbeddings;
+    [Scratch]
     private Tensor<T>? _temporalPositionalEmbeddings;
     private Tensor<T>? _textPositionalEmbeddings;
     private ILayer<T>? _patchEmbedding;
@@ -97,6 +98,7 @@ public partial class VideoCLIPNeuralNetwork<T> : MultimodalModelLayoutBase<T>, I
     private ILayer<T>? _captionHead;
 
     // Gradient checkpointing: cached frames from the last forward pass for backward recomputation
+    [Scratch]
     private List<Tensor<T>>? _cachedTrainingFrames;
 
 

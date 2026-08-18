@@ -755,6 +755,7 @@ public partial class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
         public float[] V = default!;
         public int N;
     }
+    [Scratch]
     private readonly ConcurrentDictionary<Tensor<T>, Fp32AdamSlot> _fp32StepCache =
         new(TensorReferenceComparer<Tensor<T>>.Instance);
 

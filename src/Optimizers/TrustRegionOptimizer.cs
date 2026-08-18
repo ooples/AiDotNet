@@ -69,6 +69,7 @@ public partial class TrustRegionOptimizer<T, TInput, TOutput> : GradientBasedOpt
     /// <summary>
     /// The previous gradient, used for trust region update computation.
     /// </summary>
+    [Scratch]
     private Vector<T>? _trustRegionPreviousGradient;
 
     /// <summary>

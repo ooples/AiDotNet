@@ -108,6 +108,7 @@ public class ExpectedGradientLength<T, TInput, TOutput> : ContinualLearningStrat
     private Vector<T>? _previousParameters;
 
     // Running gradient length accumulator
+    [Scratch]
     private Vector<T>? _gradientLengthSum;
     private int _gradientCount;
 

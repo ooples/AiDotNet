@@ -212,6 +212,7 @@ public partial class MessagePassingLayer<T> : LayerBase<T>, IGraphConvolutionLay
     /// <summary>
     /// Cached input from forward pass.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastInput;
 
     /// <summary>
@@ -222,36 +223,43 @@ public partial class MessagePassingLayer<T> : LayerBase<T>, IGraphConvolutionLay
     /// <summary>
     /// Cached output from forward pass.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastOutput;
 
     /// <summary>
     /// Cached messages for backward pass.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastMessages;
 
     /// <summary>
     /// Cached aggregated messages.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastAggregated;
 
     /// <summary>
     /// Cached hidden activations from message MLP layer 1.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastMessageHidden;
 
     /// <summary>
     /// Cached reset gates.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastResetGate;
 
     /// <summary>
     /// Cached update gates.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastUpdateGate;
 
     /// <summary>
     /// Gradients for parameters.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _messageWeights1Gradient;
 
     /// <summary>
@@ -263,20 +271,31 @@ public partial class MessagePassingLayer<T> : LayerBase<T>, IGraphConvolutionLay
             throw new InvalidOperationException("Adjacency matrix is not set.");
         return _adjacencyMatrix.Shape.Length == 3 ? _adjacencyMatrix[b, i, j] : _adjacencyMatrix[i, j];
     }
+    [Scratch]
     private Tensor<T>? _messageWeights2Gradient;
+    [Scratch]
     private Tensor<T>? _messageBias1Gradient;
+    [Scratch]
     private Tensor<T>? _messageBias2Gradient;
+    [Scratch]
     private Tensor<T>? _updateWeightsGradient;
+    [Scratch]
     private Tensor<T>? _updateMessageWeightsGradient;
+    [Scratch]
     private Tensor<T>? _updateBiasGradient;
+    [Scratch]
     private Tensor<T>? _resetWeightsGradient;
+    [Scratch]
     private Tensor<T>? _resetMessageWeightsGradient;
+    [Scratch]
     private Tensor<T>? _resetBiasGradient;
 #pragma warning disable CS0169 // Field is never used - reserved for future edge weight gradient computation
+    [Scratch]
     private Tensor<T>? _edgeWeightsGradient;
 #pragma warning restore CS0169
 
     // GPU cache fields for backward pass
+    [ExternalState]
     private Tensor<T>? _gpuLastInput;
     private IGpuBuffer? _gpuEdgeSrcIndices;
     private IGpuBuffer? _gpuEdgeTgtIndices;

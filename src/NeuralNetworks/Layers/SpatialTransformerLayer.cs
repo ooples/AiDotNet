@@ -164,6 +164,7 @@ public partial class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     /// or when you explicitly reset the layer.
     /// </para>
     /// </remarks>
+    [Scratch]
     private Tensor<T>? _lastInput;
 
     /// <summary>
@@ -191,6 +192,7 @@ public partial class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     /// understand how changes to the output affect the overall network performance.
     /// </para>
     /// </remarks>
+    [Scratch]
     private Tensor<T>? _lastOutput;
 
     /// <summary>
@@ -208,6 +210,7 @@ public partial class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     /// backward pass, when the layer needs to understand exactly how it processed the data.
     /// </para>
     /// </remarks>
+    [Scratch]
     private Tensor<T>? _lastTransformationMatrix;
 
     /// <summary>
@@ -227,6 +230,7 @@ public partial class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     /// that need more adjustment.
     /// </para>
     /// </remarks>
+    [Scratch]
     private Tensor<T>? _localizationWeights1Gradient;
 
     /// <summary>
@@ -244,6 +248,7 @@ public partial class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     /// in the first layer during training. They help fine-tune the network's behavior.
     /// </para>
     /// </remarks>
+    [Scratch]
     private Tensor<T>? _localizationBias1Gradient;
 
     /// <summary>
@@ -263,6 +268,7 @@ public partial class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     /// of transformations for the task.
     /// </para>
     /// </remarks>
+    [Scratch]
     private Tensor<T>? _localizationWeights2Gradient;
 
     /// <summary>
@@ -281,8 +287,11 @@ public partial class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     /// the gradients show how to move away from that neutral state toward more helpful transformations.
     /// </para>
     /// </remarks>
+    [Scratch]
     private Tensor<T>? _localizationBias2Gradient;
+    [Scratch]
     private Tensor<T>? _lastFlattenedInput;
+    [Scratch]
     private Tensor<T>? _lastLocalization1;
 
     /// <summary>

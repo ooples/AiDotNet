@@ -220,8 +220,10 @@ public partial class UpscaleAVideoModel<T> : VideoDiffusionModelBase<T>
     // Explicit positive/negative slots bound memory even when prompt text changes.
     private readonly object _conditioningCacheLock = new();
     private string? _cachedPrompt;
+    [Scratch]
     private Tensor<T>? _cachedPromptConditioning;
     private string? _cachedNegativePrompt;
+    [Scratch]
     private Tensor<T>? _cachedNegativeConditioning;
     // Seed for the deferred (lazy) init path: the constructor only eager-inits when an explicit
     // predictor/VAE is passed, so without capturing the seed the lazy EnsureInitialized() built the

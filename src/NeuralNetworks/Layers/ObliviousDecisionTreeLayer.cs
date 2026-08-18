@@ -90,9 +90,13 @@ public partial class ObliviousDecisionTreeLayer<T> : LayerBase<T>, IShapeContrac
     private Tensor<T> _leafValuesGrad;
 
     // Cached values
+    [Scratch]
     private Tensor<T>? _inputCache;
+    [Scratch]
     private Tensor<T>? _featureSelectionsCache;
+    [Scratch]
     private Tensor<T>? _splitDecisionsCache;
+    [Scratch]
     private Tensor<T>? _leafProbabilitiesCache;
 
     private readonly int _numLeaves;

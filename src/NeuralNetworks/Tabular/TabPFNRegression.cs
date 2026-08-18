@@ -56,7 +56,9 @@ public class TabPFNRegression<T> : TabPFNBase<T>
     private readonly int _outputDimension;
     private readonly FullyConnectedLayer<T> _regressionHead;
 
+    [Scratch]
     private Tensor<T>? _backboneOutputCache;
+    [Scratch]
     private Tensor<T>? _predictionsCache;
 
     /// <summary>

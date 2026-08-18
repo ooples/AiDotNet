@@ -353,11 +353,13 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>, IShapeContract
     /// <summary>
     /// Gradient of the kernels computed during backpropagation via autodiff.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _kernelsGradient;
 
     /// <summary>
     /// Gradient of the biases computed during backpropagation via autodiff.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _biasesGradient;
 
     /// <summary>
@@ -431,7 +433,9 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>, IShapeContract
     private Tensor<T> _lastOutput;
 
     // GPU-resident cached tensors for GPU training pipeline
+    [Scratch]
     private Tensor<T>? _lastInputGpu;
+    [Scratch]
     private Tensor<T>? _lastOutputGpu;
     private int[]? _gpuInputShape4D;
 

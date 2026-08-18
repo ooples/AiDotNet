@@ -66,6 +66,7 @@ public partial class ZeRO2Model<T, TInput, TOutput> : ShardedModelBase<T, TInput
 {
     private Vector<T>? _parameterDeltaShard;
     private Vector<T>? _computedGradients;
+    [Scratch]
     private Vector<T>? _gradientShard;
 
     /// <summary>

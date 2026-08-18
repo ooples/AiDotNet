@@ -159,58 +159,73 @@ public partial class HighwayLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, ISh
     /// <summary>
     /// Stores the input tensor from the last forward pass for use in the backward pass.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastInput;
 
     /// <summary>
     /// Stores the output tensor from the last forward pass for use in the backward pass.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastOutput;
 
     /// <summary>
     /// Stores the transformed output tensor from the last forward pass for use in the backward pass.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastTransformOutput;
 
     /// <summary>
     /// Stores the gate output tensor from the last forward pass for use in the backward pass.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastGateOutput;
 
     /// <summary>
     /// Stores the pre-activation transform values from the last forward pass.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastTransformPreActivation;
 
     /// <summary>
     /// Stores the pre-activation gate values from the last forward pass.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastGatePreActivation;
 
     /// <summary>
     /// Stores the gradients for the transform weights calculated during the backward pass.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _transformWeightsGradient;
 
     /// <summary>
     /// Stores the gradients for the transform bias calculated during the backward pass.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _transformBiasGradient;
 
     /// <summary>
     /// Stores the gradients for the gate weights calculated during the backward pass.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _gateWeightsGradient;
 
     /// <summary>
     /// Stores the gradients for the gate bias calculated during the backward pass.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _gateBiasGradient;
 
     // GPU cached tensors for backward pass
+    [ExternalState]
     private Tensor<T>? _gpuInput;
+    [ExternalState]
     private Tensor<T>? _gpuTransformOutput;
+    [ExternalState]
     private Tensor<T>? _gpuGateOutput;
+    [ExternalState]
     private Tensor<T>? _gpuTransformPreActivation;
+    [ExternalState]
     private Tensor<T>? _gpuGatePreActivation;
     private int[]? _gpuInputShape;
 

@@ -82,11 +82,13 @@ public partial class TiedLoRAAdapter<T> : LoRAAdapterBase<T>
     /// <summary>
     /// Gradients for shared matrix A accumulated from all layers.
     /// </summary>
+    [Scratch]
     private static Matrix<T>? _sharedMatrixAGradient;
 
     /// <summary>
     /// Gradients for shared matrix B accumulated from all layers.
     /// </summary>
+    [Scratch]
     private static Matrix<T>? _sharedMatrixBGradient;
 
     /// <summary>

@@ -66,7 +66,9 @@ public partial class PagedCachedMultiHeadAttention<T> : LayerBase<T>, IContextAw
     private Tensor<T> _outputWeights;
     private Tensor<T> _outputBias;
 
+    [Scratch]
     private Tensor<T>? _lastInput;
+    [Scratch]
     private Tensor<T>? _lastOutput;
     private int _currentPosition;
 

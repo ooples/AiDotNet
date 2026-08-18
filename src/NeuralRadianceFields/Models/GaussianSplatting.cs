@@ -476,7 +476,9 @@ public partial class GaussianSplatting<T> : AiDotNet.NeuralNetworks.VectorModelL
     private int _trainingStep;
     private SpatialHashGrid? _spatialIndex;
     private bool _spatialIndexDirty = true;
+    [Scratch]
     private Tensor<T>? _lastQueryPositions;
+    [Scratch]
     private Tensor<T>? _lastQueryDirections;
 
     public override bool SupportsTraining => true;

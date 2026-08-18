@@ -134,23 +134,29 @@ public partial class ReadoutLayer<T> : LayerBase<T>, IShapeContract
     /// input tensor that was processed in the most recent forward pass. The tensor is null
     /// before the first forward pass or after a reset.
     /// </remarks>
+    [Scratch]
     private Tensor<T>? _lastInput;
 
     /// <summary>
     /// Stores the output tensor (post-activation) from the most recent forward pass for use in backpropagation.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastOutput;
 
     /// <summary>
     /// Stores the pre-activation output tensor from the most recent forward pass.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastPreActivation;
 
     private int[] _originalInputShape = [];
 
     // GPU cached tensors for backward pass
+    [ExternalState]
     private Tensor<T>? _gpuInput;
+    [ExternalState]
     private Tensor<T>? _gpuPreActivation;
+    [ExternalState]
     private Tensor<T>? _gpuOutput;
     private int _gpuBatchDim;
     private int _gpuInputSize;

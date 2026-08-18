@@ -125,6 +125,7 @@ public partial class DenseBlock<T> : LayerBase<T>, ILayerSerializationExtras<T>,
     private List<Tensor<T>>? _layerOutputs;
 
     // GPU cached tensors for backward pass
+    [ExternalState]
     private List<Tensor<T>>? _gpuFeatureMaps;
 
     public override bool SupportsTraining => true;
@@ -342,6 +343,7 @@ public partial class DenseBlock<T> : LayerBase<T>, ILayerSerializationExtras<T>,
         }
     }
 
+    [Scratch]
     private Vector<T>? _pendingParameters;
 
     private void ApplyParameters(Vector<T> parameters)

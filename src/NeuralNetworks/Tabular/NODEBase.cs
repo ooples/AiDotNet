@@ -1,4 +1,5 @@
 using AiDotNet.ActivationFunctions;
+using AiDotNet.Attributes;
 using System.Collections.Generic;
 using AiDotNet.Models.Parameters;
 using AiDotNet.LinearAlgebra;
@@ -51,9 +52,13 @@ public abstract class NODEBase<T> : IParameterSource<T>
     private readonly Tensor<T>[] _leafValues;               // [2^depth, output_dim] per tree
 
     // Caches for backward pass
+    [Scratch]
     private Tensor<T>? _preprocessedFeaturesCache;
+    [Scratch]
     private List<Tensor<T>>? _splitProbabilitiesCache;
+    [Scratch]
     private List<Tensor<T>>? _leafWeightsCache;
+    [Scratch]
     private Tensor<T>? _treeOutputsCache;
 
     /// <summary>

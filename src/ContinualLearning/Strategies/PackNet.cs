@@ -109,6 +109,7 @@ public class PackNet<T, TInput, TOutput> : ContinualLearningStrategyBase<T, TInp
     private int[]? _parameterOwnership;
 
     // Accumulated gradient importance for gradient-based pruning
+    [Scratch]
     private Vector<T>? _gradientImportance;
     private int _gradientCount;
 

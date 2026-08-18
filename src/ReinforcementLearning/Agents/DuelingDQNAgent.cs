@@ -367,14 +367,23 @@ internal class DuelingNetwork<T> : IParameterSource<T>
     private readonly int _stateSize;
     private readonly int _actionSize;
 
+    [Scratch]
     private Vector<T>? _lastSharedOutput;
+    [Scratch]
     private Vector<T>? _lastValueOutput;
+    [Scratch]
     private Vector<T>? _lastAdvantageOutput;
+    [Scratch]
     private readonly List<Vector<T>> _lastSharedInputs = new();
+    [Scratch]
     private readonly List<Vector<T>> _lastSharedOutputs = new();
+    [Scratch]
     private readonly List<Vector<T>> _lastValueInputs = new();
+    [Scratch]
     private readonly List<Vector<T>> _lastValueOutputs = new();
+    [Scratch]
     private readonly List<Vector<T>> _lastAdvantageInputs = new();
+    [Scratch]
     private readonly List<Vector<T>> _lastAdvantageOutputs = new();
 
     public DuelingNetwork(

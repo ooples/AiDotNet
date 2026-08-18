@@ -169,9 +169,11 @@ public class SynapticIntelligence<T, TInput, TOutput> : ContinualLearningStrateg
     private Vector<T>? _pathIntegral;
 
     // Previous gradients for computing parameter changes
+    [Scratch]
     private Vector<T>? _lastGradients;
 
     // Previous parameters for delta computation
+    [Scratch]
     private Vector<T>? _lastParameters;
 
     // Whether we're currently tracking a task

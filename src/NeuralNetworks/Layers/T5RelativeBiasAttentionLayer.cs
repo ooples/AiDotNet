@@ -111,10 +111,15 @@ public partial class T5RelativeBiasAttentionLayer<T> : LayerBase<T>, IShapeContr
     private int _cachedSeqLen = -1;
     private Tensor<int>? _bucketIndices;
 
+    [Scratch]
     private Tensor<T>? _qGradient;
+    [Scratch]
     private Tensor<T>? _kGradient;
+    [Scratch]
     private Tensor<T>? _vGradient;
+    [Scratch]
     private Tensor<T>? _oGradient;
+    [Scratch]
     private Tensor<T>? _biasTableGradient;
 
     public override bool SupportsTraining => true;

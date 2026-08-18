@@ -43,7 +43,9 @@ public class ContrastivePretraining<T>
     private readonly int _projectionDim;
 
     // Cached values
+    [Scratch]
     private Tensor<T>? _originalEmbeddingsCache;
+    [Scratch]
     private Tensor<T>? _corruptedEmbeddingsCache;
     private int[]? _corruptedIndicesCache;
 

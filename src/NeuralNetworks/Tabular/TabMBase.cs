@@ -1,4 +1,5 @@
 using AiDotNet.Engines;
+using AiDotNet.Attributes;
 using AiDotNet.Models.Options;
 
 namespace AiDotNet.NeuralNetworks.Tabular;
@@ -67,7 +68,9 @@ public abstract class TabMBase<T>
     private readonly List<BatchEnsembleLayer<T>> _hiddenLayers;
 
     // Cache for backward pass
+    [Scratch]
     private Tensor<T>? _embeddedInputCache;
+    [Scratch]
     private readonly List<Tensor<T>> _hiddenOutputsCache;
 
     /// <summary>

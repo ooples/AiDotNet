@@ -107,7 +107,9 @@ public partial class BatchEnsembleLayer<T> : LayerBase<T>, IShapeContract
     private Tensor<T>? _sVectorsGrad;
 
     // Cache for backward pass
+    [Scratch]
     private Tensor<T>? _inputCache;     // Shape: [batchSize * numMembers, inputDim]
+    [Scratch]
     private Tensor<T>? _scaledInputCache;  // Input after r-vector scaling
 
     /// <summary>

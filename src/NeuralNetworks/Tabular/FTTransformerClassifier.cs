@@ -60,8 +60,11 @@ public class FTTransformerClassifier<T> : FTTransformerBase<T>
     private readonly FullyConnectedLayer<T> _classificationHead;
 
     // Cache for backward pass
+    [Scratch]
     private Tensor<T>? _clsOutputCache;
+    [Scratch]
     private Tensor<T>? _logitsCache;
+    [Scratch]
     private Tensor<T>? _probabilitiesCache;
 
     /// <summary>

@@ -328,7 +328,9 @@ public partial class SynapticPlasticityLayer<T> : LayerBase<T>, IShapeContract
 
     public override bool SupportsTraining => true;
 
+    [Scratch]
     private Tensor<T>? _lastInputGpu;
+    [Scratch]
     private Tensor<T>? _lastOutputGpu;
     private Tensor<T>? _presynapticTracesGpu;
     private Tensor<T>? _postsynapticTracesGpu;

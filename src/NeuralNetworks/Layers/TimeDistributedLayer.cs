@@ -177,6 +177,7 @@ public partial class TimeDistributedLayer<T> : LayerBase<T>, IShapeContract
     /// or wrong during the learning process.
     /// </para>
     /// </remarks>
+    [Scratch]
     private Tensor<T>? _lastInput;
 
     /// <summary>
@@ -203,6 +204,7 @@ public partial class TimeDistributedLayer<T> : LayerBase<T>, IShapeContract
     /// which is crucial for learning.
     /// </para>
     /// </remarks>
+    [Scratch]
     private Tensor<T>? _lastOutput;
 
     public override bool SupportsTraining => _innerLayer.SupportsTraining;

@@ -102,6 +102,7 @@ public partial class PipelineParallelModel<T, TInput, TOutput> : ShardedModelBas
 
     // Cached weight gradients from BackwardInput for fallback accumulation when model
     // does not support IPipelineDecomposableModel (emulated B/W split).
+    [Scratch]
     private readonly Dictionary<int, Vector<T>> _cachedWeightGradients = new();
 
     // Whether the wrapped model supports true B/W decomposition

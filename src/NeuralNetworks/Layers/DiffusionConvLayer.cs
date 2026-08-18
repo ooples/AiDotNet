@@ -140,26 +140,31 @@ public partial class DiffusionConvLayer<T> : LayerBase<T>, IShapeContract
     /// <summary>
     /// Cached weight gradients from backward pass.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _weightsGradient;
 
     /// <summary>
     /// Cached bias gradients from backward pass.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _biasesGradient;
 
     /// <summary>
     /// Cached input from the last forward pass.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastInput;
 
     /// <summary>
     /// Cached pre-activation output from the last forward pass.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastPreActivation;
 
     /// <summary>
     /// Cached output from the last forward pass.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastOutput;
 
     /// <summary>
@@ -216,6 +221,7 @@ public partial class DiffusionConvLayer<T> : LayerBase<T>, IShapeContract
     /// <summary>
     /// Cached GPU input from the last forward pass.
     /// </summary>
+    [ExternalState]
     private Tensor<T>? _gpuInput;
 
     /// <summary>
@@ -226,67 +232,85 @@ public partial class DiffusionConvLayer<T> : LayerBase<T>, IShapeContract
     /// <summary>
     /// Cached GPU diffused features for backward pass.
     /// </summary>
+    [ExternalState]
     private Tensor<T>? _gpuDiffusedFeatures;
 
     /// <summary>
     /// Cached GPU pre-activation output for backward pass.
     /// </summary>
+    [ExternalState]
     private Tensor<T>? _gpuPreActivation;
 
     /// <summary>
     /// Cached GPU activated output for backward pass.
     /// </summary>
+    [ExternalState]
     private Tensor<T>? _gpuOutput;
 
     /// <summary>
     /// GPU weight tensor.
     /// </summary>
+    [ExternalState]
     private Tensor<T>? _gpuWeights;
 
     /// <summary>
     /// GPU bias tensor.
     /// </summary>
+    [ExternalState]
     private Tensor<T>? _gpuBiases;
 
     /// <summary>
     /// GPU diffusion time tensor.
     /// </summary>
+    [ExternalState]
     private Tensor<T>? _gpuDiffusionTimes;
 
     /// <summary>
     /// GPU weight gradients.
     /// </summary>
+    [ExternalState]
     private Tensor<T>? _gpuWeightsGradient;
 
     /// <summary>
     /// GPU bias gradients.
     /// </summary>
+    [ExternalState]
     private Tensor<T>? _gpuBiasesGradient;
 
     /// <summary>
     /// GPU diffusion time gradients.
     /// </summary>
+    [ExternalState]
     private Tensor<T>? _gpuDiffusionTimesGradient;
 
     /// <summary>
     /// GPU optimizer state for weights.
     /// </summary>
+    [ExternalState]
     private Tensor<T>? _gpuWeightsVelocity;
+    [ExternalState]
     private Tensor<T>? _gpuWeightsM;
+    [ExternalState]
     private Tensor<T>? _gpuWeightsV;
 
     /// <summary>
     /// GPU optimizer state for biases.
     /// </summary>
+    [ExternalState]
     private Tensor<T>? _gpuBiasesVelocity;
+    [ExternalState]
     private Tensor<T>? _gpuBiasesM;
+    [ExternalState]
     private Tensor<T>? _gpuBiasesV;
 
     /// <summary>
     /// GPU optimizer state for diffusion times.
     /// </summary>
+    [ExternalState]
     private Tensor<T>? _gpuDiffusionTimesVelocity;
+    [ExternalState]
     private Tensor<T>? _gpuDiffusionTimesM;
+    [ExternalState]
     private Tensor<T>? _gpuDiffusionTimesV;
 
     #endregion

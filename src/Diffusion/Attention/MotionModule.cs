@@ -45,6 +45,7 @@ public partial class MotionModule<T> : LayerBase<T>, IShapeContract
     private readonly DenseLayer<T> _ffnOut;
     private readonly LayerNormalizationLayer<T> _norm1;
     private readonly LayerNormalizationLayer<T> _norm2;
+    [Scratch]
     private Tensor<T>? _lastInput;
 
     /// <inheritdoc />

@@ -83,11 +83,17 @@ public partial class SwinTransformerBlockLayer<T> : LayerBase<T>, IShapeContract
     private readonly DenseLayer<T> _mlpFc2;
 
     // Cached values for backward pass
+    [Scratch]
     private Tensor<T>? _cachedInput;
+    [Scratch]
     private Tensor<T>? _cachedNorm1Output;
+    [Scratch]
     private Tensor<T>? _cachedAttnOutput;
+    [Scratch]
     private Tensor<T>? _cachedResidual1;
+    [Scratch]
     private Tensor<T>? _cachedNorm2Output;
+    [Scratch]
     private Tensor<T>? _cachedQkv; // [numWindows, windowArea, 3*dim]
     private int _cachedNumWindows;
     private int _cachedWindowArea;

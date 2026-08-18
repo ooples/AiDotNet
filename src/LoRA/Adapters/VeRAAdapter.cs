@@ -95,21 +95,25 @@ public partial class VeRAAdapter<T> : LoRAAdapterBase<T>
     /// <summary>
     /// Gradient for scaling vector d computed during backpropagation.
     /// </summary>
+    [Scratch]
     private Vector<T>? _scalingVectorDGradient;
 
     /// <summary>
     /// Gradient for scaling vector b computed during backpropagation.
     /// </summary>
+    [Scratch]
     private Vector<T>? _scalingVectorBGradient;
 
     /// <summary>
     /// Stored input from the forward pass, needed for gradient computation.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastInput;
 
     /// <summary>
     /// Stored intermediate value (B * A * input) from forward pass, needed for backward pass.
     /// </summary>
+    [Scratch]
     private Matrix<T>? _lastIntermediate;
 
     /// <summary>

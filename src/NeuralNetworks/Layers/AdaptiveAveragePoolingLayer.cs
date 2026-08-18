@@ -52,10 +52,12 @@ public partial class AdaptiveAveragePoolingLayer<T> : LayerBase<T>, IShapeContra
     private readonly int _outputWidth;
     private int _channels;
 
+    [Scratch]
     private Tensor<T>? _lastInput;
     private int[]? _lastInputShape;
 
     // GPU cached tensors for backward pass
+    [ExternalState]
     private Tensor<T>? _gpuInput;
     private int _gpuBatch;
     private int _gpuChannels;

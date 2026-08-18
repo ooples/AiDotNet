@@ -123,11 +123,13 @@ public partial class UNetNoisePredictor<T> : NoisePredictorBase<T>
     /// <summary>
     /// Cached input for backward pass.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastInput;
 
     /// <summary>
     /// Cached output for backward pass.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastOutput;
 
     /// <summary>
@@ -1477,7 +1479,9 @@ public partial class UNetNoisePredictor<T> : NoisePredictorBase<T>
     #region Layer-Level Backpropagation
 
     // Skip connections saved during forward for proper gradient splitting
+    [Scratch]
     private List<Tensor<T>>? _lastSkips;
+    [Scratch]
     private Tensor<T>? _lastTimeEmbed;
 
     /// <summary>

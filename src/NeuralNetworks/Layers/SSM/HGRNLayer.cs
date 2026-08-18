@@ -107,23 +107,38 @@ public partial class HGRNLayer<T> : LayerBase<T>, IShapeContract
     private Tensor<T> _outputProjectionBias;
 
     // Cached values for backward pass
+    [Scratch]
     private Tensor<T>? _lastInput;
+    [Scratch]
     private Tensor<T>? _lastOutput;
+    [Scratch]
     private Tensor<T>? _lastProjectedInput;
+    [Scratch]
     private Tensor<T>? _lastForgetGate;
+    [Scratch]
     private Tensor<T>? _lastInputGate;
+    [Scratch]
     private Tensor<T>? _lastHiddenStates;
+    [Scratch]
     private Tensor<T>? _lastRecurrenceOutput;
     private int[]? _originalInputShape;
 
     // Gradients
+    [Scratch]
     private Tensor<T>? _inputProjectionWeightsGradient;
+    [Scratch]
     private Tensor<T>? _inputProjectionBiasGradient;
+    [Scratch]
     private Tensor<T>? _forgetGateWeightsGradient;
+    [Scratch]
     private Tensor<T>? _forgetGateBiasGradient;
+    [Scratch]
     private Tensor<T>? _inputGateWeightsGradient;
+    [Scratch]
     private Tensor<T>? _inputGateBiasGradient;
+    [Scratch]
     private Tensor<T>? _outputProjectionWeightsGradient;
+    [Scratch]
     private Tensor<T>? _outputProjectionBiasGradient;
 
     /// <inheritdoc />

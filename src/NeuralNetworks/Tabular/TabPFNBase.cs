@@ -1,4 +1,5 @@
 using AiDotNet.ActivationFunctions;
+using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using System.Collections.Generic;
@@ -65,8 +66,11 @@ public abstract class TabPFNBase<T> : IParameterSource<T>
     private Tensor<T>? _contextLabels;
 
     // Cached values
+    [Scratch]
     private Tensor<T>? _encodedInputCache;
+    [Scratch]
     private Tensor<T>? _transformerOutputCache;
+    [Scratch]
     private Tensor<T>? _mlpOutputCache;
 
     /// <summary>
@@ -575,7 +579,9 @@ public abstract class TabPFNBase<T> : IParameterSource<T>
         private readonly LayerNormalizationLayer<TBlock> _norm2;
 
         // Cached values
+        [Scratch]
         private Tensor<TBlock>? _inputCache;
+        [Scratch]
         private Tensor<TBlock>? _attentionOutputCache;
 
         /// <summary>

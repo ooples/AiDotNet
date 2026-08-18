@@ -206,35 +206,56 @@ public partial class GraphTransformerLayer<T> : LayerBase<T>, IGraphConvolutionL
     /// <summary>
     /// Cached values for backward pass.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastInput;
 
     /// <summary>
     /// Stores the original input shape for any-rank tensor support.
     /// </summary>
     private int[]? _originalInputShape;
+    [Scratch]
     private Tensor<T>? _lastOutput;
+    [Scratch]
     private Tensor<T>? _lastQueries;
+    [Scratch]
     private Tensor<T>? _lastKeys;
+    [Scratch]
     private Tensor<T>? _lastValues;
+    [Scratch]
     private Tensor<T>? _lastAttentionWeights;
+    [Scratch]
     private Tensor<T>? _lastHeadOutputs;
+    [Scratch]
     private Tensor<T>? _lastConcatenated;
+    [Scratch]
     private Tensor<T>? _lastAttnOutput;
+    [Scratch]
     private Tensor<T>? _lastNormed1;
+    [Scratch]
     private Tensor<T>? _lastFFNHidden;
+    [Scratch]
     private Tensor<T>? _lastFFNOutput;
 
     /// <summary>
     /// Gradients for parameters.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _queryWeightsGradient;
+    [Scratch]
     private Tensor<T>? _keyWeightsGradient;
+    [Scratch]
     private Tensor<T>? _valueWeightsGradient;
+    [Scratch]
     private Tensor<T>? _outputWeightsGradient;
+    [Scratch]
     private Tensor<T>? _outputBiasGradient;
+    [Scratch]
     private Tensor<T>? _ffnWeights1Gradient;
+    [Scratch]
     private Tensor<T>? _ffnWeights2Gradient;
+    [Scratch]
     private Tensor<T>? _ffnBias1Gradient;
+    [Scratch]
     private Tensor<T>? _ffnBias2Gradient;
 
     private readonly int _ffnHiddenDim;

@@ -158,6 +158,7 @@ public partial class Upsample3DLayer<T> : LayerBase<T>, IShapeContract
     /// <summary>
     /// The input tensor from the last forward pass, cached for backward computation.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastInput;
 
     /// <summary>

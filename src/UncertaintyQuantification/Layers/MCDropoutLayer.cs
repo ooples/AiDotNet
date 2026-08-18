@@ -38,6 +38,7 @@ public partial class MCDropoutLayer<T> : LayerBase<T>, IShapeContract
     private readonly T _scale;
     private readonly int? _initialSeed;
     private readonly ThreadLocal<Random> _rng;
+    [Scratch]
     private readonly ThreadLocal<Tensor<T>?> _lastInput = new(() => null);
     private readonly ThreadLocal<Vector<T>?> _dropoutMask = new(() => null);
     private bool _mcMode; // Monte Carlo mode - always apply dropout

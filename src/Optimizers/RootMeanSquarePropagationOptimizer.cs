@@ -78,6 +78,7 @@ public partial class RootMeanSquarePropagationOptimizer<T, TInput, TOutput> : Gr
     /// This adaptive memory allows the algorithm to respond differently to different parameters based on their history.
     /// </para>
     /// </remarks>
+    [Scratch]
     private Vector<T> _squaredGradient;
 
     /// <summary>

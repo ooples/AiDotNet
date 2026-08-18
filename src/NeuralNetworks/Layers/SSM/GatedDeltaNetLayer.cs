@@ -129,33 +129,58 @@ public partial class GatedDeltaNetLayer<T> : LayerBase<T>, IShapeContract
     private Tensor<T> _outputProjectionBias;
 
     // Cached values
+    [Scratch]
     private Tensor<T>? _lastInput;
+    [Scratch]
     private Tensor<T>? _lastOutput;
+    [Scratch]
     private Tensor<T>? _lastConvOutput;
+    [Scratch]
     private Tensor<T>? _lastQuery;
+    [Scratch]
     private Tensor<T>? _lastKey;
+    [Scratch]
     private Tensor<T>? _lastValue;
+    [Scratch]
     private Tensor<T>? _lastBeta;
+    [Scratch]
     private Tensor<T>? _lastAlpha;
+    [Scratch]
     private Tensor<T>? _lastGate;
+    [Scratch]
     private Tensor<T>? _lastGateRaw;
+    [Scratch]
     private Tensor<T>? _lastSiluConv;
+    [Scratch]
     private Tensor<T>? _lastDeltaRuleOutput;
     private int[]? _originalInputShape;
 
     // Gradients
+    [Scratch]
     private Tensor<T>? _convWeightsGradient;
+    [Scratch]
     private Tensor<T>? _convBiasGradient;
+    [Scratch]
     private Tensor<T>? _queryWeightsGradient;
+    [Scratch]
     private Tensor<T>? _keyWeightsGradient;
+    [Scratch]
     private Tensor<T>? _valueWeightsGradient;
+    [Scratch]
     private Tensor<T>? _betaWeightsGradient;
+    [Scratch]
     private Tensor<T>? _betaBiasGradient;
+    [Scratch]
     private Tensor<T>? _alphaWeightsGradient;
+    [Scratch]
     private Tensor<T>? _alphaBiasGradient;
+    [Scratch]
     private Tensor<T>? _outputGateWeightsGradient;
+    [Scratch]
     private Tensor<T>? _outputGateBiasGradient;
+    [Scratch]
     private Tensor<T>? _outputProjectionWeightsGradient;
+    [Scratch]
     private Tensor<T>? _outputProjectionBiasGradient;
 
     /// <inheritdoc />

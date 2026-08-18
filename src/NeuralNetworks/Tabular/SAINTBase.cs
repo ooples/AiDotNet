@@ -1,4 +1,5 @@
 using AiDotNet.ActivationFunctions;
+using AiDotNet.Attributes;
 using System.Collections.Generic;
 using AiDotNet.Models.Parameters;
 using AiDotNet.LinearAlgebra;
@@ -58,9 +59,13 @@ public abstract class SAINTBase<T> : IParameterSource<T>
     protected int MLPOutputDimension { get; }
 
     // Caches for backward pass
+    [Scratch]
     private Tensor<T>? _embeddedFeaturesCache;
+    [Scratch]
     private List<Tensor<T>>? _columnAttentionOutputsCache;
+    [Scratch]
     private List<Tensor<T>>? _rowAttentionOutputsCache;
+    [Scratch]
     private Tensor<T>? _mlpOutputCache;
 
     /// <summary>Built once on first parameter access, then reused.</summary>

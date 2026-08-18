@@ -1,4 +1,5 @@
 using AiDotNet.Helpers;
+using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Interpretability.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
@@ -43,6 +44,7 @@ public class IntegratedGradientsExplainer<T> : ILocalExplainer<T, IntegratedGrad
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
     private readonly Func<Vector<T>, Vector<T>> _predictFunction;
+    [Scratch]
     private readonly Func<Vector<T>, int, Vector<T>>? _gradientFunction;
     private readonly int _numFeatures;
     private readonly int _numSteps;

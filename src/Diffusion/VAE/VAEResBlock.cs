@@ -147,6 +147,7 @@ public partial class VAEResBlock<T> : LayerBase<T>, IShapeContract
     /// <summary>
     /// Cached input from forward pass for backward.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastInput;
 
     /// <summary>

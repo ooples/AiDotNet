@@ -89,34 +89,42 @@ public partial class LayerNormalizationLayer<T> : LayerBase<T>, IShapeContract
     /// <summary>
     /// Stores the input tensor from the last forward pass for use in the backward pass.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastInput;
 
     /// <summary>
     /// Stores the mean values for each sample from the last forward pass.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastMean;
 
     /// <summary>
     /// Stores the variance values for each sample from the last forward pass.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastVariance;
 
     /// <summary>
     /// Stores the gradients for the gamma parameters calculated during the backward pass.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _gammaGradient;
 
     /// <summary>
     /// Stores the gradients for the beta parameters calculated during the backward pass.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _betaGradient;
 
     private Tensor<T>? _gammaVelocity;
     private Tensor<T>? _betaVelocity;
 
     // GPU cached tensors for backward pass
+    [ExternalState]
     private Tensor<T>? _gpuLastInput;
+    [ExternalState]
     private Tensor<T>? _gpuSaveMean;
+    [ExternalState]
     private Tensor<T>? _gpuSaveInvVar;
 
     /// <summary>

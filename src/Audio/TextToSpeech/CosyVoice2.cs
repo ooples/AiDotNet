@@ -302,6 +302,7 @@ public partial class CosyVoice2<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
     {
         private readonly CosyVoice2<T> _model;
         private readonly double _speakingRate;
+        [Scratch]
         private readonly List<Tensor<T>> _pendingAudio = [];
         private string _textBuffer = string.Empty;
         private bool _disposed;

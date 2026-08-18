@@ -80,9 +80,13 @@ public partial class AttentiveTransformerLayer<T> : LayerBase<T>, IShapeContract
     private readonly Sparsemax<T> _sparsemax;
 
     // Cache for backward pass
+    [Scratch]
     private Tensor<T>? _inputCache;
+    [Scratch]
     private Tensor<T>? _priorScalesCache;
+    [Scratch]
     private Tensor<T>? _attentionMaskCache;
+    [Scratch]
     private Tensor<T>? _sparsemaxInputCache;
 
     /// <inheritdoc/>

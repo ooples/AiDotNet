@@ -66,7 +66,9 @@ public partial class CachedGroupedQueryAttention<T> : LayerBase<T>, IShapeContra
     private ALiBiPositionalBiasLayer<T>? _alibiLayer;
 
     // Cached values for backward pass
+    [Scratch]
     private Tensor<T>? _lastInput;
+    [Scratch]
     private Tensor<T>? _lastOutput;
 
     /// <inheritdoc />

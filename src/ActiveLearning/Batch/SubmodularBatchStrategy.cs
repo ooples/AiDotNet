@@ -58,6 +58,7 @@ public class SubmodularBatchStrategy<T, TInput, TOutput> : ISubmodularBatchStrat
     private readonly SubmodularObjective _objective;
     private readonly T _lambda; // Informativeness weight
     private T _diversityTradeoff;
+    [Scratch]
     private List<Vector<T>>? _cachedFeatures;
 
     /// <inheritdoc/>

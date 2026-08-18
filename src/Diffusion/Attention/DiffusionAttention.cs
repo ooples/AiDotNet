@@ -91,6 +91,7 @@ public partial class DiffusionAttention<T> : LayerBase<T>, IShapeContract
     /// <summary>
     /// Cached input for backward pass.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastInput;
 
     /// <summary>
@@ -401,6 +402,7 @@ public partial class DiffusionCrossAttention<T> : LayerBase<T>, IShapeContract
     /// <summary>
     /// Cached context for backward pass.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastContext;
 
     /// <inheritdoc />

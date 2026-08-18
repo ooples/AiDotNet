@@ -984,6 +984,7 @@ public class NTMMemory<T>
     private readonly int _width;
     private readonly int? _randomSeed;
     private readonly Random _random;
+    [Scratch]
     private Vector<T>? _lastWriteWeights;  // Track last write weights for sharpness computation
 
     /// <summary>
@@ -1746,6 +1747,7 @@ public class MLPNTMController<T, TInput, TOutput> : INTMController<T>
     private readonly Tensor<T> _outputBiases;      // [outputSize]
 
     // Cached hidden state for projection operations
+    [Scratch]
     private Tensor<T> _lastHiddenState;
 
     /// <summary>

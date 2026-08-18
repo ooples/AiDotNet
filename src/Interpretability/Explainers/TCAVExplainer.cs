@@ -1,4 +1,5 @@
 using AiDotNet.Helpers;
+using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Interpretability.Helpers;
 using AiDotNet.Tensors.Helpers;
@@ -54,6 +55,7 @@ public class TCAVExplainer<T> : IGPUAcceleratedExplainer<T>
 
     private readonly Func<Vector<T>, Vector<T>> _predictFunction;
     private readonly Func<Vector<T>, Vector<T>> _layerActivationFunction;
+    [Scratch]
     private readonly Func<Vector<T>, int, Vector<T>> _gradientToLayerFunction;
     private readonly int _layerSize;
     private readonly double _regularization;

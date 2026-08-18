@@ -104,6 +104,7 @@ public partial class SoftTreeLayer<T> : LayerBase<T>, IShapeContract
     private Tensor<T>? _leafValuesGrad;
 
     // Caches for backward pass
+    [Scratch]
     private Tensor<T>? _lastInput;
     private Tensor<T>? _pathProbabilities;
 
@@ -121,7 +122,9 @@ public partial class SoftTreeLayer<T> : LayerBase<T>, IShapeContract
     public override bool SupportsTraining => true;
 
     /// <inheritdoc/>
+    [Scratch]
     private Tensor<T>? _cachedRightProbs;
+    [Scratch]
     private Tensor<T>? _cachedSplitLogits;
 
     /// <summary>Construction state: the 'initScale' the layer was built with.</summary>

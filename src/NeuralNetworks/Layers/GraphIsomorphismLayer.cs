@@ -124,6 +124,7 @@ public partial class GraphIsomorphismLayer<T> : LayerBase<T>, IGraphConvolutionL
     /// <summary>
     /// Cached input from forward pass.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastInput;
 
     /// <summary>
@@ -134,26 +135,31 @@ public partial class GraphIsomorphismLayer<T> : LayerBase<T>, IGraphConvolutionL
     /// <summary>
     /// Cached output from forward pass.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastOutput;
 
     /// <summary>
     /// Cached aggregated features (before MLP).
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastAggregated;
 
     /// <summary>
     /// Cached pre-ReLU hidden layer output from MLP.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastMlpHiddenPreRelu;
 
     /// <summary>
     /// Cached hidden layer output from MLP (after ReLU).
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastMlpHidden;
 
     /// <summary>
     /// Cached neighbor sum before applying epsilon.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastNeighborSum;
 
     /// <summary>
@@ -164,9 +170,13 @@ public partial class GraphIsomorphismLayer<T> : LayerBase<T>, IGraphConvolutionL
     /// <summary>
     /// Gradients for MLP weights.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _mlpWeights1Gradient;
+    [Scratch]
     private Tensor<T>? _mlpWeights2Gradient;
+    [Scratch]
     private Tensor<T>? _mlpBias1Gradient;
+    [Scratch]
     private Tensor<T>? _mlpBias2Gradient;
 
     /// <inheritdoc/>

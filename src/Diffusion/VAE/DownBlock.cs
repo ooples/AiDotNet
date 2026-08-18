@@ -139,6 +139,7 @@ public partial class DownBlock<T> : LayerBase<T>, IShapeContract
     /// <summary>
     /// Cached inputs and intermediate values for backward pass.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastInput;
     private readonly Tensor<T>?[] _resBlockOutputs;
     private Tensor<T>? _preDownsampleOutput;

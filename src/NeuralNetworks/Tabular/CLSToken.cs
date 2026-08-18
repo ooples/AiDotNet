@@ -35,6 +35,7 @@ public class CLSToken<T>
     private readonly Random _random;
 
     private Tensor<T> _clsEmbedding;
+    [Scratch]
     private Tensor<T> _clsGradient;
 
     /// <summary>

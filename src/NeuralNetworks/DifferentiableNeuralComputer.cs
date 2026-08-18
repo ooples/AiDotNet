@@ -334,6 +334,7 @@ public partial class DifferentiableNeuralComputer<T> : SequenceModelLayoutBase<T
     /// algorithm-like reasoning.
     /// </para>
     /// </remarks>
+    [Scratch]
     private Matrix<T> _temporalLinkMatrix;
 
     /// <summary>
@@ -390,6 +391,7 @@ public partial class DifferentiableNeuralComputer<T> : SequenceModelLayoutBase<T
     // the new Layers-chain projection no longer needs.
     private Tensor<T> _outputWeights;
 #pragma warning disable CS0169
+    [Scratch]
     private Vector<T>? _lastCombinedVector;
 #pragma warning restore CS0169
 

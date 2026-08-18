@@ -41,7 +41,9 @@ public class VerticalPartyLabelHolder<T> : FederatedLearningComponentBase<T>, IV
     private Tensor<T> _biasEmbed = new Tensor<T>(new[] { 0 });
 
     // Cached for backward pass
+    [Scratch]
     private Tensor<T>? _lastInput;
+    [Scratch]
     private Tensor<T>? _lastHidden;
 
     /// <inheritdoc/>

@@ -300,6 +300,7 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IShap
     /// before actually making them.
     /// </para>
     /// </remarks>
+    [Scratch]
     private Tensor<T>? _weightsGradient;
 
     /// <summary>
@@ -321,6 +322,7 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IShap
     /// It works together with the weight gradients to update all the layer's parameters.
     /// </para>
     /// </remarks>
+    [Scratch]
     private Tensor<T>? _biasesGradient;
 
     /// <summary>
@@ -341,7 +343,9 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IShap
     /// errors in the output, making learning impossible.
     /// </para>
     /// </remarks>
+    [Scratch]
     private Tensor<T>? _lastInput;
+    [Scratch]
     private Tensor<T>? _lastOutput; // Pre-activation output for proper gradient computation
 
     /// <summary>
@@ -357,6 +361,7 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IShap
     /// NOT used while a gradient tape is active or in training (those need the recorded
     /// allocating op).
     /// </summary>
+    [Scratch]
     private Tensor<T>? _fusedLinearScratch;
 
     // Q8_0 quantized weight (llama.cpp / ggml native layout: weight kept int8 [out,in] with one fp32
@@ -403,8 +408,11 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IShap
     }
 
     // GPU-resident cached tensors for GPU training pipeline
+    [Scratch]
     private Tensor<T>? _lastInputGpu;
+    [Scratch]
     private Tensor<T>? _lastPreActivationGpu; // Pre-activation for GPU backward pass
+    [Scratch]
     private Tensor<T>? _lastOutputGpu; // Post-activation for sigmoid/tanh backward
     private int[]? _gpuOriginalInputShape;
 

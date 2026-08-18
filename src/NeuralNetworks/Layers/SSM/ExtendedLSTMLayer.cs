@@ -126,16 +126,27 @@ public partial class ExtendedLSTMLayer<T> : LayerBase<T>, IShapeContract
     private Tensor<T> _outputProjectionBias;
 
     // Cached values
+    [Scratch]
     private Tensor<T>? _lastInput;
+    [Scratch]
     private Tensor<T>? _lastOutput;
+    [Scratch]
     private Tensor<T>? _lastCellStates;
+    [Scratch]
     private Tensor<T>? _lastNormStates;
+    [Scratch]
     private Tensor<T>? _lastInputGates;
+    [Scratch]
     private Tensor<T>? _lastForgetGates;
+    [Scratch]
     private Tensor<T>? _lastOutputGates;
+    [Scratch]
     private Tensor<T>? _lastQ;
+    [Scratch]
     private Tensor<T>? _lastK;
+    [Scratch]
     private Tensor<T>? _lastV;
+    [Scratch]
     private Tensor<T>? _lastHiddenPreProj;
     private int[]? _originalInputShape;
 
@@ -153,16 +164,27 @@ public partial class ExtendedLSTMLayer<T> : LayerBase<T>, IShapeContract
     private Tensor<T>? _outputNormBeta;
 
     // Gradients
+    [Scratch]
     private Tensor<T>? _inputGateWeightsGradient;
+    [Scratch]
     private Tensor<T>? _inputGateBiasGradient;
+    [Scratch]
     private Tensor<T>? _forgetGateWeightsGradient;
+    [Scratch]
     private Tensor<T>? _forgetGateBiasGradient;
+    [Scratch]
     private Tensor<T>? _outputGateWeightsGradient;
+    [Scratch]
     private Tensor<T>? _outputGateBiasGradient;
+    [Scratch]
     private Tensor<T>? _queryWeightsGradient;
+    [Scratch]
     private Tensor<T>? _keyWeightsGradient;
+    [Scratch]
     private Tensor<T>? _valueWeightsGradient;
+    [Scratch]
     private Tensor<T>? _outputProjectionWeightsGradient;
+    [Scratch]
     private Tensor<T>? _outputProjectionBiasGradient;
 
     /// <inheritdoc />

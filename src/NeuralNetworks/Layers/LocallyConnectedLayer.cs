@@ -161,6 +161,7 @@ public partial class LocallyConnectedLayer<T> : LayerBase<T>, IShapeContract
     /// <summary>
     /// Stores the input tensor from the last forward pass for use in the backward pass.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastInput;
 
     /// <summary>
@@ -171,11 +172,13 @@ public partial class LocallyConnectedLayer<T> : LayerBase<T>, IShapeContract
     /// <summary>
     /// Stores the pre-activation output from the last forward pass for use in the backward pass.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastPreActivation;
 
     /// <summary>
     /// Stores the output tensor from the last forward pass for use in the backward pass.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastOutput;
 
     /// <summary>
@@ -189,7 +192,9 @@ public partial class LocallyConnectedLayer<T> : LayerBase<T>, IShapeContract
     private Tensor<T>? _biasGradients;
 
     // GPU cached tensors for backward pass
+    [ExternalState]
     private Tensor<T>? _gpuInput;
+    [ExternalState]
     private Tensor<T>? _gpuOutput;
     private int[]? _gpuInputShape4D;
     private bool _gpuAddedBatchDimension;
@@ -197,21 +202,31 @@ public partial class LocallyConnectedLayer<T> : LayerBase<T>, IShapeContract
     #region GPU Weight Storage Fields
 
     // GPU weight tensors for GPU-resident training
+    [ExternalState]
     private Tensor<T>? _gpuWeights;
+    [ExternalState]
     private Tensor<T>? _gpuBiases;
 
     // GPU gradient tensors from BackwardGpu
+    [ExternalState]
     private Tensor<T>? _gpuWeightGradient;
+    [ExternalState]
     private Tensor<T>? _gpuBiasGradient;
 
     // Optimizer state tensors for SGD/NAG/LARS (velocity)
+    [ExternalState]
     private Tensor<T>? _gpuWeightVelocity;
+    [ExternalState]
     private Tensor<T>? _gpuBiasVelocity;
 
     // Optimizer state tensors for Adam/AdamW/LAMB (M and V)
+    [ExternalState]
     private Tensor<T>? _gpuWeightM;
+    [ExternalState]
     private Tensor<T>? _gpuWeightV;
+    [ExternalState]
     private Tensor<T>? _gpuBiasM;
+    [ExternalState]
     private Tensor<T>? _gpuBiasV;
 
     #endregion

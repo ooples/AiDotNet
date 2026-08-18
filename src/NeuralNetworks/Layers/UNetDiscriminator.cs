@@ -160,6 +160,7 @@ public partial class UNetDiscriminator<T> : LayerBase<T>, IShapeContract
     /// <summary>
     /// Cached input for backpropagation.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastInput;
 
     #endregion
@@ -433,6 +434,7 @@ public partial class UNetDiscriminator<T> : LayerBase<T>, IShapeContract
         _convLast.UpdateParameters(learningRate);
     }
 
+    [Scratch]
     private Vector<T>? _pendingParameters;
 
     private static void AddParamsToList(List<T> list, Vector<T> parameters)
@@ -707,6 +709,7 @@ public partial class UNetUpBlock<T> : LayerBase<T>, IShapeContract
     private readonly int _skipChannels;
 
     private Tensor<T>? _lastInput;
+    [Scratch]
     private Tensor<T>? _lastSkip;
     private Tensor<T>? _upsampledInput;
     private Tensor<T>? _concatenated;

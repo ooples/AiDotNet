@@ -129,32 +129,56 @@ public partial class RodimusLayer<T> : LayerBase<T>, IShapeContract
     private Tensor<T> _outputProjectionBias;
 
     // Cached forward pass values
+    [Scratch]
     private Tensor<T>? _lastInput;
+    [Scratch]
     private Tensor<T>? _lastOutput;
+    [Scratch]
     private Tensor<T>? _lastQuery;
+    [Scratch]
     private Tensor<T>? _lastKey;
+    [Scratch]
     private Tensor<T>? _lastValue;
+    [Scratch]
     private Tensor<T>? _lastTemperature;
+    [Scratch]
     private Tensor<T>? _lastTemperatureRaw;
+    [Scratch]
     private Tensor<T>? _lastForgetGate;
+    [Scratch]
     private Tensor<T>? _lastSelectionWeights;
+    [Scratch]
     private Tensor<T>? _lastOutputGate;
+    [Scratch]
     private Tensor<T>? _lastOutputGateRaw;
+    [Scratch]
     private Tensor<T>? _lastRecurrenceOutput;
+    [Scratch]
     private Tensor<T>? _lastStates;
     private int[]? _originalInputShape;
 
     // Gradients
+    [Scratch]
     private Tensor<T>? _queryWeightsGradient;
+    [Scratch]
     private Tensor<T>? _keyWeightsGradient;
+    [Scratch]
     private Tensor<T>? _valueWeightsGradient;
+    [Scratch]
     private Tensor<T>? _temperatureWeightsGradient;
+    [Scratch]
     private Tensor<T>? _temperatureBiasGradient;
+    [Scratch]
     private Tensor<T>? _forgetGateWeightsGradient;
+    [Scratch]
     private Tensor<T>? _forgetGateBiasGradient;
+    [Scratch]
     private Tensor<T>? _outputGateWeightsGradient;
+    [Scratch]
     private Tensor<T>? _outputGateBiasGradient;
+    [Scratch]
     private Tensor<T>? _outputProjectionWeightsGradient;
+    [Scratch]
     private Tensor<T>? _outputProjectionBiasGradient;
 
     /// <inheritdoc />

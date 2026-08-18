@@ -180,6 +180,7 @@ public partial class RRDBNetGenerator<T> : LayerBase<T>, IShapeContract
     /// <summary>
     /// Cached input for backpropagation.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastInput;
 
     /// <summary>
@@ -548,6 +549,7 @@ public partial class RRDBNetGenerator<T> : LayerBase<T>, IShapeContract
     /// in OnFirstForward once every sub-layer reports a real
     /// GetParameters().Length.
     /// </summary>
+    [Scratch]
     private Vector<T>? _pendingParameters;
 
     private void ApplyParameters(Vector<T> parameters)

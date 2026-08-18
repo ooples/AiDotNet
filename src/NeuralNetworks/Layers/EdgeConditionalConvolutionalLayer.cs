@@ -129,24 +129,34 @@ public partial class EdgeConditionalConvolutionalLayer<T> : LayerBase<T>, IGraph
     /// <summary>
     /// Cached values for backward pass.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastInput;
 
     /// <summary>
     /// Stores the original input shape for any-rank tensor support.
     /// </summary>
     private int[]? _originalInputShape;
+    [Scratch]
     private Tensor<T>? _lastOutput;
+    [Scratch]
     private Tensor<T>? _lastEdgeWeights;
+    [Scratch]
     private Tensor<T>? _lastHidden;
 
     /// <summary>
     /// Gradients.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _edgeNetworkWeights1Gradient;
+    [Scratch]
     private Tensor<T>? _edgeNetworkWeights2Gradient;
+    [Scratch]
     private Tensor<T>? _edgeNetworkBias1Gradient;
+    [Scratch]
     private Tensor<T>? _edgeNetworkBias2Gradient;
+    [Scratch]
     private Tensor<T>? _selfWeightsGradient;
+    [Scratch]
     private Tensor<T>? _biasGradient;
 
     public override bool SupportsTraining => true;

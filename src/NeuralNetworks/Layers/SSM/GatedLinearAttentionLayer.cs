@@ -103,22 +103,36 @@ public partial class GatedLinearAttentionLayer<T> : LayerBase<T>, IShapeContract
     private const double ResidualNormEpsilon = 1e-5;
 
     // Cached values
+    [Scratch]
     private Tensor<T>? _lastInput;
+    [Scratch]
     private Tensor<T>? _lastOutput;
+    [Scratch]
     private Tensor<T>? _lastQuery;
+    [Scratch]
     private Tensor<T>? _lastKey;
+    [Scratch]
     private Tensor<T>? _lastValue;
+    [Scratch]
     private Tensor<T>? _lastGate;
+    [Scratch]
     private Tensor<T>? _lastAttnOutput; // Pre-output-projection attention output
     private int[]? _originalInputShape;
 
     // Gradients
+    [Scratch]
     private Tensor<T>? _queryWeightsGradient;
+    [Scratch]
     private Tensor<T>? _keyWeightsGradient;
+    [Scratch]
     private Tensor<T>? _valueWeightsGradient;
+    [Scratch]
     private Tensor<T>? _gateWeightsGradient;
+    [Scratch]
     private Tensor<T>? _gateBiasGradient;
+    [Scratch]
     private Tensor<T>? _outputWeightsGradient;
+    [Scratch]
     private Tensor<T>? _outputBiasGradient;
 
     /// <inheritdoc />

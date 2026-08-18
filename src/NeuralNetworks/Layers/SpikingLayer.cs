@@ -161,7 +161,9 @@ public partial class SpikingLayer<T> : LayerBase<T>, IShapeContract
 
 
     // Cached tensors for hot-loop operations (avoid per-call allocation)
+    [Scratch]
     private Tensor<T>? _cachedOnes;
+    [Scratch]
     private Tensor<T>? _cachedZeros;
 
     /// <summary>
@@ -266,6 +268,7 @@ public partial class SpikingLayer<T> : LayerBase<T>, IShapeContract
     /// or when you explicitly reset the layer.
     /// </para>
     /// </remarks>
+    [Scratch]
     private Tensor<T>? _lastInput;
 
     /// <summary>
@@ -287,6 +290,7 @@ public partial class SpikingLayer<T> : LayerBase<T>, IShapeContract
     /// understand how changes to its parameters affect the overall network performance.
     /// </para>
     /// </remarks>
+    [Scratch]
     private Tensor<T>? _lastOutput;
 
     /// <summary>

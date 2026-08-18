@@ -84,6 +84,7 @@ public partial class DiffusionResBlock<T> : LayerBase<T>, IShapeContract
     private readonly SiLUActivation<T> _silu = new();
 
     // Cache for backward
+    [Scratch]
     private Tensor<T>? _lastInput;
     private Tensor<T>? _preSiLU1;   // norm1 output (before SiLU)
     private Tensor<T>? _preSiLU2;   // norm2 output (before SiLU)
@@ -502,6 +503,7 @@ public partial class DiffusionResBlock<T> : LayerBase<T>, IShapeContract
     }
 
     // Stores time embed gradient for collection by UNet backward
+    [Scratch]
     private Tensor<T>? _timeEmbedGradient;
 
     /// <summary>

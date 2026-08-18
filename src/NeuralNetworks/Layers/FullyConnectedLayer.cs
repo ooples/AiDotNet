@@ -170,6 +170,7 @@ public partial class FullyConnectedLayer<T> : LayerBase<T>, IShapeContract
     /// This value is automatically cleared between training batches to save memory.
     /// </para>
     /// </remarks>
+    [Scratch]
     private Tensor<T>? _lastInput;
 
     /// <summary>
@@ -195,7 +196,9 @@ public partial class FullyConnectedLayer<T> : LayerBase<T>, IShapeContract
     /// This is also cleared after each training batch to save memory.
     /// </para>
     /// </remarks>
+    [Scratch]
     private Tensor<T>? _lastOutput;
+    [Scratch]
     private Tensor<T>? _lastPreActivation;
 
     /// <summary>
@@ -222,6 +225,7 @@ public partial class FullyConnectedLayer<T> : LayerBase<T>, IShapeContract
     /// modify the weights.
     /// </para>
     /// </remarks>
+    [Scratch]
     private Tensor<T>? _weightsGradient;
 
     /// <summary>
@@ -248,10 +252,13 @@ public partial class FullyConnectedLayer<T> : LayerBase<T>, IShapeContract
     /// Each output neuron has its own bias gradient that guides its adjustment.
     /// </para>
     /// </remarks>
+    [Scratch]
     private Tensor<T>? _biasesGradient;
 
     // GPU cached tensors for backward pass
+    [ExternalState]
     private Tensor<T>? _gpuInput;
+    [ExternalState]
     private Tensor<T>? _gpuPreActivation;
     private int[] _gpuInputShape = [];
 

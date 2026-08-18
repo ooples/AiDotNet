@@ -139,21 +139,35 @@ public partial class BottleneckBlock<T> : LayerBase<T>, ILayerSerializationExtra
     private int _inputWidth;
     private readonly bool _zeroInitResidual;
 
+    [Scratch]
     private Tensor<T>? _lastInput;
+    [Scratch]
     private Tensor<T>? _lastConv1Output;
+    [Scratch]
     private Tensor<T>? _lastBn1Output;
+    [Scratch]
     private Tensor<T>? _lastRelu1Output;
+    [Scratch]
     private Tensor<T>? _lastConv2Output;
+    [Scratch]
     private Tensor<T>? _lastBn2Output;
+    [Scratch]
     private Tensor<T>? _lastRelu2Output;
+    [Scratch]
     private Tensor<T>? _lastConv3Output;
+    [Scratch]
     private Tensor<T>? _lastBn3Output;
+    [Scratch]
     private Tensor<T>? _lastIdentity;
+    [Scratch]
     private Tensor<T>? _lastPreActivation;
 
     // GPU cached tensors for backward pass
+    [ExternalState]
     private Tensor<T>? _gpuBn1Out;
+    [ExternalState]
     private Tensor<T>? _gpuBn2Out;
+    [ExternalState]
     private Tensor<T>? _gpuPreActivation;
 
     public override bool SupportsTraining => true;
@@ -517,6 +531,7 @@ public partial class BottleneckBlock<T> : LayerBase<T>, ILayerSerializationExtra
         _downsampleConv?.ClearGradients(); _downsampleBn?.ClearGradients();
     }
 
+    [Scratch]
     private Vector<T>? _pendingParameters;
 
     private void ApplyParameters(Vector<T> parameters)
@@ -578,6 +593,7 @@ public partial class BottleneckBlock<T> : LayerBase<T>, ILayerSerializationExtra
         ApplyExtraParametersUnsafe(extraParameters);
     }
 
+    [Scratch]
     private Vector<T>? _pendingExtraParameters;
 
     private void ApplyExtraParametersUnsafe(Vector<T> extraParameters)

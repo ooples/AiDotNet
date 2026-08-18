@@ -1,4 +1,5 @@
 using System.Linq;
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Engines;
 using AiDotNet.Extensions;
@@ -1653,6 +1654,7 @@ public abstract partial class NoisePredictorBase<T> : INoisePredictor<T>, IModel
     /// Cache for timestep embeddings to avoid recomputing sinusoidal embeddings
     /// for the same timestep during the denoising loop.
     /// </summary>
+    [Scratch]
     private readonly Dictionary<int, Tensor<T>> _timestepEmbeddingCache = new();
 
     /// <inheritdoc />

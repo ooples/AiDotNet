@@ -120,6 +120,7 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
     /// <remarks>
     /// Stored for use in the backward pass.
     /// </remarks>
+    [Scratch]
     private Tensor<T>? _lastInput;
 
     /// <summary>
@@ -138,6 +139,7 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
     /// <remarks>
     /// Stored for use in the backward pass.
     /// </remarks>
+    [Scratch]
     private Tensor<T>? _lastMean;
 
     /// <summary>
@@ -146,6 +148,7 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
     /// <remarks>
     /// Stored for use in the backward pass.
     /// </remarks>
+    [Scratch]
     private Tensor<T>? _lastVariance;
 
     /// <summary>
@@ -154,6 +157,7 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
     /// <remarks>
     /// Computed during the backward pass and used to update gamma.
     /// </remarks>
+    [Scratch]
     private Tensor<T>? _gammaGradient;
 
     /// <summary>
@@ -162,9 +166,11 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
     /// <remarks>
     /// Computed during the backward pass and used to update beta.
     /// </remarks>
+    [Scratch]
     private Tensor<T>? _betaGradient;
 
     // GPU-resident cached tensors for GPU training pipeline
+    [Scratch]
     private Tensor<T>? _lastInputGpu;
 
     /// <summary>

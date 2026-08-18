@@ -57,7 +57,9 @@ public class FTTransformerRegression<T> : FTTransformerBase<T>
     private readonly FullyConnectedLayer<T> _regressionHead;
 
     // Cache for backward pass
+    [Scratch]
     private Tensor<T>? _clsOutputCache;
+    [Scratch]
     private Tensor<T>? _predictionsCache;
 
     /// <summary>

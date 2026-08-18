@@ -76,7 +76,9 @@ public partial class SARSAAgent<T> : ReinforcementLearningAgentBase<T>, IGradien
     private Random _random;
 
     // Track last state-action for SARSA update
+    [Scratch]
     private Vector<T>? _lastState;
+    [Scratch]
     private Vector<T>? _lastAction;
 
     /// <summary>

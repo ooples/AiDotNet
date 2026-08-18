@@ -594,6 +594,7 @@ public partial class AutoformerModel<T> : TimeSeriesModelBase<T>, ISupportsLossF
     // still flows through the softmax weights (gathered R values → q, k) and through the rolled v.
     // Cache for the constant diagonal-sum operator used by the matmul spectrum, keyed by (lq, lk, corrLen, d).
     // Shape [corrLen, lq*lk]; ~110 KB at the default 24x24x512, and it never changes for a given model.
+    [Scratch]
     private readonly ConcurrentDictionary<(int Lq, int Lk, int CorrLen, int D), Tensor<T>> _diagOperatorCache = new();
 
     /// <summary>

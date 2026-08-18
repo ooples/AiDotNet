@@ -170,33 +170,58 @@ public partial class RWKVLayer<T> : LayerBase<T>, IShapeContract
     private Tensor<T> _normBeta2;
 
     // Cached values for backward pass
+    [Scratch]
     private Tensor<T>? _lastInput;
+    [Scratch]
     private Tensor<T>? _lastOutput;
+    [Scratch]
     private Tensor<T>? _lastTimeMixOutput;
+    [Scratch]
     private Tensor<T>? _lastChannelMixOutput;
+    [Scratch]
     private Tensor<T>? _lastReceptance;
+    [Scratch]
     private Tensor<T>? _lastWkv;
+    [Scratch]
     private Tensor<T>? _lastState;
     private int[]? _originalInputShape;
 
     // Gradients
+    [Scratch]
     private Tensor<T>? _timeMixRGradient;
+    [Scratch]
     private Tensor<T>? _timeMixKGradient;
+    [Scratch]
     private Tensor<T>? _timeMixVGradient;
+    [Scratch]
     private Tensor<T>? _receptanceWeightsGradient;
+    [Scratch]
     private Tensor<T>? _keyWeightsGradient;
+    [Scratch]
     private Tensor<T>? _valueWeightsGradient;
+    [Scratch]
     private Tensor<T>? _outputWeightsGradient;
+    [Scratch]
     private Tensor<T>? _decayBiasGradient;
+    [Scratch]
     private Tensor<T>? _bonusGradient;
+    [Scratch]
     private Tensor<T>? _channelMixRGradient;
+    [Scratch]
     private Tensor<T>? _channelMixKGradient;
+    [Scratch]
     private Tensor<T>? _channelKeyWeightsGradient;
+    [Scratch]
     private Tensor<T>? _channelValueWeightsGradient;
+    [Scratch]
     private Tensor<T>? _channelReceptanceWeightsGradient;
+    [Scratch]
     private Tensor<T>? _normGamma1Gradient;
+    [Scratch]
     private Tensor<T>? _normBeta1Gradient;
+    [Scratch]
     private Tensor<T>? _normGamma2Gradient;
+    [Scratch]
     private Tensor<T>? _normBeta2Gradient;
 
     /// <inheritdoc />

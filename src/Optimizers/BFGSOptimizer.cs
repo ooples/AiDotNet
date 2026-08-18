@@ -39,6 +39,7 @@ public partial class BFGSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
     /// <summary>
     /// The gradient from the previous iteration.
     /// </summary>
+    [Scratch]
     private new Vector<T>? _previousGradient;
 
     /// <summary>

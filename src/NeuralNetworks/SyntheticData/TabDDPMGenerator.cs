@@ -120,6 +120,7 @@ public partial class TabDDPMGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
     private int _totalCategoricalWidth;
     private int _inputWidth;
     private int _lastHiddenDim;
+    [Scratch]
     private Tensor<T>? _lastMLPOutput;
 
     // Column layout tracking

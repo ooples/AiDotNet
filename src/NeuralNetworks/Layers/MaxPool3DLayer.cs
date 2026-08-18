@@ -150,6 +150,7 @@ public partial class MaxPool3DLayer<T> : LayerBase<T>, IShapeContract
     /// <summary>
     /// Cached input from the last forward pass.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastInput;
 
     /// <summary>

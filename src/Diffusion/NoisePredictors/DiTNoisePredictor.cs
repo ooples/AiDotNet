@@ -245,6 +245,7 @@ public partial class DiTNoisePredictor<T> : NoisePredictorBase<T>
     /// <summary>
     /// Cached input for backward pass.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastInput;
 
     // ──────────────────────────────────────────────────────────────────────────
@@ -258,8 +259,11 @@ public partial class DiTNoisePredictor<T> : NoisePredictorBase<T>
     // Reallocated whenever the [B, seq, hidden] shape changes. Used only on the no-tape
     // inference forward (ForwardScratchGate.Enabled). Bit-identical to the allocating path.
     // ──────────────────────────────────────────────────────────────────────────
+    [Scratch]
     private Tensor<T>? _adaLnScaledScratch;   // TensorBroadcastMultiply(x, 1+scale)
+    [Scratch]
     private Tensor<T>? _adaLnOutScratch;       // TensorBroadcastAdd(scaled, shift)
+    [Scratch]
     private Tensor<T>? _gateScratch;           // TensorBroadcastMultiply(residual, gate)
 
     /// <summary>Element-wise shape-array equality for the #1672 scratch-reuse decision.</summary>

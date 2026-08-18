@@ -109,16 +109,19 @@ public partial class PropensityScoreMatching<T> : CausalModelBase<T>
     /// <summary>
     /// Cached treatment vector from fitting.
     /// </summary>
+    [Scratch]
     private Vector<int>? _cachedTreatment;
 
     /// <summary>
     /// Cached outcome vector from fitting.
     /// </summary>
+    [Scratch]
     private Vector<T>? _cachedOutcome;
 
     /// <summary>
     /// Cached feature matrix from fitting.
     /// </summary>
+    [Scratch]
     private Matrix<T>? _cachedFeatures;
 
     /// <summary>

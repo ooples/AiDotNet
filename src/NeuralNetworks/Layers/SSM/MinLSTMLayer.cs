@@ -133,30 +133,52 @@ public partial class MinLSTMLayer<T> : LayerBase<T>, IShapeContract
     private Tensor<T> _outputProjectionBias;
 
     // Cached forward pass values for backward
+    [Scratch]
     private Tensor<T>? _lastInput;
+    [Scratch]
     private Tensor<T>? _lastOutput;
+    [Scratch]
     private Tensor<T>? _lastProjectedInput;
+    [Scratch]
     private Tensor<T>? _lastForgetGateRaw;
+    [Scratch]
     private Tensor<T>? _lastInputGateRaw;
+    [Scratch]
     private Tensor<T>? _lastForgetGateSigmoid;
+    [Scratch]
     private Tensor<T>? _lastInputGateSigmoid;
+    [Scratch]
     private Tensor<T>? _lastForgetGateNorm;
+    [Scratch]
     private Tensor<T>? _lastInputGateNorm;
+    [Scratch]
     private Tensor<T>? _lastCellCandidate;
+    [Scratch]
     private Tensor<T>? _lastCellStates;
+    [Scratch]
     private Tensor<T>? _lastRecurrenceOutput;
     private int[]? _originalInputShape;
 
     // Gradients
+    [Scratch]
     private Tensor<T>? _inputProjectionWeightsGradient;
+    [Scratch]
     private Tensor<T>? _inputProjectionBiasGradient;
+    [Scratch]
     private Tensor<T>? _forgetGateWeightsGradient;
+    [Scratch]
     private Tensor<T>? _forgetGateBiasGradient;
+    [Scratch]
     private Tensor<T>? _inputGateWeightsGradient;
+    [Scratch]
     private Tensor<T>? _inputGateBiasGradient;
+    [Scratch]
     private Tensor<T>? _cellCandidateWeightsGradient;
+    [Scratch]
     private Tensor<T>? _cellCandidateBiasGradient;
+    [Scratch]
     private Tensor<T>? _outputProjectionWeightsGradient;
+    [Scratch]
     private Tensor<T>? _outputProjectionBiasGradient;
 
     /// <inheritdoc />

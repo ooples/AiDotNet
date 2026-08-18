@@ -152,6 +152,7 @@ public partial class UpBlock<T> : LayerBase<T>, IShapeContract
     /// <summary>
     /// Cached inputs and intermediate values for backward pass.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastInput;
     private Tensor<T>? _postUpsampleOutput;
     private readonly Tensor<T>?[] _resBlockOutputs;

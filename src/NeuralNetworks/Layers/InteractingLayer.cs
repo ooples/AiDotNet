@@ -76,12 +76,19 @@ public partial class InteractingLayer<T> : LayerBase<T>, IShapeContract
     private Tensor<T>? _residualWeightsGrad;
 
     // Cached values
+    [Scratch]
     private Tensor<T>? _inputCache;
+    [Scratch]
     private Tensor<T>? _queriesCache;
+    [Scratch]
     private Tensor<T>? _keysCache;
+    [Scratch]
     private Tensor<T>? _valuesCache;
+    [Scratch]
     private Tensor<T>? _attentionScoresCache;
+    [Scratch]
     private Tensor<T>? _attendedCache;
+    [Scratch]
     private Tensor<T>? _preActivationCache;
 
     /// <inheritdoc/>

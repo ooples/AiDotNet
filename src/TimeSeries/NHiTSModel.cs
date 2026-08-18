@@ -975,6 +975,7 @@ internal partial class NHiTSStackTensor<T> : NeuralNetworks.Layers.LayerBase<T>,
         return tensor;
     }
 
+    [Scratch]
     private Tensor<T>? _lastForwardInput;
 
     protected override Tensor<T> ForwardTraced(Tensor<T> input)

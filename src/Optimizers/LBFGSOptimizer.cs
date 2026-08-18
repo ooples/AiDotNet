@@ -73,6 +73,7 @@ public partial class LBFGSOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
     /// <summary>
     /// Stores the previous gradient for computing gradient differences in UpdateParameters.
     /// </summary>
+    [Scratch]
     private Vector<T>? _lbfgsPreviousGradient;
 
     /// <summary>

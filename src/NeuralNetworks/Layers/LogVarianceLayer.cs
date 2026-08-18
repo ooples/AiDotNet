@@ -118,6 +118,7 @@ public partial class LogVarianceLayer<T> : LayerBase<T>, IShapeContract
     /// - To ensure the backward pass works correctly
     /// </para>
     /// </remarks>
+    [Scratch]
     private Tensor<T>? _lastInput;
 
     /// <summary>
@@ -136,6 +137,7 @@ public partial class LogVarianceLayer<T> : LayerBase<T>, IShapeContract
     /// - To make the training process more efficient
     /// </para>
     /// </remarks>
+    [Scratch]
     private Tensor<T>? _lastOutput;
 
     /// <summary>

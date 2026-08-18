@@ -1071,11 +1071,17 @@ internal partial class ChronosTransformerLayerTensor<T> : NeuralNetworks.Layers.
     private Tensor<T> _layerNorm2Beta;
 
     // Forward pass cache for backpropagation
+    [Scratch]
     private List<Tensor<T>>? _cachedInput;
+    [Scratch]
     private List<Tensor<T>>? _cachedNorm1;
+    [Scratch]
     private List<Tensor<T>>? _cachedAttentionOutput;
+    [Scratch]
     private List<Tensor<T>>? _cachedResidual1;
+    [Scratch]
     private List<Tensor<T>>? _cachedNorm2;
+    [Scratch]
     private List<Tensor<T>>? _cachedFfnHidden;
 
     public override bool SupportsTraining => true;

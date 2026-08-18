@@ -96,6 +96,7 @@ public partial class FeatureTransformerLayer<T> : LayerBase<T>, IShapeContract
     private readonly List<GhostBatchNormalization<T>> _stepBNLayers;
 
     // Cache for backward pass
+    [Scratch]
     private Tensor<T>? _inputCache;
     private readonly List<Tensor<T>> _intermediateOutputs = [];
 

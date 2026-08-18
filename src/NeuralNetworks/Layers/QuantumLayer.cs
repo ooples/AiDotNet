@@ -98,7 +98,9 @@ public partial class QuantumLayer<T> : LayerBase<T>, IShapeContract
     /// Cached result amplitudes from Forward for use in Backward.
     /// Shape: [batch, dimension] for real and imaginary parts.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastResultReal;
+    [Scratch]
     private Tensor<T>? _lastResultImag;
     private readonly INumericOperations<Complex<T>> _complexOps;
 

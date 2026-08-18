@@ -305,6 +305,7 @@ public partial class Conv1DLayer<T> : LayerBase<T>, IShapeContract
     }
 
     /// <summary>Parameters handed to <see cref="SetParameters"/> before the shape was known.</summary>
+    [Scratch]
     private Vector<T>? _pendingParameters;
 
     /// <summary>Applies a parameter vector to the already-resolved kernel and bias tensors.</summary>

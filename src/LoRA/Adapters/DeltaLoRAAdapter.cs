@@ -111,6 +111,7 @@ public partial class DeltaLoRAAdapter<T> : LoRAAdapterBase<T>
     /// <summary>
     /// Stored input from the forward pass, needed for gradient computation.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastInput;
 
     /// <summary>

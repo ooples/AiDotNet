@@ -82,14 +82,21 @@ public partial class CachedMultiHeadAttention<T> : LayerBase<T>, IShapeContract
     private int _layerIndex;
 
     // Cached values for backward (training mode only)
+    [Scratch]
     private Tensor<T>? _lastInput;
+    [Scratch]
     private Tensor<T>? _lastOutput;
 
     // Gradients
+    [Scratch]
     private Matrix<T>? _queryWeightsGradient;
+    [Scratch]
     private Matrix<T>? _keyWeightsGradient;
+    [Scratch]
     private Matrix<T>? _valueWeightsGradient;
+    [Scratch]
     private Matrix<T>? _outputWeightsGradient;
+    [Scratch]
     private Vector<T>? _outputBiasGradient;
 
     /// <summary>

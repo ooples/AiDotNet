@@ -549,7 +549,9 @@ internal partial class ConvLayerTensor<T> : NeuralNetworks.Layers.LayerBase<T>, 
     private Tensor<T> _biases;   // [outputChannels]
 
     // Cached state for backward pass
+    [Scratch]
     private Tensor<T>? _lastInput;
+    [Scratch]
     private Tensor<T>? _lastPreActivations;  // [outputChannels, numPositions] before ReLU
     private int _lastNumPositions;
 

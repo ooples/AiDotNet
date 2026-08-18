@@ -1050,8 +1050,10 @@ public partial class SetAbstractionLayer<T> : LayerBase<T>, IShapeContract
     /// </para>
     /// </remarks>
     private readonly List<ILayer<T>> _branchLayers = [];
+    [Scratch]
     private Tensor<T>? _lastInput;
     private int[]? _centroidIndices;
+    [Scratch]
     private Tensor<T>? _lastCentroidPositions;
     private readonly int _outputChannels;
 

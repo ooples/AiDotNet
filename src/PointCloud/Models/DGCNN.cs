@@ -651,6 +651,7 @@ public partial class EdgeConvLayer<T> : LayerBase<T>, ILayerSerializationExtras<
     private readonly int _k; // Number of nearest neighbors
     private readonly PointConvolutionLayer<T> _mlp;
     private readonly BatchNormalizationLayer<T> _bn;
+    [Scratch]
     private Tensor<T>? _lastInput;
     private int[,]? _knnIndices; // Store k-NN indices for backward pass
     private int[,]? _maxIndices; // Store max neighbor indices for backward pass

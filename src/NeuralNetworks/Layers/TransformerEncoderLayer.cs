@@ -107,7 +107,9 @@ public partial class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     private int[]? _originalInputShape;
 
     // GPU cached tensors for backward pass
+    [ExternalState]
     private Tensor<T>? _gpuInput3D;
+    [ExternalState]
     private Tensor<T>? _gpuNormalized1;
 
     /// <summary>

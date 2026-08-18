@@ -155,11 +155,13 @@ public partial class MeshPoolLayer<T> : LayerBase<T>, IShapeContract
     /// <summary>
     /// Cached gradient for importance weights.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _importanceWeightsGradient;
 
     /// <summary>
     /// Cached input from the last forward pass.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastInput;
 
     /// <summary>
@@ -170,11 +172,13 @@ public partial class MeshPoolLayer<T> : LayerBase<T>, IShapeContract
     /// <summary>
     /// Cached output from the last forward pass.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastOutput;
 
     /// <summary>
     /// Cached importance scores from the last forward pass.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastImportanceScores;
 
     /// <summary>
@@ -185,6 +189,7 @@ public partial class MeshPoolLayer<T> : LayerBase<T>, IShapeContract
     /// <summary>
     /// Cached GPU input for backward pass.
     /// </summary>
+    [ExternalState]
     private Tensor<T>? _gpuInput;
 
     /// <summary>
