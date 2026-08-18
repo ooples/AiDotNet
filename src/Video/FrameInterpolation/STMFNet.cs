@@ -179,37 +179,9 @@ public partial class STMFNet<T> : FrameInterpolationBase<T>
         return m;
     }
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter w)
-    {
-        w.Write(_useNativeMode);
-        w.Write(_options.ModelPath ?? string.Empty);
-        w.Write((int)_options.Variant);
-        w.Write(_options.NumFeatures);
-        w.Write(_options.NumFlowHypotheses);
-        w.Write(_options.NumFusionBlocks);
-        w.Write(_options.NumRefineBlocks);
-        w.Write(_options.NumPyramidLevels);
-        w.Write(_options.DropoutRate);
-    }
 
-    protected override void DeserializeNetworkSpecificData(BinaryReader r)
-    {
-        _useNativeMode = r.ReadBoolean();
-        string mp = r.ReadString();
-        if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp;
-        _options.Variant = (VideoModelVariant)r.ReadInt32();
-        _options.NumFeatures = r.ReadInt32();
-        _options.NumFlowHypotheses = r.ReadInt32();
-        _options.NumFusionBlocks = r.ReadInt32();
-        _options.NumRefineBlocks = r.ReadInt32();
-        _options.NumPyramidLevels = r.ReadInt32();
-        _options.DropoutRate = r.ReadDouble();
-        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
-            OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
-        // Native-mode layers (with their trained weights) are already reconstructed by
-        // the base deserializer before this override runs; re-initializing here would
-        // discard them and leave the model randomly initialized.
-    }
+
+
 
     #endregion
 

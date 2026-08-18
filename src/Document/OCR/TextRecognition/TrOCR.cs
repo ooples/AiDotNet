@@ -745,39 +745,10 @@ public partial class TrOCR<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
     }
 
     /// <inheritdoc/>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_encoderHiddenDim);
-        writer.Write(_decoderHiddenDim);
-        writer.Write(_numEncoderLayers);
-        writer.Write(_numDecoderLayers);
-        writer.Write(_numEncoderHeads);
-        writer.Write(_numDecoderHeads);
-        writer.Write(_patchSize);
-        writer.Write(_vocabSize);
-        writer.Write(_maxSequenceLength);
-        writer.Write(ImageSize);
-        writer.Write(_useNativeMode);
-    }
+
 
     /// <inheritdoc/>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        int encoderHiddenDim = reader.ReadInt32();
-        int decoderHiddenDim = reader.ReadInt32();
-        int numEncoderLayers = reader.ReadInt32();
-        int numDecoderLayers = reader.ReadInt32();
-        int numEncoderHeads = reader.ReadInt32();
-        int numDecoderHeads = reader.ReadInt32();
-        int patchSize = reader.ReadInt32();
-        int vocabSize = reader.ReadInt32();
-        int maxSequenceLength = reader.ReadInt32();
-        int imageSize = reader.ReadInt32();
-        bool useNativeMode = reader.ReadBoolean();
 
-        ImageSize = imageSize;
-        MaxSequenceLength = maxSequenceLength;
-    }
 
     #endregion
 
@@ -805,7 +776,8 @@ public partial class TrOCR<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
         UpdateParameters(paramGradients);
         SetTrainingMode(false);}
 
-    // UpdateParameters applied a GRADIENT STEP, but its one-argument form is the value setter and every caller passes values -- the override corrupted the model. Removed under AIDN082.
+    // UpdateParameters applied a GRADIENT STEP, but its one-argument form is the value setter and every caller passes values -- the override corrupted the model. Removed under AIDN082.
+
 
     /// <summary>
     /// Parameters cannot be written while the model is backed by a loaded ONNX graph: the weights

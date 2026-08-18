@@ -627,22 +627,7 @@ public partial class SiameseNetwork<T> : DeclaredModelLayoutBase<T>, IAuxiliaryL
     /// allowing you to load it later without having to retrain it.
     /// </para>
     /// </remarks>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        // Serialize the subnetwork
-        var subNetworkData = _subnetwork.Serialize();
-        writer.Write(subNetworkData.Length);
-        writer.Write(subNetworkData);
 
-        // Serialize the output layer parameters
-        Vector<T> outputLayerParams = _outputLayer.GetParameters();
-        writer.Write(outputLayerParams.Length);
-
-        for (int i = 0; i < outputLayerParams.Length; i++)
-        {
-            writer.Write(Convert.ToDouble(outputLayerParams[i]));
-        }
-    }
 
     /// <summary>
     /// Deserializes Siamese network-specific data from a binary reader.
@@ -658,42 +643,7 @@ public partial class SiameseNetwork<T> : DeclaredModelLayoutBase<T>, IAuxiliaryL
     /// restoring all its learned parameters so you can use it without retraining.
     /// </para>
     /// </remarks>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        // Deserialize the subnetwork
-        _subnetwork = Architecture.InputType == Enums.InputType.OneDimensional
-            ? (NeuralNetworkBase<T>)new FeedForwardNeuralNetwork<T>(CreateEmbeddingArchitecture(Architecture, _options.EmbeddingSize))
-            : new ConvolutionalNeuralNetwork<T>(CreateEmbeddingArchitecture(Architecture, _options.EmbeddingSize));
-        var subNetworkCount = reader.ReadInt32();
-        _subnetwork.Deserialize(reader.ReadBytes(subNetworkCount));
 
-        // Deserialize the output layer parameters
-        int paramCount = reader.ReadInt32();
-        Vector<T> outputLayerParams = new Vector<T>(paramCount);
-
-        for (int i = 0; i < paramCount; i++)
-        {
-            outputLayerParams[i] = NumOps.FromDouble(reader.ReadDouble());
-        }
-
-        // Initialize the output layer with the correct dimensions
-        _outputLayer = new DenseLayer<T>(1, new SigmoidActivation<T>() as IActivationFunction<T>);
-        _outputLayer.SetParameters(outputLayerParams);
-
-        // Re-wire the base Layers list to the freshly deserialized _subnetwork /
-        // _outputLayer, exactly as the constructor does. The base deserialize
-        // populated Layers from the generic layer stream BEFORE this method ran,
-        // so without this call Layers would reference stale layer objects while
-        // _subnetwork/_outputLayer point to these new ones. Training would then
-        // forward through _subnetwork/_outputLayer (ForwardForTraining) but the
-        // optimizer would read and update the disconnected Layers parameters —
-        // the clone (DeepCopy/Clone routes through this path) trained on a
-        // mismatched parameter set and its loss diverged with more iterations
-        // (MoreData_ShouldNotDegrade: loss rose instead of falling). Re-running
-        // InitializeLayers binds Layers to the live objects so forward and
-        // update share one parameter surface.
-        InitializeLayers();
-    }
 
     /// <summary>
     /// Gets metadata about the Siamese Network.

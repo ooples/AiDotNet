@@ -403,23 +403,13 @@ namespace AiDotNet.PhysicsInformed.ScientificML
         /// Serializes Hamiltonian-specific data.
         /// </summary>
         /// <param name="writer">Binary writer.</param>
-        protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-        {
-            writer.Write(_stateDim);
-        }
+
 
         /// <summary>
         /// Deserializes Hamiltonian-specific data.
         /// </summary>
         /// <param name="reader">Binary reader.</param>
-        protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-        {
-            int storedStateDim = reader.ReadInt32();
-            if (storedStateDim != _stateDim)
-            {
-                throw new InvalidOperationException("Serialized Hamiltonian configuration does not match the current instance.");
-            }
-        }
+
 
         /// <summary>
         /// Indicates whether this model supports training.

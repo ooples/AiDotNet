@@ -800,18 +800,7 @@ public partial class CogVideo<T> : NeuralNetworkBase<T>
     }
 
     /// <inheritdoc/>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        if (!_useNativeMode)
-            throw new InvalidOperationException("Serialization is not supported in ONNX mode.");
 
-        writer.Write(_embedDim);
-        writer.Write(_numLayers);
-        writer.Write(_numFrames);
-        writer.Write(_latentHeight);
-        writer.Write(_latentWidth);
-        writer.Write(_latentChannels);
-    }
 
     /// <inheritdoc/>
     /// <remarks>
@@ -819,24 +808,7 @@ public partial class CogVideo<T> : NeuralNetworkBase<T>
     /// the deserialized state. This ensures the model structure is properly
     /// reconstructed after loading from a serialized format.
     /// </remarks>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        if (!_useNativeMode)
-            throw new InvalidOperationException("Deserialization is not supported in ONNX mode.");
 
-        // Read serialized configuration values
-        _embedDim = reader.ReadInt32();
-        _numLayers = reader.ReadInt32();
-        _numFrames = reader.ReadInt32();
-        _latentHeight = reader.ReadInt32();
-        _latentWidth = reader.ReadInt32();
-        _latentChannels = reader.ReadInt32();
-
-        // The layers (with their trained weights) are already reconstructed by the base
-        // DeserializeInternalUnchecked before this override runs, so do NOT clear +
-        // re-initialize them here — that would discard the deserialized weights and leave
-        // the model randomly initialized.
-    }
 
     #endregion
 }

@@ -180,34 +180,9 @@ public partial class InterpAnyClearer<T> : FrameInterpolationBase<T>
         return m;
     }
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter w)
-    {
-        w.Write(_useNativeMode);
-        w.Write(_options.ModelPath ?? string.Empty);
-        w.Write((int)_options.Variant);
-        w.Write(_options.NumFeatures);
-        w.Write(_options.NumVelocityBlocks);
-        w.Write(_options.NumVelocityBins);
-        w.Write(_options.NumPyramidLevels);
-        w.Write(_options.UseVelocityGuidedWarping);
-        w.Write(_options.DropoutRate);
-    }
 
-    protected override void DeserializeNetworkSpecificData(BinaryReader r)
-    {
-        _useNativeMode = r.ReadBoolean();
-        string mp = r.ReadString();
-        if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp;
-        _options.Variant = (VideoModelVariant)r.ReadInt32();
-        _options.NumFeatures = r.ReadInt32();
-        _options.NumVelocityBlocks = r.ReadInt32();
-        _options.NumVelocityBins = r.ReadInt32();
-        _options.NumPyramidLevels = r.ReadInt32();
-        _options.UseVelocityGuidedWarping = r.ReadBoolean();
-        _options.DropoutRate = r.ReadDouble();
-        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
-            OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
-    }
+
+
 
     #endregion
 

@@ -745,27 +745,7 @@ public partial class DeepQNetwork<T> : VectorModelLayoutBase<T>
     /// This allows you to load the exact same DQN later, with all its settings intact.
     /// </para>
     /// </remarks>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        // Save exploration rate (epsilon)
-        writer.Write(Convert.ToDouble(_epsilon));
 
-        // Save action space size
-        writer.Write(_actionSpace);
-
-        // Save replay buffer size (but not the actual experiences)
-        writer.Write(_replayBuffer.Count);
-
-        // Serialize target network (if present)
-        writer.Write(_targetNetwork is not null);
-        if (_targetNetwork is not null)
-        {
-            for (int i = 0; i < _targetNetwork.Layers.Count; i++)
-            {
-                _targetNetwork.Layers[i].Serialize(writer);
-            }
-        }
-    }
 
     /// <summary>
     /// Loads Deep Q-Network specific data from a binary stream.
@@ -787,33 +767,7 @@ public partial class DeepQNetwork<T> : VectorModelLayoutBase<T>
     /// This allows you to continue using a previously trained DQN with all its settings intact.
     /// </para>
     /// </remarks>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        // Load exploration rate (epsilon)
-        T epsilon = NumOps.FromDouble(reader.ReadDouble());
 
-        // Load action space size
-        int actionSpace = reader.ReadInt32();
-        _actionSpace = actionSpace;
-
-        // Load replay buffer size (but can't restore actual experiences)
-        int replayBufferSize = reader.ReadInt32();
-        _ = replayBufferSize;
-
-        // Deserialize target network (if it was serialized)
-        bool hasTargetNetwork = reader.ReadBoolean();
-        if (hasTargetNetwork)
-        {
-            var targetNetwork = _targetNetwork ??
-                new DeepQNetwork<T>(Architecture, _lossFunction, Convert.ToDouble(epsilon), isTargetNetwork: true);
-            _targetNetwork = targetNetwork;
-
-            for (int i = 0; i < targetNetwork.Layers.Count; i++)
-            {
-                targetNetwork.Layers[i].Deserialize(reader);
-            }
-        }
-    }
 }
 
 

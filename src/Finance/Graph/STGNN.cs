@@ -527,20 +527,7 @@ public partial class STGNN<T> : ForecastingModelBase<T>
     /// <b>For Beginners:</b> In the STGNN model, SerializeNetworkSpecificData saves or restores model-specific settings. This lets the STGNN architecture be reused later.
     /// </para>
     /// </remarks>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_sequenceLength);
-        writer.Write(_forecastHorizon);
-        writer.Write(_numNodes);
-        writer.Write(_numFeatures);
-        writer.Write(_hiddenDimension);
-        writer.Write(_numSpatialLayers);
-        writer.Write(_numTemporalLayers);
-        writer.Write(_graphConvType);
-        writer.Write(_useGatedFusion);
-        writer.Write(_useResidualConnections);
-        writer.Write(_numSamples);
-    }
+
 
     /// <summary>
     /// Deserializes STGNN-specific data.
@@ -551,20 +538,7 @@ public partial class STGNN<T> : ForecastingModelBase<T>
     /// <b>For Beginners:</b> In the STGNN model, DeserializeNetworkSpecificData saves or restores model-specific settings. This lets the STGNN architecture be reused later.
     /// </para>
     /// </remarks>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _sequenceLength = reader.ReadInt32();
-        _forecastHorizon = reader.ReadInt32();
-        _numNodes = reader.ReadInt32();
-        _numFeatures = reader.ReadInt32();
-        _hiddenDimension = reader.ReadInt32();
-        _numSpatialLayers = reader.ReadInt32();
-        _numTemporalLayers = reader.ReadInt32();
-        _graphConvType = reader.ReadString();
-        _useGatedFusion = reader.ReadBoolean();
-        _useResidualConnections = reader.ReadBoolean();
-        _numSamples = reader.ReadInt32();
-    }
+
 
     #endregion
 

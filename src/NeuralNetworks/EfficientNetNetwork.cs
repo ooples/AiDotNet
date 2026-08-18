@@ -407,12 +407,7 @@ public partial class EfficientNetNetwork<T> : ImageClassifierModelLayoutBase<T>
     }
 
     /// <inheritdoc />
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write((int)_configuration.Variant);
-        writer.Write(_configuration.InputChannels);
-        writer.Write(_configuration.NumClasses);
-    }
+
 
     /// <summary>
     /// Deserializes and validates network-specific configuration data.
@@ -437,26 +432,7 @@ public partial class EfficientNetNetwork<T> : ImageClassifierModelLayoutBase<T>
     /// desired configuration, then call <see cref="NeuralNetworkBase{T}.Load"/> on that instance.
     /// </para>
     /// </remarks>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        // Read serialized configuration values
-        var variant = (EfficientNetVariant)reader.ReadInt32();
-        var inputChannels = reader.ReadInt32();
-        var numClasses = reader.ReadInt32();
 
-        // Validate configuration matches - layer structure depends on these values
-        // and cannot be changed after construction
-        if (variant != _configuration.Variant ||
-            inputChannels != _configuration.InputChannels ||
-            numClasses != _configuration.NumClasses)
-        {
-            throw new InvalidDataException(
-                $"Serialized EfficientNet configuration (Variant={variant}, InputChannels={inputChannels}, " +
-                $"NumClasses={numClasses}) does not match current configuration " +
-                $"(Variant={_configuration.Variant}, InputChannels={_configuration.InputChannels}, " +
-                $"NumClasses={_configuration.NumClasses}). Create a new network with matching configuration to load this model.");
-        }
-    }
 
     /// <summary>
     /// Gets the layer at the specified index.

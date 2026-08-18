@@ -616,18 +616,7 @@ public partial class PatchTST<T> : ForecastingModelBase<T>
     /// later, the corresponding DeserializeNetworkSpecificData method reads it back.
     /// </para>
     /// </remarks>
-    protected override void SerializeModelSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_patchSize);
-        writer.Write(_stride);
-        writer.Write(_numLayers);
-        writer.Write(_numHeads);
-        writer.Write(_modelDimension);
-        writer.Write(_feedForwardDimension);
-        writer.Write(_channelIndependent);
-        writer.Write(_useInstanceNormalization);
-        writer.Write(_dropout);
-    }
+
 
     /// <summary>
     /// Reads network-specific configuration data during deserialization.
@@ -640,23 +629,7 @@ public partial class PatchTST<T> : ForecastingModelBase<T>
     /// that were saved during serialization and restores the model state.
     /// </para>
     /// </remarks>
-    protected override void DeserializeModelSpecificData(BinaryReader reader)
-    {
-        _patchSize = reader.ReadInt32();
-        _stride = reader.ReadInt32();
-        _numLayers = reader.ReadInt32();
-        _numHeads = reader.ReadInt32();
-        _modelDimension = reader.ReadInt32();
-        _feedForwardDimension = reader.ReadInt32();
-        _channelIndependent = reader.ReadBoolean();
-        _useInstanceNormalization = reader.ReadBoolean();
-        _dropout = reader.ReadDouble();
 
-        // Re-bind cached layer references (_patchEmbedding, _encoderLayers,
-        // _finalNorm, _outputProjection) to the deserialized layers so a clone
-        // runs on the loaded weights, not construction-time random init.
-        ExtractLayerReferences();
-    }
 
     #endregion
 

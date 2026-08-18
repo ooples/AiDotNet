@@ -627,83 +627,12 @@ public partial class HopeNetwork<T> : VectorModelLayoutBase<T>
     /// <summary>
     /// Serializes Hope-specific data for model persistence.
     /// </summary>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        if (writer == null)
-            throw new ArgumentNullException(nameof(writer));
 
-        // Write Hope-specific architecture parameters
-        writer.Write(_hiddenDim);
-        writer.Write(_numCMSLevels);
-        writer.Write(_numRecurrentLayers);
-        writer.Write(_inContextLearningLevels);
-        writer.Write(_adaptationStep);
-        writer.Write(Convert.ToDouble(_selfModificationRate));
-
-        // Write meta-state
-        if (_metaState != null)
-        {
-            writer.Write(true); // Has meta-state
-            writer.Write(_metaState.Length);
-            for (int i = 0; i < _metaState.Length; i++)
-            {
-                writer.Write(Convert.ToDouble(_metaState[i]));
-            }
-        }
-        else
-        {
-            writer.Write(false); // No meta-state
-        }
-
-        // Context flow and associative memory will be reinitialized on load
-        // Their state is ephemeral and doesn't need persistence
-    }
 
     /// <summary>
     /// Deserializes Hope-specific data for model restoration.
     /// </summary>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        if (reader == null)
-            throw new ArgumentNullException(nameof(reader));
 
-        // Read Hope-specific architecture parameters
-        // Note: These were already set in constructor, but we verify they match
-        int loadedHiddenDim = reader.ReadInt32();
-        int loadedNumCMSLevels = reader.ReadInt32();
-        int loadedNumRecurrentLayers = reader.ReadInt32();
-        int loadedInContextLearningLevels = reader.ReadInt32();
-        _adaptationStep = reader.ReadInt32();
-        _selfModificationRate = _numOps.FromDouble(reader.ReadDouble());
-
-        // Read meta-state
-        bool hasMetaState = reader.ReadBoolean();
-        if (hasMetaState)
-        {
-            int metaStateLength = reader.ReadInt32();
-            _metaState = new Vector<T>(metaStateLength);
-            for (int i = 0; i < metaStateLength; i++)
-            {
-                _metaState[i] = _numOps.FromDouble(reader.ReadDouble());
-            }
-        }
-        else
-        {
-            _metaState = new Vector<T>(_hiddenDim);
-        }
-
-        // Verify architecture matches
-        if (loadedHiddenDim != _hiddenDim ||
-            loadedNumCMSLevels != _numCMSLevels ||
-            loadedNumRecurrentLayers != _numRecurrentLayers ||
-            loadedInContextLearningLevels != _inContextLearningLevels)
-        {
-            throw new InvalidOperationException(
-                $"Model architecture mismatch. Expected ({_hiddenDim}, {_numCMSLevels}, " +
-                $"{_numRecurrentLayers}, {_inContextLearningLevels}) but loaded " +
-                $"({loadedHiddenDim}, {loadedNumCMSLevels}, {loadedNumRecurrentLayers}, {loadedInContextLearningLevels})");
-        }
-    }
 
     /// <summary>
     /// Cloning HopeNetwork via the default DeepCopy path (serialize/deserialize)

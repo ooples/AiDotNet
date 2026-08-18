@@ -611,24 +611,9 @@ public partial class CSDI<T> : TimeSeriesFoundationModelBase<T>
         ModelData = _useNativeMode ? this.Serialize() : Array.Empty<byte>()
     };
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_sequenceLength); writer.Write(_numFeatures);
-        writer.Write(_hiddenDimension); writer.Write(_numResidualLayers);
-        writer.Write(_numDiffusionSteps); writer.Write(_numHeads);
-        writer.Write(_timeEmbeddingDim); writer.Write(_dropout);
-        writer.Write(_betaStart); writer.Write(_betaEnd);
-    }
 
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _sequenceLength = reader.ReadInt32(); _numFeatures = reader.ReadInt32();
-        _hiddenDimension = reader.ReadInt32(); _numResidualLayers = reader.ReadInt32();
-        _numDiffusionSteps = reader.ReadInt32(); _numHeads = reader.ReadInt32();
-        _timeEmbeddingDim = reader.ReadInt32(); _dropout = reader.ReadDouble();
-        _betaStart = reader.ReadDouble(); _betaEnd = reader.ReadDouble();
-        ComputeNoiseSchedule();
-    }
+
+
 
     #endregion
 

@@ -749,20 +749,7 @@ public partial class MQCNN<T> : ForecastingModelBase<T>
     /// <b>For Beginners:</b> Saves all the configuration needed to reconstruct this model.
     /// </para>
     /// </remarks>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_lookbackWindow);
-        writer.Write(_forecastHorizon);
-        writer.Write(_numFeatures);
-        writer.Write(_quantiles.Length);
-        foreach (var q in _quantiles)
-            writer.Write(q);
-        writer.Write(_encoderChannels);
-        writer.Write(_decoderChannels);
-        writer.Write(_numEncoderLayers);
-        writer.Write(_numDecoderLayers);
-        writer.Write(_dropout);
-    }
+
 
     /// <summary>
     /// Reads MQCNN-specific configuration during deserialization.
@@ -772,26 +759,7 @@ public partial class MQCNN<T> : ForecastingModelBase<T>
     /// <b>For Beginners:</b> Loads the configuration that was saved during serialization.
     /// </para>
     /// </remarks>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _lookbackWindow = reader.ReadInt32();
-        _forecastHorizon = reader.ReadInt32();
-        _numFeatures = reader.ReadInt32();
-        int numQuantiles = reader.ReadInt32();
-        _quantiles = new double[numQuantiles];
-        for (int i = 0; i < numQuantiles; i++)
-            _quantiles[i] = reader.ReadDouble();
-        _encoderChannels = reader.ReadInt32();
-        _decoderChannels = reader.ReadInt32();
-        _numEncoderLayers = reader.ReadInt32();
-        _numDecoderLayers = reader.ReadInt32();
-        _dropout = reader.ReadDouble();
 
-        // Re-point cached layer references at the freshly deserialized Layers;
-        // otherwise a clone's forward uses the stale random-initialized layers
-        // created by CreateNewInstance and diverges from the original.
-        ExtractLayerReferences();
-    }
 
     #endregion
 

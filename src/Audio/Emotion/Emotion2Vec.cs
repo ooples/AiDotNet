@@ -306,24 +306,9 @@ public partial class Emotion2Vec<T> : AudioClassifierBase<T>, IEmotionRecognizer
         return m;
     }
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter w)
-    {
-        w.Write(_useNativeMode); w.Write(_options.ModelPath ?? string.Empty);
-        w.Write(_options.SampleRate); w.Write(_options.NumMels); w.Write(_options.TransformerDim);
-        w.Write(_options.NumTransformerLayers); w.Write(_options.NumAttentionHeads);
-        w.Write(_options.FeedForwardDim); w.Write(_options.NumClasses); w.Write(_options.DropoutRate);
-        w.Write(_options.EmotionLabels.Length); foreach (var l in _options.EmotionLabels) w.Write(l);
-    }
 
-    protected override void DeserializeNetworkSpecificData(BinaryReader r)
-    {
-        _useNativeMode = r.ReadBoolean(); string mp = r.ReadString(); if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp;
-        _options.SampleRate = r.ReadInt32(); _options.NumMels = r.ReadInt32(); _options.TransformerDim = r.ReadInt32();
-        _options.NumTransformerLayers = r.ReadInt32(); _options.NumAttentionHeads = r.ReadInt32();
-        _options.FeedForwardDim = r.ReadInt32(); _options.NumClasses = r.ReadInt32(); _options.DropoutRate = r.ReadDouble();
-        int n = r.ReadInt32(); _options.EmotionLabels = new string[n]; for (int i = 0; i < n; i++) _options.EmotionLabels[i] = r.ReadString();
-        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxEncoder = new OnnxModel<T>(p, _options.OnnxOptions);
-    }
+
+
 
     #endregion
 

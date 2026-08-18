@@ -1394,28 +1394,10 @@ public partial class CausalGANGenerator<T> : NeuralSyntheticTabularGeneratorBase
     }
 
     /// <inheritdoc/>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_options.EmbeddingDimension);
-        writer.Write(_options.HiddenDimensions.Length);
-        foreach (var dim in _options.HiddenDimensions)
-        {
-            writer.Write(dim);
-        }
-        writer.Write(_options.BatchSize);
-        writer.Write(_options.LearningRate);
-        writer.Write(_options.DAGPenaltyWeight);
-        writer.Write(_options.SparsityWeight);
-        writer.Write(_options.GradientPenaltyWeight);
-        writer.Write(_options.DiscriminatorDropout);
-        writer.Write(_options.DiscriminatorSteps);
-    }
+
 
     /// <inheritdoc/>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        // Options are reconstructed from serialized data
-    }
+
 
     /// <inheritdoc/>
     public override Dictionary<string, T> GetFeatureImportance()

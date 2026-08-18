@@ -1017,33 +1017,7 @@ public partial class MAModel<T> : TimeSeriesModelBase<T>
     /// The method saves all the essential parameters: the order (q) value,
     /// the mean of the series, the MA coefficients, and the recent errors.
     /// </remarks>
-    protected override void SerializeCore(BinaryWriter writer)
-    {
-        // Note: IsTrained is handled by base class Serialize, don't duplicate
 
-        // Write MA-specific options
-        writer.Write(_maOptions.MAOrder);
-
-        // Write mean
-        writer.Write(Convert.ToDouble(_mean));
-
-        // Write noise variance
-        writer.Write(Convert.ToDouble(_noiseVariance));
-
-        // Write MA coefficients
-        writer.Write(_maCoefficients.Length);
-        for (int i = 0; i < _maCoefficients.Length; i++)
-        {
-            writer.Write(Convert.ToDouble(_maCoefficients[i]));
-        }
-
-        // Write recent errors
-        writer.Write(_recentErrors.Length);
-        for (int i = 0; i < _recentErrors.Length; i++)
-        {
-            writer.Write(Convert.ToDouble(_recentErrors[i]));
-        }
-    }
 
     /// <summary>
     /// Deserializes the model's state from a binary stream.
@@ -1061,36 +1035,7 @@ public partial class MAModel<T> : TimeSeriesModelBase<T>
     /// The method loads all the parameters that were saved during serialization:
     /// the order (q) value, the mean of the series, the MA coefficients, and the recent errors.
     /// </remarks>
-    protected override void DeserializeCore(BinaryReader reader)
-    {
-        // Note: IsTrained is handled by base class Deserialize
 
-        // Read MA-specific options
-        int q = reader.ReadInt32();
-        _maOptions = new MAModelOptions<T> { MAOrder = q };
-
-        // Read mean
-        _mean = NumOps.FromDouble(reader.ReadDouble());
-
-        // Read noise variance
-        _noiseVariance = NumOps.FromDouble(reader.ReadDouble());
-
-        // Read MA coefficients
-        int maLength = reader.ReadInt32();
-        _maCoefficients = new Vector<T>(maLength);
-        for (int i = 0; i < maLength; i++)
-        {
-            _maCoefficients[i] = NumOps.FromDouble(reader.ReadDouble());
-        }
-
-        // Read recent errors
-        int errorsLength = reader.ReadInt32();
-        _recentErrors = new Vector<T>(errorsLength);
-        for (int i = 0; i < errorsLength; i++)
-        {
-            _recentErrors[i] = NumOps.FromDouble(reader.ReadDouble());
-        }
-    }
 
     /// <summary>
     /// Gets metadata about the model, including its type, parameters, and configuration.

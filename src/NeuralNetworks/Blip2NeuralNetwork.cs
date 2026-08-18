@@ -2114,43 +2114,10 @@ public partial class Blip2NeuralNetwork<T> : MultimodalModelLayoutBase<T>, IBlip
     }
 
     /// <inheritdoc/>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_embeddingDimension);
-        writer.Write(_maxSequenceLength);
-        writer.Write(_imageSize);
-        writer.Write(_qformerHiddenDim);
-        writer.Write(_numQformerLayers);
-        writer.Write(_numHeads);
-        writer.Write(_numQueryTokens);
-        writer.Write(_patchSize);
-        writer.Write(_vocabularySize);
-        writer.Write(_visionHiddenDim);
-        writer.Write(_lmHiddenDim);
-        writer.Write((int)_languageModelBackbone);
-        writer.Write(_useNativeMode);
-    }
+
 
     /// <inheritdoc/>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        int embeddingDim = reader.ReadInt32();
-        int maxSeqLen = reader.ReadInt32();
-        int imageSize = reader.ReadInt32();
-        int qformerHiddenDim = reader.ReadInt32();
-        int numQformerLayers = reader.ReadInt32();
-        int numHeads = reader.ReadInt32();
-        int numQueryTokens = reader.ReadInt32();
-        int patchSize = reader.ReadInt32();
-        int vocabularySize = reader.ReadInt32();
-        int visionHiddenDim = reader.ReadInt32();
-        int lmHiddenDim = reader.ReadInt32();
-        var languageModelBackbone = (LanguageModelBackbone)reader.ReadInt32();
-        bool useNativeMode = reader.ReadBoolean();
 
-        // Note: Since fields are readonly, this just validates consistency
-        // In practice, you'd need to reconstruct the network if dimensions differ
-    }
 
     /// <inheritdoc/>
     protected override void Dispose(bool disposing)

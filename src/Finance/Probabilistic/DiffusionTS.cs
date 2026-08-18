@@ -603,22 +603,7 @@ public partial class DiffusionTS<T> : ForecastingModelBase<T>
     /// diffusion parameters.
     /// </para>
     /// </remarks>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_sequenceLength);
-        writer.Write(_forecastHorizon);
-        writer.Write(_numFeatures);
-        writer.Write(_hiddenDimension);
-        writer.Write(_trendHiddenDim);
-        writer.Write(_seasonalHiddenDim);
-        writer.Write(_numDiffusionSteps);
-        writer.Write(_numSamples);
-        writer.Write(_decompositionPeriod);
-        writer.Write(_trendKernelSize);
-        writer.Write(_useTrendComponent);
-        writer.Write(_useSeasonalComponent);
-        writer.Write(_betaSchedule);
-    }
+
 
     /// <summary>
     /// Deserializes DiffusionTS-specific data from a saved model.
@@ -630,22 +615,7 @@ public partial class DiffusionTS<T> : ForecastingModelBase<T>
     /// in the constructor.
     /// </para>
     /// </remarks>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _sequenceLength = reader.ReadInt32();
-        _forecastHorizon = reader.ReadInt32();
-        _numFeatures = reader.ReadInt32();
-        _hiddenDimension = reader.ReadInt32();
-        _trendHiddenDim = reader.ReadInt32();
-        _seasonalHiddenDim = reader.ReadInt32();
-        _numDiffusionSteps = reader.ReadInt32();
-        _numSamples = reader.ReadInt32();
-        _decompositionPeriod = reader.ReadInt32();
-        _trendKernelSize = reader.ReadInt32();
-        _useTrendComponent = reader.ReadBoolean();
-        _useSeasonalComponent = reader.ReadBoolean();
-        _betaSchedule = reader.ReadString();
-    }
+
 
     #endregion
 

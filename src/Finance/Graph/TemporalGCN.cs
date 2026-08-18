@@ -675,21 +675,7 @@ public partial class TemporalGCN<T> : ForecastingModelBase<T>
     /// <b>For Beginners:</b> In the TemporalGCN model, SerializeNetworkSpecificData saves or restores model-specific settings. This lets the TemporalGCN architecture be reused later.
     /// </para>
     /// </remarks>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_sequenceLength);
-        writer.Write(_forecastHorizon);
-        writer.Write(_numNodes);
-        writer.Write(_numFeatures);
-        writer.Write(_hiddenDimension);
-        writer.Write(_numGCNLayers);
-        writer.Write(_numTemporalLayers);
-        writer.Write(_chebyshevOrder);
-        writer.Write(_temporalCellType);
-        writer.Write(_useResidualConnections);
-        writer.Write(_useBatchNormalization);
-        writer.Write(_numSamples);
-    }
+
 
     /// <summary>
     /// Deserializes TemporalGCN-specific data.
@@ -700,21 +686,7 @@ public partial class TemporalGCN<T> : ForecastingModelBase<T>
     /// <b>For Beginners:</b> In the TemporalGCN model, DeserializeNetworkSpecificData saves or restores model-specific settings. This lets the TemporalGCN architecture be reused later.
     /// </para>
     /// </remarks>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _sequenceLength = reader.ReadInt32();
-        _forecastHorizon = reader.ReadInt32();
-        _numNodes = reader.ReadInt32();
-        _numFeatures = reader.ReadInt32();
-        _hiddenDimension = reader.ReadInt32();
-        _numGCNLayers = reader.ReadInt32();
-        _numTemporalLayers = reader.ReadInt32();
-        _chebyshevOrder = reader.ReadInt32();
-        _temporalCellType = reader.ReadString();
-        _useResidualConnections = reader.ReadBoolean();
-        _useBatchNormalization = reader.ReadBoolean();
-        _numSamples = reader.ReadInt32();
-    }
+
 
     #endregion
 

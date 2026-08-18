@@ -568,9 +568,7 @@ public partial class ConvolutionalNeuralNetwork<T> : ImageClassifierModelLayoutB
     /// the important information about the network so you can reload it later exactly as it is now.
     /// </para>
     /// </remarks>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-    }
+
 
     /// <summary>
     /// Deserializes convolutional neural network-specific data from a binary reader.
@@ -585,7 +583,5 @@ public partial class ConvolutionalNeuralNetwork<T> : ImageClassifierModelLayoutB
     /// network exactly as it was when you saved it, including all its learned information.
     /// </para>
     /// </remarks>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-    }
+
 }

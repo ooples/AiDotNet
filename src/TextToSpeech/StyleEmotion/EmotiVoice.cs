@@ -271,63 +271,9 @@ public partial class EmotiVoice<T> : TtsModelBase<T>, IEndToEndTts<T>
         };
     }
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_useNativeMode);
-        writer.Write(_options.ModelPath ?? string.Empty);
-        writer.Write(_options.SampleRate);
-        writer.Write(_options.MelChannels);
-        writer.Write(_options.HiddenDim);
-        writer.Write(_options.DropoutRate);
-        writer.Write(_options.EmotionDim);
-        writer.Write(_options.NumDecoderLayers);
-        writer.Write(_options.NumEmotionLayers);
-        writer.Write(_options.NumEncoderLayers);
-        writer.Write(_options.NumHeads);
-        writer.Write(_options.LearningRate);
-        writer.Write(_options.WeightDecay);
-        writer.Write(_options.OptimizerBeta1);
-        writer.Write(_options.OptimizerBeta2);
-        writer.Write(_options.OptimizerEpsilon);
-        writer.Write(_options.LearningRateSchedulerGamma);
-    }
 
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _useNativeMode = reader.ReadBoolean();
-        string mp = reader.ReadString();
-        if (!string.IsNullOrEmpty(mp))
-            _options.ModelPath = mp;
-        _options.SampleRate = reader.ReadInt32();
-        _options.MelChannels = reader.ReadInt32();
-        _options.HiddenDim = reader.ReadInt32();
-        _options.DropoutRate = reader.ReadDouble();
-        _options.EmotionDim = reader.ReadInt32();
-        _options.NumDecoderLayers = reader.ReadInt32();
-        _options.NumEmotionLayers = reader.ReadInt32();
-        _options.NumEncoderLayers = reader.ReadInt32();
-        _options.NumHeads = reader.ReadInt32();
-        if (reader.BaseStream.Position < reader.BaseStream.Length)
-            _options.LearningRate = reader.ReadDouble();
-        if (reader.BaseStream.Position < reader.BaseStream.Length)
-            _options.WeightDecay = reader.ReadDouble();
-        if (reader.BaseStream.Position < reader.BaseStream.Length)
-            _options.OptimizerBeta1 = reader.ReadDouble();
-        if (reader.BaseStream.Position < reader.BaseStream.Length)
-            _options.OptimizerBeta2 = reader.ReadDouble();
-        if (reader.BaseStream.Position < reader.BaseStream.Length)
-            _options.OptimizerEpsilon = reader.ReadDouble();
-        if (reader.BaseStream.Position < reader.BaseStream.Length)
-            _options.LearningRateSchedulerGamma = reader.ReadDouble();
-        base.SampleRate = _options.SampleRate;
-        base.MelChannels = _options.MelChannels;
-        base.HopSize = _options.HopSize;
-        base.HiddenDim = _options.HiddenDim;
-        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
-            OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
-        if (_useNativeMode)
-            _optimizer = CreateDefaultOptimizer();
-    }
+
+
 
     private void ThrowIfDisposed()
     {

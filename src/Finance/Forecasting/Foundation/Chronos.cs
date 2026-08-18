@@ -627,25 +627,7 @@ public partial class Chronos<T> : TimeSeriesFoundationModelBase<T>
     /// <b>For Beginners:</b> Saves all the configuration needed to reconstruct this model.
     /// </para>
     /// </remarks>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_contextLength);
-        writer.Write(_forecastHorizon);
-        writer.Write(_numTokens);
-        writer.Write(_hiddenDimension);
-        writer.Write(_numLayers);
-        writer.Write(_numHeads);
-        writer.Write(_intermediateSize);
-        writer.Write(_numSamples);
-        writer.Write(_dropout);
-        writer.Write(_temperature);
-        writer.Write((int)_modelSize);
 
-        // Serialize tokenization scaling state
-        writer.Write(_hasTokenScale);
-        writer.Write(NumOps.ToDouble(_lastTokenMin));
-        writer.Write(NumOps.ToDouble(_lastTokenRange));
-    }
 
     /// <summary>
     /// Reads Chronos-specific configuration during deserialization.
@@ -655,30 +637,7 @@ public partial class Chronos<T> : TimeSeriesFoundationModelBase<T>
     /// <b>For Beginners:</b> Loads the configuration that was saved during serialization.
     /// </para>
     /// </remarks>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _contextLength = reader.ReadInt32();
-        _forecastHorizon = reader.ReadInt32();
-        _numTokens = reader.ReadInt32();
-        _hiddenDimension = reader.ReadInt32();
-        _numLayers = reader.ReadInt32();
-        _numHeads = reader.ReadInt32();
-        _intermediateSize = reader.ReadInt32();
-        _numSamples = reader.ReadInt32();
-        _dropout = reader.ReadDouble();
-        _temperature = reader.ReadDouble();
-        _modelSize = (FoundationModelSize)reader.ReadInt32();
 
-        // Deserialize tokenization scaling state
-        _hasTokenScale = reader.ReadBoolean();
-        _lastTokenMin = NumOps.FromDouble(reader.ReadDouble());
-        _lastTokenRange = NumOps.FromDouble(reader.ReadDouble());
-
-        // Base deserialization replaces the Layers collection with newly deserialized
-        // layer instances. Refresh Chronos' typed layer references so inference uses
-        // those restored weights rather than the constructor's discarded random layers.
-        ExtractLayerReferences();
-    }
 
     #endregion
 

@@ -495,16 +495,7 @@ public partial class TimeMachine<T> : ForecastingModelBase<T>
     /// can be reconstructed later.
     /// </para>
     /// </remarks>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_contextLength);
-        writer.Write(_forecastHorizon);
-        writer.Write(_modelDimension);
-        writer.Write(_stateDimension);
-        writer.Write(_expandFactor);
-        writer.Write(_convKernelSize);
-        writer.Write(_useReversibleNormalization);
-    }
+
 
     /// <summary>
     /// Deserializes TimeMachine-specific data when loading a saved model.
@@ -515,16 +506,7 @@ public partial class TimeMachine<T> : ForecastingModelBase<T>
     /// loading a previously saved model.
     /// </para>
     /// </remarks>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _contextLength = reader.ReadInt32();
-        _forecastHorizon = reader.ReadInt32();
-        _modelDimension = reader.ReadInt32();
-        _stateDimension = reader.ReadInt32();
-        _expandFactor = reader.ReadInt32();
-        _convKernelSize = reader.ReadInt32();
-        _useReversibleNormalization = reader.ReadBoolean();
-    }
+
 
     #endregion
 

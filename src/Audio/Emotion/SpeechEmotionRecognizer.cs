@@ -893,65 +893,10 @@ public partial class SpeechEmotionRecognizer<T> : AudioClassifierBase<T>, IEmoti
     }
 
     /// <inheritdoc/>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_isOnnxMode);
-        writer.Write(SampleRate);
-        writer.Write(NumMels);
-        writer.Write(_nFft);
-        writer.Write(_hopLength);
-        writer.Write(_inputDurationSeconds);
-        writer.Write(_numConvBlocks);
-        writer.Write(_baseFilters);
-        writer.Write(_hiddenDim);
-        writer.Write(_dropoutRate);
-        writer.Write(_includeArousalValence);
-        writer.Write(_emotionLabels.Length);
-        foreach (var label in _emotionLabels)
-        {
-            writer.Write(label);
-        }
-    }
+
 
     /// <inheritdoc/>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        // Note: _isOnnxMode is readonly and set at construction, but we read to advance stream position
-        // The deserialized model will always be in native mode since ONNX models need model files
-        _ = reader.ReadBoolean(); // _isOnnxMode (read but not assigned - mode is set at construction)
 
-        // Restore audio configuration
-        SampleRate = reader.ReadInt32();
-        NumMels = reader.ReadInt32();
-        _nFft = reader.ReadInt32();
-        _hopLength = reader.ReadInt32();
-        _inputDurationSeconds = reader.ReadDouble();
-
-        // Restore architecture configuration
-        _numConvBlocks = reader.ReadInt32();
-        _baseFilters = reader.ReadInt32();
-        _hiddenDim = reader.ReadInt32();
-        _dropoutRate = reader.ReadDouble();
-        _includeArousalValence = reader.ReadBoolean();
-
-        // Restore emotion labels
-        int labelCount = reader.ReadInt32();
-        _emotionLabels = new string[labelCount];
-        for (int i = 0; i < labelCount; i++)
-        {
-            _emotionLabels[i] = reader.ReadString();
-        }
-        ClassLabels = _emotionLabels;
-
-        // Reinitialize mel spectrogram extractor with restored parameters
-        _melSpec = CreateMelSpectrogram(SampleRate, NumMels, _nFft, _hopLength);
-
-        // Reinitialize layers if needed (native mode)
-        if (_convLayers.Count == 0)
-        {
-            InitializeLayers();
-        }
-    }
 
     #endregion
 }

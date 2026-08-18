@@ -800,21 +800,9 @@ public partial class E2FGVI<T> : VideoInpaintingBase<T>
         ModelData = SerializeForMetadata()
     };
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_height);
-        writer.Write(_width);
-        writer.Write(_channels);
-        writer.Write(_numFeatures);
-    }
 
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _height = reader.ReadInt32();
-        _width = reader.ReadInt32();
-        _channels = reader.ReadInt32();
-        _numFeatures = reader.ReadInt32();
-    }
+
+
 
     #endregion
 

@@ -349,44 +349,7 @@ public partial class ARIMAModel<T> : TimeSeriesModelBase<T>
     /// <para>The method saves all the essential parameters: the p, d, q values,
     /// the constant term, and the AR and MA coefficients.</para>
     /// </remarks>
-    protected override void SerializeCore(BinaryWriter writer)
-    {
-        // Write ARIMA-specific options
-        writer.Write(_arimaOptions.P);
-        writer.Write(_arimaOptions.D);
-        writer.Write(_arimaOptions.Q);
 
-        // Write constant
-        writer.Write(Convert.ToDouble(_constant));
-
-        // Write AR coefficients
-        writer.Write(_arCoefficients.Length);
-        for (int i = 0; i < _arCoefficients.Length; i++)
-        {
-            writer.Write(Convert.ToDouble(_arCoefficients[i]));
-        }
-
-        // Write MA coefficients
-        writer.Write(_maCoefficients.Length);
-        for (int i = 0; i < _maCoefficients.Length; i++)
-        {
-            writer.Write(Convert.ToDouble(_maCoefficients[i]));
-        }
-
-        // Write training state needed for prediction initialization
-        writer.Write(_lastTrainDiffValues.Length);
-        for (int i = 0; i < _lastTrainDiffValues.Length; i++)
-            writer.Write(Convert.ToDouble(_lastTrainDiffValues[i]));
-
-        writer.Write(_lastTrainResiduals.Length);
-        for (int i = 0; i < _lastTrainResiduals.Length; i++)
-            writer.Write(Convert.ToDouble(_lastTrainResiduals[i]));
-
-        // Write original training series for in-sample Predict(Matrix) support
-        writer.Write(_trainingSeries.Length);
-        for (int i = 0; i < _trainingSeries.Length; i++)
-            writer.Write(Convert.ToDouble(_trainingSeries[i]));
-    }
 
     /// <summary>
     /// Deserializes the model's state from a binary stream.
@@ -404,74 +367,7 @@ public partial class ARIMAModel<T> : TimeSeriesModelBase<T>
     /// <para>The method loads all the parameters that were saved during serialization:
     /// the p, d, q values, the constant term, and the AR and MA coefficients.</para>
     /// </remarks>
-    protected override void DeserializeCore(BinaryReader reader)
-    {
-        // Read ARIMA-specific options
-        int p = reader.ReadInt32();
-        int d = reader.ReadInt32();
-        int q = reader.ReadInt32();
-        _arimaOptions = new ARIMAOptions<T>
-        {
-            P = p,
-            D = d,
-            Q = q
-        };
 
-        // Read constant
-        _constant = NumOps.FromDouble(reader.ReadDouble());
-
-        // Read AR coefficients
-        int arLength = reader.ReadInt32();
-        _arCoefficients = new Vector<T>(arLength);
-        for (int i = 0; i < arLength; i++)
-        {
-            _arCoefficients[i] = NumOps.FromDouble(reader.ReadDouble());
-        }
-
-        // Read MA coefficients
-        int maLength = reader.ReadInt32();
-        _maCoefficients = new Vector<T>(maLength);
-        for (int i = 0; i < maLength; i++)
-        {
-            _maCoefficients[i] = NumOps.FromDouble(reader.ReadDouble());
-        }
-
-        // Read training state for prediction initialization.
-        // These fields were added post-patch; older serialized models won't have them.
-        try
-        {
-            int diffLen = reader.ReadInt32();
-            _lastTrainDiffValues = new Vector<T>(diffLen);
-            for (int i = 0; i < diffLen; i++)
-                _lastTrainDiffValues[i] = NumOps.FromDouble(reader.ReadDouble());
-
-            int residLen = reader.ReadInt32();
-            _lastTrainResiduals = new Vector<T>(residLen);
-            for (int i = 0; i < residLen; i++)
-                _lastTrainResiduals[i] = NumOps.FromDouble(reader.ReadDouble());
-        }
-        catch (EndOfStreamException)
-        {
-            // Pre-patch model — initialize with empty vectors.
-            // Predictions will still work but won't have historical context
-            // for the first few steps.
-            _lastTrainDiffValues ??= new Vector<T>(0);
-            _lastTrainResiduals ??= new Vector<T>(0);
-        }
-
-        // Read original training series (post-patch field)
-        try
-        {
-            int seriesLen = reader.ReadInt32();
-            _trainingSeries = new Vector<T>(seriesLen);
-            for (int i = 0; i < seriesLen; i++)
-                _trainingSeries[i] = NumOps.FromDouble(reader.ReadDouble());
-        }
-        catch (EndOfStreamException)
-        {
-            _trainingSeries = Vector<T>.Empty();
-        }
-    }
 
     /// <summary>
     /// Core implementation of the training logic for the ARIMA model.

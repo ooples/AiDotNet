@@ -1071,24 +1071,10 @@ public partial class TimeGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
     // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
     // exactly the same enumeration, so this said nothing the base does not already say.
     /// <inheritdoc />
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_options.SequenceLength);
-        writer.Write(_options.HiddenDimension);
-        writer.Write(_options.NumLayers);
-        writer.Write(_dataWidth);
-        writer.Write(IsFitted);
-    }
+
 
     /// <inheritdoc />
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _ = reader.ReadInt32(); // SequenceLength
-        _ = reader.ReadInt32(); // HiddenDimension
-        _ = reader.ReadInt32(); // NumLayers
-        _dataWidth = reader.ReadInt32();
-        IsFitted = reader.ReadBoolean();
-    }
+
 
     /// <inheritdoc />
     public override Dictionary<string, T> GetFeatureImportance()

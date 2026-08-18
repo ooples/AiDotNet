@@ -321,61 +321,9 @@ public partial class MegaTTS<T> : TtsModelBase<T>, IEndToEndTts<T>
         return m;
     }
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_useNativeMode);
-        writer.Write(_options.ModelPath ?? string.Empty);
-        writer.Write(_options.SampleRate);
-        writer.Write(_options.DecoderDim);
-        writer.Write(_options.DropoutRate);
-        writer.Write(_options.EncoderDim);
-        writer.Write(_options.NumDecoderLayers);
-        writer.Write(_options.NumEncoderLayers);
-        writer.Write(_options.NumHeads);
-        writer.Write(_options.ProsodyDim);
-        writer.Write(_options.ProsodyCodebookSize);
-        writer.Write(_options.NumProsodyLayers);
-        writer.Write(_options.ProsodyMelBands);
-        writer.Write(_options.TimbreDim);
-        writer.Write(_options.NumTimbreLayers);
-        writer.Write(_options.PLLMDim);
-        writer.Write(_options.NumPLLMLayers);
-        writer.Write(_options.NumPLLMHeads);
-    }
 
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _useNativeMode = reader.ReadBoolean();
-        string mp = reader.ReadString();
-        if (!string.IsNullOrEmpty(mp))
-            _options.ModelPath = mp;
-        _options.SampleRate = reader.ReadInt32();
-        _options.DecoderDim = reader.ReadInt32();
-        _options.DropoutRate = reader.ReadDouble();
-        _options.EncoderDim = reader.ReadInt32();
-        _options.NumDecoderLayers = reader.ReadInt32();
-        _options.NumEncoderLayers = reader.ReadInt32();
-        _options.NumHeads = reader.ReadInt32();
-        _options.ProsodyDim = reader.ReadInt32();
-        _options.ProsodyCodebookSize = reader.ReadInt32();
-        _options.NumProsodyLayers = reader.ReadInt32();
-        _options.ProsodyMelBands = reader.ReadInt32();
-        _options.TimbreDim = reader.ReadInt32();
-        _options.NumTimbreLayers = reader.ReadInt32();
-        _options.PLLMDim = reader.ReadInt32();
-        _options.NumPLLMLayers = reader.ReadInt32();
-        _options.NumPLLMHeads = reader.ReadInt32();
-        // The branch offsets are derived from the layer counts above, so they must be recomputed
-        // once the restored options are in place.
-        if (_useNativeMode && (Architecture.Layers is null || Architecture.Layers.Count == 0))
-            ExtractLayerReferences();
-        base.SampleRate = _options.SampleRate;
-        base.MelChannels = _options.MelChannels;
-        base.HopSize = _options.HopSize;
-        base.HiddenDim = _options.HiddenDim;
-        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
-            OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
-    }
+
+
 
     private void ThrowIfDisposed()
     {

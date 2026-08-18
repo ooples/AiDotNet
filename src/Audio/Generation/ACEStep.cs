@@ -244,25 +244,9 @@ public partial class ACEStep<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
         return m;
     }
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter w)
-    {
-        w.Write(_useNativeMode); w.Write(_options.ModelPath ?? string.Empty);
-        w.Write(_options.SampleRate); w.Write(_options.NumChannels);
-        w.Write(_options.LatentDim); w.Write(_options.UNetDim);
-        w.Write(_options.NumUNetLayers); w.Write(_options.NumSteps);
-        w.Write(_options.TextEncoderDim); w.Write(_options.DropoutRate);
-    }
 
-    protected override void DeserializeNetworkSpecificData(BinaryReader r)
-    {
-        _useNativeMode = r.ReadBoolean(); string mp = r.ReadString(); if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp;
-        _options.SampleRate = r.ReadInt32(); _options.NumChannels = r.ReadInt32();
-        _options.LatentDim = r.ReadInt32(); _options.UNetDim = r.ReadInt32();
-        _options.NumUNetLayers = r.ReadInt32(); _options.NumSteps = r.ReadInt32();
-        _options.TextEncoderDim = r.ReadInt32(); _options.DropoutRate = r.ReadDouble();
-        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
-            OnnxEncoder = new OnnxModel<T>(p, _options.OnnxOptions);
-    }
+
+
 
     #endregion
 

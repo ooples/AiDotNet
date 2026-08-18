@@ -510,35 +510,7 @@ public partial class ARMAModel<T> : TimeSeriesModelBase<T>
     /// 
     /// This allows the model to be fully reconstructed later.
     /// </remarks>
-    protected override void SerializeCore(BinaryWriter writer)
-    {
-        writer.Write(_arOrder);
-        writer.Write(_maOrder);
-        for (int i = 0; i < _arOrder; i++)
-        {
-            writer.Write(Convert.ToDouble(_arCoefficients[i]));
-        }
-        for (int i = 0; i < _maOrder; i++)
-        {
-            writer.Write(Convert.ToDouble(_maCoefficients[i]));
-        }
 
-        // Serialize training state for in-sample prediction support
-        writer.Write(_trainedSeries.Length);
-        for (int i = 0; i < _trainedSeries.Length; i++)
-        {
-            writer.Write(Convert.ToDouble(_trainedSeries[i]));
-        }
-
-        writer.Write(_trainedResiduals.Length);
-        for (int i = 0; i < _trainedResiduals.Length; i++)
-        {
-            writer.Write(Convert.ToDouble(_trainedResiduals[i]));
-        }
-
-        // Serialize series mean for centered prediction
-        writer.Write(Convert.ToDouble(_seriesMean));
-    }
 
     /// <summary>
     /// Deserializes the model's state from a binary stream.
@@ -560,54 +532,7 @@ public partial class ARMAModel<T> : TimeSeriesModelBase<T>
     /// 
     /// After deserialization, the model is ready to make predictions as if it had just been trained.
     /// </remarks>
-    protected override void DeserializeCore(BinaryReader reader)
-    {
-        _arOrder = reader.ReadInt32();
-        _maOrder = reader.ReadInt32();
-        _arCoefficients = new Vector<T>(_arOrder);
-        _maCoefficients = new Vector<T>(_maOrder);
-        for (int i = 0; i < _arOrder; i++)
-        {
-            _arCoefficients[i] = NumOps.FromDouble(reader.ReadDouble());
-        }
-        for (int i = 0; i < _maOrder; i++)
-        {
-            _maCoefficients[i] = NumOps.FromDouble(reader.ReadDouble());
-        }
 
-        // Deserialize training state if available (backward-compatible)
-        _trainedSeries = Vector<T>.Empty();
-        _trainedResiduals = Vector<T>.Empty();
-        try
-        {
-            int seriesLength = reader.ReadInt32();
-            if (seriesLength > 0)
-            {
-                _trainedSeries = new Vector<T>(seriesLength);
-                for (int i = 0; i < seriesLength; i++)
-                {
-                    _trainedSeries[i] = NumOps.FromDouble(reader.ReadDouble());
-                }
-            }
-
-            int residualsLength = reader.ReadInt32();
-            if (residualsLength > 0)
-            {
-                _trainedResiduals = new Vector<T>(residualsLength);
-                for (int i = 0; i < residualsLength; i++)
-                {
-                    _trainedResiduals[i] = NumOps.FromDouble(reader.ReadDouble());
-                }
-            }
-
-            // Deserialize series mean
-            _seriesMean = NumOps.FromDouble(reader.ReadDouble());
-        }
-        catch (EndOfStreamException)
-        {
-            // Older serialized models don't include training state — leave empty
-        }
-    }
 
     /// <summary>
     /// Creates a new instance of the ARMA model with the same options.

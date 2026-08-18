@@ -1,6 +1,7 @@
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
-using AiDotNet.Models.Options;
+using AiDotNet.Models.Options;
+
 using AiDotNet.Models.Parameters;
 
 namespace AiDotNet.TimeSeries;
@@ -287,57 +288,9 @@ public partial class TiDEModel<T> : TimeSeriesModelBase<T>
         return GuardPrediction(ToFiniteT(pred));
     }
 
-    protected override void SerializeCore(BinaryWriter writer)
-    {
-        writer.Write(_l);
-        writer.Write(_h);
-        for (int i = 0; i < _h; i++)
-        {
-            for (int j = 0; j < _l; j++) { writer.Write(_w1[i][j]); }
-            writer.Write(_b1[i]);
-            writer.Write(_w2[i]);
-        }
 
-        writer.Write(_b2);
-        for (int j = 0; j < _l; j++) { writer.Write(_wr[j]); }
-        writer.Write(_br);
-        writer.Write(_targetMean);
-        writer.Write(_targetStd);
-        for (int j = 0; j < _l; j++)
-        {
-            writer.Write(_inputMeans[j]);
-            writer.Write(_inputStds[j]);
-        }
-    }
 
-    protected override void DeserializeCore(BinaryReader reader)
-    {
-        reader.ReadInt32();
-        reader.ReadInt32();
-        for (int i = 0; i < _h; i++)
-        {
-            for (int j = 0; j < _l; j++) { _w1[i][j] = reader.ReadDouble(); }
-            _b1[i] = reader.ReadDouble();
-            _w2[i] = reader.ReadDouble();
-        }
 
-        _b2 = reader.ReadDouble();
-        for (int j = 0; j < _l; j++) { _wr[j] = reader.ReadDouble(); }
-        _br = reader.ReadDouble();
-
-        // Normalization state was added after the original TiDE serialization
-        // layout. Older payloads end after _br and retain identity statistics.
-        if (reader.BaseStream.Position < reader.BaseStream.Length)
-        {
-            _targetMean = reader.ReadDouble();
-            _targetStd = reader.ReadDouble();
-            for (int j = 0; j < _l; j++)
-            {
-                _inputMeans[j] = reader.ReadDouble();
-                _inputStds[j] = reader.ReadDouble();
-            }
-        }
-    }
 
     public override ModelMetadata<T> GetModelMetadata()
     {

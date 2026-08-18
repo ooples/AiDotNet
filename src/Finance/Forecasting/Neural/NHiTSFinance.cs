@@ -665,19 +665,7 @@ public partial class NHiTSFinance<T> : ForecastingModelBase<T>
     /// <b>For Beginners:</b> In the NHiTSFinance model, SerializeNetworkSpecificData saves or restores model-specific settings. This lets the NHiTSFinance architecture be reused later.
     /// </para>
     /// </remarks>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_lookbackWindow);
-        writer.Write(_forecastHorizon);
-        writer.Write(_numStacks);
-        writer.Write(_numBlocksPerStack);
-        writer.Write(_hiddenSize);
-        writer.Write(_numHiddenLayers);
-        writer.Write(_poolingKernelSizes.Length);
-        foreach (var k in _poolingKernelSizes)
-            writer.Write(k);
-        writer.Write(_dropout);
-    }
+
 
     /// <summary>
     /// Reads N-HiTS-specific configuration during deserialization.
@@ -687,24 +675,7 @@ public partial class NHiTSFinance<T> : ForecastingModelBase<T>
     /// <b>For Beginners:</b> In the NHiTSFinance model, DeserializeNetworkSpecificData saves or restores model-specific settings. This lets the NHiTSFinance architecture be reused later.
     /// </para>
     /// </remarks>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _lookbackWindow = reader.ReadInt32();
-        _forecastHorizon = reader.ReadInt32();
-        _numStacks = reader.ReadInt32();
-        _numBlocksPerStack = reader.ReadInt32();
-        _hiddenSize = reader.ReadInt32();
-        _numHiddenLayers = reader.ReadInt32();
-        int kernelCount = reader.ReadInt32();
-        _poolingKernelSizes = new int[kernelCount];
-        for (int i = 0; i < kernelCount; i++)
-            _poolingKernelSizes[i] = reader.ReadInt32();
-        _dropout = reader.ReadDouble();
 
-        // Re-bind cached layer references so a deserialized/cloned model runs on
-        // the restored layers, not the construction-time random ones.
-        ExtractLayerReferences();
-    }
 
     #endregion
 

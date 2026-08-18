@@ -1663,40 +1663,10 @@ public partial class BlipNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IBlipM
     #region Serialization
 
     /// <inheritdoc/>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_embeddingDimension);
-        writer.Write(_maxSequenceLength);
-        writer.Write(_imageSize);
-        writer.Write(_hiddenDim);
-        writer.Write(_numLayers);
-        writer.Write(_numDecoderLayers);
-        writer.Write(_numHeads);
-        writer.Write(_mlpDim);
-        writer.Write(_patchSize);
-        writer.Write(_vocabularySize);
-        writer.Write(_useNativeMode);
-        writer.Write(_optimizer?.GetType().Name ?? "Adam");
-        writer.Write(_lossFunction?.GetType().Name ?? "Contrastive");
-    }
+
 
     /// <inheritdoc/>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _embeddingDimension = reader.ReadInt32();
-        _maxSequenceLength = reader.ReadInt32();
-        _imageSize = reader.ReadInt32();
-        _hiddenDim = reader.ReadInt32();
-        _numLayers = reader.ReadInt32();
-        _numDecoderLayers = reader.ReadInt32();
-        _numHeads = reader.ReadInt32();
-        _mlpDim = reader.ReadInt32();
-        _patchSize = reader.ReadInt32();
-        _vocabularySize = reader.ReadInt32();
-        _useNativeMode = reader.ReadBoolean();
-        _ = reader.ReadString(); // optimizer type
-        _ = reader.ReadString(); // loss function type
-    }
+
 
     #endregion
 

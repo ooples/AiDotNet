@@ -285,24 +285,9 @@ public partial class WebRTCVad<T> : AudioNeuralNetworkBase<T>, IVoiceActivityDet
         return m;
     }
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter w)
-    {
-        w.Write(_useNativeMode); w.Write(_options.ModelPath ?? string.Empty);
-        w.Write(_options.SampleRate); w.Write(_options.FrameDurationMs);
-        w.Write(_options.HiddenDim); w.Write(_options.NumLayers);
-        w.Write(_options.AggressivenessMode); w.Write(Threshold);
-        w.Write(MinSpeechDurationMs); w.Write(MinSilenceDurationMs); w.Write(_options.DropoutRate);
-    }
 
-    protected override void DeserializeNetworkSpecificData(BinaryReader r)
-    {
-        _useNativeMode = r.ReadBoolean(); string mp = r.ReadString(); if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp;
-        _options.SampleRate = r.ReadInt32(); _options.FrameDurationMs = r.ReadInt32();
-        _options.HiddenDim = r.ReadInt32(); _options.NumLayers = r.ReadInt32();
-        _options.AggressivenessMode = r.ReadInt32(); Threshold = r.ReadDouble();
-        MinSpeechDurationMs = r.ReadInt32(); MinSilenceDurationMs = r.ReadInt32(); _options.DropoutRate = r.ReadDouble();
-        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxEncoder = new OnnxModel<T>(p, _options.OnnxOptions);
-    }
+
+
 
     #endregion
 

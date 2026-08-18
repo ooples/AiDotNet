@@ -492,10 +492,7 @@ public partial class CapsuleNetwork<T> : ImageClassifierModelLayoutBase<T>, IAux
     /// <remarks>
     /// This method saves the loss function used by the network, allowing it to be reconstructed when the network is deserialized.
     /// </remarks>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        SerializationHelper<T>.SerializeInterface(writer, _lossFunction);
-    }
+
 
     /// <summary>
     /// Deserializes Capsule Network-specific data from a binary reader.
@@ -504,10 +501,7 @@ public partial class CapsuleNetwork<T> : ImageClassifierModelLayoutBase<T>, IAux
     /// <remarks>
     /// This method loads the loss function used by the network. If deserialization fails, it defaults to using a MarginLoss.
     /// </remarks>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _lossFunction = DeserializationHelper.DeserializeInterface<ILossFunction<T>>(reader) ?? new MarginLoss<T>();
-    }
+
 
     /// <summary>
     /// Computes the reconstruction loss for capsule network regularization.

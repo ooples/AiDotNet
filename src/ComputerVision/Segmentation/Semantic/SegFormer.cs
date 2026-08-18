@@ -596,40 +596,7 @@ public partial class SegFormer<T> : Common.SemanticSegmentationBase<T>
     /// match the reading order in <see cref="DeserializeNetworkSpecificData"/>.
     /// </para>
     /// </remarks>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_height);
-        writer.Write(_width);
-        writer.Write(_channels);
-        writer.Write(_numClasses);
-        writer.Write((int)_modelSize);
-        writer.Write(_decoderDim);
-        writer.Write(_dropRate);
-        writer.Write(_useNativeMode);
-        writer.Write(_onnxModelPath ?? string.Empty);
-        writer.Write(_encoderLayerEnd);
 
-        // Write embed dims
-        writer.Write(_embedDims.Length);
-        foreach (int dim in _embedDims)
-        {
-            writer.Write(dim);
-        }
-
-        // Write depths
-        writer.Write(_depths.Length);
-        foreach (int depth in _depths)
-        {
-            writer.Write(depth);
-        }
-
-        // Write num heads
-        writer.Write(_numHeads.Length);
-        foreach (int head in _numHeads)
-        {
-            writer.Write(head);
-        }
-    }
 
     /// <summary>
     /// Reads SegFormer-specific configuration values from a binary stream during model loading.
@@ -644,40 +611,7 @@ public partial class SegFormer<T> : Common.SemanticSegmentationBase<T>
     /// are consumed to advance the reader position.
     /// </para>
     /// </remarks>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _ = reader.ReadInt32(); // height
-        _ = reader.ReadInt32(); // width
-        _ = reader.ReadInt32(); // channels
-        _ = reader.ReadInt32(); // numClasses
-        _ = reader.ReadInt32(); // modelSize
-        _ = reader.ReadInt32(); // decoderDim
-        _ = reader.ReadDouble(); // dropRate
-        _ = reader.ReadBoolean(); // useNativeMode
-        _ = reader.ReadString(); // onnxModelPath
-        _ = reader.ReadInt32(); // encoderLayerEnd
 
-        // Read embed dims
-        int embedCount = reader.ReadInt32();
-        for (int i = 0; i < embedCount; i++)
-        {
-            _ = reader.ReadInt32();
-        }
-
-        // Read depths
-        int depthCount = reader.ReadInt32();
-        for (int i = 0; i < depthCount; i++)
-        {
-            _ = reader.ReadInt32();
-        }
-
-        // Read num heads
-        int headCount = reader.ReadInt32();
-        for (int i = 0; i < headCount; i++)
-        {
-            _ = reader.ReadInt32();
-        }
-    }
 
     /// <summary>
     /// Releases managed resources held by this SegFormer instance, including the ONNX inference session.

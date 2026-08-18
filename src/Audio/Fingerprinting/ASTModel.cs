@@ -461,45 +461,10 @@ public partial class ASTModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinte
         };
 
     /// <inheritdoc/>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_useNativeMode);
-        writer.Write(_options.SampleRate);
-        writer.Write(_options.StftWindowSize);
-        writer.Write(_options.HopLength);
-        writer.Write(_options.NumMelBands);
-        writer.Write(_options.TargetLength);
-        writer.Write(_options.PatchSize);
-        writer.Write(_options.NumClasses);
-        writer.Write(_options.EmbeddingDim);
-        writer.Write(_options.NumLayers);
-        writer.Write(_options.NumHeads);
-        writer.Write(_options.FeedForwardDim);
-        writer.Write(_options.DropoutRate);
-    }
+
 
     /// <inheritdoc/>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        bool useNativeMode = reader.ReadBoolean();
-        if (useNativeMode != _useNativeMode)
-            throw new InvalidOperationException(
-                $"Persisted AST mode (native={useNativeMode}) does not match this " +
-                $"instance's mode (native={_useNativeMode}). Reconstruct ASTModel " +
-                $"with the matching constructor before loading this checkpoint.");
-        VerifyEqual(reader.ReadInt32(),  _options.SampleRate,     nameof(_options.SampleRate));
-        VerifyEqual(reader.ReadInt32(),  _options.StftWindowSize, nameof(_options.StftWindowSize));
-        VerifyEqual(reader.ReadInt32(),  _options.HopLength,      nameof(_options.HopLength));
-        VerifyEqual(reader.ReadInt32(),  _options.NumMelBands,    nameof(_options.NumMelBands));
-        VerifyEqual(reader.ReadInt32(),  _options.TargetLength,   nameof(_options.TargetLength));
-        VerifyEqual(reader.ReadInt32(),  _options.PatchSize,      nameof(_options.PatchSize));
-        VerifyEqual(reader.ReadInt32(),  _options.NumClasses,     nameof(_options.NumClasses));
-        VerifyEqual(reader.ReadInt32(),  _options.EmbeddingDim,   nameof(_options.EmbeddingDim));
-        VerifyEqual(reader.ReadInt32(),  _options.NumLayers,      nameof(_options.NumLayers));
-        VerifyEqual(reader.ReadInt32(),  _options.NumHeads,       nameof(_options.NumHeads));
-        VerifyEqual(reader.ReadInt32(),  _options.FeedForwardDim, nameof(_options.FeedForwardDim));
-        VerifyEqual(reader.ReadDouble(), _options.DropoutRate,    nameof(_options.DropoutRate));
-    }
+
 
     private static void VerifyEqual<TValue>(TValue persisted, TValue current, string name)
         where TValue : IEquatable<TValue>

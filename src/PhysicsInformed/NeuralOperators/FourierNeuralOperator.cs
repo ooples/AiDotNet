@@ -779,58 +779,13 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
         /// Serializes FNO-specific data.
         /// </summary>
         /// <param name="writer">Binary writer.</param>
-        protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-        {
-            writer.Write(_modes);
-            writer.Write(_width);
-            writer.Write(_fourierLayers.Count);
-            writer.Write(_spatialDimensions.Length);
-            for (int i = 0; i < _spatialDimensions.Length; i++)
-            {
-                writer.Write(_spatialDimensions[i]);
-            }
 
-            foreach (var layer in _fourierLayers)
-            {
-                SerializationHelper<T>.SerializeVector(writer, layer.GetParameters());
-            }
-        }
 
         /// <summary>
         /// Deserializes FNO-specific data.
         /// </summary>
         /// <param name="reader">Binary reader.</param>
-        protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-        {
-            int storedModes = reader.ReadInt32();
-            int storedWidth = reader.ReadInt32();
-            int storedLayerCount = reader.ReadInt32();
-            int storedSpatialDims = reader.ReadInt32();
 
-            if (storedModes != _modes || storedWidth != _width || storedLayerCount != _fourierLayers.Count)
-            {
-                throw new InvalidOperationException("Serialized FNO configuration does not match the current instance.");
-            }
-
-            if (storedSpatialDims != _spatialDimensions.Length)
-            {
-                throw new InvalidOperationException("Serialized spatial dimensions do not match the current instance.");
-            }
-
-            for (int i = 0; i < storedSpatialDims; i++)
-            {
-                int storedDim = reader.ReadInt32();
-                if (storedDim != _spatialDimensions[i])
-                {
-                    throw new InvalidOperationException("Serialized spatial dimensions do not match the current instance.");
-                }
-            }
-
-            foreach (var layer in _fourierLayers)
-            {
-                layer.SetParameters(SerializationHelper<T>.DeserializeVector(reader));
-            }
-        }
 
         public override bool SupportsTraining => true;
     }

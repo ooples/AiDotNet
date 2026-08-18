@@ -687,64 +687,10 @@ public partial class SVTR<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
     }
 
     /// <inheritdoc/>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(NetworkDataVersion);
-        writer.Write(_embedDim);
-        writer.Write(_numLayers);
-        writer.Write(_numHeads);
-        writer.Write(_imageHeight);
-        writer.Write(ImageSize);
-        writer.Write(MaxSequenceLength);
-        writer.Write(_charset);
-        writer.Write(_useNativeMode);
-        writer.Write(_options.UseTpsRectification);
-        writer.Write(_options.DropPathRate);
-        writer.Write(_options.TpsInputHeight);
-        writer.Write(_options.TpsInputWidth);
-        writer.Write(_options.TpsControlPointCount);
-        writer.Write(_options.TpsMarginX);
-        writer.Write(_options.TpsMarginY);
-    }
+
 
     /// <inheritdoc/>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        int version = reader.ReadInt32();
-        if (version != NetworkDataVersion)
-            throw new InvalidDataException(
-                $"Unsupported SVTR network data version {version}; expected {NetworkDataVersion}.");
 
-        int embedDim = reader.ReadInt32();
-        int numLayers = reader.ReadInt32();
-        int numHeads = reader.ReadInt32();
-        int imageHeight = reader.ReadInt32();
-        int imageSize = reader.ReadInt32();
-        int maxSeqLen = reader.ReadInt32();
-        string charset = reader.ReadString();
-        bool useNativeMode = reader.ReadBoolean();
-
-        bool useTpsRectification = reader.ReadBoolean();
-        double dropPathRate = reader.ReadDouble();
-        int tpsInputHeight = reader.ReadInt32();
-        int tpsInputWidth = reader.ReadInt32();
-        int tpsControlPointCount = reader.ReadInt32();
-        double tpsMarginX = reader.ReadDouble();
-        double tpsMarginY = reader.ReadDouble();
-
-        if (embedDim != _embedDim || numLayers != _numLayers || numHeads != _numHeads ||
-            imageHeight != _imageHeight || imageSize != ImageSize || maxSeqLen != MaxSequenceLength ||
-            !string.Equals(charset, _charset, StringComparison.Ordinal) || useNativeMode != _useNativeMode ||
-            useTpsRectification != _options.UseTpsRectification ||
-            dropPathRate != _options.DropPathRate ||
-            tpsInputHeight != _options.TpsInputHeight || tpsInputWidth != _options.TpsInputWidth ||
-            tpsControlPointCount != _options.TpsControlPointCount ||
-            tpsMarginX != _options.TpsMarginX || tpsMarginY != _options.TpsMarginY)
-        {
-            throw new InvalidDataException(
-                "Serialized SVTR configuration does not match the constructed layer topology.");
-        }
-    }
 
     #endregion
 

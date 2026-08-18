@@ -371,31 +371,9 @@ public partial class VisionMambaModel<T> : ImageClassifierModelLayoutBase<T>
         };
     }
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_imageHeight);
-        writer.Write(_imageWidth);
-        writer.Write(_patchSize);
-        writer.Write(_channels);
-        writer.Write(_modelDimension);
-        writer.Write(_numLayers);
-        writer.Write(_numClasses);
-        writer.Write(_stateDimension);
-        writer.Write((int)_scanPattern);
-    }
 
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _ = reader.ReadInt32();
-        _ = reader.ReadInt32();
-        _ = reader.ReadInt32();
-        _ = reader.ReadInt32();
-        _ = reader.ReadInt32();
-        _ = reader.ReadInt32();
-        _ = reader.ReadInt32();
-        _ = reader.ReadInt32();
-        _ = reader.ReadInt32();
-    }
+
+
 
     #endregion
 

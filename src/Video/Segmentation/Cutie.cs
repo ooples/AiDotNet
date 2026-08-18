@@ -835,30 +835,10 @@ public partial class Cutie<T> : NeuralNetworkBase<T>
     }
 
     /// <inheritdoc/>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        if (!_useNativeMode)
-            throw new InvalidOperationException("Serialization is not supported in ONNX mode.");
 
-        writer.Write(_inputHeight);
-        writer.Write(_inputWidth);
-        writer.Write(_inputChannels);
-        writer.Write(_numFeatures);
-        writer.Write(_memorySize);
-    }
 
     /// <inheritdoc/>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        if (!_useNativeMode)
-            throw new InvalidOperationException("Deserialization is not supported in ONNX mode.");
 
-        _ = reader.ReadInt32(); // inputHeight
-        _ = reader.ReadInt32(); // inputWidth
-        _ = reader.ReadInt32(); // inputChannels
-        _ = reader.ReadInt32(); // numFeatures
-        _ = reader.ReadInt32(); // memorySize
-    }
 
     #endregion
 }

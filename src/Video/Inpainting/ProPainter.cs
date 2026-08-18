@@ -1005,29 +1005,10 @@ public partial class ProPainter<T> : VideoInpaintingBase<T>
     }
 
     /// <inheritdoc/>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_height);
-        writer.Write(_width);
-        writer.Write(_channels);
-        writer.Write(_numFeatures);
-    }
+
 
     /// <inheritdoc/>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _ = reader.ReadInt32();
-        _ = reader.ReadInt32();
-        _ = reader.ReadInt32();
-        _ = reader.ReadInt32();
 
-        // The base deserialize replaced Layers with freshly-created layer objects, so the cached
-        // per-role sublist fields the forward path reads (_imageEncoder, _transformerQKV, _outputConv,
-        // ...) are stale (they still point at the CreateNewInstance random-init layers). Re-link them
-        // to the deserialized Layers so a cloned/loaded model predicts with the restored weights.
-        if (Layers.Count > 0)
-            DistributeLayersToSubLists();
-    }
 
     #endregion
 

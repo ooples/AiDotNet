@@ -608,23 +608,7 @@ public partial class HopfieldNetwork<T> : VectorModelLayoutBase<T>
     /// without having to train it again from scratch.
     /// </para>
     /// </remarks>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        // Write network size
-        writer.Write(_size);
 
-        // Write weight matrix
-        writer.Write(_weights.Shape[0]);
-        writer.Write(_weights.Shape[1]);
-
-        for (int i = 0; i < _weights.Shape[0]; i++)
-        {
-            for (int j = 0; j < _weights.Shape[1]; j++)
-            {
-                writer.Write(Convert.ToDouble(_weights[i, j]));
-            }
-        }
-    }
 
     /// <summary>
     /// Deserializes Hopfield network-specific data from a binary reader.
@@ -646,27 +630,7 @@ public partial class HopfieldNetwork<T> : VectorModelLayoutBase<T>
     /// having to train it again on the same patterns.
     /// </para>
     /// </remarks>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        // Read network size
-        _size = reader.ReadInt32();
 
-        // Read weight matrix dimensions
-        int rows = reader.ReadInt32();
-        int columns = reader.ReadInt32();
-
-        // Initialize weight matrix
-        _weights = new Tensor<T>([rows, columns]);
-
-        // Read weight values
-        for (int i = 0; i < rows; i++)
-        {
-            for (int j = 0; j < columns; j++)
-            {
-                _weights[i, j] = NumOps.FromDouble(reader.ReadDouble());
-            }
-        }
-    }
 
     /// <summary>
     /// Calculates the energy of the current state of the Hopfield network.

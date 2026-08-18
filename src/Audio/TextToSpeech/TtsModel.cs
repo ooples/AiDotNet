@@ -755,40 +755,12 @@ public partial class TtsModel<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
     /// <summary>
     /// Serializes network-specific data.
     /// </summary>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(SampleRate);
-        writer.Write(NumMels);
-        writer.Write(_speakingRate);
-        writer.Write(_energy);
-        writer.Write(_useGriffinLimFallback);
-        writer.Write(_useNativeMode);
-        writer.Write(_hiddenDim);
-        writer.Write(_numHeads);
-        writer.Write(_numEncoderLayers);
-        writer.Write(_numDecoderLayers);
-        writer.Write(_maxPhonemeLength);
-    }
+
 
     /// <summary>
     /// Deserializes network-specific data.
     /// </summary>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        SampleRate = reader.ReadInt32();
-        NumMels = reader.ReadInt32();
-        // Other fields are readonly and set during construction
-        // Read them but don't assign
-        _ = reader.ReadDouble(); // speakingRate
-        _ = reader.ReadDouble(); // energy
-        _ = reader.ReadBoolean(); // useGriffinLimFallback
-        _ = reader.ReadBoolean(); // useNativeMode
-        _ = reader.ReadInt32(); // hiddenDim
-        _ = reader.ReadInt32(); // numHeads
-        _ = reader.ReadInt32(); // numEncoderLayers
-        _ = reader.ReadInt32(); // numDecoderLayers
-        _ = reader.ReadInt32(); // maxPhonemeLength
-    }
+
 
     #endregion
 

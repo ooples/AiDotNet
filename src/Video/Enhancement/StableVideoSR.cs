@@ -288,90 +288,9 @@ public partial class StableVideoSR<T> : VideoSuperResolutionBase<T>
         return m;
     }
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter w)
-    {
-        w.Write(_useNativeMode);
-        w.Write(_options.ModelPath ?? string.Empty);
-        w.Write((int)_options.Variant);
-        w.Write(_options.NumFeatures);
-        w.Write(_options.NumDenoisingSteps);
-        w.Write(_options.NumTemporalModules);
-        w.Write(_options.ScaleFactor);
-        w.Write(_options.LatentDim);
-        w.Write(_options.GuidanceScale);
-        w.Write(_options.DropoutRate);
-        w.Write(_options.LatentScaleFactor);
-        w.Write(_options.MaximumNoiseLevel);
-        w.Write(_options.TemporalWindowSize);
-        w.Write(_options.TemporalWindowOverlap);
-        w.Write(_options.EnableFlowGuidedPropagation);
-        w.Write(_options.NoiseLevel);
-        w.Write(_options.Prompt ?? string.Empty);
-        w.Write(_options.PropagationSteps.Length);
-        foreach (int step in _options.PropagationSteps) w.Write(step);
 
-        w.Write(_diffusionCore is not null);
-        if (_diffusionCore is not null)
-        {
-            var chunks = _diffusionCore.GetParameterChunks().ToList();
-            w.Write(chunks.Count);
-            foreach (var chunk in chunks)
-                SerializationHelper<T>.SerializeTensor(w, chunk);
-        }
-        // Appended for backward compatibility: older payloads end immediately
-        // after the optional diffusion-core chunks.
-        w.Write(_options.NegativePrompt ?? string.Empty);
-    }
 
-    protected override void DeserializeNetworkSpecificData(BinaryReader r)
-    {
-        _useNativeMode = r.ReadBoolean();
-        string mp = r.ReadString();
-        if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp;
-        _options.Variant = (VideoModelVariant)r.ReadInt32();
-        _options.NumFeatures = r.ReadInt32();
-        _options.NumDenoisingSteps = r.ReadInt32();
-        _options.NumTemporalModules = r.ReadInt32();
-        _options.ScaleFactor = r.ReadInt32();
-        _options.LatentDim = r.ReadInt32();
-        _options.GuidanceScale = r.ReadDouble();
-        _options.DropoutRate = r.ReadDouble();
-        _options.LatentScaleFactor = r.ReadDouble();
-        _options.MaximumNoiseLevel = r.ReadInt32();
-        _options.TemporalWindowSize = r.ReadInt32();
-        _options.TemporalWindowOverlap = r.ReadInt32();
-        _options.EnableFlowGuidedPropagation = r.ReadBoolean();
-        _options.NoiseLevel = r.ReadInt32();
-        _options.Prompt = r.ReadString();
-        int propagationCount = r.ReadInt32();
-        _options.PropagationSteps = new int[propagationCount];
-        for (int i = 0; i < propagationCount; i++)
-            _options.PropagationSteps[i] = r.ReadInt32();
-        if (_useNativeMode) _options.ValidateNativePaperContract();
 
-        bool hasDiffusionCore = r.ReadBoolean();
-        if (hasDiffusionCore)
-        {
-            _diffusionCore ??= new UpscaleAVideoModel<T>(
-                conditioner: _conditioner, seed: Architecture.RandomSeed);
-            int chunkCount = r.ReadInt32();
-            var chunks = new Tensor<T>[chunkCount];
-            for (int i = 0; i < chunkCount; i++)
-                chunks[i] = SerializationHelper<T>.DeserializeTensor(r);
-            _diffusionCore.SetParameterChunks(chunks);
-        }
-        if (r.BaseStream.Position < r.BaseStream.Length)
-            _options.NegativePrompt = r.ReadString();
-        ScaleFactor = _options.ScaleFactor;
-        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
-        {
-            OnnxModel?.Dispose();
-            OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
-        }
-        // Native-mode layers (with their trained weights) are already reconstructed by
-        // the base deserializer before this override runs; re-initializing here would
-        // discard them and leave the model randomly initialized.
-    }
 
     #endregion
 

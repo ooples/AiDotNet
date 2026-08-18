@@ -672,90 +672,11 @@ public partial class HTMNetwork<T> : VectorModelLayoutBase<T>
     /// Serializes HTM-specific data to a binary writer.
     /// </summary>
     /// <param name="writer">The binary writer to write to.</param>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        // Write HTM-specific parameters
-        writer.Write(_columnCount);
-        writer.Write(_cellsPerColumn);
-        writer.Write(NumOps.ToDouble(_sparsityThreshold));
 
-        // Serialize any additional HTM state
-
-        // Look for the temporal memory layer
-        for (int i = 0; i < Layers.Count; i++)
-        {
-            if (Layers[i] is TemporalMemoryLayer<T> temporalMemoryLayer)
-            {
-                // Mark that we found a temporal memory layer
-                writer.Write(true);
-
-                // Serialize the temporal memory's state
-                if (temporalMemoryLayer.PreviousState != null)
-                {
-                    writer.Write(true); // Has previous state
-                    writer.Write(temporalMemoryLayer.PreviousState.Length);
-
-                    // Write each element of the previous state
-                    for (int j = 0; j < temporalMemoryLayer.PreviousState.Length; j++)
-                    {
-                        writer.Write(Convert.ToDouble(temporalMemoryLayer.PreviousState[j]));
-                    }
-                }
-                else
-                {
-                    writer.Write(false); // No previous state
-                }
-
-                break; // Stop after finding the first temporal memory layer
-            }
-        }
-
-        // If no temporal memory layer was found
-        writer.Write(false);
-    }
 
     /// <summary>
     /// Deserializes HTM-specific data from a binary reader.
     /// </summary>
     /// <param name="reader">The binary reader to read from.</param>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        // Read HTM-specific parameters
-        _columnCount = reader.ReadInt32();
-        _cellsPerColumn = reader.ReadInt32();
-        _sparsityThreshold = NumOps.FromDouble(reader.ReadDouble());
 
-        // Deserialize additional HTM state
-
-        // Check if there was a temporal memory layer
-        bool hasTemporalMemoryLayer = reader.ReadBoolean();
-        if (hasTemporalMemoryLayer)
-        {
-            // Look for the temporal memory layer in the current network
-            for (int i = 0; i < Layers.Count; i++)
-            {
-                if (Layers[i] is TemporalMemoryLayer<T> temporalMemoryLayer)
-                {
-                    // Check if there was a previous state
-                    bool hasPreviousState = reader.ReadBoolean();
-                    if (hasPreviousState)
-                    {
-                        int stateLength = reader.ReadInt32();
-                        var previousState = new Vector<T>(stateLength);
-
-                        // Read each element of the previous state
-                        for (int j = 0; j < stateLength; j++)
-                        {
-                            previousState[j] = NumOps.FromDouble(reader.ReadDouble());
-                        }
-
-                        // Set the previous state
-                        temporalMemoryLayer.PreviousState = previousState;
-                    }
-
-                    break; // Stop after restoring the first temporal memory layer
-                }
-            }
-        }
-    }
 }

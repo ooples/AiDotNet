@@ -372,58 +372,10 @@ public partial class WordCharBiLSTMCRF<T> : SequenceLabelingNERBase<T>
     }
 
     /// <inheritdoc/>
-    protected override void SerializeNetworkSpecificData(BinaryWriter w)
-    {
-        w.Write(_options.EmbeddingDimension);
-        w.Write(_options.HiddenDimension);
-        w.Write(_options.NumLSTMLayers);
-        w.Write(_options.NumLabels);
-        w.Write(_options.MaxSequenceLength);
-        w.Write(_options.CharEmbeddingDimension);
-        w.Write(_options.CharHiddenDimension);
-        w.Write(_options.UseCRF);
-        w.Write(_options.DropoutRate);
-        w.Write(_options.LearningRate);
-        w.Write(_options.LabelNames.Length);
-        foreach (var label in _options.LabelNames) w.Write(label);
 
-        // Persist the encoder vocabularies: the model owns embedding rows keyed by these token/char ids,
-        // so without them a round-tripped model can't map text back to the same rows it was trained on.
-        w.Write(_encoder.MaxWordLength);
-        WriteVocabulary(w, _encoder.WordVocabulary);
-        WriteVocabulary(w, _encoder.CharVocabulary);
-    }
 
     /// <inheritdoc/>
-    protected override void DeserializeNetworkSpecificData(BinaryReader r)
-    {
-        _options.EmbeddingDimension = r.ReadInt32();
-        _options.HiddenDimension = r.ReadInt32();
-        _options.NumLSTMLayers = r.ReadInt32();
-        _options.NumLabels = r.ReadInt32();
-        _options.MaxSequenceLength = r.ReadInt32();
-        _options.CharEmbeddingDimension = r.ReadInt32();
-        _options.CharHiddenDimension = r.ReadInt32();
-        _options.UseCRF = r.ReadBoolean();
-        _options.DropoutRate = r.ReadDouble();
-        _options.LearningRate = r.ReadDouble();
-        int labelCount = r.ReadInt32();
-        var labels = new string[labelCount];
-        for (int i = 0; i < labelCount; i++) labels[i] = r.ReadString();
-        _options.LabelNames = labels;
 
-        NumLabels = _options.NumLabels;
-        EmbeddingDimension = _options.EmbeddingDimension;
-        MaxSequenceLength = _options.MaxSequenceLength;
-        UseCRF = _options.UseCRF;
-        LabelNames = _options.LabelNames;
-
-        // Restore the encoder vocabularies so token/char -> embedding-row mapping matches training.
-        int maxWordLength = r.ReadInt32();
-        var wordVocab = ReadVocabulary(r);
-        var charVocab = ReadVocabulary(r);
-        _encoder = NerTextEncoder.FromVocabularies(wordVocab, charVocab, maxWordLength);
-    }
 
     private static void WriteVocabulary(BinaryWriter w, Vocabulary vocabulary)
     {

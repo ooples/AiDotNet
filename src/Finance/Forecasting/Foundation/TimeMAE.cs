@@ -285,32 +285,10 @@ public partial class TimeMAE<T> : TimeSeriesFoundationModelBase<T>
     }
 
     /// <inheritdoc/>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_contextLength);
-        writer.Write(_forecastHorizon);
-        writer.Write(_patchLength);
-        writer.Write(_hiddenDimension);
-        writer.Write(_numEncoderLayers);
-        writer.Write(_numDecoderLayers);
-        writer.Write(_numHeads);
-        writer.Write(_maskRatio);
-        writer.Write(_dropout);
-    }
+
 
     /// <inheritdoc/>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _contextLength = reader.ReadInt32();
-        _forecastHorizon = reader.ReadInt32();
-        _patchLength = reader.ReadInt32();
-        _hiddenDimension = reader.ReadInt32();
-        _numEncoderLayers = reader.ReadInt32();
-        _numDecoderLayers = reader.ReadInt32();
-        _numHeads = reader.ReadInt32();
-        _maskRatio = reader.ReadDouble();
-        _dropout = reader.ReadDouble();
-    }
+
 
     #endregion
 

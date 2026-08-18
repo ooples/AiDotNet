@@ -310,32 +310,9 @@ public partial class FishSpeech<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<
         return m;
     }
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter w)
-    {
-        w.Write(_useNativeMode); w.Write(_options.ModelPath ?? string.Empty);
-        w.Write(_options.SampleRate); w.Write(_options.MaxDurationSeconds);
-        w.Write(_options.SemanticDim); w.Write(_options.NumSemanticLayers);
-        w.Write(_options.NumSemanticHeads); w.Write(_options.VocoderDim);
-        w.Write(_options.NumVocoderLayers); w.Write(_options.CodebookSize);
-        w.Write(_options.NumGroups); w.Write(_options.TextVocabSize);
-        w.Write(_options.NumMels); w.Write(_options.Temperature);
-        w.Write(_options.TopP); w.Write(_options.RepetitionPenalty);
-        w.Write(_options.MinReferenceSeconds); w.Write(_options.DropoutRate);
-    }
 
-    protected override void DeserializeNetworkSpecificData(BinaryReader r)
-    {
-        _useNativeMode = r.ReadBoolean(); string mp = r.ReadString(); if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp;
-        _options.SampleRate = r.ReadInt32(); _options.MaxDurationSeconds = r.ReadDouble();
-        _options.SemanticDim = r.ReadInt32(); _options.NumSemanticLayers = r.ReadInt32();
-        _options.NumSemanticHeads = r.ReadInt32(); _options.VocoderDim = r.ReadInt32();
-        _options.NumVocoderLayers = r.ReadInt32(); _options.CodebookSize = r.ReadInt32();
-        _options.NumGroups = r.ReadInt32(); _options.TextVocabSize = r.ReadInt32();
-        _options.NumMels = r.ReadInt32(); _options.Temperature = r.ReadDouble();
-        _options.TopP = r.ReadDouble(); _options.RepetitionPenalty = r.ReadDouble();
-        _options.MinReferenceSeconds = r.ReadDouble(); _options.DropoutRate = r.ReadDouble();
-        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxEncoder = new OnnxModel<T>(p, _options.OnnxOptions);
-    }
+
+
 
     #endregion
 

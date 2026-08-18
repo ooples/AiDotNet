@@ -688,38 +688,7 @@ public partial class GraphWaveNet<T> : ForecastingModelBase<T>
     /// <b>For Beginners:</b> In the GraphWaveNet model, SerializeNetworkSpecificData saves or restores model-specific settings. This lets the GraphWaveNet architecture be reused later.
     /// </para>
     /// </remarks>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_sequenceLength);
-        writer.Write(_forecastHorizon);
-        writer.Write(_numNodes);
-        writer.Write(_numFeatures);
-        writer.Write(_residualChannels);
-        writer.Write(_skipChannels);
-        writer.Write(_endChannels);
-        writer.Write(_nodeEmbeddingDim);
-        writer.Write(_numBlocks);
-        writer.Write(_layersPerBlock);
-        writer.Write(_diffusionSteps);
-        writer.Write(_useAdaptiveGraph);
-        writer.Write(_usePredefinedGraph);
-        writer.Write(_numSamples);
 
-        if (_nodeEmbedding1 is not null && _nodeEmbedding2 is not null)
-        {
-            writer.Write(true);
-            for (int i = 0; i < _numNodes; i++)
-                for (int j = 0; j < _nodeEmbeddingDim; j++)
-                {
-                    writer.Write(_nodeEmbedding1[i, j]);
-                    writer.Write(_nodeEmbedding2[i, j]);
-                }
-        }
-        else
-        {
-            writer.Write(false);
-        }
-    }
 
     /// <summary>
     /// Deserializes model-specific data.
@@ -729,39 +698,7 @@ public partial class GraphWaveNet<T> : ForecastingModelBase<T>
     /// <b>For Beginners:</b> In the GraphWaveNet model, DeserializeNetworkSpecificData saves or restores model-specific settings. This lets the GraphWaveNet architecture be reused later.
     /// </para>
     /// </remarks>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _sequenceLength = reader.ReadInt32();
-        _forecastHorizon = reader.ReadInt32();
-        _numNodes = reader.ReadInt32();
-        int numNodes = _numNodes;
-        _numFeatures = reader.ReadInt32();
-        _residualChannels = reader.ReadInt32();
-        _dilationChannels = reader.ReadInt32();
-        _skipChannels = reader.ReadInt32();
-        _nodeEmbeddingDim = reader.ReadInt32();
-        int embeddingDim = _nodeEmbeddingDim;
-        _numBlocks = reader.ReadInt32();
-        _layersPerBlock = reader.ReadInt32();
-        _diffusionSteps = reader.ReadInt32();
-        _useAdaptiveGraph = reader.ReadBoolean();
-        _usePredefinedGraph = reader.ReadBoolean();
-        _numSamples = reader.ReadInt32();
 
-        bool hasEmbeddings = reader.ReadBoolean();
-        if (hasEmbeddings)
-        {
-            _nodeEmbedding1 = new double[numNodes, embeddingDim];
-            _nodeEmbedding2 = new double[numNodes, embeddingDim];
-            for (int i = 0; i < numNodes; i++)
-                for (int j = 0; j < embeddingDim; j++)
-                {
-                    _nodeEmbedding1[i, j] = reader.ReadDouble();
-                    _nodeEmbedding2[i, j] = reader.ReadDouble();
-                }
-            UpdateAdaptiveAdjacency();
-        }
-    }
 
     #endregion
 

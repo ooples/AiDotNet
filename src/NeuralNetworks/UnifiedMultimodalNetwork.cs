@@ -1215,30 +1215,10 @@ public partial class UnifiedMultimodalNetwork<T> : MultimodalModelLayoutBase<T>,
     }
 
     /// <inheritdoc/>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_embeddingDimension);
-        writer.Write(_maxSequenceLength);
-        writer.Write(_numTransformerLayers);
-    }
+
 
     /// <inheritdoc/>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        int embeddingDimension = reader.ReadInt32();
-        int maxSequenceLength = reader.ReadInt32();
-        int numTransformerLayers = reader.ReadInt32();
 
-        if (embeddingDimension != _embeddingDimension ||
-            maxSequenceLength != _maxSequenceLength ||
-            numTransformerLayers != _numTransformerLayers)
-        {
-            throw new InvalidDataException(
-                "Serialized UnifiedMultimodalNetwork configuration does not match the target instance.");
-        }
-
-        BindLayerFieldsFromLayers();
-    }
 
     /// <inheritdoc/>
     public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()

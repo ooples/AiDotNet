@@ -548,17 +548,7 @@ public partial class TCN<T> : ForecastingModelBase<T>
     /// <b>For Beginners:</b> In the TCN model, SerializeNetworkSpecificData saves or restores model-specific settings. This lets the TCN architecture be reused later.
     /// </para>
     /// </remarks>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_lookbackWindow);
-        writer.Write(_forecastHorizon);
-        writer.Write(_numFeatures);
-        writer.Write(_numChannels);
-        writer.Write(_kernelSize);
-        writer.Write(_numLayers);
-        writer.Write(_dropout);
-        writer.Write(_useResidualConnections);
-    }
+
 
     /// <summary>
     /// Reads TCN-specific configuration during deserialization.
@@ -568,22 +558,7 @@ public partial class TCN<T> : ForecastingModelBase<T>
     /// <b>For Beginners:</b> In the TCN model, DeserializeNetworkSpecificData saves or restores model-specific settings. This lets the TCN architecture be reused later.
     /// </para>
     /// </remarks>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _lookbackWindow = reader.ReadInt32();
-        _forecastHorizon = reader.ReadInt32();
-        _numFeatures = reader.ReadInt32();
-        _numChannels = reader.ReadInt32();
-        _kernelSize = reader.ReadInt32();
-        _numLayers = reader.ReadInt32();
-        _dropout = reader.ReadDouble();
-        _useResidualConnections = reader.ReadBoolean();
 
-        // Re-bind cached layer references (_inputProjection, _tcnBlocks,
-        // _outputProjection) to the deserialized weight-loaded layers so a clone
-        // runs on the loaded weights, not random init.
-        ExtractLayerReferences();
-    }
 
     #endregion
 

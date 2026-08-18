@@ -438,49 +438,9 @@ public partial class APNet2<T> : VocoderBase<T>
         };
     }
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_useNativeMode);
-        writer.Write(_options.ModelPath ?? string.Empty);
-        writer.Write(_options.SampleRate);
-        writer.Write(_options.MelChannels);
-        writer.Write(_options.HopSize);
-        writer.Write(_options.FftSize);
-        writer.Write(_options.DropoutRate);
-        // The ConvNeXt v2 backbone geometry decides the parameter count, so it has to survive
-        // the round-trip: restoring into a model rebuilt at different widths silently
-        // misaligns every slice of the flat parameter vector.
-        writer.Write(_options.ConvNeXtChannels);
-        writer.Write(_options.ConvNeXtIntermediateChannels);
-        writer.Write(_options.NumConvNeXtBlocks);
-        writer.Write(_options.DepthwiseKernelSize);
-        writer.Write(_options.WindowLength);
-    }
 
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _useNativeMode = reader.ReadBoolean();
-        string mp = reader.ReadString();
-        if (!string.IsNullOrEmpty(mp))
-            _options.ModelPath = mp;
-        _options.SampleRate = reader.ReadInt32();
-        _options.MelChannels = reader.ReadInt32();
-        _options.HopSize = reader.ReadInt32();
-        _options.FftSize = reader.ReadInt32();
-        _options.DropoutRate = reader.ReadDouble();
-        _options.ConvNeXtChannels = reader.ReadInt32();
-        _options.ConvNeXtIntermediateChannels = reader.ReadInt32();
-        _options.NumConvNeXtBlocks = reader.ReadInt32();
-        _options.DepthwiseKernelSize = reader.ReadInt32();
-        _options.WindowLength = reader.ReadInt32();
-        base.SampleRate = _options.SampleRate;
-        base.MelChannels = _options.MelChannels;
-        base.HopSize = _options.HopSize;
-        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
-            OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
-    
-        RebindBranchLayers();
-    }
+
+
 
     private void ThrowIfDisposed()
     {

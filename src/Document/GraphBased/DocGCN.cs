@@ -484,26 +484,10 @@ public partial class DocGCN<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T
     }
 
     /// <inheritdoc/>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_nodeDim);
-        writer.Write(_edgeDim);
-        writer.Write(_gcnLayers);
-        writer.Write(_numClasses);
-        writer.Write(_maxNodes);
-        writer.Write(_useNativeMode);
-    }
+
 
     /// <inheritdoc/>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _nodeDim = reader.ReadInt32();
-        _edgeDim = reader.ReadInt32();
-        _gcnLayers = reader.ReadInt32();
-        _numClasses = reader.ReadInt32();
-        _maxNodes = reader.ReadInt32();
-        _ = reader.ReadBoolean(); // useNativeMode - already set by constructor
-    }
+
 
     #endregion
 
@@ -565,7 +549,8 @@ public partial class DocGCN<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T
         }
     }
 
-    // UpdateParameters applied a GRADIENT STEP, but its one-argument form is the value setter and every caller passes values -- the override corrupted the model. Removed under AIDN082.
+    // UpdateParameters applied a GRADIENT STEP, but its one-argument form is the value setter and every caller passes values -- the override corrupted the model. Removed under AIDN082.
+
 
     /// <summary>
     /// Parameters cannot be written while the model is backed by a loaded ONNX graph: the weights

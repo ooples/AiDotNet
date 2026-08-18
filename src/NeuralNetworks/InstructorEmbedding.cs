@@ -222,28 +222,10 @@ namespace AiDotNet.NeuralNetworks
         }
 
         /// <inheritdoc/>
-        protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-        {
-            base.SerializeNetworkSpecificData(writer);
-            writer.Write(_defaultInstruction);
-            writer.Write(_vocabSize);
-            writer.Write(_numLayers);
-            writer.Write(_numHeads);
-            writer.Write(_feedForwardDim);
-            writer.Write((int)_poolingStrategy);
-        }
+
 
         /// <inheritdoc/>
-        protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-        {
-            base.DeserializeNetworkSpecificData(reader);
-            _defaultInstruction = reader.ReadString();
-            _vocabSize = reader.ReadInt32();
-            _numLayers = reader.ReadInt32();
-            _numHeads = reader.ReadInt32();
-            _feedForwardDim = reader.ReadInt32();
-            _poolingStrategy = (PoolingStrategy)reader.ReadInt32();
-        }
+
 
         /// <inheritdoc/>
         public override Task<Vector<T>> EmbedAsync(string text)

@@ -266,32 +266,10 @@ public partial class SimMTM<T> : TimeSeriesFoundationModelBase<T>
     }
 
     /// <inheritdoc/>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_contextLength);
-        writer.Write(_forecastHorizon);
-        writer.Write(_patchLength);
-        writer.Write(_hiddenDimension);
-        writer.Write(_numLayers);
-        writer.Write(_numHeads);
-        writer.Write(_maskRatio);
-        writer.Write(_dropout);
-        writer.Write(_similarityTemperature);
-    }
+
 
     /// <inheritdoc/>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _contextLength = reader.ReadInt32();
-        _forecastHorizon = reader.ReadInt32();
-        _patchLength = reader.ReadInt32();
-        _hiddenDimension = reader.ReadInt32();
-        _numLayers = reader.ReadInt32();
-        _numHeads = reader.ReadInt32();
-        _maskRatio = reader.ReadDouble();
-        _dropout = reader.ReadDouble();
-        _similarityTemperature = reader.ReadDouble();
-    }
+
 
     #endregion
 

@@ -556,35 +556,10 @@ public partial class DocOwl<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>, I
     }
 
     /// <inheritdoc/>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_visionDim);
-        writer.Write(_languageDim);
-        writer.Write(_visionLayers);
-        writer.Write(_languageLayers);
-        writer.Write(_numHeads);
-        writer.Write(_vocabSize);
-        writer.Write(ImageSize);
-        writer.Write(MaxSequenceLength);
-        writer.Write(_useNativeMode);
-    }
+
 
     /// <inheritdoc/>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        int visionDim = reader.ReadInt32();
-        int languageDim = reader.ReadInt32();
-        int visionLayers = reader.ReadInt32();
-        int languageLayers = reader.ReadInt32();
-        int numHeads = reader.ReadInt32();
-        int vocabSize = reader.ReadInt32();
-        int imageSize = reader.ReadInt32();
-        int maxSeqLen = reader.ReadInt32();
-        bool useNativeMode = reader.ReadBoolean();
 
-        ImageSize = imageSize;
-        MaxSequenceLength = maxSeqLen;
-    }
 
     #endregion
 

@@ -613,36 +613,12 @@ public partial class GenreClassifier<T> : AudioClassifierBase<T>, IGenreClassifi
     /// <summary>
     /// Serializes network-specific data.
     /// </summary>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(SampleRate);
-        writer.Write(ClassLabels.Count);
-        foreach (var label in ClassLabels)
-        {
-            writer.Write(label);
-        }
-        writer.Write(_options.NumMfccs);
-        writer.Write(_options.FftSize);
-        writer.Write(_options.HopLength);
-    }
+
 
     /// <summary>
     /// Deserializes network-specific data.
     /// </summary>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        base.SampleRate = reader.ReadInt32();
-        int numLabels = reader.ReadInt32();
-        var labels = new string[numLabels];
-        for (int i = 0; i < numLabels; i++)
-        {
-            labels[i] = reader.ReadString();
-        }
-        ClassLabels = labels;
-        _options.NumMfccs = reader.ReadInt32();
-        _options.FftSize = reader.ReadInt32();
-        _options.HopLength = reader.ReadInt32();
-    }
+
 
     /// <summary>
     /// Creates a new instance of this model for cloning.

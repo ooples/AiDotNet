@@ -345,28 +345,9 @@ public partial class PyAnnote<T> : SpeakerRecognitionBase<T>, ISpeakerDiarizer<T
         return m;
     }
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter w)
-    {
-        w.Write(_useNativeMode); w.Write(_options.ModelPath ?? string.Empty);
-        w.Write(_options.SampleRate); w.Write(_options.NumMels); w.Write(_options.EmbeddingDim);
-        w.Write(_options.SincNetFilters); w.Write(_options.LSTMHiddenSize); w.Write(_options.NumLSTMLayers);
-        w.Write(_options.LinearDim); w.Write(_options.MaxSpeakersPerChunk);
-        w.Write(_options.ChunkDurationSeconds); w.Write(_options.ChunkStepSeconds);
-        w.Write(_options.ClusteringThreshold); w.Write(_options.MinSegmentDuration);
-        w.Write(_options.EnableOverlapDetection); w.Write(_options.DropoutRate);
-    }
 
-    protected override void DeserializeNetworkSpecificData(BinaryReader r)
-    {
-        _useNativeMode = r.ReadBoolean(); string mp = r.ReadString(); if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp;
-        _options.SampleRate = r.ReadInt32(); _options.NumMels = r.ReadInt32(); _options.EmbeddingDim = r.ReadInt32();
-        _options.SincNetFilters = r.ReadInt32(); _options.LSTMHiddenSize = r.ReadInt32(); _options.NumLSTMLayers = r.ReadInt32();
-        _options.LinearDim = r.ReadInt32(); _options.MaxSpeakersPerChunk = r.ReadInt32();
-        _options.ChunkDurationSeconds = r.ReadDouble(); _options.ChunkStepSeconds = r.ReadDouble();
-        _options.ClusteringThreshold = r.ReadDouble(); _options.MinSegmentDuration = r.ReadDouble();
-        _options.EnableOverlapDetection = r.ReadBoolean(); _options.DropoutRate = r.ReadDouble();
-        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxEncoder = new OnnxModel<T>(p, _options.OnnxOptions);
-    }
+
+
 
     #endregion
 

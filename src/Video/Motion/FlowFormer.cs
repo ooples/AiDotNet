@@ -349,16 +349,9 @@ public partial class FlowFormer<T> : OpticalFlowBase<T>
         ModelData = _useNativeMode ? this.Serialize() : []
     };
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_embedDim); writer.Write(_numLayers); writer.Write(_numIterations);
-        writer.Write(_imageHeight); writer.Write(_imageWidth);
-    }
 
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        for (int i = 0; i < 5; i++) _ = reader.ReadInt32();
-    }
+
+
 
     #endregion
 

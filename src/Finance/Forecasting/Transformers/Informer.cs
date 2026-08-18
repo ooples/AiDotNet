@@ -484,21 +484,7 @@ public partial class Informer<T> : ForecastingModelBase<T>
     /// <b>For Beginners:</b> In the Informer model, SerializeNetworkSpecificData saves or restores model-specific settings. This lets the Informer architecture be reused later.
     /// </para>
     /// </remarks>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_sequenceLength);
-        writer.Write(_labelLength);
-        writer.Write(_predictionHorizon);
-        writer.Write(_numFeatures);
-        writer.Write(_numEncoderLayers);
-        writer.Write(_numDecoderLayers);
-        writer.Write(_numHeads);
-        writer.Write(_modelDimension);
-        writer.Write(_feedForwardDimension);
-        writer.Write(_distillingFactor);
-        writer.Write(_dropout);
-        writer.Write(_useInstanceNormalization);
-    }
+
 
     /// <inheritdoc/>
     /// <remarks>
@@ -506,25 +492,7 @@ public partial class Informer<T> : ForecastingModelBase<T>
     /// <b>For Beginners:</b> In the Informer model, DeserializeNetworkSpecificData saves or restores model-specific settings. This lets the Informer architecture be reused later.
     /// </para>
     /// </remarks>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _sequenceLength = reader.ReadInt32();
-        _labelLength = reader.ReadInt32();
-        _predictionHorizon = reader.ReadInt32();
-        _numFeatures = reader.ReadInt32();
-        _numEncoderLayers = reader.ReadInt32();
-        _numDecoderLayers = reader.ReadInt32();
-        _numHeads = reader.ReadInt32();
-        _modelDimension = reader.ReadInt32();
-        _feedForwardDimension = reader.ReadInt32();
-        _distillingFactor = reader.ReadInt32();
-        _dropout = reader.ReadDouble();
-        _useInstanceNormalization = reader.ReadBoolean();
 
-        // Re-bind cached layer references to the deserialized (weight-loaded)
-        // layers so a clone runs on the loaded weights, not random init.
-        ExtractLayerReferences();
-    }
 
     #endregion
 

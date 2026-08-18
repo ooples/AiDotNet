@@ -815,23 +815,8 @@ public partial class ABCNet<T> : NeuralNetworkBase<T>, ICompositeLoss<T>
     };
 
     /// <inheritdoc />
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        Guard.NotNull(writer);
-        writer.Write(_options.InputHeight);
-        writer.Write(_options.InputWidth);
-        writer.Write(_options.InputChannels);
-        writer.Write(_options.FeatureChannels);
-        writer.Write(_options.FeatureStride);
-        writer.Write(_options.BezierSampleHeight);
-        writer.Write(_options.BezierSampleWidth);
-        writer.Write(_options.NumCharacterClasses);
-    }
+
 
     /// <inheritdoc />
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        Guard.NotNull(reader);
-        for (int i = 0; i < 8; i++) _ = reader.ReadInt32();
-    }
+
 }

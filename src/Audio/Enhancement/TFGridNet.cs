@@ -361,26 +361,9 @@ public partial class TFGridNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
         return m;
     }
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter w)
-    {
-        w.Write(_useNativeMode); w.Write(_options.ModelPath ?? string.Empty);
-        w.Write(_options.SampleRate); w.Write(_options.FftSize); w.Write(_options.HopLength);
-        w.Write(_options.NumFreqBins); w.Write(_options.HiddenDim); w.Write(_options.EmbeddingDim);
-        w.Write(_options.NumBlocks); w.Write(_options.NumAttentionHeads);
-        w.Write(_options.EnhancementStrength); w.Write(_options.DropoutRate); w.Write(_options.NumSources);
-    }
 
-    protected override void DeserializeNetworkSpecificData(BinaryReader r)
-    {
-        _useNativeMode = r.ReadBoolean();
-        string mp = r.ReadString(); if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp;
-        _options.SampleRate = r.ReadInt32(); _options.FftSize = r.ReadInt32(); _options.HopLength = r.ReadInt32();
-        _options.NumFreqBins = r.ReadInt32(); _options.HiddenDim = r.ReadInt32(); _options.EmbeddingDim = r.ReadInt32();
-        _options.NumBlocks = r.ReadInt32(); _options.NumAttentionHeads = r.ReadInt32();
-        _options.EnhancementStrength = r.ReadDouble(); _options.DropoutRate = r.ReadDouble(); _options.NumSources = r.ReadInt32();
-        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
-            OnnxEncoder = new OnnxModel<T>(p, _options.OnnxOptions);
-    }
+
+
 
     #endregion
 

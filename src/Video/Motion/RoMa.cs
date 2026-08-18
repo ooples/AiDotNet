@@ -202,16 +202,8 @@ public partial class RoMa<T> : OpticalFlowBase<T>
     }
 
     /// <inheritdoc/>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_numFeatures);
-        writer.Write(_numLayers);
-    }
+
 
     /// <inheritdoc/>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _numFeatures = reader.ReadInt32();
-        _numLayers = reader.ReadInt32();
-    }
+
 }

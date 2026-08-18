@@ -260,67 +260,9 @@ public partial class MetaVoice1B<T> : TtsModelBase<T>, IEndToEndTts<T>, IVoiceCl
         return m;
     }
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_useNativeMode);
-        writer.Write(_options.ModelPath ?? string.Empty);
-        writer.Write(_options.SampleRate);
-        writer.Write(_options.MelChannels);
-        writer.Write(_options.HopSize);
-        writer.Write(_options.DecoderDim);
-        writer.Write(_options.DropoutRate);
-        writer.Write(_options.EncoderDim);
-        writer.Write(_options.NumDecoderLayers);
-        writer.Write(_options.NumEncoderLayers);
-        writer.Write(_options.NumHeads);
-        writer.Write(_options.SpeakerEmbeddingDim);
-        writer.Write(_options.FirstStageDim);
-        writer.Write(_options.NumFirstStageLayers);
-        writer.Write(_options.SecondStageDim);
-        writer.Write(_options.NumSecondStageLayers);
-        writer.Write(_options.NumCodebooks);
-        writer.Write(_options.FirstStageCodebooks);
-        writer.Write(_options.CodecLatentDim);
-        writer.Write(_options.VocoderChannels);
-        writer.Write(_options.VocoderUpsampleFactor);
-        writer.Write(_options.SwiGLUMultipleOf);
-        writer.Write(_options.RoPETheta);
-    }
 
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _useNativeMode = reader.ReadBoolean();
-        string mp = reader.ReadString();
-        if (!string.IsNullOrEmpty(mp))
-            _options.ModelPath = mp;
-        _options.SampleRate = reader.ReadInt32();
-        _options.MelChannels = reader.ReadInt32();
-        _options.HopSize = reader.ReadInt32();
-        _options.DecoderDim = reader.ReadInt32();
-        _options.DropoutRate = reader.ReadDouble();
-        _options.EncoderDim = reader.ReadInt32();
-        _options.NumDecoderLayers = reader.ReadInt32();
-        _options.NumEncoderLayers = reader.ReadInt32();
-        _options.NumHeads = reader.ReadInt32();
-        _options.SpeakerEmbeddingDim = reader.ReadInt32();
-        _options.FirstStageDim = reader.ReadInt32();
-        _options.NumFirstStageLayers = reader.ReadInt32();
-        _options.SecondStageDim = reader.ReadInt32();
-        _options.NumSecondStageLayers = reader.ReadInt32();
-        _options.NumCodebooks = reader.ReadInt32();
-        _options.FirstStageCodebooks = reader.ReadInt32();
-        _options.CodecLatentDim = reader.ReadInt32();
-        _options.VocoderChannels = reader.ReadInt32();
-        _options.VocoderUpsampleFactor = reader.ReadInt32();
-        _options.SwiGLUMultipleOf = reader.ReadInt32();
-        _options.RoPETheta = reader.ReadDouble();
-        base.SampleRate = _options.SampleRate;
-        base.MelChannels = _options.MelChannels;
-        base.HopSize = _options.HopSize;
-        base.HiddenDim = _options.HiddenDim;
-        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
-            OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
-    }
+
+
 
     private void ThrowIfDisposed()
     {

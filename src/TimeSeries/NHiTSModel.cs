@@ -794,44 +794,9 @@ public partial class NHiTSModel<T> : TimeSeriesModelBase<T>, ISupportsLossFuncti
         return result;
     }
 
-    protected override void SerializeCore(BinaryWriter writer)
-    {
-        writer.Write(_options.NumStacks);
-        writer.Write(_options.LookbackWindow);
-        writer.Write(_options.ForecastHorizon);
 
-        writer.Write(_stacks.Count);
-        foreach (var stack in _stacks)
-        {
-            stack.Serialize(writer);
-        }
 
-        // Normalization statistics learned in TrainCore. Without these a reloaded
-        // model denormalizes with the defaults (_normMean=0, _normStd=1), so its
-        // forecasts differ from the original trained model. Written as doubles.
-        writer.Write(NumOps.ToDouble(_normMean));
-        writer.Write(NumOps.ToDouble(_normStd));
-    }
 
-    protected override void DeserializeCore(BinaryReader reader)
-    {
-        _options.NumStacks = reader.ReadInt32();
-        _options.LookbackWindow = reader.ReadInt32();
-        _options.ForecastHorizon = reader.ReadInt32();
-
-        InitializeStacks();
-
-        int stackCount = reader.ReadInt32();
-        for (int s = 0; s < stackCount && s < _stacks.Count; s++)
-        {
-            _stacks[s].Deserialize(reader);
-        }
-
-        // Restore the normalization statistics written by SerializeCore so the
-        // reloaded model reproduces the original's forecasts.
-        _normMean = NumOps.FromDouble(reader.ReadDouble());
-        _normStd = NumOps.FromDouble(reader.ReadDouble());
-    }
 
     public override ModelMetadata<T> GetModelMetadata()
     {

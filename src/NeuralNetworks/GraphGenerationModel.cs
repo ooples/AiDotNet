@@ -1104,51 +1104,12 @@ public partial class GraphGenerationModel<T> : GraphModelLayoutBase<T>
     /// <summary>
     /// Serializes network-specific data to a binary writer.
     /// </summary>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(LatentDim);
-        writer.Write(HiddenDim);
-        writer.Write(MaxNodes);
-        writer.Write(NumLayers);
-        writer.Write((int)GenerationType);
-        SerializationHelper<T>.SerializeInterface(writer, _lossFunction);
-        SerializationHelper<T>.SerializeInterface(writer, _optimizer);
 
-        // Serialize variational layer weights
-        writer.Write(_meanWeights.Length);
-        for (int i = 0; i < _meanWeights.Length; i++)
-            writer.Write(Convert.ToDouble(_meanWeights.GetFlat(i)));
-        writer.Write(_logVarWeights.Length);
-        for (int i = 0; i < _logVarWeights.Length; i++)
-            writer.Write(Convert.ToDouble(_logVarWeights.GetFlat(i)));
-    }
 
     /// <summary>
     /// Deserializes network-specific data from a binary reader.
     /// </summary>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _ = reader.ReadInt32(); // LatentDim
-        _ = reader.ReadInt32(); // HiddenDim
-        _ = reader.ReadInt32(); // MaxNodes
-        _ = reader.ReadInt32(); // NumLayers
-        _ = (GraphGenerationType)reader.ReadInt32();
-        _ = DeserializationHelper.DeserializeInterface<ILossFunction<T>>(reader);
-        _ = DeserializationHelper.DeserializeInterface<IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>>(reader);
 
-        // Restore variational layer weights
-        int meanCount = reader.ReadInt32();
-        var meanData = new T[meanCount];
-        for (int i = 0; i < meanCount; i++)
-            meanData[i] = NumOps.FromDouble(reader.ReadDouble());
-        _meanWeights = Tensor<T>.FromVector(new Vector<T>(meanData)).Reshape(_meanWeights._shape);
-
-        int logVarCount = reader.ReadInt32();
-        var logVarData = new T[logVarCount];
-        for (int i = 0; i < logVarCount; i++)
-            logVarData[i] = NumOps.FromDouble(reader.ReadDouble());
-        _logVarWeights = Tensor<T>.FromVector(new Vector<T>(logVarData)).Reshape(_logVarWeights._shape);
-    }
 
     #endregion
 }

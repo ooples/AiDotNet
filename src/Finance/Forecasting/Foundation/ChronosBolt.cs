@@ -449,36 +449,10 @@ public partial class ChronosBolt<T> : TimeSeriesFoundationModelBase<T>
     }
 
     /// <inheritdoc/>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_contextLength);
-        writer.Write(_forecastHorizon);
-        writer.Write(_patchLength);
-        writer.Write(_encoderHiddenDim);
-        writer.Write(_decoderHiddenDim);
-        writer.Write(_numEncoderLayers);
-        writer.Write(_numDecoderLayers);
-        writer.Write(_numHeads);
-        writer.Write(_dropout);
-        writer.Write((int)_modelSize);
-        writer.Write(_numQuantiles);
-    }
+
 
     /// <inheritdoc/>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _contextLength = reader.ReadInt32();
-        _forecastHorizon = reader.ReadInt32();
-        _patchLength = reader.ReadInt32();
-        _encoderHiddenDim = reader.ReadInt32();
-        _decoderHiddenDim = reader.ReadInt32();
-        _numEncoderLayers = reader.ReadInt32();
-        _numDecoderLayers = reader.ReadInt32();
-        _numHeads = reader.ReadInt32();
-        _dropout = reader.ReadDouble();
-        _modelSize = (FoundationModelSize)reader.ReadInt32();
-        _numQuantiles = reader.ReadInt32();
-    }
+
 
     #endregion
 

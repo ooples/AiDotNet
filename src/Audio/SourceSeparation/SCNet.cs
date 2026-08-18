@@ -320,32 +320,9 @@ public partial class SCNet<T> : AudioNeuralNetworkBase<T>, IMusicSourceSeparator
         return m;
     }
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter w)
-    {
-        w.Write(_useNativeMode); w.Write(_options.ModelPath ?? string.Empty);
-        w.Write(_options.SampleRate); w.Write(_options.FftSize); w.Write(_options.HopLength); w.Write(_options.NumFreqBins);
-        w.Write(_options.NumClusters); w.Write(_options.CompressionDim);
-        w.Write(_options.NumEncoderBlocks); w.Write(_options.NumDecoderBlocks);
-        w.Write(_options.NumAttentionHeads);
-        w.Write(_options.NumStems); w.Write(_options.DropoutRate);
-        w.Write(_options.Sources.Length); foreach (var s in _options.Sources) w.Write(s);
-        w.Write(_options.LearningRate); w.Write(_options.WeightDecay);
-    }
 
-    protected override void DeserializeNetworkSpecificData(BinaryReader r)
-    {
-        _useNativeMode = r.ReadBoolean(); string mp = r.ReadString(); if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp;
-        _options.SampleRate = r.ReadInt32(); _options.FftSize = r.ReadInt32(); _options.HopLength = r.ReadInt32(); _options.NumFreqBins = r.ReadInt32();
-        _options.NumClusters = r.ReadInt32(); _options.CompressionDim = r.ReadInt32();
-        _options.NumEncoderBlocks = r.ReadInt32(); _options.NumDecoderBlocks = r.ReadInt32();
-        _options.NumAttentionHeads = r.ReadInt32();
-        _options.NumStems = r.ReadInt32(); _options.DropoutRate = r.ReadDouble();
-        int n = r.ReadInt32(); _options.Sources = new string[n]; for (int i = 0; i < n; i++) _options.Sources[i] = r.ReadString();
-        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxEncoder = new OnnxModel<T>(p, _options.OnnxOptions);
-        if (r.BaseStream.Position < r.BaseStream.Length) _options.LearningRate = r.ReadDouble();
-        if (r.BaseStream.Position < r.BaseStream.Length) _options.WeightDecay = r.ReadDouble();
-        if (_useNativeMode) _optimizer = CreateDefaultOptimizer();
-    }
+
+
 
     #endregion
 

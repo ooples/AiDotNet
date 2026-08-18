@@ -443,25 +443,9 @@ public partial class FastDVDNet<T> : VideoDenoisingBase<T>
         ModelData = _useNativeMode ? this.Serialize() : []
     };
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_numFeatures); writer.Write(_numInputFrames);
-        writer.Write(_imageHeight); writer.Write(_imageWidth);
-    }
 
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        // Restore serialized configuration values
-        _numFeatures = reader.ReadInt32();
-        _numInputFrames = reader.ReadInt32();
-        _imageHeight = reader.ReadInt32();
-        _imageWidth = reader.ReadInt32();
 
-        // The layers (with their trained weights) are already reconstructed by the base
-        // DeserializeInternalUnchecked before this override runs, so do NOT clear +
-        // re-initialize them here — that would discard the deserialized weights and leave
-        // the model randomly initialized.
-    }
+
 
     #endregion
 

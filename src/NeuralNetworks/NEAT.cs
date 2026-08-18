@@ -1,6 +1,7 @@
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
-using AiDotNet.NeuralNetworks.Options;
+using AiDotNet.NeuralNetworks.Options;
+
 using AiDotNet.Models.Parameters;
 
 namespace AiDotNet.NeuralNetworks;
@@ -1693,33 +1694,7 @@ public partial class NEAT<T> : VectorModelLayoutBase<T>
     /// - Deploy evolved networks in applications
     /// </para>
     /// </remarks>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        // Save NEAT parameters
-        writer.Write(_populationSize);
-        writer.Write(NumOps.ToDouble(_mutationRate));
-        writer.Write(NumOps.ToDouble(_crossoverRate));
-        writer.Write(_innovationNumber);
 
-        // Save population
-        writer.Write(_population.Count);
-        foreach (var genome in _population)
-        {
-            // Save genome fitness
-            writer.Write(Convert.ToDouble(genome.Fitness));
-
-            // Save connections
-            writer.Write(genome.Connections.Count);
-            foreach (var conn in genome.Connections)
-            {
-                writer.Write(conn.FromNode);
-                writer.Write(conn.ToNode);
-                writer.Write(Convert.ToDouble(conn.Weight));
-                writer.Write(conn.IsEnabled);
-                writer.Write(conn.Innovation);
-            }
-        }
-    }
 
     /// <summary>
     /// Deserializes NEAT-specific data from a binary reader.
@@ -1744,42 +1719,7 @@ public partial class NEAT<T> : VectorModelLayoutBase<T>
     /// - Compare or combine results from different runs
     /// </para>
     /// </remarks>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        // Load NEAT parameters
-        _populationSize = reader.ReadInt32();
-        _mutationRate = NumOps.FromDouble(reader.ReadDouble());
-        _crossoverRate = NumOps.FromDouble(reader.ReadDouble());
-        _innovationNumber = reader.ReadInt32();
 
-        // Load population
-        int populationCount = reader.ReadInt32();
-        _population = new List<Genome<T>>(populationCount);
-
-        for (int i = 0; i < populationCount; i++)
-        {
-            // Create new genome
-            var genome = new Genome<T>(Architecture.InputSize, Architecture.OutputSize);
-
-            // Load genome fitness
-            genome.Fitness = NumOps.FromDouble(reader.ReadDouble());
-
-            // Load connections
-            int connectionCount = reader.ReadInt32();
-            for (int j = 0; j < connectionCount; j++)
-            {
-                int fromNode = reader.ReadInt32();
-                int toNode = reader.ReadInt32();
-                T weight = NumOps.FromDouble(reader.ReadDouble());
-                bool isEnabled = reader.ReadBoolean();
-                int innovation = reader.ReadInt32();
-
-                genome.AddConnection(fromNode, toNode, weight, isEnabled, innovation);
-            }
-
-            _population.Add(genome);
-        }
-    }
 
     /// <summary>
     /// Checks if the NEAT model is ready to make predictions.

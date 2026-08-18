@@ -543,32 +543,13 @@ namespace AiDotNet.PhysicsInformed.PINNs
         /// Serializes VPINN-specific data.
         /// </summary>
         /// <param name="writer">Binary writer.</param>
-        protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-        {
-            writer.Write(_numQuadraturePoints);
-            writer.Write(Architecture.InputSize);
-            writer.Write(_numTestFunctions);
-        }
+
 
         /// <summary>
         /// Deserializes VPINN-specific data.
         /// </summary>
         /// <param name="reader">Binary reader.</param>
-        protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-        {
-            int storedNumPoints = reader.ReadInt32();
-            int storedDimension = reader.ReadInt32();
-            int storedTestFunctions = reader.ReadInt32();
 
-            if (storedNumPoints != _numQuadraturePoints ||
-                storedDimension != Architecture.InputSize ||
-                storedTestFunctions != _numTestFunctions)
-            {
-                throw new InvalidOperationException("Serialized VPINN configuration does not match the current instance.");
-            }
-
-            GenerateQuadraturePoints(storedNumPoints, storedDimension);
-        }
 
         /// <summary>
         /// Indicates whether this model supports training.

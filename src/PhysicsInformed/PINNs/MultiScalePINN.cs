@@ -729,38 +729,10 @@ namespace AiDotNet.PhysicsInformed.PINNs
         }
 
         /// <inheritdoc/>
-        protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-        {
-            writer.Write(_multiScalePDE.NumberOfScales);
-            writer.Write(_currentActiveScales);
-            writer.Write(_numCollocationPointsPerScale);
 
-            foreach (var network in _scaleNetworks)
-            {
-                var bytes = network.Serialize();
-                writer.Write(bytes.Length);
-                writer.Write(bytes);
-            }
-        }
 
         /// <inheritdoc/>
-        protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-        {
-            int numScales = reader.ReadInt32();
-            _currentActiveScales = reader.ReadInt32();
-            int numPoints = reader.ReadInt32();
 
-            if (numScales != _multiScalePDE.NumberOfScales)
-            {
-                throw new InvalidOperationException("Serialized number of scales does not match.");
-            }
-
-            for (int scale = 0; scale < numScales; scale++)
-            {
-                int length = reader.ReadInt32();
-                _scaleNetworks[scale].Deserialize(reader.ReadBytes(length));
-            }
-        }
 
         /// <inheritdoc/>
         public override bool SupportsTraining => true;

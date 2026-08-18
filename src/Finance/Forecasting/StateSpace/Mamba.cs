@@ -511,20 +511,7 @@ public partial class Mamba<T> : ForecastingModelBase<T>
     /// <para><b>For Beginners:</b> Saves all the configuration needed to reconstruct this model.
     /// </para>
     /// </remarks>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_contextLength);
-        writer.Write(_forecastHorizon);
-        writer.Write(_modelDimension);
-        writer.Write(_stateDimension);
-        writer.Write(_expandFactor);
-        writer.Write(_convKernelSize);
-        writer.Write(_numLayers);
-        writer.Write(_dropout);
-        writer.Write(_dtRank);
-        writer.Write(_useBidirectional);
-        writer.Write(_numFeatures);
-    }
+
 
     /// <summary>
     /// Reads Mamba-specific configuration during deserialization.
@@ -533,20 +520,7 @@ public partial class Mamba<T> : ForecastingModelBase<T>
     /// <para><b>For Beginners:</b> Loads the configuration that was saved during serialization.
     /// </para>
     /// </remarks>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _contextLength = reader.ReadInt32();
-        _forecastHorizon = reader.ReadInt32();
-        _modelDimension = reader.ReadInt32();
-        _stateDimension = reader.ReadInt32();
-        _expandFactor = reader.ReadInt32();
-        _convKernelSize = reader.ReadInt32();
-        _numLayers = reader.ReadInt32();
-        _dropout = reader.ReadDouble();
-        _dtRank = reader.ReadInt32();
-        _useBidirectional = reader.ReadBoolean();
-        _numFeatures = reader.ReadInt32();
-    }
+
 
     #endregion
 

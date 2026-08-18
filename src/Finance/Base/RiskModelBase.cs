@@ -336,11 +336,7 @@ public abstract partial class RiskModelBase<T> : FinancialModelBase<T>, IRiskMod
     /// so the model remembers them when loaded later.
     /// </para>
     /// </remarks>
-    protected override void SerializeModelSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_confidenceLevel);
-        writer.Write(_timeHorizon);
-    }
+
 
     /// <summary>
     /// Deserializes risk-specific model data.
@@ -351,23 +347,6 @@ public abstract partial class RiskModelBase<T> : FinancialModelBase<T>, IRiskMod
     /// <b>For Beginners:</b> Loads the saved risk settings from a file.
     /// </para>
     /// </remarks>
-    protected override void DeserializeModelSpecificData(BinaryReader reader)
-    {
-        _confidenceLevel = reader.ReadDouble();
-        _timeHorizon = reader.ReadInt32();
 
-        // Re-validate invariants after deserialize to prevent corrupt state
-        // Use same exclusive bounds as constructor: confidenceLevel must be in (0, 1)
-        if (_confidenceLevel <= 0 || _confidenceLevel >= 1)
-        {
-            throw new InvalidOperationException(
-                $"Deserialized confidenceLevel ({_confidenceLevel}) is invalid. Must be between 0 and 1 (exclusive).");
-        }
-        if (_timeHorizon < 1)
-        {
-            throw new InvalidOperationException(
-                $"Deserialized timeHorizon ({_timeHorizon}) is invalid. Must be at least 1.");
-        }
-    }
 
 }

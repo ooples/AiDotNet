@@ -277,36 +277,10 @@ public partial class MobileNetV3Network<T> : ImageClassifierModelLayoutBase<T>
     }
 
     /// <inheritdoc />
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write((int)_configuration.Variant);
-        writer.Write((int)_configuration.WidthMultiplier);
-        writer.Write(_configuration.InputChannels);
-        writer.Write(_configuration.InputHeight);
-        writer.Write(_configuration.InputWidth);
-        writer.Write(_configuration.NumClasses);
-    }
+
 
     /// <inheritdoc />
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        var variant = (MobileNetV3Variant)reader.ReadInt32();
-        var widthMultiplier = (MobileNetV3WidthMultiplier)reader.ReadInt32();
-        var inputChannels = reader.ReadInt32();
-        var inputHeight = reader.ReadInt32();
-        var inputWidth = reader.ReadInt32();
-        var numClasses = reader.ReadInt32();
 
-        if (variant != _configuration.Variant ||
-            widthMultiplier != _configuration.WidthMultiplier ||
-            inputChannels != _configuration.InputChannels ||
-            inputHeight != _configuration.InputHeight ||
-            inputWidth != _configuration.InputWidth ||
-            numClasses != _configuration.NumClasses)
-        {
-            throw new InvalidDataException("Serialized MobileNetV3 configuration does not match current configuration.");
-        }
-    }
 
     /// <summary>
     /// Gets the layer at the specified index.

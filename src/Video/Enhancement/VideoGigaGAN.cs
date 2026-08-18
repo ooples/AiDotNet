@@ -200,51 +200,9 @@ public partial class VideoGigaGAN<T> : VideoSuperResolutionBase<T>
         return m;
     }
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter w)
-    {
-        w.Write(_useNativeMode);
-        w.Write(_options.ModelPath ?? string.Empty);
-        w.Write((int)_options.Variant);
-        w.Write(_options.NumFeatures);
-        w.Write(_options.NumResBlocks);
-        w.Write(_options.ScaleFactor);
-        w.Write(_options.NumStyleLayers);
-        w.Write(_options.PerceptualWeight);
-        w.Write(_options.GANWeight);
-        w.Write(_options.HFShuttleWeight);
-        w.Write(_options.DropoutRate);
-        w.Write(_options.FlowPyramidLevels);
-        w.Write(_options.LearningRate);
-    }
 
-    protected override void DeserializeNetworkSpecificData(BinaryReader r)
-    {
-        _useNativeMode = r.ReadBoolean();
-        string mp = r.ReadString();
-        if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp;
-        _options.Variant = (VideoModelVariant)r.ReadInt32();
-        _options.NumFeatures = r.ReadInt32();
-        _options.NumResBlocks = r.ReadInt32();
-        _options.ScaleFactor = r.ReadInt32();
-        _options.NumStyleLayers = r.ReadInt32();
-        _options.PerceptualWeight = r.ReadDouble();
-        _options.GANWeight = r.ReadDouble();
-        _options.HFShuttleWeight = r.ReadDouble();
-        _options.DropoutRate = r.ReadDouble();
-        _options.FlowPyramidLevels = r.ReadInt32();
-        _options.LearningRate = r.ReadDouble();
-        ScaleFactor = _options.ScaleFactor;
-        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
-        {
-            // Release any existing session before replacing it so repeated
-            // deserialize / clone round-trips don't leak native ONNX resources.
-            OnnxModel?.Dispose();
-            OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
-        }
-        // Native-mode layers (with their trained weights) are already reconstructed by
-        // the base deserializer before this override runs; re-initializing here would
-        // discard them and leave the model randomly initialized.
-    }
+
+
 
     #endregion
 

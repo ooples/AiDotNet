@@ -517,31 +517,7 @@ public partial class SegNeXt<T> : Common.SemanticSegmentationBase<T>
     /// The data is written in a specific order matching <see cref="DeserializeNetworkSpecificData"/>.
     /// </para>
     /// </remarks>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_height);
-        writer.Write(_width);
-        writer.Write(_channels);
-        writer.Write(_numClasses);
-        writer.Write((int)_modelSize);
-        writer.Write(_decoderDim);
-        writer.Write(_dropRate);
-        writer.Write(_useNativeMode);
-        writer.Write(_onnxModelPath ?? string.Empty);
-        writer.Write(_encoderLayerEnd);
 
-        writer.Write(_channelDims.Length);
-        foreach (int dim in _channelDims)
-        {
-            writer.Write(dim);
-        }
-
-        writer.Write(_depths.Length);
-        foreach (int depth in _depths)
-        {
-            writer.Write(depth);
-        }
-    }
 
     /// <summary>
     /// Reads SegNeXt-specific configuration values from a binary stream during model loading.
@@ -554,31 +530,7 @@ public partial class SegNeXt<T> : Common.SemanticSegmentationBase<T>
     /// they were written.
     /// </para>
     /// </remarks>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _ = reader.ReadInt32(); // height
-        _ = reader.ReadInt32(); // width
-        _ = reader.ReadInt32(); // channels
-        _ = reader.ReadInt32(); // numClasses
-        _ = reader.ReadInt32(); // modelSize
-        _ = reader.ReadInt32(); // decoderDim
-        _ = reader.ReadDouble(); // dropRate
-        _ = reader.ReadBoolean(); // useNativeMode
-        _ = reader.ReadString(); // onnxModelPath
-        _ = reader.ReadInt32(); // encoderLayerEnd
 
-        int channelCount = reader.ReadInt32();
-        for (int i = 0; i < channelCount; i++)
-        {
-            _ = reader.ReadInt32();
-        }
-
-        int depthCount = reader.ReadInt32();
-        for (int i = 0; i < depthCount; i++)
-        {
-            _ = reader.ReadInt32();
-        }
-    }
 
     #endregion
 }

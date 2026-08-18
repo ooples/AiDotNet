@@ -1202,30 +1202,10 @@ public partial class StableVideoDiffusion<T> : NeuralNetworkBase<T>
     }
 
     /// <inheritdoc/>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_height);
-        writer.Write(_width);
-        writer.Write(_channels);
-        writer.Write(_numFrames);
-        writer.Write(_latentDim);
-        writer.Write(_numInferenceSteps);
-        writer.Write(_guidanceScale);
-        writer.Write((int)_variant);
-    }
+
 
     /// <inheritdoc/>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _height = reader.ReadInt32();
-        _width = reader.ReadInt32();
-        _channels = reader.ReadInt32();
-        _numFrames = reader.ReadInt32();
-        _latentDim = reader.ReadInt32();
-        _numInferenceSteps = reader.ReadInt32();
-        _guidanceScale = reader.ReadDouble();
-        _variant = (SVDModelVariant)reader.ReadInt32();
-    }
+
 
     #endregion
 }

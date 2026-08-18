@@ -659,18 +659,7 @@ public partial class ITransformer<T> : ForecastingModelBase<T>
     /// number of layers, and attention heads.
     /// </para>
     /// </remarks>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_sequenceLength);
-        writer.Write(_predictionHorizon);
-        writer.Write(_numFeatures);
-        writer.Write(_numLayers);
-        writer.Write(_numHeads);
-        writer.Write(_modelDimension);
-        writer.Write(_feedForwardDimension);
-        writer.Write(_useInstanceNormalization);
-        writer.Write(_dropout);
-    }
+
 
     /// <summary>
     /// Reads network-specific configuration data during deserialization.
@@ -682,23 +671,7 @@ public partial class ITransformer<T> : ForecastingModelBase<T>
     /// This method reads back the iTransformer-specific settings that were saved.
     /// </para>
     /// </remarks>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _sequenceLength = reader.ReadInt32();
-        _predictionHorizon = reader.ReadInt32();
-        _numFeatures = reader.ReadInt32();
-        _numLayers = reader.ReadInt32();
-        _numHeads = reader.ReadInt32();
-        _modelDimension = reader.ReadInt32();
-        _feedForwardDimension = reader.ReadInt32();
-        _useInstanceNormalization = reader.ReadBoolean();
-        _dropout = reader.ReadDouble();
 
-        // Re-bind cached layer references to the deserialized (weight-loaded)
-        // layers so a clone runs on the trained weights, not construction-time
-        // random init.
-        ExtractLayerReferences();
-    }
 
     #endregion
 

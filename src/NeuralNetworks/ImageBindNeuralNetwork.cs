@@ -1621,47 +1621,10 @@ public partial class ImageBindNeuralNetwork<T> : MultimodalModelLayoutBase<T>, I
     }
 
     /// <inheritdoc/>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_embeddingDimension);
-        writer.Write(_maxSequenceLength);
-        writer.Write(_imageSize);
-        writer.Write(_hiddenDim);
-        writer.Write(_numEncoderLayers);
-        writer.Write(_numHeads);
-        writer.Write(_patchSize);
-        writer.Write(_vocabularySize);
-        writer.Write(_audioSampleRate);
-        writer.Write(_audioMaxDuration);
-        writer.Write(_imuTimesteps);
-        writer.Write(_numVideoFrames);
-        writer.Write(_useNativeMode);
-    }
+
 
     /// <inheritdoc/>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _ = reader.ReadInt32(); // embeddingDim
-        _ = reader.ReadInt32(); // maxSeqLen
-        _ = reader.ReadInt32(); // imageSize
-        _ = reader.ReadInt32(); // hiddenDim
-        _ = reader.ReadInt32(); // numEncoderLayers
-        _ = reader.ReadInt32(); // numHeads
-        _ = reader.ReadInt32(); // patchSize
-        _ = reader.ReadInt32(); // vocabularySize
-        _ = reader.ReadInt32(); // audioSampleRate
-        _ = reader.ReadInt32(); // audioMaxDuration
-        _ = reader.ReadInt32(); // imuTimesteps
-        _ = reader.ReadInt32(); // numVideoFrames
-        _ = reader.ReadBoolean(); // useNativeMode
 
-        // NeuralNetworkBase replaces Layers during deserialization. Rebind the modality
-        // views so inference/training and parameter enumeration use that restored graph.
-        if (_useNativeMode)
-        {
-            BindNativeLayers();
-        }
-    }
 
     /// <inheritdoc/>
     protected override void Dispose(bool disposing)

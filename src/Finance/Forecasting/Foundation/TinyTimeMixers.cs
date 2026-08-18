@@ -358,37 +358,10 @@ public partial class TinyTimeMixers<T> : TimeSeriesFoundationModelBase<T>
     }
 
     /// <inheritdoc/>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_contextLength);
-        writer.Write(_forecastHorizon);
-        writer.Write(_patchLength);
-        writer.Write(_hiddenDimension);
-        writer.Write(_numMixerLayers);
-        writer.Write(_expansionFactor);
-        writer.Write(_dropout);
-        writer.Write((int)_modelSize);
-        writer.Write(_useAdaptivePatching.HasValue);
-        if (_useAdaptivePatching.HasValue)
-            writer.Write(_useAdaptivePatching.Value);
-        writer.Write(_numFeatures);
-    }
+
 
     /// <inheritdoc/>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _contextLength = reader.ReadInt32();
-        _forecastHorizon = reader.ReadInt32();
-        _patchLength = reader.ReadInt32();
-        _hiddenDimension = reader.ReadInt32();
-        _numMixerLayers = reader.ReadInt32();
-        _expansionFactor = reader.ReadInt32();
-        _dropout = reader.ReadDouble();
-        _modelSize = (FoundationModelSize)reader.ReadInt32();
-        bool hasAdaptive = reader.ReadBoolean();
-        _useAdaptivePatching = hasAdaptive ? reader.ReadBoolean() : null;
-        _numFeatures = reader.ReadInt32();
-    }
+
 
     #endregion
 

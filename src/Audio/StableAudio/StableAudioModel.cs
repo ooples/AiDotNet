@@ -1048,28 +1048,12 @@ public partial class StableAudioModel<T> : AudioNeuralNetworkBase<T>, IAudioGene
     /// <summary>
     /// Serializes network-specific data.
     /// </summary>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_useNativeMode);
-        writer.Write((int)_options.ModelSize);
-        writer.Write(_options.SampleRate);
-        writer.Write(_options.NumInferenceSteps);
-        writer.Write(_options.GuidanceScale);
-        writer.Write(_options.Stereo);
-    }
+
 
     /// <summary>
     /// Deserializes network-specific data.
     /// </summary>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _ = reader.ReadBoolean();
-        _ = reader.ReadInt32();
-        _ = reader.ReadInt32();
-        _ = reader.ReadInt32();
-        _ = reader.ReadDouble();
-        _ = reader.ReadBoolean();
-    }
+
 
     #endregion
 

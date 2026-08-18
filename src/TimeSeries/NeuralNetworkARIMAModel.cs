@@ -700,30 +700,7 @@ public partial class NeuralNetworkARIMAModel<T> : TimeSeriesModelBase<T>
     /// This way, you or someone else can rebuild the exact same model later, even on a different computer.
     /// </para>
     /// </remarks>
-    protected override void SerializeCore(BinaryWriter writer)
-    {
-        // Write model parameters
-        SerializationHelper<T>.SerializeVector(writer, _arParameters);
-        SerializationHelper<T>.SerializeVector(writer, _maParameters);
 
-        // Write neural network parameters
-        var serializedModel = _neuralNetwork.Serialize();
-        writer.Write(serializedModel.Length);
-        writer.Write(serializedModel);
-
-        // Write options
-        writer.Write(_nnarimaOptions.AROrder);
-        writer.Write(_nnarimaOptions.MAOrder);
-        writer.Write(_nnarimaOptions.LaggedPredictions);
-
-        // Write training series for in-sample predictions
-        if (_y is not null)
-            SerializationHelper<T>.SerializeVector(writer, _y);
-        else
-            writer.Write(0);
-
-        SerializationHelper<T>.SerializeVector(writer, _residuals);
-    }
 
     /// <summary>
     /// Deserializes the core components of the model from a binary reader.
@@ -747,34 +724,7 @@ public partial class NeuralNetworkARIMAModel<T> : TimeSeriesModelBase<T>
     /// After this process, your model is back to its original state, ready to make predictions again.
     /// </para>
     /// </remarks>
-    protected override void DeserializeCore(BinaryReader reader)
-    {
-        // Read model parameters
-        _arParameters = SerializationHelper<T>.DeserializeVector(reader);
-        _maParameters = SerializationHelper<T>.DeserializeVector(reader);
 
-        // Read neural network parameters
-        var serializedModelLength = reader.ReadInt32();
-        var serializedModel = reader.ReadBytes(serializedModelLength);
-        _neuralNetwork.Deserialize(serializedModel);
-
-        // Read options
-        _nnarimaOptions.AROrder = reader.ReadInt32();
-        _nnarimaOptions.MAOrder = reader.ReadInt32();
-        _nnarimaOptions.LaggedPredictions = reader.ReadInt32();
-
-        // Read training series (post-patch field)
-        try
-        {
-            _y = SerializationHelper<T>.DeserializeVector(reader);
-            _residuals = SerializationHelper<T>.DeserializeVector(reader);
-        }
-        catch (EndOfStreamException)
-        {
-            // Older models don't include training series
-            _residuals = Vector<T>.Empty();
-        }
-    }
 
     /// <summary>
     /// Core implementation of the training process for the Neural Network ARIMA model.

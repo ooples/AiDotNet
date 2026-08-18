@@ -702,29 +702,10 @@ public partial class TabFlowGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
     }
 
     /// <inheritdoc/>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_options.NumSteps);
-        writer.Write(_options.TimeEmbeddingDimension);
-        writer.Write(_options.Solver);
-        writer.Write(_options.DropoutRate);
-        writer.Write(_options.LearningRate);
-        writer.Write(_options.BatchSize);
-        writer.Write(_options.Sigma);
-        writer.Write(_options.VGMModes);
-        writer.Write(_options.MLPDimensions.Length);
-        foreach (var dim in _options.MLPDimensions)
-        {
-            writer.Write(dim);
-        }
-    }
+
 
     /// <inheritdoc/>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        // Options are reconstructed from serialized data
-        // Layers are handled by base class
-    }
+
 
     #endregion
 

@@ -203,30 +203,8 @@ public partial class TabMNetwork<T> : TabularNeuralNetworkBase<T>
     }
 
     /// <inheritdoc/>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_options.NumEnsembleMembers);
-        writer.Write(_options.DropoutRate);
-        writer.Write(_options.UseLayerNorm);
-        writer.Write(_options.RankInitScale);
-        writer.Write(_options.UseBias);
-        writer.Write(_options.ActivationType);
-        writer.Write(_options.AverageEnsemble);
-        writer.Write(_options.UseFeatureEmbeddings);
-        writer.Write(_options.FeatureEmbeddingDimension);
-        writer.Write(_options.EnableGradientClipping);
-        writer.Write(_options.MaxGradientNorm);
-        writer.Write(_options.WeightDecay);
 
-        writer.Write(_options.HiddenDimensions.Length);
-        foreach (var dim in _options.HiddenDimensions)
-        {
-            writer.Write(dim);
-        }
-    }
 
     /// <inheritdoc/>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-    }
+
 }

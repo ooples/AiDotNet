@@ -1072,48 +1072,10 @@ public partial class ConvTasNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T
     }
 
     /// <inheritdoc/>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(IsOnnxMode);
-        writer.Write(SampleRate);
-        writer.Write(_encoderDim);
-        writer.Write(_kernelSize);
-        writer.Write(_stride);
-        writer.Write(_numSources);
-        writer.Write(_bottleneckDim);
-        writer.Write(_hiddenDim);
-        writer.Write(_numBlocks);
-        writer.Write(_numRepeats);
-        writer.Write(_tcnKernelSize);
-        writer.Write(EnhancementStrength);
-        var parameters = GetParameters();
-        writer.Write(parameters.Length);
-        for (int i = 0; i < parameters.Length; i++)
-            writer.Write(_numOps.ToDouble(parameters[i]));
-    }
+
 
     /// <inheritdoc/>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        // Read configuration values for validation
-        _ = reader.ReadBoolean(); // IsOnnxMode
-        _ = reader.ReadInt32();   // SampleRate
-        _ = reader.ReadInt32();   // _encoderDim
-        _ = reader.ReadInt32();   // _kernelSize
-        _ = reader.ReadInt32();   // _stride
-        _ = reader.ReadInt32();   // _numSources
-        _ = reader.ReadInt32();   // _bottleneckDim
-        _ = reader.ReadInt32();   // _hiddenDim
-        _ = reader.ReadInt32();   // _numBlocks
-        _ = reader.ReadInt32();   // _numRepeats
-        _ = reader.ReadInt32();   // _tcnKernelSize
-        EnhancementStrength = reader.ReadDouble();
-        int parameterCount = reader.ReadInt32();
-        var parameters = new Vector<T>(parameterCount);
-        for (int i = 0; i < parameterCount; i++)
-            parameters[i] = _numOps.FromDouble(reader.ReadDouble());
-        SetParameters(parameters);
-    }
+
 
     #endregion
 

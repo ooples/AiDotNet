@@ -568,16 +568,7 @@ public partial class DeepAR<T> : ForecastingModelBase<T>
     /// to a file so the model can be loaded later with the same configuration.
     /// </para>
     /// </remarks>
-    protected override void SerializeModelSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_hiddenSize);
-        writer.Write(_numLstmLayers);
-        writer.Write(_embeddingDim);
-        writer.Write(_dropout);
-        writer.Write(_distributionType);
-        writer.Write(_numSamples);
-        writer.Write(_useScaling);
-    }
+
 
     /// <summary>
     /// Reads DeepAR-specific configuration during deserialization.
@@ -589,25 +580,7 @@ public partial class DeepAR<T> : ForecastingModelBase<T>
     /// The values advance the reader but aren't used since constructor sets them.
     /// </para>
     /// </remarks>
-    protected override void DeserializeModelSpecificData(BinaryReader reader)
-    {
-        _hiddenSize = reader.ReadInt32();
-        _numLstmLayers = reader.ReadInt32();
-        _embeddingDim = reader.ReadInt32();
-        _dropout = reader.ReadDouble();
-        _distributionType = reader.ReadString();
-        _numSamples = reader.ReadInt32();
-        _useScaling = reader.ReadBoolean();
 
-        // Re-bind the cached layer references (_inputProjection, _lstmLayers,
-        // _muProjection, _sigmaProjection, _layerNorm) to the layers the base
-        // deserializer just rebuilt with the loaded weights. Without this the
-        // references still point at the construction-time fresh-init layers, so
-        // Forward (and therefore Predict / a clone) ran on RANDOM weights rather
-        // than the deserialized ones — Clone_ShouldProduceIdenticalOutput saw the
-        // original vs a randomly-initialized clone.
-        ExtractLayerReferences();
-    }
 
     #endregion
 

@@ -223,41 +223,9 @@ public partial class HiFiGAN<T> : VocoderBase<T>
         return m;
     }
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_useNativeMode);
-        writer.Write(_options.ModelPath ?? string.Empty);
-        writer.Write(_options.SampleRate);
-        writer.Write(_options.MelChannels);
-        writer.Write(_options.HopSize);
-        writer.Write(_options.UpsampleInitialChannels);
-        writer.Write(_options.UpsampleRates.Length);
-        foreach (var r in _options.UpsampleRates)
-            writer.Write(r);
-        writer.Write(_options.DropoutRate);
-    }
 
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _useNativeMode = reader.ReadBoolean();
-        string mp = reader.ReadString();
-        if (!string.IsNullOrEmpty(mp))
-            _options.ModelPath = mp;
-        _options.SampleRate = reader.ReadInt32();
-        _options.MelChannels = reader.ReadInt32();
-        _options.HopSize = reader.ReadInt32();
-        _options.UpsampleInitialChannels = reader.ReadInt32();
-        int n = reader.ReadInt32();
-        _options.UpsampleRates = new int[n];
-        for (int i = 0; i < n; i++)
-            _options.UpsampleRates[i] = reader.ReadInt32();
-        _options.DropoutRate = reader.ReadDouble();
-        base.SampleRate = _options.SampleRate;
-        base.MelChannels = _options.MelChannels;
-        base.HopSize = _options.HopSize;
-        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
-            OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
-    }
+
+
 
     private void ThrowIfDisposed()
     {

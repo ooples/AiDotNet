@@ -540,18 +540,7 @@ public partial class LiquidStateMachine<T> : SequenceModelLayoutBase<T>
     /// when loaded later.
     /// </para>
     /// </remarks>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        // Write LSM-specific properties
-        writer.Write(_reservoirSize);
-        writer.Write(NumOps.ToDouble(_connectionProbability));
-        writer.Write(NumOps.ToDouble(_spectralRadius));
-        writer.Write(NumOps.ToDouble(_inputScaling));
-        writer.Write(NumOps.ToDouble(_leakingRate));
 
-        // Write whether we're in training mode
-        writer.Write(IsTrainingMode);
-    }
 
     /// <summary>
     /// Deserializes Liquid State Machine-specific data from a binary reader.
@@ -575,17 +564,7 @@ public partial class LiquidStateMachine<T> : SequenceModelLayoutBase<T>
     /// when it was saved, preserving all its behavior and learned patterns.
     /// </para>
     /// </remarks>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _reservoirSize = reader.ReadInt32();
-        _connectionProbability = NumOps.FromDouble(reader.ReadDouble());
-        _spectralRadius = NumOps.FromDouble(reader.ReadDouble());
-        _inputScaling = NumOps.FromDouble(reader.ReadDouble());
-        _leakingRate = NumOps.FromDouble(reader.ReadDouble());
 
-        // Read training mode
-        IsTrainingMode = reader.ReadBoolean();
-    }
 
     /// <summary>
     /// Sets the training mode for the Liquid State Machine.

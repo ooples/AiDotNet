@@ -510,29 +510,9 @@ public partial class FeedForwardNeuralNetwork<T> : SequentialVectorModelLayoutBa
     /// This is useful when you want to save a trained model for later use.
     /// </para>
     /// </remarks>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        // Serialize optimizer and loss function interfaces
-        SerializationHelper<T>.SerializeInterface(writer, _optimizer);
-        SerializationHelper<T>.SerializeInterface(writer, _lossFunction);
-    }
 
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        // Deserialize and restore optimizer
-        var optimizer = DeserializationHelper.DeserializeInterface<IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>>(reader);
-        if (optimizer != null)
-        {
-            _optimizer = optimizer;
-        }
 
-        // Deserialize and restore loss function
-        var lossFunction = DeserializationHelper.DeserializeInterface<ILossFunction<T>>(reader);
-        if (lossFunction != null)
-        {
-            _lossFunction = lossFunction;
-        }
-    }
+
 
     /// <summary>
     /// Indicates whether this network supports training.

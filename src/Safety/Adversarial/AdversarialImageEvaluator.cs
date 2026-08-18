@@ -349,16 +349,10 @@ public partial class AdversarialImageEvaluator<T> : NeuralNetworkBase<T>, IImage
     };
 
     /// <inheritdoc />
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_threshold);
-    }
+
 
     /// <inheritdoc />
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _threshold = reader.ReadDouble();
-    }
+
 
     private static double ComputeHighFrequencyAnomalyScore(ReadOnlySpan<T> span, int[] shape)
     {

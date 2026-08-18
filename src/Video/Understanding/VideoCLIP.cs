@@ -1157,52 +1157,10 @@ public partial class VideoCLIP<T> : NeuralNetworkBase<T>
     }
 
     /// <inheritdoc/>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_height);
-        writer.Write(_width);
-        writer.Write(_channels);
-        writer.Write(_numFrames);
-        writer.Write(_embeddingDim);
-        writer.Write(_textMaxLength);
-        writer.Write(_vocabSize);
-        writer.Write(_temperature);
 
-        // The learned embedding tables. They are trainable (see GetExtraTrainableTensors) and live
-        // outside Layers, so the layer-by-layer weight sections of the stream do not carry them and
-        // a reload rebuilt them from InitializeEmbeddingTable's RNG instead — dropping trained text
-        // -tower weights on every save/load. Same element-by-element idiom VisionTransformer uses
-        // for its CLS and positional tokens.
-        for (int i = 0; i < _tokenEmbeddingTable.Length; i++)
-            writer.Write(Convert.ToDouble(_tokenEmbeddingTable[i]));
-        for (int i = 0; i < _positionalEmbeddingTable.Length; i++)
-            writer.Write(Convert.ToDouble(_positionalEmbeddingTable[i]));
-    }
 
     /// <inheritdoc/>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _ = reader.ReadInt32();
-        _ = reader.ReadInt32();
-        _ = reader.ReadInt32();
-        _ = reader.ReadInt32();
-        _ = reader.ReadInt32();
-        _ = reader.ReadInt32();
-        _ = reader.ReadInt32();
-        _ = reader.ReadDouble();
-        // Restore the learned embedding tables written above. The geometry fields are discarded
-        // because they are readonly and the constructor has already rebuilt this instance at the
-        // right sizes; these tensors, by contrast, carry trained values that only the stream has.
-        for (int i = 0; i < _tokenEmbeddingTable.Length; i++)
-            _tokenEmbeddingTable[i] = NumOps.FromDouble(reader.ReadDouble());
-        for (int i = 0; i < _positionalEmbeddingTable.Length; i++)
-            _positionalEmbeddingTable[i] = NumOps.FromDouble(reader.ReadDouble());
 
-        // The base deserializer has just replaced Layers with the restored instances. Rebind the
-        // per-stage views so the explicit forward and the tape both consume those restored weights
-        // rather than the constructor-fresh layers they were bound to.
-        BindLayerViewsFromLayers();
-    }
 
     /// <inheritdoc/>
     /// <summary>

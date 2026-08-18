@@ -259,8 +259,8 @@ public partial class TSDiff<T> : TimeSeriesFoundationModelBase<T>
         ModelData = _useNativeMode ? this.Serialize() : Array.Empty<byte>()
     };
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer) { writer.Write(_sequenceLength); writer.Write(_forecastHorizon); writer.Write(_hiddenDimension); writer.Write(_numResidualBlocks); writer.Write(_numDiffusionSteps); writer.Write(_numAttentionHeads); writer.Write(_dropout); writer.Write(_betaStart); writer.Write(_betaEnd); writer.Write(_guidanceScale); }
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader) { _sequenceLength = reader.ReadInt32(); _forecastHorizon = reader.ReadInt32(); _hiddenDimension = reader.ReadInt32(); _numResidualBlocks = reader.ReadInt32(); _numDiffusionSteps = reader.ReadInt32(); _numAttentionHeads = reader.ReadInt32(); _dropout = reader.ReadDouble(); _betaStart = reader.ReadDouble(); _betaEnd = reader.ReadDouble(); _guidanceScale = reader.ReadDouble(); ComputeNoiseSchedule(); }
+
+
 
     #endregion
 

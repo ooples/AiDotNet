@@ -445,74 +445,9 @@ public partial class Helix<T> : VisionLanguageModelBase<T>, IVisionLanguageActio
         return meta;
     }
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_useNativeMode);
-        writer.Write(_options.ModelPath ?? string.Empty);
-        writer.Write(_options.ImageSize);
-        writer.Write(_options.VisionDim);
-        writer.Write(_options.DecoderDim);
-        writer.Write(_options.NumVisionLayers);
-        writer.Write(_options.NumDecoderLayers);
-        writer.Write(_options.NumHeads);
-        writer.Write(_options.ActionDimension);
-        writer.Write(_options.NumJoints);
-        writer.Write(_options.System2LatentDim);
-        writer.Write(_options.System1HiddenDim);
-        writer.Write(_options.System1NumLayers);
-        writer.Write(_options.System1NumHeads);
-        writer.Write(_options.System1ToSystem2Ratio);
 
-        // The instruction-token embedding lives outside Layers, so the base
-        // per-layer serialization never persists it — without this block a trained
-        // model's embedding table silently reverts to random init on load.
-        var embedParams = _tokenEmbedding.GetParameters();
-        writer.Write(embedParams.Length);
-        for (int i = 0; i < embedParams.Length; i++)
-            writer.Write(Convert.ToDouble(embedParams[i]));
-    }
 
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _useNativeMode = reader.ReadBoolean();
-        string mp = reader.ReadString();
-        if (!string.IsNullOrEmpty(mp))
-            _options.ModelPath = mp;
-        _options.ImageSize = reader.ReadInt32();
-        _options.VisionDim = reader.ReadInt32();
-        _options.DecoderDim = reader.ReadInt32();
-        _options.NumVisionLayers = reader.ReadInt32();
-        _options.NumDecoderLayers = reader.ReadInt32();
-        _options.NumHeads = reader.ReadInt32();
-        _options.ActionDimension = reader.ReadInt32();
-        _options.NumJoints = reader.ReadInt32();
-        _options.System2LatentDim = reader.ReadInt32();
-        _options.System1HiddenDim = reader.ReadInt32();
-        _options.System1NumLayers = reader.ReadInt32();
-        _options.System1NumHeads = reader.ReadInt32();
-        _options.System1ToSystem2Ratio = reader.ReadInt32();
 
-        // Restore the trained instruction-token embedding written by
-        // SerializeNetworkSpecificData (it lives outside Layers, so the base
-        // per-layer restore never touches it).
-        int embedCount = reader.ReadInt32();
-        if (embedCount > 0)
-        {
-            if (embedCount != (int)_tokenEmbedding.ParameterCount)
-                throw new InvalidOperationException(
-                    $"Serialized Helix token-embedding parameter count ({embedCount:N0}) does not match "
-                        + $"this instance's embedding ({_tokenEmbedding.ParameterCount:N0}). The model was saved with "
-                        + "a different VocabSize/DecoderDim configuration."
-                );
-            var embedParams = new Vector<T>(embedCount);
-            for (int i = 0; i < embedCount; i++)
-                embedParams[i] = NumOps.FromDouble(reader.ReadDouble());
-            _tokenEmbedding.SetParameters(embedParams);
-        }
-
-        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
-            OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
-    }
 
     private void ThrowIfDisposed()
     {

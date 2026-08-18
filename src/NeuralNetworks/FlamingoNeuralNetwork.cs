@@ -15,7 +15,8 @@ using AiDotNet.Tokenization;
 using AiDotNet.Tokenization.Interfaces;
 using Microsoft.ML.OnnxRuntime;
 using AiDotNet.Validation;
-using OnnxTensors = Microsoft.ML.OnnxRuntime.Tensors;
+using OnnxTensors = Microsoft.ML.OnnxRuntime.Tensors;
+
 using System.Collections.Generic;
 
 namespace AiDotNet.NeuralNetworks;
@@ -1286,44 +1287,10 @@ public partial class FlamingoNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IF
     }
 
     /// <inheritdoc/>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_embeddingDimension);
-        writer.Write(_maxSequenceLength);
-        writer.Write(_imageSize);
-        writer.Write(_numPerceiverTokens);
-        writer.Write(_maxImagesInContext);
-        writer.Write(_visionHiddenDim);
-        writer.Write(_lmHiddenDim);
-        writer.Write(_numVisionLayers);
-        writer.Write(_numLmLayers);
-        writer.Write(_numHeads);
-        writer.Write(_patchSize);
-        writer.Write(_vocabularySize);
-        writer.Write((int)_languageModelBackbone);
-        writer.Write(_numPerceiverLayers);
-        writer.Write(_useNativeMode);
-    }
+
 
     /// <inheritdoc/>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _ = reader.ReadInt32();
-        _ = reader.ReadInt32();
-        _ = reader.ReadInt32();
-        _ = reader.ReadInt32();
-        _ = reader.ReadInt32();
-        _ = reader.ReadInt32();
-        _ = reader.ReadInt32();
-        _ = reader.ReadInt32();
-        _ = reader.ReadInt32();
-        _ = reader.ReadInt32();
-        _ = reader.ReadInt32();
-        _ = reader.ReadInt32();
-        _ = (LanguageModelBackbone)reader.ReadInt32();
-        _ = reader.ReadInt32();
-        _ = reader.ReadBoolean();
-    }
+
 
     /// <inheritdoc/>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()

@@ -222,71 +222,8 @@ public partial class AutoIntNetwork<T> : TabularNeuralNetworkBase<T>
     }
 
     /// <inheritdoc/>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_options.EmbeddingDimension);
-        writer.Write(_options.NumLayers);
-        writer.Write(_options.NumHeads);
-        writer.Write(_options.AttentionDimension);
-        writer.Write(_options.DropoutRate);
-        writer.Write(_options.UseResidual);
-        writer.Write(_options.UseLayerNorm);
-        writer.Write(_options.EmbeddingInitScale);
 
-        writer.Write(_options.MLPHiddenDimensions.Length);
-        foreach (var dim in _options.MLPHiddenDimensions)
-        {
-            writer.Write(dim);
-        }
-
-        if (_options.CategoricalCardinalities != null)
-        {
-            writer.Write(_options.CategoricalCardinalities.Length);
-            foreach (var card in _options.CategoricalCardinalities)
-            {
-                writer.Write(card);
-            }
-        }
-        else
-        {
-            writer.Write(0);
-        }
-    }
 
     /// <inheritdoc/>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        var options = new AutoIntOptions<T>
-        {
-            EmbeddingDimension = reader.ReadInt32(),
-            NumLayers = reader.ReadInt32(),
-            NumHeads = reader.ReadInt32(),
-            AttentionDimension = reader.ReadInt32(),
-            DropoutRate = reader.ReadDouble(),
-            UseResidual = reader.ReadBoolean(),
-            UseLayerNorm = reader.ReadBoolean(),
-            EmbeddingInitScale = reader.ReadDouble()
-        };
 
-        int mlpDimCount = reader.ReadInt32();
-        var mlpDims = new int[mlpDimCount];
-        for (int i = 0; i < mlpDimCount; i++)
-        {
-            mlpDims[i] = reader.ReadInt32();
-        }
-        options.MLPHiddenDimensions = mlpDims;
-
-        int catCount = reader.ReadInt32();
-        if (catCount > 0)
-        {
-            var cardinalities = new int[catCount];
-            for (int i = 0; i < catCount; i++)
-            {
-                cardinalities[i] = reader.ReadInt32();
-            }
-            options.CategoricalCardinalities = cardinalities;
-        }
-
-        _options = options;
-    }
 }

@@ -219,28 +219,10 @@ public partial class ShiftNet<T> : VideoDenoisingBase<T>
     }
 
     /// <inheritdoc/>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write((int)_options.Variant);
-        writer.Write(_options.NumFeatures);
-        writer.Write(_options.NumBlocks);
-        writer.Write(_options.NumShifts);
-        writer.Write(_options.ShiftRadius);
-        writer.Write(_options.LearningRate);
-        writer.Write(_options.DropoutRate);
-    }
+
 
     /// <inheritdoc/>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _options.Variant = (VideoModelVariant)reader.ReadInt32();
-        _options.NumFeatures = reader.ReadInt32();
-        _options.NumBlocks = reader.ReadInt32();
-        _options.NumShifts = reader.ReadInt32();
-        _options.ShiftRadius = reader.ReadInt32();
-        _options.LearningRate = reader.ReadDouble();
-        _options.DropoutRate = reader.ReadDouble();
-    }
+
 
     private void ThrowIfDisposed()
     {

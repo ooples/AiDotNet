@@ -252,39 +252,9 @@ public partial class MetaCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisio
         return m;
     }
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_useNativeMode);
-        writer.Write(_options.ImageEncoderModelPath ?? string.Empty);
-        writer.Write(_options.TextEncoderModelPath ?? string.Empty);
-        writer.Write(_options.ImageSize);
-        writer.Write(_options.VisionEmbeddingDim);
-        writer.Write(_options.TextEmbeddingDim);
-        writer.Write(_options.ProjectionDim);
-        writer.Write(_options.Temperature);
-        writer.Write((int)_options.Dataset);
-    }
 
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _useNativeMode = reader.ReadBoolean();
-        string ip = reader.ReadString();
-        if (!string.IsNullOrEmpty(ip))
-            _options.ImageEncoderModelPath = ip;
-        string tp = reader.ReadString();
-        if (!string.IsNullOrEmpty(tp))
-            _options.TextEncoderModelPath = tp;
-        _options.ImageSize = reader.ReadInt32();
-        _options.VisionEmbeddingDim = reader.ReadInt32();
-        _options.TextEmbeddingDim = reader.ReadInt32();
-        _options.ProjectionDim = reader.ReadInt32();
-        _options.Temperature = reader.ReadDouble();
-        _options.Dataset = (PretrainingDataset)reader.ReadInt32();
-        if (!_useNativeMode && _options.ImageEncoderModelPath is { } p && !string.IsNullOrEmpty(p))
-            OnnxImageEncoder = new OnnxModel<T>(p, _options.OnnxOptions);
-        if (_options.TextEncoderModelPath is { } t2 && !string.IsNullOrEmpty(t2))
-            OnnxTextEncoder = new OnnxModel<T>(t2, _options.OnnxOptions);
-    }
+
+
 
     private Tensor<T> TokenizeText(string text)
     {

@@ -1116,36 +1116,7 @@ public partial class UnobservedComponentsModel<T, TInput, TOutput> : TimeSeriesM
     /// 
     /// This allows the model to be fully reconstructed later.
     /// </remarks>
-    protected override void SerializeCore(BinaryWriter writer)
-    {
-        // Write model parameters
-        writer.Write(_trend.Length);
-        for (int i = 0; i < _trend.Length; i++)
-        {
-            writer.Write(Convert.ToDouble(_trend[i]));
-        }
 
-        writer.Write(_seasonal.Length);
-        for (int i = 0; i < _seasonal.Length; i++)
-        {
-            writer.Write(Convert.ToDouble(_seasonal[i]));
-        }
-
-        writer.Write(_cycle.Length);
-        for (int i = 0; i < _cycle.Length; i++)
-        {
-            writer.Write(Convert.ToDouble(_cycle[i]));
-        }
-
-        writer.Write(_irregular.Length);
-        for (int i = 0; i < _irregular.Length; i++)
-        {
-            writer.Write(Convert.ToDouble(_irregular[i]));
-        }
-
-        // Write options
-        writer.Write(_ucOptions.MaxIterations);
-    }
 
     /// <summary>
     /// Deserializes the model's state from a binary stream.
@@ -1169,40 +1140,7 @@ public partial class UnobservedComponentsModel<T, TInput, TOutput> : TimeSeriesM
     /// 
     /// After deserialization, the model is ready to make predictions as if it had just been trained.
     /// </remarks>
-    protected override void DeserializeCore(BinaryReader reader)
-    {
-        // Read model parameters
-        int trendLength = reader.ReadInt32();
-        _trend = new Vector<T>(trendLength);
-        for (int i = 0; i < trendLength; i++)
-        {
-            _trend[i] = NumOps.FromDouble(reader.ReadDouble());
-        }
 
-        int seasonalLength = reader.ReadInt32();
-        _seasonal = new Vector<T>(seasonalLength);
-        for (int i = 0; i < seasonalLength; i++)
-        {
-            _seasonal[i] = NumOps.FromDouble(reader.ReadDouble());
-        }
-
-        int cycleLength = reader.ReadInt32();
-        _cycle = new Vector<T>(cycleLength);
-        for (int i = 0; i < cycleLength; i++)
-        {
-            _cycle[i] = NumOps.FromDouble(reader.ReadDouble());
-        }
-
-        int irregularLength = reader.ReadInt32();
-        _irregular = new Vector<T>(irregularLength);
-        for (int i = 0; i < irregularLength; i++)
-        {
-            _irregular[i] = NumOps.FromDouble(reader.ReadDouble());
-        }
-
-        // Read options
-        _ucOptions.MaxIterations = reader.ReadInt32();
-    }
 
     /// <summary>
     /// Implements the model-specific training logic for the Unobserved Components Model.

@@ -229,10 +229,7 @@ public partial class FinGPT<T> : FinancialNLPModelBase<T>
     /// <b>For Beginners:</b> In the FinGPT model, SerializeModelSpecificData saves or restores model-specific settings. This lets the FinGPT architecture be reused later.
     /// </para>
     /// </remarks>
-    protected override void SerializeModelSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_dropout);
-    }
+
 
     /// <summary>
     /// Executes DeserializeModelSpecificData for the FinGPT.
@@ -242,10 +239,7 @@ public partial class FinGPT<T> : FinancialNLPModelBase<T>
     /// <b>For Beginners:</b> In the FinGPT model, DeserializeModelSpecificData saves or restores model-specific settings. This lets the FinGPT architecture be reused later.
     /// </para>
     /// </remarks>
-    protected override void DeserializeModelSpecificData(BinaryReader reader)
-    {
-        _dropout = reader.ReadDouble();
-    }
+
 
     /// <summary>
     /// Executes ForecastNative for the FinGPT.

@@ -1376,57 +1376,10 @@ public partial class AudioVisualEventLocalizationNetwork<T> : MultimodalModelLay
     }
 
     /// <inheritdoc/>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_embeddingDimension);
-        writer.Write(_temporalResolution);
-        writer.Write(_numEncoderLayers);
-        writer.Write(_supportedCategories.Count);
-        foreach (var category in _supportedCategories)
-        {
-            writer.Write(category);
-        }
-    }
+
 
     /// <inheritdoc/>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        // Read serialized values
-        int embDim = reader.ReadInt32();
-        double tempRes = reader.ReadDouble();
-        int numLayers = reader.ReadInt32();
-        int categoryCount = reader.ReadInt32();
-        var categories = new List<string>();
-        for (int i = 0; i < categoryCount; i++)
-        {
-            categories.Add(reader.ReadString());
-        }
 
-        // Validate that loaded values match current instance configuration
-        if (embDim != _embeddingDimension)
-        {
-            throw new InvalidOperationException(
-                $"Loaded embedding dimension ({embDim}) doesn't match current ({_embeddingDimension}).");
-        }
-
-        if (Math.Abs(tempRes - _temporalResolution) > 0.0001)
-        {
-            throw new InvalidOperationException(
-                $"Loaded temporal resolution ({tempRes}) doesn't match current ({_temporalResolution}).");
-        }
-
-        if (numLayers != _numEncoderLayers)
-        {
-            throw new InvalidOperationException(
-                $"Loaded encoder layers ({numLayers}) doesn't match current ({_numEncoderLayers}).");
-        }
-
-        if (categoryCount != _supportedCategories.Count)
-        {
-            throw new InvalidOperationException(
-                $"Loaded category count ({categoryCount}) doesn't match current ({_supportedCategories.Count}).");
-        }
-    }
 
     /// <inheritdoc/>
     public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()

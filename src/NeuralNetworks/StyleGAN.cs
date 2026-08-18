@@ -874,67 +874,9 @@ public partial class StyleGAN<T> : ImageGeneratorModelLayoutBase<T>
         };
     }
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_initialLearningRate);
-        writer.Write(_latentSize);
-        writer.Write(_intermediateLatentSize);
-        writer.Write(_enableStyleMixing);
-        writer.Write(NumOps.ToDouble(_styleMixingProbability));
 
-        var mappingBytes = MappingNetwork.Serialize();
-        writer.Write(mappingBytes.Length);
-        writer.Write(mappingBytes);
 
-        var synthesisBytes = SynthesisNetwork.Serialize();
-        writer.Write(synthesisBytes.Length);
-        writer.Write(synthesisBytes);
 
-        var discriminatorBytes = Discriminator.Serialize();
-        writer.Write(discriminatorBytes.Length);
-        writer.Write(discriminatorBytes);
-
-        // Serialize optimizer state for complete training state preservation
-        SerializationHelper<T>.SerializeVector(writer, _mappingMomentum);
-        SerializationHelper<T>.SerializeVector(writer, _mappingSecondMoment);
-
-        SerializationHelper<T>.SerializeVector(writer, _synthesisMomentum);
-        SerializationHelper<T>.SerializeVector(writer, _synthesisSecondMoment);
-
-        SerializationHelper<T>.SerializeVector(writer, _discMomentum);
-        SerializationHelper<T>.SerializeVector(writer, _discSecondMoment);
-    }
-
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        // Read the learning rate that was written in SerializeNetworkSpecificData
-        // Note: _initialLearningRate is readonly so we can't reassign it here
-        // The value will be correctly set by the constructor when CreateNewInstance is used
-        _ = reader.ReadDouble(); // Consume the stored learning rate value
-        _latentSize = reader.ReadInt32();
-        _intermediateLatentSize = reader.ReadInt32();
-        _enableStyleMixing = reader.ReadBoolean();
-        _styleMixingProbability = NumOps.FromDouble(reader.ReadDouble());
-
-        int mappingLength = reader.ReadInt32();
-        MappingNetwork.Deserialize(reader.ReadBytes(mappingLength));
-
-        int synthesisLength = reader.ReadInt32();
-        SynthesisNetwork.Deserialize(reader.ReadBytes(synthesisLength));
-
-        int discriminatorLength = reader.ReadInt32();
-        Discriminator.Deserialize(reader.ReadBytes(discriminatorLength));
-
-        // Deserialize optimizer state
-        _mappingMomentum = SerializationHelper<T>.DeserializeVector(reader);
-        _mappingSecondMoment = SerializationHelper<T>.DeserializeVector(reader);
-
-        _synthesisMomentum = SerializationHelper<T>.DeserializeVector(reader);
-        _synthesisSecondMoment = SerializationHelper<T>.DeserializeVector(reader);
-
-        _discMomentum = SerializationHelper<T>.DeserializeVector(reader);
-        _discSecondMoment = SerializationHelper<T>.DeserializeVector(reader);
-    }
 
     // UpdateParameters split the vector between MappingNetwork, SynthesisNetwork and Discriminator;
     // GetExtraTrainableLayers yields those three in the same order, so the base reproduces the

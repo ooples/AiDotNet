@@ -495,30 +495,10 @@ public partial class AnimateDiff<T> : NeuralNetworkBase<T>
     }
 
     /// <inheritdoc/>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        if (!_useNativeMode)
-            throw new InvalidOperationException("Serialization is not supported in ONNX mode.");
 
-        writer.Write(_inputChannels);
-        writer.Write(_numLayers);
-        writer.Write(_numFrames);
-        writer.Write(_featureHeight);
-        writer.Write(_featureWidth);
-    }
 
     /// <inheritdoc/>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        if (!_useNativeMode)
-            throw new InvalidOperationException("Deserialization is not supported in ONNX mode.");
 
-        _ = reader.ReadInt32(); // inputChannels
-        _ = reader.ReadInt32(); // numLayers
-        _ = reader.ReadInt32(); // numFrames
-        _ = reader.ReadInt32(); // featureHeight
-        _ = reader.ReadInt32(); // featureWidth
-    }
 
     #endregion
 }

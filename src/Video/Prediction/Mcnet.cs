@@ -301,47 +301,10 @@ public partial class Mcnet<T> : VideoNeuralNetworkBase<T>
     }
 
     /// <inheritdoc/>
-    protected override void SerializeNetworkSpecificData(BinaryWriter w)
-    {
-        w.Write(_useNativeMode);
-        w.Write(_options.ModelPath ?? string.Empty);
-        w.Write(_options.NumFeatures);
-        w.Write(_options.NumContentBlocks);
-        w.Write(_options.NumMotionBlocks);
-        w.Write(_options.NumDecoderBlocks);
-        w.Write(_options.NumScales);
-        w.Write(_options.NumInputFrames);
-        w.Write(_options.NumPredictedFrames);
-        w.Write(_options.ImageLossWeight);
-        w.Write(_options.AdversarialLossWeight);
-        w.Write(_options.GradientLossExponent);
-        w.Write(_options.PixelLossNorm);
-        w.Write(_options.LearningRate);
-        w.Write(_options.DropoutRate);
-    }
+
 
     /// <inheritdoc/>
-    protected override void DeserializeNetworkSpecificData(BinaryReader r)
-    {
-        _useNativeMode = r.ReadBoolean();
-        string mp = r.ReadString();
-        if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp;
-        _options.NumFeatures = r.ReadInt32();
-        _options.NumContentBlocks = r.ReadInt32();
-        _options.NumMotionBlocks = r.ReadInt32();
-        _options.NumDecoderBlocks = r.ReadInt32();
-        _options.NumScales = r.ReadInt32();
-        _options.NumInputFrames = r.ReadInt32();
-        _options.NumPredictedFrames = r.ReadInt32();
-        _options.ImageLossWeight = r.ReadDouble();
-        _options.AdversarialLossWeight = r.ReadDouble();
-        _options.GradientLossExponent = r.ReadDouble();
-        _options.PixelLossNorm = r.ReadInt32();
-        _options.LearningRate = r.ReadDouble();
-        _options.DropoutRate = r.ReadDouble();
-        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
-            OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
-    }
+
 
     #endregion
 

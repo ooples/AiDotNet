@@ -539,20 +539,7 @@ public partial class TFT<T> : ForecastingModelBase<T>
     /// to a file so the model can be loaded later with the same configuration.
     /// </para>
     /// </remarks>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_sequenceLength);
-        writer.Write(_predictionHorizon);
-        writer.Write(_hiddenSize);
-        writer.Write(_numHeads);
-        writer.Write(_numLayers);
-        writer.Write(_dropout);
-        writer.Write(_quantileLevels.Length);
-        foreach (var q in _quantileLevels)
-            writer.Write(q);
-        writer.Write(_useVariableSelection);
-        writer.Write(_staticCovariateSize);
-    }
+
 
     /// <summary>
     /// Reads TFT-specific configuration during deserialization.
@@ -564,26 +551,7 @@ public partial class TFT<T> : ForecastingModelBase<T>
     /// and restores the model configuration.
     /// </para>
     /// </remarks>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _sequenceLength = reader.ReadInt32();
-        _predictionHorizon = reader.ReadInt32();
-        _hiddenSize = reader.ReadInt32();
-        _numHeads = reader.ReadInt32();
-        _numLayers = reader.ReadInt32();
-        _dropout = reader.ReadDouble();
-        int quantileCount = reader.ReadInt32();
-        _quantileLevels = new double[quantileCount];
-        for (int i = 0; i < quantileCount; i++)
-            _quantileLevels[i] = reader.ReadDouble();
-        _useVariableSelection = reader.ReadBoolean();
-        _staticCovariateSize = reader.ReadInt32();
 
-        // Re-bind cached layer references (variable-selection, LSTM enc/dec,
-        // _grnLayers, attention, output) to the deserialized weight-loaded layers
-        // so a clone runs on the loaded weights, not construction-time random init.
-        ExtractLayerReferences();
-    }
 
     #endregion
 

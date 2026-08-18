@@ -1042,42 +1042,12 @@ public partial class MusicGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerat
     /// <summary>
     /// Serializes network-specific data.
     /// </summary>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_useNativeMode);
-        writer.Write((int)_options.ModelSize);
-        writer.Write(_options.SampleRate);
-        writer.Write(_options.DurationSeconds);
-        writer.Write(_options.MaxDurationSeconds);
-        writer.Write(_options.Temperature);
-        writer.Write(_options.TopK);
-        writer.Write(_options.TopP);
-        writer.Write(_options.GuidanceScale);
-        writer.Write(_options.Stereo);
-        writer.Write(_options.NumCodebooks);
-        writer.Write(_options.CodebookSize);
-        writer.Write(_options.MaxTextLength);
-    }
+
 
     /// <summary>
     /// Deserializes network-specific data.
     /// </summary>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _ = reader.ReadBoolean();
-        _ = reader.ReadInt32();
-        _ = reader.ReadInt32();
-        _ = reader.ReadDouble();
-        _ = reader.ReadDouble();
-        _ = reader.ReadDouble();
-        _ = reader.ReadInt32();
-        _ = reader.ReadDouble();
-        _ = reader.ReadDouble();
-        _ = reader.ReadBoolean();
-        _ = reader.ReadInt32();
-        _ = reader.ReadInt32();
-        _ = reader.ReadInt32();
-    }
+
 
     #endregion
 

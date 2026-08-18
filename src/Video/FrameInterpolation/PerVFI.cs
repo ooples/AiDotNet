@@ -174,38 +174,9 @@ public partial class PerVFI<T> : FrameInterpolationBase<T>
         return m;
     }
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter w)
-    {
-        w.Write(_useNativeMode);
-        w.Write(_options.ModelPath ?? string.Empty);
-        w.Write((int)_options.Variant);
-        w.Write(_options.NumFeatures);
-        w.Write(_options.NumRefinementIters);
-        w.Write(_options.NumFlowScales);
-        w.Write(_options.NumResBlocks);
-        w.Write(_options.PerceptualWeight);
-        w.Write(_options.DropoutRate);
-    }
 
-    protected override void DeserializeNetworkSpecificData(BinaryReader r)
-    {
-        _useNativeMode = r.ReadBoolean();
-        string mp = r.ReadString();
-        if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp;
-        _options.Variant = (VideoModelVariant)r.ReadInt32();
-        _options.NumFeatures = r.ReadInt32();
-        _options.NumRefinementIters = r.ReadInt32();
-        _options.NumFlowScales = r.ReadInt32();
-        _options.NumResBlocks = r.ReadInt32();
-        _options.PerceptualWeight = r.ReadDouble();
-        _options.DropoutRate = r.ReadDouble();
-        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
-            OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
-        // Do NOT call InitializeLayers() here (matches the working AMT sibling): the layers are already
-        // built by CreateNewInstance -> ctor -> InitializeLayers before the base loads parameters, and
-        // InitializeLayers does not ClearLayers first, so a second call double-adds fresh untrained
-        // layers and corrupts the loaded weights (Clone_ShouldProduceIdenticalOutput divergence).
-    }
+
+
 
     #endregion
 

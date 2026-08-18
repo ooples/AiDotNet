@@ -274,26 +274,9 @@ public partial class BandSplitRNNEnhancer<T> : AudioNeuralNetworkBase<T>, IAudio
         return m;
     }
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter w)
-    {
-        w.Write(_useNativeMode); w.Write(_options.ModelPath ?? string.Empty);
-        w.Write(_options.SampleRate); w.Write(_options.Variant);
-        w.Write(_options.NumBands); w.Write(_options.BandRnnHiddenSize);
-        w.Write(_options.NumRnnLayers); w.Write(_options.FusionDim);
-        w.Write(_options.NumFreqBins); w.Write(_options.FFTSize);
-        w.Write(_options.HopLength); w.Write(_options.DropoutRate);
-    }
 
-    protected override void DeserializeNetworkSpecificData(BinaryReader r)
-    {
-        _useNativeMode = r.ReadBoolean(); string mp = r.ReadString(); if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp;
-        _options.SampleRate = r.ReadInt32(); _options.Variant = r.ReadString();
-        _options.NumBands = r.ReadInt32(); _options.BandRnnHiddenSize = r.ReadInt32();
-        _options.NumRnnLayers = r.ReadInt32(); _options.FusionDim = r.ReadInt32();
-        _options.NumFreqBins = r.ReadInt32(); _options.FFTSize = r.ReadInt32();
-        _options.HopLength = r.ReadInt32(); _options.DropoutRate = r.ReadDouble();
-        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxEncoder = new OnnxModel<T>(p, _options.OnnxOptions);
-    }
+
+
 
     #endregion
 

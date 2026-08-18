@@ -281,39 +281,10 @@ public partial class Kairos<T> : TimeSeriesFoundationModelBase<T>
     }
 
     /// <inheritdoc/>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_contextLength);
-        writer.Write(_forecastHorizon);
-        writer.Write(_patchSizes.Length);
-        foreach (var ps in _patchSizes)
-            writer.Write(ps);
-        writer.Write(_hiddenDimension);
-        writer.Write(_numLayers);
-        writer.Write(_numHeads);
-        writer.Write(_intermediateSize);
-        writer.Write(_dropout);
-        writer.Write((int)_modelSize);
-    }
+
 
     /// <inheritdoc/>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _contextLength = reader.ReadInt32();
-        _forecastHorizon = reader.ReadInt32();
-        int numPatchSizes = reader.ReadInt32();
-        if (numPatchSizes < 0 || numPatchSizes > 1000)
-            throw new InvalidOperationException($"Invalid numPatchSizes ({numPatchSizes}) in deserialization.");
-        _patchSizes = new int[numPatchSizes];
-        for (int i = 0; i < numPatchSizes; i++)
-            _patchSizes[i] = reader.ReadInt32();
-        _hiddenDimension = reader.ReadInt32();
-        _numLayers = reader.ReadInt32();
-        _numHeads = reader.ReadInt32();
-        _intermediateSize = reader.ReadInt32();
-        _dropout = reader.ReadDouble();
-        _modelSize = (FoundationModelSize)reader.ReadInt32();
-    }
+
 
     #endregion
 

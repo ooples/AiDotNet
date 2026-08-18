@@ -531,36 +531,10 @@ public partial class Dessurt<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
     }
 
     /// <inheritdoc/>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_encoderDim);
-        writer.Write(_decoderDim);
-        writer.Write(_encoderLayers);
-        writer.Write(_decoderLayers);
-        writer.Write(_numHeads);
-        writer.Write(_vocabSize);
-        writer.Write(ImageSize);
-        writer.Write(MaxSequenceLength);
-        writer.Write(_useNativeMode);
-    }
+
 
     /// <inheritdoc/>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        int encoderDim = reader.ReadInt32();
-        int decoderDim = reader.ReadInt32();
-        int encoderLayers = reader.ReadInt32();
-        int decoderLayers = reader.ReadInt32();
-        int numHeads = reader.ReadInt32();
-        int vocabSize = reader.ReadInt32();
-        int imageSize = reader.ReadInt32();
-        int maxSeqLen = reader.ReadInt32();
-        bool useNativeMode = reader.ReadBoolean();
 
-        ImageSize = imageSize;
-        MaxSequenceLength = maxSeqLen;
-        _nativeLayersInitialized = Layers.Count > 0;
-    }
 
     /// <inheritdoc/>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
@@ -625,7 +599,8 @@ public partial class Dessurt<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
         }
     }
 
-    // UpdateParameters applied a GRADIENT STEP, but its one-argument form is the value setter and every caller passes values -- the override corrupted the model. Removed under AIDN082.
+    // UpdateParameters applied a GRADIENT STEP, but its one-argument form is the value setter and every caller passes values -- the override corrupted the model. Removed under AIDN082.
+
 
     /// <summary>
     /// Parameters cannot be written while the model is backed by a loaded ONNX graph: the weights

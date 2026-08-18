@@ -752,41 +752,7 @@ public partial class MTGNN<T> : ForecastingModelBase<T>
     /// <b>For Beginners:</b> In the MTGNN model, SerializeNetworkSpecificData saves or restores model-specific settings. This lets the MTGNN architecture be reused later.
     /// </para>
     /// </remarks>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_sequenceLength);
-        writer.Write(_forecastHorizon);
-        writer.Write(_numNodes);
-        writer.Write(_numFeatures);
-        writer.Write(_hiddenDimension);
-        writer.Write(_nodeEmbeddingDim);
-        writer.Write(_numLayers);
-        writer.Write(_mixHopDepth);
-        writer.Write(_temporalKernelSize);
-        writer.Write(_dilationFactor);
-        writer.Write(_usePredefinedGraph);
-        writer.Write(_useSubgraphSampling);
-        writer.Write(_subgraphSize);
-        writer.Write(_numSamples);
 
-        // Serialize node embeddings
-        if (_nodeEmbedding1 is not null && _nodeEmbedding2 is not null)
-        {
-            writer.Write(true);
-            for (int i = 0; i < _numNodes; i++)
-            {
-                for (int j = 0; j < _nodeEmbeddingDim; j++)
-                {
-                    writer.Write(_nodeEmbedding1[i, j]);
-                    writer.Write(_nodeEmbedding2[i, j]);
-                }
-            }
-        }
-        else
-        {
-            writer.Write(false);
-        }
-    }
 
     /// <summary>
     /// Deserializes MTGNN-specific data.
@@ -797,42 +763,7 @@ public partial class MTGNN<T> : ForecastingModelBase<T>
     /// <b>For Beginners:</b> In the MTGNN model, DeserializeNetworkSpecificData saves or restores model-specific settings. This lets the MTGNN architecture be reused later.
     /// </para>
     /// </remarks>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _sequenceLength = reader.ReadInt32();
-        _forecastHorizon = reader.ReadInt32();
-        _numNodes = reader.ReadInt32();
-        int numNodes = _numNodes;
-        _numFeatures = reader.ReadInt32();
-        _hiddenDimension = reader.ReadInt32();
-        _nodeEmbeddingDim = reader.ReadInt32();
-        int embeddingDim = _nodeEmbeddingDim;
-        _numLayers = reader.ReadInt32();
-        _mixHopDepth = reader.ReadInt32();
-        _temporalKernelSize = reader.ReadInt32();
-        _dilationFactor = reader.ReadInt32();
-        _usePredefinedGraph = reader.ReadBoolean();
-        _useSubgraphSampling = reader.ReadBoolean();
-        _subgraphSize = reader.ReadInt32();
-        _numSamples = reader.ReadInt32();
 
-        // Deserialize node embeddings
-        bool hasEmbeddings = reader.ReadBoolean();
-        if (hasEmbeddings)
-        {
-            _nodeEmbedding1 = new double[numNodes, embeddingDim];
-            _nodeEmbedding2 = new double[numNodes, embeddingDim];
-            for (int i = 0; i < numNodes; i++)
-            {
-                for (int j = 0; j < embeddingDim; j++)
-                {
-                    _nodeEmbedding1[i, j] = reader.ReadDouble();
-                    _nodeEmbedding2[i, j] = reader.ReadDouble();
-                }
-            }
-            UpdateAdaptiveAdjacency();
-        }
-    }
 
     #endregion
 

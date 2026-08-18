@@ -281,28 +281,10 @@ public partial class BSVD<T> : VideoDenoisingBase<T>
     }
 
     /// <inheritdoc/>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write((int)_options.Variant);
-        writer.Write(_options.NumFeatures);
-        writer.Write(_options.NumRecurrentBlocks);
-        writer.Write(_options.BufferDim);
-        writer.Write(_options.NumLevels);
-        writer.Write(_options.LearningRate);
-        writer.Write(_options.DropoutRate);
-    }
+
 
     /// <inheritdoc/>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _options.Variant = (VideoModelVariant)reader.ReadInt32();
-        _options.NumFeatures = reader.ReadInt32();
-        _options.NumRecurrentBlocks = reader.ReadInt32();
-        _options.BufferDim = reader.ReadInt32();
-        _options.NumLevels = reader.ReadInt32();
-        _options.LearningRate = reader.ReadDouble();
-        _options.DropoutRate = reader.ReadDouble();
-    }
+
 
     private void ThrowIfDisposed()
     {

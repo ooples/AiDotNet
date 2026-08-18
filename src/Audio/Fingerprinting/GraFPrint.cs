@@ -460,28 +460,9 @@ internal partial class GraFPrint<T> : AudioNeuralNetworkBase<T>, IAudioFingerpri
         return m;
     }
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter w)
-    {
-        w.Write(_useNativeMode); w.Write(_options.ModelPath ?? string.Empty);
-        w.Write(_options.SampleRate); w.Write(_options.NumMels); w.Write(_options.FftSize);
-        w.Write(_options.HopLength); w.Write(_options.SegmentDurationSec);
-        w.Write(_options.EmbeddingDim); w.Write(_options.GnnHiddenDim);
-        w.Write(_options.NumGnnLayers); w.Write(_options.NumAttentionHeads);
-        w.Write(_options.KNeighbors); w.Write(_options.Temperature); w.Write(_options.DropoutRate);
-    }
 
-    protected override void DeserializeNetworkSpecificData(BinaryReader r)
-    {
-        _useNativeMode = r.ReadBoolean(); string mp = r.ReadString(); if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp;
-        _options.SampleRate = r.ReadInt32(); _options.NumMels = r.ReadInt32(); _options.FftSize = r.ReadInt32();
-        _options.HopLength = r.ReadInt32(); _options.SegmentDurationSec = r.ReadDouble();
-        _options.EmbeddingDim = r.ReadInt32(); _options.GnnHiddenDim = r.ReadInt32();
-        _options.NumGnnLayers = r.ReadInt32(); _options.NumAttentionHeads = r.ReadInt32();
-        _options.KNeighbors = r.ReadInt32(); _options.Temperature = r.ReadDouble(); _options.DropoutRate = r.ReadDouble();
-        NormalizeEmbeddingDimFromArchitecture();
-        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxEncoder = new OnnxModel<T>(p, _options.OnnxOptions);
-        _melSpectrogram = new MelSpectrogram<T>(_options.SampleRate, _options.NumMels, _options.FftSize, _options.HopLength);
-    }
+
+
 
     private void NormalizeEmbeddingDimFromArchitecture()
     {

@@ -582,21 +582,7 @@ public partial class TSDiff<T> : ForecastingModelBase<T>
     /// <b>For Beginners:</b> In the TSDiff model, SerializeNetworkSpecificData saves or restores model-specific settings. This lets the TSDiff architecture be reused later.
     /// </para>
     /// </remarks>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_sequenceLength);
-        writer.Write(_forecastHorizon);
-        writer.Write(_numFeatures);
-        writer.Write(_hiddenDimension);
-        writer.Write(_numResidualBlocks);
-        writer.Write(_numDiffusionSteps);
-        writer.Write(_numSamples);
-        writer.Write(_numAttentionHeads);
-        writer.Write(_guidanceScale);
-        writer.Write(_useSelfGuidance);
-        writer.Write(_useObservationGuidance);
-        writer.Write(_betaSchedule);
-    }
+
 
     /// <summary>
     /// Deserializes TSDiff-specific data.
@@ -607,21 +593,7 @@ public partial class TSDiff<T> : ForecastingModelBase<T>
     /// <b>For Beginners:</b> In the TSDiff model, DeserializeNetworkSpecificData saves or restores model-specific settings. This lets the TSDiff architecture be reused later.
     /// </para>
     /// </remarks>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _sequenceLength = reader.ReadInt32();
-        _forecastHorizon = reader.ReadInt32();
-        _numFeatures = reader.ReadInt32();
-        _hiddenDimension = reader.ReadInt32();
-        _numResidualBlocks = reader.ReadInt32();
-        _numDiffusionSteps = reader.ReadInt32();
-        _numSamples = reader.ReadInt32();
-        _numAttentionHeads = reader.ReadInt32();
-        _guidanceScale = reader.ReadDouble();
-        _useSelfGuidance = reader.ReadBoolean();
-        _useObservationGuidance = reader.ReadBoolean();
-        _betaSchedule = reader.ReadString();
-    }
+
 
     #endregion
 

@@ -353,35 +353,10 @@ public partial class SelfOrganizingMap<T> : VectorModelLayoutBase<T>
     }
 
     /// <inheritdoc/>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_inputDimension);
-        writer.Write(_mapWidth);
-        writer.Write(_mapHeight);
-        writer.Write(_totalEpochs);
-        writer.Write(_currentEpoch);
 
-        int n = _mapWidth * _mapHeight;
-        for (int i = 0; i < n; i++)
-            for (int j = 0; j < _inputDimension; j++)
-                writer.Write(Convert.ToDouble(_weights[i, j]));
-    }
 
     /// <inheritdoc/>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _inputDimension = reader.ReadInt32();
-        _mapWidth = reader.ReadInt32();
-        _mapHeight = reader.ReadInt32();
-        _totalEpochs = reader.ReadInt32();
-        _currentEpoch = reader.ReadInt32();
 
-        int n = _mapWidth * _mapHeight;
-        _weights = new Tensor<T>(new[] { n, _inputDimension });
-        for (int i = 0; i < n; i++)
-            for (int j = 0; j < _inputDimension; j++)
-                _weights[i, j] = NumOps.FromDouble(reader.ReadDouble());
-    }
 
     /// <inheritdoc/>
     public override bool SupportsTraining => true;

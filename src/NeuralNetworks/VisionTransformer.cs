@@ -585,77 +585,13 @@ public partial class VisionTransformer<T> : ImageClassifierModelLayoutBase<T>
     /// Serializes Vision Transformer-specific data.
     /// </summary>
     /// <param name="writer">The binary writer to write data to.</param>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_imageHeight);
-        writer.Write(_imageWidth);
-        writer.Write(_channels);
-        writer.Write(_patchSize);
-        writer.Write(_numClasses);
-        writer.Write(_hiddenDim);
-        writer.Write(_numLayers);
-        writer.Write(_numHeads);
-        writer.Write(_mlpDim);
 
-        for (int i = 0; i < _clsToken.Length; i++)
-        {
-            writer.Write(Convert.ToDouble(_clsToken[i]));
-        }
-
-        for (int i = 0; i < _positionalEmbeddings.Shape[0]; i++)
-        {
-            for (int j = 0; j < _positionalEmbeddings.Shape[1]; j++)
-            {
-                writer.Write(Convert.ToDouble(_positionalEmbeddings[i, j]));
-            }
-        }
-    }
 
     /// <summary>
     /// Deserializes Vision Transformer-specific data.
     /// </summary>
     /// <param name="reader">The binary reader to read data from.</param>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        int imageHeight = reader.ReadInt32();
-        int imageWidth = reader.ReadInt32();
-        int channels = reader.ReadInt32();
-        int patchSize = reader.ReadInt32();
-        int numClasses = reader.ReadInt32();
-        int hiddenDim = reader.ReadInt32();
-        int numLayers = reader.ReadInt32();
-        int numHeads = reader.ReadInt32();
-        int mlpDim = reader.ReadInt32();
 
-        if (imageHeight != _imageHeight || imageWidth != _imageWidth ||
-            channels != _channels || patchSize != _patchSize ||
-            numClasses != _numClasses || hiddenDim != _hiddenDim ||
-            numLayers != _numLayers || numHeads != _numHeads ||
-            mlpDim != _mlpDim)
-        {
-            throw new InvalidOperationException(
-                $"Serialized model configuration does not match current instance. " +
-                $"Expected: {_imageHeight}x{_imageWidth}x{_channels}, patch={_patchSize}, " +
-                $"classes={_numClasses}, hidden={_hiddenDim}, layers={_numLayers}, " +
-                $"heads={_numHeads}, mlp={_mlpDim}. " +
-                $"Got: {imageHeight}x{imageWidth}x{channels}, patch={patchSize}, " +
-                $"classes={numClasses}, hidden={hiddenDim}, layers={numLayers}, " +
-                $"heads={numHeads}, mlp={mlpDim}.");
-        }
-
-        for (int i = 0; i < _clsToken.Length; i++)
-        {
-            _clsToken[i] = NumOps.FromDouble(reader.ReadDouble());
-        }
-
-        for (int i = 0; i < _positionalEmbeddings.Shape[0]; i++)
-        {
-            for (int j = 0; j < _positionalEmbeddings.Shape[1]; j++)
-            {
-                _positionalEmbeddings[i, j] = NumOps.FromDouble(reader.ReadDouble());
-            }
-        }
-    }
 
     /// <summary>
     /// Clone via fresh-construct + UpdateParameters rather than the default

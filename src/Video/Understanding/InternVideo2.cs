@@ -501,32 +501,10 @@ public partial class InternVideo2<T> : NeuralNetworkBase<T>
     }
 
     /// <inheritdoc/>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        if (!_useNativeMode)
-            throw new InvalidOperationException("Serialization is not supported in ONNX mode.");
 
-        writer.Write(_embedDim);
-        writer.Write(_numHeads);
-        writer.Write(_numEncoderLayers);
-        writer.Write(_numFrames);
-        writer.Write(_patchSize);
-        writer.Write(_imageSize);
-    }
 
     /// <inheritdoc/>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        if (!_useNativeMode)
-            throw new InvalidOperationException("Deserialization is not supported in ONNX mode.");
 
-        _ = reader.ReadInt32(); // embedDim
-        _ = reader.ReadInt32(); // numHeads
-        _ = reader.ReadInt32(); // numEncoderLayers
-        _ = reader.ReadInt32(); // numFrames
-        _ = reader.ReadInt32(); // patchSize
-        _ = reader.ReadInt32(); // imageSize
-    }
 
     #endregion
 }

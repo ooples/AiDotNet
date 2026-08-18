@@ -456,49 +456,9 @@ public partial class ShowO<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<
         return m;
     }
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_useNativeMode);
-        writer.Write(_options.ModelPath ?? string.Empty);
-        writer.Write(_options.ImageSize);
-        writer.Write(_options.VisionDim);
-        writer.Write(_options.DecoderDim);
-        writer.Write(_options.NumVisionLayers);
-        writer.Write(_options.NumDecoderLayers);
-        writer.Write(_options.NumHeads);
-        writer.Write(_options.SupportsGeneration);
-        writer.Write(_options.OutputImageSize);
-        writer.Write(_options.ImageTokenCount);
-        writer.Write(_options.DiffusionSteps);
-        writer.Write(_options.LearningRate);
-        writer.Write(_options.WeightDecay);
-    }
 
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _useNativeMode = reader.ReadBoolean();
-        string mp = reader.ReadString();
-        if (!string.IsNullOrEmpty(mp))
-            _options.ModelPath = mp;
-        _options.ImageSize = reader.ReadInt32();
-        _options.VisionDim = reader.ReadInt32();
-        _options.DecoderDim = reader.ReadInt32();
-        _options.NumVisionLayers = reader.ReadInt32();
-        _options.NumDecoderLayers = reader.ReadInt32();
-        _options.NumHeads = reader.ReadInt32();
-        _options.SupportsGeneration = reader.ReadBoolean();
-        _options.OutputImageSize = reader.ReadInt32();
-        if (reader.BaseStream.Position < reader.BaseStream.Length)
-            _options.ImageTokenCount = reader.ReadInt32();
-        if (reader.BaseStream.Position < reader.BaseStream.Length)
-            _options.DiffusionSteps = reader.ReadInt32();
-        if (reader.BaseStream.Position < reader.BaseStream.Length)
-            _options.LearningRate = reader.ReadDouble();
-        if (reader.BaseStream.Position < reader.BaseStream.Length)
-            _options.WeightDecay = reader.ReadDouble();
-        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
-            OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
-    }
+
+
 
     private void ThrowIfDisposed()
     {

@@ -167,28 +167,10 @@ public partial class StabStitch<T> : VideoStabilizationBase<T>
     }
 
     /// <inheritdoc/>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write((int)_options.Variant);
-        writer.Write(_options.NumFeatures);
-        writer.Write(_options.NumWarpBranches);
-        writer.Write(_options.MeshGridRows);
-        writer.Write(_options.MeshGridCols);
-        writer.Write(_options.LearningRate);
-        writer.Write(_options.DropoutRate);
-    }
+
 
     /// <inheritdoc/>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _options.Variant = (VideoModelVariant)reader.ReadInt32();
-        _options.NumFeatures = reader.ReadInt32();
-        _options.NumWarpBranches = reader.ReadInt32();
-        _options.MeshGridRows = reader.ReadInt32();
-        _options.MeshGridCols = reader.ReadInt32();
-        _options.LearningRate = reader.ReadDouble();
-        _options.DropoutRate = reader.ReadDouble();
-    }
+
 
     private void ThrowIfDisposed()
     {

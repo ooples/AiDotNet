@@ -916,32 +916,12 @@ public partial class GraphSAGENetwork<T> : GraphModelLayoutBase<T>
     /// <summary>
     /// Serializes network-specific data to a binary writer.
     /// </summary>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(HiddenDim);
-        writer.Write(NumLayers);
-        writer.Write((int)AggregatorType);
-        writer.Write(DropoutRate);
-        writer.Write(IsLoRAEnabled);
-        writer.Write(LoRARank);
-        SerializationHelper<T>.SerializeInterface(writer, _lossFunction);
-        SerializationHelper<T>.SerializeInterface(writer, _optimizer);
-    }
+
 
     /// <summary>
     /// Deserializes network-specific data from a binary reader.
     /// </summary>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _ = reader.ReadInt32(); // HiddenDim
-        _ = reader.ReadInt32(); // NumLayers
-        _ = (SAGEAggregatorType)reader.ReadInt32();
-        _ = reader.ReadDouble(); // DropoutRate
-        _ = reader.ReadBoolean(); // IsLoRAEnabled
-        _ = reader.ReadInt32(); // LoRARank
-        _ = DeserializationHelper.DeserializeInterface<ILossFunction<T>>(reader);
-        _ = DeserializationHelper.DeserializeInterface<IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>>(reader);
-    }
+
 
     #endregion
 }

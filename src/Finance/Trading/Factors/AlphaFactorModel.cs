@@ -386,16 +386,7 @@ public partial class AlphaFactorModel<T> : FinancialModelBase<T>, IFactorModel<T
     /// <b>For Beginners:</b> Saves the model configuration so it can be restored later.
     /// </para>
     /// </remarks>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_numFactors);
-        writer.Write(_numAssets);
-        writer.Write(_numFeatures);
-        writer.Write(_hiddenDimension);
-        writer.Write(_sequenceLength);
-        writer.Write(_predictionHorizon);
-        writer.Write(_dropoutRate);
-    }
+
 
     /// <summary>
     /// Deserializes model-specific data.
@@ -406,16 +397,7 @@ public partial class AlphaFactorModel<T> : FinancialModelBase<T>, IFactorModel<T
     /// <b>For Beginners:</b> Restores the saved configuration when loading a model.
     /// </para>
     /// </remarks>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _numFactors = reader.ReadInt32();
-        _numAssets = reader.ReadInt32();
-        _numFeatures = reader.ReadInt32();
-        _hiddenDimension = reader.ReadInt32();
-        _sequenceLength = reader.ReadInt32();
-        _predictionHorizon = reader.ReadInt32();
-        _dropoutRate = reader.ReadDouble();
-    }
+
 
     #endregion
 

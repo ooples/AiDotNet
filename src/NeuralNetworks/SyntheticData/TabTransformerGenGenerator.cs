@@ -589,42 +589,10 @@ public partial class TabTransformerGenGenerator<T> : NeuralSyntheticTabularGener
     // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
     // exactly the same enumeration, so this said nothing the base does not already say.
     /// <inheritdoc />
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_options.NumLayers);
-        writer.Write(_options.NumHeads);
-        writer.Write(_options.EmbeddingDimension);
-        writer.Write(_options.FeedForwardDimension);
-        writer.Write(_numColumns);
-        writer.Write(_dataWidth);
-        // Per-column widths define the embedding/decoder layer boundaries within
-        // Layers — serialize them so a deserialized clone can re-bind its typed
-        // layer references and run the identical column-token forward.
-        writer.Write(_colWidths.Count);
-        for (int c = 0; c < _colWidths.Count; c++) writer.Write(_colWidths[c]);
-        writer.Write(IsFitted);
-    }
+
 
     /// <inheritdoc />
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _ = reader.ReadInt32(); // NumLayers
-        _ = reader.ReadInt32(); // NumHeads
-        _ = reader.ReadInt32(); // EmbeddingDimension
-        _ = reader.ReadInt32(); // FeedForwardDimension
-        _numColumns = reader.ReadInt32();
-        _dataWidth = reader.ReadInt32();
-        int colWidthCount = reader.ReadInt32();
-        _colWidths.Clear();
-        for (int c = 0; c < colWidthCount; c++) _colWidths.Add(reader.ReadInt32());
-        IsFitted = reader.ReadBoolean();
 
-        // The base deserializer rebuilt Layers from the serialized layer list,
-        // orphaning the typed references the constructor populated. Re-bind them
-        // from the freshly-loaded Layers so the column-token forward uses the
-        // deserialized (trained) weights rather than the clone's discarded init.
-        ExtractLayerReferences();
-    }
 
     /// <summary>
     /// Re-binds the typed layer-reference lists (embeddings, per-block Q/K/V +

@@ -901,40 +901,13 @@ public partial class GraphAttentionNetwork<T> : GraphModelLayoutBase<T>
     /// Serializes network-specific data to a binary writer.
     /// </summary>
     /// <param name="writer">The binary writer to serialize to.</param>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        // Serialize GAT-specific configuration
-        writer.Write(NumHeads);
-        writer.Write(HiddenDim);
-        writer.Write(NumLayers);
-        writer.Write(DropoutRate);
-        writer.Write(IsLoRAEnabled);
-        writer.Write(LoRARank);
 
-        // Serialize loss function and optimizer
-        SerializationHelper<T>.SerializeInterface(writer, _lossFunction);
-        SerializationHelper<T>.SerializeInterface(writer, _optimizer);
-    }
 
     /// <summary>
     /// Deserializes network-specific data from a binary reader.
     /// </summary>
     /// <param name="reader">The binary reader to deserialize from.</param>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        // Note: The readonly fields are set in constructor, so we just read and discard
-        // to maintain stream position. For full deserialization, use Load method.
-        var numHeads = reader.ReadInt32();
-        var hiddenDim = reader.ReadInt32();
-        var numLayers = reader.ReadInt32();
-        var dropoutRate = reader.ReadDouble();
-        var isLoRAEnabled = reader.ReadBoolean();
-        var loraRank = reader.ReadInt32();
 
-        // Deserialize loss function and optimizer
-        _ = DeserializationHelper.DeserializeInterface<ILossFunction<T>>(reader);
-        _ = DeserializationHelper.DeserializeInterface<IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>>(reader);
-    }
 
     #endregion
 }

@@ -393,47 +393,8 @@ public partial class SAINTNetwork<T> : TabularNeuralNetworkBase<T>
     }
 
     /// <inheritdoc/>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_options.EmbeddingDimension);
-        writer.Write(_options.HiddenDimension);
-        writer.Write(_options.NumHeads);
-        writer.Write(_options.NumLayers);
-        writer.Write(_options.DropoutRate);
-        writer.Write(_options.UseLayerNorm);
-        writer.Write(_options.UseIntersampleAttention);
-        writer.Write(_options.UsePreNorm);
-        writer.Write(_options.BatchSize);
-        writer.Write(_options.EmbeddingInitScale);
-        writer.Write(_options.AttentionDropoutRate);
-        writer.Write(_options.FeedForwardMultiplier);
 
-        // Serialize MLPHiddenDimensions
-        writer.Write(_options.MLPHiddenDimensions.Length);
-        foreach (var dim in _options.MLPHiddenDimensions)
-        {
-            writer.Write(dim);
-        }
-
-        // Serialize CategoricalCardinalities if present
-        if (_options.CategoricalCardinalities != null)
-        {
-            writer.Write(_options.CategoricalCardinalities.Length);
-            foreach (var card in _options.CategoricalCardinalities)
-            {
-                writer.Write(card);
-            }
-        }
-        else
-        {
-            writer.Write(0);
-        }
-    }
 
     /// <inheritdoc/>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        // Options are reconstructed from serialized data
-        // Layers are handled by base class
-    }
+
 }

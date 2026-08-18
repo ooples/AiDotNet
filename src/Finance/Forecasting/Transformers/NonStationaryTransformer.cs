@@ -698,23 +698,7 @@ public partial class NonStationaryTransformer<T> : ForecastingModelBase<T>
     /// into a format that can be saved to disk and loaded later.
     /// </para>
     /// </remarks>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_sequenceLength);
-        writer.Write(_labelLength);
-        writer.Write(_predictionHorizon);
-        writer.Write(_numFeatures);
-        writer.Write(_modelDimension);
-        writer.Write(_numEncoderLayers);
-        writer.Write(_numDecoderLayers);
-        writer.Write(_numHeads);
-        writer.Write(_feedForwardDim);
-        writer.Write(_projectionDim);
-        writer.Write(_useSeriesStationarization);
-        writer.Write(_useDeStationaryAttention);
-        writer.Write(_dropout);
-        writer.Write(_useNativeMode);
-    }
+
 
     /// <summary>
     /// Deserializes network-specific data from persistence.
@@ -726,27 +710,7 @@ public partial class NonStationaryTransformer<T> : ForecastingModelBase<T>
     /// from a saved format. Called when loading a model from disk.
     /// </para>
     /// </remarks>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _sequenceLength = reader.ReadInt32();
-        _labelLength = reader.ReadInt32();
-        _predictionHorizon = reader.ReadInt32();
-        _numFeatures = reader.ReadInt32();
-        _modelDimension = reader.ReadInt32();
-        _numEncoderLayers = reader.ReadInt32();
-        _numDecoderLayers = reader.ReadInt32();
-        _numHeads = reader.ReadInt32();
-        _feedForwardDim = reader.ReadInt32();
-        _projectionDim = reader.ReadInt32();
-        _useSeriesStationarization = reader.ReadBoolean();
-        _useDeStationaryAttention = reader.ReadBoolean();
-        _dropout = reader.ReadDouble();
-        _useNativeMode = reader.ReadBoolean();
 
-        // Re-bind cached layer references to the deserialized (weight-loaded)
-        // layers so a clone runs on the loaded weights, not random init.
-        ExtractLayerReferences();
-    }
 
     #endregion
 

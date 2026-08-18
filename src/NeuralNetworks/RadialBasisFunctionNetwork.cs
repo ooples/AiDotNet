@@ -457,15 +457,7 @@ public partial class RadialBasisFunctionNetwork<T> : VectorModelLayoutBase<T>
     /// It's like writing down a recipe so you can make the same dish again in the future.
     /// </para>
     /// </remarks>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        // Write RBFN-specific data
-        writer.Write(_inputSize);
-        writer.Write(_hiddenSize);
-        writer.Write(_outputSize);
 
-        SerializationHelper<T>.SerializeInterface(writer, _radialBasisFunction);
-    }
 
     /// <summary>
     /// Deserializes network-specific data for the Radial Basis Function Network.
@@ -487,14 +479,5 @@ public partial class RadialBasisFunctionNetwork<T> : VectorModelLayoutBase<T>
     /// It's like following a recipe to recreate a dish exactly as it was made before.
     /// </para>
     /// </remarks>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        // Read RBFN-specific data
-        _inputSize = reader.ReadInt32();
-        _hiddenSize = reader.ReadInt32();
-        _outputSize = reader.ReadInt32();
 
-        // Read and set the radial basis function if a custom one was used
-        _radialBasisFunction = DeserializationHelper.DeserializeInterface<IRadialBasisFunction<T>>(reader) ?? new GaussianRBF<T>();
-    }
 }

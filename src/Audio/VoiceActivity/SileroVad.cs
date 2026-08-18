@@ -9,7 +9,8 @@ using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Onnx;
 using AiDotNet.Tensors.Helpers;
-using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Tensors.LinearAlgebra;
+
 using System.Collections.Generic;
 
 namespace AiDotNet.Audio.VoiceActivity;
@@ -773,42 +774,10 @@ public partial class SileroVad<T> : AudioNeuralNetworkBase<T>, IVoiceActivityDet
     }
 
     /// <inheritdoc/>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_useNativeMode);
-        writer.Write(SampleRate);
-        writer.Write(_frameSize);
-        writer.Write(_threshold);
-        writer.Write(_minSpeechDurationMs);
-        writer.Write(_minSilenceDurationMs);
-        writer.Write(_convFilters);
-        writer.Write(_lstmHiddenDim);
-        writer.Write(_numLstmLayers);
-    }
+
 
     /// <inheritdoc/>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        // Read saved values (but don't reassign readonly fields)
-        _ = reader.ReadBoolean(); // _useNativeMode
-        SampleRate = reader.ReadInt32();
-        _ = reader.ReadInt32(); // _frameSize
-        _ = reader.ReadDouble(); // _threshold
-        _ = reader.ReadInt32(); // _minSpeechDurationMs
-        _ = reader.ReadInt32(); // _minSilenceDurationMs
-        _ = reader.ReadInt32(); // _convFilters
-        _ = reader.ReadInt32(); // _lstmHiddenDim
-        _ = reader.ReadInt32(); // _numLstmLayers
 
-        // Deserialization has already rebuilt the canonical Layers list with the
-        // loaded weights. Re-point the cached conv/LSTM/output references at those
-        // layers; otherwise Forward would keep running the constructor's
-        // randomly-initialized layers and ignore the loaded weights.
-        if (_useNativeMode && Layers.Count >= 3 + _numLstmLayers + 1)
-        {
-            ExtractLayerReferences();
-        }
-    }
 
     #endregion
 

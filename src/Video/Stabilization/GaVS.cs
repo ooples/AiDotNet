@@ -169,28 +169,10 @@ public partial class GaVS<T> : VideoStabilizationBase<T>
     }
 
     /// <inheritdoc/>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write((int)_options.Variant);
-        writer.Write(_options.NumFeatures);
-        writer.Write(_options.NumGazeHeads);
-        writer.Write(_options.GazeHiddenDim);
-        writer.Write(_options.SmoothingWindow);
-        writer.Write(_options.LearningRate);
-        writer.Write(_options.DropoutRate);
-    }
+
 
     /// <inheritdoc/>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _options.Variant = (VideoModelVariant)reader.ReadInt32();
-        _options.NumFeatures = reader.ReadInt32();
-        _options.NumGazeHeads = reader.ReadInt32();
-        _options.GazeHiddenDim = reader.ReadInt32();
-        _options.SmoothingWindow = reader.ReadInt32();
-        _options.LearningRate = reader.ReadDouble();
-        _options.DropoutRate = reader.ReadDouble();
-    }
+
 
     private void ThrowIfDisposed()
     {

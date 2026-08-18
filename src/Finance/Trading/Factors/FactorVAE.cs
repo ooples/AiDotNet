@@ -799,28 +799,7 @@ public partial class FactorVAE<T> : FinancialModelBase<T>, IFactorModel<T>
     /// <b>For Beginners:</b> Saves the model configuration so it can be restored later.
     /// </para>
     /// </remarks>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_numFactors);
-        writer.Write(_numAssets);
-        writer.Write(_numFeatures);
-        writer.Write(_hiddenDimension);
-        writer.Write(_latentDimension);
-        writer.Write(_sequenceLength);
-        writer.Write(_predictionHorizon);
-        writer.Write(_beta);
-        writer.Write(_gamma);
-        writer.Write(_dropoutRate);
 
-        // The three options CreateNewInstance already copies. Without them, a model saved after
-        // training and reloaded into an instance built from defaults got a different KL weight and a
-        // different sampling seed, so the reloaded model did not behave like the saved one. Seed is
-        // nullable, so a presence flag precedes it.
-        writer.Write(_options.KlWeight);
-        writer.Write(_options.UseAMSGrad);
-        writer.Write(_options.Seed.HasValue);
-        if (_options.Seed.HasValue) writer.Write(_options.Seed.Value);
-    }
 
     /// <summary>
     /// Deserializes model-specific data.
@@ -831,38 +810,7 @@ public partial class FactorVAE<T> : FinancialModelBase<T>, IFactorModel<T>
     /// <b>For Beginners:</b> Restores the saved configuration when loading a model.
     /// </para>
     /// </remarks>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _numFactors = reader.ReadInt32();
-        _numAssets = reader.ReadInt32();
-        _numFeatures = reader.ReadInt32();
-        _hiddenDimension = reader.ReadInt32();
-        _latentDimension = reader.ReadInt32();
-        _sequenceLength = reader.ReadInt32();
-        _predictionHorizon = reader.ReadInt32();
-        _beta = reader.ReadDouble();
-        _gamma = reader.ReadDouble();
-        _dropoutRate = reader.ReadDouble();
 
-        // Read back in the order SerializeNetworkSpecificData wrote them.
-        _options.KlWeight = reader.ReadDouble();
-        _options.UseAMSGrad = reader.ReadBoolean();
-        _options.Seed = reader.ReadBoolean() ? reader.ReadInt32() : (int?)null;
-
-        // Restoring the OPTIONS is not enough on its own. _random and the default optimizer are both
-        // built from these values during construction, so without rebuilding them the reloaded model
-        // kept sampling from the seed it happened to be constructed with and kept the AMSGrad setting
-        // it was constructed with -- the three restored values would have been dead on arrival.
-        // KlWeight needs no such treatment: it is read from _options at the point of use.
-        _random = _options.Seed.HasValue
-            ? RandomHelper.CreateSeededRandom(_options.Seed.Value)
-            : RandomHelper.CreateSeededRandom(DefaultSamplingSeed);
-
-        // Only when this instance built its own. A caller-supplied optimizer carries state and
-        // configuration the saved model knows nothing about, and discarding it would be worse than
-        // the flag not taking effect.
-        if (_usesDefaultOptimizer) _optimizer = CreateDefaultOptimizer();
-    }
 
     #endregion
 

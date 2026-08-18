@@ -1029,56 +1029,10 @@ public partial class WGANGP<T> : ImageGeneratorModelLayoutBase<T>
     }
 
     /// <inheritdoc/>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_gradientPenaltyCoefficient);
-        writer.Write(_criticIterations);
 
-        // Serialize loss histories
-        writer.Write(_generatorLosses.Count);
-        foreach (var loss in _generatorLosses)
-            writer.Write(NumOps.ToDouble(loss));
-
-        writer.Write(_criticLosses.Count);
-        foreach (var loss in _criticLosses)
-            writer.Write(NumOps.ToDouble(loss));
-
-        // Serialize networks
-        var generatorBytes = Generator.Serialize();
-        writer.Write(generatorBytes.Length);
-        writer.Write(generatorBytes);
-
-        var criticBytes = Critic.Serialize();
-        writer.Write(criticBytes.Length);
-        writer.Write(criticBytes);
-    }
 
     /// <inheritdoc/>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _gradientPenaltyCoefficient = reader.ReadDouble();
-        _criticIterations = reader.ReadInt32();
 
-        // Deserialize loss histories
-        _generatorLosses.Clear();
-        int genLossCount = reader.ReadInt32();
-        for (int i = 0; i < genLossCount; i++)
-            _generatorLosses.Add(NumOps.FromDouble(reader.ReadDouble()));
-
-        _criticLosses.Clear();
-        int criticLossCount = reader.ReadInt32();
-        for (int i = 0; i < criticLossCount; i++)
-            _criticLosses.Add(NumOps.FromDouble(reader.ReadDouble()));
-
-        // Deserialize networks
-        int generatorDataLength = reader.ReadInt32();
-        byte[] generatorData = reader.ReadBytes(generatorDataLength);
-        Generator.Deserialize(generatorData);
-
-        int criticDataLength = reader.ReadInt32();
-        byte[] criticData = reader.ReadBytes(criticDataLength);
-        Critic.Deserialize(criticData);
-    }
 
     // UpdateParameters split the vector between Generator and Critic. Both sub-networks' layers are
     // added to Layers in that same order (Layers.AddRange(Generator.Layers) then

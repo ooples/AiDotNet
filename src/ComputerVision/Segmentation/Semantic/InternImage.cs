@@ -398,18 +398,7 @@ public partial class InternImage<T> : Common.SemanticSegmentationBase<T>
     /// The order must match <see cref="DeserializeNetworkSpecificData"/>.
     /// </para>
     /// </remarks>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_height); writer.Write(_width); writer.Write(_channels);
-        writer.Write(_numClasses); writer.Write((int)_modelSize);
-        writer.Write(_decoderDim); writer.Write(_dropRate);
-        writer.Write(_useNativeMode); writer.Write(_onnxModelPath ?? string.Empty);
-        writer.Write(_encoderLayerEnd);
-        writer.Write(_channelDims.Length);
-        foreach (int dim in _channelDims) writer.Write(dim);
-        writer.Write(_depths.Length);
-        foreach (int depth in _depths) writer.Write(depth);
-    }
+
 
     /// <summary>
     /// Deserializes InternImage-specific configuration from a binary stream.
@@ -420,18 +409,7 @@ public partial class InternImage<T> : Common.SemanticSegmentationBase<T>
     /// <b>For Beginners:</b> Reads back the saved configuration in the same order it was written.
     /// </para>
     /// </remarks>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _ = reader.ReadInt32(); _ = reader.ReadInt32(); _ = reader.ReadInt32();
-        _ = reader.ReadInt32(); _ = reader.ReadInt32();
-        _ = reader.ReadInt32(); _ = reader.ReadDouble();
-        _ = reader.ReadBoolean(); _ = reader.ReadString();
-        _ = reader.ReadInt32();
-        int channelCount = reader.ReadInt32();
-        for (int i = 0; i < channelCount; i++) _ = reader.ReadInt32();
-        int depthCount = reader.ReadInt32();
-        for (int i = 0; i < depthCount; i++) _ = reader.ReadInt32();
-    }
+
 
     /// <summary>
     /// Creates a new InternImage with the same config but fresh weights.

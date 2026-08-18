@@ -1827,9 +1827,7 @@ public partial class LSTMNeuralNetwork<T> : SequenceModelLayoutBase<T>
     /// - Load the model later for additional training or making predictions
     /// </para>
     /// </remarks>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-    }
+
 
     /// <summary>
     /// Deserializes LSTM-specific data from a binary reader.
@@ -1854,7 +1852,5 @@ public partial class LSTMNeuralNetwork<T> : SequenceModelLayoutBase<T>
     /// - Apply a trained model to new data for predictions
     /// </para>
     /// </remarks>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-    }
+
 }

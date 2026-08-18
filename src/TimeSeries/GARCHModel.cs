@@ -886,21 +886,7 @@ public partial class GARCHModel<T> : TimeSeriesModelBase<T>
     /// having to start from scratch.
     /// </para>
     /// </remarks>
-    protected override void SerializeCore(BinaryWriter writer)
-    {
-        SerializationHelper<T>.SerializeVector(writer, _omega);
-        SerializationHelper<T>.SerializeVector(writer, _alpha);
-        SerializationHelper<T>.SerializeVector(writer, _beta);
-        SerializationHelper<T>.SerializeVector(writer, _residuals);
-        SerializationHelper<T>.SerializeVector(writer, _conditionalVariances);
 
-        writer.Write(JsonConvert.SerializeObject(_garchOptions));
-
-        // Serialize the mean model so it can be restored on deserialization
-        byte[] meanModelBytes = _meanModel.Serialize();
-        writer.Write(meanModelBytes.Length);
-        writer.Write(meanModelBytes);
-    }
 
     /// <summary>
     /// Deserializes the model's core parameters from a binary reader.
@@ -928,23 +914,7 @@ public partial class GARCHModel<T> : TimeSeriesModelBase<T>
     /// to continue using the model without having to train it again.
     /// </para>
     /// </remarks>
-    protected override void DeserializeCore(BinaryReader reader)
-    {
-        _omega = SerializationHelper<T>.DeserializeVector(reader);
-        _alpha = SerializationHelper<T>.DeserializeVector(reader);
-        _beta = SerializationHelper<T>.DeserializeVector(reader);
-        _residuals = SerializationHelper<T>.DeserializeVector(reader);
-        _conditionalVariances = SerializationHelper<T>.DeserializeVector(reader);
 
-        string optionsJson = reader.ReadString();
-        _garchOptions = JsonConvert.DeserializeObject<GARCHModelOptions<T>>(optionsJson) ?? new();
-
-        // Deserialize the mean model to restore its trained state
-        int meanModelBytesLength = reader.ReadInt32();
-        byte[] meanModelBytes = reader.ReadBytes(meanModelBytesLength);
-        _meanModel = _garchOptions.MeanModel ?? new ARIMAModel<T>();
-        _meanModel.Deserialize(meanModelBytes);
-    }
 
     /// <summary>
     /// Resets the model to its initial state.

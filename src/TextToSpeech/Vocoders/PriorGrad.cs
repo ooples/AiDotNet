@@ -228,63 +228,9 @@ public partial class PriorGrad<T> : VocoderBase<T>
         };
     }
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_useNativeMode);
-        writer.Write(_options.ModelPath ?? string.Empty);
-        writer.Write(_options.SampleRate);
-        writer.Write(_options.MelChannels);
-        writer.Write(_options.HopSize);
-        writer.Write(_options.NumDiffusionSteps);
-        writer.Write(_options.DropoutRate);
-        writer.Write(_options.NumResBlocks);
-        writer.Write(_options.HiddenDim);
-        writer.Write(_options.NumHeads);
-        writer.Write(_options.LearningRate);
-        writer.Write(_options.WeightDecay);
-        writer.Write(_options.OptimizerBatchSize);
-        writer.Write(_options.OptimizerBeta1);
-        writer.Write(_options.OptimizerBeta2);
-        writer.Write(_options.OptimizerEpsilon);
-        writer.Write(_options.MaxGradientNorm);
-    }
 
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _useNativeMode = reader.ReadBoolean();
-        string mp = reader.ReadString();
-        if (!string.IsNullOrEmpty(mp))
-            _options.ModelPath = mp;
-        _options.SampleRate = reader.ReadInt32();
-        _options.MelChannels = reader.ReadInt32();
-        _options.HopSize = reader.ReadInt32();
-        _options.NumDiffusionSteps = reader.ReadInt32();
-        _options.DropoutRate = reader.ReadDouble();
-        _options.NumResBlocks = reader.ReadInt32();
-        // These architecture/optimizer fields were appended so model files written by older
-        // releases (whose payload ended after NumResBlocks) remain readable.
-        const int configurablePayloadBytes = (6 * sizeof(double)) + (3 * sizeof(int));
-        if (reader.BaseStream.Length - reader.BaseStream.Position >= configurablePayloadBytes)
-        {
-            _options.HiddenDim = reader.ReadInt32();
-            _options.NumHeads = reader.ReadInt32();
-            _options.LearningRate = reader.ReadDouble();
-            _options.WeightDecay = reader.ReadDouble();
-            _options.OptimizerBatchSize = reader.ReadInt32();
-            _options.OptimizerBeta1 = reader.ReadDouble();
-            _options.OptimizerBeta2 = reader.ReadDouble();
-            _options.OptimizerEpsilon = reader.ReadDouble();
-            _options.MaxGradientNorm = reader.ReadDouble();
-            MaxGradNorm = NumOps.FromDouble(_options.MaxGradientNorm);
-        }
-        base.SampleRate = _options.SampleRate;
-        base.MelChannels = _options.MelChannels;
-        base.HopSize = _options.HopSize;
-        if (_useNativeMode && !_preserveSuppliedOptimizer)
-            _optimizer = CreateDefaultOptimizer();
-        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
-            OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
-    }
+
+
 
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreateDefaultOptimizer()
     {

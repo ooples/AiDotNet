@@ -255,47 +255,9 @@ public partial class LSTMVAE<T> : TimeSeriesModelBase<T>
         return scores;
     }
 
-    protected override void SerializeCore(BinaryWriter writer)
-    {
-        writer.Write(_options.WindowSize);
-        writer.Write(_options.LatentDim);
-        writer.Write(_options.HiddenSize);
-        writer.Write(_numOps.ToDouble(_reconstructionThreshold));
 
-        _encoder.Serialize(writer);
-        _decoder.Serialize(writer);
 
-        writer.Write(_trainingSeries.Length);
-        for (int i = 0; i < _trainingSeries.Length; i++)
-            writer.Write(_numOps.ToDouble(_trainingSeries[i]));
-    }
 
-    protected override void DeserializeCore(BinaryReader reader)
-    {
-        _options.WindowSize = reader.ReadInt32();
-        _options.LatentDim = reader.ReadInt32();
-        _options.HiddenSize = reader.ReadInt32();
-        _reconstructionThreshold = _numOps.FromDouble(reader.ReadDouble());
-
-        // Rebuild encoder/decoder with correct dimensions
-        _encoder = new LSTMEncoderTensor<T>(_options.WindowSize, _options.LatentDim, _options.HiddenSize);
-        _decoder = new LSTMDecoderTensor<T>(_options.LatentDim, _options.WindowSize, _options.HiddenSize);
-
-        _encoder.Deserialize(reader);
-        _decoder.Deserialize(reader);
-
-        try
-        {
-            int tsLen = reader.ReadInt32();
-            _trainingSeries = new Vector<T>(tsLen);
-            for (int i = 0; i < tsLen; i++)
-                _trainingSeries[i] = _numOps.FromDouble(reader.ReadDouble());
-        }
-        catch (EndOfStreamException)
-        {
-            _trainingSeries = Vector<T>.Empty();
-        }
-    }
 
     public override ModelMetadata<T> GetModelMetadata()
     {

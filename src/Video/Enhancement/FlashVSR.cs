@@ -198,46 +198,9 @@ public partial class FlashVSR<T> : VideoSuperResolutionBase<T>
         return m;
     }
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter w)
-    {
-        w.Write(_useNativeMode);
-        w.Write(_options.ModelPath ?? string.Empty);
-        w.Write((int)_options.Variant);
-        w.Write(_options.NumFeatures);
-        w.Write(_options.NumLCSABlocks);
-        w.Write(_options.WindowSize);
-        w.Write(_options.NumHeads);
-        w.Write(_options.ScaleFactor);
-        w.Write(_options.NumInputFrames);
-        w.Write(_options.NumDecoderBlocks);
-        w.Write(_options.DropoutRate);
-    }
 
-    protected override void DeserializeNetworkSpecificData(BinaryReader r)
-    {
-        _useNativeMode = r.ReadBoolean();
-        string mp = r.ReadString();
-        if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp;
-        _options.Variant = (VideoModelVariant)r.ReadInt32();
-        _options.NumFeatures = r.ReadInt32();
-        _options.NumLCSABlocks = r.ReadInt32();
-        _options.WindowSize = r.ReadInt32();
-        _options.NumHeads = r.ReadInt32();
-        _options.ScaleFactor = r.ReadInt32();
-        _options.NumInputFrames = r.ReadInt32();
-        _options.NumDecoderBlocks = r.ReadInt32();
-        _options.DropoutRate = r.ReadDouble();
-        ScaleFactor = _options.ScaleFactor;
-        NumFrames = _options.NumInputFrames;
-        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
-        {
-            OnnxModel?.Dispose();
-            OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
-        }
-        // Native-mode layers (with their trained weights) are already reconstructed by
-        // the base deserializer before this override runs; re-initializing here would
-        // discard them and leave the model randomly initialized.
-    }
+
+
 
     #endregion
 

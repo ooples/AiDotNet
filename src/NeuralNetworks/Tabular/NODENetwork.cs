@@ -263,30 +263,8 @@ public partial class NODENetwork<T> : TabularNeuralNetworkBase<T>
     }
 
     /// <inheritdoc/>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_options.NumTrees);
-        writer.Write(_options.TreeDepth);
-        writer.Write(_options.TreeOutputDimension);
-        writer.Write(_options.Temperature);
-        writer.Write(_options.EntmaxAlpha);
-        writer.Write(_options.DropoutRate);
-        writer.Write(_options.UseBatchNorm);
-        writer.Write(_options.InitScale);
-        writer.Write(_options.UseFeaturePreprocessing);
-        writer.Write(_options.FeatureSelectionDimension);
 
-        writer.Write(_options.MLPHiddenDimensions.Length);
-        foreach (var dim in _options.MLPHiddenDimensions)
-        {
-            writer.Write(dim);
-        }
-    }
 
     /// <inheritdoc/>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        // Options are reconstructed from serialized data
-        // Layers are handled by base class
-    }
+
 }

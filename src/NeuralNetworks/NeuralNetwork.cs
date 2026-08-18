@@ -372,9 +372,7 @@ public partial class NeuralNetwork<T> : SequentialVectorModelLayoutBase<T>
     /// beyond what the base class already saves.
     /// </para>
     /// </remarks>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-    }
+
 
     /// <summary>
     /// Deserializes neural network-specific data from a binary reader.
@@ -396,7 +394,5 @@ public partial class NeuralNetwork<T> : SequentialVectorModelLayoutBase<T>
     /// beyond what the base class already loads.
     /// </para>
     /// </remarks>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-    }
+
 }

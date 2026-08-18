@@ -835,38 +835,10 @@ namespace AiDotNet.PhysicsInformed.PINNs
         }
 
         /// <inheritdoc/>
-        protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-        {
-            writer.Write(_parameters.Length);
-            foreach (var p in _parameters)
-            {
-                writer.Write(NumOps.ToDouble(p));
-            }
-            writer.Write(_numCollocationPoints);
-        }
+
 
         /// <inheritdoc/>
-        protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-        {
-            int numParams = reader.ReadInt32();
-            if (numParams != _parameters.Length)
-            {
-                throw new InvalidOperationException("Serialized parameter count does not match.");
-            }
 
-            for (int i = 0; i < numParams; i++)
-            {
-                _parameters[i] = NumOps.FromDouble(reader.ReadDouble());
-            }
-
-            int numPoints = reader.ReadInt32();
-            if (numPoints != _numCollocationPoints)
-            {
-                throw new InvalidOperationException("Serialized collocation point count does not match.");
-            }
-
-            UpdatePDE();
-        }
 
         /// <inheritdoc/>
         public override bool SupportsTraining => true;

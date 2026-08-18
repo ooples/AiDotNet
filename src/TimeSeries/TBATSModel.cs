@@ -1046,43 +1046,7 @@ public partial class TBATSModel<T> : TimeSeriesModelBase<T>
     /// or continue analysis without repeating the training process.
     /// </para>
     /// </remarks>
-    protected override void SerializeCore(BinaryWriter writer)
-    {
-        // Serialize TBATSModel specific data
-        writer.Write(_level.Length);
-        for (int i = 0; i < _level.Length; i++)
-            writer.Write(Convert.ToDouble(_level[i]));
 
-        writer.Write(_trend.Length);
-        for (int i = 0; i < _trend.Length; i++)
-            writer.Write(Convert.ToDouble(_trend[i]));
-
-        writer.Write(_seasonalComponents.Count);
-        foreach (var component in _seasonalComponents)
-        {
-            writer.Write(component.Length);
-            for (int i = 0; i < component.Length; i++)
-                writer.Write(Convert.ToDouble(component[i]));
-        }
-
-        writer.Write(_arCoefficients.Length);
-        for (int i = 0; i < _arCoefficients.Length; i++)
-            writer.Write(Convert.ToDouble(_arCoefficients[i]));
-
-        writer.Write(_maCoefficients.Length);
-        for (int i = 0; i < _maCoefficients.Length; i++)
-            writer.Write(Convert.ToDouble(_maCoefficients[i]));
-
-        writer.Write(Convert.ToDouble(_boxCoxLambda));
-
-        // Serialize TBATSModelOptions
-        writer.Write(JsonConvert.SerializeObject(_tbatsOptions));
-
-        // Serialize training series for in-sample predictions
-        writer.Write(_trainingSeries.Length);
-        for (int i = 0; i < _trainingSeries.Length; i++)
-            writer.Write(Convert.ToDouble(_trainingSeries[i]));
-    }
 
     /// <summary>
     /// Deserializes the model's core parameters from a binary reader.
@@ -1103,60 +1067,7 @@ public partial class TBATSModel<T> : TimeSeriesModelBase<T>
     /// It's like saving your work in a document and opening it later to continue editing.
     /// </para>
     /// </remarks>
-    protected override void DeserializeCore(BinaryReader reader)
-    {
-        // Deserialize TBATSModel specific data
-        int levelLength = reader.ReadInt32();
-        _level = new Vector<T>(levelLength);
-        for (int i = 0; i < levelLength; i++)
-            _level[i] = NumOps.FromDouble(reader.ReadDouble());
 
-        int trendLength = reader.ReadInt32();
-        _trend = new Vector<T>(trendLength);
-        for (int i = 0; i < trendLength; i++)
-            _trend[i] = NumOps.FromDouble(reader.ReadDouble());
-
-        int seasonalComponentsCount = reader.ReadInt32();
-        _seasonalComponents = new List<Vector<T>>();
-        for (int j = 0; j < seasonalComponentsCount; j++)
-        {
-            int componentLength = reader.ReadInt32();
-            Vector<T> component = new Vector<T>(componentLength);
-            for (int i = 0; i < componentLength; i++)
-                component[i] = NumOps.FromDouble(reader.ReadDouble());
-            _seasonalComponents.Add(component);
-        }
-
-        int arCoefficientsLength = reader.ReadInt32();
-        _arCoefficients = new Vector<T>(arCoefficientsLength);
-        for (int i = 0; i < arCoefficientsLength; i++)
-            _arCoefficients[i] = NumOps.FromDouble(reader.ReadDouble());
-
-        int maCoefficientsLength = reader.ReadInt32();
-        _maCoefficients = new Vector<T>(maCoefficientsLength);
-        for (int i = 0; i < maCoefficientsLength; i++)
-            _maCoefficients[i] = NumOps.FromDouble(reader.ReadDouble());
-
-        _boxCoxLambda = NumOps.FromDouble(reader.ReadDouble());
-
-        // Deserialize TBATSModelOptions
-        string optionsJson = reader.ReadString();
-        _tbatsOptions = JsonConvert.DeserializeObject<TBATSModelOptions<T>>(optionsJson)
-            ?? throw new InvalidOperationException("Failed to deserialize TBATS model options.");
-
-        // Deserialize training series (post-patch field)
-        try
-        {
-            int tsLen = reader.ReadInt32();
-            _trainingSeries = new Vector<T>(tsLen);
-            for (int i = 0; i < tsLen; i++)
-                _trainingSeries[i] = NumOps.FromDouble(reader.ReadDouble());
-        }
-        catch (EndOfStreamException)
-        {
-            _trainingSeries = Vector<T>.Empty();
-        }
-    }
 
     /// <summary>
     /// Resets the model to its initial state.

@@ -237,34 +237,9 @@ public partial class Zipformer<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer
         return m;
     }
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter w)
-    {
-        w.Write(_useNativeMode); w.Write(_options.ModelPath ?? string.Empty);
-        w.Write(_options.SampleRate); w.Write(_options.Variant);
-        w.Write(_options.NumMels); w.Write(_options.VocabSize);
-        w.Write(_options.EncoderDims.Length);
-        foreach (int d in _options.EncoderDims) w.Write(d);
-        w.Write(_options.NumLayersPerStack.Length);
-        foreach (int n in _options.NumLayersPerStack) w.Write(n);
-        w.Write(_options.NumHeadsPerStack.Length);
-        foreach (int h in _options.NumHeadsPerStack) w.Write(h);
-        w.Write(_options.DownsampleFactors.Length);
-        foreach (int f in _options.DownsampleFactors) w.Write(f);
-        w.Write(_options.DropoutRate); w.Write(_options.Language);
-    }
 
-    protected override void DeserializeNetworkSpecificData(BinaryReader r)
-    {
-        _useNativeMode = r.ReadBoolean(); string mp = r.ReadString(); if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp;
-        _options.SampleRate = r.ReadInt32(); _options.Variant = r.ReadString();
-        _options.NumMels = r.ReadInt32(); _options.VocabSize = r.ReadInt32();
-        int dimsLen = r.ReadInt32(); _options.EncoderDims = new int[dimsLen]; for (int i = 0; i < dimsLen; i++) _options.EncoderDims[i] = r.ReadInt32();
-        int layersLen = r.ReadInt32(); _options.NumLayersPerStack = new int[layersLen]; for (int i = 0; i < layersLen; i++) _options.NumLayersPerStack[i] = r.ReadInt32();
-        int headsLen = r.ReadInt32(); _options.NumHeadsPerStack = new int[headsLen]; for (int i = 0; i < headsLen; i++) _options.NumHeadsPerStack[i] = r.ReadInt32();
-        int dsLen = r.ReadInt32(); _options.DownsampleFactors = new int[dsLen]; for (int i = 0; i < dsLen; i++) _options.DownsampleFactors[i] = r.ReadInt32();
-        _options.DropoutRate = r.ReadDouble(); _options.Language = r.ReadString();
-        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxEncoder = new OnnxModel<T>(p, _options.OnnxOptions);
-    }
+
+
 
     #endregion
 

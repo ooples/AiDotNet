@@ -206,31 +206,9 @@ public partial class ClipNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IMulti
         };
     }
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_imageEncoderPath);
-        writer.Write(_textEncoderPath);
-        writer.Write(_embeddingDimension);
-        writer.Write(_maxSequenceLength);
-        writer.Write(_imageSize);
-    }
 
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _imageEncoderPath = reader.ReadString();
-        _textEncoderPath = reader.ReadString();
-        _embeddingDimension = reader.ReadInt32();
-        _maxSequenceLength = reader.ReadInt32();
-        _imageSize = reader.ReadInt32();
 
-        // Re-initialize sessions with loaded paths
-        _imageSession.Dispose();
-        _textSession.Dispose();
 
-        var sessionOptions = new SessionOptions();
-        _imageSession = new InferenceSession(_imageEncoderPath, sessionOptions);
-        _textSession = new InferenceSession(_textEncoderPath, sessionOptions);
-    }
 
     /// <inheritdoc/>
     public Vector<T> EncodeText(string text)

@@ -634,72 +634,12 @@ public partial class AudioEventDetector<T> : AudioClassifierBase<T>, IAudioEvent
     /// <summary>
     /// Serializes network-specific data.
     /// </summary>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        // Write ONNX mode state
-        writer.Write(_useNativeMode);
-        writer.Write(_options.ModelPath ?? string.Empty);
 
-        // Write options
-        writer.Write(_options.SampleRate);
-        writer.Write(_options.NumMels);
-        writer.Write(_options.FftSize);
-        writer.Write(_options.HopLength);
-        writer.Write(_options.WindowSize);
-        writer.Write(_options.Threshold);
-        writer.Write(ClassLabels.Count);
-        foreach (var label in ClassLabels)
-        {
-            writer.Write(label);
-        }
-    }
 
     /// <summary>
     /// Deserializes network-specific data.
     /// </summary>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        // Restore ONNX mode state
-        _useNativeMode = reader.ReadBoolean();
-        string modelPath = reader.ReadString();
-        if (!string.IsNullOrEmpty(modelPath))
-        {
-            _options.ModelPath = modelPath;
-        }
 
-        // Restore options properties
-        _options.SampleRate = reader.ReadInt32();
-        _options.NumMels = reader.ReadInt32();
-        _options.FftSize = reader.ReadInt32();
-        _options.HopLength = reader.ReadInt32();
-        _options.WindowSize = reader.ReadDouble();
-        _options.Threshold = reader.ReadDouble();
-
-        // Read class labels
-        int numLabels = reader.ReadInt32();
-        var labels = new string[numLabels];
-        for (int i = 0; i < numLabels; i++)
-        {
-            labels[i] = reader.ReadString();
-        }
-        ClassLabels = labels;
-
-        // Reinitialize mel spectrogram with deserialized options
-        _melSpectrogram = new MelSpectrogram<T>(
-            sampleRate: _options.SampleRate,
-            nMels: _options.NumMels,
-            nFft: _options.FftSize,
-            hopLength: _options.HopLength,
-            fMin: _options.FMin,
-            fMax: _options.FMax,
-            logMel: true);
-
-        // Restore ONNX model if in ONNX inference mode
-        if (!_useNativeMode && _options.ModelPath is { } onnxModelPath && !string.IsNullOrEmpty(onnxModelPath))
-        {
-            OnnxEncoder = new OnnxModel<T>(onnxModelPath, _options.OnnxOptions);
-        }
-    }
 
     #endregion
 

@@ -1240,63 +1240,7 @@ public partial class SpikingNeuralNetwork<T> : SequenceModelLayoutBase<T>
     /// - Create a snapshot of the network's state at a specific point
     /// </para>
     /// </remarks>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        // Write temporal parameters
-        writer.Write(NumOps.ToDouble(_timeStep));
-        writer.Write(_simulationSteps);
 
-        // Write neuron model parameters
-        writer.Write(Convert.ToDouble(_membraneDecay));
-        writer.Write(_refractoryPeriod);
-
-        // Write activation type
-        bool hasVectorActivation = _vectorActivation != null;
-        writer.Write(hasVectorActivation);
-
-        if (hasVectorActivation)
-        {
-            writer.Write((_vectorActivation ?? throw new InvalidOperationException("Vector activation not initialized.")).GetType().FullName ?? "Unknown");
-        }
-        else if (_scalarActivation != null)
-        {
-            writer.Write(_scalarActivation.GetType().FullName ?? "Unknown");
-        }
-        else
-        {
-            writer.Write("None");
-        }
-
-        // Write neuron states
-
-        // Write number of layers
-        writer.Write(_membranePotentials.Count);
-
-        // Write membrane potentials
-        for (int layer = 0; layer < _membranePotentials.Count; layer++)
-        {
-            // Write number of neurons in this layer
-            writer.Write(_membranePotentials[layer].Length);
-
-            // Write membrane potentials
-            for (int i = 0; i < _membranePotentials[layer].Length; i++)
-            {
-                writer.Write(Convert.ToDouble(_membranePotentials[layer][i]));
-            }
-
-            // Write refractory counters
-            for (int i = 0; i < _refractoryCounters[layer].Length; i++)
-            {
-                writer.Write(_refractoryCounters[layer][i]);
-            }
-
-            // Write firing thresholds
-            for (int i = 0; i < _firingThresholds[layer].Length; i++)
-            {
-                writer.Write(Convert.ToDouble(_firingThresholds[layer][i]));
-            }
-        }
-    }
 
     /// <summary>
     /// Deserializes SNN-specific data from a binary reader.
@@ -1321,88 +1265,7 @@ public partial class SpikingNeuralNetwork<T> : SequenceModelLayoutBase<T>
     /// - Share networks between different systems or users
     /// </para>
     /// </remarks>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        // Read temporal parameters
-        _timeStep = NumOps.FromDouble(reader.ReadDouble());
-        _simulationSteps = reader.ReadInt32();
 
-        // Read neuron model parameters
-        _membraneDecay = NumOps.FromDouble(reader.ReadDouble());
-        _refractoryPeriod = reader.ReadInt32();
-
-        // Read activation type
-        bool hasVectorActivation = reader.ReadBoolean();
-        string activationType = reader.ReadString();
-
-        // Recreate activation function if needed
-        if (hasVectorActivation)
-        {
-            // Use existing or create default
-            if (_vectorActivation == null)
-            {
-                _vectorActivation = new BinarySpikingActivation<T>();
-            }
-        }
-        else if (activationType != "None" && _scalarActivation == null)
-        {
-            // Use existing or create default
-            _scalarActivation = new BinarySpikingActivation<T>();
-        }
-
-        // Read neuron states
-
-        // Read number of layers
-        int layerCount = reader.ReadInt32();
-
-        // Initialize state containers if not already done
-        if (_membranePotentials == null || _membranePotentials.Count == 0)
-        {
-            _membranePotentials = new List<Vector<T>>(layerCount);
-            _refractoryCounters = new List<int[]>(layerCount);
-            _firingThresholds = new List<Vector<T>>(layerCount);
-        }
-
-        // Clear existing data if needed
-        _membranePotentials.Clear();
-        _refractoryCounters.Clear();
-        _firingThresholds.Clear();
-
-        // Read membrane potentials, refractory counters, and firing thresholds
-        for (int layer = 0; layer < layerCount; layer++)
-        {
-            // Read number of neurons in this layer
-            int neuronCount = reader.ReadInt32();
-
-            // Create vectors and arrays
-            var potentials = new Vector<T>(neuronCount);
-            var refractoryCounters = new int[neuronCount];
-            var thresholds = new Vector<T>(neuronCount);
-
-            // Read membrane potentials
-            for (int i = 0; i < neuronCount; i++)
-            {
-                potentials[i] = NumOps.FromDouble(reader.ReadDouble());
-            }
-
-            // Read refractory counters
-            for (int i = 0; i < neuronCount; i++)
-            {
-                refractoryCounters[i] = reader.ReadInt32();
-            }
-
-            // Read firing thresholds
-            for (int i = 0; i < neuronCount; i++)
-            {
-                thresholds[i] = NumOps.FromDouble(reader.ReadDouble());
-            }
-
-            // Add to collections
-            _membranePotentials.Add(potentials);
-            _refractoryCounters.Add(refractoryCounters);
-            _firingThresholds.Add(thresholds);
-        }
-    }
 
     /// <summary>
     /// Sets the neuron model parameters for the network.

@@ -958,13 +958,7 @@ public partial class Autoencoder<T> : VectorModelLayoutBase<T>, IAuxiliaryLossLa
     /// It's like writing down a detailed recipe so you can make the same dish again in the future.
     /// </para>
     /// </remarks>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(EncodedSize);
-        writer.Write(Convert.ToDouble(_learningRate));
-        writer.Write(_epochs);
-        writer.Write(_batchSize);
-    }
+
 
     /// <summary>
     /// Deserializes network-specific data for the Autoencoder.
@@ -987,11 +981,5 @@ public partial class Autoencoder<T> : VectorModelLayoutBase<T>, IAuxiliaryLossLa
     /// It's like following a detailed recipe to recreate a dish exactly as it was made before.
     /// </para>
     /// </remarks>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        EncodedSize = reader.ReadInt32();
-        _learningRate = NumOps.FromDouble(reader.ReadDouble());
-        _epochs = reader.ReadInt32();
-        _batchSize = reader.ReadInt32();
-    }
+
 }

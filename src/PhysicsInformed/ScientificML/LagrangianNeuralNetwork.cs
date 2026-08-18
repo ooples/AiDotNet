@@ -325,23 +325,13 @@ namespace AiDotNet.PhysicsInformed.ScientificML
         /// Serializes Lagrangian-specific data.
         /// </summary>
         /// <param name="writer">Binary writer.</param>
-        protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-        {
-            writer.Write(_configurationDim);
-        }
+
 
         /// <summary>
         /// Deserializes Lagrangian-specific data.
         /// </summary>
         /// <param name="reader">Binary reader.</param>
-        protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-        {
-            int storedConfigDim = reader.ReadInt32();
-            if (storedConfigDim != _configurationDim)
-            {
-                throw new InvalidOperationException("Serialized Lagrangian configuration does not match the current instance.");
-            }
-        }
+
 
         /// <summary>
         /// Indicates whether this model supports training.

@@ -500,32 +500,10 @@ public partial class VRT<T> : VideoSuperResolutionBase<T>
     }
 
     /// <inheritdoc/>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        if (!_useNativeMode)
-            throw new InvalidOperationException("Serialization is not supported in ONNX mode.");
 
-        writer.Write(_embedDim);
-        writer.Write(_numFrames);
-        writer.Write(_numBlocks);
-        writer.Write(_scaleFactor);
-        writer.Write(_inputHeight);
-        writer.Write(_inputWidth);
-    }
 
     /// <inheritdoc/>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        if (!_useNativeMode)
-            throw new InvalidOperationException("Deserialization is not supported in ONNX mode.");
 
-        _ = reader.ReadInt32(); // embedDim
-        _ = reader.ReadInt32(); // numFrames
-        _ = reader.ReadInt32(); // numBlocks
-        _ = reader.ReadInt32(); // scaleFactor
-        _ = reader.ReadInt32(); // inputHeight
-        _ = reader.ReadInt32(); // inputWidth
-    }
 
     #endregion
 

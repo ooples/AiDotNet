@@ -649,27 +649,10 @@ public partial class DepthAnythingV2<T> : NeuralNetworkBase<T>
     }
 
     /// <inheritdoc/>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_height);
-        writer.Write(_width);
-        writer.Write(_channels);
-        writer.Write((int)_modelSize);
-        writer.Write(_useNativeMode);
-        writer.Write(_onnxModelPath ?? string.Empty);
-    }
+
 
     /// <inheritdoc/>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _height = reader.ReadInt32();
-        _width = reader.ReadInt32();
-        _channels = reader.ReadInt32();
-        _modelSize = (ModelSize)reader.ReadInt32();
-        _useNativeMode = reader.ReadBoolean();
-        _onnxModelPath = reader.ReadString();
-        if (string.IsNullOrEmpty(_onnxModelPath)) _onnxModelPath = null;
-    }
+
 
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? CreateOptimizerForClone()
     {

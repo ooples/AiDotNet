@@ -485,28 +485,10 @@ namespace AiDotNet.NeuralNetworks
         }
 
         /// <inheritdoc/>
-        protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-        {
-            writer.Write(_vocabSize);
-            writer.Write(_embeddingDimension);
-            writer.Write(_maxSequenceLength);
-            writer.Write(_numLayers);
-            writer.Write(_numHeads);
-            writer.Write(_feedForwardDim);
-            writer.Write((int)_poolingStrategy);
-        }
+
 
         /// <inheritdoc/>
-        protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-        {
-            _vocabSize = reader.ReadInt32();
-            _embeddingDimension = reader.ReadInt32();
-            _maxSequenceLength = reader.ReadInt32();
-            _numLayers = reader.ReadInt32();
-            _numHeads = reader.ReadInt32();
-            _feedForwardDim = reader.ReadInt32();
-            _poolingStrategy = (PoolingStrategy)reader.ReadInt32();
-        }
+
 
         #endregion
 

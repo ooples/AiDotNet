@@ -813,30 +813,7 @@ public partial class MOIRAI<T> : TimeSeriesFoundationModelBase<T>
     /// <para><b>For Beginners:</b> Saves all the configuration needed to reconstruct this model.
     /// </para>
     /// </remarks>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_contextLength);
-        writer.Write(_forecastHorizon);
-        writer.Write(_patchSizes.Length);
-        foreach (var ps in _patchSizes)
-        {
-            writer.Write(ps);
-        }
-        writer.Write(_hiddenDimension);
-        writer.Write(_numLayers);
-        writer.Write(_numHeads);
-        writer.Write(_intermediateSize);
-        writer.Write(_numMixtures);
-        writer.Write(_dropout);
-        writer.Write(_maskRatio);
-        writer.Write(_numFeatures);
-        writer.Write((int)_modelSize);
-        // Moirai 2.0 fields
-        writer.Write(_useDecoderOnly);
-        writer.Write(_numQuantiles);
-        writer.Write(_multiTokenSteps);
-        writer.Write(_v2PatchSize);
-    }
+
 
     /// <summary>
     /// Reads MOIRAI-specific configuration during deserialization.
@@ -845,44 +822,7 @@ public partial class MOIRAI<T> : TimeSeriesFoundationModelBase<T>
     /// <para><b>For Beginners:</b> Loads the configuration that was saved during serialization.
     /// </para>
     /// </remarks>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _contextLength = reader.ReadInt32();
-        _forecastHorizon = reader.ReadInt32();
-        int patchCount = reader.ReadInt32();
-        _patchSizes = new int[patchCount];
-        for (int i = 0; i < patchCount; i++)
-        {
-            _patchSizes[i] = reader.ReadInt32();
-        }
-        _hiddenDimension = reader.ReadInt32();
-        _numLayers = reader.ReadInt32();
-        _numHeads = reader.ReadInt32();
-        _intermediateSize = reader.ReadInt32();
-        _numMixtures = reader.ReadInt32();
-        _dropout = reader.ReadDouble();
-        _maskRatio = reader.ReadDouble();
-        _numFeatures = reader.ReadInt32();
-        _modelSize = (FoundationModelSize)reader.ReadInt32();
-        // Moirai 2.0 fields
-        _useDecoderOnly = reader.ReadBoolean();
-        _numQuantiles = reader.ReadInt32();
-        _multiTokenSteps = reader.ReadInt32();
-        _v2PatchSize = reader.ReadInt32();
 
-        _totalPatches = 0;
-        if (_useDecoderOnly)
-        {
-            _totalPatches = _contextLength / Math.Max(1, _v2PatchSize);
-        }
-        else
-        {
-            foreach (var patchSize in _patchSizes)
-            {
-                _totalPatches += _contextLength / Math.Max(1, patchSize);
-            }
-        }
-    }
 
     #endregion
 

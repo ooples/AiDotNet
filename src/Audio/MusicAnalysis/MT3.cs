@@ -265,26 +265,9 @@ public partial class MT3<T> : AudioNeuralNetworkBase<T>, IMusicTranscriber<T>
         return m;
     }
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter w)
-    {
-        w.Write(_useNativeMode); w.Write(_options.ModelPath ?? string.Empty);
-        w.Write(_options.SampleRate); w.Write(_options.NumMels); w.Write(_options.FftSize);
-        w.Write(_options.HopLength); w.Write(_options.EncoderDim); w.Write(_options.NumEncoderLayers);
-        w.Write(_options.DecoderDim); w.Write(_options.NumDecoderLayers);
-        w.Write(_options.NumAttentionHeads); w.Write(_options.VocabSize);
-        w.Write(_options.MaxInstruments); w.Write(_options.DropoutRate);
-    }
 
-    protected override void DeserializeNetworkSpecificData(BinaryReader r)
-    {
-        _useNativeMode = r.ReadBoolean(); string mp = r.ReadString(); if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp;
-        _options.SampleRate = r.ReadInt32(); _options.NumMels = r.ReadInt32(); _options.FftSize = r.ReadInt32();
-        _options.HopLength = r.ReadInt32(); _options.EncoderDim = r.ReadInt32(); _options.NumEncoderLayers = r.ReadInt32();
-        _options.DecoderDim = r.ReadInt32(); _options.NumDecoderLayers = r.ReadInt32();
-        _options.NumAttentionHeads = r.ReadInt32(); _options.VocabSize = r.ReadInt32();
-        _options.MaxInstruments = r.ReadInt32(); _options.DropoutRate = r.ReadDouble();
-        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxEncoder = new OnnxModel<T>(p, _options.OnnxOptions);
-    }
+
+
 
     #endregion
 

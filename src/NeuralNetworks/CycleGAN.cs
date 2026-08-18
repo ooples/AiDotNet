@@ -885,29 +885,7 @@ public partial class CycleGAN<T> : ImageTranslationModelLayoutBase<T>
     /// four networks (two generators and two discriminators) to a file.
     /// </para>
     /// </remarks>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        // Serialize CycleGAN-specific hyperparameters
-        writer.Write(NumOps.ToDouble(_cycleConsistencyLambda));
-        writer.Write(NumOps.ToDouble(_identityLambda));
 
-        // Serialize all four networks
-        var genAtoB = GeneratorAtoB.Serialize();
-        writer.Write(genAtoB.Length);
-        writer.Write(genAtoB);
-
-        var genBtoA = GeneratorBtoA.Serialize();
-        writer.Write(genBtoA.Length);
-        writer.Write(genBtoA);
-
-        var discA = DiscriminatorA.Serialize();
-        writer.Write(discA.Length);
-        writer.Write(discA);
-
-        var discB = DiscriminatorB.Serialize();
-        writer.Write(discB.Length);
-        writer.Write(discB);
-    }
 
     /// <summary>
     /// Deserializes CycleGAN-specific data from a binary reader.
@@ -922,28 +900,7 @@ public partial class CycleGAN<T> : ImageTranslationModelLayoutBase<T>
     /// four networks (two generators and two discriminators) from a file.
     /// </para>
     /// </remarks>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        // Deserialize CycleGAN-specific hyperparameters
-        _cycleConsistencyLambda = NumOps.FromDouble(reader.ReadDouble());
-        _identityLambda = NumOps.FromDouble(reader.ReadDouble());
 
-        // Deserialize all four networks
-        int genAtoB_Length = reader.ReadInt32();
-        GeneratorAtoB.Deserialize(reader.ReadBytes(genAtoB_Length));
-
-        int genBtoA_Length = reader.ReadInt32();
-        GeneratorBtoA.Deserialize(reader.ReadBytes(genBtoA_Length));
-
-        int discA_Length = reader.ReadInt32();
-        DiscriminatorA.Deserialize(reader.ReadBytes(discA_Length));
-
-        int discB_Length = reader.ReadInt32();
-        DiscriminatorB.Deserialize(reader.ReadBytes(discB_Length));
-
-        // Reset optimizer state after loading network weights
-        ResetOptimizerState();
-    }
 
     /// <inheritdoc />
     /// <remarks>

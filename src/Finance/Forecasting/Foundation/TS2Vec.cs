@@ -298,35 +298,10 @@ public partial class TS2Vec<T> : TimeSeriesFoundationModelBase<T>
     }
 
     /// <inheritdoc/>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_contextLength);
-        writer.Write(_forecastHorizon);
-        writer.Write(_hiddenDimension);
-        writer.Write(_outputDimension);
-        writer.Write(_numLayers);
-        writer.Write(_dropout);
-        writer.Write(_temporalContrastiveWeight);
-        writer.Write(_instanceContrastiveWeight);
-    }
+
 
     /// <inheritdoc/>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _contextLength = reader.ReadInt32();
-        _forecastHorizon = reader.ReadInt32();
-        _hiddenDimension = reader.ReadInt32();
-        _outputDimension = reader.ReadInt32();
-        _numLayers = reader.ReadInt32();
-        _dropout = reader.ReadDouble();
-        _temporalContrastiveWeight = reader.ReadDouble();
-        _instanceContrastiveWeight = reader.ReadDouble();
 
-        // Re-point cached layer references at the freshly deserialized Layers;
-        // otherwise a clone's forward uses the stale random-initialized layers
-        // created by CreateNewInstance and diverges from the original.
-        ExtractLayerReferences();
-    }
 
     #endregion
 

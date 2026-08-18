@@ -796,27 +796,9 @@ public partial class XMem<T> : NeuralNetworkBase<T>
         };
     }
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        if (!_useNativeMode)
-            throw new InvalidOperationException("Serialization is not supported in ONNX mode.");
 
-        writer.Write(_inputHeight);
-        writer.Write(_inputWidth);
-        writer.Write(_inputChannels);
-        writer.Write(_numFeatures);
-        writer.Write(_sensoryMemorySize);
-        writer.Write(_workingMemorySize);
-        writer.Write(_longTermMemorySize);
-    }
 
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        if (!_useNativeMode)
-            throw new InvalidOperationException("Deserialization is not supported in ONNX mode.");
 
-        for (int i = 0; i < 7; i++) _ = reader.ReadInt32();
-    }
 
     #endregion
 }

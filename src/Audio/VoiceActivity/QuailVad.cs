@@ -304,30 +304,9 @@ public partial class QuailVad<T> : AudioNeuralNetworkBase<T>, IVoiceActivityDete
         return m;
     }
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter w)
-    {
-        w.Write(_useNativeMode); w.Write(_options.ModelPath ?? string.Empty);
-        w.Write(_options.SampleRate); w.Write(_options.HiddenDim);
-        w.Write(_options.NumCNNLayers); w.Write(_options.RNNHiddenSize);
-        w.Write(_options.FrameSizeMs); w.Write(_options.Threshold);
-        w.Write(_options.MinSpeechDuration); w.Write(_options.MinSilenceDuration);
-        w.Write(_options.DropoutRate);
-    }
 
-    protected override void DeserializeNetworkSpecificData(BinaryReader r)
-    {
-        _useNativeMode = r.ReadBoolean(); string mp = r.ReadString(); if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp;
-        _options.SampleRate = r.ReadInt32(); _options.HiddenDim = r.ReadInt32();
-        _options.NumCNNLayers = r.ReadInt32(); _options.RNNHiddenSize = r.ReadInt32();
-        _options.FrameSizeMs = r.ReadInt32(); _options.Threshold = r.ReadDouble();
-        _options.MinSpeechDuration = r.ReadDouble(); _options.MinSilenceDuration = r.ReadDouble();
-        _options.DropoutRate = r.ReadDouble();
-        Threshold = _options.Threshold;
-        MinSpeechDurationMs = (int)(_options.MinSpeechDuration * 1000);
-        MinSilenceDurationMs = (int)(_options.MinSilenceDuration * 1000);
-        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
-            OnnxEncoder = new OnnxModel<T>(p, _options.OnnxOptions);
-    }
+
+
 
     #endregion
 

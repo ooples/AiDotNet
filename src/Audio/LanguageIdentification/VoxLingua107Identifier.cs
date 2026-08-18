@@ -554,25 +554,10 @@ public partial class VoxLingua107Identifier<T> : AudioNeuralNetworkBase<T>, ILan
     }
 
     /// <inheritdoc/>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(IsOnnxMode);
-        writer.Write(SampleRate);
-        writer.Write(_options.EmbeddingDimension);
-        writer.Write(_options.TdnnChannels);
-        writer.Write(_numLanguages); // classifier head width (paper default 107)
-    }
+
 
     /// <inheritdoc/>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        // Read configuration values for validation
-        _ = reader.ReadBoolean(); // IsOnnxMode
-        _ = reader.ReadInt32();   // SampleRate
-        _ = reader.ReadInt32();   // EmbeddingDimension
-        _ = reader.ReadInt32();   // TdnnChannels
-        _ = reader.ReadInt32();   // NumLanguages
-    }
+
 
     #endregion
 

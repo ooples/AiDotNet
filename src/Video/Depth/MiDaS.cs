@@ -353,20 +353,9 @@ public partial class MiDaS<T> : NeuralNetworkBase<T>
         ModelData = _useNativeMode ? this.Serialize() : []
     };
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        if (!_useNativeMode) throw new InvalidOperationException("Serialization is not supported in ONNX mode.");
-        writer.Write(_embedDim);
-        writer.Write(_numLayers);
-        writer.Write(_imageSize);
-        writer.Write((int)_variant);
-    }
 
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        if (!_useNativeMode) throw new InvalidOperationException("Deserialization is not supported in ONNX mode.");
-        for (int i = 0; i < 4; i++) _ = reader.ReadInt32();
-    }
+
+
 
     #endregion
 }

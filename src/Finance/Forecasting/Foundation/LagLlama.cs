@@ -655,21 +655,7 @@ public partial class LagLlama<T> : ForecastingModelBase<T>
     /// <b>For Beginners:</b> Saves all the configuration needed to reconstruct this model.
     /// </para>
     /// </remarks>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_contextLength);
-        writer.Write(_forecastHorizon);
-        writer.Write(_hiddenDimension);
-        writer.Write(_numLayers);
-        writer.Write(_numHeads);
-        writer.Write(_intermediateSize);
-        writer.Write(_lagIndices.Length);
-        foreach (var lag in _lagIndices)
-            writer.Write(lag);
-        writer.Write(_dropout);
-        writer.Write(_distributionOutput);
-        writer.Write(_useRoPE);
-    }
+
 
     /// <summary>
     /// Reads Lag-Llama-specific configuration during deserialization.
@@ -679,28 +665,7 @@ public partial class LagLlama<T> : ForecastingModelBase<T>
     /// <b>For Beginners:</b> Loads the configuration that was saved during serialization.
     /// </para>
     /// </remarks>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _contextLength = reader.ReadInt32();
-        _forecastHorizon = reader.ReadInt32();
-        _hiddenDimension = reader.ReadInt32();
-        _numLayers = reader.ReadInt32();
-        _numHeads = reader.ReadInt32();
-        _intermediateSize = reader.ReadInt32();
-        int lagCount = reader.ReadInt32();
-        _lagIndices = new int[lagCount];
-        for (int i = 0; i < lagCount; i++)
-            _lagIndices[i] = reader.ReadInt32();
-        _dropout = reader.ReadDouble();
-        _distributionOutput = reader.ReadString();
-        _useRoPE = reader.ReadBoolean();
 
-        // The base deserializer has already recreated every layer in Layers with the
-        // copied weights. Re-point the cached projection/transformer/head references at
-        // those layers; otherwise they keep pointing at the stale random-initialized
-        // layers from CreateNewInstance and a clone diverges from the original.
-        ExtractLayerReferences();
-    }
 
     #endregion
 

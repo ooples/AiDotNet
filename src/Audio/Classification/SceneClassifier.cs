@@ -681,46 +681,12 @@ public partial class SceneClassifier<T> : AudioClassifierBase<T>, ISceneClassifi
     /// <summary>
     /// Serializes network-specific data.
     /// </summary>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        // Write options
-        writer.Write(_options.SampleRate);
-        writer.Write(_options.NumMels);
-        writer.Write(_options.FftSize);
-        writer.Write(_options.HopLength);
-        writer.Write(_options.NumMfccs);
-        writer.Write(_useNativeMode);
 
-        // Write class labels
-        writer.Write(ClassLabels.Count);
-        foreach (var label in ClassLabels)
-        {
-            writer.Write(label);
-        }
-    }
 
     /// <summary>
     /// Deserializes network-specific data.
     /// </summary>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        // Restore options properties
-        _options.SampleRate = reader.ReadInt32();
-        _options.NumMels = reader.ReadInt32();
-        _options.FftSize = reader.ReadInt32();
-        _options.HopLength = reader.ReadInt32();
-        _options.NumMfccs = reader.ReadInt32();
-        _useNativeMode = reader.ReadBoolean();
 
-        // Read class labels
-        int numLabels = reader.ReadInt32();
-        var labels = new string[numLabels];
-        for (int i = 0; i < numLabels; i++)
-        {
-            labels[i] = reader.ReadString();
-        }
-        ClassLabels = labels;
-    }
 
     #endregion
 

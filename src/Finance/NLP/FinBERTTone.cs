@@ -195,10 +195,7 @@ public partial class FinBERTTone<T> : FinancialNLPModelBase<T>
     /// <b>For Beginners:</b> In the FinBERTTone model, SerializeModelSpecificData saves or restores model-specific settings. This lets the FinBERTTone architecture be reused later.
     /// </para>
     /// </remarks>
-    protected override void SerializeModelSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_dropout);
-    }
+
 
     /// <summary>
     /// Executes DeserializeModelSpecificData for the FinBERTTone.
@@ -208,10 +205,7 @@ public partial class FinBERTTone<T> : FinancialNLPModelBase<T>
     /// <b>For Beginners:</b> In the FinBERTTone model, DeserializeModelSpecificData saves or restores model-specific settings. This lets the FinBERTTone architecture be reused later.
     /// </para>
     /// </remarks>
-    protected override void DeserializeModelSpecificData(BinaryReader reader)
-    {
-        _dropout = reader.ReadDouble();
-    }
+
 
     /// <summary>
     /// Executes ForecastNative for the FinBERTTone.

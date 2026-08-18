@@ -11,7 +11,8 @@ using AiDotNet.Onnx;
 using AiDotNet.Optimizers;
 using AiDotNet.Tokenization;
 using AiDotNet.Tokenization.Interfaces;
-using AiDotNet.VisionLanguage.Interfaces;
+using AiDotNet.VisionLanguage.Interfaces;
+
 using System.Collections.Generic;
 
 namespace AiDotNet.VisionLanguage.Unified;
@@ -585,105 +586,9 @@ public partial class JanusPro<T> : VisionLanguageModelBase<T>, IUnifiedVisionMod
         return meta;
     }
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_useNativeMode);
-        writer.Write(_options.ModelPath ?? string.Empty);
-        writer.Write(_options.ImageSize);
-        writer.Write(_options.VisionDim);
-        writer.Write(_options.DecoderDim);
-        writer.Write(_options.NumVisionLayers);
-        writer.Write(_options.NumDecoderLayers);
-        writer.Write(_options.NumHeads);
-        writer.Write(_options.SupportsGeneration);
-        writer.Write(_options.OutputImageSize);
-        writer.Write(_options.EnableDecoupledEncoding);
-        writer.Write(_options.NumVisualTokens);
-        writer.Write(_options.NumGenerationTokens);
-        writer.Write(_options.CodebookEmbeddingDim);
-        writer.Write(_options.CfgScale);
 
-        // The learned generation modules live outside Layers, so the base per-layer
-        // serialization never persists them — without this block a trained model's
-        // generation path silently reverts to random init on load (the modules are
-        // rebuilt fresh in DeserializeNetworkSpecificData). Written per-module
-        // (count + values) in GenerationModules() order; lazily-uninitialized dense
-        // modules write count 0 and are restored as still-lazy.
-        foreach (var module in GenerationModules())
-        {
-            var p = module.GetParameters();
-            writer.Write(p.Length);
-            for (int i = 0; i < p.Length; i++)
-                writer.Write(Convert.ToDouble(p[i]));
-        }
-    }
 
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _useNativeMode = reader.ReadBoolean();
-        string mp = reader.ReadString();
-        if (!string.IsNullOrEmpty(mp))
-            _options.ModelPath = mp;
-        _options.ImageSize = reader.ReadInt32();
-        _options.VisionDim = reader.ReadInt32();
-        _options.DecoderDim = reader.ReadInt32();
-        _options.NumVisionLayers = reader.ReadInt32();
-        _options.NumDecoderLayers = reader.ReadInt32();
-        _options.NumHeads = reader.ReadInt32();
-        _options.SupportsGeneration = reader.ReadBoolean();
-        _options.OutputImageSize = reader.ReadInt32();
-        _options.EnableDecoupledEncoding = reader.ReadBoolean();
-        _options.NumVisualTokens = reader.ReadInt32();
-        _options.NumGenerationTokens = reader.ReadInt32();
-        _options.CodebookEmbeddingDim = reader.ReadInt32();
-        _options.CfgScale = reader.ReadDouble();
-        // Rebuild _vqCodebook against the just-deserialized dimensions —
-        // otherwise the constructor-time instance keeps its original
-        // codebookSize/embeddingDim and every subsequent Lookup throws
-        // (or worse, silently mis-indexes if the dims overlap). Codebook
-        // entries themselves are NOT serialized here, so consumers
-        // needing a fully usable model must follow this with a
-        // checkpoint load via VQCodebook.LoadCodebook(...).
-        _vqCodebook = new JanusVQCodebook<T>(
-            codebookSize: _options.NumVisualTokens,
-            embeddingDim: _options.CodebookEmbeddingDim
-        );
-        // Rebuild the learned generation modules against the just-deserialized
-        // dimensions (same rationale as _vqCodebook above), then restore their
-        // TRAINED parameters written by SerializeNetworkSpecificData — without
-        // this the rebuild left them at fresh random init, losing the trained
-        // generation path on every save/load round-trip.
-        BuildGenerationModules();
-        foreach (var module in GenerationModules())
-        {
-            int count = reader.ReadInt32();
-            if (count <= 0)
-                continue;
-            // Validate the serialized count against the freshly-rebuilt module before reading
-            // `count` doubles off the stream. A non-lazy module (ParameterCount already > 0 after
-            // BuildGenerationModules) whose stored count differs means the saved model's
-            // generation-module geometry no longer matches this build's — restoring it would
-            // either throw deep inside SetParameters or silently mis-shape the module. Fail fast
-            // with both counts (mirrors Helix's embedCount validation). Lazy modules
-            // (ParameterCount == 0 until first forward) legitimately resolve their shape from the
-            // vector length per the #1221 save/load contract, so they skip this check.
-            long expected = module.ParameterCount;
-            if (expected > 0 && count != expected)
-                throw new InvalidOperationException(
-                    $"JanusPro generation-module parameter count mismatch on deserialize: stream has "
-                        + $"{count} but the rebuilt {module.GetType().Name} expects {expected}. The saved "
-                        + $"model's generation-module configuration is incompatible with this build."
-                );
-            var p = new Vector<T>(count);
-            for (int i = 0; i < count; i++)
-                p[i] = NumOps.FromDouble(reader.ReadDouble());
-            // DenseLayer.SetParameters resolves lazy shapes from the vector length
-            // (the #1221 save/load contract), so still-lazy modules restore too.
-            module.SetParameters(p);
-        }
-        if (!_useNativeMode && _options.ModelPath is { } p2 && !string.IsNullOrEmpty(p2))
-            OnnxModel = new OnnxModel<T>(p2, _options.OnnxOptions);
-    }
+
 
     private void ThrowIfDisposed()
     {

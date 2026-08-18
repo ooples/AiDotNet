@@ -171,7 +171,8 @@ public partial class FuseFormer<T> : VideoInpaintingBase<T>
         }
     }
 
-    // UpdateParameters restated the base verbatim; ModelBase routes it to SetParameters.
+    // UpdateParameters restated the base verbatim; ModelBase routes it to SetParameters.
+
 
     /// <summary>
     /// Parameters cannot be written while the model is backed by a loaded ONNX graph: the weights
@@ -202,28 +203,10 @@ public partial class FuseFormer<T> : VideoInpaintingBase<T>
     }
 
     /// <inheritdoc/>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write((int)_options.Variant);
-        writer.Write(_options.NumFeatures);
-        writer.Write(_options.NumTransformerLayers);
-        writer.Write(_options.NumHeads);
-        writer.Write(_options.PatchSize);
-        writer.Write(_options.LearningRate);
-        writer.Write(_options.DropoutRate);
-    }
+
 
     /// <inheritdoc/>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _options.Variant = (VideoModelVariant)reader.ReadInt32();
-        _options.NumFeatures = reader.ReadInt32();
-        _options.NumTransformerLayers = reader.ReadInt32();
-        _options.NumHeads = reader.ReadInt32();
-        _options.PatchSize = reader.ReadInt32();
-        _options.LearningRate = reader.ReadDouble();
-        _options.DropoutRate = reader.ReadDouble();
-    }
+
 
     private static Tensor<T> ConcatFramesAndMasks(Tensor<T> frames, Tensor<T> masks)
     {

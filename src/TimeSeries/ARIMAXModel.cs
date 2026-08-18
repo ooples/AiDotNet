@@ -540,28 +540,7 @@ public partial class ARIMAXModel<T> : TimeSeriesModelBase<T>, IExogenousForecast
     /// exogenous coefficients, differencing information, intercept value, and
     /// model options. This allows the model to be fully reconstructed later.
     /// </remarks>
-    protected override void SerializeCore(BinaryWriter writer)
-    {
-        writer.Write(_arCoefficients.Length);
-        for (int i = 0; i < _arCoefficients.Length; i++)
-            writer.Write(Convert.ToDouble(_arCoefficients[i]));
 
-        writer.Write(_maCoefficients.Length);
-        for (int i = 0; i < _maCoefficients.Length; i++)
-            writer.Write(Convert.ToDouble(_maCoefficients[i]));
-
-        writer.Write(_exogenousCoefficients.Length);
-        for (int i = 0; i < _exogenousCoefficients.Length; i++)
-            writer.Write(Convert.ToDouble(_exogenousCoefficients[i]));
-
-        writer.Write(_differenced.Length);
-        for (int i = 0; i < _differenced.Length; i++)
-            writer.Write(Convert.ToDouble(_differenced[i]));
-
-        writer.Write(Convert.ToDouble(_intercept));
-
-        writer.Write(JsonConvert.SerializeObject(_arimaxOptions));
-    }
 
     /// <summary>
     /// Deserializes the model's state from a binary stream.
@@ -581,33 +560,7 @@ public partial class ARIMAXModel<T> : TimeSeriesModelBase<T>, IExogenousForecast
     /// intercept value, and model options. This fully reconstructs the model exactly
     /// as it was when saved.
     /// </remarks>
-    protected override void DeserializeCore(BinaryReader reader)
-    {
-        int arCoefficientsLength = reader.ReadInt32();
-        _arCoefficients = new Vector<T>(arCoefficientsLength);
-        for (int i = 0; i < arCoefficientsLength; i++)
-            _arCoefficients[i] = NumOps.FromDouble(reader.ReadDouble());
 
-        int maCoefficientsLength = reader.ReadInt32();
-        _maCoefficients = new Vector<T>(maCoefficientsLength);
-        for (int i = 0; i < maCoefficientsLength; i++)
-            _maCoefficients[i] = NumOps.FromDouble(reader.ReadDouble());
-
-        int exogenousCoefficientsLength = reader.ReadInt32();
-        _exogenousCoefficients = new Vector<T>(exogenousCoefficientsLength);
-        for (int i = 0; i < exogenousCoefficientsLength; i++)
-            _exogenousCoefficients[i] = NumOps.FromDouble(reader.ReadDouble());
-
-        int differencedLength = reader.ReadInt32();
-        _differenced = new Vector<T>(differencedLength);
-        for (int i = 0; i < differencedLength; i++)
-            _differenced[i] = NumOps.FromDouble(reader.ReadDouble());
-
-        _intercept = NumOps.FromDouble(reader.ReadDouble());
-
-        string optionsJson = reader.ReadString();
-        _arimaxOptions = JsonConvert.DeserializeObject<ARIMAXModelOptions<T>>(optionsJson) ?? new();
-    }
 
     /// <summary>
     /// Creates a new instance of the ARIMAX model.

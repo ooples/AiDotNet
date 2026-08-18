@@ -300,34 +300,10 @@ public partial class LLMTime<T> : TimeSeriesFoundationModelBase<T>
     }
 
     /// <inheritdoc/>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_contextLength);
-        writer.Write(_forecastHorizon);
-        writer.Write(_hiddenDimension);
-        writer.Write(_numLayers);
-        writer.Write(_numHeads);
-        writer.Write(_dropout);
-        writer.Write((int)_modelSize);
-        writer.Write(_numDecimalPlaces);
-        writer.Write(_numSamples);
-        writer.Write(_temperature);
-    }
+
 
     /// <inheritdoc/>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _contextLength = reader.ReadInt32();
-        _forecastHorizon = reader.ReadInt32();
-        _hiddenDimension = reader.ReadInt32();
-        _numLayers = reader.ReadInt32();
-        _numHeads = reader.ReadInt32();
-        _dropout = reader.ReadDouble();
-        _modelSize = (FoundationModelSize)reader.ReadInt32();
-        _numDecimalPlaces = reader.ReadInt32();
-        _numSamples = reader.ReadInt32();
-        _temperature = reader.ReadDouble();
-    }
+
 
     #endregion
 

@@ -975,40 +975,12 @@ public partial class WhisperModel<T> : AudioNeuralNetworkBase<T>, ISpeechRecogni
     /// <summary>
     /// Serializes network-specific data.
     /// </summary>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_useNativeMode);
-        writer.Write(SampleRate);
-        writer.Write(_numMels);
-        writer.Write(_maxAudioLengthSeconds);
-        writer.Write((int)_modelSize);
-        writer.Write(_language ?? string.Empty);
-        writer.Write(_translate);
-        writer.Write(_maxTokens);
-        writer.Write(_beamSize);
-        writer.Write(_temperature);
-    }
+
 
     /// <summary>
     /// Deserializes network-specific data.
     /// </summary>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        // Note: Most fields are readonly, so deserialization would require a different approach
-        // For now, we read and validate the values
-        var useNative = reader.ReadBoolean();
-        var sampleRate = reader.ReadInt32();
-        var numMels = reader.ReadInt32();
-        var maxAudioLen = reader.ReadInt32();
-        var modelSize = (WhisperModelSize)reader.ReadInt32();
-        var lang = reader.ReadString();
-        var translate = reader.ReadBoolean();
-        var maxTokens = reader.ReadInt32();
-        var beamSize = reader.ReadInt32();
-        var temperature = reader.ReadDouble();
 
-        // Validation would happen here
-    }
 
     #endregion
 

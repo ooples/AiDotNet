@@ -1042,32 +1042,12 @@ public partial class GraphIsomorphismNetwork<T> : GraphModelLayoutBase<T>
     /// <summary>
     /// Serializes network-specific data to a binary writer.
     /// </summary>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(MlpHiddenDim);
-        writer.Write(NumLayers);
-        writer.Write(InitialEpsilon);
-        writer.Write(LearnEpsilon);
-        writer.Write(IsLoRAEnabled);
-        writer.Write(LoRARank);
-        SerializationHelper<T>.SerializeInterface(writer, _lossFunction);
-        SerializationHelper<T>.SerializeInterface(writer, _optimizer);
-    }
+
 
     /// <summary>
     /// Deserializes network-specific data from a binary reader.
     /// </summary>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _ = reader.ReadInt32(); // MlpHiddenDim
-        _ = reader.ReadInt32(); // NumLayers
-        _ = reader.ReadDouble(); // InitialEpsilon
-        _ = reader.ReadBoolean(); // LearnEpsilon
-        _ = reader.ReadBoolean(); // IsLoRAEnabled
-        _ = reader.ReadInt32(); // LoRARank
-        _ = DeserializationHelper.DeserializeInterface<ILossFunction<T>>(reader);
-        _ = DeserializationHelper.DeserializeInterface<IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>>(reader);
-    }
+
 
     #endregion
 }

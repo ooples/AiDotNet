@@ -285,24 +285,9 @@ public partial class ECAPATDNNSpeaker<T> : SpeakerRecognitionBase<T>, ISpeakerVe
         return m;
     }
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter w)
-    {
-        w.Write(_useNativeMode); w.Write(_options.ModelPath ?? string.Empty);
-        w.Write(_options.SampleRate); w.Write(_options.NumMels); w.Write(_options.EmbeddingDim);
-        w.Write(_options.PoolingDim); w.Write(_options.SEBottleneckDim); w.Write(_options.Res2NetScale);
-        w.Write(_options.DropoutRate); w.Write(_options.DefaultThreshold);
-        w.Write(_options.Channels.Length); foreach (var c in _options.Channels) w.Write(c);
-    }
 
-    protected override void DeserializeNetworkSpecificData(BinaryReader r)
-    {
-        _useNativeMode = r.ReadBoolean(); string mp = r.ReadString(); if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp;
-        _options.SampleRate = r.ReadInt32(); _options.NumMels = r.ReadInt32(); _options.EmbeddingDim = r.ReadInt32();
-        _options.PoolingDim = r.ReadInt32(); _options.SEBottleneckDim = r.ReadInt32(); _options.Res2NetScale = r.ReadInt32();
-        _options.DropoutRate = r.ReadDouble(); _options.DefaultThreshold = r.ReadDouble();
-        int n = r.ReadInt32(); _options.Channels = new int[n]; for (int i = 0; i < n; i++) _options.Channels[i] = r.ReadInt32();
-        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxEncoder = new OnnxModel<T>(p, _options.OnnxOptions);
-    }
+
+
 
     #endregion
 

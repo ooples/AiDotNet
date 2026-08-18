@@ -516,27 +516,7 @@ public partial class Hippo<T> : ForecastingModelBase<T>
     /// can be reconstructed later.
     /// </para>
     /// </remarks>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_contextLength);
-        writer.Write(_forecastHorizon);
-        writer.Write(_modelDimension);
-        writer.Write(_stateDimension);
-        writer.Write(_numLayers);
-        writer.Write(_hippoMethod);
-        writer.Write(_discretizationMethod);
-        writer.Write(_timescaleMin);
-        writer.Write(_timescaleMax);
-        writer.Write(_useNormalization);
 
-        // Keep the original HiPPO payload above byte-for-byte compatible.
-        // New recurrent-cell settings are append-only so older payloads can
-        // still be loaded with the paper defaults below.
-        writer.Write(_memorySize);
-        writer.Write(_initialTime);
-        writer.Write(_timeStep);
-        writer.Write(_useGate);
-    }
 
     /// <summary>
     /// Deserializes HiPPO-specific data when loading a saved model.
@@ -547,39 +527,7 @@ public partial class Hippo<T> : ForecastingModelBase<T>
     /// loading a previously saved model.
     /// </para>
     /// </remarks>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _contextLength = reader.ReadInt32();
-        _forecastHorizon = reader.ReadInt32();
-        _modelDimension = reader.ReadInt32();
-        _stateDimension = reader.ReadInt32();
-        _numLayers = reader.ReadInt32();
-        _hippoMethod = reader.ReadString();
-        _discretizationMethod = reader.ReadString();
-        _timescaleMin = reader.ReadDouble();
-        _timescaleMax = reader.ReadDouble();
-        _useNormalization = reader.ReadBoolean();
 
-        // These fields were appended after the original payload. Preserve
-        // the paper configuration when loading a model serialized before
-        // they existed.
-        _memorySize = 1;
-        _initialTime = 0;
-        _timeStep = 0.0;
-        _useGate = true;
-        if (reader.BaseStream.Position < reader.BaseStream.Length)
-            _memorySize = reader.ReadInt32();
-        if (reader.BaseStream.Position < reader.BaseStream.Length)
-            _initialTime = reader.ReadInt32();
-        if (reader.BaseStream.Position < reader.BaseStream.Length)
-            _timeStep = reader.ReadDouble();
-        if (reader.BaseStream.Position < reader.BaseStream.Length)
-            _useGate = reader.ReadBoolean();
-
-        // Re-bind cached layer references so a deserialized/cloned model runs on
-        // the restored layers, not the construction-time random ones.
-        ExtractLayerReferences();
-    }
 
     #endregion
 

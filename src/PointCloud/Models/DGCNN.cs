@@ -517,49 +517,9 @@ public partial class DGCNN<T> : NeuralNetworkBase<T>, IPointCloudModel<T>, IPoin
         };
     }
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_numClasses);
-        writer.Write(_inputFeatureDim);
-        writer.Write(_knnK);
-        writer.Write(_useDropout);
-        writer.Write(_dropoutRate);
-        writer.Write(NumOps.ToDouble(_learningRate));
-        WriteIntArray(writer, _edgeConvChannels);
-        WriteIntArray(writer, _classifierChannels);
-    }
 
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _numClasses = reader.ReadInt32();
-        _inputFeatureDim = reader.ReadInt32();
-        _knnK = reader.ReadInt32();
-        _useDropout = reader.ReadBoolean();
-        _dropoutRate = reader.ReadDouble();
-        _learningRate = NumOps.FromDouble(reader.ReadDouble());
-        _edgeConvChannels = ReadIntArray(reader, nameof(_edgeConvChannels), allowEmpty: false);
-        _classifierChannels = ReadIntArray(reader, nameof(_classifierChannels), allowEmpty: true);
 
-        _edgeConvLayers.Clear();
-        _classificationHeadLayers.Clear();
-        bool afterPooling = false;
-        foreach (var layer in Layers)
-        {
-            if (layer is EdgeConvLayer<T> edgeLayer)
-            {
-                _edgeConvLayers.Add(edgeLayer);
-            }
-            if (layer is AiDotNet.PointCloud.Layers.MaxPoolingLayer<T>)
-            {
-                afterPooling = true;
-                continue;
-            }
-            if (afterPooling && (layer is DenseLayer<T> || layer is DropoutLayer<T>))
-            {
-                _classificationHeadLayers.Add(layer);
-            }
-        }
-    }
+
 
     private static int[] ValidatePositiveArray(int[]? values, string paramName)
     {

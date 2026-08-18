@@ -226,28 +226,9 @@ public partial class FastConformer<T> : AudioNeuralNetworkBase<T>, ISpeechRecogn
         return m;
     }
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter w)
-    {
-        w.Write(_useNativeMode); w.Write(_options.ModelPath ?? string.Empty);
-        w.Write(_options.SampleRate); w.Write(_options.Variant);
-        w.Write(_options.EncoderDim); w.Write(_options.NumLayers);
-        w.Write(_options.NumHeads); w.Write(_options.FeedForwardDim);
-        w.Write(_options.ConvKernelSize); w.Write(_options.DownsampleFactor);
-        w.Write(_options.NumMels); w.Write(_options.VocabSize);
-        w.Write(_options.DropoutRate); w.Write(_options.Language);
-    }
 
-    protected override void DeserializeNetworkSpecificData(BinaryReader r)
-    {
-        _useNativeMode = r.ReadBoolean(); string mp = r.ReadString(); if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp;
-        _options.SampleRate = r.ReadInt32(); _options.Variant = r.ReadString();
-        _options.EncoderDim = r.ReadInt32(); _options.NumLayers = r.ReadInt32();
-        _options.NumHeads = r.ReadInt32(); _options.FeedForwardDim = r.ReadInt32();
-        _options.ConvKernelSize = r.ReadInt32(); _options.DownsampleFactor = r.ReadInt32();
-        _options.NumMels = r.ReadInt32(); _options.VocabSize = r.ReadInt32();
-        _options.DropoutRate = r.ReadDouble(); _options.Language = r.ReadString();
-        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxEncoder = new OnnxModel<T>(p, _options.OnnxOptions);
-    }
+
+
 
     #endregion
 

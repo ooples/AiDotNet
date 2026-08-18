@@ -487,18 +487,7 @@ public partial class Crossformer<T> : ForecastingModelBase<T>
     /// to a file so the model can be loaded later with the same configuration.
     /// </para>
     /// </remarks>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_sequenceLength);
-        writer.Write(_predictionHorizon);
-        writer.Write(_numFeatures);
-        writer.Write(_segmentLength);
-        writer.Write(_modelDimension);
-        writer.Write(_numHeads);
-        writer.Write(_numLayers);
-        writer.Write(_dropout);
-        writer.Write(_useInstanceNormalization);
-    }
+
 
     /// <summary>
     /// Reads Crossformer-specific configuration during deserialization.
@@ -510,22 +499,7 @@ public partial class Crossformer<T> : ForecastingModelBase<T>
     /// and restores the model configuration.
     /// </para>
     /// </remarks>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _sequenceLength = reader.ReadInt32();
-        _predictionHorizon = reader.ReadInt32();
-        _numFeatures = reader.ReadInt32();
-        _segmentLength = reader.ReadInt32();
-        _modelDimension = reader.ReadInt32();
-        _numHeads = reader.ReadInt32();
-        _numLayers = reader.ReadInt32();
-        _dropout = reader.ReadDouble();
-        _useInstanceNormalization = reader.ReadBoolean();
 
-        // Re-bind cached layer references to the deserialized (weight-loaded)
-        // layers so a clone runs on the loaded weights, not random init.
-        ExtractLayerReferences();
-    }
 
     #endregion
 

@@ -331,41 +331,10 @@ public partial class Figan<T> : FrameInterpolationBase<T>
     }
 
     /// <inheritdoc/>
-    protected override void SerializeNetworkSpecificData(BinaryWriter w)
-    {
-        w.Write(_useNativeMode);
-        w.Write(_options.ModelPath ?? string.Empty);
-        w.Write(_options.NumScales);
-        w.Write(_options.NumFeatures);
-        w.Write(_options.LayersPerModule);
-        w.Write(_options.KernelSize);
-        w.Write(_options.DiscriminatorFilters);
-        w.Write(_options.DiscriminatorBlocks);
-        w.Write(_options.LeakyReluSlope);
-        w.Write(_options.LearningRate);
-        w.Write(_options.CropSize);
-        w.Write(_options.DropoutRate);
-    }
+
 
     /// <inheritdoc/>
-    protected override void DeserializeNetworkSpecificData(BinaryReader r)
-    {
-        _useNativeMode = r.ReadBoolean();
-        string mp = r.ReadString();
-        if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp;
-        _options.NumScales = r.ReadInt32();
-        _options.NumFeatures = r.ReadInt32();
-        _options.LayersPerModule = r.ReadInt32();
-        _options.KernelSize = r.ReadInt32();
-        _options.DiscriminatorFilters = r.ReadInt32();
-        _options.DiscriminatorBlocks = r.ReadInt32();
-        _options.LeakyReluSlope = r.ReadDouble();
-        _options.LearningRate = r.ReadDouble();
-        _options.CropSize = r.ReadInt32();
-        _options.DropoutRate = r.ReadDouble();
-        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
-            OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
-    }
+
 
     #endregion
 

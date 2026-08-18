@@ -634,37 +634,9 @@ public partial class BarkModel<T> : TtsModelBase<T>
         return metadata;
     }
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_options.SampleRate);
-        writer.Write(_options.NumCodebooks);
-        writer.Write(_options.CodebookSize);
-        writer.Write(_options.CodecFrameRate);
-        WriteStage(writer, _options.Semantic);
-        WriteStage(writer, _options.Coarse);
-        WriteStage(writer, _options.Fine);
-    }
 
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        int sampleRate = reader.ReadInt32();
-        int codebooks = reader.ReadInt32();
-        int codebookSize = reader.ReadInt32();
-        int frameRate = reader.ReadInt32();
-        var semantic = ReadStage(reader);
-        var coarse = ReadStage(reader);
-        var fine = ReadStage(reader);
 
-        if (sampleRate != _options.SampleRate || codebooks != _options.NumCodebooks
-            || codebookSize != _options.CodebookSize || frameRate != _options.CodecFrameRate
-            || !StageMatches(semantic, _options.Semantic)
-            || !StageMatches(coarse, _options.Coarse)
-            || !StageMatches(fine, _options.Fine))
-        {
-            throw new InvalidDataException(
-                "The serialized Bark checkpoint architecture does not match this BarkOptions configuration.");
-        }
-    }
+
 
     /// <summary>
     /// Recreates the injected codec dependency for cloning while leaving Bark parameter transfer to

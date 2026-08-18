@@ -1071,30 +1071,13 @@ public partial class SpeakerDiarizer<T> : SpeakerRecognitionBase<T>, ISpeakerDia
     /// Serializes network-specific data.
     /// </summary>
     /// <param name="writer">Binary writer.</param>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(SampleRate);
-        writer.Write(EmbeddingDimension);
-        writer.Write(_options.ClusteringThreshold);
-        writer.Write(_options.MinTurnDuration);
-        writer.Write(_options.WindowDurationSeconds);
-        writer.Write(_options.HopDurationSeconds);
-    }
+
 
     /// <summary>
     /// Deserializes network-specific data.
     /// </summary>
     /// <param name="reader">Binary reader.</param>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        base.SampleRate = reader.ReadInt32();
-        EmbeddingDimension = reader.ReadInt32();
-        // Note: Options are readonly, values loaded for reference
-        _ = reader.ReadDouble(); // ClusteringThreshold
-        _ = reader.ReadDouble(); // MinTurnDuration
-        _ = reader.ReadDouble(); // WindowDurationSeconds
-        _ = reader.ReadDouble(); // HopDurationSeconds
-    }
+
 
     /// <summary>
     /// Creates a new instance of this model for cloning.

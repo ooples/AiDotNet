@@ -481,19 +481,7 @@ public partial class WaveNet<T> : ForecastingModelBase<T>
     /// <b>For Beginners:</b> In the WaveNet model, SerializeNetworkSpecificData saves or restores model-specific settings. This lets the WaveNet architecture be reused later.
     /// </para>
     /// </remarks>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_lookbackWindow);
-        writer.Write(_forecastHorizon);
-        writer.Write(_numFeatures);
-        writer.Write(_residualChannels);
-        writer.Write(_skipChannels);
-        writer.Write(_dilationDepth);
-        writer.Write(_numStacks);
-        writer.Write(_kernelSize);
-        writer.Write(_useGatedActivations);
-        writer.Write(_dropout);
-    }
+
 
     /// <summary>
     /// Reads WaveNet-specific configuration during deserialization.
@@ -503,19 +491,7 @@ public partial class WaveNet<T> : ForecastingModelBase<T>
     /// <b>For Beginners:</b> In the WaveNet model, DeserializeNetworkSpecificData saves or restores model-specific settings. This lets the WaveNet architecture be reused later.
     /// </para>
     /// </remarks>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _lookbackWindow = reader.ReadInt32();
-        _forecastHorizon = reader.ReadInt32();
-        _numFeatures = reader.ReadInt32();
-        _residualChannels = reader.ReadInt32();
-        _skipChannels = reader.ReadInt32();
-        _dilationDepth = reader.ReadInt32();
-        _numStacks = reader.ReadInt32();
-        _kernelSize = reader.ReadInt32();
-        _useGatedActivations = reader.ReadBoolean();
-        _dropout = reader.ReadDouble();
-    }
+
 
     #endregion
 

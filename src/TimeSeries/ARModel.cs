@@ -438,21 +438,7 @@ public partial class ARModel<T> : TimeSeriesModelBase<T>
     /// 
     /// This allows the model to be fully reconstructed later.
     /// </remarks>
-    protected override void SerializeCore(BinaryWriter writer)
-    {
-        writer.Write(_arOrder);
-        for (int i = 0; i < _arOrder; i++)
-        {
-            writer.Write(Convert.ToDouble(_arCoefficients[i]));
-        }
 
-        // Serialize training series for in-sample prediction support
-        writer.Write(_trainedSeries.Length);
-        for (int i = 0; i < _trainedSeries.Length; i++)
-        {
-            writer.Write(Convert.ToDouble(_trainedSeries[i]));
-        }
-    }
 
     /// <summary>
     /// Deserializes the model's state from a binary stream.
@@ -473,34 +459,7 @@ public partial class ARModel<T> : TimeSeriesModelBase<T>
     /// 
     /// After deserialization, the model is ready to make predictions as if it had just been trained.
     /// </remarks>
-    protected override void DeserializeCore(BinaryReader reader)
-    {
-        _arOrder = reader.ReadInt32();
-        _arCoefficients = new Vector<T>(_arOrder);
-        for (int i = 0; i < _arOrder; i++)
-        {
-            _arCoefficients[i] = NumOps.FromDouble(reader.ReadDouble());
-        }
 
-        // Deserialize training series if available (backward-compatible)
-        _trainedSeries = Vector<T>.Empty();
-        try
-        {
-            int seriesLength = reader.ReadInt32();
-            if (seriesLength > 0)
-            {
-                _trainedSeries = new Vector<T>(seriesLength);
-                for (int i = 0; i < seriesLength; i++)
-                {
-                    _trainedSeries[i] = NumOps.FromDouble(reader.ReadDouble());
-                }
-            }
-        }
-        catch (EndOfStreamException)
-        {
-            // Older serialized models don't include training series — leave empty
-        }
-    }
 
     /// <summary>
     /// Creates a new instance of the AR model with the same options.

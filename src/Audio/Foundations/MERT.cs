@@ -288,30 +288,9 @@ public partial class MERT<T> : AudioNeuralNetworkBase<T>, IAudioFoundationModel<
         return m;
     }
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter w)
-    {
-        w.Write(_useNativeMode); w.Write(_options.ModelPath ?? string.Empty);
-        w.Write(_options.SampleRate); w.Write(_options.HiddenDim);
-        w.Write(_options.NumLayers); w.Write(_options.NumHeads);
-        w.Write(_options.FeedForwardDim); w.Write(_options.Variant);
-        w.Write(_options.CQTBins); w.Write(_options.NumCodebooks);
-        w.Write(_options.CodebookSize); w.Write(_options.NumClusters);
-        w.Write(_options.MaskProbability); w.Write(_options.MaskSpanLength);
-        w.Write(_options.DropoutRate);
-    }
 
-    protected override void DeserializeNetworkSpecificData(BinaryReader r)
-    {
-        _useNativeMode = r.ReadBoolean(); string mp = r.ReadString(); if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp;
-        _options.SampleRate = r.ReadInt32(); _options.HiddenDim = r.ReadInt32();
-        _options.NumLayers = r.ReadInt32(); _options.NumHeads = r.ReadInt32();
-        _options.FeedForwardDim = r.ReadInt32(); _options.Variant = r.ReadString();
-        _options.CQTBins = r.ReadInt32(); _options.NumCodebooks = r.ReadInt32();
-        _options.CodebookSize = r.ReadInt32(); _options.NumClusters = r.ReadInt32();
-        _options.MaskProbability = r.ReadDouble(); _options.MaskSpanLength = r.ReadInt32();
-        _options.DropoutRate = r.ReadDouble();
-        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxEncoder = new OnnxModel<T>(p, _options.OnnxOptions);
-    }
+
+
 
     #endregion
 

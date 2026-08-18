@@ -302,24 +302,12 @@ public partial class UNet3D<T> : VolumetricModelLayoutBase<T>
     /// </summary>
     /// <param name="writer">The binary writer to serialize to.</param>
     /// <inheritdoc />
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(VoxelResolution);
-        writer.Write(NumEncoderBlocks);
-        writer.Write(BaseFilters);
-        writer.Write(NumClasses);
-    }
+
 
     /// <summary>
     /// Deserializes network-specific data from a binary stream.
     /// </summary>
     /// <param name="reader">The binary reader to deserialize from.</param>
     /// <inheritdoc />
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        VoxelResolution = reader.ReadInt32();
-        NumEncoderBlocks = reader.ReadInt32();
-        BaseFilters = reader.ReadInt32();
-        NumClasses = reader.ReadInt32();
-    }
+
 }

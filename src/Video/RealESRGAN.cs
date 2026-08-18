@@ -1016,67 +1016,10 @@ public partial class RealESRGAN<T> : VideoSuperResolutionBase<T>
     }
 
     /// <inheritdoc/>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        ThrowIfNativeModeUnavailable();
 
-        writer.Write(_scaleFactor);
-        writer.Write(_numRRDBBlocks);
-        writer.Write(_numFeatures);
-        writer.Write(_residualScale);
-        writer.Write(_l1Lambda);
-        writer.Write(_perceptualLambda);
-        writer.Write(_ganLambda);
-
-        // Serialize generator parameters
-        var generatorParams = GeneratorRequired.GetParameters();
-        writer.Write(generatorParams.Length);
-        for (int i = 0; i < generatorParams.Length; i++)
-        {
-            writer.Write(NumOps.ToDouble(generatorParams[i]));
-        }
-
-        // Serialize discriminator parameters
-        var discriminatorParams = DiscriminatorRequired.GetParameters();
-        writer.Write(discriminatorParams.Length);
-        for (int i = 0; i < discriminatorParams.Length; i++)
-        {
-            writer.Write(NumOps.ToDouble(discriminatorParams[i]));
-        }
-    }
 
     /// <inheritdoc/>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        ThrowIfNativeModeUnavailable();
 
-        // Read configuration (already set in constructor, just advance reader)
-        _ = reader.ReadInt32(); // scaleFactor
-        _ = reader.ReadInt32(); // numRRDBBlocks
-        _ = reader.ReadInt32(); // numFeatures
-        _ = reader.ReadDouble(); // residualScale
-        _ = reader.ReadDouble(); // l1Lambda
-        _ = reader.ReadDouble(); // perceptualLambda
-        _ = reader.ReadDouble(); // ganLambda
-
-        // Load generator parameters
-        int generatorParamCount = reader.ReadInt32();
-        var generatorParams = new T[generatorParamCount];
-        for (int i = 0; i < generatorParamCount; i++)
-        {
-            generatorParams[i] = NumOps.FromDouble(reader.ReadDouble());
-        }
-        GeneratorRequired.SetParameters(new Vector<T>(generatorParams));
-
-        // Load discriminator parameters
-        int discriminatorParamCount = reader.ReadInt32();
-        var discriminatorParams = new T[discriminatorParamCount];
-        for (int i = 0; i < discriminatorParamCount; i++)
-        {
-            discriminatorParams[i] = NumOps.FromDouble(reader.ReadDouble());
-        }
-        DiscriminatorRequired.SetParameters(new Vector<T>(discriminatorParams));
-    }
 
     #endregion
 

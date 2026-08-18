@@ -303,15 +303,9 @@ public partial class EDVR<T> : VideoSuperResolutionBase<T>
         ModelData = _useNativeMode ? this.Serialize() : []
     };
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_numFeatures); writer.Write(_numFrames); writer.Write(_numBlocks); writer.Write(_scaleFactor);
-    }
 
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        for (int i = 0; i < 4; i++) _ = reader.ReadInt32();
-    }
+
+
 
     #endregion
 

@@ -205,28 +205,9 @@ public partial class DemucsNoise<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<
         return m;
     }
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter w)
-    {
-        w.Write(_useNativeMode); w.Write(_options.ModelPath ?? string.Empty);
-        w.Write(_options.SampleRate); w.Write(_options.Variant);
-        w.Write(_options.HiddenChannels); w.Write(_options.Depth);
-        w.Write(_options.LSTMHiddenSize); w.Write(_options.NumLSTMLayers);
-        w.Write(_options.ChannelGrowth); w.Write(_options.DropoutRate);
-    }
 
-    protected override void DeserializeNetworkSpecificData(BinaryReader r)
-    {
-        _useNativeMode = r.ReadBoolean(); string mp = r.ReadString(); if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp;
-        _options.SampleRate = r.ReadInt32(); _options.Variant = r.ReadString();
-        _options.HiddenChannels = r.ReadInt32(); _options.Depth = r.ReadInt32();
-        _options.LSTMHiddenSize = r.ReadInt32(); _options.NumLSTMLayers = r.ReadInt32();
-        _options.ChannelGrowth = r.ReadInt32(); _options.DropoutRate = r.ReadDouble();
-        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
-        {
-            OnnxEncoder?.Dispose();
-            OnnxEncoder = new OnnxModel<T>(p, _options.OnnxOptions);
-        }
-    }
+
+
 
     #endregion
 

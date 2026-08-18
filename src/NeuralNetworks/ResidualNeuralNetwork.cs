@@ -732,13 +732,7 @@ finally
     /// Saving them allows you to recreate the exact same training setup later.
     /// </para>
     /// </remarks>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        // Write training parameters
-        writer.Write(_epochs);
-        writer.Write(Convert.ToDouble(_learningRate));
-        writer.Write(_batchSize);
-    }
+
 
     /// <summary>
     /// Deserializes network-specific data for the Residual Neural Network.
@@ -761,11 +755,5 @@ finally
     /// with the exact same configuration it had when it was saved.
     /// </para>
     /// </remarks>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        // Read training parameters
-        _epochs = reader.ReadInt32();
-        _learningRate = NumOps.FromDouble(reader.ReadDouble());
-        _batchSize = reader.ReadInt32();
-    }
+
 }

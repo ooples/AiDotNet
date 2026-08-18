@@ -589,30 +589,12 @@ public partial class SpeakerEmbeddingExtractor<T> : SpeakerRecognitionBase<T>, I
     /// <summary>
     /// Serializes network-specific data.
     /// </summary>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(SampleRate);
-        writer.Write(EmbeddingDimension);
-        writer.Write(MinimumDurationSeconds);
-        writer.Write(_useNativeMode);
-        writer.Write(_hiddenDim);
-        writer.Write(_numEncoderLayers);
-        writer.Write(_numHeads);
-    }
+
 
     /// <summary>
     /// Deserializes network-specific data.
     /// </summary>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        SampleRate = reader.ReadInt32();
-        EmbeddingDimension = reader.ReadInt32();
-        _ = reader.ReadDouble(); // MinimumDurationSeconds
-        _ = reader.ReadBoolean(); // useNativeMode
-        _ = reader.ReadInt32(); // hiddenDim
-        _ = reader.ReadInt32(); // numEncoderLayers
-        _ = reader.ReadInt32(); // numHeads
-    }
+
 
     #endregion
 

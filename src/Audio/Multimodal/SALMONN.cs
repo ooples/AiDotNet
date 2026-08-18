@@ -254,36 +254,9 @@ public partial class SALMONN<T> : AudioNeuralNetworkBase<T>, IAudioLanguageModel
         return m;
     }
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter w)
-    {
-        w.Write(_useNativeMode); w.Write(_options.ModelPath ?? string.Empty);
-        w.Write(_options.SampleRate); w.Write(_options.SpeechEncoderDim);
-        w.Write(_options.NumSpeechEncoderLayers); w.Write(_options.AudioEncoderDim);
-        w.Write(_options.NumAudioEncoderLayers); w.Write(_options.NumMels);
-        w.Write(_options.MaxAudioDurationSeconds); w.Write(_options.QFormerDim);
-        w.Write(_options.NumQFormerLayers); w.Write(_options.NumQueryTokens);
-        w.Write(_options.WindowSize); w.Write(_options.LMHiddenDim);
-        w.Write(_options.NumLMLayers); w.Write(_options.NumLMHeads);
-        w.Write(_options.VocabSize); w.Write(_options.MaxResponseTokens);
-        w.Write(_options.Temperature); w.Write(_options.TopP);
-        w.Write(_options.DropoutRate);
-    }
 
-    protected override void DeserializeNetworkSpecificData(BinaryReader r)
-    {
-        _useNativeMode = r.ReadBoolean(); string mp = r.ReadString(); if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp;
-        _options.SampleRate = r.ReadInt32(); _options.SpeechEncoderDim = r.ReadInt32();
-        _options.NumSpeechEncoderLayers = r.ReadInt32(); _options.AudioEncoderDim = r.ReadInt32();
-        _options.NumAudioEncoderLayers = r.ReadInt32(); _options.NumMels = r.ReadInt32();
-        _options.MaxAudioDurationSeconds = r.ReadDouble(); _options.QFormerDim = r.ReadInt32();
-        _options.NumQFormerLayers = r.ReadInt32(); _options.NumQueryTokens = r.ReadInt32();
-        _options.WindowSize = r.ReadInt32(); _options.LMHiddenDim = r.ReadInt32();
-        _options.NumLMLayers = r.ReadInt32(); _options.NumLMHeads = r.ReadInt32();
-        _options.VocabSize = r.ReadInt32(); _options.MaxResponseTokens = r.ReadInt32();
-        _options.Temperature = r.ReadDouble(); _options.TopP = r.ReadDouble();
-        _options.DropoutRate = r.ReadDouble();
-        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxEncoder = new OnnxModel<T>(p, _options.OnnxOptions);
-    }
+
+
 
     #endregion
 

@@ -186,22 +186,7 @@ public class GraphCodeBERT<T> : CodeModelBase<T>
             optimizerName: _optimizer.GetType().Name);
     }
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        CodeModelArchitectureSerialization.Write(
-            writer,
-            CodeArchitecture,
-            includeUseDataFlow: true,
-            includeEncoderDecoderLayerCounts: false);
-    }
 
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        CodeModelArchitectureSerialization.ReadAndValidate(
-            reader,
-            CodeArchitecture,
-            modelName: "GraphCodeBERT",
-            includeUseDataFlow: true,
-            includeEncoderDecoderLayerCounts: false);
-    }
+
+
 }

@@ -301,32 +301,9 @@ public partial class VALLE<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
         return m;
     }
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter w)
-    {
-        w.Write(_useNativeMode); w.Write(_options.ModelPath ?? string.Empty);
-        w.Write(_options.SampleRate); w.Write(_options.MaxDurationSeconds);
-        w.Write(_options.ARHiddenDim); w.Write(_options.NumARLayers);
-        w.Write(_options.NumARHeads); w.Write(_options.NARHiddenDim);
-        w.Write(_options.NumNARLayers); w.Write(_options.NumNARHeads);
-        w.Write(_options.PhonemeVocabSize); w.Write(_options.CodebookSize);
-        w.Write(_options.NumCodebooks); w.Write(_options.Temperature);
-        w.Write(_options.TopP); w.Write(_options.MinEnrollmentSeconds);
-        w.Write(_options.DropoutRate);
-    }
 
-    protected override void DeserializeNetworkSpecificData(BinaryReader r)
-    {
-        _useNativeMode = r.ReadBoolean(); string mp = r.ReadString(); if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp;
-        _options.SampleRate = r.ReadInt32(); _options.MaxDurationSeconds = r.ReadDouble();
-        _options.ARHiddenDim = r.ReadInt32(); _options.NumARLayers = r.ReadInt32();
-        _options.NumARHeads = r.ReadInt32(); _options.NARHiddenDim = r.ReadInt32();
-        _options.NumNARLayers = r.ReadInt32(); _options.NumNARHeads = r.ReadInt32();
-        _options.PhonemeVocabSize = r.ReadInt32(); _options.CodebookSize = r.ReadInt32();
-        _options.NumCodebooks = r.ReadInt32(); _options.Temperature = r.ReadDouble();
-        _options.TopP = r.ReadDouble(); _options.MinEnrollmentSeconds = r.ReadDouble();
-        _options.DropoutRate = r.ReadDouble();
-        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxEncoder = new OnnxModel<T>(p, _options.OnnxOptions);
-    }
+
+
 
     #endregion
 

@@ -481,39 +481,10 @@ public partial class Wav2Vec2LanguageIdentifier<T> : AudioNeuralNetworkBase<T>, 
     }
 
     /// <inheritdoc/>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(IsOnnxMode);
-        writer.Write(SampleRate);
-        writer.Write(_options.HiddenSize);
-        writer.Write(_options.NumLayers);
-        writer.Write(_options.NumAttentionHeads);
-        writer.Write(_languageIdToCode.Count);
 
-        foreach (var kvp in _languageIdToCode)
-        {
-            writer.Write(kvp.Key);
-            writer.Write(kvp.Value);
-        }
-    }
 
     /// <inheritdoc/>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        // Read configuration values for validation
-        _ = reader.ReadBoolean(); // IsOnnxMode
-        _ = reader.ReadInt32();   // SampleRate
-        _ = reader.ReadInt32();   // HiddenSize
-        _ = reader.ReadInt32();   // NumLayers
-        _ = reader.ReadInt32();   // NumAttentionHeads
-        int langCount = reader.ReadInt32();
 
-        for (int i = 0; i < langCount; i++)
-        {
-            _ = reader.ReadInt32();   // language id
-            _ = reader.ReadString();  // language code
-        }
-    }
 
     #endregion
 

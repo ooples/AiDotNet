@@ -482,18 +482,7 @@ public partial class S4<T> : ForecastingModelBase<T>
     /// can be reconstructed later.
     /// </para>
     /// </remarks>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_contextLength);
-        writer.Write(_forecastHorizon);
-        writer.Write(_modelDimension);
-        writer.Write(_stateDimension);
-        writer.Write(_numLayers);
-        writer.Write(_hippoMethod);
-        writer.Write(_discretizationMethod);
-        writer.Write(_useLowRankCorrection);
-        writer.Write(_lowRankRank);
-    }
+
 
     /// <summary>
     /// Deserializes S4-specific data when loading a saved model.
@@ -504,18 +493,7 @@ public partial class S4<T> : ForecastingModelBase<T>
     /// loading a previously saved model.
     /// </para>
     /// </remarks>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _contextLength = reader.ReadInt32();
-        _forecastHorizon = reader.ReadInt32();
-        _modelDimension = reader.ReadInt32();
-        _stateDimension = reader.ReadInt32();
-        _numLayers = reader.ReadInt32();
-        _hippoMethod = reader.ReadString();
-        _discretizationMethod = reader.ReadString();
-        _useLowRankCorrection = reader.ReadBoolean();
-        _lowRankRank = reader.ReadInt32();
-    }
+
 
     #endregion
 

@@ -168,28 +168,10 @@ public partial class DUT<T> : VideoStabilizationBase<T>
     }
 
     /// <inheritdoc/>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write((int)_options.Variant);
-        writer.Write(_options.NumFeatures);
-        writer.Write(_options.NumPyramidLevels);
-        writer.Write(_options.NumResBlocks);
-        writer.Write(_options.TemporalWindowSize);
-        writer.Write(_options.LearningRate);
-        writer.Write(_options.DropoutRate);
-    }
+
 
     /// <inheritdoc/>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _options.Variant = (VideoModelVariant)reader.ReadInt32();
-        _options.NumFeatures = reader.ReadInt32();
-        _options.NumPyramidLevels = reader.ReadInt32();
-        _options.NumResBlocks = reader.ReadInt32();
-        _options.TemporalWindowSize = reader.ReadInt32();
-        _options.LearningRate = reader.ReadDouble();
-        _options.DropoutRate = reader.ReadDouble();
-    }
+
 
     private void ThrowIfDisposed()
     {

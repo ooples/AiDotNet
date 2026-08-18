@@ -377,39 +377,10 @@ public partial class DenseNetNetwork<T> : ImageClassifierModelLayoutBase<T>
     }
 
     /// <inheritdoc />
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write((int)_configuration.Variant);
-        writer.Write(_configuration.InputChannels);
-        writer.Write(_configuration.InputHeight);
-        writer.Write(_configuration.InputWidth);
-        writer.Write(_configuration.NumClasses);
-        writer.Write(_configuration.GrowthRate);
-        writer.Write(_configuration.CompressionFactor);
-    }
+
 
     /// <inheritdoc />
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        var variant = (DenseNetVariant)reader.ReadInt32();
-        var inputChannels = reader.ReadInt32();
-        var inputHeight = reader.ReadInt32();
-        var inputWidth = reader.ReadInt32();
-        var numClasses = reader.ReadInt32();
-        var growthRate = reader.ReadInt32();
-        var compressionFactor = reader.ReadDouble();
 
-        if (variant != _configuration.Variant ||
-            inputChannels != _configuration.InputChannels ||
-            inputHeight != _configuration.InputHeight ||
-            inputWidth != _configuration.InputWidth ||
-            numClasses != _configuration.NumClasses ||
-            growthRate != _configuration.GrowthRate ||
-            Math.Abs(compressionFactor - _configuration.CompressionFactor) > 0.001)
-        {
-            throw new InvalidDataException("Serialized DenseNet configuration does not match current configuration.");
-        }
-    }
 
     /// <summary>
     /// Gets the layer at the specified index.

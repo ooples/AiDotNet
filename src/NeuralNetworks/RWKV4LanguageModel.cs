@@ -210,30 +210,10 @@ public partial class RWKV4LanguageModel<T> : TokenLanguageModelLayoutBase<T>
     }
 
     /// <inheritdoc />
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_vocabSize);
-        writer.Write(_modelDimension);
-        writer.Write(_numLayers);
-        writer.Write(_maxSeqLength);
-    }
+
 
     /// <inheritdoc />
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        int vocabSize = reader.ReadInt32();
-        int modelDimension = reader.ReadInt32();
-        int numLayers = reader.ReadInt32();
-        int maxSeqLength = reader.ReadInt32();
 
-        if (vocabSize != _vocabSize || modelDimension != _modelDimension ||
-            numLayers != _numLayers || maxSeqLength != _maxSeqLength)
-        {
-            throw new InvalidOperationException(
-                $"Deserialized dimensions (vocab={vocabSize}, dim={modelDimension}, layers={numLayers}, seq={maxSeqLength}) " +
-                $"do not match instance (vocab={_vocabSize}, dim={_modelDimension}, layers={_numLayers}, seq={_maxSeqLength}).");
-        }
-    }
 
     #endregion
 }

@@ -608,24 +608,7 @@ public partial class OccupancyNeuralNetwork<T> : VectorModelLayoutBase<T>
     /// as it was configured.
     /// </para>
     /// </remarks>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        // Save temporal configuration
-        writer.Write(_includeTemporalData);
-        writer.Write(_historyWindowSize);
 
-        // Save any internal sensor history if present
-        writer.Write(_internalSensorHistory.Count);
-
-        foreach (var reading in _internalSensorHistory)
-        {
-            writer.Write(reading.Length);
-            for (int i = 0; i < reading.Length; i++)
-            {
-                writer.Write(Convert.ToDouble(reading[i]));
-            }
-        }
-    }
 
     /// <summary>
     /// Deserializes network-specific data from a binary reader.
@@ -644,29 +627,5 @@ public partial class OccupancyNeuralNetwork<T> : VectorModelLayoutBase<T>
     /// with all its settings and internal state intact.
     /// </para>
     /// </remarks>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        // Load temporal configuration
-        _includeTemporalData = reader.ReadBoolean();
-        _historyWindowSize = reader.ReadInt32();
 
-        // Initialize sensor history queue
-        _internalSensorHistory = new Queue<Vector<T>>(_historyWindowSize);
-
-        // Load any saved sensor history
-        int historyCount = reader.ReadInt32();
-
-        for (int h = 0; h < historyCount; h++)
-        {
-            int readingLength = reader.ReadInt32();
-            var reading = new Vector<T>(readingLength);
-
-            for (int i = 0; i < readingLength; i++)
-            {
-                reading[i] = NumOps.FromDouble(reader.ReadDouble());
-            }
-
-            _internalSensorHistory.Enqueue(reading);
-        }
-    }
 }

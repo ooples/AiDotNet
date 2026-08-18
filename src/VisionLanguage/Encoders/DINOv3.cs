@@ -197,33 +197,9 @@ public partial class DINOv3<T> : VisionLanguageModelBase<T>, IVisualEncoder<T>
         return m;
     }
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_useNativeMode);
-        writer.Write(_options.ModelPath ?? string.Empty);
-        writer.Write(_options.ImageSize);
-        writer.Write(_options.EmbeddingDim);
-        writer.Write(_options.NumLayers);
-        writer.Write(_options.NumHeads);
-        writer.Write(_options.NumRegisterTokens);
-        writer.Write(_options.UseSwiGLU);
-    }
 
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _useNativeMode = reader.ReadBoolean();
-        string mp = reader.ReadString();
-        if (!string.IsNullOrEmpty(mp))
-            _options.ModelPath = mp;
-        _options.ImageSize = reader.ReadInt32();
-        _options.EmbeddingDim = reader.ReadInt32();
-        _options.NumLayers = reader.ReadInt32();
-        _options.NumHeads = reader.ReadInt32();
-        _options.NumRegisterTokens = reader.ReadInt32();
-        _options.UseSwiGLU = reader.ReadBoolean();
-        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
-            OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
-    }
+
+
 
     private void ThrowIfDisposed()
     {

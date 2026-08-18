@@ -198,11 +198,7 @@ public partial class FinMA<T> : FinancialNLPModelBase<T>
     /// <b>For Beginners:</b> In the FinMA model, SerializeModelSpecificData saves or restores model-specific settings. This lets the FinMA architecture be reused later.
     /// </para>
     /// </remarks>
-    protected override void SerializeModelSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_dropout);
-        writer.Write(_numAgents);
-    }
+
 
     /// <summary>
     /// Executes DeserializeModelSpecificData for the FinMA.
@@ -212,11 +208,7 @@ public partial class FinMA<T> : FinancialNLPModelBase<T>
     /// <b>For Beginners:</b> In the FinMA model, DeserializeModelSpecificData saves or restores model-specific settings. This lets the FinMA architecture be reused later.
     /// </para>
     /// </remarks>
-    protected override void DeserializeModelSpecificData(BinaryReader reader)
-    {
-        _dropout = reader.ReadDouble();
-        _numAgents = reader.ReadInt32();
-    }
+
 
     /// <summary>
     /// Executes ForecastNative for the FinMA.

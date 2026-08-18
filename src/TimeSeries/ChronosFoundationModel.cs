@@ -922,36 +922,7 @@ public partial class ChronosFoundationModel<T> : TimeSeriesModelBase<T>
 
     private const int SerializationVersion = 3;
 
-    protected override void SerializeCore(BinaryWriter writer)
-    {
-        writer.Write(SerializationVersion);
 
-        writer.Write(_vocabularySize);
-        writer.Write(_options.EmbeddingDim);
-        writer.Write(_options.ContextLength);
-        writer.Write(_options.ForecastHorizon);
-        writer.Write(_options.NumLayers);
-        writer.Write(_options.NumHeads);
-        writer.Write(_binMin);
-        writer.Write(_binMax);
-
-        SerializeTensor(writer, _tokenEmbeddings);
-        SerializeTensor(writer, _positionalEncoding);
-
-        writer.Write(_transformerLayers.Count);
-        foreach (var layer in _transformerLayers)
-            layer.Serialize(writer);
-
-        SerializeTensor(writer, _finalLayerNormGamma);
-        SerializeTensor(writer, _finalLayerNormBeta);
-        SerializeTensor(writer, _outputProjection);
-        SerializeTensor(writer, _outputBias);
-
-        // Serialize training series (needed for Predict to work correctly)
-        writer.Write(_trainingSeries.Length);
-        for (int i = 0; i < _trainingSeries.Length; i++)
-            writer.Write(Convert.ToDouble(_trainingSeries[i]));
-    }
 
     private void SerializeTensor(BinaryWriter writer, Tensor<T> tensor)
     {
@@ -962,58 +933,7 @@ public partial class ChronosFoundationModel<T> : TimeSeriesModelBase<T>
             writer.Write(Convert.ToDouble(tensor[i]));
     }
 
-    protected override void DeserializeCore(BinaryReader reader)
-    {
-        int version = reader.ReadInt32();
-        if (version < 2 || version > SerializationVersion)
-            throw new NotSupportedException($"Unsupported serialization version: {version}");
 
-        int vocabularySize = reader.ReadInt32();
-        int embeddingDim = reader.ReadInt32();
-        int contextLength = reader.ReadInt32();
-        int forecastHorizon = reader.ReadInt32();
-        int numLayers = reader.ReadInt32();
-        int numHeads = reader.ReadInt32();
-        _binMin = reader.ReadDouble();
-        _binMax = reader.ReadDouble();
-
-        ValidateOption(vocabularySize, _vocabularySize, "VocabularySize");
-        ValidateOption(embeddingDim, _options.EmbeddingDim, "EmbeddingDim");
-        ValidateOption(contextLength, _options.ContextLength, "ContextLength");
-        ValidateOption(forecastHorizon, _options.ForecastHorizon, "ForecastHorizon");
-        ValidateOption(numLayers, _options.NumLayers, "NumLayers");
-        ValidateOption(numHeads, _options.NumHeads, "NumHeads");
-
-        _binWidth = (_binMax - _binMin) / _vocabularySize;
-
-        _tokenEmbeddings = DeserializeTensor(reader);
-        _positionalEncoding = DeserializeTensor(reader);
-
-        int layerCount = reader.ReadInt32();
-        _transformerLayers = new List<ChronosTransformerLayerTensor<T>>(layerCount);
-        for (int i = 0; i < layerCount; i++)
-        {
-            var layer = new ChronosTransformerLayerTensor<T>();
-            layer.Deserialize(reader);
-            _transformerLayers.Add(layer);
-        }
-
-        _finalLayerNormGamma = DeserializeTensor(reader);
-        _finalLayerNormBeta = DeserializeTensor(reader);
-        _outputProjection = DeserializeTensor(reader);
-        _outputBias = DeserializeTensor(reader);
-
-        // Deserialize training series if present
-        if (reader.BaseStream.Position < reader.BaseStream.Length)
-        {
-            int tsLen = reader.ReadInt32();
-            _trainingSeries = new Vector<T>(tsLen);
-            for (int i = 0; i < tsLen; i++)
-                _trainingSeries[i] = _numOps.FromDouble(reader.ReadDouble());
-        }
-
-        InitializeGradientAccumulators();
-    }
 
     private void ValidateOption(int serialized, int expected, string name)
     {

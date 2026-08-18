@@ -468,8 +468,7 @@ public partial class GroundedSAM2<T> : Common.OpenVocabSegmentationBase<T>
     /// <b>For Beginners:</b> Saves model configuration for later reconstruction.
     /// </para>
     /// </remarks>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    { writer.Write(_height); writer.Write(_width); writer.Write(_channels); writer.Write(_numClasses); writer.Write(_decoderDim); writer.Write(_dropRate); writer.Write(_useNativeMode); writer.Write(_onnxModelPath ?? string.Empty); writer.Write(_encoderLayerEnd); }
+
 
     /// <summary>
     /// Reads configuration from a binary stream.
@@ -480,8 +479,7 @@ public partial class GroundedSAM2<T> : Common.OpenVocabSegmentationBase<T>
     /// <b>For Beginners:</b> Loads model configuration when restoring a saved model.
     /// </para>
     /// </remarks>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    { _ = reader.ReadInt32(); _ = reader.ReadInt32(); _ = reader.ReadInt32(); _ = reader.ReadInt32(); _ = reader.ReadInt32(); _ = reader.ReadDouble(); _ = reader.ReadBoolean(); _ = reader.ReadString(); _ = reader.ReadInt32(); }
+
 
     /// <summary>
     /// Creates a new instance with the same configuration but fresh weights.

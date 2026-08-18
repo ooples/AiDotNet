@@ -577,36 +577,10 @@ public partial class TFC<T> : TimeSeriesFoundationModelBase<T>
     }
 
     /// <inheritdoc/>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_contextLength);
-        writer.Write(_forecastHorizon);
-        writer.Write(_hiddenDimension);
-        writer.Write(_projectionDimension);
-        writer.Write(_numTimeLayers);
-        writer.Write(_numFreqLayers);
-        writer.Write(_dropout);
-        writer.Write(_contrastiveTemperature);
-    }
+
 
     /// <inheritdoc/>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _contextLength = reader.ReadInt32();
-        _forecastHorizon = reader.ReadInt32();
-        _hiddenDimension = reader.ReadInt32();
-        _projectionDimension = reader.ReadInt32();
-        _numTimeLayers = reader.ReadInt32();
-        _numFreqLayers = reader.ReadInt32();
-        _dropout = reader.ReadDouble();
-        _contrastiveTemperature = reader.ReadDouble();
 
-        // The base deserializer has already recreated every layer in Layers with the
-        // copied weights. Re-point the cached encoder/projection/head references at
-        // those layers; otherwise they keep pointing at the stale random-initialized
-        // layers from CreateNewInstance and a clone diverges from the original.
-        ExtractLayerReferences();
-    }
 
     #endregion
 

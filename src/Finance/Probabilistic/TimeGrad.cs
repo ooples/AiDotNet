@@ -570,17 +570,7 @@ public partial class TimeGrad<T> : ForecastingModelBase<T>
     /// <b>For Beginners:</b> In the TimeGrad model, SerializeNetworkSpecificData saves or restores model-specific settings. This lets the TimeGrad architecture be reused later.
     /// </para>
     /// </remarks>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_contextLength);
-        writer.Write(_forecastHorizon);
-        writer.Write(_hiddenDimension);
-        writer.Write(_numRnnLayers);
-        writer.Write(_numDiffusionSteps);
-        writer.Write(_numSamples);
-        writer.Write(_denoisingDim);
-        writer.Write(_betaSchedule);
-    }
+
 
     /// <summary>
     /// Deserializes TimeGrad-specific data when loading a saved model.
@@ -591,17 +581,7 @@ public partial class TimeGrad<T> : ForecastingModelBase<T>
     /// <b>For Beginners:</b> In the TimeGrad model, DeserializeNetworkSpecificData saves or restores model-specific settings. This lets the TimeGrad architecture be reused later.
     /// </para>
     /// </remarks>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _contextLength = reader.ReadInt32();
-        _forecastHorizon = reader.ReadInt32();
-        _hiddenDimension = reader.ReadInt32();
-        _numRnnLayers = reader.ReadInt32();
-        _numDiffusionSteps = reader.ReadInt32();
-        _numSamples = reader.ReadInt32();
-        _denoisingDim = reader.ReadInt32();
-        _betaSchedule = reader.ReadString();
-    }
+
 
     #endregion
 

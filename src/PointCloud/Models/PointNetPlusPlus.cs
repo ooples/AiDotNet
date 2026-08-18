@@ -589,92 +589,9 @@ public partial class PointNetPlusPlus<T> : NeuralNetworkBase<T>, IPointCloudMode
         };
     }
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_numClasses);
-        writer.Write(_inputFeatureDim);
-        writer.Write(_useMultiScaleGrouping);
-        writer.Write(_useDropout);
-        writer.Write(_dropoutRate);
-        writer.Write(NumOps.ToDouble(_learningRate));
 
-        WriteIntArray(writer, _samplingRates);
-        WriteDoubleArray(writer, _searchRadii);
-        WriteIntArray(writer, _neighborSamples);
-        WriteIntJagged(writer, _mlpDimensions);
-        WriteIntArray(writer, _classifierChannels);
 
-        bool hasMultiScale = _multiScaleRadii != null && _multiScaleMlpDimensions != null && _multiScaleNeighborSamples != null;
-        writer.Write(hasMultiScale);
-        if (hasMultiScale)
-        {
-            var multiScaleRadii = _multiScaleRadii;
-            var multiScaleMlpDimensions = _multiScaleMlpDimensions;
-            var multiScaleNeighborSamples = _multiScaleNeighborSamples;
-            if (multiScaleRadii == null || multiScaleMlpDimensions == null || multiScaleNeighborSamples == null)
-            {
-                throw new InvalidOperationException("Multi-scale configuration is missing.");
-            }
 
-            WriteDoubleJagged(writer, multiScaleRadii);
-            WriteIntJagged3(writer, multiScaleMlpDimensions);
-            WriteIntJagged(writer, multiScaleNeighborSamples);
-        }
-    }
-
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _numClasses = reader.ReadInt32();
-        _inputFeatureDim = reader.ReadInt32();
-        _useMultiScaleGrouping = reader.ReadBoolean();
-        _useDropout = reader.ReadBoolean();
-        _dropoutRate = reader.ReadDouble();
-        _learningRate = NumOps.FromDouble(reader.ReadDouble());
-
-        _samplingRates = ReadIntArray(reader, nameof(_samplingRates), allowEmpty: false);
-        _searchRadii = ReadDoubleArray(reader, nameof(_searchRadii), allowEmpty: false);
-        _neighborSamples = ReadIntArray(reader, nameof(_neighborSamples), allowEmpty: false);
-        _mlpDimensions = ReadIntJagged(reader, nameof(_mlpDimensions), allowEmpty: false);
-        _classifierChannels = ReadIntArray(reader, nameof(_classifierChannels), allowEmpty: true);
-
-        bool hasMultiScale = reader.ReadBoolean();
-        if (hasMultiScale)
-        {
-            _multiScaleRadii = ReadDoubleJagged(reader, nameof(_multiScaleRadii));
-            _multiScaleMlpDimensions = ReadIntJagged3(reader, nameof(_multiScaleMlpDimensions));
-            _multiScaleNeighborSamples = ReadIntJagged(reader, nameof(_multiScaleNeighborSamples), allowEmpty: false);
-            if (_multiScaleRadii == null || _multiScaleMlpDimensions == null || _multiScaleNeighborSamples == null)
-            {
-                throw new InvalidOperationException("Serialized multi-scale configuration is incomplete.");
-            }
-        }
-        else
-        {
-            _multiScaleRadii = null;
-            _multiScaleMlpDimensions = null;
-            _multiScaleNeighborSamples = null;
-        }
-
-        _setAbstractionLayers.Clear();
-        _classificationHeadLayers.Clear();
-        bool afterPooling = false;
-        foreach (var layer in Layers)
-        {
-            if (layer is SetAbstractionLayer<T> saLayer)
-            {
-                _setAbstractionLayers.Add(saLayer);
-            }
-            if (layer is AiDotNet.PointCloud.Layers.MaxPoolingLayer<T>)
-            {
-                afterPooling = true;
-                continue;
-            }
-            if (afterPooling && (layer is DenseLayer<T> || layer is DropoutLayer<T>))
-            {
-                _classificationHeadLayers.Add(layer);
-            }
-        }
-    }
 
     private static int[] ValidatePositiveArray(int[]? values, string paramName)
     {

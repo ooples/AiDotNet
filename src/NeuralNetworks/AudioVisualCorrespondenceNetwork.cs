@@ -1102,48 +1102,10 @@ public partial class AudioVisualCorrespondenceNetwork<T> : MultimodalModelLayout
     }
 
     /// <inheritdoc/>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_embeddingDimension);
-        writer.Write(_audioSampleRate);
-        writer.Write(_videoFrameRate);
-        writer.Write(_numEncoderLayers);
-    }
+
 
     /// <inheritdoc/>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        // Read serialized values
-        var embDim = reader.ReadInt32();
-        var sampleRate = reader.ReadInt32();
-        var frameRate = reader.ReadDouble();
-        var numLayers = reader.ReadInt32();
 
-        // Validate that loaded values match current instance configuration
-        if (embDim != _embeddingDimension)
-        {
-            throw new InvalidOperationException(
-                $"Loaded embedding dimension ({embDim}) doesn't match current ({_embeddingDimension}).");
-        }
-
-        if (sampleRate != _audioSampleRate)
-        {
-            throw new InvalidOperationException(
-                $"Loaded audio sample rate ({sampleRate}) doesn't match current ({_audioSampleRate}).");
-        }
-
-        if (Math.Abs(frameRate - _videoFrameRate) > 0.001)
-        {
-            throw new InvalidOperationException(
-                $"Loaded video frame rate ({frameRate}) doesn't match current ({_videoFrameRate}).");
-        }
-
-        if (numLayers != _numEncoderLayers)
-        {
-            throw new InvalidOperationException(
-                $"Loaded encoder layers ({numLayers}) doesn't match current ({_numEncoderLayers}).");
-        }
-    }
 
     #endregion
 }

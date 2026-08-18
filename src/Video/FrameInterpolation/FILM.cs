@@ -610,23 +610,9 @@ public partial class FILM<T> : FrameInterpolationBase<T>
         };
     }
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_height);
-        writer.Write(_width);
-        writer.Write(_channels);
-        writer.Write(_numScales);
-        writer.Write(_numFeatures);
-    }
 
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _height = reader.ReadInt32();
-        _width = reader.ReadInt32();
-        _channels = reader.ReadInt32();
-        _numScales = reader.ReadInt32();
-        _numFeatures = reader.ReadInt32();
-    }
+
+
 
     #endregion
 

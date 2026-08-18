@@ -290,10 +290,7 @@ public abstract partial class PortfolioOptimizerBase<T> : FinancialModelBase<T>,
     /// so the model configuration can be restored later.
     /// </para>
     /// </remarks>
-    protected override void SerializeModelSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_numAssets);
-    }
+
 
     /// <summary>
     /// Deserializes portfolio-specific model data.
@@ -304,17 +301,7 @@ public abstract partial class PortfolioOptimizerBase<T> : FinancialModelBase<T>,
     /// <b>For Beginners:</b> Loads portfolio settings from a file.
     /// </para>
     /// </remarks>
-    protected override void DeserializeModelSpecificData(BinaryReader reader)
-    {
-        _numAssets = reader.ReadInt32();
 
-        // Validate deserialized value matches constructor invariant
-        if (_numAssets <= 0)
-        {
-            throw new InvalidOperationException(
-                $"Deserialized numAssets ({_numAssets}) is invalid. Must be greater than 0.");
-        }
-    }
 
     /// <summary>
     /// Core training logic for the portfolio optimizer.

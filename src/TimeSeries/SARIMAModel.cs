@@ -586,30 +586,7 @@ public partial class SARIMAModel<T> : TimeSeriesModelBase<T>
     /// This allows you to save a trained model and load it later without having to retrain it.
     /// </para>
     /// </remarks>
-    protected override void SerializeCore(BinaryWriter writer)
-    {
-        // Serialize SARIMA-specific options
-        writer.Write(_sarimaOptions.P);
-        writer.Write(_sarimaOptions.D);
-        writer.Write(_sarimaOptions.Q);
-        writer.Write(_sarimaOptions.SeasonalP);
-        writer.Write(_sarimaOptions.SeasonalD);
-        writer.Write(_sarimaOptions.SeasonalQ);
-        writer.Write(_sarimaOptions.MaxIterations);
-        writer.Write(Convert.ToDouble(_sarimaOptions.Tolerance));
 
-        // Serialize coefficients
-        SerializationHelper<T>.SerializeVector(writer, _arCoefficients);
-        SerializationHelper<T>.SerializeVector(writer, _maCoefficients);
-        SerializationHelper<T>.SerializeVector(writer, _sarCoefficients);
-        SerializationHelper<T>.SerializeVector(writer, _smaCoefficients);
-        writer.Write(Convert.ToDouble(_constant));
-
-        // Serialize training series for Predict(Matrix) undifferencing
-        SerializationHelper<T>.SerializeVector(writer, _trainingSeries);
-        SerializationHelper<T>.SerializeVector(writer, _lastTrainDiffValues);
-        SerializationHelper<T>.SerializeVector(writer, _lastTrainResiduals);
-    }
 
     /// <summary>
     /// Deserializes the model's core parameters from a binary reader.
@@ -623,39 +600,7 @@ public partial class SARIMAModel<T> : TimeSeriesModelBase<T>
     /// exactly as it was when it was saved.
     /// </para>
     /// </remarks>
-    protected override void DeserializeCore(BinaryReader reader)
-    {
-        // Deserialize SARIMA-specific options
-        _sarimaOptions.P = reader.ReadInt32();
-        _sarimaOptions.D = reader.ReadInt32();
-        _sarimaOptions.Q = reader.ReadInt32();
-        _sarimaOptions.SeasonalP = reader.ReadInt32();
-        _sarimaOptions.SeasonalD = reader.ReadInt32();
-        _sarimaOptions.SeasonalQ = reader.ReadInt32();
-        _sarimaOptions.MaxIterations = reader.ReadInt32();
-        _sarimaOptions.Tolerance = Convert.ToDouble(reader.ReadDouble());
 
-        // Deserialize coefficients
-        _arCoefficients = SerializationHelper<T>.DeserializeVector(reader);
-        _maCoefficients = SerializationHelper<T>.DeserializeVector(reader);
-        _sarCoefficients = SerializationHelper<T>.DeserializeVector(reader);
-        _smaCoefficients = SerializationHelper<T>.DeserializeVector(reader);
-        _constant = NumOps.FromDouble(reader.ReadDouble());
-
-        // Deserialize training series (post-patch field)
-        try
-        {
-            _trainingSeries = SerializationHelper<T>.DeserializeVector(reader);
-            _lastTrainDiffValues = SerializationHelper<T>.DeserializeVector(reader);
-            _lastTrainResiduals = SerializationHelper<T>.DeserializeVector(reader);
-        }
-        catch (EndOfStreamException)
-        {
-            _trainingSeries = Vector<T>.Empty();
-            _lastTrainDiffValues = Vector<T>.Empty();
-            _lastTrainResiduals = Vector<T>.Empty();
-        }
-    }
 
     /// <summary>
     /// Core implementation of the training logic for the SARIMA model.

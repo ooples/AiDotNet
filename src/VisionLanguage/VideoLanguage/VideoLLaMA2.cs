@@ -360,69 +360,9 @@ public partial class VideoLLaMA2<T> : VisionLanguageModelBase<T>, IVideoLanguage
         return m;
     }
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_useNativeMode);
-        writer.Write(_options.ModelPath ?? string.Empty);
-        writer.Write(_options.ImageSize);
-        writer.Write(_options.VisionDim);
-        writer.Write(_options.DecoderDim);
-        writer.Write(_options.NumVisionLayers);
-        writer.Write(_options.NumDecoderLayers);
-        writer.Write(_options.NumHeads);
-        writer.Write(_options.MaxFrames);
-        writer.Write(_options.EnableSpatialTemporalConv);
-        writer.Write(_options.VisionEncoderName);
-        writer.Write(_options.PatchSize);
-        writer.Write(_options.VisionNumHeads);
-        writer.Write(_options.DecoderNumHeads);
-        writer.Write(_options.DecoderNumKeyValueHeads);
-        writer.Write(_options.VisionFfnDim);
-        writer.Write(_options.DecoderFfnDim);
-        writer.Write(_options.RoPETheta);
-        writer.Write(_options.STCKernelSize);
-        writer.Write(_options.STCStride);
-        writer.Write(_options.STCPadding);
-        writer.Write(_options.STCStageDepth);
-        writer.Write(_options.STCMlpDepth);
-        writer.Write(_options.LearningRate);
-        writer.Write(_options.WeightDecay);
-    }
 
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _useNativeMode = reader.ReadBoolean();
-        string mp = reader.ReadString();
-        if (!string.IsNullOrEmpty(mp))
-            _options.ModelPath = mp;
-        _options.ImageSize = reader.ReadInt32();
-        _options.VisionDim = reader.ReadInt32();
-        _options.DecoderDim = reader.ReadInt32();
-        _options.NumVisionLayers = reader.ReadInt32();
-        _options.NumDecoderLayers = reader.ReadInt32();
-        _options.NumHeads = reader.ReadInt32();
-        _options.MaxFrames = reader.ReadInt32();
-        _options.EnableSpatialTemporalConv = reader.ReadBoolean();
-        _options.VisionEncoderName = reader.ReadString();
-        _options.PatchSize = reader.ReadInt32();
-        _options.VisionNumHeads = reader.ReadInt32();
-        _options.DecoderNumHeads = reader.ReadInt32();
-        _options.DecoderNumKeyValueHeads = reader.ReadInt32();
-        _options.VisionFfnDim = reader.ReadInt32();
-        _options.DecoderFfnDim = reader.ReadInt32();
-        _options.RoPETheta = reader.ReadDouble();
-        _options.STCKernelSize = reader.ReadInt32();
-        _options.STCStride = reader.ReadInt32();
-        _options.STCPadding = reader.ReadInt32();
-        _options.STCStageDepth = reader.ReadInt32();
-        _options.STCMlpDepth = reader.ReadInt32();
-        _options.LearningRate = reader.ReadDouble();
-        _options.WeightDecay = reader.ReadDouble();
-        ValidateOptions(_options);
-        _optimizer = _useNativeMode ? CreateDefaultOptimizer() : null;
-        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
-            OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
-    }
+
+
 
     private void ThrowIfDisposed()
     {

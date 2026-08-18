@@ -1616,40 +1616,10 @@ For each category, indicate if it's flagged (YES/NO) and confidence level (HIGH/
     }
 
     /// <inheritdoc/>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_embeddingDimension);
-        writer.Write(_visionEmbeddingDim);
-        writer.Write(_maxSequenceLength);
-        writer.Write(_contextWindowSize);
-        writer.Write(_imageSize);
-        writer.Write(_hiddenDim);
-        writer.Write(_numVisionLayers);
-        writer.Write(_numLanguageLayers);
-        writer.Write(_numHeads);
-        writer.Write(_patchSize);
-        writer.Write(_vocabularySize);
-        writer.Write(_maxImagesPerRequest);
-        writer.Write(_useNativeMode);
-    }
+
 
     /// <inheritdoc/>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _embeddingDimension = reader.ReadInt32();
-        _visionEmbeddingDim = reader.ReadInt32();
-        _maxSequenceLength = reader.ReadInt32();
-        _contextWindowSize = reader.ReadInt32();
-        _imageSize = reader.ReadInt32();
-        _hiddenDim = reader.ReadInt32();
-        _numVisionLayers = reader.ReadInt32();
-        _numLanguageLayers = reader.ReadInt32();
-        _numHeads = reader.ReadInt32();
-        _patchSize = reader.ReadInt32();
-        _vocabularySize = reader.ReadInt32();
-        _maxImagesPerRequest = reader.ReadInt32();
-        _useNativeMode = reader.ReadBoolean();
-    }
+
 
     /// <inheritdoc/>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()

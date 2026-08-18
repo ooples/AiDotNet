@@ -978,45 +978,10 @@ public partial class PATEGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
 
     // UpdateParameters restated the base verbatim; ModelBase routes it to SetParameters.
     /// <inheritdoc />
-    protected override void SerializeNetworkSpecificData(System.IO.BinaryWriter writer)
-    {
-        writer.Write(_dataWidth);
-        writer.Write(_usingCustomLayers);
-        writer.Write(IsFitted);
 
-        // The generator batch-norm layers (running mean/variance included) live outside the base
-        // Layers collection, and the fitted VGM transformer drives inverse-transform + per-column
-        // output activations. Both must be persisted or a loaded model generates garbage.
-        AuxLayerSerialization.WriteLayerList(writer, _genBNLayers);
-        if (_transformer is not null)
-        {
-            writer.Write(true);
-            _transformer.Serialize(writer);
-        }
-        else
-        {
-            writer.Write(false);
-        }
-    }
 
     /// <inheritdoc />
-    protected override void DeserializeNetworkSpecificData(System.IO.BinaryReader reader)
-    {
-        _dataWidth = reader.ReadInt32();
-        _usingCustomLayers = reader.ReadBoolean();
-        IsFitted = reader.ReadBoolean();
 
-        AuxLayerSerialization.ReadLayerList<T, BatchNormalizationLayer<T>>(
-            reader, _genBNLayers, (inShape, outShape) => new BatchNormalizationLayer<T>());
-
-        bool hasTransformer = reader.ReadBoolean();
-        if (hasTransformer)
-        {
-            _transformer = new TabularDataTransformer<T>(_options.VGMModes, _random);
-            _transformer.Deserialize(reader);
-            _columns = new List<ColumnMetadata>(_transformer.Columns);
-        }
-    }
 
     #endregion
 

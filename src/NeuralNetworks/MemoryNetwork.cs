@@ -867,28 +867,7 @@ finally
     /// - Preserve the memory of facts the network has learned
     /// </para>
     /// </remarks>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        // Save memory configuration
-        writer.Write(_memorySize);
-        writer.Write(_embeddingSize);
 
-        // Save memory matrix contents
-        for (int i = 0; i < _memorySize; i++)
-        {
-            for (int j = 0; j < _embeddingSize; j++)
-            {
-                writer.Write(Convert.ToDouble(_memory[i, j]));
-            }
-        }
-
-        // Save each layer
-        writer.Write(Layers.Count);
-        foreach (var layer in Layers)
-        {
-            layer.Serialize(writer);
-        }
-    }
 
     /// <summary>
     /// Deserializes memory network-specific data from a binary reader.
@@ -914,39 +893,7 @@ finally
     /// - Restore the memory of facts the network had previously learned
     /// </para>
     /// </remarks>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        // Load memory configuration
-        int memorySize = reader.ReadInt32();
-        int embeddingSize = reader.ReadInt32();
 
-        // Verify configuration matches
-        if (memorySize != _memorySize || embeddingSize != _embeddingSize)
-        {
-            throw new InvalidOperationException("Memory configuration in saved model does not match current configuration");
-        }
-
-        // Load memory matrix contents
-        for (int i = 0; i < _memorySize; i++)
-        {
-            for (int j = 0; j < _embeddingSize; j++)
-            {
-                _memory[i, j] = NumOps.FromDouble(reader.ReadDouble());
-            }
-        }
-
-        // Load layers
-        int layerCount = reader.ReadInt32();
-        if (layerCount != Layers.Count)
-        {
-            throw new InvalidOperationException("Layer count in saved model does not match current model");
-        }
-
-        for (int i = 0; i < layerCount; i++)
-        {
-            Layers[i].Deserialize(reader);
-        }
-    }
 
     /// <summary>
     /// Stores a new fact in memory.

@@ -480,31 +480,7 @@ public partial class VARMAModel<T> : VectorAutoRegressionModel<T>
     /// - Saving computation time by not having to retrain complex models
     /// </para>
     /// </remarks>
-    protected override void SerializeCore(BinaryWriter writer)
-    {
-        base.SerializeCore(writer);
 
-        // Serialize VARMAModelOptions
-        writer.Write(_varmaOptions.MaLag);
-
-        // VECTORIZED: Serialize _maCoefficients using row operations
-        writer.Write(_maCoefficients.Rows);
-        writer.Write(_maCoefficients.Columns);
-        for (int i = 0; i < _maCoefficients.Rows; i++)
-        {
-            Vector<T> row = _maCoefficients.GetRow(i);
-            foreach (var val in row)
-            {
-                writer.Write(Convert.ToDouble(val));
-            }
-        }
-
-        writer.Write(_residuals.Rows);
-        writer.Write(_residuals.Columns);
-        for (int i = 0; i < _residuals.Rows; i++)
-            for (int j = 0; j < _residuals.Columns; j++)
-                writer.Write(Convert.ToDouble(_residuals[i, j]));
-    }
 
     /// <summary>
     /// Deserializes the model's core parameters from a binary reader.
@@ -531,43 +507,5 @@ public partial class VARMAModel<T> : VectorAutoRegressionModel<T>
     /// - You're deploying a model to a production environment where training isn't feasible
     /// </para>
     /// </remarks>
-    protected override void DeserializeCore(BinaryReader reader)
-    {
-        base.DeserializeCore(reader);
 
-        // Deserialize VARMAModelOptions
-        _varmaOptions.MaLag = reader.ReadInt32();
-
-        // VECTORIZED: Deserialize _maCoefficients using row operations
-        int maCoeffRows = reader.ReadInt32();
-        int maCoeffCols = reader.ReadInt32();
-        _maCoefficients = new Matrix<T>(maCoeffRows, maCoeffCols);
-        for (int i = 0; i < maCoeffRows; i++)
-        {
-            T[] rowData = new T[maCoeffCols];
-            for (int j = 0; j < maCoeffCols; j++)
-            {
-                rowData[j] = NumOps.FromDouble(reader.ReadDouble());
-            }
-            _maCoefficients.SetRow(i, new Vector<T>(rowData));
-        }
-
-
-        // The MA correction reads recent innovations. They are learned state, not a transient
-        // training cache, so persist them alongside the coefficient matrix. Older payloads end
-        // after the coefficient matrix; retain compatibility with those checkpoints.
-        try
-        {
-            int residualRows = reader.ReadInt32();
-            int residualColumns = reader.ReadInt32();
-            _residuals = new Matrix<T>(residualRows, residualColumns);
-            for (int i = 0; i < residualRows; i++)
-                for (int j = 0; j < residualColumns; j++)
-                    _residuals[i, j] = NumOps.FromDouble(reader.ReadDouble());
-        }
-        catch (EndOfStreamException)
-        {
-            _residuals = Matrix<T>.Empty();
-        }
-    }
 }

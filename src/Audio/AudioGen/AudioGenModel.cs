@@ -936,51 +936,12 @@ public partial class AudioGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerat
     /// <summary>
     /// Serializes network-specific data.
     /// </summary>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_useNativeMode);
-        writer.Write((int)_modelSize);
-        writer.Write(_sampleRate);
-        writer.Write(_durationSeconds);
-        writer.Write(_maxDurationSeconds);
-        writer.Write(_temperature);
-        writer.Write(_topK);
-        writer.Write(_topP);
-        writer.Write(_guidanceScale);
-        writer.Write(_channels);
-        writer.Write(_textHiddenDim);
-        writer.Write(_lmHiddenDim);
-        writer.Write(_numLmLayers);
-        writer.Write(_numHeads);
-        writer.Write(_numCodebooks);
-        writer.Write(_codebookSize);
-        writer.Write(_maxTextLength);
-    }
+
 
     /// <summary>
     /// Deserializes network-specific data.
     /// </summary>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        // Read values to advance stream position (validation done in CreateNewInstance)
-        _ = reader.ReadBoolean();  // useNativeMode
-        _ = reader.ReadInt32();    // modelSize
-        _ = reader.ReadInt32();    // sampleRate
-        _ = reader.ReadDouble();   // durationSeconds
-        _ = reader.ReadDouble();   // maxDurationSeconds
-        _ = reader.ReadDouble();   // temperature
-        _ = reader.ReadInt32();    // topK
-        _ = reader.ReadDouble();   // topP
-        _ = reader.ReadDouble();   // guidanceScale
-        _ = reader.ReadInt32();    // channels
-        _ = reader.ReadInt32();    // textHiddenDim
-        _ = reader.ReadInt32();    // lmHiddenDim
-        _ = reader.ReadInt32();    // numLmLayers
-        _ = reader.ReadInt32();    // numHeads
-        _ = reader.ReadInt32();    // numCodebooks
-        _ = reader.ReadInt32();    // codebookSize
-        _ = reader.ReadInt32();    // maxTextLength
-    }
+
 
     #endregion
 

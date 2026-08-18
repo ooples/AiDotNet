@@ -287,32 +287,9 @@ public partial class DAC<T> : AudioNeuralNetworkBase<T>, IAudioCodec<T>
         return m;
     }
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter w)
-    {
-        w.Write(_useNativeMode); w.Write(_options.ModelPath ?? string.Empty);
-        w.Write(_options.SampleRate); w.Write(_options.NumChannels);
-        w.Write(_options.Variant);
-        w.Write(_options.EncoderDim);
-        w.Write(_options.EncoderChannels.Length);
-        foreach (int ch in _options.EncoderChannels) w.Write(ch);
-        w.Write(_options.NumCodebooks); w.Write(_options.CodebookSize);
-        w.Write(_options.CodebookDim); w.Write(_options.TokenFrameRate);
-        w.Write(_options.TargetBitrate); w.Write(_options.DropoutRate);
-    }
 
-    protected override void DeserializeNetworkSpecificData(BinaryReader r)
-    {
-        _useNativeMode = r.ReadBoolean(); string mp = r.ReadString(); if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp;
-        _options.SampleRate = r.ReadInt32(); _options.NumChannels = r.ReadInt32();
-        _options.Variant = r.ReadString();
-        _options.EncoderDim = r.ReadInt32();
-        int nch = r.ReadInt32(); _options.EncoderChannels = new int[nch];
-        for (int i = 0; i < nch; i++) _options.EncoderChannels[i] = r.ReadInt32();
-        _options.NumCodebooks = r.ReadInt32(); _options.CodebookSize = r.ReadInt32();
-        _options.CodebookDim = r.ReadInt32(); _options.TokenFrameRate = r.ReadInt32();
-        _options.TargetBitrate = r.ReadDouble(); _options.DropoutRate = r.ReadDouble();
-        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxEncoder = new OnnxModel<T>(p, _options.OnnxOptions);
-    }
+
+
 
     #endregion
 

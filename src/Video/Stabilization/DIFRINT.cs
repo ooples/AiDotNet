@@ -585,16 +585,9 @@ public partial class DIFRINT<T> : VideoStabilizationBase<T>
         ModelData = _useNativeMode ? this.Serialize() : []
     };
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_numFeatures); writer.Write(_numIterations);
-        writer.Write(_imageHeight); writer.Write(_imageWidth);
-    }
 
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        for (int i = 0; i < 4; i++) _ = reader.ReadInt32();
-    }
+
+
 
     #endregion
 

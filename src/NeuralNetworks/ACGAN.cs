@@ -771,39 +771,7 @@ public partial class ACGAN<T> : ImageGeneratorModelLayoutBase<T>
     /// </para>
     /// </remarks>
     /// <param name="writer">The binary writer to serialize data to.</param>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_numClasses);
 
-        // Serialize loss histories
-        writer.Write(_generatorLosses.Count);
-        foreach (var loss in _generatorLosses)
-            writer.Write(NumOps.ToDouble(loss));
-
-        writer.Write(_discriminatorLosses.Count);
-        foreach (var loss in _discriminatorLosses)
-            writer.Write(NumOps.ToDouble(loss));
-
-        // Serialize Generator network
-        var generatorBytes = Generator.Serialize();
-        writer.Write(generatorBytes.Length);
-        writer.Write(generatorBytes);
-
-        // Serialize Discriminator network
-        var discriminatorBytes = Discriminator.Serialize();
-        writer.Write(discriminatorBytes.Length);
-        writer.Write(discriminatorBytes);
-
-        // Serialize optimizer states for training resumption
-        // This preserves momentum vectors, adaptive learning rates, and timesteps
-        var generatorOptimizerBytes = _generatorOptimizer.Serialize();
-        writer.Write(generatorOptimizerBytes.Length);
-        writer.Write(generatorOptimizerBytes);
-
-        var discriminatorOptimizerBytes = _discriminatorOptimizer.Serialize();
-        writer.Write(discriminatorOptimizerBytes.Length);
-        writer.Write(discriminatorOptimizerBytes);
-    }
 
     /// <summary>
     /// Deserializes AC-GAN-specific data including networks and optimizer states.
@@ -831,41 +799,7 @@ public partial class ACGAN<T> : ImageGeneratorModelLayoutBase<T>
     /// </para>
     /// </remarks>
     /// <param name="reader">The binary reader to deserialize data from.</param>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _numClasses = reader.ReadInt32();
 
-        // Deserialize loss histories
-        _generatorLosses.Clear();
-        int genLossCount = reader.ReadInt32();
-        for (int i = 0; i < genLossCount; i++)
-            _generatorLosses.Add(NumOps.FromDouble(reader.ReadDouble()));
-
-        _discriminatorLosses.Clear();
-        int discLossCount = reader.ReadInt32();
-        for (int i = 0; i < discLossCount; i++)
-            _discriminatorLosses.Add(NumOps.FromDouble(reader.ReadDouble()));
-
-        // Deserialize Generator network
-        int generatorDataLength = reader.ReadInt32();
-        byte[] generatorData = reader.ReadBytes(generatorDataLength);
-        Generator.Deserialize(generatorData);
-
-        // Deserialize Discriminator network
-        int discriminatorDataLength = reader.ReadInt32();
-        byte[] discriminatorData = reader.ReadBytes(discriminatorDataLength);
-        Discriminator.Deserialize(discriminatorData);
-
-        // Deserialize optimizer states for training resumption
-        // This restores momentum vectors, adaptive learning rates, and timesteps
-        int generatorOptimizerDataLength = reader.ReadInt32();
-        byte[] generatorOptimizerData = reader.ReadBytes(generatorOptimizerDataLength);
-        _generatorOptimizer.Deserialize(generatorOptimizerData);
-
-        int discriminatorOptimizerDataLength = reader.ReadInt32();
-        byte[] discriminatorOptimizerData = reader.ReadBytes(discriminatorOptimizerDataLength);
-        _discriminatorOptimizer.Deserialize(discriminatorOptimizerData);
-    }
 
     // UpdateParameters split the vector between Generator and Discriminator; GetExtraTrainableLayers
     // yields the same two in the same order, so the base reproduces the split. Removed under AIDN082.

@@ -177,7 +177,8 @@ public partial class FlowLens<T> : VideoInpaintingBase<T>
         }
     }
 
-    // UpdateParameters restated the base verbatim; ModelBase routes it to SetParameters.
+    // UpdateParameters restated the base verbatim; ModelBase routes it to SetParameters.
+
 
     /// <summary>
     /// Parameters cannot be written while the model is backed by a loaded ONNX graph: the weights
@@ -208,28 +209,10 @@ public partial class FlowLens<T> : VideoInpaintingBase<T>
     }
 
     /// <inheritdoc/>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write((int)_options.Variant);
-        writer.Write(_options.NumFeatures);
-        writer.Write(_options.NumFlowIters);
-        writer.Write(_options.NumLevels);
-        writer.Write(_options.NumResBlocks);
-        writer.Write(_options.LearningRate);
-        writer.Write(_options.DropoutRate);
-    }
+
 
     /// <inheritdoc/>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _options.Variant = (VideoModelVariant)reader.ReadInt32();
-        _options.NumFeatures = reader.ReadInt32();
-        _options.NumFlowIters = reader.ReadInt32();
-        _options.NumLevels = reader.ReadInt32();
-        _options.NumResBlocks = reader.ReadInt32();
-        _options.LearningRate = reader.ReadDouble();
-        _options.DropoutRate = reader.ReadDouble();
-    }
+
 
     private static Tensor<T> ConcatFramesAndMasks(Tensor<T> frames, Tensor<T> masks)
     {

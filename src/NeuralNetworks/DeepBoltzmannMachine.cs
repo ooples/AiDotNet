@@ -995,57 +995,7 @@ public partial class DeepBoltzmannMachine<T> : VectorModelLayoutBase<T>
     /// This allows us to later "unpack" the network exactly as it was, preserving all its learned knowledge.
     /// </para>
     /// </remarks>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        // Write the number of layers
-        writer.Write(_layerSizes.Count);
 
-        // Write layer sizes
-        foreach (var size in _layerSizes)
-        {
-            writer.Write(size);
-        }
-
-        // Write epochs
-        writer.Write(_epochs);
-
-        // Write learning rate
-        writer.Write(Convert.ToDouble(_learningRate));
-
-        // Write learning rate decay
-        writer.Write(Convert.ToDouble(_learningRateDecay));
-
-        // Write batch size
-        writer.Write(_batchSize);
-
-        // Write CD steps
-        writer.Write(_cdSteps);
-
-        // Write activation function type
-        writer.Write(_activationFunction != null ? 0 : (_vectorActivationFunction != null ? 1 : -1));
-
-        // Serialize activation function if present
-        if (_activationFunction != null)
-        {
-            SerializationHelper<T>.SerializeInterface(writer, _activationFunction);
-        }
-        else if (_vectorActivationFunction != null)
-        {
-            SerializationHelper<T>.SerializeInterface(writer, _vectorActivationFunction);
-        }
-
-        // Write layer weights
-        foreach (var weights in _layerWeights)
-        {
-            SerializationHelper<T>.SerializeTensor(writer, weights);
-        }
-
-        // Write layer biases
-        foreach (var biases in _layerBiases)
-        {
-            SerializationHelper<T>.SerializeTensor(writer, biases);
-        }
-    }
 
     /// <summary>
     /// Deserializes Deep Boltzmann Machine-specific data from a binary reader.
@@ -1069,58 +1019,5 @@ public partial class DeepBoltzmannMachine<T> : VectorModelLayoutBase<T>
     /// This allows us to continue using the network exactly where we left off, with all its learned knowledge intact.
     /// </para>
     /// </remarks>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        // Read the number of layers
-        int layerCount = reader.ReadInt32();
 
-        // Read layer sizes
-        _layerSizes = new List<int>();
-        for (int i = 0; i < layerCount; i++)
-        {
-            _layerSizes.Add(reader.ReadInt32());
-        }
-
-        // Read epochs
-        _epochs = reader.ReadInt32();
-
-        // Read learning rate
-        _learningRate = NumOps.FromDouble(reader.ReadDouble());
-
-        // Read learning rate decay
-        _learningRateDecay = NumOps.FromDouble(reader.ReadDouble());
-
-        // Read batch size
-        _batchSize = reader.ReadInt32();
-
-        // Read CD steps
-        _cdSteps = reader.ReadInt32();
-
-        // Read activation function type
-        int activationType = reader.ReadInt32();
-
-        // Deserialize activation function
-        if (activationType == 0)
-        {
-            _activationFunction = DeserializationHelper.DeserializeInterface<IActivationFunction<T>>(reader);
-        }
-        else if (activationType == 1)
-        {
-            _vectorActivationFunction = DeserializationHelper.DeserializeInterface<IVectorActivationFunction<T>>(reader);
-        }
-
-        // Read layer weights
-        _layerWeights = new List<Tensor<T>>();
-        for (int i = 0; i < layerCount - 1; i++)
-        {
-            _layerWeights.Add(SerializationHelper<T>.DeserializeTensor(reader));
-        }
-
-        // Read layer biases
-        _layerBiases = new List<Tensor<T>>();
-        for (int i = 0; i < layerCount; i++)
-        {
-            _layerBiases.Add(SerializationHelper<T>.DeserializeTensor(reader));
-        }
-    }
 }

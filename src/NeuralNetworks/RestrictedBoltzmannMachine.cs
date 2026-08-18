@@ -1201,54 +1201,7 @@ public partial class RestrictedBoltzmannMachine<T> : VectorModelLayoutBase<T>
     /// retrain it from scratch, which can be time-consuming.
     /// </para>
     /// </remarks>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        // Write layer sizes
-        writer.Write(VisibleSize);
-        writer.Write(HiddenSize);
 
-        // Write weights
-        for (int i = 0; i < HiddenSize; i++)
-        {
-            for (int j = 0; j < VisibleSize; j++)
-            {
-                writer.Write(Convert.ToDouble(_weights[i, j]));
-            }
-        }
-
-        // Write visible biases
-        for (int i = 0; i < VisibleSize; i++)
-        {
-            writer.Write(Convert.ToDouble(_visibleBiases[i]));
-        }
-
-        // Write hidden biases
-        for (int i = 0; i < HiddenSize; i++)
-        {
-            writer.Write(Convert.ToDouble(_hiddenBiases[i]));
-        }
-
-        // Write configuration parameters
-        writer.Write(Convert.ToDouble(_learningRate));
-        writer.Write(_cdSteps);
-
-        // Write activation type
-        bool hasVectorActivation = _vectorActivation != null;
-        writer.Write(hasVectorActivation);
-
-        if (hasVectorActivation)
-        {
-            writer.Write((_vectorActivation ?? throw new InvalidOperationException("Vector activation not initialized.")).GetType().FullName ?? "Unknown");
-        }
-        else if (_scalarActivation != null)
-        {
-            writer.Write(_scalarActivation.GetType().FullName ?? "Unknown");
-        }
-        else
-        {
-            writer.Write("None");
-        }
-    }
 
     /// <summary>
     /// Deserializes RBM-specific data from a binary reader.
@@ -1271,63 +1224,7 @@ public partial class RestrictedBoltzmannMachine<T> : VectorModelLayoutBase<T>
     /// without needing to retrain it from scratch.
     /// </para>
     /// </remarks>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        // Read layer sizes (and validate they match)
-        int storedVisibleSize = reader.ReadInt32();
-        int storedHiddenSize = reader.ReadInt32();
 
-        if (storedVisibleSize != VisibleSize || storedHiddenSize != HiddenSize)
-        {
-            throw new InvalidOperationException(
-                $"Size mismatch during deserialization. Expected {VisibleSize}x{HiddenSize}, " +
-                $"but found {storedVisibleSize}x{storedHiddenSize}."
-            );
-        }
-
-        // Read weights
-        for (int i = 0; i < HiddenSize; i++)
-        {
-            for (int j = 0; j < VisibleSize; j++)
-            {
-                _weights[i, j] = NumOps.FromDouble(reader.ReadDouble());
-            }
-        }
-
-        // Read visible biases
-        for (int i = 0; i < VisibleSize; i++)
-        {
-            _visibleBiases[i] = NumOps.FromDouble(reader.ReadDouble());
-        }
-
-        // Read hidden biases
-        for (int i = 0; i < HiddenSize; i++)
-        {
-            _hiddenBiases[i] = NumOps.FromDouble(reader.ReadDouble());
-        }
-
-        // Read configuration parameters
-        _learningRate = NumOps.FromDouble(reader.ReadDouble());
-        _cdSteps = reader.ReadInt32();
-
-        // Read activation type
-        bool hasVectorActivation = reader.ReadBoolean();
-        string activationType = reader.ReadString();
-
-        if (hasVectorActivation)
-        {
-            // Default to sigmoid if the exact type can't be recreated
-            if (_vectorActivation == null)
-            {
-                _vectorActivation = new SigmoidActivation<T>();
-            }
-        }
-        else if (activationType != "None" && _scalarActivation == null)
-        {
-            // Default to sigmoid if the exact type can't be recreated
-            _scalarActivation = new SigmoidActivation<T>();
-        }
-    }
 
     /// <summary>
     /// Sets the training parameters for the RBM.

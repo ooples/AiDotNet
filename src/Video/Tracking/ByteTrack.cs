@@ -400,17 +400,9 @@ public partial class ByteTrack<T> : NeuralNetworkBase<T>
         ModelData = _useNativeMode ? this.Serialize() : []
     };
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_numFeatures); writer.Write(_numClasses);
-        writer.Write(_highThreshold); writer.Write(_lowThreshold); writer.Write(_maxAge);
-    }
 
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _ = reader.ReadInt32(); _ = reader.ReadInt32();
-        _ = reader.ReadDouble(); _ = reader.ReadDouble(); _ = reader.ReadInt32();
-    }
+
+
 
     #endregion
 }

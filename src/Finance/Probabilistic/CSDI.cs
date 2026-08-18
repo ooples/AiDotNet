@@ -590,20 +590,7 @@ public partial class CSDI<T> : ForecastingModelBase<T>
     /// <b>For Beginners:</b> In the CSDI model, SerializeNetworkSpecificData saves or restores model-specific settings. This lets the CSDI architecture be reused later.
     /// </para>
     /// </remarks>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_sequenceLength);
-        writer.Write(_numFeatures);
-        writer.Write(_hiddenDimension);
-        writer.Write(_numResidualLayers);
-        writer.Write(_numDiffusionSteps);
-        writer.Write(_numSamples);
-        writer.Write(_numHeads);
-        writer.Write(_timeEmbeddingDim);
-        writer.Write(_featureEmbeddingDim);
-        writer.Write(_betaSchedule);
-        writer.Write(_useAttention);
-    }
+
 
     /// <summary>
     /// Deserializes CSDI-specific data when loading a saved model.
@@ -614,20 +601,7 @@ public partial class CSDI<T> : ForecastingModelBase<T>
     /// <b>For Beginners:</b> In the CSDI model, DeserializeNetworkSpecificData saves or restores model-specific settings. This lets the CSDI architecture be reused later.
     /// </para>
     /// </remarks>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _sequenceLength = reader.ReadInt32();
-        _numFeatures = reader.ReadInt32();
-        _hiddenDimension = reader.ReadInt32();
-        _numResidualLayers = reader.ReadInt32();
-        _numDiffusionSteps = reader.ReadInt32();
-        _numSamples = reader.ReadInt32();
-        _numHeads = reader.ReadInt32();
-        _timeEmbeddingDim = reader.ReadInt32();
-        _featureEmbeddingDim = reader.ReadInt32();
-        _betaSchedule = reader.ReadString();
-        _useAttention = reader.ReadBoolean();
-    }
+
 
     #endregion
 

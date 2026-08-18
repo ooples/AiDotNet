@@ -384,47 +384,10 @@ public partial class HTSAT<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
     }
 
     /// <inheritdoc/>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_useNativeMode);
-        writer.Write(_options.ModelPath ?? string.Empty);
-        writer.Write(_options.SampleRate); writer.Write(_options.NumMels);
-        writer.Write(_options.FftSize); writer.Write(_options.HopLength);
-        writer.Write(_options.EmbeddingDim); writer.Write(_options.WindowSize);
-        writer.Write(_options.PatchSize); writer.Write(_options.Threshold);
-        writer.Write(_options.DetectionWindowSize); writer.Write(_options.WindowOverlap);
-        writer.Write(_options.DropoutRate);
-        writer.Write((int)_options.FMin); writer.Write((int)_options.FMax);
-        writer.Write(ClassLabels.Count);
-        foreach (var label in ClassLabels) writer.Write(label);
-    }
+
 
     /// <inheritdoc/>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _useNativeMode = reader.ReadBoolean();
-        string modelPath = reader.ReadString();
-        if (!string.IsNullOrEmpty(modelPath)) _options.ModelPath = modelPath;
-        _options.SampleRate = reader.ReadInt32(); _options.NumMels = reader.ReadInt32();
-        _options.FftSize = reader.ReadInt32(); _options.HopLength = reader.ReadInt32();
-        _options.EmbeddingDim = reader.ReadInt32(); _options.WindowSize = reader.ReadInt32();
-        _options.PatchSize = reader.ReadInt32(); _options.Threshold = reader.ReadDouble();
-        _options.DetectionWindowSize = reader.ReadDouble(); _options.WindowOverlap = reader.ReadDouble();
-        _options.DropoutRate = reader.ReadDouble();
-        _options.FMin = reader.ReadInt32(); _options.FMax = reader.ReadInt32();
-        int numLabels = reader.ReadInt32();
-        var labels = new string[numLabels];
-        for (int i = 0; i < numLabels; i++) labels[i] = reader.ReadString();
-        ClassLabels = labels;
 
-        _melSpectrogram = new MelSpectrogram<T>(
-            sampleRate: _options.SampleRate, nMels: _options.NumMels,
-            nFft: _options.FftSize, hopLength: _options.HopLength,
-            fMin: _options.FMin, fMax: _options.FMax, logMel: true);
-
-        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
-            OnnxEncoder = new OnnxModel<T>(p, _options.OnnxOptions);
-    }
 
     #endregion
 

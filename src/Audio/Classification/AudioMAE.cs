@@ -247,27 +247,9 @@ public partial class AudioMAE<T> : AudioClassifierBase<T>, IAudioEventDetector<T
         return m;
     }
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter w)
-    {
-        w.Write(_useNativeMode); w.Write(_options.ModelPath ?? string.Empty);
-        w.Write(_options.SampleRate); w.Write(_options.NumMels); w.Write(_options.FftSize); w.Write(_options.HopLength);
-        w.Write(_options.EncoderEmbeddingDim); w.Write(_options.NumEncoderLayers); w.Write(_options.NumEncoderHeads);
-        w.Write(_options.PatchSize); w.Write(_options.PatchStride); w.Write(_options.Threshold); w.Write(_options.WindowSize); w.Write(_options.WindowOverlap); w.Write(_options.DropoutRate); w.Write(_options.MaskRatio);
-        w.Write((int)_options.FMin); w.Write((int)_options.FMax);
-        w.Write(ClassLabels.Count); foreach (var l in ClassLabels) w.Write(l);
-    }
 
-    protected override void DeserializeNetworkSpecificData(BinaryReader r)
-    {
-        _useNativeMode = r.ReadBoolean(); string mp = r.ReadString(); if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp;
-        _options.SampleRate = r.ReadInt32(); _options.NumMels = r.ReadInt32(); _options.FftSize = r.ReadInt32(); _options.HopLength = r.ReadInt32();
-        _options.EncoderEmbeddingDim = r.ReadInt32(); _options.NumEncoderLayers = r.ReadInt32(); _options.NumEncoderHeads = r.ReadInt32();
-        _options.PatchSize = r.ReadInt32(); _options.PatchStride = r.ReadInt32(); _options.Threshold = r.ReadDouble(); _options.WindowSize = r.ReadDouble(); _options.WindowOverlap = r.ReadDouble(); _options.DropoutRate = r.ReadDouble(); _options.MaskRatio = r.ReadDouble();
-        _options.FMin = r.ReadInt32(); _options.FMax = r.ReadInt32();
-        int n = r.ReadInt32(); var labels = new string[n]; for (int i = 0; i < n; i++) labels[i] = r.ReadString(); ClassLabels = labels;
-        _melSpectrogram = new MelSpectrogram<T>(_options.SampleRate, _options.NumMels, _options.FftSize, _options.HopLength, _options.FMin, _options.FMax, logMel: true);
-        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxEncoder = new OnnxModel<T>(p, _options.OnnxOptions);
-    }
+
+
 
     #endregion
 
