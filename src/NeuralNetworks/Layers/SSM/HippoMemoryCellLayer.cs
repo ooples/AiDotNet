@@ -54,9 +54,12 @@ public partial class HippoMemoryCellLayer<T> : LayerBase<T>, IShapeContract
     private readonly double _timescaleMax;
     private readonly bool _useGate;
 
-    // Fixed HiPPO operator. These are buffers, not trainable parameters.
+    // Fixed HiPPO operator, rebuilt from _measure and _order at construction. These are buffers,
+    // not trainable parameters, and all three must stay declared the same way: _aTranspose alone
+    // briefly carried [TrainableParameter], which the hand-written parameter pair below hid
+    // because that pair made the generator skip this type entirely. Deleting the pair would have
+    // promoted a fixed operator into the trainable vector and moved every downstream offset.
     private readonly Tensor<T> _a;
-    [AiDotNet.Attributes.TrainableParameter]
     private readonly Tensor<T> _aTranspose;
     private readonly Tensor<T> _bRow;
 
@@ -69,9 +72,12 @@ public partial class HippoMemoryCellLayer<T> : LayerBase<T>, IShapeContract
     private Tensor<T> _hiddenWeights;
     [TrainableParameter(Role = PersistentTensorRole.Biases)]
     private Tensor<T> _hiddenBias;
-    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+    // The gate exists only when the layer is configured with one, so both of its tensors are
+    // conditional. Without the condition the generated surface would always publish six tensors
+    // while an ungated cell holds four, and the count would stop matching the vector.
+    [TrainableParameter(Role = PersistentTensorRole.Weights, Condition = nameof(_useGate))]
     private Tensor<T> _gateWeights;
-    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+    [TrainableParameter(Role = PersistentTensorRole.Biases, Condition = nameof(_useGate))]
     private Tensor<T> _gateBias;
 
     private readonly Tensor<T>? _ltiTransition;
@@ -96,44 +102,6 @@ public partial class HippoMemoryCellLayer<T> : LayerBase<T>, IShapeContract
 
     /// <summary>Gets the configured discretization method.</summary>
     public string Discretization => _discretization;
-
-    /// <inheritdoc />
-    public override IReadOnlyList<Tensor<T>> GetTrainableParameters() => _useGate
-        ? new[] { _memoryWeights, _memoryBias, _hiddenWeights, _hiddenBias, _gateWeights, _gateBias }
-        : new[] { _memoryWeights, _memoryBias, _hiddenWeights, _hiddenBias };
-
-    /// <inheritdoc />
-    /// <remarks>
-    /// Parameter-buffer and copy-on-write paths replace tensor objects rather
-    /// than copying values. Keep the fields consumed by <see cref="Forward"/>
-    /// synchronized with those replacements.
-    /// </remarks>
-    public override void SetTrainableParameters(IReadOnlyList<Tensor<T>> parameters)
-    {
-        int expected = _useGate ? 6 : 4;
-        if (parameters.Count != expected)
-            throw new ArgumentException($"Expected exactly {expected} HiPPO parameter tensors.", nameof(parameters));
-
-        ValidateShapeMatch(parameters[0], _memoryWeights, nameof(_memoryWeights));
-        ValidateShapeMatch(parameters[1], _memoryBias, nameof(_memoryBias));
-        ValidateShapeMatch(parameters[2], _hiddenWeights, nameof(_hiddenWeights));
-        ValidateShapeMatch(parameters[3], _hiddenBias, nameof(_hiddenBias));
-        if (_useGate)
-        {
-            ValidateShapeMatch(parameters[4], _gateWeights, nameof(_gateWeights));
-            ValidateShapeMatch(parameters[5], _gateBias, nameof(_gateBias));
-        }
-
-        _memoryWeights = parameters[0];
-        _memoryBias = parameters[1];
-        _hiddenWeights = parameters[2];
-        _hiddenBias = parameters[3];
-        if (_useGate)
-        {
-            _gateWeights = parameters[4];
-            _gateBias = parameters[5];
-        }
-    }
 
     private static void ValidateShapeMatch(Tensor<T> incoming, Tensor<T> existing, string parameterName)
     {
