@@ -1114,6 +1114,25 @@ public partial class SetAbstractionLayer<T> : LayerBase<T>, IShapeContract
     private readonly int _numPoints;
     private readonly int _inputChannels;
     private readonly List<ScaleBranch> _branches;
+
+    /// <summary>
+    /// Every branch's mini-PointNet, flattened, so the generator can SEE them.
+    /// </summary>
+    /// <remarks>
+    /// The MLPs are owned by <c>_branches[i].MlpLayers</c>, but <c>ScaleBranch</c> is a plain nested
+    /// class, and TrainableParameterGenerator recognises children only in a field whose TYPE is a layer
+    /// or a collection of layers. A <c>List&lt;ScaleBranch&gt;</c> is opaque to it, so it concluded this
+    /// layer had no parameters at all and emitted <c>IsDeclaredParameterFree =&gt; true</c> -- a
+    /// COMPILE-TIME assertion that no amount of runtime RegisterSubLayer can outvote. Every
+    /// PointConvolution weight was therefore absent from GetParameters, never saved, and unreachable by
+    /// SetParameters, so a rebuilt layer silently kept its random initialisation.
+    /// <para>
+    /// This field holds the same layer instances (not copies), so it is a VIEW for the generator rather
+    /// than a second owner: registering it is what makes ParameterCount, GetParameters and
+    /// SetParameters fold the branch weights in.
+    /// </para>
+    /// </remarks>
+    private readonly List<ILayer<T>> _branchLayers = [];
     private Tensor<T>? _lastInput;
     private int[]? _centroidIndices;
     private Tensor<T>? _lastCentroidPositions;
@@ -1144,6 +1163,7 @@ public partial class SetAbstractionLayer<T> : LayerBase<T>, IShapeContract
         _branches = [new ScaleBranch(searchRadius, neighborSamples, inputChannels, mlpDimensions)];
         _outputChannels = _branches[0].OutputChannels;
 
+        RegisterBranchLayers();
         Parameters = GetParameters();
     }
 
@@ -1186,7 +1206,46 @@ public partial class SetAbstractionLayer<T> : LayerBase<T>, IShapeContract
         }
 
         _outputChannels = _branches.Sum(branch => branch.OutputChannels);
+        RegisterBranchLayers();
         Parameters = GetParameters();
+    }
+
+    /// <summary>
+    /// Registers every branch's mini-PointNet as a CHILD layer, which is what puts their weights into
+    /// this layer's parameter surface at all.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The MLPs live in <c>_branches[i].MlpLayers</c>, and <c>ScaleBranch</c> is a plain nested class
+    /// rather than a layer. TrainableParameterGenerator collects children only from a field whose TYPE
+    /// is a layer or a collection of layers, so a <c>List&lt;ScaleBranch&gt;</c> is opaque to it and the
+    /// generated file for this type collected NO tensors at all.
+    /// </para>
+    /// <para>
+    /// The consequence was silent and total: every PointConvolution weight in every branch sat OUTSIDE
+    /// GetParameters, so it was never saved, <c>SetParameters</c> could not reach it, and a rebuilt
+    /// layer kept its fresh random initialisation. The saved vector still compared bit-identical
+    /// because it only ever held the classification head -- the whole model reported 1652 parameters.
+    /// A clone's three set-abstraction layers therefore computed different outputs from provably
+    /// identical weights.
+    /// </para>
+    /// <para>
+    /// Registration is the entire fix: <see cref="LayerBase{T}"/> folds <c>GetSubLayers()</c> into
+    /// ParameterCount, GetParameters and SetParameters, so no override and no hand-written
+    /// serialization is needed here. This is the same mechanism CifAlignmentLayer uses for its alpha
+    /// predictor.
+    /// </para>
+    /// </remarks>
+    private void RegisterBranchLayers()
+    {
+        foreach (var branch in _branches)
+        {
+            foreach (var mlp in branch.MlpLayers)
+            {
+                _branchLayers.Add(mlp);
+                RegisterSubLayer(mlp);
+            }
+        }
     }
 
     /// <summary>
