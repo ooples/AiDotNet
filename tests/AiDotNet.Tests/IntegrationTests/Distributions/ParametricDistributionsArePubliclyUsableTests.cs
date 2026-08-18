@@ -95,8 +95,12 @@ public class ParametricDistributionsArePubliclyUsableTests
         double atCentre = rule.Score(distribution, 15.0);
         double offCentre = rule.Score(distribution, 16.0);
 
-        Assert.True(double.IsFinite(atCentre), $"the score at the mean was {atCentre}");
-        Assert.True(double.IsFinite(offCentre), $"the score away from the mean was {offCentre}");
+        // double.IsFinite is .NET Core 3.0+; this assembly also targets net471, where the
+        // equivalent is the NaN/Infinity pair.
+        Assert.True(!double.IsNaN(atCentre) && !double.IsInfinity(atCentre),
+            $"the score at the mean was {atCentre}");
+        Assert.True(!double.IsNaN(offCentre) && !double.IsInfinity(offCentre),
+            $"the score away from the mean was {offCentre}");
         Assert.NotEqual(atCentre, offCentre);
 
         var gradient = rule.ScoreGradient(distribution, 16.0);

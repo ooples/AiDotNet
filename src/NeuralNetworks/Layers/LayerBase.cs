@@ -5459,7 +5459,37 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         }
         catch (ArgumentException)
         {
-            // Leave the layer unresolved; the pre-existing restore path still applies below.
+            // InputShape is stored PER-SAMPLE -- it carries no batch axis -- but OnFirstForward is
+            // written against the tensor a real Forward hands it, which is batched. For every layer
+            // whose hook accepts the unbatched rank (DenseLayer and FeedForwardLayer take rank>=1)
+            // the direct attempt above already succeeded. A layer that pins an exact batched rank
+            // rejects it instead: Conv1DLayer and Conv1DTransposeLayer demand rank-3 [B,C,T] and
+            // SwinPatchEmbeddingLayer rank-4 [B,C,H,W], so a persisted [C,T] / [C,H,W] arrived one
+            // axis short and threw. That throw was swallowed, the layer stayed unresolved, and every
+            // restored weight was dropped on the floor -- measured as Conv1DLayer round-tripping 28
+            // parameters to 0 with the 288-byte payload intact on disk, so the data was written and
+            // then had nowhere to land. SwinPatchEmbeddingLayer's own message spells out the remedy:
+            // "Add a batch dimension before calling Forward."
+            //
+            // Retry with a singleton batch. Batch is never a parameter-shaping axis -- weights are
+            // sized from channels and spatial extent -- so B=1 reproduces exactly the resolution the
+            // original forward performed: Conv1DLayer reading [1,2,8] recovers cIn=2, tIn=8 and
+            // republishes InputShape=[2,8], identical to what was serialized. The retry is confined
+            // to the case where the unbatched attempt already failed, and ResolveFromShape returns
+            // early once IsShapeResolved, so a layer that resolved on the first attempt never sees it.
+            var batched = new int[rank + 1];
+            batched[0] = 1;
+            Array.Copy(shape, 0, batched, 1, rank);
+
+            try
+            {
+                ResolveFromShape(batched);
+            }
+            catch (ArgumentException)
+            {
+                // Genuinely not this layer's shape. Leave it unresolved; the pre-existing restore
+                // path still applies below, exactly as it did before either attempt existed.
+            }
         }
     }
 
