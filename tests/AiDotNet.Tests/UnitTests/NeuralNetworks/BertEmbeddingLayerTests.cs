@@ -75,7 +75,7 @@ public class BertEmbeddingLayerTests
         var input = TokenIds([1, 2], 1, 2);
         var invalidTypes = TokenIds([1, 2], 0, 2);
 
-        var ex = Assert.Throws<ArgumentException>(() => layer.Forward(input, invalidTypes));
+        var ex = Assert.Throws<InputContractViolationException>(() => layer.Forward(input, invalidTypes));
 
         Assert.Contains("[0, 2)", ex.Message);
     }

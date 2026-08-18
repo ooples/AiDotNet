@@ -1,3 +1,4 @@
+using AiDotNet.Diffusion.NoisePredictors;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
@@ -22,6 +23,46 @@ namespace AiDotNet.Tests.UnitTests.NeuralNetworks.Layers;
 [Collection(global::AiDotNet.Tests.Fixtures.LayerSerializationCollection.Name)]
 public class ShapeOracleIssue1370Tests
 {
+    /// <summary>
+    /// A diffusion residual block knows its convolution channel widths at construction, but its
+    /// spatial extent remains polymorphic. Shape-only traversal must therefore expose an exact
+    /// parameter manifest without pinning the first real H/W to the constructor's probe geometry.
+    /// </summary>
+    [Fact]
+    public async Task DiffusionResBlock_ShapeInferenceKeepsSpatialAxesPolymorphic()
+    {
+        await Task.Yield();
+
+        using var block = new DiffusionResBlock<double>(
+            inChannels: 4,
+            outChannels: 8,
+            spatialSize: 16,
+            timeEmbedDim: 32,
+            numGroups: 4);
+        long declaredParameterCount = block.ParameterCount;
+        var input = new Tensor<double>([1, 4, 32, 32]);
+        var timeEmbedding = new Tensor<double>([1, 32]);
+
+        LayerBase<double>.IsInferringShapes = true;
+        Tensor<double> inferred;
+        try
+        {
+            inferred = block.Forward(input, timeEmbedding);
+        }
+        finally
+        {
+            LayerBase<double>.IsInferringShapes = false;
+        }
+
+        Assert.True(declaredParameterCount > 0);
+        Assert.Equal(new[] { 1, 8, 32, 32 }, inferred.Shape.ToArray());
+        Assert.Equal(declaredParameterCount, block.ParameterCount);
+
+        var actual = block.Forward(input, timeEmbedding);
+        Assert.Equal(new[] { 1, 8, 32, 32 }, actual.Shape.ToArray());
+        Assert.Equal(declaredParameterCount, block.ParameterCount);
+    }
+
     /// <summary>
     /// Default <see cref="LayerBase{T}.TryDeclareShape"/> impl returns
     /// <see cref="LayerBase{T}.IsShapeResolved"/> verbatim. A

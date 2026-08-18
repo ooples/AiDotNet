@@ -38,6 +38,7 @@
            - Storage.Sqlite → Storage/SqliteSqlSyntaxValidatorTests.cs -->
     <ProjectReference Include="..\..\src\AiDotNet.Privacy.HE\AiDotNet.Privacy.HE.csproj" />
     <ProjectReference Include="..\..\src\AiDotNet.Storage.Sqlite\AiDotNet.Storage.Sqlite.csproj" />
+    <ProjectReference Include="..\..\src\AiDotNet.Dashboard\AiDotNet.Dashboard.csproj" />
   </ItemGroup>
 
   <!-- Source generator for auto-generating test scaffolds for untested models -->
@@ -52,6 +53,7 @@
        compiled assembly is not callable from tests; this pulls in just the pure-string helper. -->
   <ItemGroup>
     <Compile Include="..\..\src\AiDotNet.Generators\GeneratedTestFloatify.cs" Link="Generators\GeneratedTestFloatify.cs" />
+    <Compile Include="..\..\src\AiDotNet.Generators\GeneratedVisionFixtureContract.cs" Link="Generators\GeneratedVisionFixtureContract.cs" />
     <!-- Shared-compile the model-metadata validator so its assembly-scoping logic (AIDN001 must
          fire for AiDotNet's own library models but NOT for consumer/test IFullModel doubles) can
          be driven directly in a Roslyn generator unit test. Referenced above only as an analyzer,
@@ -59,6 +61,7 @@
     <Compile Include="..\..\src\AiDotNet.Generators\ModelMetadataValidationGenerator.cs" Link="Generators\ModelMetadataValidationGenerator.cs" />
     <Compile Include="..\..\src\AiDotNet.Generators\ComponentMetadataValidationGenerator.cs" Link="Generators\ComponentMetadataValidationGenerator.cs" />
     <Compile Include="..\..\src\AiDotNet.Generators\TensorPortContractGenerator.cs" Link="Generators\TensorPortContractGenerator.cs" />
+    <Compile Include="..\..\src\AiDotNet.Generators\FacadeConfigurationValidationGenerator.cs" Link="Generators\FacadeConfigurationValidationGenerator.cs" />
     <!-- B1 semantic contract: these generators and their shared classifier are linked so tests can
          execute Roslyn directly. The production project reference is analyzer-only and therefore
          intentionally does not expose generator types as a compile reference. -->

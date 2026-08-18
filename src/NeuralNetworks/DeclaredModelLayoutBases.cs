@@ -33,6 +33,40 @@ public abstract class VectorModelLayoutBase<T> : DeclaredModelLayoutBase<T>
         : base(lossFunction, maxGradNorm) { }
 }
 
+/// <summary>
+/// Base class for vector models whose declared <see cref="NeuralNetworkBase{T}.Layers"/> collection is
+/// the complete, literal inference graph in execution order.
+/// </summary>
+/// <remarks>
+/// <para>
+/// This is an execution-topology contract, not a shape guess. Models opt in by choosing this base only
+/// after their forward has been verified to apply every declared layer exactly once in list order. The
+/// base then supplies framework services that are safe only for a true sequential graph, including the
+/// allocation-efficient named-activation fold.
+/// </para>
+/// <para>
+/// The capability is intentionally limited to a model that directly chooses this base. A subclass of
+/// such a model falls back to tracing its actual forward because it may override inference and introduce
+/// branches, shared stages, input transforms, or generation loops. A still-sequential subclass can opt
+/// in explicitly after verifying its own forward contract.
+/// </para>
+/// </remarks>
+public abstract class SequentialVectorModelLayoutBase<T> : VectorModelLayoutBase<T>
+{
+    protected SequentialVectorModelLayoutBase(
+        NeuralNetworkArchitecture<T> architecture,
+        ILossFunction<T> lossFunction,
+        double maxGradNorm = 1.0)
+        : base(architecture, lossFunction, maxGradNorm) { }
+
+    protected SequentialVectorModelLayoutBase(ILossFunction<T> lossFunction, double maxGradNorm = 1.0)
+        : base(lossFunction, maxGradNorm) { }
+
+    /// <inheritdoc/>
+    protected override bool SupportsSequentialActivationFold
+        => GetType().BaseType == typeof(SequentialVectorModelLayoutBase<T>);
+}
+
 [TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
     Direction = TensorLayoutDirection.Input, BatchOptional = true)]
 [TensorLayout(TensorAxis.Batch, TensorAxis.Features,

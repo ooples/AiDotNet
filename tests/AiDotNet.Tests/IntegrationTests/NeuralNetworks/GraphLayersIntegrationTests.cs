@@ -904,6 +904,38 @@ public class GraphLayersIntegrationTests
         Assert.Equal(outputFeatures, output.Shape[1]);
     }
 
+    [Fact]
+    public async Task HeterogeneousGraphLayer_RuntimeRegistryRebindsExecutionContainers()
+    {
+        await Task.Yield();
+        var metadata = new HeterogeneousGraphMetadata
+        {
+            NodeTypes = ["A"],
+            EdgeTypes = ["e"],
+            NodeTypeFeatures = new Dictionary<string, int> { ["A"] = 8 },
+            EdgeTypeSchema = new Dictionary<string, (string, string)> { ["e"] = ("A", "A") }
+        };
+        var layer = new HeterogeneousGraphLayer<float>(metadata, outputFeatures: 4);
+        var current = layer.GetTrainableParameters();
+        var replacements = current
+            .Select((tensor, index) =>
+            {
+                var replacement = new Tensor<float>(tensor.Shape.ToArray());
+                replacement.Fill(index + 1);
+                return replacement;
+            })
+            .ToArray();
+
+        layer.SetTrainableParameters(replacements);
+
+        Assert.Equal(replacements.Length, layer.GetParameterTensors().Count);
+        for (int i = 0; i < replacements.Length; i++)
+        {
+            Assert.Same(replacements[i], layer.GetTrainableParameters()[i]);
+            Assert.Same(replacements[i], layer.GetParameterTensors()[i]);
+        }
+    }
+
     [Fact(Timeout = 120000)]
     public async Task HeterogeneousGraphLayer_SetAdjacencyMatrix_ThrowsNotSupportedException()
     {

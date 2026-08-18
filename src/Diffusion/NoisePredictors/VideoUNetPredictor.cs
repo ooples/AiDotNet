@@ -7,6 +7,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.Autodiff;
 
 namespace AiDotNet.Diffusion.NoisePredictors;
 
@@ -96,6 +97,9 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
     /// </summary>
     private readonly int _numTemporalLayers;
 
+    /// <summary>Architecture-specific topology rules used by this shared predictor.</summary>
+    private readonly VideoUNetArchitectureProfile _architectureProfile;
+
     /// <summary>
     /// Encoder blocks.
     /// </summary>
@@ -111,6 +115,12 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
     /// </summary>
     private readonly List<VideoBlock> _decoderBlocks;
 
+    private bool _lazyShapeResolved;
+    private bool _lazyShapeResolvedWithVideo;
+    private bool _lazyShapeResolvedWithTextConditioning;
+    private bool _lazyShapeResolvedWithImageConditioning;
+    private IReadOnlyList<ILayer<T>>? _temporalTrainingLayers;
+
     /// <summary>
     /// Input convolution.
     /// </summary>
@@ -120,6 +130,9 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
     /// Output convolution.
     /// </summary>
     private ConvolutionalLayer<T>? _outputConv;
+
+    /// <summary>Released U-Net output normalization before SiLU and conv-out.</summary>
+    private GroupNormalizationLayer<T>? _outputNorm;
 
     /// <summary>
     /// Time embedding MLP.
@@ -131,6 +144,9 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
     /// Image conditioning projection (for image-to-video).
     /// </summary>
     private ConvolutionalLayer<T>? _imageCondProjection;
+
+    /// <summary>Learned embedding for super-resolution degradation/noise levels.</summary>
+    private EmbeddingLayer<T>? _classEmbedding;
 
     /// <summary>
     /// Cached input for backward pass.
@@ -171,6 +187,18 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
     /// Whether to support image conditioning.
     /// </summary>
     private readonly bool _supportsImageConditioning;
+
+    /// <summary>Number of channels in the image/video condition.</summary>
+    private readonly int _imageConditionChannels;
+
+    /// <summary>
+    /// Whether the condition is concatenated with the latent before the input convolution.
+    /// Stable-Diffusion x4 / Upscale-A-Video use this seven-channel (4 + 3) contract.
+    /// </summary>
+    private readonly bool _concatenateImageCondition;
+
+    /// <summary>Number of learned class/noise-level embeddings, or zero when disabled.</summary>
+    private readonly int _numClassEmbeddings;
 
     /// <summary>
     /// Latent spatial height.
@@ -218,10 +246,69 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
     /// </summary>
     public bool SupportsImageConditioning => _supportsImageConditioning;
 
+    /// <summary>Gets the expected image/video condition channel count.</summary>
+    public int ImageConditionChannels => _imageConditionChannels;
+
+    /// <summary>Gets whether conditioning is concatenated before the input convolution.</summary>
+    public bool ConcatenatesImageCondition => _concatenateImageCondition;
+
+    /// <summary>Gets the number of learned degradation/noise-level embeddings.</summary>
+    public int NumClassEmbeddings => _numClassEmbeddings;
+
+    /// <summary>Gets the paper-defined channel multiplier at each U-Net resolution.</summary>
+    public IReadOnlyList<int> ChannelMultipliers => Array.AsReadOnly(_channelMultipliers);
+
     /// <summary>
     /// Gets the number of temporal transformer layers.
     /// </summary>
     public int NumTemporalLayers => _numTemporalLayers;
+
+    /// <summary>Gets the number of spatial residual layers in each down block.</summary>
+    public int NumResBlocks => _numResBlocks;
+
+    /// <summary>Gets the selected topology profile.</summary>
+    public VideoUNetArchitectureProfile ArchitectureProfile => _architectureProfile;
+
+    /// <summary>Gets the number of explicit temporal modules in the materialized topology.</summary>
+    public int TemporalModuleCount =>
+        _encoderBlocks.Concat(_middleBlocks).Concat(_decoderBlocks)
+            .Count(block => block.TemporalResBlock is TemporalModule3DLayer<T>);
+
+    /// <summary>Gets the number of spatial residual blocks in the materialized topology.</summary>
+    public int SpatialResBlockCount =>
+        _encoderBlocks.Concat(_middleBlocks).Concat(_decoderBlocks)
+            .Count(block => block.SpatialResBlock is DiffusionResBlock<T>);
+
+    /// <summary>Gets the number of released Transformer3D blocks.</summary>
+    public int VideoTransformerCount =>
+        _encoderBlocks.Concat(_middleBlocks).Concat(_decoderBlocks)
+            .Count(block => block.SpatialAttention is VideoTransformer3DLayer<T>);
+
+    /// <summary>Gets the number of Transformer3D blocks whose first attention is text-only.</summary>
+    public int OnlyCrossAttentionTransformerCount =>
+        _encoderBlocks.Concat(_middleBlocks).Concat(_decoderBlocks)
+            .Select(block => block.SpatialAttention)
+            .OfType<VideoTransformer3DLayer<T>>()
+            .Count(layer => layer.OnlyCrossAttention);
+
+    /// <summary>Gets the number of spatial downsampling operations.</summary>
+    public int DownsampleCount => _encoderBlocks.Count(block => block.Downsample is not null);
+
+    /// <summary>Gets the number of spatial upsampling operations.</summary>
+    public int UpsampleCount => _decoderBlocks.Count(block => block.Upsample is not null);
+
+    /// <summary>Gets whether any temporal transformer-attention layer is present.</summary>
+    public bool UsesTemporalTransformerAttention =>
+        _encoderBlocks.Concat(_middleBlocks).Concat(_decoderBlocks)
+            .Any(block => block.TemporalAttention is not null ||
+                block.SpatialAttention is VideoTransformer3DLayer<T> transformer &&
+                transformer.UsesTemporalAttention);
+
+    /// <summary>
+    /// Gets the inserted temporal layers while excluding pretrained spatial U-Net layers.
+    /// </summary>
+    public IReadOnlyList<ILayer<T>> TemporalTrainingLayers =>
+        _temporalTrainingLayers ??= BuildTemporalTrainingLayers();
 
     /// <summary>
     /// Initializes a new instance of the VideoUNetPredictor class.
@@ -242,6 +329,9 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
     /// <param name="clipTokenLength">CLIP text token sequence length for cross-attention (default: 77).</param>
     /// <param name="lossFunction">Optional loss function (default: MSE).</param>
     /// <param name="seed">Optional random seed for reproducibility.</param>
+    /// <param name="imageConditionChannels">Channels in the image/video condition. Defaults to <paramref name="inputChannels"/>.</param>
+    /// <param name="concatenateImageCondition">Concatenate condition and latent before the input convolution.</param>
+    /// <param name="numClassEmbeddings">Number of learned class/noise-level embeddings, or zero to disable.</param>
     public VideoUNetPredictor(
         int inputChannels = 4,
         int? outputChannels = null,
@@ -258,7 +348,11 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
         int numFrames = 25,
         int clipTokenLength = 77,
         ILossFunction<T>? lossFunction = null,
-        int? seed = null)
+        int? seed = null,
+        int? imageConditionChannels = null,
+        bool concatenateImageCondition = false,
+        int numClassEmbeddings = 0,
+        VideoUNetArchitectureProfile architectureProfile = VideoUNetArchitectureProfile.Generic)
         : base(lossFunction, seed)
     {
         _inputChannels = inputChannels;
@@ -268,10 +362,18 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
         _numResBlocks = numResBlocks;
         _attentionResolutions = attentionResolutions ?? new[] { 1, 2, 3 };
         _numTemporalLayers = numTemporalLayers;
+        _architectureProfile = architectureProfile;
         _contextDim = contextDim;
         _numHeads = numHeads;
         _timeEmbeddingDim = baseChannels * 4;
         _supportsImageConditioning = supportsImageConditioning;
+        _imageConditionChannels = imageConditionChannels ?? inputChannels;
+        _concatenateImageCondition = concatenateImageCondition;
+        _numClassEmbeddings = numClassEmbeddings;
+        if (_imageConditionChannels <= 0)
+            throw new ArgumentOutOfRangeException(nameof(imageConditionChannels));
+        if (_numClassEmbeddings < 0)
+            throw new ArgumentOutOfRangeException(nameof(numClassEmbeddings));
         _inputHeight = inputHeight;
         _inputWidth = inputWidth;
         _numFrames = numFrames;
@@ -303,8 +405,10 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
         // Input convolution: [inputChannels] -> [baseChannels]. LazyConv2D keeps
         // kernel tensors unallocated until first Forward() — the full video U-Net
         // is multi-GB at default sizes.
+        int networkInputChannels = _inputChannels +
+            (_supportsImageConditioning && _concatenateImageCondition ? _imageConditionChannels : 0);
         _inputConv = LazyConv2D(
-            inputDepth: _inputChannels,
+            inputDepth: networkInputChannels,
             inputHeight: _inputHeight,
             inputWidth: _inputWidth,
             outputDepth: _baseChannels,
@@ -329,10 +433,10 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
         _timeEmbedMlp2 = LazyDense(_timeEmbeddingDim, _timeEmbeddingDim, new SiLUActivation<T>());
 
         // Image conditioning projection (for image-to-video)
-        if (_supportsImageConditioning)
+        if (_supportsImageConditioning && !_concatenateImageCondition)
         {
             _imageCondProjection = LazyConv2D(
-                inputDepth: _inputChannels,
+                inputDepth: _imageConditionChannels,
                 inputHeight: _inputHeight,
                 inputWidth: _inputWidth,
                 outputDepth: _baseChannels,
@@ -340,6 +444,17 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
                 stride: 1,
                 padding: 0,
                 activation: new IdentityActivation<T>());
+        }
+
+        if (_numClassEmbeddings > 0)
+        {
+            _classEmbedding = new EmbeddingLayer<T>(_numClassEmbeddings, _timeEmbeddingDim);
+        }
+
+        if (_architectureProfile == VideoUNetArchitectureProfile.UpscaleAVideo)
+        {
+            BuildUpscaleAVideoTopology();
+            return;
         }
 
         // Build encoder
@@ -357,7 +472,7 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
                     TemporalResBlock = CreateTemporalMixingBlock(),
                     SpatialAttention = useAttention ? CreateSpatialAttention(outChannels, level) : null,
                     TemporalAttention = useAttention ? CreateTemporalAttention(outChannels) : null,
-                    CrossAttention = useAttention && _contextDim > 0 ? CreateCrossAttention(outChannels) : null,
+                    CrossAttention = useAttention && _contextDim > 0 ? CreateCrossAttention(outChannels, level) : null,
                     TimeCondProjection = CreateTimeCondProjection(outChannels)
                 });
                 inChannels = outChannels;
@@ -381,7 +496,7 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
             TemporalResBlock = CreateTemporalMixingBlock(),
             SpatialAttention = CreateSpatialAttention(inChannels, middleLevel),
             TemporalAttention = CreateTemporalAttention(inChannels),
-            CrossAttention = _contextDim > 0 ? CreateCrossAttention(inChannels) : null,
+            CrossAttention = _contextDim > 0 ? CreateCrossAttention(inChannels, middleLevel) : null,
             TimeCondProjection = CreateTimeCondProjection(inChannels)
         });
         _middleBlocks.Add(new VideoBlock
@@ -450,7 +565,7 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
                     TemporalResBlock = CreateTemporalMixingBlock(),
                     SpatialAttention = useAttention ? CreateSpatialAttention(outChannels, level) : null,
                     TemporalAttention = useAttention ? CreateTemporalAttention(outChannels) : null,
-                    CrossAttention = useAttention && _contextDim > 0 ? CreateCrossAttention(outChannels) : null,
+                    CrossAttention = useAttention && _contextDim > 0 ? CreateCrossAttention(outChannels, level) : null,
                     TimeCondProjection = CreateTimeCondProjection(outChannels)
                 });
                 inChannels = outChannels;
@@ -468,6 +583,154 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
         }
 
         // Output convolution (lazy).
+        _outputConv = LazyConv2D(
+            inputDepth: _baseChannels,
+            inputHeight: _inputHeight,
+            inputWidth: _inputWidth,
+            outputDepth: _outputChannels,
+            kernelSize: 3,
+            stride: 1,
+            padding: 1,
+            activation: new IdentityActivation<T>());
+    }
+
+    /// <summary>
+    /// Builds the released Upscale-A-Video U-Net rather than the historical
+    /// fixed-frame approximation. The topology follows unet_video_config.json:
+    /// [256,512,512,1024], two down ResNets, three up ResNets, cross attention
+    /// at levels 1-3, self-attention only at the deepest cross-attention stage,
+    /// and one convolutional temporal module after every down/up stage plus mid.
+    /// Transformer3D blocks retain their distinct zero-initialized temporal-attention path.
+    /// </summary>
+    private void BuildUpscaleAVideoTopology()
+    {
+        if (_inputChannels != 4 || _outputChannels != 4 || _baseChannels != 256)
+            throw new ArgumentException(
+                "Upscale-A-Video requires four latent input/output channels and baseChannels 256.");
+        if (!_supportsImageConditioning || !_concatenateImageCondition || _imageConditionChannels != 3)
+            throw new ArgumentException(
+                "Upscale-A-Video requires concatenated three-channel low-resolution conditioning.");
+        if (_numClassEmbeddings != 1000)
+            throw new ArgumentException(
+                "Upscale-A-Video requires the released 1,000-entry noise-level embedding.");
+        if (_inputHeight != 128 || _inputWidth != 128)
+            throw new ArgumentException(
+                "Upscale-A-Video requires the released 128x128 latent sample size.");
+        if (_channelMultipliers.Length != 4 ||
+            !_channelMultipliers.SequenceEqual(new[] { 1, 2, 2, 4 }))
+            throw new ArgumentException(
+                "Upscale-A-Video requires channelMultipliers [1,2,2,4].");
+        if (_numResBlocks != 2)
+            throw new ArgumentException("Upscale-A-Video requires two spatial ResNets per down block.");
+        if (_contextDim != 1024)
+            throw new ArgumentException("Upscale-A-Video requires cross-attention width 1024.");
+        if (_numHeads != 8)
+            throw new ArgumentException("Upscale-A-Video requires eight attention heads.");
+
+        int inChannels = _baseChannels;
+        int lastLevel = _channelMultipliers.Length - 1;
+
+        // Down blocks. Each ResNet output is a U-Net skip; the first three
+        // downsample outputs are skips too, exactly as diffusers DownBlock3D.
+        for (int level = 0; level <= lastLevel; level++)
+        {
+            int outChannels = _baseChannels * _channelMultipliers[level];
+            bool useCrossAttention = level > 0;
+            bool useSelfAttention = level == lastLevel;
+            for (int block = 0; block < _numResBlocks; block++)
+            {
+                _encoderBlocks.Add(new VideoBlock
+                {
+                    SpatialResBlock = CreateSpatialResBlock(inChannels, outChannels, level),
+                    SpatialAttention = useCrossAttention
+                        ? CreateVideoTransformer(outChannels, level, onlyCrossAttention: !useSelfAttention)
+                        : null,
+                    CaptureSkipAfter = true
+                });
+                inChannels = outChannels;
+            }
+
+            if (level < lastLevel)
+            {
+                _encoderBlocks.Add(new VideoBlock
+                {
+                    Downsample = CreateDownsample(outChannels, level),
+                    CaptureSkipAfter = true
+                });
+            }
+
+            _encoderBlocks.Add(new VideoBlock
+            {
+                TemporalResBlock = new TemporalModule3DLayer<T>(
+                    outChannels, _timeEmbeddingDim,
+                    ResolutionAtLevel(System.Math.Min(level + 1, lastLevel)))
+            });
+        }
+
+        // Stable-Diffusion mid block: ResNet → self/cross attention → ResNet,
+        // followed by the released temporal module.
+        _middleBlocks.Add(new VideoBlock
+        {
+            SpatialResBlock = CreateSpatialResBlock(inChannels, inChannels, lastLevel),
+            SpatialAttention = CreateVideoTransformer(
+                inChannels, lastLevel, onlyCrossAttention: false)
+        });
+        _middleBlocks.Add(new VideoBlock
+        {
+            SpatialResBlock = CreateSpatialResBlock(inChannels, inChannels, lastLevel)
+        });
+        _middleBlocks.Add(new VideoBlock
+        {
+            TemporalResBlock = new TemporalModule3DLayer<T>(
+                inChannels, _timeEmbeddingDim, ResolutionAtLevel(lastLevel))
+        });
+
+        // Up blocks consume one skip before EACH of their three ResNets.
+        // The third skip in a stage comes from the next shallower channel width.
+        for (int level = lastLevel; level >= 0; level--)
+        {
+            int outChannels = _baseChannels * _channelMultipliers[level];
+            int shallowSkipChannels = level > 0
+                ? _baseChannels * _channelMultipliers[level - 1]
+                : _baseChannels;
+            bool useCrossAttention = level > 0;
+            bool useSelfAttention = level == lastLevel;
+
+            for (int block = 0; block < _numResBlocks + 1; block++)
+            {
+                int skipChannels = block == _numResBlocks
+                    ? shallowSkipChannels
+                    : outChannels;
+                _decoderBlocks.Add(new VideoBlock
+                {
+                    SpatialResBlock = CreateSpatialResBlock(
+                        inChannels + skipChannels, outChannels, level),
+                    SpatialAttention = useCrossAttention
+                        ? CreateVideoTransformer(outChannels, level, onlyCrossAttention: !useSelfAttention)
+                        : null,
+                    ConsumesSkip = true
+                });
+                inChannels = outChannels;
+            }
+
+            if (level > 0)
+            {
+                _decoderBlocks.Add(new VideoBlock
+                {
+                    Upsample = CreateUpsample(outChannels, level - 1)
+                });
+            }
+
+            _decoderBlocks.Add(new VideoBlock
+            {
+                TemporalResBlock = new TemporalModule3DLayer<T>(
+                    outChannels, _timeEmbeddingDim,
+                    ResolutionAtLevel(System.Math.Max(0, level - 1)))
+            });
+        }
+
+        _outputNorm = new GroupNormalizationLayer<T>(
+            ComputeGroups(_baseChannels, 32), _baseChannels, 1e-5);
         _outputConv = LazyConv2D(
             inputDepth: _baseChannels,
             inputHeight: _inputHeight,
@@ -532,6 +795,62 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
     }
 
     /// <summary>
+    /// Predicts noise while conditioning every frame on its corresponding low-resolution
+    /// video latent. This is the conditioning contract used by video super-resolution;
+    /// unlike image-to-video conditioning, it must not reuse the first frame for the clip.
+    /// </summary>
+    /// <param name="noisySample">Noisy target latents in [B,C,F,H,W] layout.</param>
+    /// <param name="timestep">Current diffusion timestep.</param>
+    /// <param name="videoCondition">Per-frame conditioning latents in [B,C,F,H,W] layout.</param>
+    /// <param name="textConditioning">Optional text encoder states.</param>
+    public Tensor<T> PredictNoiseWithVideoCondition(
+        Tensor<T> noisySample,
+        int timestep,
+        Tensor<T> videoCondition,
+        Tensor<T>? textConditioning = null,
+        int? noiseLevel = null)
+    {
+        if (!_supportsImageConditioning)
+            throw new InvalidOperationException("This predictor does not support video conditioning.");
+        if (noisySample.Rank != 5 || videoCondition.Rank != 5)
+            throw new ArgumentException("Video conditioning requires [B,C,F,H,W] tensors.");
+        if (noisySample.Shape[0] != videoCondition.Shape[0] ||
+            noisySample.Shape[2] != videoCondition.Shape[2] ||
+            noisySample.Shape[3] != videoCondition.Shape[3] ||
+            noisySample.Shape[4] != videoCondition.Shape[4])
+            throw new ArgumentException(
+                "Video condition must match latent batch, frame, height, and width dimensions.",
+                nameof(videoCondition));
+        if (videoCondition.Shape[1] != _imageConditionChannels)
+            throw new ArgumentException(
+                $"Expected {_imageConditionChannels} condition channels, got {videoCondition.Shape[1]}.",
+                nameof(videoCondition));
+
+        using var streaming = BeginWeightStreamingForward();
+        _lastInput = noisySample;
+        var timeEmbed = AddClassEmbedding(
+            ProjectTimeEmbedding(GetTimestepEmbedding(timestep)), noiseLevel);
+        return streaming.Complete(
+            ForwardVideoUNet(noisySample, timeEmbed, textConditioning, videoCondition));
+    }
+
+    private Tensor<T> AddClassEmbedding(Tensor<T> timeEmbedding, int? classLabel)
+    {
+        if (_classEmbedding is null)
+            return timeEmbedding;
+        if (!classLabel.HasValue)
+            throw new ArgumentNullException(nameof(classLabel),
+                "This predictor requires a degradation/noise-level label.");
+        if ((uint)classLabel.Value >= (uint)_numClassEmbeddings)
+            throw new ArgumentOutOfRangeException(nameof(classLabel), classLabel.Value,
+                $"Class/noise level must be in [0, {_numClassEmbeddings - 1}].");
+
+        var label = new Tensor<T>([1],
+            new Vector<T>(new[] { NumOps.FromDouble(classLabel.Value) }));
+        return Engine.TensorAdd(timeEmbedding, _classEmbedding.Forward(label));
+    }
+
+    /// <summary>
     /// Projects the sinusoidal timestep embedding through the MLP.
     /// </summary>
     private Tensor<T> ProjectTimeEmbedding(Tensor<T> timeEmbed)
@@ -564,17 +883,37 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
         bool isVideo = x.Shape.Length == 5;
         int numFrames = isVideo ? x.Shape[2] : 1;
 
+        // Upscale-A-Video / SD-x4 concatenate the three-channel low-resolution
+        // condition with the four-channel noisy latent before the seven-channel
+        // input convolution. Other video models retain additive projection mode.
+        if (imageCondition != null && _concatenateImageCondition)
+        {
+            if (imageCondition.Rank != x.Rank)
+                throw new ArgumentException("Concatenated conditioning rank must match the sample rank.",
+                    nameof(imageCondition));
+            x = ConcatenateChannels(x, imageCondition, isVideo);
+        }
+
         // Process each frame through input conv (or use 3D conv in production)
         x = isVideo
             ? ProcessVideoFrames(x, frame => _inputConv.Forward(frame))
             : _inputConv.Forward(x);
 
         // Add image condition (for image-to-video)
-        if (imageCondition != null && _imageCondProjection != null)
+        if (imageCondition != null && !_concatenateImageCondition && _imageCondProjection != null)
         {
-            var imageCond = _imageCondProjection.Forward(imageCondition);
-            // Broadcast to all frames and add
-            x = AddImageCondition(x, imageCond, numFrames);
+            if (imageCondition.Rank == 5)
+            {
+                var videoCond = ProcessVideoFrames(
+                    imageCondition, frame => _imageCondProjection.Forward(frame));
+                x = Engine.TensorAdd(x, videoCond);
+            }
+            else
+            {
+                var imageCond = _imageCondProjection.Forward(imageCondition);
+                // Image-to-video retains first-frame conditioning semantics.
+                x = AddImageCondition(x, imageCond, numFrames);
+            }
         }
 
         // Store skip connections — one per spatial level, captured at the
@@ -591,22 +930,34 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
         // construction across the symmetric encoder/decoder pyramid.
         var skips = new List<Tensor<T>>();
 
-        // Encoder
-        for (int i = 0; i < _encoderBlocks.Count; i++)
+        // Encoder. The released Upscale-A-Video/diffusers U-Net stores the
+        // input-conv output, every ResNet output, and each non-final downsample
+        // output. Generic callers retain the legacy level-boundary behavior.
+        if (_architectureProfile == VideoUNetArchitectureProfile.UpscaleAVideo)
         {
-            var block = _encoderBlocks[i];
-            if (block.Downsample != null)
+            skips.Add(x);
+            foreach (var block in _encoderBlocks)
             {
-                // Snapshot the level's output (post the preceding ResBlock(s))
-                // BEFORE downsampling so the saved skip lives at the current
-                // spatial size, matching what the decoder will see post-
-                // Upsample at the same level.
-                skips.Add(x);
-                x = ApplyDownsample(block.Downsample, x, isVideo);
+                x = block.Downsample is not null
+                    ? ApplyDownsample(block.Downsample, x, isVideo)
+                    : ApplyVideoBlock(block, x, timeEmbed, textConditioning, isVideo);
+                if (block.CaptureSkipAfter) skips.Add(x);
             }
-            else
+        }
+        else
+        {
+            for (int i = 0; i < _encoderBlocks.Count; i++)
             {
-                x = ApplyVideoBlock(block, x, timeEmbed, textConditioning, isVideo);
+                var block = _encoderBlocks[i];
+                if (block.Downsample != null)
+                {
+                    skips.Add(x);
+                    x = ApplyDownsample(block.Downsample, x, isVideo);
+                }
+                else
+                {
+                    x = ApplyVideoBlock(block, x, timeEmbed, textConditioning, isVideo);
+                }
             }
         }
 
@@ -621,24 +972,53 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
         // reverse order — last-saved (deepest level) is the first consumed
         // because the decoder ascends from the bottleneck toward the input.
         var skipIdx = skips.Count - 1;
-        bool consumeSkipNext = false;
-        foreach (var block in _decoderBlocks)
+        if (_architectureProfile == VideoUNetArchitectureProfile.UpscaleAVideo)
         {
-            if (block.Upsample != null)
+            foreach (var block in _decoderBlocks)
             {
-                x = ApplyUpsample(block.Upsample, x, isVideo);
-                consumeSkipNext = true;
-            }
-            else
-            {
-                if (consumeSkipNext && skipIdx >= 0)
+                if (block.ConsumesSkip)
                 {
-                    x = ConcatenateChannels(x, skips[skipIdx], isVideo);
-                    skipIdx--;
-                    consumeSkipNext = false;
+                    if (skipIdx < 0)
+                        throw new InvalidOperationException(
+                            "Upscale-A-Video decoder requested more skips than the encoder produced.");
+                    x = ConcatenateChannels(x, skips[skipIdx--], isVideo);
                 }
-                x = ApplyVideoBlock(block, x, timeEmbed, textConditioning, isVideo);
+
+                x = block.Upsample is not null
+                    ? ApplyUpsample(block.Upsample, x, isVideo)
+                    : ApplyVideoBlock(block, x, timeEmbed, textConditioning, isVideo);
             }
+            if (skipIdx != -1)
+                throw new InvalidOperationException(
+                    $"Upscale-A-Video decoder left {skipIdx + 1} encoder skip(s) unused.");
+        }
+        else
+        {
+            bool consumeSkipNext = false;
+            foreach (var block in _decoderBlocks)
+            {
+                if (block.Upsample != null)
+                {
+                    x = ApplyUpsample(block.Upsample, x, isVideo);
+                    consumeSkipNext = true;
+                }
+                else
+                {
+                    if (consumeSkipNext && skipIdx >= 0)
+                    {
+                        x = ConcatenateChannels(x, skips[skipIdx--], isVideo);
+                        consumeSkipNext = false;
+                    }
+                    x = ApplyVideoBlock(block, x, timeEmbed, textConditioning, isVideo);
+                }
+            }
+        }
+
+        if (_outputNorm is not null)
+        {
+            x = isVideo
+                ? ProcessVideoFrames(x, frame => Engine.TensorSiLU(_outputNorm.Forward(frame)))
+                : Engine.TensorSiLU(_outputNorm.Forward(x));
         }
 
         // Output convolution
@@ -646,6 +1026,10 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
             ? ProcessVideoFrames(x, frame => _outputConv.Forward(frame))
             : _outputConv.Forward(x);
 
+        _lazyShapeResolved = true;
+        _lazyShapeResolvedWithVideo |= isVideo;
+        _lazyShapeResolvedWithTextConditioning |= textConditioning is not null;
+        _lazyShapeResolvedWithImageConditioning |= imageCondition is not null;
         return x;
     }
 
@@ -665,8 +1049,40 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
         Tensor<T>? conditioning,
         bool isVideo)
     {
+        // Upscale-A-Video freezes the Stable Diffusion spatial backbone and optimizes only the
+        // inserted temporal modules. Retaining every internal spatial activation until backward
+        // made the paper-scale 733M model require over 45 GiB for one step. Checkpoint each block:
+        // retain its boundary, recompute its interior during backward, and explicitly request only
+        // the temporal parameter gradients. The input VJP still crosses every frozen spatial op,
+        // so this is mathematically the same temporal-only fine-tuning objective, not a smaller model.
+        if (_architectureProfile == VideoUNetArchitectureProfile.UpscaleAVideo
+            && GradientTape<T>.Current is not null)
+        {
+            return GradientCheckpointing<T>.Checkpoint(
+                [input => ApplyVideoBlockCore(block, input, timeEmbed, conditioning, isVideo)],
+                x,
+                parameterSourceFactory: () => GetBlockTemporalTrainingParameters(block),
+                segmentSize: 1);
+        }
+
+        return ApplyVideoBlockCore(block, x, timeEmbed, conditioning, isVideo);
+    }
+
+    private Tensor<T> ApplyVideoBlockCore(
+        VideoBlock block,
+        Tensor<T> x,
+        Tensor<T> timeEmbed,
+        Tensor<T>? conditioning,
+        bool isVideo)
+    {
         // Spatial ResBlock
-        if (block.SpatialResBlock != null)
+        if (block.SpatialResBlock is DiffusionResBlock<T> diffusionResBlock)
+        {
+            x = isVideo
+                ? ApplySpatialResBlockToVideo(diffusionResBlock, x, timeEmbed)
+                : diffusionResBlock.Forward(x, timeEmbed);
+        }
+        else if (block.SpatialResBlock != null)
         {
             x = isVideo
                 ? ProcessVideoFrames(x, frame => block.SpatialResBlock.Forward(frame))
@@ -684,16 +1100,41 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
         }
 
         // Temporal ResBlock (only for video) — learned temporal mixing with residual
-        if (block.TemporalResBlock != null && isVideo)
+        if (block.TemporalResBlock is TemporalModule3DLayer<T> temporalModule && isVideo)
+        {
+            x = temporalModule.Forward(x, timeEmbed);
+        }
+        else if (block.TemporalResBlock != null && isVideo)
         {
             x = ApplyTemporalProcessing(block.TemporalResBlock, x);
+        }
+
+        // Released Upscale-A-Video Transformer3D jointly owns spatial/text and
+        // zero-initialized temporal attention plus GEGLU residual processing.
+        bool handledTransformer3D = false;
+        if (block.SpatialAttention is VideoTransformer3DLayer<T> transformer3D)
+        {
+            if (conditioning is null)
+                throw new InvalidOperationException(
+                    "Upscale-A-Video Transformer3D requires Stable Diffusion x4 Upscaler " +
+                    "CLIP encoder states; text conditioning cannot be omitted.");
+            Tensor<T> videoInput = isVideo
+                ? x
+                : Engine.Reshape(x, [x.Shape[0], x.Shape[1], 1, x.Shape[2], x.Shape[3]]);
+            var transformed = transformer3D.Forward(videoInput, conditioning);
+            x = isVideo
+                ? transformed
+                : Engine.Reshape(
+                    transformed,
+                    [transformed.Shape[0], transformed.Shape[1], transformed.Shape[3], transformed.Shape[4]]);
+            handledTransformer3D = true;
         }
 
         // Spatial attention. MHA expects [batch, seq, embed_dim]; spatial features
         // arrive as NCHW [B, C, H, W]. Reshape to [B, H*W, C] before the layer and
         // back after — without this MHA reads H or W as the embedding dim and
         // throws a weight-mismatch ArgumentException.
-        if (block.SpatialAttention != null)
+        if (block.SpatialAttention != null && !handledTransformer3D)
         {
             x = isVideo
                 ? ProcessVideoFrames(x, frame => SpatialAttentionForward(block.SpatialAttention, frame))
@@ -735,6 +1176,34 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
         }
 
         return x;
+    }
+
+    private IReadOnlyList<Tensor<T>> GetBlockTemporalTrainingParameters(VideoBlock block)
+    {
+        var parameters = new List<Tensor<T>>();
+        var seen = new HashSet<Tensor<T>>(TensorReferenceComparer<Tensor<T>>.Instance);
+
+        Add(block.TemporalResBlock);
+        Add(block.TemporalAttention);
+        if (block.SpatialAttention is VideoTransformer3DLayer<T> transformer)
+        {
+            foreach (var layer in transformer.TemporalTrainingLayers) Add(layer);
+        }
+
+        return parameters;
+
+        void Add(ILayer<T>? layer)
+        {
+            if (layer is ITrainableLayer<T> trainable)
+            {
+                // The no-grad checkpoint forward runs before this factory, so lazy child weights
+                // are materialized. TemporalTrainingLayers contains the explicit leaf/composite
+                // adapters from the paper objective; read their tensor list directly without ever
+                // flattening the foundation-scale predictor parameter vector.
+                foreach (var parameter in trainable.GetTrainableParameters())
+                    if (parameter.Length > 0 && seen.Add(parameter)) parameters.Add(parameter);
+            }
+        }
     }
 
     // Reshape NCHW [B, C, H, W] → [B, H*W, C] for self-attention, then back.
@@ -856,17 +1325,52 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
     /// </summary>
     private Tensor<T> ProcessVideoFrames(Tensor<T> video, Func<Tensor<T>, Tensor<T>> processFrame)
     {
+        int batch = video.Shape[0];
         int frames = video.Shape[2];
-        var processedFrames = new List<Tensor<T>>();
+        int height = video.Shape[3];
+        int width = video.Shape[4];
+        var bfchw = Engine.TensorPermute(video, [0, 2, 1, 3, 4]).Contiguous();
+        var frameBatch = Engine.Reshape(
+            bfchw, [batch * frames, video.Shape[1], height, width]);
+        var processed = processFrame(frameBatch);
+        var restored = Engine.Reshape(
+            processed,
+            [batch, frames, processed.Shape[1], processed.Shape[2], processed.Shape[3]]);
+        return Engine.TensorPermute(restored, [0, 2, 1, 3, 4]).Contiguous();
+    }
 
-        for (int f = 0; f < frames; f++)
+    private Tensor<T> ApplySpatialResBlockToVideo(
+        DiffusionResBlock<T> block, Tensor<T> video, Tensor<T> timeEmbedding)
+    {
+        int batch = video.Shape[0];
+        int frames = video.Shape[2];
+        int height = video.Shape[3];
+        int width = video.Shape[4];
+        var bfchw = Engine.TensorPermute(video, [0, 2, 1, 3, 4]).Contiguous();
+        var frameBatch = Engine.Reshape(
+            bfchw, [batch * frames, video.Shape[1], height, width]);
+
+        Tensor<T> timeBatch = timeEmbedding.Rank switch
         {
-            var frame = ExtractFrame(video, f);
-            var processed = processFrame(frame);
-            processedFrames.Add(processed);
-        }
+            1 => Engine.Reshape(timeEmbedding, [1, timeEmbedding.Shape[0]]),
+            2 => timeEmbedding,
+            _ => throw new ArgumentException("Time embedding must be [D] or [B,D].", nameof(timeEmbedding))
+        };
+        if (timeBatch.Shape[0] == 1 && batch > 1)
+            timeBatch = Engine.TensorBroadcastTo(timeBatch, [batch, timeBatch.Shape[1]]);
+        if (timeBatch.Shape[0] != batch)
+            throw new ArgumentException(
+                $"Time embedding batch {timeBatch.Shape[0]} does not match video batch {batch}.",
+                nameof(timeEmbedding));
+        var expanded = Engine.Reshape(timeBatch, [batch, 1, timeBatch.Shape[1]]);
+        expanded = Engine.TensorBroadcastTo(expanded, [batch, frames, timeBatch.Shape[1]]);
+        expanded = Engine.Reshape(expanded, [batch * frames, timeBatch.Shape[1]]);
 
-        return StackFrames(processedFrames);
+        var processed = block.Forward(frameBatch, expanded);
+        var restored = Engine.Reshape(
+            processed,
+            [batch, frames, processed.Shape[1], processed.Shape[2], processed.Shape[3]]);
+        return Engine.TensorPermute(restored, [0, 2, 1, 3, 4]).Contiguous();
     }
 
     /// <summary>
@@ -1144,30 +1648,19 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
 
     #region Layer Factory Methods
 
-    private ILayer<T> CreateSpatialResBlock(int inChannels, int outChannels)
+    private ILayer<T> CreateSpatialResBlock(int inChannels, int outChannels, int level = 0)
     {
-        // A diffusion spatial ResBlock transforms the channel dimension of a
-        // 4D [B, C, H, W] feature map. The previous implementation used
-        // LazyDense(inChannels, outChannels), but DenseLayer projects the
-        // *last* dimension of its input — for a 4D tensor that is the width
-        // axis, not channels. The block therefore left C unchanged while
-        // scrambling W to outChannels, and every subsequent TimeCondProjection
-        // (sized for the planned outChannels) saw a feature map still at the
-        // incoming channel count — hence "FiLM conditioning projection width
-        // mismatch: expected 640, got 1280" on upscaleavideomodel and
-        // streamingt2vmodel tests.
-        // A 1x1 Conv2D is the standard channel-mixing primitive: it consumes
-        // [B, inChannels, H, W] and produces [B, outChannels, H, W] while
-        // leaving spatial dims alone.
-        return LazyConv2D(
-            inputDepth: inChannels,
-            inputHeight: 1,
-            inputWidth: 1,
-            outputDepth: outChannels,
-            kernelSize: 1,
-            stride: 1,
-            padding: 0,
-            activation: new SiLUActivation<T>());
+        // Shared paper-faithful diffusion ResNet: GN → SiLU → 3×3 conv,
+        // additive Linear(SiLU(timestep)), GN → SiLU → 3×3 conv + shortcut.
+        // This replaces the historical 1×1 projection that had neither a
+        // residual path nor the released receptive field.
+        return new DiffusionResBlock<T>(
+            inChannels,
+            outChannels,
+            ResolutionAtLevel(level),
+            _timeEmbeddingDim,
+            numGroups: 32,
+            epsilon: 1e-5);
     }
 
     /// <summary>
@@ -1210,6 +1703,13 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
     private int ResolutionAtLevel(int level)
         => Math.Max(1, _inputHeight >> level);
 
+    private static int ComputeGroups(int channels, int targetGroups)
+    {
+        for (int groups = System.Math.Min(channels, targetGroups); groups >= 1; groups--)
+            if (channels % groups == 0) return groups;
+        return 1;
+    }
+
     private ILayer<T> CreateSpatialAttention(int channels, int level)
     {
         int res = ResolutionAtLevel(level);
@@ -1221,9 +1721,25 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
         return LazyMHA(_numFrames, channels, _numHeads, new IdentityActivation<T>());
     }
 
-    private ILayer<T> CreateCrossAttention(int channels)
+    private ILayer<T> CreateCrossAttention(int channels, int level)
     {
-        return LazyMHA(_clipTokenLength, channels, _numHeads, new IdentityActivation<T>());
+        int resolution = ResolutionAtLevel(level);
+        return new CrossAttentionLayer<T>(
+            queryDim: channels,
+            contextDim: _contextDim,
+            headCount: _numHeads,
+            sequenceLength: resolution * resolution);
+    }
+
+    private ILayer<T> CreateVideoTransformer(
+        int channels, int level, bool onlyCrossAttention)
+    {
+        return new VideoTransformer3DLayer<T>(
+            channels,
+            _contextDim,
+            _numHeads,
+            ResolutionAtLevel(level),
+            onlyCrossAttention);
     }
 
     private ILayer<T> CreateDownsample(int channels, int level)
@@ -1262,7 +1778,6 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
 
     #region Parameter Management
 
-
     /// <summary>
     /// Enumerates every layer in the EXACT order used by <see cref="GetParameters"/> /
     /// <see cref="SetParameters"/> (input conv, time-embed MLPs, image-cond projection,
@@ -1274,25 +1789,28 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
     /// </summary>
     private IEnumerable<ILayer<T>?> EnumerateLayersInParameterOrder()
     {
-        yield return _inputConv;
-        yield return _timeEmbedMlp1;
-        yield return _timeEmbedMlp2;
-        yield return _imageCondProjection;
+        var layers = new List<ILayer<T>?>
+        {
+            _inputConv,
+            _timeEmbedMlp1,
+            _timeEmbedMlp2,
+            _imageCondProjection,
+            _classEmbedding
+        };
 
         foreach (var block in _encoderBlocks)
-            foreach (var layer in BlockLayersInParameterOrder(block))
-                yield return layer;
+            layers.AddRange(BlockLayersInParameterOrder(block));
         foreach (var block in _middleBlocks)
-            foreach (var layer in BlockLayersInParameterOrder(block))
-                yield return layer;
+            layers.AddRange(BlockLayersInParameterOrder(block));
         foreach (var block in _decoderBlocks)
-            foreach (var layer in BlockLayersInParameterOrder(block))
-                yield return layer;
+            layers.AddRange(BlockLayersInParameterOrder(block));
 
-        yield return _outputConv;
+        layers.Add(_outputNorm);
+        layers.Add(_outputConv);
+        return layers;
     }
 
-    // Must match AddBlockParameters / SetBlockParameters component order exactly.
+    // This is the single canonical component order for values and gradients.
     private static IEnumerable<ILayer<T>?> BlockLayersInParameterOrder(VideoBlock block)
     {
         yield return block.SpatialResBlock;
@@ -1305,6 +1823,28 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
         yield return block.Upsample;
     }
 
+    private IReadOnlyList<ILayer<T>> BuildTemporalTrainingLayers()
+    {
+        var layers = new List<ILayer<T>>();
+        var seen = new HashSet<ILayer<T>>(AiDotNet.Helpers.TensorReferenceComparer<ILayer<T>>.Instance);
+
+        foreach (var block in _encoderBlocks.Concat(_middleBlocks).Concat(_decoderBlocks))
+        {
+            Add(block.TemporalResBlock);
+            Add(block.TemporalAttention);
+            if (block.SpatialAttention is VideoTransformer3DLayer<T> transformer)
+                foreach (var temporalLayer in transformer.TemporalTrainingLayers)
+                    Add(temporalLayer);
+        }
+
+        return layers.AsReadOnly();
+
+        void Add(ILayer<T>? layer)
+        {
+            if (layer is not null && seen.Add(layer)) layers.Add(layer);
+        }
+    }
+
     private void AddLayerParameters(List<T> parameters, ILayer<T>? layer)
     {
         if (layer == null) return;
@@ -1315,40 +1855,45 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
         }
     }
 
-    private void AddBlockParameters(List<T> parameters, VideoBlock block)
+    /// <inheritdoc />
+    public override Vector<T> GetParameters()
     {
-        AddLayerParameters(parameters, block.SpatialResBlock);
-        AddLayerParameters(parameters, block.TimeCondProjection);
-        AddLayerParameters(parameters, block.TemporalResBlock);
-        AddLayerParameters(parameters, block.SpatialAttention);
-        AddLayerParameters(parameters, block.TemporalAttention);
-        AddLayerParameters(parameters, block.CrossAttention);
-        AddLayerParameters(parameters, block.Downsample);
-        AddLayerParameters(parameters, block.Upsample);
+        var parameters = new List<T>();
+        foreach (var layer in EnumerateLayersInParameterOrder())
+            AddLayerParameters(parameters, layer);
+        return new Vector<T>(parameters.ToArray());
     }
 
-    private void SetLayerParameters(ILayer<T>? layer, Vector<T> parameters, ref int index)
+    /// <inheritdoc />
+    public override void SetParameters(Vector<T> parameters)
     {
-        if (layer == null) return;
-        var layerParams = layer.GetParameters();
-        var newParams = new Vector<T>(layerParams.Length);
-        for (int i = 0; i < layerParams.Length && index < parameters.Length; i++)
+        if (parameters is null) throw new ArgumentNullException(nameof(parameters));
+
+        var layers = EnumerateLayersInParameterOrder()
+            .Where(layer => layer is not null)
+            .Cast<ILayer<T>>()
+            .ToArray();
+        var lengths = new int[layers.Length];
+        long expected = 0;
+        for (int i = 0; i < layers.Length; i++)
         {
-            newParams[i] = parameters[index++];
+            lengths[i] = layers[i].GetParameters().Length;
+            expected = checked(expected + lengths[i]);
         }
-        layer.SetParameters(newParams);
-    }
 
-    private void SetBlockParameters(VideoBlock block, Vector<T> parameters, ref int index)
-    {
-        SetLayerParameters(block.SpatialResBlock, parameters, ref index);
-        SetLayerParameters(block.TimeCondProjection, parameters, ref index);
-        SetLayerParameters(block.TemporalResBlock, parameters, ref index);
-        SetLayerParameters(block.SpatialAttention, parameters, ref index);
-        SetLayerParameters(block.TemporalAttention, parameters, ref index);
-        SetLayerParameters(block.CrossAttention, parameters, ref index);
-        SetLayerParameters(block.Downsample, parameters, ref index);
-        SetLayerParameters(block.Upsample, parameters, ref index);
+        if (expected != parameters.Length)
+            throw new ArgumentException(
+                $"Expected {expected} parameters, got {parameters.Length}.", nameof(parameters));
+
+        int offset = 0;
+        for (int layerIndex = 0; layerIndex < layers.Length; layerIndex++)
+        {
+            int length = lengths[layerIndex];
+            var layerParameters = new Vector<T>(length);
+            for (int i = 0; i < length; i++)
+                layerParameters[i] = parameters[offset++];
+            layers[layerIndex].SetParameters(layerParameters);
+        }
     }
 
     #endregion
@@ -1373,7 +1918,16 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
             _inputWidth,
             _numFrames,
             _clipTokenLength,
-            LossFunction);
+            LossFunction,
+            seed: null,
+            imageConditionChannels: _imageConditionChannels,
+            concatenateImageCondition: _concatenateImageCondition,
+            numClassEmbeddings: _numClassEmbeddings,
+            architectureProfile: _architectureProfile);
+
+        bool sourceUsedVideo = _lazyShapeResolvedWithVideo;
+        bool sourceUsedTextConditioning = _lazyShapeResolvedWithTextConditioning;
+        bool sourceUsedImageConditioning = _lazyShapeResolvedWithImageConditioning;
 
         // Resolve the SOURCE's lazy layers so each source layer reports its real
         // parameter shape below. The source's resolving forward packs its OWN
@@ -1384,7 +1938,10 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
         // tensors. This preserves layer-owned caches and avoids relying on SetParameters to infer
         // a lazy tensor's shape from a flat length (which is ambiguous for grouped/deconvolutional
         // kernels and caused output-divergent clones).
-        clone.TriggerLazyShapeResolution();
+        clone.TriggerLazyShapeResolution(
+            sourceUsedVideo,
+            sourceUsedTextConditioning,
+            sourceUsedImageConditioning);
         using (var srcEnum = EnumerateLayersInParameterOrder().GetEnumerator())
         using (var cloneEnum = clone.EnumerateLayersInParameterOrder().GetEnumerator())
         {
@@ -1409,8 +1966,19 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
     /// <see cref="SetParameters"/> copies weights across. Mirrors
     /// UNetNoisePredictor.TriggerLazyShapeResolution.
     /// </summary>
-    internal void TriggerLazyShapeResolution()
+    internal void TriggerLazyShapeResolution(
+        bool includeVideo = false,
+        bool includeTextConditioning = false,
+        bool includeImageConditioning = false)
     {
+        if (_lazyShapeResolved
+            && (!includeVideo || _lazyShapeResolvedWithVideo)
+            && (!includeTextConditioning || _lazyShapeResolvedWithTextConditioning)
+            && (!includeImageConditioning || _lazyShapeResolvedWithImageConditioning))
+        {
+            return;
+        }
+
         // Mirror the model's REAL Predict path exactly: a 4D image-mode forward
         // with no conditioning. LatentDiffusionModelBase.Predict drives the
         // denoising loop with a 4D latent [B, LatentChannels, H, W] and calls
@@ -1431,8 +1999,43 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
         int side = 1 << System.Math.Max(0, levels - 1);
         int sideH = System.Math.Min(_inputHeight, side);
         int sideW = System.Math.Min(_inputWidth, side);
-        var dummy = new Tensor<T>(new[] { 1, _inputChannels, sideH, sideW });
-        _ = PredictNoise(dummy, timestep: 0, conditioning: null);
+        int frames = includeVideo ? System.Math.Max(1, _numFrames) : 1;
+        int[] sampleShape = includeVideo
+            ? [1, _inputChannels, frames, sideH, sideW]
+            : [1, _inputChannels, sideH, sideW];
+        var dummy = new Tensor<T>(sampleShape);
+        Tensor<T>? textConditioning = includeTextConditioning
+            ? new Tensor<T>([1, System.Math.Max(1, _clipTokenLength), _contextDim])
+            : null;
+
+        if (includeImageConditioning)
+        {
+            if (!_supportsImageConditioning)
+                throw new InvalidOperationException(
+                    "Cannot resolve an image-conditioning path on a predictor that does not support it.");
+
+            int[] conditionShape = includeVideo
+                ? [1, _imageConditionChannels, frames, sideH, sideW]
+                : [1, _imageConditionChannels, sideH, sideW];
+            var condition = new Tensor<T>(conditionShape);
+            if (includeVideo)
+            {
+                _ = PredictNoiseWithVideoCondition(
+                    dummy,
+                    timestep: 0,
+                    condition,
+                    textConditioning,
+                    noiseLevel: _classEmbedding is null ? null : 0);
+            }
+            else
+            {
+                _ = PredictNoiseWithImageCondition(
+                    dummy, timestep: 0, condition, textConditioning);
+            }
+            return;
+        }
+
+        _ = PredictNoise(dummy, timestep: 0, conditioning: textConditioning);
     }
 
     /// <inheritdoc />
@@ -1452,17 +2055,8 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
     protected override Vector<T> GetParameterGradients()
     {
         var gradients = new List<T>();
-
-        AddLayerGradients(gradients, _inputConv);
-        AddLayerGradients(gradients, _timeEmbedMlp1);
-        AddLayerGradients(gradients, _timeEmbedMlp2);
-        AddLayerGradients(gradients, _imageCondProjection);
-
-        foreach (var block in _encoderBlocks) AddBlockGradients(gradients, block);
-        foreach (var block in _middleBlocks) AddBlockGradients(gradients, block);
-        foreach (var block in _decoderBlocks) AddBlockGradients(gradients, block);
-
-        AddLayerGradients(gradients, _outputConv);
+        foreach (var layer in EnumerateLayersInParameterOrder())
+            AddLayerGradients(gradients, layer);
 
         return new Vector<T>(gradients.ToArray());
     }
@@ -1472,18 +2066,6 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
         if (layer == null) return;
         var g = layer.GetParameterGradients();
         for (int i = 0; i < g.Length; i++) gradients.Add(g[i]);
-    }
-
-    private void AddBlockGradients(List<T> gradients, VideoBlock block)
-    {
-        AddLayerGradients(gradients, block.SpatialResBlock);
-        AddLayerGradients(gradients, block.TimeCondProjection);
-        AddLayerGradients(gradients, block.TemporalResBlock);
-        AddLayerGradients(gradients, block.SpatialAttention);
-        AddLayerGradients(gradients, block.TemporalAttention);
-        AddLayerGradients(gradients, block.CrossAttention);
-        AddLayerGradients(gradients, block.Downsample);
-        AddLayerGradients(gradients, block.Upsample);
     }
 
     #endregion
@@ -1500,6 +2082,8 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
         public ILayer<T>? CrossAttention { get; set; }
         public ILayer<T>? Downsample { get; set; }
         public ILayer<T>? Upsample { get; set; }
+        public bool CaptureSkipAfter { get; set; }
+        public bool ConsumesSkip { get; set; }
 
         /// <summary>
         /// FiLM conditioning projection: timeEmbedDim → channels * 2 (scale + shift).

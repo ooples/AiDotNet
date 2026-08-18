@@ -72,13 +72,18 @@ public partial class TransformerEncoderBlock<T> : LayerBase<T>, IShapeContract
     // rewritten attention implementation (FlashAttentionLayer, CachedMultiHeadAttention,
     // PagedCachedMultiHeadAttention) via ReplaceAttention. All members used below
     // (Forward/ParameterCount/Get-SetParameters/gradients/state) are LayerBase<T> surface.
+    [SubLayerInput("1, _hiddenSize")]
     private LayerBase<T> _attention;
+    [SubLayerInput("_hiddenSize")]
     private readonly LayerNormalizationLayer<T> _norm1;
     // Widened from DenseLayer<T> (same rationale as _attention) so the inference
     // optimizer / LoRA configuration can swap in wrapped implementations
     // (QuantizedDenseLayer, StandardLoRAAdapter) via ReplaceFfnUp/ReplaceFfnDown.
+    [SubLayerInput("_hiddenSize")]
     private LayerBase<T> _ffnUp;
+    [SubLayerInput("_ffnDim")]
     private LayerBase<T> _ffnDown;
+    [SubLayerInput("_hiddenSize")]
     private readonly LayerNormalizationLayer<T> _norm2;
     private readonly DropoutLayer<T>? _attnDropout;
     private readonly DropoutLayer<T>? _ffnDropout;

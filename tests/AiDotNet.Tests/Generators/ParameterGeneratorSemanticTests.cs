@@ -165,6 +165,27 @@ public partial class CacheLayer<T> : AiDotNet.NeuralNetworks.Layers.LayerBase<T>
     }
 
     [Fact]
+    public async Task LayerGenerator_MaterializesCountableDeclarationsForOptimizerDiscovery()
+    {
+        await Task.Yield();
+        const string source = @"
+using AiDotNet.Attributes;
+[AutoParameters]
+public partial class ChannelPinnedLayer<T> : AiDotNet.NeuralNetworks.Layers.LayerBase<T>
+{
+    private int _channels = 4;
+    [TrainableParameter(Shape = ""_channels, 3"")]
+    private AiDotNet.Tensors.LinearAlgebra.Tensor<T> _weights = new();
+}";
+
+        string generated = Run(new AiDotNet.Generators.TrainableParameterGenerator(), source);
+        Assert.Contains(
+            "OwnParameterReadiness == AiDotNet.Models.Parameters.ParameterReadiness.ShapeResolvedUnmaterialized",
+            generated,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task LayerGenerator_ProvesMigratedStatelessLayerIsParameterFree()
     {
         await Task.Yield();

@@ -1690,47 +1690,27 @@ public partial class UnobservedComponentsModel<T, TInput, TOutput> : TimeSeriesM
     }
 
     /// <summary>
-    /// Generates small random variations for the irregular component forecast.
+    /// Returns the conditional-mean forecast of the irregular component.
     /// </summary>
     /// <param name="horizon">The number of time steps to forecast.</param>
     /// <returns>A vector containing the forecasted irregular values.</returns>
     /// <remarks>
     /// <para>
-    /// This method creates small random variations based on the historical irregular component,
-    /// with decreasing variance over time.
+    /// The irregular component is zero-mean observation noise. A point forecast therefore uses
+    /// its conditional expectation, zero. Probabilistic sample paths belong in an explicit
+    /// simulation API with caller-controlled random state; injecting secure randomness here made
+    /// repeated predictions and serialized clones disagree for identical inputs.
     /// </para>
     /// <para>
     /// <b>For Beginners:</b>
-    /// This method adds small random fluctuations to your forecast to represent the unpredictable
-    /// noise that exists in any real-world data. The randomness is calibrated to match the level
-    /// of randomness in your historical data, and it decreases for points further in the future
-    /// (since the forecast shouldn't be dominated by unpredictable elements).
+    /// Unpredictable noise has no directional contribution to the best single forecast, so this
+    /// method contributes zeros. Prediction intervals or simulated futures can still use the
+    /// fitted irregular variance through a dedicated stochastic API.
     /// </para>
     /// </remarks>
     private Vector<T> ForecastIrregular(int horizon)
     {
-        Vector<T> irregularForecast = new Vector<T>(horizon);
-
-        // Calculate the standard deviation of the historical irregular component
-        T irregularStdDev = _irregular.StandardDeviation();
-
-        // Create a random number generator
-        Random random = RandomHelper.CreateSecureRandom();
-
-        // Damping factor to reduce irregular component over time
-        T dampingFactor = NumOps.FromDouble(0.9);
-
-        // Generate irregular component forecasts with decreasing variance
-        for (int i = 0; i < horizon; i++)
-        {
-            // Calculate damped standard deviation
-            T dampedStdDev = NumOps.Multiply(irregularStdDev, NumOps.Power(dampingFactor, NumOps.FromDouble(i)));
-
-            // Generate random value with appropriate standard deviation
-            irregularForecast[i] = NumOps.Multiply(dampedStdDev, NumOps.FromDouble(random.NextGaussian()));
-        }
-
-        return irregularForecast;
+        return new Vector<T>(horizon);
     }
 
     /// <summary>
