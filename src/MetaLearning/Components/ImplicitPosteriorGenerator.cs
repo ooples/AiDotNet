@@ -62,6 +62,7 @@ public class ImplicitPosteriorGenerator<T>
     // Flat lambda layout, in this order: W1, b1, W2, b2, W3, b3.
     private readonly int _w1, _b1, _w2, _b2, _w3, _b3;
 
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T> _lambda;
 
     /// <summary>Gets the dimension of the generated parameter vector.</summary>

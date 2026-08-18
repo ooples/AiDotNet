@@ -136,11 +136,13 @@ public partial class GraphGenerationModel<T> : GraphModelLayoutBase<T>
     /// <summary>
     /// Encoder weights for mean projection.
     /// </summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _meanWeights;
 
     /// <summary>
     /// Encoder weights for log-variance projection.
     /// </summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _logVarWeights;
 
     /// <summary>
@@ -870,6 +872,7 @@ public partial class GraphGenerationModel<T> : GraphModelLayoutBase<T>
         return Decode(mean);
     }
 
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T>? _autoAdjacencyMatrix;
 
     private Tensor<T> EnsureAdjacencyMatrix(int numNodes)

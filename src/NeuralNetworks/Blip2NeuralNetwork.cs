@@ -173,21 +173,25 @@ public partial class Blip2NeuralNetwork<T> : MultimodalModelLayoutBase<T>, IBlip
     /// <summary>
     /// Learnable query tokens for Q-Former.
     /// </summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T>? _queryTokens;
 
     /// <summary>
     /// Vision CLS token.
     /// </summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T>? _visionClsToken;
 
     /// <summary>
     /// Vision positional embeddings.
     /// </summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T>? _visionPositionalEmbeddings;
 
     /// <summary>
     /// Query positional embeddings.
     /// </summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T>? _queryPositionalEmbeddings;
 
     /// <summary>

@@ -232,6 +232,7 @@ public partial class SCiForest<T> : AnomalyDetectorBase<T>
         private readonly int _nFeatures;
         private readonly double _sparsity;
         private readonly Random _random;
+        [AiDotNet.Attributes.TrainableParameter]
         private Vector<T>? _sparseWeights;
         private T _threshold;
         private SCiTree? _left;

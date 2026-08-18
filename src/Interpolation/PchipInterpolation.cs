@@ -32,6 +32,7 @@ public class PchipInterpolation<T> : IInterpolation<T>
     /// <summary>
     /// The calculated slopes at each data point.
     /// </summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private readonly Vector<T> _slopes;
 
     /// <summary>

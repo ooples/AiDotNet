@@ -70,6 +70,7 @@ public partial class PACOHAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
     private Vector<T> _priorMean;
 
     /// <summary>Prior log-variance (meta-learned). Per-parameter log(σ²).</summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T> _priorLogVar;
 
     private readonly int _paramDim;

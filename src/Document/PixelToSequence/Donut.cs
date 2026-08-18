@@ -107,7 +107,9 @@ public partial class Donut<T> : DocumentNeuralNetworkBase<T>, IOCRModel<T>, IDoc
     private int ImageWidth { get; set; }
 
     // Learnable tokens
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T>? _tokenEmbeddings;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T>? _decoderPositionEmbeddings;
 
     // Gradient storage

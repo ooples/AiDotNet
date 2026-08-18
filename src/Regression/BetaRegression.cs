@@ -87,6 +87,7 @@ public partial class BetaRegression<T> : AsyncDecisionTreeRegressionBase<T>
     /// <summary>
     /// Coefficients for the precision (φ) model (if variable precision).
     /// </summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T>? _precisionCoefficients;
 
     /// <summary>

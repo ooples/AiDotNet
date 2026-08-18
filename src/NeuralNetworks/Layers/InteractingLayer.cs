@@ -69,10 +69,15 @@ public partial class InteractingLayer<T> : LayerBase<T>, IShapeContract
     private Tensor<T>? _residualWeights;  // [embeddingDim, embeddingDim] if needed
 
     // Gradients
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _queryWeightsGrad;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _keyWeightsGrad;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _valueWeightsGrad;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _outputWeightsGrad;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T>? _residualWeightsGrad;
 
     // Cached values

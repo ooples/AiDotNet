@@ -69,6 +69,7 @@ public partial class ZeroInflatedRegression<T> : AsyncDecisionTreeRegressionBase
     /// <summary>
     /// Coefficients for the count model (λ).
     /// </summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T>? _countCoefficients;
 
     /// <summary>
@@ -79,6 +80,7 @@ public partial class ZeroInflatedRegression<T> : AsyncDecisionTreeRegressionBase
     /// <summary>
     /// Coefficients for the zero-inflation model (π).
     /// </summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T>? _zeroCoefficients;
 
     /// <summary>

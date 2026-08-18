@@ -87,6 +87,7 @@ public partial class DVoRAAdapter<T> : LoRAAdapterBase<T>
     /// It is NEVER trained - it remains frozen at its random initialization values.
     /// This is the VeRA component of DVoRA.
     /// </remarks>
+    [AiDotNet.Attributes.TrainableParameter]
     private static Matrix<T>? _sharedMatrixA;
 
     /// <summary>
@@ -97,6 +98,7 @@ public partial class DVoRAAdapter<T> : LoRAAdapterBase<T>
     /// It is NEVER trained - it remains frozen at its random initialization values.
     /// This is the VeRA component of DVoRA.
     /// </remarks>
+    [AiDotNet.Attributes.TrainableParameter]
     private static Matrix<T>? _sharedMatrixB;
 
     /// <summary>

@@ -66,6 +66,7 @@ public abstract class TradingEnvironment<T> : IEnvironment<T>
     private Random _random;
     private int _currentStep;
     private int _episodeStep;
+    [AiDotNet.Attributes.TrainableParameter]
     protected Vector<T> _positions;
     protected T _cash;
     protected T _portfolioValue;

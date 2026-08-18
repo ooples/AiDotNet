@@ -49,7 +49,9 @@ public class LEOModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetadat
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
     private readonly IFullModel<T, TInput, TOutput> _featureEncoder;
+    [AiDotNet.Attributes.TrainableParameter]
     private readonly Vector<T> _classifierParams;
+    [AiDotNet.Attributes.TrainableParameter]
     private readonly Vector<T> _latentCode;
     private readonly LEOOptions<T, TInput, TOutput> _options;
 

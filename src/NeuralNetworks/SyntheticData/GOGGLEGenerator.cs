@@ -97,6 +97,7 @@ public partial class GOGGLEGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
     // Tensor so it participates in autodiff alongside the encoder/decoder
     // weights — gradients of the ELBO + sparsity (γ‖A‖₁) + DAG penalty
     // h(A) = tr((A⊙A)^d) - d (Zheng et al. 2018) flow through it.
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T>? _adjacency;
 
     // GNN encoder layers (auxiliary, not user-overridable)

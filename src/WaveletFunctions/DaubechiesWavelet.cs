@@ -48,11 +48,13 @@ public class DaubechiesWavelet<T> : WaveletFunctionBase<T>
     /// <summary>
     /// The scaling function coefficients of the Daubechies wavelet.
     /// </summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private readonly Vector<T> _scalingCoefficients;
 
     /// <summary>
     /// The wavelet function coefficients of the Daubechies wavelet.
     /// </summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private readonly Vector<T> _waveletCoefficients;
 
     /// <summary>

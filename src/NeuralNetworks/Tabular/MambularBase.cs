@@ -48,6 +48,7 @@ public abstract class MambularBase<T> : IParameterSource<T>
     private readonly Random _random = RandomHelper.CreateSecureRandom();
 
     // Feature embeddings
+    [AiDotNet.Attributes.TrainableParameter]
     private readonly Tensor<T> _numericalEmbeddings;
     private readonly Tensor<T>[]? _categoricalEmbeddings;
 

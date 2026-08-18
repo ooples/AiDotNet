@@ -107,6 +107,7 @@ public partial class AutoformerModel<T> : TimeSeriesModelBase<T>, ISupportsLossF
     private readonly int _movingAvgKernel;
 
     // Input embedding
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _inputProjection;      // [embeddingDim, 1]
     [Buffer]
     private Tensor<T> _positionalEncoding;   // [maxLen, embeddingDim]
@@ -120,12 +121,17 @@ public partial class AutoformerModel<T> : TimeSeriesModelBase<T>, ISupportsLossF
 
     // Decoder components
     private readonly List<AutoformerDecoderLayer<T>> _decoderLayers;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _decoderSeasonalInit;  // [forecastHorizon, embeddingDim]
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _decoderTrendInit;     // [forecastHorizon, embeddingDim]
 
     // Output projections
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _seasonalProjection;   // [1, embeddingDim]
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _trendProjection;      // [1, embeddingDim]
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _outputBias;           // [forecastHorizon]
 
     // Normalization statistics computed during training (zero-mean / unit-variance of the
@@ -1046,21 +1052,33 @@ internal partial class AutoformerEncoderLayer<T> : NeuralNetworks.Layers.LayerBa
     private readonly double _dropoutRate;
 
     // Auto-correlation parameters
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _queryProj;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _keyProj;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _valueProj;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _outputProj;
 
     // Feed-forward parameters
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _ff1Weight;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _ff1Bias;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _ff2Weight;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _ff2Bias;
 
     // Layer normalization parameters
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _layerNorm1Gamma;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _layerNorm1Beta;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _layerNorm2Gamma;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _layerNorm2Beta;
 
     public override bool SupportsTraining => true;
@@ -1218,15 +1236,23 @@ internal partial class AutoformerDecoderLayer<T> : NeuralNetworks.Layers.LayerBa
     private readonly double _dropoutRate;
 
     // Self auto-correlation parameters
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _selfQueryProj;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _selfKeyProj;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _selfValueProj;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _selfOutputProj;
 
     // Cross auto-correlation parameters
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _crossQueryProj;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _crossKeyProj;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _crossValueProj;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _crossOutputProj;
 
     // Feed-forward parameters
@@ -1240,7 +1266,9 @@ internal partial class AutoformerDecoderLayer<T> : NeuralNetworks.Layers.LayerBa
     private Tensor<T> _layerNorm1Beta;
     private Tensor<T> _layerNorm2Gamma;
     private Tensor<T> _layerNorm2Beta;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _layerNorm3Gamma;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _layerNorm3Beta;
 
     public override bool SupportsTraining => true;

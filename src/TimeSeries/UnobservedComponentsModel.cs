@@ -178,6 +178,7 @@ public partial class UnobservedComponentsModel<T, TInput, TOutput> : TimeSeriesM
     /// rules that tell the model how each component should normally behave over time
     /// if no new information is observed.
     /// </remarks>
+    [AiDotNet.Attributes.TrainableParameter]
     private Matrix<T> _stateTransition;
 
     /// <summary>
@@ -203,6 +204,7 @@ public partial class UnobservedComponentsModel<T, TInput, TOutput> : TimeSeriesM
     /// the components, making it more responsive to new data but potentially
     /// less smooth.
     /// </remarks>
+    [AiDotNet.Attributes.TrainableParameter]
     private Matrix<T> _processNoise;
 
     /// <summary>

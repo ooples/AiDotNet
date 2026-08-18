@@ -90,12 +90,14 @@ public partial class AudioVisualCorrespondenceNetwork<T> : MultimodalModelLayout
     private List<ILayer<T>>? _audioEncoderLayers;
     private ILayer<T>? _audioInputProjection;
     private ILayer<T>? _audioOutputProjection;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T>? _audioPositionalEmbedding;
 
     // Visual encoder components
     private List<ILayer<T>>? _visualEncoderLayers;
     private ILayer<T>? _visualInputProjection;
     private ILayer<T>? _visualOutputProjection;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T>? _visualPositionalEmbedding;
 
     // Cross-modal attention for localization

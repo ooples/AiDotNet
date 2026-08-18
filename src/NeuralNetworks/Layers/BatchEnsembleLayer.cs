@@ -101,9 +101,13 @@ public partial class BatchEnsembleLayer<T> : LayerBase<T>, IShapeContract
     private Tensor<T> _sVectors;     // Shape: [numMembers, outputDim]
 
     // Gradients
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T>? _weightsGrad;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T>? _biasGrad;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T>? _rVectorsGrad;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T>? _sVectorsGrad;
 
     // Cache for backward pass

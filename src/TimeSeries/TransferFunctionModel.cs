@@ -57,21 +57,25 @@ public partial class TransferFunctionModel<T> : TimeSeriesModelBase<T>
     /// <summary>
     /// Autoregressive (AR) parameters that capture the dependency on past values of the output series.
     /// </summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T> _arParameters;
 
     /// <summary>
     /// Moving Average (MA) parameters that capture the dependency on past error terms.
     /// </summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T> _maParameters;
 
     /// <summary>
     /// Parameters that capture the effect of input variables at different lags.
     /// </summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T> _inputLags;
 
     /// <summary>
     /// Parameters that capture the effect of output variables at different lags.
     /// </summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T> _outputLags;
 
     /// <summary>

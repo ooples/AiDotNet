@@ -106,6 +106,7 @@ public partial class FEATAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
     /// <summary>
     /// Parameters for the set-to-set transformer that adapts prototypes.
     /// </summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T> _transformerParams = new Vector<T>(0);
 
     /// <inheritdoc/>

@@ -135,6 +135,7 @@ public partial class OccupancyNetworkDecoder<T> : LayerBase<T>, IShapeContract
 
     // Constant "1" input that drives the learnable latent-code generator. Cached
     // so each forward reuses the same buffer instead of allocating.
+    [AiDotNet.Attributes.TrainableParameter]
     private readonly Tensor<T> _one;
 
     // Learnable latent code c (auto-decoder): ones[1,1] → DenseLayer → c[1, latentDim].

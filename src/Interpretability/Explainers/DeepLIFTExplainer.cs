@@ -48,6 +48,7 @@ public class DeepLIFTExplainer<T> : ILocalExplainer<T, DeepLIFTExplanation<T>>, 
     private readonly Func<Vector<T>, Vector<T>, Vector<T>>? _computeMultipliers;
     private readonly InputGradientHelper<T>? _gradientHelper;
     private readonly int _numFeatures;
+    [AiDotNet.Attributes.TrainableParameter]
     private readonly Vector<T>? _baseline;
     private readonly string[]? _featureNames;
     private readonly DeepLIFTRule _rule;

@@ -90,6 +90,7 @@ public partial class InterventionAnalysisModel<T> : TimeSeriesModelBase<T>
     /// and uses each past time period.
     /// </para>
     /// </remarks>
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T> _arParameters;
 
     /// <summary>
@@ -112,6 +113,7 @@ public partial class InterventionAnalysisModel<T> : TimeSeriesModelBase<T>
     /// adjusts based on each past prediction error.
     /// </para>
     /// </remarks>
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T> _maParameters;
 
     /// <summary>

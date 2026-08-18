@@ -230,6 +230,7 @@ public partial class ExtendedIsolationForest<T> : AnomalyDetectorBase<T>
         private readonly int _extensionLevel;
         private readonly Random _random;
         private readonly INumericOperations<T> _numOps;
+        [AiDotNet.Attributes.TrainableParameter]
         private Vector<T>? _normal;
 
         private T _intercept;

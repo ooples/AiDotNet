@@ -86,6 +86,7 @@ public partial class PrependCLSTokenLayer<T> : LayerBase<T>, IShapeContract
 
     // Trainable CLS token — shape [1, embedDim]. Held by reference so the
     // gradient tape can track parameter identity.
+    [AiDotNet.Attributes.TrainableParameter]
     private  Tensor<T> _cls;
 
     /// <summary>Creates a CLS-token prepender for embedDim-wide inputs.</summary>

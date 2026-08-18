@@ -98,7 +98,9 @@ public partial class GatedLinearAttentionLayer<T> : LayerBase<T>, IShapeContract
 
     // Fixed (non-trainable) unit-gamma / zero-beta for the residual-block output LayerNorm.
     // Allocated once and reused so the hot forward path doesn't re-allocate them per step.
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _residualNormGamma;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _residualNormBeta;
     private const double ResidualNormEpsilon = 1e-5;
 

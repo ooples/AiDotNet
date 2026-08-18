@@ -80,7 +80,9 @@ public partial class TrOCR<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
     private readonly List<ILayer<T>> _decoderLayers = [];
 
     // Learnable embeddings
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T>? _decoderPositionEmbeddings;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T>? _decoderWordEmbeddings;
 
     // Cached outputs

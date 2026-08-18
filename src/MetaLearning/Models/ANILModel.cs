@@ -50,7 +50,9 @@ namespace AiDotNet.MetaLearning.Models;
 public class ANILModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetadata<T>>
 {
     private readonly IFullModel<T, TInput, TOutput> _featureExtractor;
+    [AiDotNet.Attributes.TrainableParameter]
     private readonly Vector<T> _headWeights;
+    [AiDotNet.Attributes.TrainableParameter]
     private readonly Vector<T>? _headBias;
     private readonly ANILOptions<T, TInput, TOutput> _options;
 

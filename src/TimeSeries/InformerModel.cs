@@ -1095,6 +1095,7 @@ internal partial class InformerEncoderLayerTensor<T> : NeuralNetworks.Layers.Lay
     private readonly int _sparsityFactor;
 
     // Multi-head attention weights (Tensor-based)
+    [AiDotNet.Attributes.TrainableParameter]
     private  Tensor<T> _queryProj;
     internal Tensor<T> GetQueryProjection() => _queryProj;
     internal Tensor<T> GetKeyProjection() => _keyProj;
@@ -1108,20 +1109,31 @@ internal partial class InformerEncoderLayerTensor<T> : NeuralNetworks.Layers.Lay
     internal Tensor<T> GetLayerNorm1Beta() => _layerNorm1Beta;
     internal Tensor<T> GetLayerNorm2Gamma() => _layerNorm2Gamma;
     internal Tensor<T> GetLayerNorm2Beta() => _layerNorm2Beta;
+    [AiDotNet.Attributes.TrainableParameter]
     private  Tensor<T> _keyProj;
+    [AiDotNet.Attributes.TrainableParameter]
     private  Tensor<T> _valueProj;
+    [AiDotNet.Attributes.TrainableParameter]
     private  Tensor<T> _outputProj;
 
     // Feed-forward network (Tensor-based)
+    [AiDotNet.Attributes.TrainableParameter]
     private  Tensor<T> _ffn1;
+    [AiDotNet.Attributes.TrainableParameter]
     private  Tensor<T> _ffn1Bias;
+    [AiDotNet.Attributes.TrainableParameter]
     private  Tensor<T> _ffn2;
+    [AiDotNet.Attributes.TrainableParameter]
     private  Tensor<T> _ffn2Bias;
 
     // Layer normalization parameters (Tensor-based)
+    [AiDotNet.Attributes.TrainableParameter]
     private  Tensor<T> _layerNorm1Gamma;
+    [AiDotNet.Attributes.TrainableParameter]
     private  Tensor<T> _layerNorm1Beta;
+    [AiDotNet.Attributes.TrainableParameter]
     private  Tensor<T> _layerNorm2Gamma;
+    [AiDotNet.Attributes.TrainableParameter]
     private  Tensor<T> _layerNorm2Beta;
 
     public override bool SupportsTraining => true;
@@ -1321,7 +1333,9 @@ internal partial class DistillingConvTensor<T> : NeuralNetworks.Layers.LayerBase
     private readonly int _embeddingDim;
     private readonly int _distillingFactor;
 
+    [AiDotNet.Attributes.TrainableParameter]
     private  Tensor<T> _convWeights;  // [embeddingDim, 3] for kernel size 3
+    [AiDotNet.Attributes.TrainableParameter]
     private  Tensor<T> _convBias;
 
     // Tape accessors so the IEngine forward can run the distilling conv/pool as tracked ops
@@ -1459,15 +1473,23 @@ internal partial class InformerDecoderLayerTensor<T> : NeuralNetworks.Layers.Lay
     private readonly int _headDim;
 
     // Self-attention weights
+    [AiDotNet.Attributes.TrainableParameter]
     private  Tensor<T> _selfQueryProj;
+    [AiDotNet.Attributes.TrainableParameter]
     private  Tensor<T> _selfKeyProj;
+    [AiDotNet.Attributes.TrainableParameter]
     private  Tensor<T> _selfValueProj;
+    [AiDotNet.Attributes.TrainableParameter]
     private  Tensor<T> _selfOutputProj;
 
     // Cross-attention weights
+    [AiDotNet.Attributes.TrainableParameter]
     private  Tensor<T> _crossQueryProj;
+    [AiDotNet.Attributes.TrainableParameter]
     private  Tensor<T> _crossKeyProj;
+    [AiDotNet.Attributes.TrainableParameter]
     private  Tensor<T> _crossValueProj;
+    [AiDotNet.Attributes.TrainableParameter]
     private  Tensor<T> _crossOutputProj;
 
     // FFN
@@ -1481,7 +1503,9 @@ internal partial class InformerDecoderLayerTensor<T> : NeuralNetworks.Layers.Lay
     private  Tensor<T> _layerNorm1Beta;
     private  Tensor<T> _layerNorm2Gamma;
     private  Tensor<T> _layerNorm2Beta;
+    [AiDotNet.Attributes.TrainableParameter]
     private  Tensor<T> _layerNorm3Gamma;
+    [AiDotNet.Attributes.TrainableParameter]
     private  Tensor<T> _layerNorm3Beta;
     internal Tensor<T> GetSelfQueryProjection() => _selfQueryProj;
     internal Tensor<T> GetSelfKeyProjection() => _selfKeyProj;

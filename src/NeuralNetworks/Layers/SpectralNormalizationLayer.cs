@@ -147,7 +147,9 @@ public partial class SpectralNormalizationLayer<T> : LayerBase<T>, IShapeContrac
     /// <summary>
     /// GPU-resident power iteration vectors.
     /// </summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T>? _uGpu;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T>? _vGpu;
 
     /// <summary>

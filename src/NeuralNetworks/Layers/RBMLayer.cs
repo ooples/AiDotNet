@@ -303,6 +303,7 @@ public partial class RBMLayer<T> : LayerBase<T>, IShapeContract
     /// how the RBM updates its weights to improve future reconstructions.
     /// </para>
     /// </remarks>
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T>? _reconstructedVisible;
 
     /// <summary>
@@ -324,6 +325,7 @@ public partial class RBMLayer<T> : LayerBase<T>, IShapeContract
     /// the RBM learn to distinguish real patterns from ones it incorrectly imagines.
     /// </para>
     /// </remarks>
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T>? _reconstructedHidden;
 
     /// <summary>

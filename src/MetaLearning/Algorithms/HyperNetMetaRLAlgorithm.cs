@@ -61,12 +61,15 @@ public partial class HyperNetMetaRLAlgorithm<T, TInput, TOutput> : MetaLearnerBa
     private const int MaxCompressedDim = 128;
 
     /// <summary>Task encoder: compressedDim → embDim.</summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T> _encoderParams;
 
     /// <summary>Hypernetwork layer 1: embDim → hiddenDim.</summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T> _hyperLayer1;
 
     /// <summary>Hypernetwork layer 2: hiddenDim → compressedDim.</summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T> _hyperLayer2;
 
     /// <summary>SPSA learning rate multiplier for auxiliary parameter updates.</summary>

@@ -41,6 +41,7 @@ public partial class PiecewiseLinearEncodingLayer<T> : LayerBase<T>, IShapeContr
 
     // Learnable bin boundaries for each feature
     private Tensor<T> _binBoundaries;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _binBoundaryGradients;
 
     // Cached values for backward pass

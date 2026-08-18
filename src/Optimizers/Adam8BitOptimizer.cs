@@ -105,21 +105,25 @@ public partial class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimi
     /// Span-optimized <see cref="Vector{T}"/> over <c>byte</c>; backed by
     /// span-aware memory the engine can address without extra copies.
     /// </summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<byte>? _mQuantized;
 
     /// <summary>
     /// Quantized second moment vector (moving average of squared gradients).
     /// </summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<byte>? _vQuantized;
 
     /// <summary>
     /// Scaling factors for first moment quantization blocks.
     /// </summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<double>? _mScales;
 
     /// <summary>
     /// Scaling factors for second moment quantization blocks.
     /// </summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<double>? _vScales;
 
     /// <summary>

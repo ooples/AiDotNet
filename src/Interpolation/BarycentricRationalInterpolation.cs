@@ -36,6 +36,7 @@ public class BarycentricRationalInterpolation<T> : IInterpolation<T>
     /// values between points. They're calculated once when you create the interpolation object and then
     /// used for all interpolation calculations.
     /// </remarks>
+    [AiDotNet.Attributes.TrainableParameter]
     private readonly Vector<T> _weights;
 
     /// <summary>

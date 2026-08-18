@@ -47,6 +47,7 @@ namespace AiDotNet.MetaLearning.Algorithms;
 public partial class NPAlgorithm<T, TInput, TOutput> : NeuralProcessBase<T, TInput, TOutput>
 {
     private readonly NPOptions<T, TInput, TOutput> _npOptions;
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T> _latentEncoderParams;
 
     /// <inheritdoc/>

@@ -59,7 +59,9 @@ public class MLPProjector<T> : IProjectorHead<T>
     // BatchNorm 1
     private Tensor<T> _gamma1;
     private Tensor<T> _beta1;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _runningMean1;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _runningVar1;
     [Scratch]
     private Tensor<T>? _gradGamma1;
@@ -77,7 +79,9 @@ public class MLPProjector<T> : IProjectorHead<T>
     // BatchNorm 2 (optional)
     private Tensor<T>? _gamma2;
     private Tensor<T>? _beta2;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T>? _runningMean2;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T>? _runningVar2;
     [Scratch]
     private Tensor<T>? _gradGamma2;

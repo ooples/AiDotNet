@@ -94,6 +94,7 @@ public partial class ReLoRAAdapter<T> : LoRAAdapterBase<T>
     /// This is how we prevent forgetting - all previous learning is saved here.
     /// </para>
     /// </remarks>
+    [AiDotNet.Attributes.TrainableParameter]
     private Matrix<T> _accumulatedWeight;
 
     /// <summary>

@@ -151,6 +151,7 @@ public partial class EchoStateNetwork<T> : SequenceModelLayoutBase<T>
     /// it's what allows the network to "remember" past inputs when processing new ones.
     /// </para>
     /// </remarks>
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T> _reservoirState;
 
     /// <summary>
@@ -344,26 +345,31 @@ public partial class EchoStateNetwork<T> : SequenceModelLayoutBase<T>
     /// <summary>
     /// The weight matrix for input-to-reservoir connections.
     /// </summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private Matrix<T> _inputWeights;
 
     /// <summary>
     /// The weight matrix for reservoir-to-reservoir connections.
     /// </summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private Matrix<T> _reservoirWeights;
 
     /// <summary>
     /// The weight matrix for reservoir-to-output connections.
     /// </summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _outputWeights;
 
     /// <summary>
     /// The bias vector for the reservoir.
     /// </summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T> _reservoirBias;
 
     /// <summary>
     /// The bias vector for the output layer.
     /// </summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T> _outputBias;
 
     /// <summary>

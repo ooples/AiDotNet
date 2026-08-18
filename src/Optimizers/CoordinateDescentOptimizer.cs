@@ -47,6 +47,7 @@ public partial class CoordinateDescentOptimizer<T, TInput, TOutput> : GradientBa
     /// <summary>
     /// Vector of previous update values for each coordinate (variable) in the optimization problem.
     /// </summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T> _previousUpdate;
 
     /// <summary>

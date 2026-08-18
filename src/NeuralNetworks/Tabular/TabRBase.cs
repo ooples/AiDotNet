@@ -64,7 +64,9 @@ public abstract class TabRBase<T> : IParameterSource<T>
     private readonly LayerNormalizationLayer<T>? _encoderNorm;
 
     // Retrieval index (stores training sample embeddings)
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T>? _indexEmbeddings;       // [numTrainSamples, embeddingDim]
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T>? _indexFeatures;         // [numTrainSamples, numFeatures]
     private int _numIndexedSamples;
 

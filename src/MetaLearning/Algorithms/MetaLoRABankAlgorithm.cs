@@ -69,12 +69,14 @@ public partial class MetaLoRABankAlgorithm<T, TInput, TOutput> : MetaLearnerBase
     /// Bank of LoRA modules. Each module is a low-rank basis vector in parameter space
     /// (length = rank * paramDim). Module k's basis vectors start at k * rank * paramDim.
     /// </summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T> _moduleBank;
 
     /// <summary>
     /// Gating network parameters: maps task embeddings to module scores.
     /// Linear: embeddingDim → bankSize (weights + bias).
     /// </summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T> _gatingParams;
 
     private readonly int _paramDim;

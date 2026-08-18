@@ -89,7 +89,9 @@ public partial class Gpt4VisionNeuralNetwork<T> : MultimodalModelLayoutBase<T>, 
 
     // Vision encoder layers (ViT)
     private readonly List<ILayer<T>> _visionEncoderLayers = [];
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T>? _visionClsToken;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T>? _visionPositionalEmbeddings;
     private ILayer<T>? _visionPatchEmbedding;
     private ILayer<T>? _visionLayerNorm;
@@ -100,6 +102,7 @@ public partial class Gpt4VisionNeuralNetwork<T> : MultimodalModelLayoutBase<T>, 
 
     // Language Model (Transformer Decoder)
     private readonly List<ILayer<T>> _languageModelLayers = [];
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T>? _textPositionalEmbeddings;
     private ILayer<T>? _tokenEmbedding;
     private ILayer<T>? _lmHead;

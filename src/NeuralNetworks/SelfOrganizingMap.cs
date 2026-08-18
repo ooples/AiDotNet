@@ -55,6 +55,7 @@ public partial class SelfOrganizingMap<T> : VectorModelLayoutBase<T>
     /// The neuron codebook: shape [numNeurons, inputDimension]. Row i is the prototype vector of
     /// neuron i (row-major over the [mapHeight, mapWidth] grid, i = y * mapWidth + x).
     /// </summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _weights;
 
     // Cached fixed-shape ones tensors reused by ComputeSquaredDistances / UpdateWeights. Their shapes

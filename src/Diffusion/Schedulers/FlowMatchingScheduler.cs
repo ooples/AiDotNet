@@ -59,6 +59,7 @@ public sealed class FlowMatchingScheduler<T> : NoiseSchedulerBase<T>
     /// <remarks>
     /// Maps integer timesteps to continuous t in [0, 1] where t=0 is clean and t=1 is noise.
     /// </remarks>
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T> _timeValues;
 
     /// <summary>

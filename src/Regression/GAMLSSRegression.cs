@@ -82,16 +82,19 @@ public partial class GAMLSSRegression<T> : AsyncDecisionTreeRegressionBase<T>
     /// <summary>
     /// Coefficients for the location parameter model.
     /// </summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T>? _locationCoefficients;
 
     /// <summary>
     /// Coefficients for the scale parameter model.
     /// </summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T>? _scaleCoefficients;
 
     /// <summary>
     /// Coefficients for the shape parameter model (if applicable).
     /// </summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T>? _shapeCoefficients;
 
     /// <summary>

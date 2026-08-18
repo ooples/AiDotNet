@@ -81,6 +81,7 @@ public partial class AdaLoRAAdapter<T> : LoRAAdapterBase<T>
     /// We keep the high-scoring components and prune the low-scoring ones.
     /// </para>
     /// </remarks>
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T> _importanceScores;
 
     /// <summary>

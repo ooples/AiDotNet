@@ -362,23 +362,35 @@ internal partial class LSTMEncoderTensor<T> : NeuralNetworks.Layers.LayerBase<T>
     private readonly int _hiddenSize;
 
     // LSTM weights (Tensor-based)
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _weights;      // [hiddenSize, inputSize]
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _bias;         // [hiddenSize]
 
     // Mean projection weights
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _meanWeights;  // [latentDim, hiddenSize]
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _meanBias;     // [latentDim]
 
     // Log variance projection weights
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _logVarWeights; // [latentDim, hiddenSize]
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _logVarBias;    // [latentDim]
 
     // Gradient accumulators
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _weightsGrad;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _biasGrad;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _meanWeightsGrad;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _meanBiasGrad;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _logVarWeightsGrad;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _logVarBiasGrad;
 
     public override bool SupportsTraining => true;
@@ -593,13 +605,17 @@ internal partial class LSTMDecoderTensor<T> : NeuralNetworks.Layers.LayerBase<T>
     private Tensor<T> _bias;         // [hiddenSize]
 
     // Output projection weights
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _outputWeights; // [outputSize, hiddenSize]
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _outputBias;    // [outputSize]
 
     // Gradient accumulators
     private Tensor<T> _weightsGrad;
     private Tensor<T> _biasGrad;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _outputWeightsGrad;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _outputBiasGrad;
 
     [Scratch]

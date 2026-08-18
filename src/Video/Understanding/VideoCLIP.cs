@@ -116,7 +116,9 @@ public partial class VideoCLIP<T> : NeuralNetworkBase<T>
 
     // Text encoder components
     // Proper CLIP-style token embedding: embedding lookup table [vocab_size, hidden_dim]
+    [AiDotNet.Attributes.TrainableParameter]
     private readonly Tensor<T> _tokenEmbeddingTable;          // Embedding lookup table
+    [AiDotNet.Attributes.TrainableParameter]
     private readonly Tensor<T> _positionalEmbeddingTable;     // Learned positional embeddings
     private readonly List<ConvolutionalLayer<T>> _textTransformerQKV;      // QKV projections
     private readonly List<ConvolutionalLayer<T>> _textTransformerAttnProj; // Attention output

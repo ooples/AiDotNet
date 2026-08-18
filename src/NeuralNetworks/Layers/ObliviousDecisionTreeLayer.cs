@@ -85,8 +85,11 @@ public partial class ObliviousDecisionTreeLayer<T> : LayerBase<T>, IShapeContrac
     private Tensor<T> _leafValues;                // [numLeaves, outputDim]
 
     // Gradients
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _featureSelectionGrad;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _thresholdsGrad;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _leafValuesGrad;
 
     // Cached values

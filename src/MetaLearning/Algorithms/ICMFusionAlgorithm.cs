@@ -64,9 +64,11 @@ public partial class ICMFusionAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T,
     private const int MaxCompressedDim = 128;
 
     /// <summary>VAE encoder params: maps task vectors to (μ, log_σ²) in latent space.</summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T> _encoderParams;
 
     /// <summary>VAE decoder params: maps latent vectors back to parameter deltas.</summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T> _decoderParams;
 
     /// <summary>Stored latent codes from recent tasks for fusion (circular buffer).</summary>

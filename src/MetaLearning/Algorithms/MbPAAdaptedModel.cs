@@ -67,6 +67,7 @@ public partial class MbPAAdaptedModel<T, TInput, TOutput> : MetaLearningModelBas
 
     private readonly MbPAEpisodicMemory<T> _memory;
     private readonly MbPAOptions<T, TInput, TOutput> _options;
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T> _trainedOutputParams;
 
     /// <summary>

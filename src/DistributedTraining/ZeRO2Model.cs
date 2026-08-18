@@ -64,6 +64,7 @@ namespace AiDotNet.DistributedTraining;
     [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 public partial class ZeRO2Model<T, TInput, TOutput> : ShardedModelBase<T, TInput, TOutput>
 {
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T>? _parameterDeltaShard;
     [AiDotNet.Attributes.FittedParameter]
     private Vector<T>? _computedGradients;

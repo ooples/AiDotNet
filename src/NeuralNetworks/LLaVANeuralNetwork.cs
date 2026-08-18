@@ -88,10 +88,13 @@ public partial class LLaVANeuralNetwork<T> : MultimodalModelLayoutBase<T>, ILLaV
     // tape-aware vision forward (PrependClsToken / AddPositionalEmbeddings), so gradients reach them and
     // the tape optimizer updates them. Kept as Tensor<T> (not Matrix<T>) precisely so the concat/add ops
     // treat them as tape leaves rather than copying detached values.
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T>? _visionClsToken;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T>? _visionPositionalEmbeddings;
     private ILayer<T>? _patchEmbedding;
     private ILayer<T>? _textTokenEmbedding;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T>? _textPositionalEmbeddings;
     private ILayer<T>? _outputProjection;
     private ILayer<T>? _groundingHead;

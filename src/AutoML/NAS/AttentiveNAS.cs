@@ -51,7 +51,9 @@ namespace AiDotNet.AutoML.NAS
         private readonly List<int> _elasticKernelSizes;
 
         // Attention module parameters
+        [AiDotNet.Attributes.TrainableParameter]
         private readonly Tensor<T> _attentionWeights;
+        [AiDotNet.Attributes.TrainableParameter]
         private readonly Matrix<T> _attentionGradients;
         private readonly int _attentionHiddenSize;
 

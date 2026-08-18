@@ -35,6 +35,7 @@ public partial class CMAESOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInpu
     /// <summary>
     /// The current population of candidate solutions.
     /// </summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private Matrix<T> _population;
 
     /// <summary>

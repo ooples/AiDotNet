@@ -235,6 +235,7 @@ public partial class SynapticPlasticityLayer<T> : LayerBase<T>, IShapeContract
     /// were active in the recent past.
     /// </para>
     /// </remarks>
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _presynapticTraces;
 
     /// <summary>
@@ -256,6 +257,7 @@ public partial class SynapticPlasticityLayer<T> : LayerBase<T>, IShapeContract
     /// input and output activity, which is crucial for spike-timing-dependent plasticity.
     /// </para>
     /// </remarks>
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _postsynapticTraces;
 
     /// <summary>
@@ -277,6 +279,7 @@ public partial class SynapticPlasticityLayer<T> : LayerBase<T>, IShapeContract
     /// version of how biological neurons generate electrical impulses when sufficiently activated.
     /// </para>
     /// </remarks>
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _presynapticSpikes;
 
     /// <summary>
@@ -298,6 +301,7 @@ public partial class SynapticPlasticityLayer<T> : LayerBase<T>, IShapeContract
     /// timing-dependent learning rules.
     /// </para>
     /// </remarks>
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _postsynapticSpikes;
 
     /// <summary>

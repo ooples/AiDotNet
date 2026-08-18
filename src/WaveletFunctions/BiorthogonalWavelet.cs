@@ -48,11 +48,13 @@ public class BiorthogonalWavelet<T> : WaveletFunctionBase<T>
     /// <summary>
     /// Coefficients used for the decomposition process.
     /// </summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private readonly Vector<T> _decompositionCoefficients;
 
     /// <summary>
     /// Coefficients used for the reconstruction process.
     /// </summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private readonly Vector<T> _reconstructionCoefficients;
 
     /// <summary>

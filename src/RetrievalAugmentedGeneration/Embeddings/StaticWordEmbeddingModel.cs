@@ -38,6 +38,7 @@ public class StaticWordEmbeddingModel<T> : EmbeddingModelBase<T>
 {
     private readonly Dictionary<string, Vector<T>> _wordVectors;
     private readonly int _dimension;
+    [AiDotNet.Attributes.TrainableParameter]
     private readonly Vector<T> _unknownVector;
     private readonly bool _ignoreUnknown;
 

@@ -113,6 +113,7 @@ public partial class VisionTransformer<T> : ImageClassifierModelLayoutBase<T>
     /// froze the cls token even though the public parameter surface still
     /// counted it as trainable.
     /// </summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _clsToken;
 
     /// <summary>
@@ -120,6 +121,7 @@ public partial class VisionTransformer<T> : ImageClassifierModelLayoutBase<T>
     /// Stored as Tensor&lt;T&gt; for the same gradient-flow reason as
     /// <see cref="_clsToken"/>.
     /// </summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _positionalEmbeddings;
 
     /// <summary>

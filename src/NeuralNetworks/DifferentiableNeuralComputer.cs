@@ -240,6 +240,7 @@ public partial class DifferentiableNeuralComputer<T> : SequenceModelLayoutBase<T
     /// valuable information it might need later.
     /// </para>
     /// </remarks>
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T> _usageFree;
 
     /// <summary>
@@ -263,6 +264,7 @@ public partial class DifferentiableNeuralComputer<T> : SequenceModelLayoutBase<T
     /// This focused writing allows the system to organize information in a way it can find later.
     /// </para>
     /// </remarks>
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T> _writeWeighting;
 
     /// <summary>
@@ -389,6 +391,7 @@ public partial class DifferentiableNeuralComputer<T> : SequenceModelLayoutBase<T
     // matrix is read/written by the legacy Serialize/Deserialize paths only.
     // _lastCombinedVector was a backward-pass cache for the manual matmul that
     // the new Layers-chain projection no longer needs.
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _outputWeights;
 #pragma warning disable CS0169
     [Scratch]

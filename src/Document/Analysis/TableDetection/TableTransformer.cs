@@ -86,6 +86,7 @@ public partial class TableTransformer<T> : DocumentNeuralNetworkBase<T>, ITableE
     private readonly List<ILayer<T>> _structureHead = [];
 
     // Learnable object queries
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T>? _objectQueries;
 
     // Task mode - tracks whether we're doing detection or structure recognition

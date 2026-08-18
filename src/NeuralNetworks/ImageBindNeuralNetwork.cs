@@ -86,45 +86,55 @@ public partial class ImageBindNeuralNetwork<T> : MultimodalModelLayoutBase<T>, I
 
     // Image encoder layers
     private readonly List<ILayer<T>> _imageEncoderLayers = [];
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T>? _imageClsToken;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T>? _imagePositionalEmbeddings;
     private ILayer<T>? _imagePatchEmbedding;
     private ILayer<T>? _imageProjection;
 
     // Text encoder layers
     private readonly List<ILayer<T>> _textEncoderLayers = [];
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T>? _textPositionalEmbeddings;
     private ILayer<T>? _textTokenEmbedding;
     private ILayer<T>? _textProjection;
 
     // Audio encoder layers (uses spectrogram input)
     private readonly List<ILayer<T>> _audioEncoderLayers = [];
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T>? _audioPositionalEmbeddings;
     private ILayer<T>? _audioConv;
     private ILayer<T>? _audioProjection;
 
     // Thermal encoder (similar to image encoder)
     private readonly List<ILayer<T>> _thermalEncoderLayers = [];
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T>? _thermalClsToken;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T>? _thermalPositionalEmbeddings;
     private ILayer<T>? _thermalPatchEmbedding;
     private ILayer<T>? _thermalProjection;
 
     // Depth encoder
     private readonly List<ILayer<T>> _depthEncoderLayers = [];
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T>? _depthClsToken;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T>? _depthPositionalEmbeddings;
     private ILayer<T>? _depthPatchEmbedding;
     private ILayer<T>? _depthProjection;
 
     // IMU encoder
     private readonly List<ILayer<T>> _imuEncoderLayers = [];
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T>? _imuPositionalEmbeddings;
     private ILayer<T>? _imuEmbedding;
     private ILayer<T>? _imuProjection;
 
     // Video encoder (temporal aggregation over frames)
     private readonly List<ILayer<T>> _videoTemporalLayers = [];
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T>? _videoTemporalPositionalEmbeddings;
     private ILayer<T>? _videoProjection;
 

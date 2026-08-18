@@ -100,6 +100,7 @@ public partial class FewTUREAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, T
     private readonly FewTUREOptions<T, TInput, TOutput> _fewTUREOptions;
 
     /// <summary>Parameters for the uncertainty estimation module.</summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T> _uncertaintyParams = new Vector<T>(0);
 
     /// <inheritdoc/>

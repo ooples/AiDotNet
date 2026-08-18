@@ -119,6 +119,7 @@ public partial class DeepHit<T> : AsyncDecisionTreeRegressionBase<T>
     /// <summary>
     /// Time bin edges (discretization of time axis).
     /// </summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T>? _timeBinEdges;
 
     /// <summary>

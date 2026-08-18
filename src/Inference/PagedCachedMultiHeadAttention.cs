@@ -60,10 +60,15 @@ public partial class PagedCachedMultiHeadAttention<T> : LayerBase<T>, IContextAw
     private RotaryPositionalEncodingLayer<T>? _ropeLayer;
     private ALiBiPositionalBiasLayer<T>? _alibiLayer;
 
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _queryWeights;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _keyWeights;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _valueWeights;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _outputWeights;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _outputBias;
 
     [Scratch]

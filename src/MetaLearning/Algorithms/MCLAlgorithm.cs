@@ -100,6 +100,7 @@ public partial class MCLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
     private readonly MCLOptions<T, TInput, TOutput> _mclOptions;
 
     /// <summary>Parameters for the contrastive projection head.</summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T> _projectionParams = new Vector<T>(0);
 
     /// <inheritdoc/>

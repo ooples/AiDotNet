@@ -56,6 +56,7 @@ public partial class VeRAAdapter<T> : LoRAAdapterBase<T>
     /// This matrix is initialized once globally and shared across all VeRA layers.
     /// It is NEVER trained - it remains frozen at its random initialization values.
     /// </remarks>
+    [AiDotNet.Attributes.TrainableParameter]
     private static Matrix<T>? _sharedMatrixA;
 
     /// <summary>
@@ -65,6 +66,7 @@ public partial class VeRAAdapter<T> : LoRAAdapterBase<T>
     /// This matrix is initialized once globally and shared across all VeRA layers.
     /// It is NEVER trained - it remains frozen at its random initialization values.
     /// </remarks>
+    [AiDotNet.Attributes.TrainableParameter]
     private static Matrix<T>? _sharedMatrixB;
 
     /// <summary>
@@ -80,6 +82,7 @@ public partial class VeRAAdapter<T> : LoRAAdapterBase<T>
     /// It is initialized to ones so VeRA has no effect initially.
     /// Reassigned with correct size in CreateLoRALayer() which is called by the base constructor.
     /// </remarks>
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _scalingVectorD = new Tensor<T>([0]);
 
     /// <summary>
@@ -90,6 +93,7 @@ public partial class VeRAAdapter<T> : LoRAAdapterBase<T>
     /// It is initialized to ones so VeRA has no effect initially.
     /// Reassigned with correct size in CreateLoRALayer() which is called by the base constructor.
     /// </remarks>
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _scalingVectorB = new Tensor<T>([0]);
 
     /// <summary>

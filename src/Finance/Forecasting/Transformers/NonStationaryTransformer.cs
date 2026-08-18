@@ -167,6 +167,7 @@ public partial class NonStationaryTransformer<T> : ForecastingModelBase<T>
     /// adjust attention weights based on the data's statistical properties.
     /// </para>
     /// </remarks>
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T>? _tau;
 
     /// <summary>
@@ -178,6 +179,7 @@ public partial class NonStationaryTransformer<T> : ForecastingModelBase<T>
     /// to better match the original data distribution.
     /// </para>
     /// </remarks>
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T>? _delta;
 
     #endregion

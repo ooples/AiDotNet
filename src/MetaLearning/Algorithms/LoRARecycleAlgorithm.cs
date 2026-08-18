@@ -82,6 +82,7 @@ public partial class LoRARecycleAlgorithm<T, TInput, TOutput> : MetaLearnerBase<
     /// Prototype encoder parameters: maps feature vectors to prototype space.
     /// Stored as a flat vector of length (paramDim * prototypeDim + prototypeDim).
     /// </summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T> _encoderParams;
 
     private const int MaxEncoderInputDim = 128;

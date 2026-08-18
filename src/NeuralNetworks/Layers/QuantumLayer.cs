@@ -78,6 +78,7 @@ public partial class QuantumLayer<T> : LayerBase<T>, IShapeContract
     /// <summary>Construction state, retained so the layer can be rebuilt exactly rather than inferred from its shape.</summary>
     private readonly int _inputSize;
     private readonly int _numQubits;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<Complex<T>> _quantumCircuit;
     [TrainableParameter(Role = PersistentTensorRole.Weights)]
 

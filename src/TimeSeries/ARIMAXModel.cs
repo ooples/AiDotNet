@@ -90,6 +90,7 @@ public partial class ARIMAXModel<T> : TimeSeriesModelBase<T>, IExogenousForecast
     /// model learn to adjust future predictions upward. They help the model correct systematic
     /// errors in its forecasts.
     /// </remarks>
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T> _maCoefficients;
 
     /// <summary>

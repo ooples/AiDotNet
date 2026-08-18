@@ -56,6 +56,7 @@ public partial class HippoMemoryCellLayer<T> : LayerBase<T>, IShapeContract
 
     // Fixed HiPPO operator. These are buffers, not trainable parameters.
     private readonly Tensor<T> _a;
+    [AiDotNet.Attributes.TrainableParameter]
     private readonly Tensor<T> _aTranspose;
     private readonly Tensor<T> _bRow;
 

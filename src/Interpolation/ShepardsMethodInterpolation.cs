@@ -32,6 +32,7 @@ public class ShepardsMethodInterpolation<T> : I2DInterpolation<T>
     /// <summary>
     /// The z-values (heights) at each data point.
     /// </summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private readonly Vector<T> _z;
 
     /// <summary>

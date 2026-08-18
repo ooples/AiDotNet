@@ -372,6 +372,7 @@ public class BasicStats<T>
         _deferredValues = inputs.Values;
     }
 
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T>? _deferredValues;
     private bool _fullStatsComputed;
 

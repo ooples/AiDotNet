@@ -13872,6 +13872,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// <summary>
     /// Indices of features considered sensitive for fairness analysis.
     /// </summary>
+    [AiDotNet.Attributes.TrainableParameter]
     protected Vector<int> _sensitiveFeatures;
 
     /// <summary>

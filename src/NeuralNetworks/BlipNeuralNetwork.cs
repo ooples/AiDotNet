@@ -148,21 +148,25 @@ public partial class BlipNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IBlipM
     /// <summary>
     /// Learnable CLS token for vision encoder.
     /// </summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T>? _visionClsToken;
 
     /// <summary>
     /// Learnable CLS token for text encoder.
     /// </summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T>? _textClsToken;
 
     /// <summary>
     /// Vision positional embeddings.
     /// </summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T>? _visionPositionalEmbeddings;
 
     /// <summary>
     /// Text positional embeddings.
     /// </summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T>? _textPositionalEmbeddings;
 
     /// <summary>

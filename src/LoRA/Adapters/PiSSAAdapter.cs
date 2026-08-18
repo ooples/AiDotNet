@@ -84,6 +84,7 @@ public partial class PiSSAAdapter<T> : LoRAAdapterBase<T>
     /// This is like keeping the background of a photo fixed while adjusting only the main subject.
     /// </para>
     /// </remarks>
+    [AiDotNet.Attributes.TrainableParameter]
     private Matrix<T>? _residualWeights;
 
     /// <summary>

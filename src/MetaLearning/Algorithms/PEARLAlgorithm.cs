@@ -66,9 +66,11 @@ public partial class PEARLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
     private const double SpsaLearningRateMultiplier = 0.1;
 
     /// <summary>Encoder parameters: maps compressed gradient → (μ, log_σ²) of size 2*latentDim.</summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T> _encoderParams;
 
     /// <summary>Projection matrix W_z: maps z (latentDim) → parameter delta (compressedDim).</summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T> _projectionParams;
 
     /// <inheritdoc/>

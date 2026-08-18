@@ -102,6 +102,7 @@ public partial class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprint
     // Trainable temperature parameter (stored in log space). Gradients flow
     // through the tape via Engine ops; the optimizer updates this alongside
     // the rest of the network.
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _logTemperature = null!;
 
     // Cached Hann window for the STFT preprocessing step. Built once on the

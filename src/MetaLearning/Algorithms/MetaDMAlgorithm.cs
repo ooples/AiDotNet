@@ -73,6 +73,7 @@ public partial class MetaDMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TI
     private readonly MetaDMOptions<T, TInput, TOutput> _algoOptions;
 
     /// <summary>Feature denoiser parameters for generating synthetic features.</summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T> _denoiserParams;
 
     /// <summary>Noise schedule.</summary>

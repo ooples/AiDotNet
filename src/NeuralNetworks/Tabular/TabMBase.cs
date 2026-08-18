@@ -61,7 +61,9 @@ public abstract class TabMBase<T>
     protected readonly int NumFeatures;
 
     // Feature embedding (optional)
+    [AiDotNet.Attributes.TrainableParameter]
     private readonly Tensor<T>? _featureEmbeddings;  // [numFeatures, embeddingDim]
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T>? _featureEmbeddingsGrad;
 
     // BatchEnsemble hidden layers

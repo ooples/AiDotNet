@@ -78,6 +78,7 @@ public partial class HopfieldNetwork<T> : VectorModelLayoutBase<T>
     /// These connection strengths are what allow the network to store and recall patterns.
     /// </para>
     /// </remarks>
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _weights;
 
     /// <summary>

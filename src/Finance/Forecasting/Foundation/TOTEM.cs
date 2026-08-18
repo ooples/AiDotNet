@@ -94,6 +94,7 @@ public partial class TOTEM<T> : TimeSeriesFoundationModelBase<T>
     private double _commitmentWeight;
 
     // VQ codebook: [numCodebooks x codebookSize x codebookDimension]
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T>? _codebooks;
     private T _lastCommitmentLoss;
 

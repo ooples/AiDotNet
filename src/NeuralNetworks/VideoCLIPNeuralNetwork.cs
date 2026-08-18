@@ -86,7 +86,9 @@ public partial class VideoCLIPNeuralNetwork<T> : MultimodalModelLayoutBase<T>, I
     private readonly List<ILayer<T>> _temporalEncoderLayers = [];
     private readonly List<ILayer<T>> _textEncoderLayers = [];
     private readonly List<ILayer<T>> _projectionLayers = [];
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T>? _visionClsToken;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T>? _visionPositionalEmbeddings;
     [Scratch]
     private Tensor<T>? _temporalPositionalEmbeddings;

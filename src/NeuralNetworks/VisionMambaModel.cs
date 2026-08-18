@@ -96,13 +96,19 @@ public partial class VisionMambaModel<T> : ImageClassifierModelLayoutBase<T>
     private readonly VisionScanPattern _scanPattern;
 
     // Patch embedding weights (model-level state, not in Layers)
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _patchProjectionWeights;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _patchProjectionBias;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _positionalEmbedding;
 
     // Final normalization and classification head
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _finalNormGamma;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _classifierWeights;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _classifierBias;
 
     /// <inheritdoc />

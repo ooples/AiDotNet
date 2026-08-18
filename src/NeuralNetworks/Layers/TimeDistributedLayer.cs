@@ -490,6 +490,7 @@ public partial class TimeDistributedLayer<T> : LayerBase<T>, IShapeContract
     /// through each time step and delegating to the inner layer's backward pass.
     /// </para>
     /// </remarks>
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T>? _accumulatedGradients;
 
     private static Tensor<T> SqueezeAxis(Tensor<T> tensor, int axis)

@@ -28,7 +28,9 @@ public class GaussianProcessFitDetector<T, TInput, TOutput> : FitDetectorBase<T,
     /// </remarks>
     private readonly GaussianProcessFitDetectorOptions _options;
 
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T> _meanPrediction;
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T> _variancePrediction;
     private T _averageUncertainty;
     private T _rmse;

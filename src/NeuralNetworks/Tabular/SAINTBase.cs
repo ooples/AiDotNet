@@ -46,6 +46,7 @@ public abstract class SAINTBase<T> : IParameterSource<T>
     // Feature embeddings
     private readonly FullyConnectedLayer<T> _numericalEmbedding;
     private readonly Tensor<T>[]? _categoricalEmbeddings;
+    [AiDotNet.Attributes.TrainableParameter]
     private readonly Tensor<T>? _columnEmbeddings;
 
     // Transformer layers (alternating column and row attention)

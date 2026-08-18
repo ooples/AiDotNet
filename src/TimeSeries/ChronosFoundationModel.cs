@@ -91,6 +91,7 @@ public partial class ChronosFoundationModel<T> : TimeSeriesModelBase<T>
     private double _binWidth;
 
     // Transformer components - now using Tensor<T>
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _tokenEmbeddings;      // [vocabularySize, embeddingDim]
     [Buffer]
     private Tensor<T> _positionalEncoding;   // [maxLen, embeddingDim]
@@ -99,7 +100,9 @@ public partial class ChronosFoundationModel<T> : TimeSeriesModelBase<T>
     private Tensor<T> _outputBias;           // [vocabularySize]
 
     // Layer normalization for final output
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _finalLayerNormGamma;  // [embeddingDim]
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _finalLayerNormBeta;   // [embeddingDim]
 
     // Pre-allocated gradient computation buffers (reused across gradient steps)
@@ -1053,21 +1056,33 @@ internal partial class ChronosTransformerLayerTensor<T> : NeuralNetworks.Layers.
     private int _headDim;
 
     // Self-attention weights - now using Tensor<T>
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _queryProj;     // [embeddingDim, embeddingDim]
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _keyProj;       // [embeddingDim, embeddingDim]
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _valueProj;     // [embeddingDim, embeddingDim]
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _outputProj;    // [embeddingDim, embeddingDim]
 
     // Feed-forward network
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _ffn1;          // [ffnDim, embeddingDim]
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _ffn1Bias;      // [ffnDim]
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _ffn2;          // [embeddingDim, ffnDim]
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _ffn2Bias;      // [embeddingDim]
 
     // Layer normalization parameters
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _layerNorm1Gamma;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _layerNorm1Beta;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _layerNorm2Gamma;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _layerNorm2Beta;
 
     // Forward pass cache for backpropagation

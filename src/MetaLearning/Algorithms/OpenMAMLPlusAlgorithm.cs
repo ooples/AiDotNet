@@ -76,9 +76,11 @@ public partial class OpenMAMLPlusAlgorithm<T, TInput, TOutput> : MetaLearnerBase
     private readonly int _paramDim;
 
     /// <summary>Meta-learned per-parameter learning rates (MAML++ style).</summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T> _perParamLR;
 
     /// <summary>Meta-learned novelty threshold (on prediction entropy).</summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T> _noveltyThreshold;
 
     /// <inheritdoc/>

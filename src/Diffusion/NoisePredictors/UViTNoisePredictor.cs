@@ -89,6 +89,7 @@ public partial class UViTNoisePredictor<T> : NoisePredictorBase<T>
     private DenseLayer<T> _outputProj;
 
     // Position embeddings
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T>? _posEmbed;
     [Scratch]
     private Tensor<T>? _lastInput;

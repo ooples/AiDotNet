@@ -67,6 +67,7 @@ public class GriffinLim<T>
     /// <summary>
     /// Window tensor for GPU operations.
     /// </summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private readonly Tensor<T>? _windowTensor;
 
     /// <summary>

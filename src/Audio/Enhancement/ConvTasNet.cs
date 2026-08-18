@@ -89,7 +89,9 @@ public partial class ConvTasNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T
     private readonly int _encoderDim;
     private readonly int _kernelSize;
     private readonly int _stride;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _encoderWeight;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _encoderBias;
 
     // Separator (TCN) parameters
@@ -104,10 +106,13 @@ public partial class ConvTasNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T
     private readonly List<TcnBlock> _tcnBlocks;
 
     // Decoder parameters
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _decoderWeight;
 
     // Mask estimation
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _maskWeight;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _maskBias;
 
     // Normalization layers

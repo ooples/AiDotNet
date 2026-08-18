@@ -51,10 +51,15 @@ public partial class CachedGroupedQueryAttention<T> : LayerBase<T>, IShapeContra
     private readonly bool _useCausalMask;
 
     // Projection weights (initialized in constructor, never reassigned)
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _queryWeights;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _keyWeights;  // Reduced: [embDim, numKVHeads * headDim]
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _valueWeights; // Reduced: [embDim, numKVHeads * headDim]
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _outputWeights;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _outputBias;
 
     // KV-Cache reference

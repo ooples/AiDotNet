@@ -36,6 +36,7 @@ public class BilinearInterpolation<T> : I2DInterpolation<T>
     /// If you're thinking of a temperature map, these would be the temperature readings
     /// at each measured location.
     /// </remarks>
+    [AiDotNet.Attributes.TrainableParameter]
     private readonly Matrix<T> _z;
 
     /// <summary>

@@ -38,6 +38,7 @@ public class ColumnEmbedding<T>
     private readonly bool _learnable;
 
     private Tensor<T> _embeddings;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _embeddingGradients;
 
     /// <summary>

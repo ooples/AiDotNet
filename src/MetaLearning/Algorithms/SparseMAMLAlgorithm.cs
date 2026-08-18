@@ -106,6 +106,7 @@ public partial class SparseMAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T
     /// Meta-learned per-parameter learning-rate multipliers, for the paper's "more expressive model
     /// where learning rates are meta-learned". Null unless that variant is enabled.
     /// </summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T>? _perParameterRates;
 
     /// <inheritdoc/>

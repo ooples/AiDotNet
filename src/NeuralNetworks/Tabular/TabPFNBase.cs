@@ -52,6 +52,7 @@ public abstract class TabPFNBase<T> : IParameterSource<T>
     // Input encoding
     private readonly FullyConnectedLayer<T> _featureEncoder;
     private readonly FullyConnectedLayer<T>[] _categoricalEncoders;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T>? _positionalEncoding;
 
     // Transformer backbone

@@ -94,9 +94,13 @@ public partial class LayoutLMv3<T> : DocumentNeuralNetworkBase<T>, ILayoutDetect
     private readonly List<ILayer<T>> _classificationLayers = [];
 
     // Learnable embeddings
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T>? _position1DEmbeddings;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T>? _position2DXEmbeddings;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T>? _position2DYEmbeddings;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T>? _segmentEmbeddings;
 
     // Gradient storage

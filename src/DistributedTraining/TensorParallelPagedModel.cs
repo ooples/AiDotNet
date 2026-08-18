@@ -90,7 +90,9 @@ internal sealed partial class TensorParallelPagedModel<T> : TokenLanguageModelLa
     private readonly double _scale;
 
     // Full (un-sharded) weights.
+    [AiDotNet.Attributes.TrainableParameter]
     private readonly Tensor<T> _embedding; // [vocab, embedDim]
+    [AiDotNet.Attributes.TrainableParameter]
     private readonly Tensor<T> _lmHead;    // [vocab, embedDim]
     private readonly TensorParallelLayerWeights<T>[] _layers;
 
@@ -102,6 +104,7 @@ internal sealed partial class TensorParallelPagedModel<T> : TokenLanguageModelLa
     // primitive equivalence tests), and the FFN uses the trained activation (else ReLU). This lets the sharded
     // model reproduce a real model's output token-for-token rather than a reference block.
     private readonly bool _useRmsNorm;
+    [AiDotNet.Attributes.TrainableParameter]
     private readonly Tensor<T>? _finalNormGamma;
     private readonly Func<double, double> _ffnActivation;
     private readonly double _rmsNormEpsilon;

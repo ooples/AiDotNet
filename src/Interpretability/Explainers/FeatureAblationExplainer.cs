@@ -43,6 +43,7 @@ public class FeatureAblationExplainer<T> : ILocalExplainer<T, FeatureAblationExp
 
     private readonly Func<Vector<T>, Vector<T>> _predictFunction;
     private readonly Func<Tensor<T>, Tensor<T>>? _tensorPredictFunction;
+    [AiDotNet.Attributes.TrainableParameter]
     private readonly Vector<T>? _baseline;
     private readonly int[][]? _featureGroups;
     private readonly string[]? _featureNames;

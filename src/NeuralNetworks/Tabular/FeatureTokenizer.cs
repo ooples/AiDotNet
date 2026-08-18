@@ -58,9 +58,12 @@ public class FeatureTokenizer<T>
     private Tensor<T> _clsToken;  // Shape: [1, embeddingDim]
 
     // Gradients
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T>? _numericalWeightsGrad;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T>? _numericalBiasGrad;
     private readonly List<Tensor<T>?> _categoricalEmbeddingsGrad;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T>? _clsTokenGrad;
 
     // Cache for backward pass

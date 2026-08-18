@@ -91,6 +91,7 @@ public class ShortTimeFourierTransform<T>
     /// <summary>
     /// Window function as a tensor (for IEngine operations).
     /// </summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T>? _windowTensor;
 
     /// <summary>

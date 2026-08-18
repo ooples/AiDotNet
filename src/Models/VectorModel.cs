@@ -971,6 +971,7 @@ public partial class VectorModel<T> : ModelBase<T, Matrix<T>, Vector<T>>, IInter
 #pragma warning disable CS0618
 
     protected readonly HashSet<InterpretationMethod> _enabledMethods = new();
+    [AiDotNet.Attributes.TrainableParameter]
     protected Vector<int>? _sensitiveFeatures;
     protected readonly List<FairnessMetric> _fairnessMetrics = new();
     [ExternalState]

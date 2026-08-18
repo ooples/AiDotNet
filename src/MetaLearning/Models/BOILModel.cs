@@ -53,8 +53,11 @@ public class BOILModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetada
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
     private readonly IFullModel<T, TInput, TOutput> _baseModel;
+    [AiDotNet.Attributes.TrainableParameter]
     private readonly Vector<T> _adaptedBodyParams;
+    [AiDotNet.Attributes.TrainableParameter]
     private readonly Vector<T> _headWeights;
+    [AiDotNet.Attributes.TrainableParameter]
     private readonly Vector<T>? _headBias;
     private readonly BOILOptions<T, TInput, TOutput> _options;
 

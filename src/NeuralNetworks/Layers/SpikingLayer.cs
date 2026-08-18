@@ -231,6 +231,7 @@ public partial class SpikingLayer<T> : LayerBase<T>, IShapeContract
     /// This helps the network gradually improve its performance on the given task.
     /// </para>
     /// </remarks>
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _weightGradients;
 
     /// <summary>
@@ -251,6 +252,7 @@ public partial class SpikingLayer<T> : LayerBase<T>, IShapeContract
     /// The network uses these gradients to update the biases after processing a batch of examples.
     /// </para>
     /// </remarks>
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _biasGradients;
 
     /// <summary>
@@ -377,6 +379,7 @@ public partial class SpikingLayer<T> : LayerBase<T>, IShapeContract
     /// This is only used when _neuronType is Izhikevich.
     /// </para>
     /// </remarks>
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T>? _recoveryVariable;
 
     /// <summary>

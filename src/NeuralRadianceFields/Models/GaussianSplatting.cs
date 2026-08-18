@@ -243,6 +243,7 @@ public partial class GaussianSplatting<T> : AiDotNet.NeuralNetworks.VectorModelL
         /// and the property below keeps every existing read and write in the renderer working
         /// unchanged.
         /// </remarks>
+        [AiDotNet.Attributes.TrainableParameter]
         private readonly Vector<T> _opacity = new(1);
 
         /// <summary>Opacity in logit space, stored in <see cref="OpacityStorage"/>.</summary>

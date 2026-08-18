@@ -35,6 +35,7 @@ public class MonotoneCubicInterpolation<T> : IInterpolation<T>
     /// at that exact point. These slopes are carefully calculated to make sure our curve remains
     /// smooth but doesn't create unwanted oscillations.
     /// </remarks>
+    [AiDotNet.Attributes.TrainableParameter]
     private readonly Vector<T> _m;
 
     /// <summary>

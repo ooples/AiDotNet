@@ -37,6 +37,7 @@ namespace AiDotNet.ReinforcementLearning.Policies.Exploration
         private readonly double _sigma;      // Volatility/noise scale
         private readonly double _mu;         // Long-term mean
         private readonly double _dt;         // Time step
+        [AiDotNet.Attributes.TrainableParameter]
         private Vector<T> _state;            // Current noise state
 
         /// <summary>
