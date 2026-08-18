@@ -1,4 +1,4 @@
-using AiDotNet.Helpers;
+﻿using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
@@ -79,6 +79,116 @@ public abstract class RegressionModelTestBase<T> : System.IDisposable
     }
 
     protected abstract IFullModel<T, Matrix<T>, Vector<T>> CreateModel();
+
+    /// <summary>
+    /// Converts a generated target into the domain this model accepts, then into <typeparamref name="T"/>.
+    /// </summary>
+    /// <param name="y">The continuous linear target this base class generates.</param>
+    /// <returns>The target actually passed to <c>Train</c>.</returns>
+    /// <remarks>
+    /// <para>
+    /// This harness generates one shape of target: an unrestricted continuous response. Most estimators
+    /// here accept that directly, and the default implementation passes it straight through.
+    /// </para>
+    /// <para>
+    /// Some do not. A classifier needs class labels, and Beta regression needs a proportion in (0,1);
+    /// handed a continuous unbounded target, the honest response is to reject it. Overriding this lets
+    /// such a model keep running EVERY structural invariant below -- output dimension, determinism,
+    /// cloning, serialization, metadata, collinear features -- on data it can actually be fitted to,
+    /// rather than opting out of them.
+    /// </para>
+    /// <para>
+    /// Only the mapping of the target changes; the features, the seeds and the assertions are untouched,
+    /// so a model that overrides this is held to the same contract as every other. Override it whenever
+    /// the model's response domain is narrower than "any real number", and say in the override which
+    /// domain it requires.
+    /// </para>
+    /// </remarks>
+    protected virtual Vector<T> ToTarget(Vector<double> y) => ToT(y);
+
+    /// <summary>
+    /// Thresholds a continuous target at its median, giving two balanced classes labelled 0 and 1.
+    /// </summary>
+    /// <param name="y">The continuous target.</param>
+    /// <returns>A binary target preserving the ordering of <paramref name="y"/>.</returns>
+    /// <remarks>
+    /// The median split keeps the classes balanced and keeps the label monotone in the original target,
+    /// so invariants that expect predictions to rise with a feature still mean what they meant before.
+    /// </remarks>
+    protected static Vector<double> ThresholdAtMedian(Vector<double> y)
+    {
+        var sorted = new double[y.Length];
+        for (int i = 0; i < y.Length; i++) sorted[i] = y[i];
+        Array.Sort(sorted);
+        double median = sorted[sorted.Length / 2];
+
+        var labels = new Vector<double>(y.Length);
+        for (int i = 0; i < y.Length; i++)
+        {
+            labels[i] = y[i] >= median ? 1.0 : 0.0;
+        }
+
+        return labels;
+    }
+
+    /// <summary>
+    /// Bins a continuous target into <paramref name="classCount"/> equal-width, ordered classes.
+    /// </summary>
+    /// <param name="y">The continuous target.</param>
+    /// <param name="classCount">How many classes to produce.</param>
+    /// <returns>A target holding class labels 0..classCount-1, monotone in <paramref name="y"/>.</returns>
+    protected static Vector<double> BinIntoClasses(Vector<double> y, int classCount)
+    {
+        double min = double.MaxValue;
+        double max = double.MinValue;
+        for (int i = 0; i < y.Length; i++)
+        {
+            if (y[i] < min) min = y[i];
+            if (y[i] > max) max = y[i];
+        }
+
+        double range = max - min;
+        if (range < 1e-10) range = 1.0;
+
+        var labels = new Vector<double>(y.Length);
+        for (int i = 0; i < y.Length; i++)
+        {
+            int bin = (int)((y[i] - min) / range * classCount);
+            labels[i] = Math.Max(0, Math.Min(classCount - 1, bin));
+        }
+
+        return labels;
+    }
+
+    /// <summary>
+    /// Squashes a continuous target into the open interval (0,1) with a logistic transform.
+    /// </summary>
+    /// <param name="y">The continuous target.</param>
+    /// <returns>A proportion strictly inside (0,1), monotone in <paramref name="y"/>.</returns>
+    /// <remarks>
+    /// Standardizing first and then applying the logistic function keeps the result strictly interior --
+    /// never exactly 0 or 1, where the Beta density is undefined -- and strictly increasing, so ordering
+    /// is preserved.
+    /// </remarks>
+    protected static Vector<double> ToProportion(Vector<double> y)
+    {
+        double mean = 0.0;
+        for (int i = 0; i < y.Length; i++) mean += y[i];
+        mean /= y.Length;
+
+        double variance = 0.0;
+        for (int i = 0; i < y.Length; i++) variance += (y[i] - mean) * (y[i] - mean);
+        double std = Math.Sqrt(variance / y.Length);
+        if (std < 1e-10) std = 1.0;
+
+        var proportions = new Vector<double>(y.Length);
+        for (int i = 0; i < y.Length; i++)
+        {
+            proportions[i] = 1.0 / (1.0 + Math.Exp(-(y[i] - mean) / std));
+        }
+
+        return proportions;
+    }
 
     /// <summary>
     /// True when the monotonic-response invariant applies to this model.
@@ -182,8 +292,8 @@ public abstract class RegressionModelTestBase<T> : System.IDisposable
         for (int i = 0; i < trainY2.Length; i++)
             shiftedY[i] = trainY2[i] + shift;
 
-        model1.Train(ToT(trainX1), ToT(trainY1));
-        model2.Train(ToT(trainX2), ToT(shiftedY));
+        model1.Train(ToT(trainX1), ToTarget(trainY1));
+        model2.Train(ToT(trainX2), ToTarget(shiftedY));
 
         var testX = ModelTestHelpers.GenerateLinearData(10, Features, ModelTestHelpers.CreateSeededRandom(99), noise: 0.0).X;
         var pred1 = ToD(model1.Predict(ToT(testX)));
@@ -225,8 +335,8 @@ public abstract class RegressionModelTestBase<T> : System.IDisposable
         for (int i = 0; i < trainY2.Length; i++)
             scaledY[i] = trainY2[i] * scale;
 
-        model1.Train(ToT(trainX1), ToT(trainY1));
-        model2.Train(ToT(trainX2), ToT(scaledY));
+        model1.Train(ToT(trainX1), ToTarget(trainY1));
+        model2.Train(ToT(trainX2), ToTarget(scaledY));
 
         var testX = ModelTestHelpers.GenerateLinearData(10, Features, ModelTestHelpers.CreateSeededRandom(99), noise: 0.0).X;
         var pred1 = ToD(model1.Predict(ToT(testX)));
@@ -264,7 +374,7 @@ public abstract class RegressionModelTestBase<T> : System.IDisposable
         var (trainX, trainY) = ModelTestHelpers.GenerateLinearData(TrainSamples, Features, rng, noise: 0.5);
         var (testX, testY) = ModelTestHelpers.GenerateLinearData(TestSamples, Features, rng, noise: 0.5);
 
-        model.Train(ToT(trainX), ToT(trainY));
+        model.Train(ToT(trainX), ToTarget(trainY));
         var trainPred = ToD(model.Predict(ToT(trainX)));
         var testPred = ToD(model.Predict(ToT(testX)));
 
@@ -304,8 +414,8 @@ public abstract class RegressionModelTestBase<T> : System.IDisposable
         var rngTest = ModelTestHelpers.CreateSeededRandom(99);
         var (testX, testY) = ModelTestHelpers.GenerateLinearData(50, Features, rngTest, noise: 0.1);
 
-        model1.Train(ToT(trainX1), ToT(trainY1));
-        model2.Train(ToT(trainX2), ToT(trainY2));
+        model1.Train(ToT(trainX1), ToTarget(trainY1));
+        model2.Train(ToT(trainX2), ToTarget(trainY2));
 
         var pred1 = ToD(model1.Predict(ToT(testX)));
         var pred2 = ToD(model2.Predict(ToT(testX)));
@@ -366,8 +476,8 @@ public abstract class RegressionModelTestBase<T> : System.IDisposable
             testX_noisy[i, Features] = rngNoise.NextDouble() * 100.0;
         }
 
-        model1.Train(ToT(trainX_real), ToT(trainY));
-        model2.Train(ToT(trainX_noisy), ToT(trainY));
+        model1.Train(ToT(trainX_real), ToTarget(trainY));
+        model2.Train(ToT(trainX_noisy), ToTarget(trainY));
 
         var pred1 = ToD(model1.Predict(ToT(testX_real)));
         var pred2 = ToD(model2.Predict(ToT(testX_noisy)));
@@ -402,7 +512,7 @@ public abstract class RegressionModelTestBase<T> : System.IDisposable
         int nFeatures = Math.Max(Features, 1);
         var (trainX, trainY) = ModelTestHelpers.GenerateLinearData(200, nFeatures, rng, noise: 0.01);
 
-        model.Train(ToT(trainX), ToT(trainY));
+        model.Train(ToT(trainX), ToTarget(trainY));
 
         // Create probe with x0 varying from -5 to 15, other features fixed at 5
         var probe = new Matrix<double>(5, nFeatures);
@@ -445,7 +555,7 @@ public abstract class RegressionModelTestBase<T> : System.IDisposable
         using var model = CreateModel();
         var (trainX, trainY) = ModelTestHelpers.GenerateLinearData(200, Features, rng, noise: 0.5);
 
-        model.Train(ToT(trainX), ToT(trainY));
+        model.Train(ToT(trainX), ToTarget(trainY));
         var predictions = ToD(model.Predict(ToT(trainX)));
 
         Assert.True(
@@ -487,7 +597,7 @@ public abstract class RegressionModelTestBase<T> : System.IDisposable
         int nFeatures = Math.Max(Features, 1);
         var (trainX, trainY) = ModelTestHelpers.GenerateLinearData(200, nFeatures, rng, noise: 0.01);
 
-        model.Train(ToT(trainX), ToT(trainY));
+        model.Train(ToT(trainX), ToTarget(trainY));
 
         // Probe: baseline at origin, then increase each feature independently
         int probeRows = 1 + nFeatures; // baseline + one per feature
@@ -571,8 +681,8 @@ public abstract class RegressionModelTestBase<T> : System.IDisposable
                 permutedX[i, j] = trainX[i, j]; // keep rest
         }
 
-        model1.Train(ToT(trainX), ToT(trainY));
-        model2.Train(ToT(permutedX), ToT(trainY));
+        model1.Train(ToT(trainX), ToTarget(trainY));
+        model2.Train(ToT(permutedX), ToTarget(trainY));
 
         // Test with a specific point
         var testOrig = new Matrix<double>(1, Features);
@@ -615,7 +725,7 @@ public abstract class RegressionModelTestBase<T> : System.IDisposable
         var (trainX, trainY) = ModelTestHelpers.GenerateLinearData(TrainSamples, Features, rng, noise: 0.1);
         var (testX, testY) = ModelTestHelpers.GenerateLinearData(TestSamples, Features, rng, noise: 0.1);
 
-        model.Train(ToT(trainX), ToT(trainY));
+        model.Train(ToT(trainX), ToTarget(trainY));
         var predictions = ToD(model.Predict(ToT(testX)));
 
         Assert.True(
@@ -642,7 +752,7 @@ public abstract class RegressionModelTestBase<T> : System.IDisposable
         var (trainX, trainY) = ModelTestHelpers.GenerateLinearData(TrainSamples, Features, rng);
         var (testX, _) = ModelTestHelpers.GenerateLinearData(TestSamples, Features, rng);
 
-        model.Train(ToT(trainX), ToT(trainY));
+        model.Train(ToT(trainX), ToTarget(trainY));
         var predictions = ToD(model.Predict(ToT(testX)));
 
         Assert.Equal(TestSamples, predictions.Length);
@@ -670,7 +780,7 @@ public abstract class RegressionModelTestBase<T> : System.IDisposable
         var (trainX, trainY) = ModelTestHelpers.GenerateLinearData(TrainSamples, Features, rng);
         var (testX, _) = ModelTestHelpers.GenerateLinearData(TestSamples, Features, rng);
 
-        model.Train(ToT(trainX), ToT(trainY));
+        model.Train(ToT(trainX), ToTarget(trainY));
         var pred1 = ToD(model.Predict(ToT(testX)));
         var pred2 = ToD(model.Predict(ToT(testX)));
 
@@ -692,7 +802,7 @@ public abstract class RegressionModelTestBase<T> : System.IDisposable
         using var model = CreateModel();
         var (trainX, trainY) = ModelTestHelpers.GenerateLinearData(TrainSamples, Features, rng);
 
-        model.Train(ToT(trainX), ToT(trainY));
+        model.Train(ToT(trainX), ToTarget(trainY));
 
         // Test with various sample counts
         foreach (int n in new[] { 1, 5, 50 })
@@ -717,7 +827,7 @@ public abstract class RegressionModelTestBase<T> : System.IDisposable
         var (trainX, trainY) = ModelTestHelpers.GenerateLinearData(TrainSamples, Features, rng);
         var (testX, _) = ModelTestHelpers.GenerateLinearData(TestSamples, Features, rng);
 
-        model.Train(ToT(trainX), ToT(trainY));
+        model.Train(ToT(trainX), ToTarget(trainY));
         var cloned = model.Clone();
 
         var pred1 = ToD(model.Predict(ToT(testX)));
@@ -740,7 +850,7 @@ public abstract class RegressionModelTestBase<T> : System.IDisposable
         using var model = CreateModel();
         var (trainX, trainY) = ModelTestHelpers.GenerateLinearData(TrainSamples, Features, rng);
 
-        model.Train(ToT(trainX), ToT(trainY));
+        model.Train(ToT(trainX), ToTarget(trainY));
         Assert.NotNull(model.GetModelMetadata());
     }
 
@@ -757,7 +867,7 @@ public abstract class RegressionModelTestBase<T> : System.IDisposable
         using var model = CreateModel();
         var (trainX, trainY) = ModelTestHelpers.GenerateLinearData(TrainSamples, Features, rng);
 
-        model.Train(ToT(trainX), ToT(trainY));
+        model.Train(ToT(trainX), ToTarget(trainY));
         if (model is not IParameterizable<T, Matrix<T>, Vector<T>> paramModel)
         {
             // Tree/ensemble models don't implement IParameterizable — skip
@@ -780,7 +890,7 @@ public abstract class RegressionModelTestBase<T> : System.IDisposable
         using var model = CreateModel();
         var (trainX, trainY) = ModelTestHelpers.GenerateLinearData(TrainSamples, Features, rng);
 
-        model.Train(ToT(trainX), ToT(trainY));
+        model.Train(ToT(trainX), ToTarget(trainY));
         if (model is not IFeatureAware featureAware)
         {
             // Tree/ensemble models don't implement IFeatureAware — skip
@@ -822,7 +932,7 @@ public abstract class RegressionModelTestBase<T> : System.IDisposable
             y[i] = constant;
         }
 
-        model.Train(ToT(x), ToT(y));
+        model.Train(ToT(x), ToTarget(y));
         var predictions = ToD(model.Predict(ToT(x)));
 
         Assert.True(
@@ -861,7 +971,7 @@ public abstract class RegressionModelTestBase<T> : System.IDisposable
             y[i] = val * 2.0 + 1.0;
         }
 
-        model.Train(ToT(x), ToT(y));
+        model.Train(ToT(x), ToTarget(y));
         var predictions = ToD(model.Predict(ToT(x)));
 
         for (int i = 0; i < predictions.Length; i++)
@@ -895,7 +1005,7 @@ public abstract class RegressionModelTestBase<T> : System.IDisposable
             y[i] = 3.0 * x[i, 0] + 1.0 + ModelTestHelpers.NextGaussian(rng) * 0.1;
         }
 
-        model.Train(ToT(x), ToT(y));
+        model.Train(ToT(x), ToTarget(y));
         var predictions = ToD(model.Predict(ToT(x)));
         Assert.Equal(n, predictions.Length);
 
@@ -917,7 +1027,7 @@ public abstract class RegressionModelTestBase<T> : System.IDisposable
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var (trainX, trainY) = ModelTestHelpers.GenerateLinearData(TrainSamples, Features, rng);
-        var loader = AiDotNet.Data.Loaders.DataLoaders.FromMatrixVector(ToT(trainX), ToT(trainY));
+        var loader = AiDotNet.Data.Loaders.DataLoaders.FromMatrixVector(ToT(trainX), ToTarget(trainY));
 
         var result = new AiDotNet.AiModelBuilder<T, Matrix<T>, Vector<T>>()
             .ConfigureDataLoader(loader)
@@ -939,7 +1049,7 @@ public abstract class RegressionModelTestBase<T> : System.IDisposable
         var rng = ModelTestHelpers.CreateSeededRandom();
         var (trainX, trainY) = ModelTestHelpers.GenerateLinearData(TrainSamples, Features, rng);
         var (testX, testY) = ModelTestHelpers.GenerateLinearData(TestSamples, Features, rng);
-        var loader = AiDotNet.Data.Loaders.DataLoaders.FromMatrixVector(ToT(trainX), ToT(trainY));
+        var loader = AiDotNet.Data.Loaders.DataLoaders.FromMatrixVector(ToT(trainX), ToTarget(trainY));
 
         var result = new AiDotNet.AiModelBuilder<T, Matrix<T>, Vector<T>>()
             .ConfigureDataLoader(loader)

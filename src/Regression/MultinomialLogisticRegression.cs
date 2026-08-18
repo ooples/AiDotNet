@@ -256,8 +256,34 @@ public partial class MultinomialLogisticRegression<T> : RegressionBase<T>
             }
         }
 
-        Coefficients = _coefficients.GetColumn(0);
-        Intercept = _coefficients.GetColumn(_coefficients.Columns - 1)[0];
+        // `_coefficients` is [class, feature] with the intercept in the last column, so a COLUMN is one
+        // feature across all classes and a ROW is one class across all features. GetColumn(0) therefore
+        // returned "feature 0's weight for each class" -- a vector as long as the number of CLASSES, being
+        // published as the per-feature coefficient vector. With four classes over three features it
+        // reported a coefficient for feature 3, and GetActiveFeatureIndices duly returned an index outside
+        // the input feature space.
+        //
+        // A multiclass softmax has no single coefficient per feature: it has one per (class, feature), and
+        // they are identified only up to a shift shared across classes. What the single-vector contract is
+        // used for here is feature ACTIVITY, so each entry is the mean absolute weight that feature
+        // carries across the classes -- zero exactly when no class uses the feature. Per-class values
+        // remain available through the model's own coefficient matrix.
+        int featureCount = _coefficients.Columns - 1;
+        var perFeature = new Vector<T>(featureCount);
+        for (int j = 0; j < featureCount; j++)
+        {
+            T total = NumOps.Zero;
+            for (int c = 0; c < _coefficients.Rows; c++)
+            {
+                total = NumOps.Add(total, NumOps.Abs(_coefficients[c, j]));
+            }
+
+            perFeature[j] = NumOps.Divide(total, NumOps.FromDouble(_coefficients.Rows));
+        }
+
+        Coefficients = perFeature;
+        Intercept = _coefficients[0, _coefficients.Columns - 1];
+        TrainingFeatureCount = featureCount;
     }
 
     /// <summary>

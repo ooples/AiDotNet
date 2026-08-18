@@ -348,19 +348,38 @@ public class BetaRegression<T> : AsyncDecisionTreeRegressionBase<T>
             T phi = phis[i];
             double muD = NumOps.ToDouble(mu);
 
-            // Derivative of link function at mu (boundary: special math)
-            double dmu = LinkFunctionDerivative(muD);
-            T dmuT = NumOps.FromDouble(dmu);
+            // LinkFunctionDerivative returns g'(mu) = d(eta)/d(mu) -- for the logit that is
+            // 1/(mu(1-mu)), NOT mu(1-mu). The local was named `dmu`, and both formulas below used it as
+            // though it were d(mu)/d(eta), which inverted the role of the link derivative in each.
+            //
+            // Fisher scoring for a GLM with variance function V(mu) uses
+            //
+            //     w = 1 / (V(mu) * g'(mu)^2)          z = eta + (y - mu) * g'(mu)
+            //
+            // and for the Beta mean model V(mu) = mu(1-mu) (Ferrari & Cribari-Neto 2004). The precision
+            // phi scales every weight equally, so it does not change the weighted least-squares solution.
+            //
+            // What was here instead:
+            //
+            //     w = phi * V / g'^2   which for the logit is phi * V^3, not phi * V
+            //     z = eta + (y - mu) * g' / V          an extra factor of 1/V
+            //
+            // The working response was the fatal one. At mu = 0.1, V is 0.09, so every Fisher step
+            // overshot by more than tenfold; the coefficients ran away and the fitted mean saturated at
+            // 0 or 1 for every observation. That went unnoticed because a target outside [0,1] was
+            // silently diverted to ordinary least squares, and one inside it was first min-max rescaled,
+            // so no test ever asked this path for a prediction it could check.
+            double gPrime = LinkFunctionDerivative(muD);
+            T gPrimeT = NumOps.FromDouble(gPrime);
 
-            // Fisher weight: w = φ * mu * (1-mu) / g'(mu)²
             T v = NumOps.Multiply(mu, NumOps.Subtract(NumOps.One, mu));
-            T w = NumOps.Divide(NumOps.Multiply(phi, v), NumOps.Multiply(dmuT, dmuT));
-            weights[i] = w;
+            T variance = NumOps.Multiply(v, NumOps.Multiply(gPrimeT, gPrimeT));
+            weights[i] = NumOps.Divide(phi, variance);
 
             // Working response
             double eta = LinkFunction(muD);
             T residual = NumOps.Subtract(y[i], mu);
-            z[i] = NumOps.Add(NumOps.FromDouble(eta), NumOps.Divide(NumOps.Multiply(residual, dmuT), v));
+            z[i] = NumOps.Add(NumOps.FromDouble(eta), NumOps.Multiply(residual, gPrimeT));
         }
 
         // Weighted least squares
