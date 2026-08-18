@@ -98,7 +98,11 @@ public class NODERegression<T> : NODEBase<T>
         _regressionHead = new FullyConnectedLayer<T>(
             TreeOutputDimension,
             outputDimension,
-            (IActivationFunction<T>?)null);
+            // Identity, stated rather than left to the default. Passing null here reads as "no
+            // activation", but FullyConnectedLayer resolves null to ReLU, so this regression head
+            // could only ever emit non-negative values: measured at 0.00012 from a fresh model and
+            // exactly 0 once any parameter vector was restored into it.
+            new IdentityActivation<T>());
     }
 
     /// <summary>

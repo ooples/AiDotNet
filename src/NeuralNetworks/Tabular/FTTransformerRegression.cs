@@ -100,7 +100,9 @@ public class FTTransformerRegression<T> : FTTransformerBase<T>
         _regressionHead = new FullyConnectedLayer<T>(
             EmbeddingDimension,
             outputDimension,
-            (IActivationFunction<T>?)null);  // No activation for regression
+            // No activation for regression -- stated as Identity rather than passed as null, which
+            // FullyConnectedLayer resolves to ReLU and would clamp the head to non-negative outputs.
+            new IdentityActivation<T>());
     }
 
     /// <summary>

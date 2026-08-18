@@ -91,7 +91,9 @@ public class MambularRegression<T> : MambularBase<T>
         _regressionHead = new FullyConnectedLayer<T>(
             MLPOutputDimension,
             outputDimension,
-            (IActivationFunction<T>?)null);
+            // Identity, stated rather than left to the default: FullyConnectedLayer resolves a null
+            // activation to ReLU, which would clamp this regression head to non-negative outputs.
+            new IdentityActivation<T>());
     }
 
     /// <summary>
