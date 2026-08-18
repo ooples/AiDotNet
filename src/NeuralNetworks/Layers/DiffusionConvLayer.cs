@@ -1929,6 +1929,18 @@ public partial class DiffusionConvLayer<T> : LayerBase<T>, IShapeContract
             }
             _massMatrix = new Tensor<T>(massArray, [numVertices]);
         }
+
+        // Re-register the restored weights as trainable parameters. Deserialize replaces the field
+        // references outright, so without this the registry either stays empty -- this layer is lazy,
+        // so a freshly constructed instance has never registered anything, and GetParameters() then
+        // reports zero and silently discards every restored weight -- or still points at the tensors
+        // from a prior forward, leaving optimizers and tape training to update dead references while
+        // Forward reads the new ones. Only _weights and _biases are trainable; the eigenbasis,
+        // Laplacian and mass matrix are fixed mesh structure supplied by SetEigenbasis/SetLaplacian.
+        // ConvolutionalLayer and Conv3DLayer do the same.
+        ClearRegisteredParameters();
+        RegisterTrainableParameter(_weights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);
     }
 
     #endregion
