@@ -405,8 +405,6 @@ public abstract partial class DecisionTreeRegressionBase<T> : ITreeBasedRegressi
         {
             writer.Write(Convert.ToDouble(importance));
         }
-        // Serialize tree structure
-        SerializeNode(writer, Root);
         return AiDotNet.Models.ModelStateEnvelope.Append(DeclaredState, ms.ToArray());
     }
 
@@ -470,52 +468,9 @@ public abstract partial class DecisionTreeRegressionBase<T> : ITreeBasedRegressi
             importances[i] = NumOps.FromDouble(reader.ReadDouble());
         }
         FeatureImportances = new Vector<T>(importances);
-        // Deserialize tree structure
-        Root = DeserializeNode(reader);
     }
 
-    /// <summary>
-    /// Serializes a tree node to a binary writer.
-    /// </summary>
-    /// <param name="writer">The binary writer to write to.</param>
-    /// <param name="node">The node to serialize.</param>
-    private void SerializeNode(BinaryWriter writer, DecisionTreeNode<T>? node)
-    {
-        if (node == null)
-        {
-            writer.Write(false);
-            return;
-        }
-        writer.Write(true);
-        writer.Write(node.FeatureIndex);
-        writer.Write(Convert.ToDouble(node.SplitValue));
-        writer.Write(Convert.ToDouble(node.Prediction));
-        writer.Write(node.IsLeaf);
-        SerializeNode(writer, node.Left);
-        SerializeNode(writer, node.Right);
-    }
 
-    /// <summary>
-    /// Deserializes a tree node from a binary reader.
-    /// </summary>
-    /// <param name="reader">The binary reader to read from.</param>
-    /// <returns>The deserialized node.</returns>
-    private DecisionTreeNode<T>? DeserializeNode(BinaryReader reader)
-    {
-        bool hasNode = reader.ReadBoolean();
-        if (!hasNode) return null;
-        var node = new DecisionTreeNode<T>
-        {
-            FeatureIndex = reader.ReadInt32(),
-            SplitValue = NumOps.FromDouble(reader.ReadDouble()),
-            Prediction = NumOps.FromDouble(reader.ReadDouble()),
-            IsLeaf = reader.ReadBoolean(),
-            Left = DeserializeNode(reader),
-            Right = DeserializeNode(reader)
-        };
-
-        return node;
-    }
 
     /// <summary>
     /// Gets the model parameters as a vector representation.

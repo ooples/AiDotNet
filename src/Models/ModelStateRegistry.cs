@@ -688,6 +688,138 @@ public sealed class ModelStateRegistry<T>
             + "or have the model build its list before Deserialize runs.");
     }
 
+    /// <summary>Declares a decision tree, carried whole.</summary>
+    /// <param name="name">A stable name, unique within the model.</param>
+    /// <param name="get">Reads the root.</param>
+    /// <param name="set">Installs a restored root.</param>
+    /// <remarks>
+    /// Every decision-tree model kept its structure in a <c>Root</c> field no overload could carry, so
+    /// each walked the tree by hand -- and a by-hand walk carries what its author remembered. The
+    /// shared one wrote FeatureIndex, SplitValue, Prediction and IsLeaf, and dropped <c>Threshold</c>
+    /// and <c>LinearModel</c>. M5ModelTree fits a LINEAR MODEL at every leaf, so its restored tree had
+    /// the right shape, the right splits and constant leaves: it predicted 3 where the original said 2.
+    /// A leaf model travels as its concrete type name plus its own payload, because the field is
+    /// declared as a base type and the restore has to rebuild whatever was actually fitted.
+    /// </remarks>
+    public void DeclareTree(
+        string name,
+        Func<DecisionTreeNode<T>?> get,
+        Action<DecisionTreeNode<T>?> set)
+        => Add(name,
+            w => WriteNode(w, get()),
+            r => set(ReadNode(r, name)));
+
+    private static void WriteNode(BinaryWriter w, DecisionTreeNode<T>? node)
+    {
+        if (node is null) { w.Write(false); return; }
+        w.Write(true);
+
+        w.Write(node.FeatureIndex);
+        w.Write(Ops.ToDouble(node.SplitValue));
+        w.Write(Ops.ToDouble(node.Threshold));
+        w.Write(Ops.ToDouble(node.Prediction));
+        w.Write(node.IsLeaf);
+
+        if (node.LinearModel is null)
+        {
+            w.Write(false);
+        }
+        else
+        {
+            w.Write(true);
+            var concrete = node.LinearModel.GetType();
+            w.Write(concrete.AssemblyQualifiedName ?? concrete.FullName ?? concrete.Name);
+            var payload = node.LinearModel.Serialize();
+            w.Write(payload.Length);
+            w.Write(payload);
+        }
+
+        WriteNode(w, node.Left);
+        WriteNode(w, node.Right);
+    }
+
+    private static DecisionTreeNode<T>? ReadNode(BinaryReader r, string name)
+    {
+        if (!r.ReadBoolean()) return null;
+
+        var node = new DecisionTreeNode<T>
+        {
+            FeatureIndex = r.ReadInt32(),
+            SplitValue = Ops.FromDouble(r.ReadDouble()),
+            Threshold = Ops.FromDouble(r.ReadDouble()),
+            Prediction = Ops.FromDouble(r.ReadDouble()),
+            IsLeaf = r.ReadBoolean(),
+        };
+
+        if (r.ReadBoolean())
+        {
+            string typeName = r.ReadString();
+            int length = r.ReadInt32();
+            var payload = r.ReadBytes(length);
+
+            var concrete = Type.GetType(typeName, throwOnError: false);
+            if (concrete is null)
+            {
+                throw new InvalidOperationException(
+                    $"State '{name}' holds a leaf model of type '{typeName}', which this runtime cannot "
+                    + "load, so the tree cannot be restored as it was fitted.");
+            }
+
+            var leaf = CreateSerializable(concrete, name);
+            leaf.Deserialize(payload);
+            node.LinearModel = leaf as RegressionBase<T>;
+        }
+
+        node.Left = ReadNode(r, name);
+        node.Right = ReadNode(r, name);
+        return node;
+    }
+
+    /// <summary>Builds an empty instance of a type named in a payload.</summary>
+    /// <param name="type">The concrete type to build.</param>
+    /// <param name="name">The state name, for the error message.</param>
+    /// <returns>The new instance.</returns>
+    /// <remarks>
+    /// Accepts an all-optional constructor for the same reason <see cref="CreateChild{TChild}"/> does:
+    /// reflection's parameterless lookup cannot see one, and most models declare exactly that shape.
+    /// </remarks>
+    private static IModelSerializer CreateSerializable(Type type, string name)
+    {
+        try
+        {
+            if (Activator.CreateInstance(type, nonPublic: true) is IModelSerializer built) return built;
+        }
+        catch (MissingMethodException)
+        {
+        }
+
+        var withOptionalArguments = type
+            .GetConstructors(System.Reflection.BindingFlags.Public
+                | System.Reflection.BindingFlags.NonPublic
+                | System.Reflection.BindingFlags.Instance)
+            .FirstOrDefault(c => c.GetParameters().Length > 0
+                && c.GetParameters().All(p => p.IsOptional));
+
+        if (withOptionalArguments is not null)
+        {
+            var arguments = new object?[withOptionalArguments.GetParameters().Length];
+            for (int i = 0; i < arguments.Length; i++) arguments[i] = Type.Missing;
+
+            if (withOptionalArguments.Invoke(
+                    System.Reflection.BindingFlags.OptionalParamBinding,
+                    binder: null,
+                    arguments,
+                    culture: null) is IModelSerializer built)
+            {
+                return built;
+            }
+        }
+
+        throw new InvalidOperationException(
+            $"State '{name}' holds a leaf model of type '{type.Name}', which has no constructor callable "
+            + "without arguments, so restoring cannot build one to read it back into.");
+    }
+
     /// <summary>Declares the options object a model predicts with.</summary>
     /// <param name="name">A stable name, unique within the model.</param>
     /// <param name="get">Reads the options instance.</param>

@@ -297,6 +297,11 @@ public class ModelStateGenerator : IIncrementalGenerator
 
         return key switch
         {
+            // A DECISION TREE, carried whole instead of walked by hand: the shared hand-written
+            // walk dropped Threshold and the per-leaf LinearModel.
+            var k when k.EndsWith(".DecisionTreeNode<T>") || k == "DecisionTreeNode<T>" =>
+                $"state.DeclareTree(\"{id}\", {getter}, {setter});",
+
             var k when k.EndsWith(".Vector<T>") || k == "Vector<T>" => $"state.Declare(\"{id}\", {getter}, {setter});",
             var k when k.EndsWith(".Matrix<T>") || k == "Matrix<T>" => $"state.Declare(\"{id}\", {getter}, {setter});",
             var k when k.EndsWith(".Tensor<T>") || k == "Tensor<T>" => $"state.Declare(\"{id}\", {getter}, {setter});",
