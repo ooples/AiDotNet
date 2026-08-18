@@ -3401,6 +3401,32 @@ public static class DeserializationHelper
                     "Layer will resolve via SetParameters or first Forward.");
             }
         }
+
+        // A RESOLVED PARENT CAN STILL HOLD UNRESOLVED CHILDREN, and the block above asks only about
+        // the parent. A composite that takes its width as a constructor argument reports
+        // IsShapeResolved = true the moment it is rebuilt, so it skipped pre-resolve entirely while
+        // the lazy sub-layer it registered stayed a placeholder: CifAlignmentLayer came back holding
+        // an _alphaPredictor with no weights, answered ParameterCount 0 instead of 66, and
+        // SetParameters dropped all 66 trained values without a word. The parent's own shape is not
+        // evidence about its children.
+        //
+        // EnsureParametersMaterialized already recurses through GetSubLayers and is idempotent, so
+        // this drives the mechanism that was always there rather than adding a second one.
+        if (layer is NeuralNetworks.Layers.LayerBase<T> composite)
+        {
+            try
+            {
+                composite.MaterializeParameters();
+            }
+            catch (Exception ex) when (ex is ArgumentException || ex is InvalidOperationException)
+            {
+                // Same contract as above: a child that cannot be sized from the parent's width still
+                // has SetParameters' self-resolve ahead of it. Traced, never swallowed.
+                System.Diagnostics.Trace.TraceWarning(
+                    $"DeserializationHelper: MaterializeParameters failed for {composite.GetType().Name}: " +
+                    $"{ex.GetType().Name}: {ex.Message}. Sub-layers will resolve via SetParameters or first Forward.");
+            }
+        }
     }
 
     private static object CreateDenseLayer<T>(Type type, int[] inputShape, int[] outputShape, Dictionary<string, object>? additionalParams)

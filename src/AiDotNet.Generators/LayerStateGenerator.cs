@@ -119,6 +119,12 @@ public class LayerStateGenerator : IIncrementalGenerator
         if (ctx.SemanticModel.GetDeclaredSymbol(syntax) is not IMethodSymbol ctor) return null;
 
         var marked = ctor.Parameters.Where(HasStateAttribute).ToList();
+
+        // Captured BEFORE the inference block below reassigns `marked`, because afterwards the two
+        // origins are indistinguishable. An author who wrote [LayerState] on a constructor stated
+        // that this is the one to rebuild through; inference only guesses. Selection uses that.
+        bool explicitlyMarked = marked.Count > 0;
+
         if (marked.Count == 0)
         {
             // INFERENCE. A constructor argument the layer stores in a field of the same name IS
@@ -241,6 +247,7 @@ public class LayerStateGenerator : IIncrementalGenerator
                 ? null
                 : type.ContainingNamespace.ToDisplayString(),
             TypeName = type.Name,
+            HasExplicitState = explicitlyMarked,
             ContainingTypes = ContainingChain(type),
             TypeParameters = type.TypeParameters.Select(tp => tp.Name).ToList(),
             BaseFqn = type.ConstructedFrom.ToDisplayString(UnqualifiedGenerics),
@@ -503,8 +510,20 @@ public class LayerStateGenerator : IIncrementalGenerator
             spc.ReportDiagnostic(d);
         }
 
-        // One constructor per type: if a layer annotates several, the first by source order wins so
-        // the generated factory is deterministic.
+        // One constructor per type: if a layer offers several, the one that RESTORES THE MOST wins,
+        // with source order kept only as the final tie-break.
+        //
+        // Source order alone chose the constructor that happened to be written first, which is not a
+        // statement about fidelity. A layer whose narrow convenience overload precedes its fuller one
+        // had the narrow one selected and every parameter only the fuller one carries was dropped from
+        // the save with no diagnostic -- the factory still compiled and still returned a layer, just a
+        // differently-configured one. FeatureTokenizerLayer(embeddingDim) at line 102 beat
+        // FeatureTokenizerLayer([LayerState] numFeatures, [LayerState] embeddingDim) at line 116, so a
+        // restored tokenizer kept numFeatures = -1, never allocated its [F,E] weights, reported
+        // ParameterCount 0, and let SetParameters discard 512 trained values in silence.
+        //
+        // Explicit [LayerState] outranks inference because it is an author's claim about which
+        // constructor rebuilds the layer, and inference is only this generator's guess.
         var byType = models
             .Where(m => m.IsValid)
             .GroupBy(TypeKey, System.StringComparer.Ordinal)
@@ -514,7 +533,9 @@ public class LayerStateGenerator : IIncrementalGenerator
             // constructors could generate a different factory between builds. Ordering on the
             // constructor's own location also makes "first by source order" true.
             .Select(g => g
-                .OrderBy(m => m.Location.FilePath, System.StringComparer.Ordinal)
+                .OrderByDescending(m => m.HasExplicitState)
+                .ThenByDescending(m => m.StateCount)
+                .ThenBy(m => m.Location.FilePath, System.StringComparer.Ordinal)
                 .ThenBy(m => m.Location.Start)
                 .First())
             .OrderBy(TypeKey, System.StringComparer.Ordinal)
@@ -1028,6 +1049,12 @@ public class LayerStateGenerator : IIncrementalGenerator
         public bool HasHandWrittenMetadata;
         public bool IsValid;
 
+        /// <summary>Whether this constructor's state came from [LayerState], not from inference.</summary>
+        public bool HasExplicitState;
+
+        /// <summary>How much construction state rebuilding through this constructor restores.</summary>
+        public int StateCount => Parameters.Count(p => p.IsState);
+
         /// <summary>Value equality, which is what lets Roslyn cache this pipeline step.</summary>
         /// <remarks>
         /// Reference equality on a mutable class means two structurally identical models from
@@ -1043,6 +1070,7 @@ public class LayerStateGenerator : IIncrementalGenerator
                 && TypeName == other.TypeName
                 && BaseFqn == other.BaseFqn
                 && IsPartial == other.IsPartial
+                && HasExplicitState == other.HasExplicitState
                 && HasHandWrittenMetadata == other.HasHandWrittenMetadata
                 && IsValid == other.IsValid
                 && Location.Equals(other.Location)

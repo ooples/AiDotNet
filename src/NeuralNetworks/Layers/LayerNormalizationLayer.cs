@@ -245,8 +245,19 @@ public partial class LayerNormalizationLayer<T> : LayerBase<T>, IShapeContract
         _beta = new Tensor<T>([0]);
     }
 
-    /// <summary>Construction state: the 'featureSize' the layer was built with.</summary>
-    private readonly int _featureSize;
+    /// <summary>
+    /// Construction state: the feature width this layer normalizes over, kept current for BOTH
+    /// construction paths.
+    /// </summary>
+    /// <remarks>
+    /// Not readonly, and not merely an echo of the eager constructor's argument. This field is what
+    /// the generated <c>WriteConstructionState</c> saves, so a layer built through the lazy
+    /// constructor and resolved on first forward would otherwise save featureSize = 0 and fail its
+    /// own rebuild with "featureSize must be positive, got 0" -- state that describes how the layer
+    /// was CONSTRUCTED rather than what it currently is cannot round-trip a lazily-resolved layer.
+    /// Every path that sizes gamma/beta updates it.
+    /// </remarks>
+    private int _featureSize;
 
     /// <summary>
     /// AiDotNet#1370 eager-init constructor. Pass <paramref name="featureSize"/> at
@@ -378,6 +389,7 @@ public partial class LayerNormalizationLayer<T> : LayerBase<T>, IShapeContract
 
         _gamma = Tensor<T>.CreateDefault([featureSize], NumOps.One);
         _beta = Tensor<T>.CreateDefault([featureSize], NumOps.Zero);
+        _featureSize = featureSize;
         RegisterTrainableParameter(_gamma, PersistentTensorRole.NormalizationParams);
         RegisterTrainableParameter(_beta, PersistentTensorRole.NormalizationParams);
     }
@@ -422,6 +434,7 @@ public partial class LayerNormalizationLayer<T> : LayerBase<T>, IShapeContract
 
             _gamma = gamma;
             _beta = beta;
+            _featureSize = featureSize;
             _gammaGradient = null;
             _betaGradient = null;
             _gammaVelocity = null;
