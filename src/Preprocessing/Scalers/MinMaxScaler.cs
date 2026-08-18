@@ -31,8 +31,10 @@ namespace AiDotNet.Preprocessing.Scalers;
 public class MinMaxScaler<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 {
     [JsonProperty]
+    [AiDotNet.Attributes.FittedParameter]
     private Vector<T>? _dataMin;
     [JsonProperty]
+    [AiDotNet.Attributes.FittedParameter]
     private Vector<T>? _dataMax;
     [JsonProperty]
     private readonly T _featureRangeMin;

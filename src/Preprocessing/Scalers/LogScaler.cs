@@ -28,10 +28,13 @@ namespace AiDotNet.Preprocessing.Scalers;
 public class LogScaler<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 {
     [JsonProperty]
+    [AiDotNet.Attributes.FittedParameter]
     private Vector<T>? _shift;
     [JsonProperty]
+    [AiDotNet.Attributes.FittedParameter]
     private Vector<T>? _logMin;
     [JsonProperty]
+    [AiDotNet.Attributes.FittedParameter]
     private Vector<T>? _logRange;
 
     /// <summary>

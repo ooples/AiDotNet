@@ -1302,6 +1302,7 @@ public class LSTMNTMController<T, TInput, TOutput> : INTMController<T>
 
     // LSTM gate weights: input, forget, cell, output gates
     // Input weights: [4 * hiddenSize, inputSize]
+    [AiDotNet.Attributes.Scratch]
     private Tensor<T> _weightsInput;
     // Hidden weights: [4 * hiddenSize, hiddenSize]
     private readonly Tensor<T> _weightsHidden;

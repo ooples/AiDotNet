@@ -33,8 +33,10 @@ namespace AiDotNet.Preprocessing.Scalers;
 public class RobustScaler<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 {
     [JsonProperty]
+    [AiDotNet.Attributes.FittedParameter]
     private Vector<T>? _median;
     [JsonProperty]
+    [AiDotNet.Attributes.FittedParameter]
     private Vector<T>? _iqr;
     [JsonProperty]
     private readonly double _quantileRangeMin;
