@@ -136,38 +136,16 @@ public partial class ClozeAttentionLayer<T> : LayerBase<T>, IShapeContract
         if (!_output.IsShapeResolved) _output.ResolveFromShape(new[] { 1, 1, _modelDim });
     }
 
-    /// <inheritdoc/>
-    /// <remarks>
-    /// Explicitly includes the projections' tensors: <c>LayerBase</c> does not recurse into
-    /// registered sub-layers, and a composite that omits them reports an empty trainable set
-    /// while still advertising a parameter count, which corrupts training silently.
-    /// </remarks>
-    public override IReadOnlyList<Tensor<T>> GetTrainableParameters()
-    {
-        var result = new List<Tensor<T>>();
-        result.AddRange(_query.GetTrainableParameters());
-        result.AddRange(_key.GetTrainableParameters());
-        result.AddRange(_value.GetTrainableParameters());
-        result.AddRange(_output.GetTrainableParameters());
-        return result;
-    }
-
-    /// <inheritdoc/>
-    public override void SetTrainableParameters(IReadOnlyList<Tensor<T>> parameters)
-    {
-        var targets = new[] { _query, _key, _value, _output };
-        var counts = targets.Select(t => t.GetTrainableParameters().Count).ToArray();
-
-        if (parameters.Count != counts.Sum())
-            throw new ArgumentException($"Expected {counts.Sum()} trainable tensors, got {parameters.Count}.", nameof(parameters));
-
-        int at = 0;
-        for (int t = 0; t < targets.Length; t++)
-        {
-            targets[t].SetTrainableParameters(parameters.Skip(at).Take(counts[t]).ToList());
-            at += counts[t];
-        }
-    }
+    // The four projections' tensors used to be listed here as this layer's own, on the stated
+    // grounds that "LayerBase does not recurse into registered sub-layers". That is true of the base
+    // GetTrainableParameters, which returns only this layer's own registrations, and false of the
+    // walk ParameterCount, GetParameters and SetParameters are built from: it appends every
+    // registered sub-layer that no declaration already covers, and its duplicate check compares
+    // LAYER references, so it cannot tell that a child's tensors already arrived through the
+    // parent's own list. Listing them here entered all eight TWICE. The failure the remark feared --
+    // an empty trainable set beside a non-zero count -- is real, but it is what happens to a
+    // composite that registers no sub-layer at all; these four are registered, so the base reaches
+    // them.
 
     /// <inheritdoc/>
     internal override Dictionary<string, string> GetMetadata()
