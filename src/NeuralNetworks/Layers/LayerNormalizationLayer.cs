@@ -285,9 +285,20 @@ public partial class LayerNormalizationLayer<T> : LayerBase<T>, IShapeContract
     /// </para>
     /// </remarks>
     /// <exception cref="ArgumentOutOfRangeException">When <paramref name="featureSize"/> is not positive.</exception>
+    /// <remarks>
+    /// BOTH parameters carry [LayerState] because the generator uses only the ATTRIBUTED set once any
+    /// parameter on a constructor is marked -- annotating featureSize alone would silently stop
+    /// epsilon being saved.
+    /// <para>
+    /// OmitWhenNonPositive is what keeps a lazily-built LayerNorm rebuildable. Such a layer has
+    /// _featureSize == 0 until its first forward, and 0 is the honest answer, but this constructor
+    /// rejects it. Omitting the key rather than saving the 0 makes the generated factory decline the
+    /// layer, and the loader falls through to the lazy path that builds it correctly.
+    /// </para>
+    /// </remarks>
     public LayerNormalizationLayer(
-        int featureSize,
-        double epsilon = NumericalStabilityHelper.LargeEpsilon)
+        [LayerState(OmitWhenNonPositive = true)] int featureSize,
+        [LayerState] double epsilon = NumericalStabilityHelper.LargeEpsilon)
         : base(new[] { featureSize }, new[] { featureSize })
     {
         _featureSize = featureSize;

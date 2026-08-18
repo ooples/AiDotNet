@@ -293,6 +293,7 @@ public class LayerStateGenerator : IIncrementalGenerator
             {
                 info.IsState = true;
                 info.Key = StateKey(p) ?? p.Name;
+                info.OmitWhenNonPositive = OmitWhenNonPositive(p);
                 info.Kind = Classify(p.Type);
                 if (info.Kind == ValueKind.Unsupported)
                 {
@@ -379,6 +380,16 @@ public class LayerStateGenerator : IIncrementalGenerator
         var attr = p.GetAttributes().FirstOrDefault(a => a.AttributeClass?.ToDisplayString() == StateAttribute);
         var named = attr?.NamedArguments.FirstOrDefault(n => n.Key == "Key").Value.Value as string;
         return string.IsNullOrWhiteSpace(named) ? null : named;
+    }
+
+    /// <summary>
+    /// Whether the author declared this parameter's zero to mean "not resolved yet", so the writer
+    /// must skip it rather than save a value the constructor would reject.
+    /// </summary>
+    private static bool OmitWhenNonPositive(IParameterSymbol p)
+    {
+        var attr = p.GetAttributes().FirstOrDefault(a => a.AttributeClass?.ToDisplayString() == StateAttribute);
+        return attr?.NamedArguments.FirstOrDefault(n => n.Key == "OmitWhenNonPositive").Value.Value is true;
     }
 
     private static ValueKind Classify(ITypeSymbol type)
@@ -611,6 +622,22 @@ public class LayerStateGenerator : IIncrementalGenerator
             var read = p.NeedsConvert
                 ? ConvertExpression(p, model.TypeParameters.Count > 0 ? model.TypeParameters[0] : "T")
                 : $"this.{p.BackingMember}";
+
+            // A size the layer has not resolved yet is written as NOTHING, not as 0. Saving the 0
+            // produced a state the layer's own constructor rejects ("featureSize must be positive,
+            // got 0"), because for a lazily-shaped layer 0 is the truth and the constructor still
+            // refuses it. Omitting the key makes the generated factory's state.HasAll(...) check
+            // fail, so TryCreate returns false and the caller falls through to the lazy build path,
+            // which is exactly right for a layer with no width yet.
+            if (p.OmitWhenNonPositive)
+            {
+                sb.AppendLine($"        if (this.{p.BackingMember} > 0)");
+                sb.AppendLine("        {");
+                sb.AppendLine($"            __metadata[\"{p.Key}\"] = global::AiDotNet.Serialization.LayerStateBag.Format({read});");
+                sb.AppendLine("        }");
+                continue;
+            }
+
             sb.AppendLine($"        __metadata[\"{p.Key}\"] = global::AiDotNet.Serialization.LayerStateBag.Format({read});");
         }
         sb.AppendLine("    }");
@@ -913,6 +940,11 @@ public class LayerStateGenerator : IIncrementalGenerator
         public string? DefaultExpression;
         public bool NeedsConvert;
         public ValueKind Kind;
+
+        /// <summary>
+        /// The author declared that a zero here means "not resolved yet", so the writer guards it.
+        /// </summary>
+        public bool OmitWhenNonPositive;
     }
 
     /// <summary>A location reduced to primitives, so it neither roots a Compilation nor breaks equality.</summary>
