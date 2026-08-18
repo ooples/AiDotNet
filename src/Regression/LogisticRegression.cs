@@ -134,7 +134,17 @@ public class LogisticRegression<T> : RegressionBase<T>
     /// </remarks>
     public override bool SupportsParameterInitialization => false;
 
-    private bool _useOLS;
+    /// <summary>
+    /// The two class labels the model was trained on, ascending. <see cref="Predict"/> returns the
+    /// probability of <c>ClassLabels[1]</c>, the higher of the two.
+    /// </summary>
+    /// <remarks>
+    /// <b>For Beginners:</b> If you trained on labels like -1 and +1, this remembers them, so you can tell
+    /// which of your own two categories the returned probability refers to. It is always the second one.
+    /// </remarks>
+    public IReadOnlyList<T> ClassLabels => _classLabels;
+
+    private List<T> _classLabels = new List<T>();
 
     public override void Train(Matrix<T> x, Vector<T> y)
     {
@@ -143,23 +153,15 @@ public class LogisticRegression<T> : RegressionBase<T>
         int n = x.Rows;
         int p = x.Columns;
 
-        // Detect continuous data (not binary 0/1 labels)
-        bool isBinary = y.All(v => NumOps.Equals(v, NumOps.Zero) || NumOps.Equals(v, NumOps.One));
-        if (!isBinary)
-        {
-            // Use OLS for continuous data since logistic regression can't regress
-            _useOLS = true;
-            var xWithInt = x.AddConstantColumn(NumOps.One);
-            var xTx = xWithInt.Transpose().Multiply(xWithInt);
-            var xTy = xWithInt.Transpose().Multiply(y);
-            for (int i = 0; i < xTx.Rows; i++)
-                xTx[i, i] = NumOps.Add(xTx[i, i], NumOps.FromDouble(1e-10));
-            var solution = SolveSystem(xTx, xTy);
-            Intercept = solution[0]; // AddConstantColumn puts at index 0
-            Coefficients = solution.Slice(1, p);
-            TrainingFeatureCount = p;
-            return;
-        }
+        // A target that is not two classes is a caller error, not a cue to fit something else.
+        // This previously set `_useOLS = true` and fitted ordinary least squares, so the object
+        // reported Coefficients from a linear model while presenting as a logistic one -- and
+        // Predict skipped the sigmoid, returning unbounded values where a probability was promised.
+        // EncodeBinaryTarget accepts any two labels ({0,1}, {-1,1}, {1,2}, ...) and throws with a
+        // diagnostic naming the observed target otherwise.
+        var (encodedY, classes) = ValidationHelper<T>.EncodeBinaryTarget(y, nameof(LogisticRegression<T>));
+        _classLabels = classes;
+        y = encodedY;
 
         Coefficients = new Vector<T>(p);
         Intercept = NumOps.Zero;
@@ -251,11 +253,6 @@ public class LogisticRegression<T> : RegressionBase<T>
     /// </remarks>
     public override Vector<T> Predict(Matrix<T> x)
     {
-        if (_useOLS)
-        {
-            return base.Predict(x);
-        }
-
         Vector<T> scores = x.Multiply(Coefficients).Add(Intercept);
         return scores.Transform(Sigmoid);
     }
@@ -359,8 +356,14 @@ public class LogisticRegression<T> : RegressionBase<T>
         byte[] baseData = base.Serialize();
         writer.Write(baseData.Length);
         writer.Write(baseData);
-        // OLS flag
-        writer.Write(_useOLS);
+        // The two class labels, so a round-tripped model can still report which category the
+        // returned probability belongs to. This slot previously held the `_useOLS` flag, which
+        // recorded that the model had quietly fitted least squares instead.
+        writer.Write(_classLabels.Count);
+        for (int i = 0; i < _classLabels.Count; i++)
+        {
+            writer.Write(NumOps.ToDouble(_classLabels[i]));
+        }
         // Serialize LogisticRegression specific data
         writer.Write(_options.MaxIterations);
         writer.Write(_options.Tolerance);
@@ -397,8 +400,13 @@ public class LogisticRegression<T> : RegressionBase<T>
         int baseDataLength = reader.ReadInt32();
         byte[] baseData = reader.ReadBytes(baseDataLength);
         base.Deserialize(baseData);
-        // OLS flag
-        _useOLS = reader.ReadBoolean();
+        // Class labels (see Serialize)
+        int classCount = reader.ReadInt32();
+        _classLabels = new List<T>(classCount);
+        for (int i = 0; i < classCount; i++)
+        {
+            _classLabels.Add(NumOps.FromDouble(reader.ReadDouble()));
+        }
         // Deserialize MultipleRegression specific data
         _options.MaxIterations = reader.ReadInt32();
         _options.Tolerance = reader.ReadDouble();

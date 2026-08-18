@@ -121,7 +121,18 @@ public partial class MultinomialLogisticRegression<T> : RegressionBase<T>
     /// </para>
     /// </remarks>
     private int _numClasses;
-    private bool _useOLS;
+
+    /// <summary>
+    /// The class labels the model was trained on, ascending. <see cref="Predict"/> returns values drawn
+    /// from this list, so predictions come back in whatever labels were supplied for training.
+    /// </summary>
+    /// <remarks>
+    /// <b>For Beginners:</b> If you trained with categories numbered 2, 5 and 9, the model works with 0, 1
+    /// and 2 internally but this remembers your numbering, so predictions are reported as 2, 5 and 9 again.
+    /// </remarks>
+    public IReadOnlyList<T> ClassLabels => _classLabels;
+
+    private List<T> _classLabels = new List<T>();
 
     /// <summary>
     /// Multinomial logistic is a classification model — no optimizer parameter injection.
@@ -192,47 +203,23 @@ public partial class MultinomialLogisticRegression<T> : RegressionBase<T>
     {
         ValidationHelper<T>.ValidateInputData(x, y);
 
-        // Check if data is continuous (not integer class labels)
-        var distinctValues = y.Distinct().OrderBy(v => v).ToList();
-        bool isContinuous = distinctValues.Count > y.Length / 2 || distinctValues.Any(v => !MathHelper.IsInteger(v));
+        // Two substitutions used to happen here, both silent:
+        //
+        //   1. A continuous target set `_useOLS = true` and fitted ordinary least squares, so the
+        //      object presented a linear model's coefficients as the classifier's.
+        //   2. An integer target with many distinct labels was QUANTIZED into at most 5 equal-width
+        //      bins. The model then reported classes the caller had never supplied, and Predict
+        //      returned bin indices that did not correspond to any label in the training data.
+        //
+        // Both are replaced by validation. Class labels need not be consecutive or zero-based --
+        // {2, 5, 9} trains fine and encodes to {0, 1, 2} -- and a genuinely continuous target throws
+        // with a message naming what was observed and which model to use instead.
+        var (encodedY, classes) = ValidationHelper<T>.EncodeMulticlassTarget(
+            y, nameof(MultinomialLogisticRegression<T>));
+        _classLabels = classes;
+        y = encodedY;
 
-        if (isContinuous)
-        {
-            // Use OLS for continuous data since multinomial logistic can't regress
-            _useOLS = true;
-            var xWithInt = x.AddConstantColumn(NumOps.One);
-            var xTx = xWithInt.Transpose().Multiply(xWithInt);
-            var xTy = xWithInt.Transpose().Multiply(y);
-            for (int i = 0; i < xTx.Rows; i++)
-                xTx[i, i] = NumOps.Add(xTx[i, i], NumOps.FromDouble(1e-10));
-            var solution = SolveSystem(xTx, xTy);
-            // AddConstantColumn puts intercept at column 0
-            Intercept = solution[0];
-            Coefficients = solution.Slice(1, x.Columns);
-            TrainingFeatureCount = x.Columns;
-            return;
-        }
-
-        // For actual classification data, use the multinomial logistic model
-        // (quantize if needed for near-classification data)
-        if (distinctValues.Count > y.Length / 2)
-        {
-            int numBins = Math.Min(5, Math.Max(2, (int)Math.Sqrt(y.Length)));
-            double min = NumOps.ToDouble(y.Min());
-            double max = NumOps.ToDouble(y.Max());
-            double range = max - min;
-            if (range < 1e-10) range = 1.0;
-            var yQuantized = new Vector<T>(y.Length);
-            for (int i = 0; i < y.Length; i++)
-            {
-                int bin = (int)((NumOps.ToDouble(y[i]) - min) / range * (numBins - 1));
-                bin = Math.Max(0, Math.Min(numBins - 1, bin));
-                yQuantized[i] = NumOps.FromDouble(bin);
-            }
-            y = yQuantized;
-        }
-
-        _numClasses = y.Distinct().Count();
+        _numClasses = classes.Count;
 
         int numFeatures = x.Columns;
         _coefficients = new Matrix<T>(_numClasses, numFeatures + 1);
@@ -481,16 +468,27 @@ public partial class MultinomialLogisticRegression<T> : RegressionBase<T>
     /// </remarks>
     public override Vector<T> Predict(Matrix<T> x)
     {
-        // OLS path for continuous data
-        if (_useOLS)
-        {
-            return base.Predict(x);
-        }
-
         Matrix<T> xWithIntercept = x.AddColumn(Vector<T>.CreateDefault(x.Rows, NumOps.One));
         Matrix<T> probabilities = ComputeProbabilities(xWithIntercept);
 
-        return probabilities.RowWiseArgmax();
+        // Argmax gives the internal class index; map it back to the label the caller trained with,
+        // so predictions are comparable with the y that was passed to Train. Returning the raw index
+        // would silently relabel the caller's classes whenever they were not already 0..K-1.
+        Vector<T> indices = probabilities.RowWiseArgmax();
+        if (_classLabels.Count == 0)
+        {
+            return indices;
+        }
+
+        var labelled = new Vector<T>(indices.Length);
+        for (int i = 0; i < indices.Length; i++)
+        {
+            int index = (int)Math.Round(NumOps.ToDouble(indices[i]));
+            index = Math.Max(0, Math.Min(_classLabels.Count - 1, index));
+            labelled[i] = _classLabels[index];
+        }
+
+        return labelled;
     }
 
     /// <summary>
@@ -553,8 +551,14 @@ public partial class MultinomialLogisticRegression<T> : RegressionBase<T>
         writer.Write(baseData.Length);
         writer.Write(baseData);
 
-        // OLS flag
-        writer.Write(_useOLS);
+        // The class labels, so a round-tripped model still predicts in the caller's own labels.
+        // This slot previously held the `_useOLS` flag, which recorded that the model had quietly
+        // fitted least squares instead.
+        writer.Write(_classLabels.Count);
+        for (int i = 0; i < _classLabels.Count; i++)
+        {
+            writer.Write(NumOps.ToDouble(_classLabels[i]));
+        }
 
         // Serialize MultinomialLogisticRegression specific data
         writer.Write(_numClasses);
@@ -612,8 +616,13 @@ public partial class MultinomialLogisticRegression<T> : RegressionBase<T>
         byte[] baseData = reader.ReadBytes(baseDataLength);
         base.Deserialize(baseData);
 
-        // OLS flag
-        _useOLS = reader.ReadBoolean();
+        // Class labels (see Serialize)
+        int classCount = reader.ReadInt32();
+        _classLabels = new List<T>(classCount);
+        for (int i = 0; i < classCount; i++)
+        {
+            _classLabels.Add(NumOps.FromDouble(reader.ReadDouble()));
+        }
 
         // Deserialize MultinomialLogisticRegression specific data
         _numClasses = reader.ReadInt32();
