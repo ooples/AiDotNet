@@ -42,9 +42,38 @@ public static class DeserializationHelper
 
     static DeserializationHelper()
     {
-        // Automatically discover and register all ILayer<T> implementations
-        var layerTypes = Assembly.GetExecutingAssembly()
-            .GetTypes()
+        // Automatically discover and register all ILayer<T> implementations.
+        //
+        // GetTypes() THROWS ReflectionTypeLoadException when individual types cannot be loaded, and
+        // its partial results silently omit exactly those. A layer dropped that way is indis-
+        // tinguishable, later, from one that was never written: CreateLayerFromType reports it as
+        // "not supported for deserialization", which sends the reader looking for a missing
+        // registration instead of a missing dependency. Catch it, keep what did load, and say what
+        // did not -- the same reason every other silent skip in this work was made loud.
+        Type[] discovered;
+        try
+        {
+            discovered = Assembly.GetExecutingAssembly().GetTypes();
+        }
+        catch (ReflectionTypeLoadException ex)
+        {
+            discovered = ex.Types.Where(t => t is not null).Select(t => t!).ToArray();
+
+            var unloadable = (ex.LoaderExceptions ?? Array.Empty<Exception?>())
+                .Where(e => e is not null)
+                .Select(e => e!.Message)
+                .Distinct(StringComparer.Ordinal)
+                .Take(5)
+                .ToArray();
+
+            System.Diagnostics.Trace.TraceError(
+                "Layer discovery could not load every type in the assembly, so any layer among them "
+                + "will later be reported as 'not supported for deserialization' when the real cause "
+                + "is a load failure. First load errors: "
+                + (unloadable.Length == 0 ? "(none reported)" : string.Join(" | ", unloadable)));
+        }
+
+        var layerTypes = discovered
             .Where(t => !t.IsAbstract && t.GetInterfaces()
                 .Any(i => i.IsGenericType && i.GetGenericTypeDefinition() == typeof(ILayer<>)));
 
