@@ -82,6 +82,12 @@ public partial class AudioVisualCorrespondenceNetwork<T> : MultimodalModelLayout
 
     private readonly int _embeddingDimension;
     private readonly int _audioSampleRate;
+
+    /// <summary>
+    /// Real log-mel front-end, built for <see cref="_audioSampleRate"/>. Holds no trainable
+    /// parameters (the filterbank is fixed), so it is not part of the layer list.
+    /// </summary>
+    private readonly AiDotNet.Diffusion.Audio.MelSpectrogram<T> _audioFrontEnd;
     private readonly double _videoFrameRate;
     private readonly int _numEncoderLayers;
     private readonly int _hiddenDim;
@@ -188,6 +194,7 @@ public partial class AudioVisualCorrespondenceNetwork<T> : MultimodalModelLayout
 
         _embeddingDimension = embeddingDimension;
         _audioSampleRate = audioSampleRate;
+        _audioFrontEnd = CreateAudioFrontEnd(audioSampleRate);
         _videoFrameRate = videoFrameRate;
         _numEncoderLayers = numEncoderLayers;
         _hiddenDim = embeddingDimension * 4;
@@ -600,29 +607,45 @@ public partial class AudioVisualCorrespondenceNetwork<T> : MultimodalModelLayout
 
     #region Helper Methods
 
+    /// <summary>
+    /// Builds the log-mel front-end for a given sample rate.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="SPECTROGRAM_BINS"/> mel bins and a <see cref="SPECTROGRAM_HOP"/>-sample hop keep
+    /// this model's own frequency resolution and frame rate; only the arithmetic producing them
+    /// changes. The FFT length follows librosa's convention of four times the hop.
+    /// </remarks>
+    private static AiDotNet.Diffusion.Audio.MelSpectrogram<T> CreateAudioFrontEnd(int sampleRate)
+        => new AiDotNet.Diffusion.Audio.MelSpectrogram<T>(
+            sampleRate: sampleRate,
+            nMels: SPECTROGRAM_BINS,
+            nFft: SPECTROGRAM_HOP * 4,
+            hopLength: SPECTROGRAM_HOP);
+
+    /// <summary>
+    /// Computes a real log-mel spectrogram, <c>[frames, SPECTROGRAM_BINS]</c>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This previously built its own array and called it a spectrogram: for each frame it read raw
+    /// waveform samples at <c>startSample + bin</c>, scaled them by a linear ramp
+    /// <c>(bin + 1) / SPECTROGRAM_BINS</c>, and took the log of the magnitude. There was no Fourier
+    /// transform, no mel filterbank and no window function, so the second axis indexed a sample
+    /// OFFSET rather than a frequency — the values carried no spectral meaning for the audio encoder
+    /// to correspond against the visual stream.
+    /// </para>
+    /// <para>
+    /// The transform is cached for the model's configured rate and rebuilt only when a caller asks
+    /// for a different one, since the mel filterbank depends on the sample rate.
+    /// </para>
+    /// </remarks>
     private Tensor<T> ComputeSpectrogram(Tensor<T> waveform, int sampleRate)
     {
-        var waveLength = waveform.Length;
-        var numFrames = (waveLength - SPECTROGRAM_HOP) / SPECTROGRAM_HOP + 1;
-        numFrames = Math.Max(1, numFrames);
+        var frontEnd = sampleRate == _audioSampleRate
+            ? _audioFrontEnd
+            : CreateAudioFrontEnd(sampleRate);
 
-        var spectrogram = new Tensor<T>([numFrames, SPECTROGRAM_BINS]);
-
-        // Simplified spectrogram computation
-        for (int frame = 0; frame < numFrames; frame++)
-        {
-            var startSample = frame * SPECTROGRAM_HOP;
-            for (int bin = 0; bin < SPECTROGRAM_BINS; bin++)
-            {
-                var freq = (bin + 1.0) / SPECTROGRAM_BINS;
-                var sampleIdx = Math.Min(startSample + bin, waveLength - 1);
-                var value = NumOps.ToDouble(waveform.Data.Span[sampleIdx]);
-                spectrogram.Data.Span[frame * SPECTROGRAM_BINS + bin] =
-                    NumOps.FromDouble(Math.Log(Math.Abs(value * freq) + 1e-8));
-            }
-        }
-
-        return spectrogram;
+        return frontEnd.Forward(waveform);
     }
 
     private Tensor<T> ApplyAudioEncoder(Tensor<T> spectrogram)
