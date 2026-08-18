@@ -626,6 +626,33 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape,
         foreach (var layer in ReflectInstanceLayers(this))
         {
             if (layer is not LayerBase<T> lb) continue;
+
+            // Prepare each layer's value surface, exactly as the chunk stream does through
+            // GetOwnParameterStateChunks. This is a VALUE boundary: every caller below is about to
+            // read or write real scalars, and a slot whose tensor is still lazy reports ScalarCount 0
+            // and is then skipped -- silently shrinking the surface this method describes.
+            //
+            // The two sides disagreed because only one of them prepared. GetParameterChunks
+            // materializes per layer and counted 954,084 scalars on a cloned UNetNoisePredictor,
+            // while this enumeration skipped the still-lazy components and yielded 904,740 -- the
+            // same object reporting two different sizes. Clone()'s fallback then handed the larger
+            // stream to a SetParameters sized by the smaller one:
+            //
+            //     ArgumentException : Expected 904740 parameters, got 954084
+            //
+            // which is the whole of failure class P1. The remark on EnsureParametersReady already
+            // states the rule this restores: a predictor with lazy weights "must use the SAME
+            // resolution on every path", or "the count described one model and the restore built
+            // another".
+            //
+            // Prepared HERE rather than in LayerBase.GetOwnTrainableParameterValueSlots: that
+            // method is on the base every layer in the library inherits, and materializing there
+            // moved weight allocation earlier for every model, changing initialization order. It
+            // took the diffusion family from 2 failures to 14. Preparing at this boundary reaches
+            // exactly the layers whose values are being enumerated, when they are being enumerated.
+            if (lb is AiDotNet.Models.Parameters.IParameterSurfaceLifecycle lifecycle)
+                lifecycle.PrepareParameterSurface(AiDotNet.Models.Parameters.ParameterSurfaceIntent.Read);
+
             foreach (var slot in lb.GetOwnTrainableParameterValueSlots())
             {
                 if (slot.ScalarCount == 0) continue;
