@@ -399,8 +399,11 @@ public abstract class MambularBase<T> : IParameterSource<T>
         // Convolution
         private readonly Tensor<T> _convWeight;
 
-        // Delta (discretization)
-        [AiDotNet.Attributes.Scratch]
+        // Delta (discretization). Built once in the constructor and only ever read afterwards, and
+        // it is yielded from Tensors() below, so it travels in the parameter vector exactly like the
+        // seven weights above it. It was briefly labelled Scratch, which would have declared the
+        // opposite -- a value the restore path is free to discard -- while the vector was still
+        // carrying it. A field cannot be both.
         private readonly Tensor<T> _deltaProj;
 
         /// <summary>
