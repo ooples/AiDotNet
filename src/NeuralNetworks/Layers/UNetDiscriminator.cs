@@ -646,6 +646,7 @@ public partial class UNetConvBlock<T> : LayerBase<T>, IShapeContract
         _conv2.UpdateParameters(learningRate);
     }
 
+    [AiDotNet.Attributes.Scratch]
     private Vector<T>? _pendingParameters;
 
     public override void ResetState()
@@ -942,6 +943,7 @@ public partial class UNetUpBlock<T> : LayerBase<T>, IShapeContract
         _conv2.UpdateParameters(learningRate);
     }
 
+    [AiDotNet.Attributes.Scratch]
     private Vector<T>? _pendingParameters;
 
     public override void ResetState()

@@ -743,8 +743,11 @@ public partial class LSTMLayer<T> : LayerBase<T>, IShapeContract
     // [4*hidden, *] arrays is invariant across forward calls while the weights are
     // unchanged, so cache it and reuse on repeated inference. Invalidated alongside
     // the GPU stacked weights whenever the underlying weights mutate.
+    [AiDotNet.Attributes.Scratch]
     private Tensor<float>? _cpuStackedWeightsIh;
+    [AiDotNet.Attributes.Scratch]
     private Tensor<float>? _cpuStackedWeightsHh;
+    [AiDotNet.Attributes.Scratch]
     private Tensor<float>? _cpuStackedBiasIh;
     private bool _cpuStackedWeightsValid;
 

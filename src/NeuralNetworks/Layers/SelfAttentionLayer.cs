@@ -221,6 +221,7 @@ public partial class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T
     /// <see cref="LayerBase{T}.UpcastResidentWeight"/> and <see cref="_fusedQkvWeightsHalf"/> holds the
     /// resident master instead.
     /// </summary>
+    [AiDotNet.Attributes.Scratch]
     private Tensor<T> _fusedQkvWeights = new Tensor<T>([0, 0]);
 
     /// <summary>True once <see cref="_fusedQkvWeights"/> / <see cref="_fusedQkvWeightsHalf"/> has been built.</summary>
@@ -241,8 +242,11 @@ public partial class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T
     /// the fused weight is stale (weights were replaced by SetParameters / a training step / Clone) and
     /// is rebuilt. Null until first build.
     /// </summary>
+    [AiDotNet.Attributes.Scratch]
     private Tensor<T>? _fusedQkvSrcQ;
+    [AiDotNet.Attributes.Scratch]
     private Tensor<T>? _fusedQkvSrcK;
+    [AiDotNet.Attributes.Scratch]
     private Tensor<T>? _fusedQkvSrcV;
 
     /// <summary>

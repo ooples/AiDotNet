@@ -377,8 +377,11 @@ public partial class RWKV7Block<T> : LayerBase<T>, IShapeContract
     private Tensor<T>? _normBeta2Grad;
 
     // Recurrent state for autoregressive inference
+    [AiDotNet.Attributes.Buffer]
     private Tensor<T>? _recurrentState;       // [batch, numHeads, headDim, headDim]
+    [AiDotNet.Attributes.Buffer]
     private Tensor<T>? _prevToken;            // [batch, modelDim] for time mixing token shift
+    [AiDotNet.Attributes.Buffer]
     private Tensor<T>? _prevChannelToken;     // [batch, modelDim] for channel mixing token shift
 
     /// <summary>
