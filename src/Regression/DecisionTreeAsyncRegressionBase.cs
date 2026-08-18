@@ -325,8 +325,6 @@ public abstract partial class AsyncDecisionTreeRegressionBase<T> : IAsyncTreeBas
             writer.Write(Convert.ToDouble(importance));
         }
 
-        // Serialize tree structure
-        SerializeNode(writer, Root);
 
         return AiDotNet.Models.ModelStateEnvelope.Append(DeclaredState, ms.ToArray());
     }
@@ -375,56 +373,9 @@ public abstract partial class AsyncDecisionTreeRegressionBase<T> : IAsyncTreeBas
         }
         FeatureImportances = new Vector<T>(importances);
 
-        // Deserialize tree structure
-        Root = DeserializeNode(reader);
     }
 
-    /// <summary>
-    /// Serializes a single node of the decision tree.
-    /// </summary>
-    /// <param name="writer">The BinaryWriter to write the serialized data to.</param>
-    /// <param name="node">The node to serialize.</param>
-    private void SerializeNode(BinaryWriter writer, DecisionTreeNode<T>? node)
-    {
-        if (node == null)
-        {
-            writer.Write(false);
-            return;
-        }
 
-        writer.Write(true);
-        writer.Write(node.FeatureIndex);
-        writer.Write(Convert.ToDouble(node.SplitValue));
-        writer.Write(Convert.ToDouble(node.Prediction));
-        writer.Write(node.IsLeaf);
-
-        SerializeNode(writer, node.Left);
-        SerializeNode(writer, node.Right);
-    }
-
-    /// <summary>
-    /// Deserializes a single node of the decision tree.
-    /// </summary>
-    /// <param name="reader">The BinaryReader to read the serialized data from.</param>
-    /// <returns>The deserialized DecisionTreeNode, or null if the node was not present.</returns>
-    private DecisionTreeNode<T>? DeserializeNode(BinaryReader reader)
-    {
-        bool hasNode = reader.ReadBoolean();
-        if (!hasNode) return null;
-
-        var node = new DecisionTreeNode<T>
-        {
-            FeatureIndex = reader.ReadInt32(),
-            SplitValue = NumOps.FromDouble(reader.ReadDouble()),
-            Prediction = NumOps.FromDouble(reader.ReadDouble()),
-            IsLeaf = reader.ReadBoolean()
-        };
-
-        node.Left = DeserializeNode(reader);
-        node.Right = DeserializeNode(reader);
-
-        return node;
-    }
 
     /// <summary>
     /// Gets the model parameters as a vector representation.
