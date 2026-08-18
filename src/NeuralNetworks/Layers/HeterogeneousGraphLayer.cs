@@ -1162,12 +1162,50 @@ public partial class HeterogeneousGraphLayer<T> : LayerBase<T>, IGraphConvolutio
         return parameters;
     }
 
+    /// <inheritdoc />
+    /// <remarks>
+    /// Relation- and node-specific tensors live in dictionaries, so their complete surface cannot
+    /// be expressed by one attribute per field. Publishing the live ordered manifest here lets the
+    /// base checkpoint and copy-on-write machinery validate and adopt the entire runtime registry.
+    /// </remarks>
+    protected override IReadOnlyList<(Tensor<T>? Tensor, TensorShape Expected, PersistentTensorRole Role)>
+        DeclaredParameterShapes()
+    {
+        var tensors = GetParameterTensors();
+        int biasStart = tensors.Count - _biases.Count;
+        var declared = new (Tensor<T>?, TensorShape, PersistentTensorRole)[tensors.Count];
+        for (int i = 0; i < tensors.Count; i++)
+        {
+            var tensor = tensors[i];
+            declared[i] = (
+                tensor,
+                ShapeOf(tensor.Shape.ToArray()),
+                i >= biasStart ? PersistentTensorRole.Biases : PersistentTensorRole.Weights);
+        }
+        return declared;
+    }
+
+    /// <inheritdoc />
+    protected override void AdoptTrainableParameterTensors(IReadOnlyList<Tensor<T>> parameters)
+    {
+        SetParameterTensors(parameters.ToList());
+    }
+
     /// <summary>
     /// Sets the trainable parameters of the layer from a list of tensors.
     /// </summary>
     /// <param name="parameters">A list containing all parameter tensors to set.</param>
     public void SetParameterTensors(List<Tensor<T>> parameters)
     {
+        int expected = GetParameterTensors().Count;
+        if (parameters.Count != expected)
+        {
+            throw new ArgumentException(
+                $"{nameof(HeterogeneousGraphLayer<T>)} requires exactly {expected} parameter tensors, " +
+                $"but received {parameters.Count}.",
+                nameof(parameters));
+        }
+
         int index = 0;
 
         if (_useBasis)

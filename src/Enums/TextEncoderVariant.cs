@@ -35,6 +35,12 @@ public enum CLIPVariant
     ViTL14,
     /// <summary>CLIP ViT-H/14: 1024-dim, 24 layers. Used in SD 2.x.</summary>
     ViTH14,
+    /// <summary>
+    /// Frozen OpenCLIP ViT-H text tower shipped with the Stable Diffusion x4
+    /// Upscaler: 1024 hidden dimensions, 23 layers, 16 heads, and a 512-dim
+    /// pooled projection. Upscale-A-Video reuses this released conditioner.
+    /// </summary>
+    StableDiffusionX4Upscaler,
     /// <summary>CLIP ViT-bigG/14: 1280-dim, 32 layers. Encoder 2 of SDXL/SD3.</summary>
     ViTBigG14
 }

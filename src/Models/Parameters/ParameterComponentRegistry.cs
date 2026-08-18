@@ -365,6 +365,137 @@ public sealed class ParameterComponentRegistry<T> : IParameterManifestProvider
         }
     }
 
+    /// <summary>
+    /// Restores every checkpoint slot whose stable identity and shape still match the live model.
+    /// </summary>
+    /// <remarks>
+    /// This is the safe checkpoint path for fitted models whose constructor-time state layout can
+    /// differ from their post-fit layout. A positional flat restore cannot recover after one field
+    /// grows, disappears, or changes shape: every later value shifts into the wrong field even when
+    /// the total count happens to agree. Stable-ID matching makes each field independent and leaves
+    /// model-specific deserialization in control of slots whose topology it reconstructed itself.
+    /// </remarks>
+    public void SetMatchingParameters(
+        Vector<T> parameters,
+        ParameterLayoutSnapshot checkpointLayout)
+    {
+        if (parameters is null) throw new ArgumentNullException(nameof(parameters));
+        if (checkpointLayout is null) throw new ArgumentNullException(nameof(checkpointLayout));
+        if (checkpointLayout.ParameterCount != parameters.Length)
+        {
+            throw new ArgumentException(
+                $"Checkpoint layout describes {checkpointLayout.ParameterCount?.ToString() ?? "an unresolved number of"} " +
+                $"values, but the payload contains {parameters.Length}.",
+                nameof(parameters));
+        }
+
+        lock (_surfaceGate)
+        {
+            PrepareSources(ParameterSurfaceIntent.Restore);
+            var target = CaptureLayout();
+            var checkpointSlots = new Dictionary<string, ParameterSlotDescriptor>(StringComparer.Ordinal);
+            for (int i = 0; i < checkpointLayout.Slots.Count; i++)
+            {
+                var slot = checkpointLayout.Slots[i];
+                ValidateCheckpointSlotGeometry(slot, parameters.Length, nameof(checkpointLayout));
+                checkpointSlots.Add(slot.StableId, slot);
+            }
+
+            // Build the complete restore plan before mutating any source. Besides making malformed
+            // checkpoint geometry fail atomically, this validates every narrowing conversion and
+            // every slice used by a later source write.
+            var pending = new List<(IParameterSource<T> Source, Vector<T> Payload)>();
+
+            for (int entryIndex = 0; entryIndex < target.Entries.Count; entryIndex++)
+            {
+                var item = target.Entries[entryIndex];
+                var source = item.Entry.Source;
+                if (source is null || !item.ParameterCount.HasValue) continue;
+
+                // A replaceable fitted vector/tensor can learn its width directly from its named
+                // checkpoint slot. Unlike the ordinary flat restore, this remains unambiguous even
+                // when several independent fitted fields are resizable.
+                if (source is IVariableLengthParameterSource<T> variable && variable.CanResizeOnRestore
+                    && checkpointSlots.TryGetValue(item.Entry.StableId, out var variableSlot)
+                    && variableSlot.ParameterCount is long variableCount
+                    && variableSlot.Offset is long variableOffset
+                    && variableCount > 0)
+                {
+                    var variableValues = new Vector<T>(checked((int)variableCount));
+                    parameters.AsSpan()
+                        .Slice(checked((int)variableOffset), checked((int)variableCount))
+                        .CopyTo(variableValues.AsWritableSpan());
+                    pending.Add((source, variableValues));
+                    continue;
+                }
+
+                int targetCount = checked((int)item.ParameterCount.Value);
+                if (targetCount == 0) continue;
+                var payload = new Vector<T>(targetCount);
+                int payloadOffset = 0;
+                bool completeMatch = true;
+
+                for (int slotIndex = 0; slotIndex < item.LocalSlots.Count; slotIndex++)
+                {
+                    var localSlot = item.LocalSlots[slotIndex];
+                    if (!localSlot.ParameterCount.HasValue)
+                    {
+                        completeMatch = false;
+                        break;
+                    }
+
+                    int count = checked((int)localSlot.ParameterCount.Value);
+                    if (count == 0) continue;
+                    string stableId = localSlot.StableId == "$"
+                        ? item.Entry.StableId
+                        : item.Entry.StableId + "/" + localSlot.StableId;
+                    if (!checkpointSlots.TryGetValue(stableId, out var checkpointSlot)
+                        || checkpointSlot.ParameterCount != count
+                        || !ParameterShapeComparer.AreEqual(localSlot.Shape, checkpointSlot.Shape)
+                        || !checkpointSlot.Offset.HasValue)
+                    {
+                        completeMatch = false;
+                        break;
+                    }
+
+                    parameters.AsSpan()
+                        .Slice(checked((int)checkpointSlot.Offset.Value), count)
+                        .CopyTo(payload.AsWritableSpan().Slice(payloadOffset, count));
+                    payloadOffset += count;
+                }
+
+                if (completeMatch && payloadOffset == targetCount)
+                    pending.Add((source, payload));
+            }
+
+            for (int i = 0; i < pending.Count; i++)
+                pending[i].Source.SetParameters(pending[i].Payload);
+        }
+    }
+
+    private static void ValidateCheckpointSlotGeometry(
+        ParameterSlotDescriptor slot,
+        int payloadLength,
+        string parameterName)
+    {
+        if (!slot.ParameterCount.HasValue || !slot.Offset.HasValue)
+        {
+            throw new ArgumentException(
+                $"Checkpoint slot '{slot.StableId}' has unresolved range geometry.",
+                parameterName);
+        }
+
+        long count = slot.ParameterCount.Value;
+        long offset = slot.Offset.Value;
+        if (count < 0 || offset < 0 || offset > payloadLength || count > payloadLength - offset)
+        {
+            throw new ArgumentException(
+                $"Checkpoint slot '{slot.StableId}' describes offset {offset} and count {count}, " +
+                $"which do not fit a {payloadLength}-value payload.",
+                parameterName);
+        }
+    }
+
     private void SetParametersCore(Vector<T> parameters)
     {
 

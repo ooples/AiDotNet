@@ -67,6 +67,12 @@ public partial class PReLULayer<T> : LayerBase<T>
     /// </summary>
     public Tensor<T> GetAlphaTensor() => _alpha;
 
+    /// <summary>Gets the number of independently learned negative slopes.</summary>
+    public int NumParameters => _numParameters;
+
+    /// <summary>Gets the tensor axis used for per-channel broadcasting.</summary>
+    public int ChannelAxis => _channelAxis;
+
     /// <summary>
     /// Initializes a new <see cref="PReLULayer{T}"/>.
     /// </summary>
@@ -172,6 +178,13 @@ public partial class PReLULayer<T> : LayerBase<T>
     }
 
     /// <inheritdoc/>
+    internal override Dictionary<string, string> GetMetadata()
+    {
+        var metadata = base.GetMetadata();
+        metadata["NumParameters"] = _numParameters.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        metadata["ChannelAxis"] = _channelAxis.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        return metadata;
+    }
     public override void ResetState()
     {
         _lastInput = null;

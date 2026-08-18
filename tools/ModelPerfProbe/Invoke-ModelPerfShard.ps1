@@ -102,6 +102,10 @@ foreach ($testName in $assigned) {
     # guard accept it without coupling this child process to the matrix shard number.
     $process.StartInfo.Environment['AIDOTNET_MODEL_PERF_SHARD_INDEX'] = '0'
     $process.StartInfo.Environment['AIDOTNET_MODEL_PERF_SHARD_COUNT'] = '1'
+    # Set the CPU-only contract before assembly load. Tensors performs backend discovery from a
+    # module initializer, so setting this inside the test assembly is too late: it compiles hundreds
+    # of OpenCL kernels before the fixture resets to CpuEngine, contaminating both memory and time.
+    $process.StartInfo.Environment['AIDOTNET_DISABLE_GPU'] = '1'
 
     Write-Host "[$([DateTimeOffset]::UtcNow.ToString('u'))] START $fixture"
     [void]$process.Start()

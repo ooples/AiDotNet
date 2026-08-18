@@ -426,7 +426,7 @@ public partial class MambaBlock<T> : LayerBase<T>, IShapeContract
         _lastZBranch = zBranch;
 
         // Step 2: Conv1D on x branch (depthwise, causal) - Engine-accelerated
-        var convOutput = DepthwiseConv1DForward(xBranch, batchSize, seqLen);
+        var convOutput = DepthwiseConv1DForward(xBranch, seqLen);
         _lastConvOutput = convOutput;
 
         // Step 3: SiLU activation via Engine
@@ -532,49 +532,25 @@ public partial class MambaBlock<T> : LayerBase<T>, IShapeContract
     /// Depthwise causal Conv1D using Engine tensor operations.
     /// </summary>
     /// <remarks>
-    /// Time loop over sequence positions with a tiny inner kernel loop (typically 4).
-    /// All per-position operations use Engine-accelerated vectors of size [batch, innerDim].
+    /// Uses the engine's depthwise Conv1D primitive so the entire causal convolution is one
+    /// differentiable operation instead of expanding <c>sequenceLength * kernelSize</c> narrow,
+    /// multiply, and add nodes onto the tape. The public Mamba parameter layout stores coefficients
+    /// as <c>[channel, lag]</c>, where lag zero is the current token. The NCL convolution primitive
+    /// performs cross-correlation, so reverse the lag axis and use <c>kernelSize - 1</c> symmetric
+    /// padding, then retain the first <c>sequenceLength</c> positions. This is exactly equivalent to
+    /// <c>sum_k weight[channel,k] * input[t-k,channel]</c> and preserves the paper's causal contract.
     /// </remarks>
-    private Tensor<T> DepthwiseConv1DForward(Tensor<T> input, int batchSize, int seqLen)
+    private Tensor<T> DepthwiseConv1DForward(Tensor<T> input, int seqLen)
     {
-        var bias2D = Engine.Reshape(_convBias, new[] { 1, _innerDimension });
-        var timeSlices = new Tensor<T>[seqLen];
-
-        // Pre-compute weight slices for each kernel position: [innerDim] -> [1, innerDim]
-        var weightSlices = new Tensor<T>[_convKernelSize];
-        for (int k = 0; k < _convKernelSize; k++)
-        {
-            var weightColumn = Engine.TensorNarrow(_convWeights, 1, k, 1);
-            weightSlices[k] = Engine.Reshape(weightColumn, new[] { 1, _innerDimension });
-        }
-
-        for (int t = 0; t < seqLen; t++)
-        {
-            // Accumulate weighted past inputs, then add bias last.
-            Tensor<T>? result_t = null;
-            for (int k = 0; k < _convKernelSize; k++)
-            {
-                int srcT = t - k;  // causal: only current and past positions
-                if (srcT >= 0)
-                {
-                    var xAtTime = Engine.TensorNarrow(input, 1, srcT, 1);
-                    var x_src = Engine.Reshape(xAtTime, new[] { batchSize, _innerDimension });
-                    var weighted = Engine.TensorBroadcastMultiply(x_src, weightSlices[k]);
-                    result_t = result_t is null
-                        ? weighted
-                        : Engine.TensorAdd(result_t, weighted);
-                }
-            }
-
-            // Add bias: broadcast [1, innerDim] to [batch, innerDim]
-            var final_t = result_t is null
-                ? Engine.TensorBroadcastAdd(new Tensor<T>(new[] { batchSize, _innerDimension }), bias2D)
-                : Engine.TensorBroadcastAdd(result_t, bias2D);
-
-            timeSlices[t] = Engine.Reshape(final_t, new[] { batchSize, 1, _innerDimension });
-        }
-
-        return Engine.TensorConcatenate(timeSlices, axis: 1);
+        var inputNcl = Engine.TensorPermute(input, new[] { 0, 2, 1 }).Contiguous();
+        var reversedWeights = Engine.TensorFlip(_convWeights, new[] { 1 });
+        var kernel = Engine.Reshape(reversedWeights, new[] { _innerDimension, 1, _convKernelSize });
+        var padded = Engine.DepthwiseConv1D(
+            inputNcl, kernel, stride: 1, padding: _convKernelSize - 1);
+        var causalNcl = Engine.TensorNarrow(padded, dim: 2, start: 0, length: seqLen);
+        var causal = Engine.TensorPermute(causalNcl, new[] { 0, 2, 1 }).Contiguous();
+        var bias = Engine.Reshape(_convBias, new[] { 1, 1, _innerDimension });
+        return Engine.TensorBroadcastAdd(causal, bias);
     }
 
     /// <summary>

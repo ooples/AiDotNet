@@ -14005,6 +14005,18 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     #region INeuralNetworkModel Implementation
 
     /// <summary>
+    /// Gets whether <see cref="Layers"/> is the model's complete, literal execution chain.
+    /// </summary>
+    /// <remarks>
+    /// This is deliberately an explicit opt-in. A serialization-order layer list does not prove a
+    /// sequential graph: combined-stream, encoder/decoder, shared-stage, and input-transforming
+    /// models can all inherit the base lazy-shape resolver while owning non-linear execution
+    /// boundaries. The safe default records the model's actual forward. A plain-chain base may
+    /// override this only when forwarding <c>Layers[0..n]</c> exactly reproduces <see cref="Predict"/>.
+    /// </remarks>
+    protected virtual bool SupportsSequentialActivationFold => false;
+
+    /// <summary>
     /// Gets the intermediate activations from each layer when processing the given input with named keys.
     /// </summary>
     public virtual Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input)
@@ -14025,26 +14037,29 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // is the fallback: models the fold already serves pay nothing, and a model the fold cannot
         // serve gets an answer instead of an exception.
         var activations = new Dictionary<string, Tensor<T>>();
-        try
+        if (SupportsSequentialActivationFold)
         {
-            var current = input;
-            for (int i = 0; i < Layers.Count; i++)
+            try
             {
-                current = Layers[i].Forward(current);
-                activations[$"Layer_{i}_{Layers[i].GetType().Name}"] = current.Clone();
-            }
+                var current = input;
+                for (int i = 0; i < Layers.Count; i++)
+                {
+                    current = Layers[i].Forward(current);
+                    activations[$"Layer_{i}_{Layers[i].GetType().Name}"] = current.Clone();
+                }
 
-            // AN EMPTY RESULT IS ALSO A FAILURE TO ANSWER, not an answer of "no activations".
-            // Layers is empty for every model that keeps its real layers somewhere else -- an echo
-            // state network's reservoir and readout, InfoGAN's generator / discriminator / Q trio --
-            // and the fold then completes without throwing and reports nothing. Falling through
-            // covers that case with the same machinery as the branched one.
-            if (activations.Count > 0) return activations;
-        }
-        catch (Exception)
-        {
-            // The fold is invalid for this topology. Fall through and record what the model itself does.
-            activations.Clear();
+                // AN EMPTY RESULT IS ALSO A FAILURE TO ANSWER, not an answer of "no activations".
+                // Layers is empty for every model that keeps its real layers somewhere else -- an echo
+                // state network's reservoir and readout, InfoGAN's generator / discriminator / Q trio --
+                // and the fold then completes without throwing and reports nothing. Falling through
+                // covers that case with the same machinery as the branched one.
+                if (activations.Count > 0) return activations;
+            }
+            catch (Exception)
+            {
+                // The fold is invalid for this topology. Fall through and record what the model itself does.
+                activations.Clear();
+            }
         }
 
         // The observer is already wired into LayerBase.Forward and composes with an enclosing trace,

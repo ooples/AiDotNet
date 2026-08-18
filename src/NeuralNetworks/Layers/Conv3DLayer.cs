@@ -4,7 +4,6 @@ using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.Autodiff;
-using AiDotNet.Tensors.Engines.Compilation;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
 using AiDotNet.Tensors.Helpers;
@@ -358,6 +357,14 @@ public partial class Conv3DLayer<T> : LayerBase<T>, IShapeContract
         return layer;
     }
 
+    /// <inheritdoc />
+    protected override void EnsureInitialized()
+    {
+        if (InputChannels <= 0)
+            return;
+        AllocateAndRegisterWeights(InputChannels);
+    }
+
     /// <summary>
     /// Resolves input shape (channels, depth, height, width) on first forward (PyTorch-style).
     /// Allocates kernels [outputChannels, inputChannels, K, K, K] and biases [outputChannels].
@@ -385,20 +392,25 @@ public partial class Conv3DLayer<T> : LayerBase<T>, IShapeContract
         // exist (installed by SetParameters/SetTrainableParameters on deserialize, or shared by a
         // copy-on-write clone) so a cloned model's first forward does not overwrite restored/shared
         // TRAINED weights with fresh random ones (#1221 Clone_AfterTraining). See Conv1DLayer.
-        bool weightsAlreadyValid =
-            WeightsAlreadyAllocated(_kernels, OutputChannels, c, KernelSize, KernelSize, KernelSize)
-            && WeightsAlreadyAllocated(_biases, OutputChannels);
-
-        if (!weightsAlreadyValid)
-        {
-            _kernels = AllocateLazyWeight([OutputChannels, c, KernelSize, KernelSize, KernelSize]);
-            _biases = AllocateLazyWeight([OutputChannels]);
-            InitializeWeights();
-            RegisterTrainableParameter(_kernels, PersistentTensorRole.Weights);
-            RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);
-        }
+        AllocateAndRegisterWeights(c);
 
         ResolveShapes(new[] { c, d, h, w }, new[] { OutputChannels, outD, outH, outW });
+    }
+
+    private void AllocateAndRegisterWeights(int inputChannels)
+    {
+        int[] kernelShape =
+            [OutputChannels, inputChannels, KernelSize, KernelSize, KernelSize];
+        if (!WeightsAlreadyAllocated(_kernels, kernelShape)
+            || !WeightsAlreadyAllocated(_biases, OutputChannels))
+        {
+            _kernels = AllocateLazyWeight(kernelShape);
+            _biases = AllocateLazyWeight([OutputChannels]);
+            InitializeWeights();
+        }
+
+        RegisterTrainableParameter(_kernels, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);
     }
 
     /// <summary>
@@ -636,50 +648,16 @@ public partial class Conv3DLayer<T> : LayerBase<T>, IShapeContract
         // Get the fused activation type for optimal GPU/CPU performance
         var fusedActivation = GetFusedActivationType();
 
-        // Training-mode and tape-recording path: route through the im2col
-        // + GEMM rewrite. The IsTrainingMode branch additionally covers
-        // the compiled training path — Training.CompiledTapeTrainingStep
-        // traces the forward graph under its own GraphMode (which is NOT
-        // GradientTape.Current). Without this OR-branch the layer would
-        // fall through to the inference FusedConv3D fast path during
-        // trace, the compiled plan would capture
-        // FusedConv3D+engine.Conv3DBackward, and every training step
-        // would burn ~1.1 s in
-        // engine.Conv3DBackwardInput / Conv3DBackwardKernel on
-        // VoxelCNN-scale shapes — overflowing the 180 s xUnit
-        // memorization-probe timeout. Same pattern that ConvolutionalLayer
-        // (2D) uses at line 1131–1147 of ConvolutionalLayer.cs to opt the
-        // eager-tape path into the compiled-trace pipeline.
+        // Training and compiled traces must use the differentiable package operation. Tensors
+        // 0.127.0 owns the bounded im2col/GEMM forward and both gradient contractions, so the
+        // layer no longer duplicates that implementation with a consumer-side custom graph node.
+        // Keep FusedConv3D for no-grad inference, where bias and activation fusion still wins.
         bool tapeActive = GradientTape<T>.Current is not null
             && !AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>.IsSuppressed;
         bool useEagerOrTracePath = tapeActive || IsTrainingMode;
 
         Tensor<T> activated;
-        if (useEagerOrTracePath)
-        {
-            // Tape-recording path (training). The default Engine.Conv3D /
-            // engine.Conv3DBackward* kernels in AiDotNet.Tensors take the
-            // per-output-element direct-convolution route on CPU, which on
-            // a Conv3D-heavy stack like VoxelCNN runs ~1.1 s per training
-            // step (forward 17 ms via FusedConv3D + backward ~820 ms across
-            // three blocks), pushing the 100-step memorization probe past
-            // its 180 s xUnit timeout. Switching to an im2col + GEMM
-            // formulation puts the heavy compute on the BLAS-optimized
-            // Engine.TensorMatMul path which is multi-threaded and
-            // cache-blocked — measured 3.8×–11.6× faster on VoxelCNN
-            // shapes (see testconsole/Conv3DProfile.cs) — and the MatMul
-            // autodiff backward is itself two GEMMs, so the train-time
-            // backward inherits the same speedup.
-            //
-            // The im2col-to-input mapping is registered as a single manual
-            // backward node (col2im scatter-add); MatMul / Reshape / Permute
-            // / TensorBroadcastAdd / ApplyActivation are all tape-tracked by
-            // their engine implementations, so their gradients flow
-            // automatically. Inference (tape == null) keeps using the GPU-
-            // fused FusedConv3D path below for minimum latency.
-            activated = ForwardIm2Col(batchedInput, fusedActivation);
-        }
-        else if (fusedActivation != FusedActivationType.None)
+        if (!useEagerOrTracePath && fusedActivation != FusedActivationType.None)
         {
             // Use FusedConv3D for optimal GPU kernel fusion (conv3d + bias + activation)
             activated = Engine.FusedConv3D(
@@ -695,7 +673,8 @@ public partial class Conv3DLayer<T> : LayerBase<T>, IShapeContract
         }
         else
         {
-            // Fallback for unsupported activations: use separate operations
+            // Tensors 0.127.0 lowers primitive CPU Conv3D forward/backward to bounded GEMMs and
+            // dispatches other backends through the same cross-backend IEngine operation.
             var convOutput = Engine.Conv3D(
                 batchedInput,
                 _kernels,
@@ -844,132 +823,6 @@ public partial class Conv3DLayer<T> : LayerBase<T>, IShapeContract
     }
 
     #endregion
-
-    /// <summary>
-    /// Tape-recording forward path that replaces the engine's direct
-    /// <see cref="IEngine{T}.Conv3D"/> with an im2col + GEMM formulation.
-    /// Inputs must be rank-5 NCDHW (the caller in <see cref="Forward"/>
-    /// reshapes lower / higher ranks first). The resulting computation
-    /// graph is:
-    /// <list type="number">
-    /// <item>im2col matrix <c>M = im2col(x)</c> with shape
-    ///       <c>[B·OD·OH·OW, CI·KD·KH·KW]</c> — tied to <c>x</c> via a
-    ///       manual-backward node that calls
-    ///       <see cref="Im2Col3DHelper.Col2Im3D"/> on the upstream gradient.</item>
-    /// <item><c>Y_flat = M · K_flatᵀ</c> via tape-tracked
-    ///       <see cref="IEngine{T}.TensorMatMul"/>.</item>
-    /// <item>Reshape to <c>[B, OD, OH, OW, CO]</c>, permute to
-    ///       <c>[B, CO, OD, OH, OW]</c>, broadcast-add bias, apply
-    ///       activation — all tape-tracked engine ops.</item>
-    /// </list>
-    /// The MatMul autodiff backward yields <c>∂L/∂K_flatᵀ</c> and
-    /// <c>∂L/∂M</c>; the manual node converts <c>∂L/∂M</c> back into
-    /// <c>∂L/∂x</c> via col2im.
-    /// </summary>
-    private Tensor<T> ForwardIm2Col(Tensor<T> input5D, FusedActivationType fusedActivation)
-    {
-        int B = input5D.Shape[0];
-        int CI = input5D.Shape[1];
-        int ID = input5D.Shape[2];
-        int IH = input5D.Shape[3];
-        int IW = input5D.Shape[4];
-        int K = KernelSize;
-        int OC = OutputChannels;
-
-        // Validate output dims via the shared checker (throws on zero/negative sizes)
-        // before allocating im2col buffers, matching the normal forward path.
-        int[] outShape = CalculateOutputShape(OC, ID, IH, IW, K, Stride, Padding);
-        int OD = outShape[1];
-        int OH = outShape[2];
-        int OW = outShape[3];
-
-        int colsPerRow = CI * K * K * K;
-        int rowsTotal = B * OD * OH * OW;
-
-        // Im2col is manual data movement rather than an Engine operation.
-        // Bind it explicitly to whichever training graph is active below:
-        // a lazy graph node for compiled training, or a manual tape node
-        // for eager training.
-        int kernelSizeCapture = K;
-        int strideCapture = Stride;
-        int paddingCapture = Padding;
-        int[] inputShapeCapture = (int[])input5D.Shape.ToArray().Clone();
-
-        Tensor<T> im2colMatrix;
-        var graphScope = GraphMode.Current;
-        if (graphScope is not null)
-        {
-            // Compiled training traces with lazy tensors. Reading input5D
-            // eagerly here would consume the trace-time placeholder and bake
-            // a stale im2col matrix into every replay. Record im2col as a real
-            // graph node so it executes after its input producer on every
-            // step, and attach the matching col2im backward edge so gradients
-            // continue through stacked Conv3D layers.
-            graphScope.BindEngineIfUnset(Engine);
-            var graphInput = input5D;
-            im2colMatrix = graphScope.RecordUnary(
-                LazyNodeType.Custom,
-                "Im2Col3D",
-                graphInput,
-                new[] { rowsTotal, colsPerRow },
-                (_, output) => Im2Col3DHelper.Im2Col3D(
-                    graphInput, output, kernelSizeCapture, strideCapture, paddingCapture),
-                (gradOutput, inputs, _, _, engine, grads) =>
-                {
-                    var gradInput = new Tensor<T>(inputShapeCapture);
-                    Im2Col3DHelper.Col2Im3D(
-                        gradOutput, gradInput, kernelSizeCapture, strideCapture, paddingCapture);
-                    DifferentiableOps.AccumulateGrad(grads, inputs[0], gradInput, engine);
-                });
-        }
-        else
-        {
-            // Tape entry: input5D --im2col--> im2colMatrix. Other
-            // downstream tape ops contribute dL/d(im2colMatrix); this node
-            // converts it to dL/d(input5D) via col2im scatter-add.
-            im2colMatrix = new Tensor<T>(new[] { rowsTotal, colsPerRow });
-            Im2Col3DHelper.Im2Col3D(input5D, im2colMatrix, K, Stride, Padding);
-            im2colMatrix = RegisterManualBackwardNode(
-                im2colMatrix,
-                new[] { input5D },
-                gradOutput =>
-                {
-                    var gradInput = new Tensor<T>(inputShapeCapture);
-                    Im2Col3DHelper.Col2Im3D(
-                        gradOutput, gradInput, kernelSizeCapture, strideCapture, paddingCapture);
-                    return new Tensor<T>?[] { gradInput };
-                });
-        }
-
-        // K_flat: kernel reshaped from [CO, CI, K, K, K] to [CO, CI·K³].
-        var kFlat = Engine.Reshape(_kernels, new[] { OC, colsPerRow });
-        // K_flatᵀ: transpose to [CI·K³, CO] so MatMul gives [rowsTotal, CO].
-        var kFlatT = Engine.TensorPermute(kFlat, new[] { 1, 0 });
-
-        // Y_flat: standard GEMM, runs on the BLAS-optimized path.
-        var yFlat = Engine.TensorMatMul(im2colMatrix, kFlatT);
-
-        // Reshape Y_flat [rowsTotal, OC] → [B, OD, OH, OW, OC], then permute
-        // to NCDHW [B, OC, OD, OH, OW] so the bias-broadcast and any
-        // downstream layer sees the conventional channels-first layout.
-        var yNDHWC = Engine.Reshape(yFlat, new[] { B, OD, OH, OW, OC });
-        var yNCDHW = Engine.TensorPermute(yNDHWC, new[] { 0, 4, 1, 2, 3 });
-
-        // Broadcast bias [OC] → [1, OC, 1, 1, 1] over the spatial dims.
-        var biasReshape = Engine.Reshape(_biases, new[] { 1, OC, 1, 1, 1 });
-        var withBias = Engine.TensorBroadcastAdd(yNCDHW, biasReshape);
-        _lastPreActivation = ShouldCacheForBackward ? withBias : null; // #1668: skip in inference (arena safety)
-
-        // Activation. ApplyActivation routes through the tape-tracked
-        // Engine activation operators when the layer's IActivationFunction
-        // is a recognized fused type (ReLU / Sigmoid / Tanh / etc.) — the
-        // same fast path the inference FusedConv3D activation used to bake
-        // in. For non-fused activations (custom IVectorActivationFunction)
-        // it still tape-tracks via the per-element scalar dispatch.
-        var activated = ApplyActivation(withBias);
-        _lastOutput = ShouldCacheForBackward ? activated : null; // #1668: skip in inference (arena safety)
-        return activated;
-    }
 
     #region Backward Pass
 

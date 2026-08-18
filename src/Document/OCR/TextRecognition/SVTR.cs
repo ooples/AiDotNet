@@ -1,4 +1,5 @@
 ﻿using AiDotNet.Attributes;
+using AiDotNet.ActivationFunctions;
 using AiDotNet.Document.Interfaces;
 using AiDotNet.Document.Options;
 using AiDotNet.Enums;
@@ -55,6 +56,7 @@ namespace AiDotNet.Document.OCR.TextRecognition;
 [ResearchPaper("SVTR: Scene Text Recognition with a Single Visual Model", "https://doi.org/10.48550/arXiv.2205.00159", Year = 2022, Authors = "Yongkun Du, Zhineng Chen, Caiyan Jia, Xiaoting Yin, Tianlun Zheng, Chenxia Li, Yuning Du, Yu-Gang Jiang")]
 public partial class SVTR<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
 {
+    private const int NetworkDataVersion = 2;
     private readonly SVTROptions _options;
 
     /// <inheritdoc/>
@@ -70,12 +72,26 @@ public partial class SVTR<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
     private readonly int _imageHeight;
     private readonly string _charset;
 
-    // Native mode layers
-    private readonly List<ILayer<T>> _patchEmbedLayers = [];
-    private readonly List<ILayer<T>> _mixingLayers = [];
-    private readonly List<ILayer<T>> _decoderLayers = [];
-
-    // Learnable embeddings
+    private bool _hasCustomArchitecture;
+    private SVTRThinPlateSplineLayer<T>? _tpsRectifier;
+    private ConvolutionalLayer<T>? _patchConv1;
+    private BatchNormalizationLayer<T>? _patchNorm1;
+    private ActivationLayer<T>? _patchAct1;
+    private ConvolutionalLayer<T>? _patchConv2;
+    private BatchNormalizationLayer<T>? _patchNorm2;
+    private ActivationLayer<T>? _patchAct2;
+    private LearnedPositionalEmbeddingLayer<T>? _positionLayer;
+    private readonly List<SVTRMixingBlockLayer<T>> _referenceBlocks = [];
+    private ConvolutionalLayer<T>? _merge1;
+    private LayerNormalizationLayer<T>? _mergeNorm1;
+    private ConvolutionalLayer<T>? _merge2;
+    private LayerNormalizationLayer<T>? _mergeNorm2;
+    private LayerNormalizationLayer<T>? _encoderNorm;
+    private AdaptiveAveragePoolingLayer<T>? _heightCollapse;
+    private BiasFreeLinearLayer<T>? _lastProjection;
+    private ActivationLayer<T>? _lastActivation;
+    private DropoutLayer<T>? _lastDropout;
+    private DenseLayer<T>? _ctcHead;
 
     #endregion
 
@@ -115,7 +131,7 @@ public partial class SVTR<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
         : this(new NeuralNetworkArchitecture<T>(
             inputType: InputType.TwoDimensional,
             taskType: NeuralNetworkTaskType.MultiClassClassification,
-            inputHeight: 32, inputWidth: 256,
+            inputHeight: 32, inputWidth: 100,
             outputSize: 96))
     {
     }
@@ -126,19 +142,14 @@ public partial class SVTR<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
     public SVTR(
         NeuralNetworkArchitecture<T> architecture,
         string onnxModelPath,
-        int imageWidth = 256,
-        int imageHeight = 32,
-        int maxSequenceLength = 25,
-        int embedDim = 192,
-        int numLayers = 8,
-        int numHeads = 6,
         string? charset = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         SVTROptions? options = null)
         : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
     {
-        _options = options ?? new SVTROptions();
+        _options = options is null ? new SVTROptions() : new SVTROptions(options);
+        _options.ValidateReferenceTopology();
         Options = _options;
 
         if (string.IsNullOrWhiteSpace(onnxModelPath))
@@ -147,15 +158,15 @@ public partial class SVTR<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
             throw new FileNotFoundException($"ONNX model not found: {onnxModelPath}", onnxModelPath);
 
         _useNativeMode = false;
-        _embedDim = embedDim;
-        _numLayers = numLayers;
-        _numHeads = numHeads;
-        _imageHeight = imageHeight;
+        _embedDim = _options.OutputChannels;
+        _numLayers = _options.StageDepths.Sum();
+        _numHeads = _options.StageHeads.Max();
+        _imageHeight = _options.InputHeight;
         _charset = charset ?? GetDefaultCharset();
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
-        ImageSize = imageWidth;
-        base.MaxSequenceLength = maxSequenceLength;
+        ImageSize = _options.InputWidth;
+        base.MaxSequenceLength = _options.OutputCharacterPositions;
 
         // Install the ONNX model through the base abstraction so DocumentNeuralNetworkBase.RunOnnxInference
         // (which reads OnnxModel/OnnxEncoder/OnnxDecoder) actually runs it. The previous code created a raw
@@ -179,31 +190,26 @@ public partial class SVTR<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
     /// </remarks>
     public SVTR(
         NeuralNetworkArchitecture<T> architecture,
-        int imageWidth = 256,
-        int imageHeight = 32,
-        int maxSequenceLength = 25,
-        int embedDim = 192,
-        int numLayers = 8,
-        int numHeads = 6,
         string? charset = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         SVTROptions? options = null)
         : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
     {
-        _options = options ?? new SVTROptions();
+        _options = options is null ? new SVTROptions() : new SVTROptions(options);
+        _options.ValidateReferenceTopology();
         Options = _options;
 
         _useNativeMode = true;
-        _embedDim = embedDim;
-        _numLayers = numLayers;
-        _numHeads = numHeads;
-        _imageHeight = imageHeight;
+        _embedDim = _options.OutputChannels;
+        _numLayers = _options.StageDepths.Sum();
+        _numHeads = _options.StageHeads.Max();
+        _imageHeight = _options.InputHeight;
         _charset = charset ?? GetDefaultCharset();
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
-        ImageSize = imageWidth;
-        base.MaxSequenceLength = maxSequenceLength;
+        ImageSize = _options.InputWidth;
+        base.MaxSequenceLength = _options.OutputCharacterPositions;
 
         // Wire SVTR's optimizer into the base tape-training loop. base.Train drives training through
         // the base training optimizer, not this private field, so without this a caller-supplied
@@ -211,7 +217,6 @@ public partial class SVTR<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
         SetBaseTrainOptimizer(_optimizer);
 
         InitializeLayers();
-        InitializeEmbeddings();
     }
 
     private static string GetDefaultCharset()
@@ -235,34 +240,239 @@ public partial class SVTR<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
         {
             Layers.AddRange(Architecture.Layers);
             ValidateCustomLayers(Layers);
+            _hasCustomArchitecture = true;
             return;
         }
-
-        Layers.AddRange(LayerHelper<T>.CreateDefaultSVTRLayers(
-            imageWidth: ImageSize,
-            imageHeight: _imageHeight,
-            hiddenDim: _embedDim,
-            numLayers: _numLayers,
-            numHeads: _numHeads,
-            charsetSize: _charset.Length + 1));
+        BuildReferenceSVTRTiny();
     }
 
-    private void InitializeEmbeddings()
+    private void BuildReferenceSVTRTiny()
     {
-        var random = RandomHelper.CreateSeededRandom(42);
-        int numPatches = (ImageSize / 4) * (_imageHeight / 4);
+        int[] dims = _options.EmbedDimensions;
+        int[] depths = _options.StageDepths;
+        int[] heads = _options.StageHeads;
+        var identity = new IdentityActivation<T>() as IActivationFunction<T>;
+        var gelu = new GELUActivation<T>() as IActivationFunction<T>;
 
-    }
-
-    private void InitializeWithSmallRandomValues(Tensor<T> tensor, Random random, double stdDev)
-    {
-        for (int i = 0; i < tensor.Data.Length; i++)
+        if (_options.UseTpsRectification)
         {
-            double u1 = 1.0 - random.NextDouble();
-            double u2 = 1.0 - random.NextDouble();
-            double randStdNormal = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Sin(2.0 * Math.PI * u2);
-            tensor.Data.Span[i] = NumOps.FromDouble(randStdNormal * stdDev);
+            _tpsRectifier = new SVTRThinPlateSplineLayer<T>(
+                inputChannels: 3,
+                localizationHeight: _options.TpsInputHeight,
+                localizationWidth: _options.TpsInputWidth,
+                outputHeight: _options.InputHeight,
+                outputWidth: _options.InputWidth,
+                controlPointCount: _options.TpsControlPointCount,
+                marginX: _options.TpsMarginX,
+                marginY: _options.TpsMarginY);
+            Layers.Add(_tpsRectifier);
         }
+
+        _patchConv1 = new ConvolutionalLayer<T>(dims[0] / 2, 3, 2, 1, identity);
+        _patchNorm1 = new BatchNormalizationLayer<T>();
+        _patchAct1 = new ActivationLayer<T>(gelu);
+        _patchConv2 = new ConvolutionalLayer<T>(dims[0], 3, 2, 1, identity);
+        _patchNorm2 = new BatchNormalizationLayer<T>();
+        _patchAct2 = new ActivationLayer<T>(gelu);
+        int gridH = _options.InputHeight / 4;
+        int gridW = _options.InputWidth / 4;
+        _positionLayer = new LearnedPositionalEmbeddingLayer<T>(gridH * gridW, dims[0]);
+        AddReferenceLayers(_patchConv1, _patchNorm1, _patchAct1, _patchConv2, _patchNorm2, _patchAct2, _positionLayer);
+
+        int globalBlockIndex = 0;
+        int totalBlocks = depths.Sum();
+        for (int stage = 0; stage < 3; stage++)
+        {
+            for (int block = 0; block < depths[stage]; block++, globalBlockIndex++)
+            {
+                var mixer = new SVTRMixingBlockLayer<T>(
+                    dims[stage], heads[stage], gridH, gridW,
+                    _options.LocalWindowHeight, _options.LocalWindowWidth,
+                    local: globalBlockIndex < _options.LocalMixingBlocks,
+                    dropPathRate: totalBlocks > 1
+                        ? _options.DropPathRate * globalBlockIndex / (totalBlocks - 1)
+                        : 0.0);
+                _referenceBlocks.Add(mixer);
+                Layers.Add(mixer);
+            }
+
+            if (stage == 0)
+            {
+                _merge1 = new ConvolutionalLayer<T>(dims[1], 3, 1, 1, identity);
+                _mergeNorm1 = new LayerNormalizationLayer<T>(dims[1]);
+                AddReferenceLayers(_merge1, _mergeNorm1);
+                gridH /= 2;
+            }
+            else if (stage == 1)
+            {
+                _merge2 = new ConvolutionalLayer<T>(dims[2], 3, 1, 1, identity);
+                _mergeNorm2 = new LayerNormalizationLayer<T>(dims[2]);
+                AddReferenceLayers(_merge2, _mergeNorm2);
+                gridH /= 2;
+            }
+        }
+
+        // rec_svtrnet.yml selects `prenorm: False`. In PaddleOCR's implementation that
+        // means each block is pre-normalized and the encoder receives one final norm.
+        _encoderNorm = new LayerNormalizationLayer<T>(dims[2]);
+        Layers.Add(_encoderNorm);
+        _heightCollapse = new AdaptiveAveragePoolingLayer<T>(1, _options.OutputCharacterPositions);
+        _lastProjection = new BiasFreeLinearLayer<T>(dims[2], _options.OutputChannels);
+        _lastActivation = new ActivationLayer<T>(new HardSwishActivation<T>() as IActivationFunction<T>);
+        _lastDropout = new DropoutLayer<T>(_options.LastStageDropout);
+        _ctcHead = new DenseLayer<T>(_charset.Length + 1, identity);
+        AddReferenceLayers(_heightCollapse, _lastProjection, _lastActivation, _lastDropout, _ctcHead);
+    }
+
+    private void AddReferenceLayers(params ILayer<T>[] layers)
+    {
+        foreach (var layer in layers) Layers.Add(layer);
+    }
+
+    private Tensor<T> RunNativeForward(Tensor<T> input)
+    {
+        if (_hasCustomArchitecture)
+        {
+            var custom = input;
+            foreach (var layer in Layers) custom = layer.Forward(custom);
+            return custom;
+        }
+
+        EnsureReferenceLayerBindings();
+        if (_patchConv1 is null || _patchNorm1 is null || _patchAct1 is null ||
+            _patchConv2 is null || _patchNorm2 is null || _patchAct2 is null ||
+            _positionLayer is null || _merge1 is null || _mergeNorm1 is null ||
+            _merge2 is null || _mergeNorm2 is null || _encoderNorm is null || _heightCollapse is null ||
+            _lastProjection is null || _lastActivation is null || _lastDropout is null || _ctcHead is null)
+            throw new InvalidOperationException("SVTR-Tiny reference architecture is not initialized.");
+
+        var x = _tpsRectifier is null ? input : _tpsRectifier.Forward(input);
+        x = _patchAct1.Forward(_patchNorm1.Forward(_patchConv1.Forward(x)));
+        x = _patchAct2.Forward(_patchNorm2.Forward(_patchConv2.Forward(x)));
+        int batch = x.Shape[0];
+        int height = x.Shape[2];
+        int width = x.Shape[3];
+        var tokens = SpatialToTokens(x);
+        tokens = _positionLayer.Forward(tokens);
+
+        int blockOffset = 0;
+        tokens = RunBlocks(tokens, blockOffset, _options.StageDepths[0]);
+        blockOffset += _options.StageDepths[0];
+        tokens = SubsampleHeight(tokens, batch, height, width, _options.EmbedDimensions[0], _merge1, _mergeNorm1);
+        height /= 2;
+
+        tokens = RunBlocks(tokens, blockOffset, _options.StageDepths[1]);
+        blockOffset += _options.StageDepths[1];
+        tokens = SubsampleHeight(tokens, batch, height, width, _options.EmbedDimensions[1], _merge2, _mergeNorm2);
+        height /= 2;
+
+        tokens = RunBlocks(tokens, blockOffset, _options.StageDepths[2]);
+        tokens = _encoderNorm.Forward(tokens);
+        x = TokensToSpatial(tokens, batch, height, width, _options.EmbedDimensions[2]);
+        x = _heightCollapse.Forward(x);
+        tokens = SpatialToTokens(x);
+        tokens = _lastDropout.Forward(_lastActivation.Forward(_lastProjection.Forward(tokens)));
+        var flat = Engine.Reshape(tokens, [batch * _options.OutputCharacterPositions, _options.OutputChannels]);
+        var logits = _ctcHead.Forward(flat);
+        logits = Engine.Reshape(logits,
+            [batch, _options.OutputCharacterPositions, _charset.Length + 1]);
+        return logits;
+    }
+
+    private Tensor<T> RunBlocks(Tensor<T> input, int offset, int count)
+    {
+        var current = input;
+        for (int i = 0; i < count; i++) current = _referenceBlocks[offset + i].Forward(current);
+        return current;
+    }
+
+    private Tensor<T> SubsampleHeight(
+        Tensor<T> tokens, int batch, int height, int width, int channels,
+        ConvolutionalLayer<T> convolution, LayerNormalizationLayer<T> normalization)
+    {
+        var spatial = TokensToSpatial(tokens, batch, height, width, channels);
+        spatial = convolution.Forward(spatial);
+        int outputHeight = height / 2;
+        var indices = new Tensor<int>([outputHeight]);
+        for (int i = 0; i < outputHeight; i++) indices[i] = i * 2;
+        spatial = Engine.TensorGather(spatial, indices, axis: 2);
+        return normalization.Forward(SpatialToTokens(spatial));
+    }
+
+    private Tensor<T> SpatialToTokens(Tensor<T> spatial)
+    {
+        int batch = spatial.Shape[0];
+        int channels = spatial.Shape[1];
+        int height = spatial.Shape[2];
+        int width = spatial.Shape[3];
+        var nhwc = Engine.TensorPermute(spatial, [0, 2, 3, 1]).Contiguous();
+        return Engine.Reshape(nhwc, [batch, height * width, channels]);
+    }
+
+    private Tensor<T> TokensToSpatial(Tensor<T> tokens, int batch, int height, int width, int channels)
+    {
+        var nhwc = Engine.Reshape(tokens, [batch, height, width, channels]);
+        return Engine.TensorPermute(nhwc, [0, 3, 1, 2]);
+    }
+
+    private void EnsureReferenceLayerBindings()
+    {
+        if (_hasCustomArchitecture) return;
+        if (Layers.Count == 0 ||
+            (_options.UseTpsRectification && ReferenceEquals(Layers[0], _tpsRectifier)) ||
+            (!_options.UseTpsRectification && ReferenceEquals(Layers[0], _patchConv1)))
+            return;
+
+        int index = 0;
+        _tpsRectifier = _options.UseTpsRectification
+            ? BindLayer<SVTRThinPlateSplineLayer<T>>(ref index)
+            : null;
+        _patchConv1 = BindLayer<ConvolutionalLayer<T>>(ref index);
+        _patchNorm1 = BindLayer<BatchNormalizationLayer<T>>(ref index);
+        _patchAct1 = BindLayer<ActivationLayer<T>>(ref index);
+        _patchConv2 = BindLayer<ConvolutionalLayer<T>>(ref index);
+        _patchNorm2 = BindLayer<BatchNormalizationLayer<T>>(ref index);
+        _patchAct2 = BindLayer<ActivationLayer<T>>(ref index);
+        _positionLayer = BindLayer<LearnedPositionalEmbeddingLayer<T>>(ref index);
+        _referenceBlocks.Clear();
+        for (int stage = 0; stage < 3; stage++)
+        {
+            for (int block = 0; block < _options.StageDepths[stage]; block++)
+                _referenceBlocks.Add(BindLayer<SVTRMixingBlockLayer<T>>(ref index));
+            if (stage == 0)
+            {
+                _merge1 = BindLayer<ConvolutionalLayer<T>>(ref index);
+                _mergeNorm1 = BindLayer<LayerNormalizationLayer<T>>(ref index);
+            }
+            else if (stage == 1)
+            {
+                _merge2 = BindLayer<ConvolutionalLayer<T>>(ref index);
+                _mergeNorm2 = BindLayer<LayerNormalizationLayer<T>>(ref index);
+            }
+        }
+        _encoderNorm = BindLayer<LayerNormalizationLayer<T>>(ref index);
+        _heightCollapse = BindLayer<AdaptiveAveragePoolingLayer<T>>(ref index);
+        _lastProjection = BindLayer<BiasFreeLinearLayer<T>>(ref index);
+        _lastActivation = BindLayer<ActivationLayer<T>>(ref index);
+        _lastDropout = BindLayer<DropoutLayer<T>>(ref index);
+        _ctcHead = BindLayer<DenseLayer<T>>(ref index);
+        if (index != Layers.Count)
+            throw new InvalidDataException($"SVTR reference topology expected {index} layers, found {Layers.Count}.");
+    }
+
+    private TLayer BindLayer<TLayer>(ref int index) where TLayer : class, ILayer<T>
+    {
+        int currentIndex = index;
+        if ((uint)currentIndex >= (uint)Layers.Count)
+            throw new InvalidDataException(
+                $"SVTR reference topology expected {typeof(TLayer).Name} at index {currentIndex}, " +
+                $"but only {Layers.Count} layers were available.");
+        if (Layers[currentIndex] is not TLayer layer)
+            throw new InvalidDataException(
+                $"SVTR reference topology expected {typeof(TLayer).Name} at index {currentIndex}, " +
+                $"found {Layers[currentIndex].GetType().Name}.");
+        index++;
+        return layer;
     }
 
     #endregion
@@ -275,7 +485,8 @@ public partial class SVTR<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
         var startTime = DateTime.UtcNow;
 
         var preprocessed = PreprocessTextImage(croppedImage);
-        var output = _useNativeMode ? Forward(preprocessed) : RunOnnxInference(preprocessed);
+        var output = SqueezeSingleBatch(
+            _useNativeMode ? RunNativeForward(preprocessed) : RunOnnxInference(preprocessed));
 
         var (text, confidence) = CTCDecode(output);
 
@@ -366,15 +577,14 @@ public partial class SVTR<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
     private Tensor<T> PreprocessTextImage(Tensor<T> image)
     {
         var processed = EnsureBatchDimension(image);
-        var normalized = new Tensor<T>(processed._shape);
-
-        for (int i = 0; i < processed.Data.Length; i++)
-        {
-            double val = NumOps.ToDouble(processed.Data.Span[i]);
-            normalized.Data.Span[i] = NumOps.FromDouble((val / 255.0 - 0.5) / 0.5);
-        }
-
-        return normalized;
+        if (!_options.UseTpsRectification &&
+            (processed.Shape[^2] != _options.InputHeight || processed.Shape[^1] != _options.InputWidth))
+            processed = Engine.Interpolate(
+                processed, [_options.InputHeight, _options.InputWidth],
+                InterpolateMode.Bilinear, alignCorners: false);
+        var scaled = Engine.TensorMultiplyScalar(processed, NumOps.FromDouble(1.0 / 127.5));
+        return Engine.TensorSubtract(
+            scaled, Tensor<T>.CreateDefault(scaled.Shape.ToArray(), NumOps.One));
     }
 
     #endregion
@@ -385,8 +595,14 @@ public partial class SVTR<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
     public Tensor<T> EncodeDocument(Tensor<T> documentImage)
     {
         var preprocessed = PreprocessTextImage(documentImage);
-        return _useNativeMode ? Forward(preprocessed) : RunOnnxInference(preprocessed);
+        return SqueezeSingleBatch(
+            _useNativeMode ? RunNativeForward(preprocessed) : RunOnnxInference(preprocessed));
     }
+
+    private Tensor<T> SqueezeSingleBatch(Tensor<T> output)
+        => output.Rank == 3 && output.Shape[0] == 1
+            ? Engine.Reshape(output, [output.Shape[1], output.Shape[2]])
+            : output;
 
     /// <inheritdoc/>
     public void ValidateInputShape(Tensor<T> documentImage)
@@ -452,7 +668,19 @@ public partial class SVTR<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
                 { "image_height", _imageHeight },
                 { "image_width", ImageSize },
                 { "charset_size", _charset.Length },
-                { "use_native_mode", _useNativeMode }
+                { "use_native_mode", _useNativeMode },
+                { "paper_variant", "SVTR-Tiny" },
+                { "input_geometry", _options.UseTpsRectification
+                    ? $"TPS {_options.TpsInputHeight}x{_options.TpsInputWidth} -> {_options.InputHeight}x{_options.InputWidth}"
+                    : $"{_options.InputHeight}x{_options.InputWidth}" },
+                { "stage_dimensions", string.Join(",", _options.EmbedDimensions) },
+                { "stage_depths", string.Join(",", _options.StageDepths) },
+                { "stage_heads", string.Join(",", _options.StageHeads) },
+                { "mixers", $"{_options.LocalMixingBlocks} local {_options.LocalWindowHeight}x{_options.LocalWindowWidth}; " +
+                    $"{_options.StageDepths.Sum() - _options.LocalMixingBlocks} global" },
+                { "drop_path_schedule", $"linear 0.0 -> {_options.DropPathRate}" },
+                { "layer_count", Layers.Count },
+                { "ctc_positions", _options.OutputCharacterPositions }
             },
             ModelData = SafeSerialize()
         };
@@ -461,6 +689,7 @@ public partial class SVTR<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
     /// <inheritdoc/>
     protected override void SerializeNetworkSpecificData(BinaryWriter writer)
     {
+        writer.Write(NetworkDataVersion);
         writer.Write(_embedDim);
         writer.Write(_numLayers);
         writer.Write(_numHeads);
@@ -469,11 +698,23 @@ public partial class SVTR<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
         writer.Write(MaxSequenceLength);
         writer.Write(_charset);
         writer.Write(_useNativeMode);
+        writer.Write(_options.UseTpsRectification);
+        writer.Write(_options.DropPathRate);
+        writer.Write(_options.TpsInputHeight);
+        writer.Write(_options.TpsInputWidth);
+        writer.Write(_options.TpsControlPointCount);
+        writer.Write(_options.TpsMarginX);
+        writer.Write(_options.TpsMarginY);
     }
 
     /// <inheritdoc/>
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
+        int version = reader.ReadInt32();
+        if (version != NetworkDataVersion)
+            throw new InvalidDataException(
+                $"Unsupported SVTR network data version {version}; expected {NetworkDataVersion}.");
+
         int embedDim = reader.ReadInt32();
         int numLayers = reader.ReadInt32();
         int numHeads = reader.ReadInt32();
@@ -483,14 +724,32 @@ public partial class SVTR<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
         string charset = reader.ReadString();
         bool useNativeMode = reader.ReadBoolean();
 
-        ImageSize = imageSize;
-        base.MaxSequenceLength = maxSeqLen;
+        bool useTpsRectification = reader.ReadBoolean();
+        double dropPathRate = reader.ReadDouble();
+        int tpsInputHeight = reader.ReadInt32();
+        int tpsInputWidth = reader.ReadInt32();
+        int tpsControlPointCount = reader.ReadInt32();
+        double tpsMarginX = reader.ReadDouble();
+        double tpsMarginY = reader.ReadDouble();
+
+        if (embedDim != _embedDim || numLayers != _numLayers || numHeads != _numHeads ||
+            imageHeight != _imageHeight || imageSize != ImageSize || maxSeqLen != MaxSequenceLength ||
+            !string.Equals(charset, _charset, StringComparison.Ordinal) || useNativeMode != _useNativeMode ||
+            useTpsRectification != _options.UseTpsRectification ||
+            dropPathRate != _options.DropPathRate ||
+            tpsInputHeight != _options.TpsInputHeight || tpsInputWidth != _options.TpsInputWidth ||
+            tpsControlPointCount != _options.TpsControlPointCount ||
+            tpsMarginX != _options.TpsMarginX || tpsMarginY != _options.TpsMarginY)
+        {
+            throw new InvalidDataException(
+                "Serialized SVTR configuration does not match the constructed layer topology.");
+        }
     }
 
     /// <inheritdoc/>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
-        return new SVTR<T>(Architecture, ImageSize, _imageHeight, MaxSequenceLength, _embedDim, _numLayers, _numHeads, _charset);
+        return new SVTR<T>(Architecture, charset: _charset, options: new SVTROptions(_options));
     }
 
     #endregion
@@ -513,100 +772,17 @@ public partial class SVTR<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
     /// <inheritdoc/>
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
-        // ONNX mode still applies the [0,255] pixel normalization it was exported with. The native
-        // path runs the raw (batch-normalized) image so it matches ForwardForTraining exactly AND
-        // keeps the input's full dynamic range: PreprocessTextImage divides by 255, which collapses
-        // an already-[0,1]-scaled tensor to a near-constant ~-1 and starves the model of signal.
-        return _useNativeMode
-            ? RunNativeLayers(input)
-            : RunOnnxInference(PreprocessTextImage(input));
+        var preprocessed = PreprocessTextImage(input);
+        return _useNativeMode ? RunNativeForward(preprocessed) : RunOnnxInference(preprocessed);
     }
 
-    /// <summary>
-    /// Training forward. Overridden so the gradient path is IDENTICAL to <see cref="PredictCore"/>'s
-    /// native path: both run <see cref="RunNativeLayers"/>, whose conv-patch-embed -> token-sequence
-    /// flatten is a tape-aware Engine reshape. The base
-    /// <see cref="NeuralNetworkBase{T}.ForwardForTraining"/> walks the raw layer list with no
-    /// spatial->sequence step, so the mixing blocks used to receive the 4-D conv feature map (shape
-    /// mismatch) and no gradient reached the conv patch-embed — which is why training never reduced
-    /// the loss, never moved the parameters, and left the post-train forward non-finite.
-    /// </summary>
+    /// <inheritdoc/>
     public override Tensor<T> ForwardForTraining(Tensor<T> input)
     {
-        return RunNativeLayers(input);
-    }
-
-    /// <summary>
-    /// Runs SVTR's native layer stack: the progressive conv patch-embed (spatial [B,C,H,W]), a
-    /// tape-aware flatten to the token sequence [B, H*W, C] at the first mixing block, then the
-    /// transformer mixing blocks and the CTC head. Shared by inference and training so both paths
-    /// are identical.
-    /// </summary>
-    private Tensor<T> RunNativeLayers(Tensor<T> input)
-    {
-        // Promote a single [C, H, W] image to a unit-batch [1, C, H, W] for the conv patch-embed
-        // (the harness passes rank-3; training/NormalizeBatchDim passes rank-4).
-        var output = input.Shape.Length == 3
-            ? Engine.Reshape(input, new[] { 1, input.Shape[0], input.Shape[1], input.Shape[2] })
-            : input;
-
-        bool flattened = false;
-        foreach (var layer in Layers)
-        {
-            // Flatten the conv feature map to a token sequence before the first layer that needs
-            // one. That used to mean the first mixing block; the learned position table now sits in
-            // front of those blocks (positions have to be added BEFORE attention, not after), so the
-            // trigger is the first sequence consumer of either kind rather than the block alone.
-            if (!flattened && output.Shape.Length == 4
-                && (layer is TransformerEncoderLayer<T> or LearnedPositionalEmbeddingLayer<T>))
-            {
-                output = FlattenSpatialToSequence(output);
-                flattened = true;
-            }
-            output = layer.Forward(output);
-        }
-        return output;
-    }
-
-    /// <summary>Tape-aware [B, C, H, W] -> [B, H*W, C] flatten (channels-last token sequence).</summary>
-    private Tensor<T> FlattenSpatialToSequence(Tensor<T> x)
-    {
-        int b = x.Shape[0], c = x.Shape[1], h = x.Shape[2], w = x.Shape[3];
-        var channelsLast = Engine.TensorPermute(x, new[] { 0, 2, 3, 1 }); // [B, H, W, C]
-        return Engine.Reshape(channelsLast, new[] { b, h * w, c });        // [B, H*W, C]
-    }
-
-    /// <summary>
-    /// Per-layer activations for the introspection tests. Overridden for the SAME reason as
-    /// <see cref="ForwardForTraining"/>: the base walks the raw layer list with no conv->sequence
-    /// flatten, so the first mixing block would receive the 4-D conv feature map ("Input embedding
-    /// dimension (H) does not match weight dimension (D)"). Mirror <see cref="RunNativeLayers"/>,
-    /// capturing each layer's output.
-    /// </summary>
-    public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input)
-    {
-        var activations = new Dictionary<string, Tensor<T>>();
-        var current = input.Shape.Length == 3
-            ? Engine.Reshape(input, new[] { 1, input.Shape[0], input.Shape[1], input.Shape[2] })
-            : input;
-
-        bool flattened = false;
-        for (int i = 0; i < Layers.Count; i++)
-        {
-            // Same widened trigger as RunNativeLayers: the learned position table now sits in front
-            // of the mixing blocks, so it is the first sequence consumer and the flatten has to
-            // happen before IT, not before the block behind it.
-            if (!flattened && current.Shape.Length == 4
-                && (Layers[i] is TransformerEncoderLayer<T> or LearnedPositionalEmbeddingLayer<T>))
-            {
-                current = FlattenSpatialToSequence(current);
-                flattened = true;
-            }
-            current = Layers[i].Forward(current);
-            activations[$"Layer_{i}_{Layers[i].GetType().Name}"] = current.Clone();
-        }
-
-        return activations;
+        EnsureLayerRandomSeedsWired();
+        return _useNativeMode
+            ? RunNativeForward(PreprocessTextImage(input))
+            : base.ForwardForTraining(input);
     }
 
     /// <inheritdoc/>
