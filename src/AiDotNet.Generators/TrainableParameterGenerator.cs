@@ -711,7 +711,12 @@ public class TrainableParameterGenerator : IIncrementalGenerator
             {
                 sb.AppendLine("        EnsureSubLayersRegistered();");
             }
-            sb.AppendLine("        if (IsShapeResolved || ParametersAreConstructionSized) EnsureInitializationSerialized();");
+            // A declared parameter shape can be complete even when unrelated data axes remain
+            // deferred. Channel-pinned convolution factories are the canonical example: their
+            // kernels are fully sized, but image/video extents correctly stay dynamic. Use the
+            // shared readiness state rather than repeating the older whole-input-shape gate, so
+            // the optimizer view and the flat parameter surface materialize at the same boundary.
+            sb.AppendLine("        if (OwnParameterReadiness == AiDotNet.Models.Parameters.ParameterReadiness.ShapeResolvedUnmaterialized) EnsureInitializationSerialized();");
             if (hasOptional || hasCollections)
             {
                 sb.AppendLine($"        var __params = new System.Collections.Generic.List<Tensor<{GetTypeParamName(classSymbol)}>>({paramFields.Count});");

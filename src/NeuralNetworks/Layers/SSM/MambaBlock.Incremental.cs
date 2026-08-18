@@ -61,7 +61,7 @@ public partial class MambaBlock<T>
         // then run the identical conv over the window; its last position equals Forward's conv at this step.
         var xCurrent = Engine.Reshape(xBranch, new[] { batchSize, _innerDimension });
         state.ConvWindow = AdvanceConvWindow(state.ConvWindow, xCurrent, batchSize);
-        var convWindowOut = DepthwiseConv1DForward(state.ConvWindow, batchSize, _convKernelSize);
+        var convWindowOut = DepthwiseConv1DForward(state.ConvWindow, _convKernelSize);
         var convCurrent3D = Engine.TensorNarrow(convWindowOut, 1, _convKernelSize - 1, 1);
         var convCurrent = Engine.Reshape(convCurrent3D, new[] { batchSize, _innerDimension });
         var convOutput = Engine.Reshape(convCurrent, new[] { batchSize, 1, _innerDimension });

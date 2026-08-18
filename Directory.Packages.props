@@ -311,7 +311,12 @@
 
          Bumped 0.125.0 -> 0.126.0: brings AiDotNet.Tensors #945's mutation-safe paged tensor access
          and #876's direct-PTX global-pooling family. The managed and native packages were published
-         together and remain pinned as one lockstep release set. -->
+         together and remain pinned as one lockstep release set.
+
+         Bumped 0.126.0 -> 0.127.0: consumes the package-side census work from Tensors #951/#952:
+         differentiable UPR-Net splatting/correlation, bounded Conv3D GEMM forward and gradients,
+         selective checkpoint parameter sources, requested-source pruning, bounded lazy compilation,
+         and thread-budget-aware Goto GEMM routing. -->
 
     <!-- These packages are published and consumed as a lockstep release set, so they move together.
          The natives were left at 0.126.0 when Tensors went to 0.127.0, which contradicted that and would

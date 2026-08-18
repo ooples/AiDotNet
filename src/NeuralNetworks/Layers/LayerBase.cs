@@ -5776,19 +5776,13 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
                     ? existing
                     : new Tensor<T>(shapes[i]);
             }
-            // Rebind only when the runtime registry actually has slots to rebind. A shape-deferred
-            // layer (BatchNorm/LayerNorm resolving their width from the first real input) is still
-            // unmaterialized here -- EnsureMaterializedForParameterSurface cannot size it, because
-            // nothing has told it the channel width yet -- so its registry is empty while
-            // GetTrainableParameters already reports the lazy fields. That divergence is by design;
-            // it is the same one the generated SetTrainableParameters guards against.
-            //
-            // Calling the base setter across it threw "has 0 registered parameters but received N"
-            // and failed the whole deserialize/clone. Skipping the rebind is safe: OwnLength was
-            // applied to Parameters above, so the restored values are carried by the parameter
-            // vector and land when the layer materializes and pulls its slice.
-            if (RegisteredTrainableParameterCount == rebuilt.Length)
-                SetTrainableParameters(rebuilt);
+            // Rebind through the generated setter even when a lazy layer's runtime registry is
+            // still empty. The generated implementation assigns the parameter FIELDS and rebuilds
+            // their registry atomically; the base implementation performs the equivalent declared-
+            // shape adoption for registry-owned layers. Skipping this when the counts differed left
+            // the checkpoint layout in detached temporary tensors, so the subsequent flat restore
+            // still saw zero live parameters and parked a payload that could never be replayed.
+            SetTrainableParameters(rebuilt);
         }
 
         foreach (var entry in layout.Buffers)
@@ -7140,6 +7134,10 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         for (int i = 0; i < parameters.Count; i++)
             _registeredTensors[i] = parameters[i];
 
+        // Runtime-registry layers can keep their execution handles in dictionaries or other
+        // containers that the generator cannot rewrite. Give the same adoption hook used by the
+        // declaration-driven path a chance to update those handles after the registry is rebound.
+        AdoptTrainableParameterTensors(parameters);
         _cachedParameterCount = -1;
         BumpParameterEpoch();
     }

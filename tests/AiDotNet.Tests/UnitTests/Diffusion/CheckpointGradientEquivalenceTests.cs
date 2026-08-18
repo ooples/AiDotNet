@@ -113,6 +113,49 @@ public class CheckpointGradientEquivalenceTests : System.IDisposable
     }
 
     [Fact]
+    public void PackageCheckpoint_SelectedParameters_PreservesInputVjpAndSkipsFrozenWeights()
+    {
+        var input = Filled(new[] { 2, 3 }, -0.4, 0.05);
+        var frozenWeight = Filled(new[] { 3, 4 }, -0.3, 0.03);
+        var selectedWeight = Filled(new[] { 4, 2 }, 0.2, -0.01);
+        var outputWeight = Filled(new[] { 2, 2 }, 0.1, 0.07);
+        bool forwardCompleted = false;
+        bool sourceFactoryCalled = false;
+
+        Tensor<double> Segment(Tensor<double> value)
+        {
+            var result = Engine.TensorMatMul(
+                Engine.TensorMatMul(value, frozenWeight), selectedWeight);
+            forwardCompleted = true;
+            return result;
+        }
+
+        using var tape = new GradientTape<double>();
+        var output = GradientCheckpointing<double>.Checkpoint(
+            new System.Func<Tensor<double>, Tensor<double>>[] { Segment },
+            input,
+            parameterSourceFactory: () =>
+            {
+                Assert.True(forwardCompleted,
+                    "Selected checkpoint sources must be collected after lazy forward materialization.");
+                sourceFactoryCalled = true;
+                return new[] { selectedWeight };
+            },
+            segmentSize: 1);
+        var loss = Engine.ReduceSum(Engine.TensorMultiply(output, outputWeight), null);
+        var gradients = tape.ComputeGradients(loss, new[] { input, selectedWeight, frozenWeight });
+
+        Assert.True(sourceFactoryCalled);
+        Assert.True(gradients.TryGetValue(input, out var inputGradient));
+        Assert.NotNull(inputGradient);
+        Assert.Contains(inputGradient!.AsSpan().ToArray(), value => System.Math.Abs(value) > 1e-12);
+        Assert.True(gradients.TryGetValue(selectedWeight, out var selectedGradient));
+        Assert.NotNull(selectedGradient);
+        Assert.Contains(selectedGradient!.AsSpan().ToArray(), value => System.Math.Abs(value) > 1e-12);
+        Assert.False(gradients.ContainsKey(frozenWeight));
+    }
+
+    [Fact]
     public void PackageCheckpoint_GradientsMatchEager_ForInputAndParameters()
     {
         // Master parameter values: resolve once, snapshot, then both runs use copies of these.

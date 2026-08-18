@@ -69,6 +69,7 @@ public partial class CrossAttentionLayer<T> : LayerBase<T>, IShapeContract
     private readonly int _contextDim;
     private readonly int _headCount;
     private readonly int _headDim;
+    private readonly bool _zeroOutputProjection;
 
     // Query projection: queryDim -> queryDim
     [TrainableParameter(Role = PersistentTensorRole.Weights, Shape = "_queryDim, _queryDim")]
@@ -151,10 +152,24 @@ public partial class CrossAttentionLayer<T> : LayerBase<T>, IShapeContract
 
     /// <param name="sequenceLength">Maximum sequence length for queries.</param>
     public CrossAttentionLayer(
+        int queryDim,
+        int contextDim,
+        int headCount,
+        int sequenceLength = 64)
+        : this(queryDim, contextDim, headCount, sequenceLength, zeroOutputProjection: false)
+    {
+    }
+
+    /// <summary>
+    /// Creates cross attention with optional zero initialization of its output
+    /// projection, as used by residual temporal-attention adapters.
+    /// </summary>
+    public CrossAttentionLayer(
         [LayerState] int queryDim,
         [LayerState] int contextDim,
         [LayerState] int headCount,
-        [LayerState] int sequenceLength = 64)
+        [LayerState] int sequenceLength,
+        [LayerState] bool zeroOutputProjection)
         : base(new[] { -1, queryDim }, new[] { -1, queryDim }, (IActivationFunction<T>)new IdentityActivation<T>())
     {
         _sequenceLength = sequenceLength;
@@ -162,6 +177,7 @@ public partial class CrossAttentionLayer<T> : LayerBase<T>, IShapeContract
         _contextDim = contextDim;
         _headCount = headCount;
         _headDim = queryDim / headCount;
+        _zeroOutputProjection = zeroOutputProjection;
 
         if (queryDim % headCount != 0)
         {
@@ -207,6 +223,12 @@ public partial class CrossAttentionLayer<T> : LayerBase<T>, IShapeContract
             _outputBias = AllocateLazyWeight([_queryDim]);
             InitializeParameters();
 
+            if (_zeroOutputProjection)
+            {
+                _outputWeights.Fill(NumOps.Zero);
+                _outputBias.Fill(NumOps.Zero);
+            }
+
             RegisterTrainableParameter(_queryWeights, PersistentTensorRole.Weights);
             RegisterTrainableParameter(_keyWeights, PersistentTensorRole.Weights);
             RegisterTrainableParameter(_valueWeights, PersistentTensorRole.Weights);
@@ -232,6 +254,7 @@ public partial class CrossAttentionLayer<T> : LayerBase<T>, IShapeContract
         var metadata = base.GetMetadata();
         metadata["ContextDim"] = _contextDim.ToString();
         metadata["HeadCount"] = _headCount.ToString();
+        metadata["ZeroOutputProjection"] = _zeroOutputProjection.ToString();
         return metadata;
     }
 

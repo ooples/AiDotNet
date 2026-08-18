@@ -25,6 +25,36 @@ public class ClipTokenizerFactoryTests
     }
 
     [Fact(Timeout = 60000)]
+    public async Task CreateShapeCompatibleForTesting_HasExactRequestedVocabularySize()
+    {
+        await Task.Yield();
+        var tokenizer = ClipTokenizerFactory.CreateShapeCompatibleForTesting(vocabSize: 4096);
+
+        Assert.Equal(4096, tokenizer.VocabularySize);
+        Assert.NotEmpty(tokenizer.Encode("a photo of a cat").TokenIds);
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task CreateShapeCompatibleForTesting_RejectsNonPositiveVocabularySize()
+    {
+        await Task.Yield();
+
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            ClipTokenizerFactory.CreateShapeCompatibleForTesting(vocabSize: 0));
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task CreateShapeCompatibleForTesting_RejectsTrainedVocabularyLargerThanShape()
+    {
+        await Task.Yield();
+
+        Assert.Throws<ArgumentException>(() =>
+            ClipTokenizerFactory.CreateShapeCompatibleForTesting(
+                vocabSize: 1,
+                corpus: ["alpha beta gamma delta"]));
+    }
+
+    [Fact(Timeout = 60000)]
     public async Task CreateSimple_WithCustomCorpus_TrainsOnCorpus()
     {
         // Arrange
