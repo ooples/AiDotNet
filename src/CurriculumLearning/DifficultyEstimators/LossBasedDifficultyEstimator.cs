@@ -148,6 +148,7 @@ public class LossBasedDifficultyEstimator<T, TInput, TOutput> : DifficultyEstima
 public class SmoothedLossDifficultyEstimator<T, TInput, TOutput> : LossBasedDifficultyEstimator<T, TInput, TOutput>
 {
     private readonly T _smoothingFactor;
+    [AiDotNet.Attributes.FittedParameter]
     private Vector<T>? _smoothedLosses;
 
     /// <summary>

@@ -89,6 +89,7 @@ public partial class OrdinalLogisticRegression<T> : OrdinalClassifierBase<T>,
     /// ordinal outcome. A positive coefficient means higher values of that feature push
     /// predictions toward higher classes (e.g., more stars).</para>
     /// </remarks>
+    [AiDotNet.Attributes.FittedParameter]
     private Vector<T>? _coefficients;
 
     /// <summary>

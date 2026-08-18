@@ -106,6 +106,7 @@ public partial class DeepSurv<T> : AsyncDecisionTreeRegressionBase<T>
     /// </summary>
     private readonly Random _random;
     private bool _useOLS;
+    [AiDotNet.Attributes.FittedParameter]
     private Vector<T>? _olsCoefficients;
 
 

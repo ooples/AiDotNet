@@ -85,6 +85,7 @@ public partial class WorldModelsAgent<T> : DeepReinforcementLearningAgentBase<T>
     private Vector<T> _rnnHiddenState;
 
     // C: Controller (simple linear policy)
+    [AiDotNet.Attributes.FittedParameter]
     private Matrix<T> _controllerWeights;
 
     private UniformReplayBuffer<T, Vector<T>, Vector<T>> _replayBuffer;

@@ -78,6 +78,7 @@ public partial class NGBoostRegression<T> : AsyncDecisionTreeRegressionBase<T>
     /// <summary>
     /// Initial parameter values (e.g., mean of y for location, initial scale).
     /// </summary>
+    [AiDotNet.Attributes.FittedParameter]
     private Vector<T> _initialParameters;
 
     /// <summary>

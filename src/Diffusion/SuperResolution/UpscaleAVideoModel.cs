@@ -234,7 +234,9 @@ public partial class UpscaleAVideoModel<T> : VideoDiffusionModelBase<T>
     // trainer owns timestep sampling, target-noise construction, autodiff, and optimization; these
     // fields provide the paper-specific low-resolution RGB and text context to its virtual hooks.
     private readonly object _trainingContextLock = new();
+    [AiDotNet.Attributes.FittedParameter]
     private Tensor<T>? _trainingVideoCondition;
+    [AiDotNet.Attributes.FittedParameter]
     private Tensor<T>? _trainingTextConditioning;
     private int _trainingNoiseLevel;
 

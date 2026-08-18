@@ -108,6 +108,7 @@ public partial class DeepHit<T> : AsyncDecisionTreeRegressionBase<T>
 
     private T _yStd;
 
+    [AiDotNet.Attributes.FittedParameter]
     private Vector<T>? _olsCoefficients;
 
 

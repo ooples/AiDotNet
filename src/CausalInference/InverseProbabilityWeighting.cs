@@ -86,6 +86,7 @@ public partial class InverseProbabilityWeighting<T> : CausalModelBase<T>
     /// <summary>
     /// Stores the logistic regression coefficients for propensity score estimation.
     /// </summary>
+    [AiDotNet.Attributes.FittedParameter]
     private Vector<T>? _propensityCoefficients;
 
     /// <summary>

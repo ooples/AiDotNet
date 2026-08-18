@@ -60,13 +60,16 @@ public partial class IsotonicRegression<T> : NonLinearRegressionBase<T>
     /// <summary>
     /// The sorted input values from the training data.
     /// </summary>
+    [AiDotNet.Attributes.FittedParameter]
     private Vector<T> _xValues;
 
     /// <summary>
     /// The target values corresponding to the sorted input values.
     /// </summary>
+    [AiDotNet.Attributes.FittedParameter]
     private Vector<T> _yValues;
     private int _trainingFeatureCount;
+    [AiDotNet.Attributes.FittedParameter]
     private Vector<T>? _olsCoefficients;
     private T _olsIntercept;
 

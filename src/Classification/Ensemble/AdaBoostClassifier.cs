@@ -73,6 +73,7 @@ public partial class AdaBoostClassifier<T> : EnsembleClassifierBase<T>
     /// <summary>
     /// Weights for each estimator (based on their accuracy).
     /// </summary>
+    [AiDotNet.Attributes.FittedParameter]
     private Vector<T>? _estimatorWeights;
 
     /// <summary>

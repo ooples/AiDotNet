@@ -70,6 +70,7 @@ namespace AiDotNet.DistributedTraining;
     [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 public partial class DDPModel<T, TInput, TOutput> : ShardedModelBase<T, TInput, TOutput>
 {
+    [AiDotNet.Attributes.FittedParameter]
     private Vector<T>? _computedGradients;
 
     /// <summary>

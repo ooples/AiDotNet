@@ -72,10 +72,13 @@ public partial class DBSCAN<T> : ClusteringBase<T>
     private bool[]? _corePointMask;
 
     // Feature normalization state for scale-invariant distance computation
+    [AiDotNet.Attributes.FittedParameter]
     private Vector<T>? _featureMeans;
+    [AiDotNet.Attributes.FittedParameter]
     private Vector<T>? _featureStds;
 
     // Cluster centers in normalized space for Predict comparison
+    [AiDotNet.Attributes.FittedParameter]
     private Matrix<T>? _normalizedClusterCenters;
 
     /// <summary>

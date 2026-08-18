@@ -56,11 +56,13 @@ public partial class NelsonAalenEstimator<T> : SurvivalModelBase<T>
     /// <summary>
     /// The cumulative hazard values at each event time.
     /// </summary>
+    [AiDotNet.Attributes.FittedParameter]
     private Vector<T>? _cumulativeHazard;
 
     /// <summary>
     /// The variance estimates at each event time.
     /// </summary>
+    [AiDotNet.Attributes.FittedParameter]
     private Vector<T>? _variance;
 
     /// <summary>

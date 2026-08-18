@@ -269,6 +269,7 @@ public partial class MultilayerPerceptronRegression<T> : NonLinearRegressionBase
         return base.GetActiveFeatureIndices();
     }
     private bool _useOLS;
+    [AiDotNet.Attributes.FittedParameter]
     private Vector<T>? _olsCoefficients;
 
 

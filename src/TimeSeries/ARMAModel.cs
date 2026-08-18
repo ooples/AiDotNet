@@ -74,6 +74,7 @@ public partial class ARMAModel<T> : TimeSeriesModelBase<T>
     /// 
     /// These values are determined during training to best fit your historical data.
     /// </remarks>
+    [AiDotNet.Attributes.FittedParameter]
     private Vector<T> _arCoefficients;
 
     /// <summary>
@@ -87,6 +88,7 @@ public partial class ARMAModel<T> : TimeSeriesModelBase<T>
     /// 
     /// These values are determined during training to best fit your historical data.
     /// </remarks>
+    [AiDotNet.Attributes.FittedParameter]
     private Vector<T> _maCoefficients;
 
     /// <summary>

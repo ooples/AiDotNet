@@ -70,6 +70,7 @@ public partial class MixedEffectsModel<T> : NonLinearRegressionBase<T>
     /// <summary>
     /// Fixed effect coefficients.
     /// </summary>
+    [AiDotNet.Attributes.FittedParameter]
     private Vector<T>? _fixedEffects;
 
     /// <summary>
@@ -80,6 +81,7 @@ public partial class MixedEffectsModel<T> : NonLinearRegressionBase<T>
     /// <summary>
     /// Variance of random effects.
     /// </summary>
+    [AiDotNet.Attributes.FittedParameter]
     private Matrix<T>? _randomEffectVariance;
 
     /// <summary>
@@ -90,6 +92,7 @@ public partial class MixedEffectsModel<T> : NonLinearRegressionBase<T>
     /// <summary>
     /// Standard errors of fixed effects.
     /// </summary>
+    [AiDotNet.Attributes.FittedParameter]
     private Vector<T>? _fixedEffectStdErrors;
 
     /// <summary>

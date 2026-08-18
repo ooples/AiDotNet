@@ -56,13 +56,18 @@ namespace AiDotNet.Clustering.Density;
 public partial class OPTICS<T> : ClusteringBase<T>
 {
     private readonly OPTICSOptions<T> _options;
+    [AiDotNet.Attributes.FittedParameter]
     private Vector<T>? _featureMeans;
+    [AiDotNet.Attributes.FittedParameter]
     private Vector<T>? _featureStds;
+    [AiDotNet.Attributes.FittedParameter]
     private Matrix<T>? _normalizedClusterCenters;
 
     /// <inheritdoc/>
     public override ModelOptions GetOptions() => _options;
+    [AiDotNet.Attributes.FittedParameter]
     private Vector<T> _reachabilityDistances = new Vector<T>(0);
+    [AiDotNet.Attributes.FittedParameter]
     private Vector<T> _coreDistances = new Vector<T>(0);
     private int[] _ordering = Array.Empty<int>();
     private int[] _predecessor = Array.Empty<int>();

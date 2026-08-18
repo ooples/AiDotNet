@@ -61,6 +61,7 @@ public partial class FuzzyCMeans<T> : ClusteringBase<T>
 
     /// <inheritdoc/>
     public override ModelOptions GetOptions() => _options;
+    [AiDotNet.Attributes.FittedParameter]
     private Matrix<T> _membershipMatrix = new Matrix<T>(0, 0);
 
     /// <summary>

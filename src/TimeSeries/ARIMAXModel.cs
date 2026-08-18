@@ -77,6 +77,7 @@ public partial class ARIMAXModel<T> : TimeSeriesModelBase<T>, IExogenousForecast
     /// yesterday's value and the day before's value affect today's prediction.
     /// Larger coefficients mean stronger influence from that time period.
     /// </remarks>
+    [AiDotNet.Attributes.FittedParameter]
     private Vector<T> _arCoefficients;
 
     /// <summary>
@@ -101,6 +102,7 @@ public partial class ARIMAXModel<T> : TimeSeriesModelBase<T>, IExogenousForecast
     /// its coefficient might be negative for a workplace attendance model (fewer people come to work on holidays)
     /// or positive for a retail sales model (more people shop on holidays).
     /// </remarks>
+    [AiDotNet.Attributes.FittedParameter]
     private Vector<T> _exogenousCoefficients;
 
     /// <summary>

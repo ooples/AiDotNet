@@ -58,6 +58,7 @@ public partial class KNNEvaluator<T> : ModelBase<T, Tensor<T>, Tensor<T>>
     private readonly bool _useCosine;
     private readonly double _temperature;
 
+    [AiDotNet.Attributes.FittedParameter]
     private Tensor<T>? _trainFeatures;
     private int[]? _trainLabels;
     private int _numClasses;

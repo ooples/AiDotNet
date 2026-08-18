@@ -74,6 +74,7 @@ public partial class BetaRegression<T> : AsyncDecisionTreeRegressionBase<T>
     /// <summary>
     /// Coefficients for the mean (μ) model.
     /// </summary>
+    [AiDotNet.Attributes.FittedParameter]
     private Vector<T>? _meanCoefficients;
 
     /// <summary>

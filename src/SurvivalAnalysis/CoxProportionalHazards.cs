@@ -80,6 +80,7 @@ public partial class CoxProportionalHazards<T> : SurvivalModelBase<T>
     /// <summary>
     /// The estimated coefficients (log hazard ratios).
     /// </summary>
+    [AiDotNet.Attributes.FittedParameter]
     private Vector<T> _coefficients = new Vector<T>(0);
 
     /// <summary>

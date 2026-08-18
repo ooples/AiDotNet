@@ -100,6 +100,7 @@ public partial class MultinomialLogisticRegression<T> : RegressionBase<T>
     /// "work" emails and a low coefficient for "spam" emails.
     /// </para>
     /// </remarks>
+    [AiDotNet.Attributes.FittedParameter]
     private Matrix<T>? _coefficients;
 
     /// <summary>

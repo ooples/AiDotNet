@@ -87,6 +87,7 @@ namespace AiDotNet.DistributedTraining;
     [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 public partial class HybridShardedModel<T, TInput, TOutput> : ShardedModelBase<T, TInput, TOutput>
 {
+    [AiDotNet.Attributes.FittedParameter]
     private Vector<T>? _computedGradients;
 
     // Static ThreadLocal to pass constructor parameters before base constructor call.

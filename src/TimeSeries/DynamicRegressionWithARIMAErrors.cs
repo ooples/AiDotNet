@@ -199,6 +199,7 @@ public partial class DynamicRegressionWithARIMAErrors<T> : TimeSeriesModelBase<T
     /// 
     /// These coefficients are applied to the regression residuals (errors), not to the original time series.
     /// </remarks>
+    [AiDotNet.Attributes.FittedParameter]
     private Vector<T> _arCoefficients;
 
     /// <summary>
@@ -213,6 +214,7 @@ public partial class DynamicRegressionWithARIMAErrors<T> : TimeSeriesModelBase<T
     /// 
     /// This helps the model correct for systematic errors in its predictions.
     /// </remarks>
+    [AiDotNet.Attributes.FittedParameter]
     private Vector<T> _maCoefficients;
 
     /// <summary>

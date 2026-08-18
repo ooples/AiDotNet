@@ -109,16 +109,19 @@ public partial class LabelPropagation<T> : SemiSupervisedClassifierBase<T>
     /// <summary>
     /// The affinity matrix representing pairwise similarities between all samples.
     /// </summary>
+    [AiDotNet.Attributes.FittedParameter]
     private Matrix<T> _affinityMatrix = new Matrix<T>(0, 0);
 
     /// <summary>
     /// The combined feature matrix (labeled + unlabeled) after training.
     /// </summary>
+    [AiDotNet.Attributes.FittedParameter]
     private Matrix<T> _allFeatures = new Matrix<T>(0, 0);
 
     /// <summary>
     /// The label distribution matrix where each row is a sample and each column is a class.
     /// </summary>
+    [AiDotNet.Attributes.FittedParameter]
     private Matrix<T> _labelDistributions = new Matrix<T>(0, 0);
 
     /// <summary>

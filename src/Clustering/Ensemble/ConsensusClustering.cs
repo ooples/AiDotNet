@@ -64,6 +64,7 @@ public partial class ConsensusClustering<T> : ClusteringBase<T>
 
     /// <inheritdoc/>
     public override ModelOptions GetOptions() => _options;
+    [AiDotNet.Attributes.FittedParameter]
     private Matrix<T>? _coAssociationMatrix;
     private readonly INumericOperations<T> _numOps;
 

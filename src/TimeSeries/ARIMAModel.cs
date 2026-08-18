@@ -68,6 +68,7 @@ public partial class ARIMAModel<T> : TimeSeriesModelBase<T>
     /// For example, if the coefficient for yesterday's value is 0.7, it means yesterday's
     /// value has a strong influence on today's prediction.</para>
     /// </remarks>
+    [AiDotNet.Attributes.FittedParameter]
     private Vector<T> _arCoefficients;
 
     /// <summary>
@@ -79,6 +80,7 @@ public partial class ARIMAModel<T> : TimeSeriesModelBase<T>
     /// They help the model learn from its mistakes. For example, if the model consistently
     /// underpredicts, these coefficients help correct that bias.</para>
     /// </remarks>
+    [AiDotNet.Attributes.FittedParameter]
     private Vector<T> _maCoefficients;
 
     /// <summary>

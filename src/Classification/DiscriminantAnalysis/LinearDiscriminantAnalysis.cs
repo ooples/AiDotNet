@@ -107,21 +107,25 @@ public partial class LinearDiscriminantAnalysis<T> : ProbabilisticClassifierBase
     /// <summary>
     /// Class means for each class.
     /// </summary>
+    [AiDotNet.Attributes.FittedParameter]
     private Matrix<T> _classMeans = new Matrix<T>(0, 0);
 
     /// <summary>
     /// Pooled within-class covariance matrix (shared by all classes).
     /// </summary>
+    [AiDotNet.Attributes.FittedParameter]
     private Matrix<T> _pooledCovariance = new Matrix<T>(0, 0);
 
     /// <summary>
     /// Inverse of the pooled covariance matrix.
     /// </summary>
+    [AiDotNet.Attributes.FittedParameter]
     private Matrix<T> _covarianceInverse = new Matrix<T>(0, 0);
 
     /// <summary>
     /// Class priors (prior probabilities).
     /// </summary>
+    [AiDotNet.Attributes.FittedParameter]
     private Vector<T> _classPriors = new Vector<T>(0);
 
     /// <summary>

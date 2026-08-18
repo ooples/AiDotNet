@@ -5877,7 +5877,9 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     /// </summary>
     internal readonly struct TrainableParameterValueSlot
     {
+        [AiDotNet.Attributes.FittedParameter]
         private readonly Tensor<T>? _tensor;
+        [AiDotNet.Attributes.FittedParameter]
         private readonly Tensor<Half>? _lowPrecisionTensor;
 
         internal TrainableParameterValueSlot(

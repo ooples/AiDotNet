@@ -66,21 +66,25 @@ public partial class SARIMAModel<T> : TimeSeriesModelBase<T>
     /// <summary>
     /// Coefficients for the non-seasonal autoregressive (AR) component.
     /// </summary>
+    [AiDotNet.Attributes.FittedParameter]
     private Vector<T> _arCoefficients;
 
     /// <summary>
     /// Coefficients for the non-seasonal moving average (MA) component.
     /// </summary>
+    [AiDotNet.Attributes.FittedParameter]
     private Vector<T> _maCoefficients;
 
     /// <summary>
     /// Coefficients for the seasonal autoregressive (SAR) component.
     /// </summary>
+    [AiDotNet.Attributes.FittedParameter]
     private Vector<T> _sarCoefficients;
 
     /// <summary>
     /// Coefficients for the seasonal moving average (SMA) component.
     /// </summary>
+    [AiDotNet.Attributes.FittedParameter]
     private Vector<T> _smaCoefficients;
 
     /// <summary>

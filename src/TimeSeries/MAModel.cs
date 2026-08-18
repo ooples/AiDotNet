@@ -63,6 +63,7 @@ public partial class MAModel<T> : TimeSeriesModelBase<T>
     /// For example, if the coefficient for yesterday's error is 0.7, it means yesterday's
     /// error strongly influences today's prediction adjustment.
     /// </remarks>
+    [AiDotNet.Attributes.FittedParameter]
     private Vector<T> _maCoefficients;
 
     /// <summary>

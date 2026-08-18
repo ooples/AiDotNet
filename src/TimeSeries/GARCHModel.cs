@@ -116,6 +116,7 @@ public partial class GARCHModel<T> : TimeSeriesModelBase<T>
     /// even during the calmest market periods.
     /// </para>
     /// </remarks>
+    [AiDotNet.Attributes.FittedParameter]
     private Vector<T> _omega; // Constant term in variance equation
 
     /// <summary>
@@ -137,6 +138,7 @@ public partial class GARCHModel<T> : TimeSeriesModelBase<T>
     /// will cause the model to predict higher volatility in the near future.
     /// </para>
     /// </remarks>
+    [AiDotNet.Attributes.FittedParameter]
     private Vector<T> _alpha; // ARCH coefficients
 
     /// <summary>
@@ -158,6 +160,7 @@ public partial class GARCHModel<T> : TimeSeriesModelBase<T>
     /// will likely be followed by more periods of high volatility.
     /// </para>
     /// </remarks>
+    [AiDotNet.Attributes.FittedParameter]
     private Vector<T> _beta;  // GARCH coefficients
 
     /// <summary>

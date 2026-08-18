@@ -128,21 +128,25 @@ public partial class LabelSpreading<T> : SemiSupervisedClassifierBase<T>
     /// <summary>
     /// The symmetrically normalized affinity matrix (Laplacian-style normalization).
     /// </summary>
+    [AiDotNet.Attributes.FittedParameter]
     private Matrix<T> _normalizedAffinity = new Matrix<T>(0, 0);
 
     /// <summary>
     /// The combined feature matrix (labeled + unlabeled) after training.
     /// </summary>
+    [AiDotNet.Attributes.FittedParameter]
     private Matrix<T> _allFeatures = new Matrix<T>(0, 0);
 
     /// <summary>
     /// The label distribution matrix where each row is a sample and each column is a class.
     /// </summary>
+    [AiDotNet.Attributes.FittedParameter]
     private Matrix<T> _labelDistributions = new Matrix<T>(0, 0);
 
     /// <summary>
     /// The initial label distributions (before propagation).
     /// </summary>
+    [AiDotNet.Attributes.FittedParameter]
     private Matrix<T> _initialDistributions = new Matrix<T>(0, 0);
 
     /// <summary>

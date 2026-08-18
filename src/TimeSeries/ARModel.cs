@@ -77,6 +77,7 @@ public partial class ARModel<T> : TimeSeriesModelBase<T>
     /// Larger coefficients mean stronger influence from that time period.
     /// These values are learned during training to best fit your historical data.
     /// </remarks>
+    [AiDotNet.Attributes.FittedParameter]
     private Vector<T> _arCoefficients;
     private T _seriesMean;
 

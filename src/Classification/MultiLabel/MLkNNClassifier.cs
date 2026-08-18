@@ -75,7 +75,9 @@ public partial class MLkNNClassifier<T> : MultiLabelClassifierBase<T>
     /// <inheritdoc/>
     public override ModelOptions GetOptions() => _options;
     private readonly Random _random;
+    [AiDotNet.Attributes.FittedParameter]
     private Matrix<T> _trainFeatures = new Matrix<T>(0, 0);
+    [AiDotNet.Attributes.FittedParameter]
     private Matrix<T> _trainLabels = new Matrix<T>(0, 0);
     private double[]? _priorProbs; // P(H_l = 1)
     private double[,] _condProbsPos = new double[0, 0]; // P(E_l = j | H_l = 1) for j = 0..k

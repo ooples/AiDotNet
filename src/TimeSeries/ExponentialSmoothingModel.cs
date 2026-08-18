@@ -158,6 +158,7 @@ public partial class ExponentialSmoothingModel<T> : TimeSeriesModelBase<T>
     /// The model uses these as starting points and then updates them as it processes more data.
     /// </para>
     /// </remarks>
+    [AiDotNet.Attributes.FittedParameter]
     private Vector<T> _initialValues;
 
     /// <summary>

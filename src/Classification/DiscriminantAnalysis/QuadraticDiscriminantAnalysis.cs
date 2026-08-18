@@ -96,6 +96,7 @@ public partial class QuadraticDiscriminantAnalysis<T> : ProbabilisticClassifierB
     /// <summary>
     /// Class means for each class.
     /// </summary>
+    [AiDotNet.Attributes.FittedParameter]
     private Matrix<T> _classMeans = new Matrix<T>(0, 0);
 
     /// <summary>
@@ -111,11 +112,13 @@ public partial class QuadraticDiscriminantAnalysis<T> : ProbabilisticClassifierB
     /// <summary>
     /// Log determinant of covariance matrix for each class.
     /// </summary>
+    [AiDotNet.Attributes.FittedParameter]
     private Vector<T> _classLogDets = new Vector<T>(0);
 
     /// <summary>
     /// Class priors (prior probabilities).
     /// </summary>
+    [AiDotNet.Attributes.FittedParameter]
     private Vector<T> _classPriors = new Vector<T>(0);
 
     /// <summary>

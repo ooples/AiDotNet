@@ -71,6 +71,7 @@ public partial class PartialLeastSquaresRegression<T> : RegressionBase<T>
     /// <value>
     /// A matrix where each column represents the loadings for a component.
     /// </value>
+    [AiDotNet.Attributes.FittedParameter]
     private Matrix<T> _loadings;
 
     /// <summary>
@@ -79,6 +80,7 @@ public partial class PartialLeastSquaresRegression<T> : RegressionBase<T>
     /// <value>
     /// A matrix where each column represents the scores for a component.
     /// </value>
+    [AiDotNet.Attributes.FittedParameter]
     private Matrix<T> _scores;
 
     /// <summary>
@@ -87,11 +89,13 @@ public partial class PartialLeastSquaresRegression<T> : RegressionBase<T>
     /// <value>
     /// A matrix where each column represents the weights for a component.
     /// </value>
+    [AiDotNet.Attributes.FittedParameter]
     private Tensor<T> _weights;
 
     /// <summary>
     /// Y-loadings (c) from the NIPALS algorithm: c_k = t_k'*y / (t_k'*t_k).
     /// </summary>
+    [AiDotNet.Attributes.FittedParameter]
     private Vector<T> _yLoadings = new Vector<T>(0);
 
     /// <summary>

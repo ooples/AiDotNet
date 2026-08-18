@@ -45,7 +45,9 @@ public partial class PercentileDetector<T> : AnomalyDetectorBase<T>
 {
     private readonly double _lowPercentile;
     private readonly double _highPercentile;
+    [AiDotNet.Attributes.FittedParameter]
     private Vector<T>? _lowThresholds;
+    [AiDotNet.Attributes.FittedParameter]
     private Vector<T>? _highThresholds;
     [Buffer]
     private Vector<T>? _ranges;

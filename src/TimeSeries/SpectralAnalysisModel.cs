@@ -61,6 +61,7 @@ public partial class SpectralAnalysisModel<T> : TimeSeriesModelBase<T>
     /// <summary>
     /// The power spectral density (periodogram) values for each frequency.
     /// </summary>
+    [AiDotNet.Attributes.FittedParameter]
     private Vector<T> _periodogram;
 
     /// <summary>

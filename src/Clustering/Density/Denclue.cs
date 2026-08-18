@@ -66,7 +66,9 @@ public partial class Denclue<T> : ClusteringBase<T>
     public override ModelOptions GetOptions() => _options;
     private T[][]? _attractors;
     private T[]? _attractorDensities;
+    [AiDotNet.Attributes.FittedParameter]
     private Vector<T>? _featureMeans;
+    [AiDotNet.Attributes.FittedParameter]
     private Vector<T>? _featureStds;
 
     /// <summary>

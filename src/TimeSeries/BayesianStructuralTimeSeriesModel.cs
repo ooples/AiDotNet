@@ -159,6 +159,7 @@ public partial class BayesianStructuralTimeSeriesModel<T> : TimeSeriesModelBase<
     /// Each coefficient quantifies the effect of one external variable. The model
     /// learns these coefficients from your data to improve predictions.
     /// </remarks>
+    [AiDotNet.Attributes.FittedParameter]
     private Vector<T> _regression;
 
     /// <summary>

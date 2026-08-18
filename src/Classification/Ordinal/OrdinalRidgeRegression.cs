@@ -111,6 +111,7 @@ public partial class OrdinalRidgeRegression<T> : OrdinalClassifierBase<T>,
     /// <para><b>For Beginners:</b> These coefficients determine how each feature affects the
     /// predicted value. Positive coefficients push predictions toward higher classes.</para>
     /// </remarks>
+    [AiDotNet.Attributes.FittedParameter]
     private Vector<T>? _coefficients;
 
     /// <summary>

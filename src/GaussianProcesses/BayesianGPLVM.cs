@@ -97,6 +97,7 @@ public class BayesianGPLVM<T>
     /// <summary>
     /// The observed data (N x D).
     /// </summary>
+    [AiDotNet.Attributes.FittedParameter]
     private Matrix<T>? _observedData;
 
     /// <summary>

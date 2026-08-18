@@ -61,6 +61,7 @@ public partial class NeuralNetworkRegression<T> : NonLinearRegressionBase<T>
     /// </value>
     private readonly NeuralNetworkRegressionOptions<T, Matrix<T>, Vector<T>> _options;
     private bool _useOLS;
+    [AiDotNet.Attributes.FittedParameter]
     private Vector<T>? _olsCoefficients;
 
 

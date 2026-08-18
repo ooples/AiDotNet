@@ -61,9 +61,13 @@ public partial class GaussianMixtureModel<T> : ClusteringBase<T>
 
     /// <inheritdoc/>
     public override ModelOptions GetOptions() => _options;
+    [AiDotNet.Attributes.FittedParameter]
     private Vector<T>? _weights;
+    [AiDotNet.Attributes.FittedParameter]
     private Matrix<T>? _means;
+    [AiDotNet.Attributes.FittedParameter]
     private Tensor<T>? _covariances;
+    [AiDotNet.Attributes.FittedParameter]
     private Matrix<T>? _responsibilities;
     private T _lowerBound = MathHelper.GetNumericOperations<T>().Zero;
 

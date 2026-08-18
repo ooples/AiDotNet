@@ -65,6 +65,7 @@ namespace AiDotNet.DistributedTraining;
 public partial class ZeRO2Model<T, TInput, TOutput> : ShardedModelBase<T, TInput, TOutput>
 {
     private Vector<T>? _parameterDeltaShard;
+    [AiDotNet.Attributes.FittedParameter]
     private Vector<T>? _computedGradients;
     [Scratch]
     private Vector<T>? _gradientShard;

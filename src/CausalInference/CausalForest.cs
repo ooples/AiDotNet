@@ -118,6 +118,7 @@ public partial class CausalForest<T> : CausalModelBase<T>
     /// <summary>
     /// Propensity score coefficients for overlap adjustment.
     /// </summary>
+    [AiDotNet.Attributes.FittedParameter]
     private Vector<T>? _propensityCoefficients;
 
     /// <summary>

@@ -101,6 +101,7 @@ public partial class ProphetModel<T, TInput, TOutput> : TimeSeriesModelBase<T>
     /// The per-changepoint rate adjustments <c>delta</c>. Each entry is the change in slope applied from the
     /// corresponding changepoint time onward, giving the trend its piecewise-linear (time-varying) shape.
     /// </summary>
+    [AiDotNet.Attributes.FittedParameter]
     private Vector<T> _delta;
 
     /// <summary>
@@ -131,6 +132,7 @@ public partial class ProphetModel<T, TInput, TOutput> : TimeSeriesModelBase<T>
     /// regular patterns at different time scales (daily, weekly, yearly, etc.).
     /// </para>
     /// </remarks>
+    [AiDotNet.Attributes.FittedParameter]
     private Vector<T> _seasonalComponents;
 
     /// <summary>
@@ -147,6 +149,7 @@ public partial class ProphetModel<T, TInput, TOutput> : TimeSeriesModelBase<T>
     /// increase or decrease the values in your data.
     /// </para>
     /// </remarks>
+    [AiDotNet.Attributes.FittedParameter]
     private Vector<T> _holidayComponents;
 
     /// <summary>
@@ -163,6 +166,7 @@ public partial class ProphetModel<T, TInput, TOutput> : TimeSeriesModelBase<T>
     /// each external factor influences your data.
     /// </para>
     /// </remarks>
+    [AiDotNet.Attributes.FittedParameter]
     private Vector<T> _regressors;
 
     /// <summary>

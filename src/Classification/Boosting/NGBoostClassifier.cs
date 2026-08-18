@@ -80,6 +80,7 @@ public partial class NGBoostClassifier<T> : EnsembleClassifierBase<T>
     /// <summary>
     /// Initial log-odds values for each class.
     /// </summary>
+    [AiDotNet.Attributes.FittedParameter]
     private Vector<T> _initialLogOdds;
 
     /// <summary>

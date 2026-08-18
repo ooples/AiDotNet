@@ -64,6 +64,7 @@ public partial class SUBCLU<T> : ClusteringBase<T>
     /// <inheritdoc/>
     public override ModelOptions GetOptions() => _options;
     private List<SubspaceClusterInfo>? _subspaceClusterInfos;
+    [AiDotNet.Attributes.FittedParameter]
     private Matrix<T>? _trainingData;
 
     /// <summary>

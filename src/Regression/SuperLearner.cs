@@ -80,6 +80,7 @@ public partial class SuperLearner<T> : NonLinearRegressionBase<T>
     /// <summary>
     /// Meta-learner weights or coefficients.
     /// </summary>
+    [AiDotNet.Attributes.FittedParameter]
     private Vector<T>? _metaWeights;
 
     /// <summary>
@@ -90,6 +91,7 @@ public partial class SuperLearner<T> : NonLinearRegressionBase<T>
     /// <summary>
     /// Cross-validation performance of each base model.
     /// </summary>
+    [AiDotNet.Attributes.FittedParameter]
     private Vector<T>? _cvPerformance;
 
     /// <summary>

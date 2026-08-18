@@ -106,12 +106,14 @@ public partial class OrdinalRegression<T> : ClassifierBase<T>,
     /// <summary>
     /// Feature coefficients (β). Shared across all thresholds (proportional odds assumption).
     /// </summary>
+    [AiDotNet.Attributes.FittedParameter]
     private Vector<T> _coefficients = new Vector<T>(0);
 
     /// <summary>
     /// Threshold parameters (α_1, α_2, ..., α_{K-1}) where K is the number of classes.
     /// These are in increasing order: α_1 < α_2 < ... < α_{K-1}.
     /// </summary>
+    [AiDotNet.Attributes.FittedParameter]
     private Vector<T> _thresholds = new Vector<T>(0);
 
     /// <summary>
