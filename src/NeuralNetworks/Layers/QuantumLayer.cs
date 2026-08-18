@@ -92,7 +92,9 @@ public partial class QuantumLayer<T> : LayerBase<T>, IShapeContract
     /// Stores the original input shape for any-rank tensor support.
     /// </summary>
     private int[]? _originalInputShape;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _rotationAngles;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _angleGradients;
 
     /// <summary>

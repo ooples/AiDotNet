@@ -85,6 +85,7 @@ public partial class AdaMaxOptimizer<T, TInput, TOutput> : GradientBasedOptimize
     /// This "memory" helps the optimizer move more steadily toward the solution.
     /// </para>
     /// </remarks>
+    [AiDotNet.Attributes.Buffer]
     private Vector<T>? _m; // First moment vector
 
     /// <summary>
@@ -106,6 +107,7 @@ public partial class AdaMaxOptimizer<T, TInput, TOutput> : GradientBasedOptimize
     /// This adaptive step sizing helps the optimizer learn efficiently across different parameters.
     /// </para>
     /// </remarks>
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T>? _u; // Exponentially weighted infinity norm
 
     /// <summary>

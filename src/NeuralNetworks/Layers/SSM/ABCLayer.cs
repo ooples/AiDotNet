@@ -97,6 +97,7 @@ public partial class ABCLayer<T> : LayerBase<T>, IShapeContract
     private Tensor<T> _valueWeights;
 
     // Slot key embeddings: [numHeads, numSlots, headDim]
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _slotKeys;
 
     // Forget gate projection: [modelDim, numHeads]

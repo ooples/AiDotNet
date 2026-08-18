@@ -303,6 +303,7 @@ public partial class DilatedConvolutionalLayer<T> : LayerBase<T>, IShapeContract
     /// what the network learned from its mistakes.
     /// </para>
     /// </remarks>
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T>? _kernelGradients;
 
     /// <summary>
@@ -324,6 +325,7 @@ public partial class DilatedConvolutionalLayer<T> : LayerBase<T>, IShapeContract
     /// each output channel only has one bias value.
     /// </para>
     /// </remarks>
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T>? _biasGradients;
 
     // GPU cached tensors for backward pass

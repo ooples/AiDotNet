@@ -42,6 +42,7 @@ public sealed class HeunDiscreteScheduler<T> : NoiseSchedulerBase<T>
     /// <summary>
     /// Sigma values (noise levels) for each inference timestep.
     /// </summary>
+    [AiDotNet.Attributes.Scratch]
     private Vector<T>? _sigmas;
 
     // Two-pass Heun state: stored between predictor (first call) and corrector (second call)

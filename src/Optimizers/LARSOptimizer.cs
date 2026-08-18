@@ -60,6 +60,7 @@ public partial class LARSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
     /// <summary>
     /// The velocity/momentum buffer for each parameter.
     /// </summary>
+    [AiDotNet.Attributes.Buffer]
     private Vector<T> _velocity;
 
     /// <summary>
@@ -75,6 +76,7 @@ public partial class LARSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
     /// <summary>
     /// Previous velocity for reverse updates.
     /// </summary>
+    [AiDotNet.Attributes.Buffer]
     private Vector<T>? _previousVelocity;
 
     /// <summary>

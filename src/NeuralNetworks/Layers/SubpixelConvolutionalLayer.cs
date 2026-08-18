@@ -314,6 +314,7 @@ public partial class SubpixelConvolutionalLayer<T> : LayerBase<T>, IShapeContrac
     /// to make the network perform better next time.
     /// </para>
     /// </remarks>
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T>? _kernelGradients;
 
     /// <summary>
@@ -332,6 +333,7 @@ public partial class SubpixelConvolutionalLayer<T> : LayerBase<T>, IShapeContrac
     /// - The update step uses these to modify the biases during training
     /// </para>
     /// </remarks>
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T>? _biasGradients;
 
     /// <summary>
@@ -353,6 +355,7 @@ public partial class SubpixelConvolutionalLayer<T> : LayerBase<T>, IShapeContrac
     /// small ups and downs, helping it reach the bottom (optimal solution) faster.
     /// </para>
     /// </remarks>
+    [AiDotNet.Attributes.Buffer]
     private Tensor<T>? _kernelMomentum;
 
     /// <summary>
@@ -374,6 +377,7 @@ public partial class SubpixelConvolutionalLayer<T> : LayerBase<T>, IShapeContrac
     /// to smooth out the learning process.
     /// </para>
     /// </remarks>
+    [AiDotNet.Attributes.Buffer]
     private Tensor<T>? _biasMomentum;
 
     // GPU cached tensors for backward pass

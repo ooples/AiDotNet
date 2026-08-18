@@ -114,7 +114,9 @@ public partial class BayesianDenseLayer<T> : LayerBase<T>, IBayesianLayer<T>, IS
     // SampleWeights stores epsilon, rather than a detached sampled parameter.
     // Forward applies the reparameterization with Engine operations so both μ
     // and log σ² remain connected to the active gradient tape.
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T>? _sampledWeightEpsilon;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T>? _sampledBiasEpsilon;
     private bool _samplePending;
 

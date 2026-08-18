@@ -1689,10 +1689,15 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     }
 
 
+    [AiDotNet.Attributes.Buffer]
     private Tensor<T>? _queryWeightsVelocity;
+    [AiDotNet.Attributes.Buffer]
     private Tensor<T>? _keyWeightsVelocity;
+    [AiDotNet.Attributes.Buffer]
     private Tensor<T>? _valueWeightsVelocity;
+    [AiDotNet.Attributes.Buffer]
     private Tensor<T>? _outputWeightsVelocity;
+    [AiDotNet.Attributes.Buffer]
     private Tensor<T>? _outputBiasVelocity;
 
     /// <summary>

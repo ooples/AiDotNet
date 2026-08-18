@@ -34,11 +34,13 @@ public partial class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
     /// <summary>
     /// The first moment vector (moving average of gradients).
     /// </summary>
+    [AiDotNet.Attributes.Buffer]
     private Vector<T> _m;
 
     /// <summary>
     /// The second moment vector (moving average of squared gradients).
     /// </summary>
+    [AiDotNet.Attributes.Buffer]
     private Vector<T> _v;
 
     /// <summary>
@@ -49,6 +51,7 @@ public partial class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
     /// post-convergence m / sqrt(v) drift Adam exhibits on fixed-input
     /// regression. Issue #1332 cluster 6.
     /// </summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T>? _vMaxVector;
 
     /// <summary>
@@ -70,11 +73,13 @@ public partial class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
     /// <summary>
     /// Stores the pre-update snapshot of first moment vector for accurate reverse updates.
     /// </summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T>? _previousM;
 
     /// <summary>
     /// Stores the pre-update snapshot of second moment vector for accurate reverse updates.
     /// </summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T>? _previousV;
 
     /// <summary>

@@ -545,7 +545,9 @@ internal partial class ConvLayerTensor<T> : NeuralNetworks.Layers.LayerBase<T>, 
 
     private int _outputChannels;
     private int _kernelSize;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _kernels;  // [outputChannels, kernelSize]
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _biases;   // [outputChannels]
 
     // Cached state for backward pass
@@ -556,7 +558,9 @@ internal partial class ConvLayerTensor<T> : NeuralNetworks.Layers.LayerBase<T>, 
     private int _lastNumPositions;
 
     // Stored gradients for UpdateParameters
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T>? _kernelGradients;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T>? _biasGradients;
 
     public override bool SupportsTraining => true;

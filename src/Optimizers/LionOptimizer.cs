@@ -61,6 +61,7 @@ public partial class LionOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
     /// <summary>
     /// The momentum vector (exponentially moving average of gradients).
     /// </summary>
+    [AiDotNet.Attributes.Buffer]
     private Vector<T> _m;
 
     /// <summary>

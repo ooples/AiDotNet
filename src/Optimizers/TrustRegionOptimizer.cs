@@ -64,6 +64,7 @@ public partial class TrustRegionOptimizer<T, TInput, TOutput> : GradientBasedOpt
     /// <summary>
     /// The previous parameters, used for trust region update computation.
     /// </summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T>? _trustRegionPreviousParameters;
 
     /// <summary>

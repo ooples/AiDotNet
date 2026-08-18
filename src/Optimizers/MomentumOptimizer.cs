@@ -60,6 +60,7 @@ public partial class MomentumOptimizer<T, TInput, TOutput> : GradientBasedOptimi
     /// This "memory" helps the ball maintain its course through small bumps and roll faster in consistent directions.
     /// </para>
     /// </remarks>
+    [AiDotNet.Attributes.Buffer]
     private Vector<T>? _velocity;
 
     /// <summary>

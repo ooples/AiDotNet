@@ -37,6 +37,7 @@ public partial class NesterovAcceleratedGradientOptimizer<T, TInput, TOutput> : 
     /// <summary>
     /// The velocity vector used in the NAG algorithm.
     /// </summary>
+    [AiDotNet.Attributes.Buffer]
     private Vector<T>? _velocity;
 
     /// <summary>

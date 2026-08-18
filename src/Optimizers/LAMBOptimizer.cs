@@ -90,11 +90,13 @@ public partial class LAMBOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
     /// <summary>
     /// The first moment vector (moving average of gradients).
     /// </summary>
+    [AiDotNet.Attributes.Buffer]
     private Vector<T> _m;
 
     /// <summary>
     /// The second moment vector (moving average of squared gradients).
     /// </summary>
+    [AiDotNet.Attributes.Buffer]
     private Vector<T> _v;
 
     /// <summary>
@@ -110,11 +112,13 @@ public partial class LAMBOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
     /// <summary>
     /// Previous first moment for reverse updates.
     /// </summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T>? _previousM;
 
     /// <summary>
     /// Previous second moment for reverse updates.
     /// </summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T>? _previousV;
 
     /// <summary>

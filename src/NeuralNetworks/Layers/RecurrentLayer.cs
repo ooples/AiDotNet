@@ -691,8 +691,11 @@ public partial class RecurrentLayer<T> : LayerBase<T>, IShapeContract
     }
 
 
+    [AiDotNet.Attributes.Buffer]
     private Tensor<T>? _inputWeightsVelocity;
+    [AiDotNet.Attributes.Buffer]
     private Tensor<T>? _hiddenWeightsVelocity;
+    [AiDotNet.Attributes.Buffer]
     private Tensor<T>? _biasesVelocity;
 
     #region GPU Training Fields

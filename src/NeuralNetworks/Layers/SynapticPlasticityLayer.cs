@@ -339,6 +339,7 @@ public partial class SynapticPlasticityLayer<T> : LayerBase<T>, IShapeContract
     private Tensor<T>? _presynapticTracesGpu;
     private Tensor<T>? _postsynapticTracesGpu;
     private Tensor<T>? _presynapticSpikesGpu;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T>? _postsynapticSpikesGpu;
 
     /// <inheritdoc/>

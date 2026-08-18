@@ -56,16 +56,19 @@ public partial class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
     /// <summary>
     /// The first moment vector (moving average of gradients).
     /// </summary>
+    [AiDotNet.Attributes.Buffer]
     private Vector<T> _m;
 
     /// <summary>
     /// The second moment vector (moving average of squared gradients).
     /// </summary>
+    [AiDotNet.Attributes.Buffer]
     private Vector<T> _v;
 
     /// <summary>
     /// Maximum of past squared gradients (used when AMSGrad is enabled).
     /// </summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T>? _vMax;
 
     /// <summary>
@@ -86,11 +89,13 @@ public partial class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
     /// <summary>
     /// Stores the pre-update snapshot of first moment vector for accurate reverse updates.
     /// </summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T>? _previousM;
 
     /// <summary>
     /// Stores the pre-update snapshot of second moment vector for accurate reverse updates.
     /// </summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T>? _previousV;
 
     /// <summary>

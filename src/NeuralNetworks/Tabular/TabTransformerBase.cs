@@ -73,6 +73,7 @@ public abstract class TabTransformerBase<T> : IParameterSource<T>
     private readonly List<Tensor<T>?> _categoricalEmbeddingsGrad;
 
     // Column embeddings (learned position for each categorical feature)
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T>? _columnEmbeddings;  // [numCat, embDim]
     [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T>? _columnEmbeddingsGrad;

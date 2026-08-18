@@ -124,8 +124,11 @@ public partial class RWKVLayer<T> : LayerBase<T>, IShapeContract
     private readonly int _headDimension;
 
     // Time mixing parameters
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _timeMixR;  // [modelDim] lerp coefficient for receptance
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _timeMixK;  // [modelDim] lerp coefficient for key
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _timeMixV;  // [modelDim] lerp coefficient for value
 
     // Time mixing projections: [modelDim, modelDim]
@@ -148,10 +151,13 @@ public partial class RWKVLayer<T> : LayerBase<T>, IShapeContract
     private Tensor<T> _decayBias;     // [modelDim] — RWKV-4 time_decay
 
     // RWKV-4 time_first (u): per-channel current-token bonus [numHeads, headDim] == [modelDim].
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _bonus;
 
     // Channel mixing parameters
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _channelMixR;  // [modelDim]
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _channelMixK;  // [modelDim]
     [TrainableParameter(Role = PersistentTensorRole.Weights)]
 
@@ -164,9 +170,13 @@ public partial class RWKVLayer<T> : LayerBase<T>, IShapeContract
     private Tensor<T> _channelReceptanceWeights;  // [modelDim, modelDim]
 
     // Layer norm parameters
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _normGamma1;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _normBeta1;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _normGamma2;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _normBeta2;
 
     // Cached values for backward pass

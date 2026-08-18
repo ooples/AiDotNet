@@ -47,11 +47,13 @@ public partial class FTRLOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
     /// <summary>
     /// Auxiliary vector used in the FTRL update rule.
     /// </summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T>? _z;
 
     /// <summary>
     /// Vector of accumulated squared gradients.
     /// </summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T>? _n;
 
     /// <summary>
@@ -62,6 +64,7 @@ public partial class FTRLOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
     /// <summary>
     /// Stores the pre-update parameters for approximate reverse updates.
     /// </summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T>? _previousParameters;
 
     /// <summary>

@@ -560,9 +560,13 @@ public abstract class TabPFNBase<T> : IParameterSource<T>
         private readonly double _dropoutRate;
 
         // Attention weights
+        [AiDotNet.Attributes.TrainableParameter]
         private Tensor<TBlock> _queryWeights;
+        [AiDotNet.Attributes.TrainableParameter]
         private Tensor<TBlock> _keyWeights;
+        [AiDotNet.Attributes.TrainableParameter]
         private Tensor<TBlock> _valueWeights;
+        [AiDotNet.Attributes.TrainableParameter]
         private Tensor<TBlock> _outputWeights;
 
         // Attention gradients

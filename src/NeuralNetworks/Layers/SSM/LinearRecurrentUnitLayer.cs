@@ -93,21 +93,28 @@ public partial class LinearRecurrentUnitLayer<T> : LayerBase<T>, IShapeContract
 
     // Eigenvalue parameterization: lambda = exp(-exp(nu) + i * exp(theta))
     // nu (log magnitude): [stateDimension]
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _nu;
     // theta (phase): [stateDimension]
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _theta;
 
     // B input projection (complex): [stateDimension] real and imaginary parts
     // Maps scalar input per dimension to complex state
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _bReal;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _bImag;
 
     // C output projection (complex): [stateDimension] real and imaginary parts
     // Maps complex state back to scalar output per dimension
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _cReal;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _cImag;
 
     // D skip connection: [modelDimension]
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _dParam;
 
     // Input projection: [modelDimension, modelDimension]

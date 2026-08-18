@@ -71,10 +71,15 @@ public partial class CachedMultiHeadAttention<T> : LayerBase<T>, IShapeContract
     public PositionalEncodingType PositionalEncoding { get; private set; } = PositionalEncodingType.None;
 
     // Projection weights
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _queryWeights;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _keyWeights;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _valueWeights;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _outputWeights;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _outputBias;
 
     // KV-Cache reference (shared across layers)

@@ -88,6 +88,7 @@ public partial class AdagradOptimizer<T, TInput, TOutput> : GradientBasedOptimiz
     /// which is especially useful when some parameters are more important than others or appear less frequently.
     /// </para>
     /// </remarks>
+    [AiDotNet.Attributes.Buffer]
     private Vector<T>? _accumulatedSquaredGradients;
 
     /// <summary>

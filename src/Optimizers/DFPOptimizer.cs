@@ -35,6 +35,7 @@ public partial class DFPOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBa
     /// <summary>
     /// The inverse Hessian matrix approximation used in the DFP algorithm.
     /// </summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private Matrix<T> _inverseHessian;
 
     /// <summary>
@@ -318,6 +319,7 @@ public partial class DFPOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBa
     /// <summary>
     /// The parameters from the previous iteration for UpdateParameters method.
     /// </summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T>? _previousParameters;
 
     /// <summary>

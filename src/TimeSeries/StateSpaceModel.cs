@@ -61,21 +61,25 @@ public partial class StateSpaceModel<T> : TimeSeriesModelBase<T>
     /// <summary>
     /// The state transition matrix that describes how the hidden state evolves from one time step to the next.
     /// </summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private Matrix<T> _transitionMatrix;
 
     /// <summary>
     /// The observation matrix that relates the hidden state to the observed measurements.
     /// </summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private Matrix<T> _observationMatrix;
 
     /// <summary>
     /// The covariance matrix of the process noise, representing uncertainty in the state transition.
     /// </summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private Matrix<T> _processNoise;
 
     /// <summary>
     /// The covariance matrix of the observation noise, representing measurement uncertainty.
     /// </summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private Matrix<T> _observationNoise;
 
     /// <summary>

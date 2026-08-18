@@ -313,7 +313,9 @@ public partial class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T
 
     private Tensor<T>? _queryWeightsVelocity;
     private Tensor<T>? _keyWeightsVelocity;
+    [AiDotNet.Attributes.Buffer]
     private Tensor<T>? _valueWeightsVelocity;
+    [AiDotNet.Attributes.Buffer]
     private Tensor<T>? _outputBiasVelocity;
 
     // GPU cached tensors for backward pass

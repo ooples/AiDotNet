@@ -1152,7 +1152,9 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
         base.SetTrainingMode(isTraining);
     }
 
+    [AiDotNet.Attributes.Buffer]
     private Tensor<T>? _gammaVelocity;
+    [AiDotNet.Attributes.Buffer]
     private Tensor<T>? _betaVelocity;
 
     /// <summary>

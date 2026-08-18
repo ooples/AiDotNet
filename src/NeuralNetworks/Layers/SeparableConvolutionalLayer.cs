@@ -303,6 +303,7 @@ public partial class SeparableConvolutionalLayer<T> : LayerBase<T>, IShapeContra
     /// similar to how a ball rolling downhill gathers momentum.
     /// </para>
     /// </remarks>
+    [AiDotNet.Attributes.Buffer]
     private Tensor<T>? _depthwiseKernelsVelocity;
 
     /// <summary>
@@ -318,6 +319,7 @@ public partial class SeparableConvolutionalLayer<T> : LayerBase<T>, IShapeContra
     /// mix information between channels.
     /// </para>
     /// </remarks>
+    [AiDotNet.Attributes.Buffer]
     private Tensor<T>? _pointwiseKernelsVelocity;
 
     /// <summary>
@@ -333,6 +335,7 @@ public partial class SeparableConvolutionalLayer<T> : LayerBase<T>, IShapeContra
     /// the history of previous updates.
     /// </para>
     /// </remarks>
+    [AiDotNet.Attributes.Buffer]
     private Tensor<T>? _biasesVelocity;
 
     #region GPU Training Fields

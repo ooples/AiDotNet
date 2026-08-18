@@ -68,6 +68,7 @@ public partial class LBFGSOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
     /// <summary>
     /// Stores the previous parameters for computing position differences in UpdateParameters.
     /// </summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T>? _lbfgsPreviousParameters;
 
     /// <summary>

@@ -90,11 +90,13 @@ public partial class SpectralNormalizationLayer<T> : LayerBase<T>, IShapeContrac
     /// <summary>
     /// The left singular vector used for power iteration to compute the spectral norm.
     /// </summary>
+    [AiDotNet.Attributes.Scratch]
     private Tensor<T>? _u;
 
     /// <summary>
     /// The right singular vector used for power iteration.
     /// </summary>
+    [AiDotNet.Attributes.Scratch]
     private Tensor<T>? _v;
 
     /// <summary>

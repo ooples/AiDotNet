@@ -94,7 +94,9 @@ public partial class MegalodonLayer<T> : LayerBase<T>, IShapeContract
 
     // CEMA parameters: complex-valued alpha = alpha_real + i * alpha_imag
     // Stored as real/imag pairs: [emaDimension] each
+    [AiDotNet.Attributes.Buffer]
     private Tensor<T> _emaAlphaReal;
+    [AiDotNet.Attributes.Buffer]
     private Tensor<T> _emaAlphaImag;
 
     // EMA input projection: [modelDim, emaDimension]
@@ -114,7 +116,9 @@ public partial class MegalodonLayer<T> : LayerBase<T>, IShapeContract
     private Tensor<T> _emaOutputBias;
 
     // Timestep normalization: [emaDimension] each
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _tsNormGamma;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _tsNormBeta;
 
     // Q, K, V projections: [modelDim, modelDim]

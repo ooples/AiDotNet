@@ -591,6 +591,7 @@ internal class DGPLayer<T>
     private Matrix<T> _inducingInputs;
     private Matrix<T> _variationalMean;
     private Matrix<T> _variationalCovCholesky;
+    [AiDotNet.Attributes.Scratch]
     private Matrix<T> _Kuu;
 
     public int OutputDim => _outputDim;

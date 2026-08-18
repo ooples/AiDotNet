@@ -1220,7 +1220,9 @@ public partial class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLa
         return Engine.Reshape(result, [batch, rows, outputCols]);
     }
 
+    [AiDotNet.Attributes.Buffer]
     private Tensor<T>? _weightsVelocity;
+    [AiDotNet.Attributes.Buffer]
     private Tensor<T>? _biasVelocity;
 
     /// <summary>

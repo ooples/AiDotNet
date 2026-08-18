@@ -76,12 +76,14 @@ public partial class BernoulliNaiveBayes<T> : NaiveBayesBase<T>
     /// Log of feature probabilities for presence (P(f=1|c)) for each class.
     /// Shape: [NumClasses, NumFeatures]
     /// </summary>
+    [AiDotNet.Attributes.FittedParameter]
     private Matrix<T>? _logFeatureProbsPresent;
 
     /// <summary>
     /// Log of feature probabilities for absence (P(f=0|c) = 1 - P(f=1|c)) for each class.
     /// Shape: [NumClasses, NumFeatures]
     /// </summary>
+    [AiDotNet.Attributes.FittedParameter]
     private Matrix<T>? _logFeatureProbsAbsent;
 
     /// <summary>

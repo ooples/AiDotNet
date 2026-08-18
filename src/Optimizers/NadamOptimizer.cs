@@ -55,11 +55,13 @@ public partial class NadamOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
     /// <summary>
     /// The first moment vector (momentum).
     /// </summary>
+    [AiDotNet.Attributes.Buffer]
     private Vector<T>? _m;
 
     /// <summary>
     /// The second moment vector (adaptive learning rates).
     /// </summary>
+    [AiDotNet.Attributes.Buffer]
     private Vector<T>? _v;
 
     /// <summary>
@@ -70,11 +72,13 @@ public partial class NadamOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
     /// <summary>
     /// Stores the pre-update snapshot of first moment vector for accurate reverse updates.
     /// </summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T>? _previousM;
 
     /// <summary>
     /// Stores the pre-update snapshot of second moment vector for accurate reverse updates.
     /// </summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T>? _previousV;
 
     /// <summary>

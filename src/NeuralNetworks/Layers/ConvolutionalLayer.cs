@@ -1596,7 +1596,9 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>, IShapeContract
         };
     }
 
+    [AiDotNet.Attributes.Buffer]
     private Tensor<T>? _kernelsVelocity;
+    [AiDotNet.Attributes.Buffer]
     private Tensor<T>? _biasesVelocity;
 
     /// <summary>

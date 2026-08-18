@@ -73,6 +73,7 @@ public partial class ComplementNaiveBayes<T> : NaiveBayesBase<T>
     /// <summary>
     /// Complement feature log-probabilities: log P(feature|NOT class).
     /// </summary>
+    [AiDotNet.Attributes.FittedParameter]
     private Matrix<T>? _complementLogProbs;
     private T[]? _featureMinShift;
 

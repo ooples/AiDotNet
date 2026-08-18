@@ -75,19 +75,26 @@ public partial class S4DLayer<T> : LayerBase<T>, IShapeContract
 
     // A parameter stored as real/imaginary pairs: [innerDim, stateDim, 2]
     // A = a_real + i * a_imag, initialized with S4D-Lin: A_n = -1/2 + n*i
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _aReal;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _aImag;
 
     // B projection: [modelDim, innerDim * stateDim] (complex, stored as real/imag pairs)
     // In S4D-Lin, B is typically initialized to ones.
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _bReal;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _bImag;
 
     // C projection: [innerDim * stateDim, modelDim] (complex, learned)
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _cReal;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _cImag;
 
     // D: [innerDim] (skip connection, real-valued)
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _dParam;
 
     // Input projection: [modelDim, innerDim]
@@ -107,6 +114,7 @@ public partial class S4DLayer<T> : LayerBase<T>, IShapeContract
     private Tensor<T> _outputProjectionBias;
 
     // Delta (discretization step size): [innerDim] (learned, stored as log for positivity)
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _logDelta;
 
     // Cached values for backward pass

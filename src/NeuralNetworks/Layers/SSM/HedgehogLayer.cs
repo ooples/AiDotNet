@@ -95,9 +95,13 @@ public partial class HedgehogLayer<T> : LayerBase<T>, IShapeContract
     // Trainable feature map MLP per head: phi(x) = W2 * GELU(W1 * x + b1) + b2
     // W1: [numHeads, headDim, hiddenDim], W2: [numHeads, hiddenDim, headDim]
     // b1: [numHeads, hiddenDim], b2: [numHeads, headDim]
+    [AiDotNet.Attributes.Buffer]
     private Tensor<T> _featureMapW1;
+    [AiDotNet.Attributes.Buffer]
     private Tensor<T> _featureMapB1;
+    [AiDotNet.Attributes.Buffer]
     private Tensor<T> _featureMapW2;
+    [AiDotNet.Attributes.Buffer]
     private Tensor<T> _featureMapB2;
 
     // Output gate: [modelDim, modelDim]

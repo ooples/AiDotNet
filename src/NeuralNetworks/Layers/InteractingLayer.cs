@@ -66,6 +66,7 @@ public partial class InteractingLayer<T> : LayerBase<T>, IShapeContract
     private Tensor<T> _outputWeights;  // [attentionDim, embeddingDim]
 
     // Residual projection (if dimensions don't match)
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T>? _residualWeights;  // [embeddingDim, embeddingDim] if needed
 
     // Gradients

@@ -1593,7 +1593,9 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IShap
         }
     }
 
+    [AiDotNet.Attributes.Buffer]
     private Tensor<T>? _weightsVelocity;
+    [AiDotNet.Attributes.Buffer]
     private Tensor<T>? _biasesVelocity;
 
     /// <summary>

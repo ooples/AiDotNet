@@ -87,23 +87,31 @@ public partial class S5Layer<T> : LayerBase<T>, IShapeContract
 
     // Diagonal A stored as real/imaginary pairs: [stateDim]
     // Lambda = a_real + i * a_imag, initialized with HiPPO-LegS: Lambda_n = -1/2 + n*pi*i
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _aReal;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _aImag;
 
     // B input matrix (complex, after V^{-1} transformation): [stateDim, modelDim] real/imag
     // Maps H-dimensional input to N-dimensional complex state
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _bReal;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _bImag;
 
     // C output matrix (complex): [modelDim, stateDim] real/imag
     // Maps N-dimensional complex state to H-dimensional real output via Re(C * x)
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _cReal;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _cImag;
 
     // D skip connection: [modelDim]
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _dParam;
 
     // Discretization step size: [stateDim] (stored as log for positivity)
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _logDelta;
 
     // Input projection: [modelDim, modelDim]

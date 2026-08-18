@@ -34,16 +34,19 @@ public partial class AMSGradOptimizer<T, TInput, TOutput> : GradientBasedOptimiz
     /// <summary>
     /// The first moment vector (moving average of gradients).
     /// </summary>
+    [AiDotNet.Attributes.Buffer]
     private Vector<T>? _m;
 
     /// <summary>
     /// The second moment vector (moving average of squared gradients).
     /// </summary>
+    [AiDotNet.Attributes.Buffer]
     private Vector<T>? _v;
 
     /// <summary>
     /// The maximum of past second moments.
     /// </summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T>? _vHat;
 
     /// <summary>

@@ -86,6 +86,7 @@ public partial class AdaDeltaOptimizer<T, TInput, TOutput> : GradientBasedOptimi
     /// - This information helps determine how big your next learning step should be
     /// </para>
     /// </remarks>
+    [AiDotNet.Attributes.Buffer]
     private Vector<T>? _accumulatedSquaredGradients;
 
     /// <summary>
@@ -109,16 +110,19 @@ public partial class AdaDeltaOptimizer<T, TInput, TOutput> : GradientBasedOptimi
     /// process automatically based on past experience.
     /// </para>
     /// </remarks>
+    [AiDotNet.Attributes.Buffer]
     private Vector<T>? _accumulatedSquaredUpdates;
 
     /// <summary>
     /// Stores the pre-update snapshot of accumulated squared gradients for accurate reverse updates.
     /// </summary>
+    [AiDotNet.Attributes.Buffer]
     private Vector<T>? _previousAccumulatedSquaredGradients;
 
     /// <summary>
     /// Stores the pre-update snapshot of accumulated squared updates for accurate reverse updates.
     /// </summary>
+    [AiDotNet.Attributes.Buffer]
     private Vector<T>? _previousAccumulatedSquaredUpdates;
 
     /// <summary>

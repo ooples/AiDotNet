@@ -54,6 +54,7 @@ public partial class AdaptedMetaModel<T, TInput, TOutput> : MetaLearningModelBas
             () => _adaptedParams,
             value => _adaptedParams = value));
     }
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T> _adaptedParams;
     [AiDotNet.Attributes.TrainableParameter]
     private readonly Vector<T>? _supportFeatures;
