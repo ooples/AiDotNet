@@ -92,10 +92,10 @@ public class UNITEROptions : FoundationalVLMOptions
     /// </exception>
     public void Validate()
     {
-        if (!double.IsFinite(LearningRate) || LearningRate <= 0.0)
+        if (!IsFinite(LearningRate) || LearningRate <= 0.0)
             throw new ArgumentOutOfRangeException(nameof(LearningRate), LearningRate,
                 "LearningRate must be finite and greater than zero.");
-        if (!double.IsFinite(WeightDecay) || WeightDecay < 0.0)
+        if (!IsFinite(WeightDecay) || WeightDecay < 0.0)
             throw new ArgumentOutOfRangeException(nameof(WeightDecay), WeightDecay,
                 "WeightDecay must be finite and non-negative.");
         if (WarmupSteps < 0)
@@ -107,19 +107,28 @@ public class UNITEROptions : FoundationalVLMOptions
         if (WarmupSteps > TotalTrainingSteps)
             throw new ArgumentOutOfRangeException(nameof(WarmupSteps), WarmupSteps,
                 "WarmupSteps cannot exceed TotalTrainingSteps.");
-        if (WarmupInitialLearningRate is double warmupRate
-            && (!double.IsFinite(warmupRate) || warmupRate < 0.0))
+        if (WarmupInitialLearningRate.HasValue)
         {
-            throw new ArgumentOutOfRangeException(nameof(WarmupInitialLearningRate), warmupRate,
-                "WarmupInitialLearningRate must be finite and non-negative when specified.");
+            double warmupRate = WarmupInitialLearningRate.Value;
+            if (!IsFinite(warmupRate) || warmupRate < 0.0)
+            {
+                throw new ArgumentOutOfRangeException(nameof(WarmupInitialLearningRate), warmupRate,
+                    "WarmupInitialLearningRate must be finite and non-negative when specified.");
+            }
         }
-        if (!double.IsFinite(EndLearningRate) || EndLearningRate < 0.0)
+        if (!IsFinite(EndLearningRate) || EndLearningRate < 0.0)
             throw new ArgumentOutOfRangeException(nameof(EndLearningRate), EndLearningRate,
                 "EndLearningRate must be finite and non-negative.");
-        if (!double.IsFinite(MaxGradientNorm) || MaxGradientNorm <= 0.0)
+        if (!IsFinite(MaxGradientNorm) || MaxGradientNorm <= 0.0)
             throw new ArgumentOutOfRangeException(nameof(MaxGradientNorm), MaxGradientNorm,
                 "MaxGradientNorm must be finite and greater than zero.");
     }
+
+    // double.IsFinite is unavailable on the library's net471 target. Keep the validation contract
+    // identical across every target framework instead of allowing modern-target-only API usage to
+    // reach CI before it is discovered.
+    private static bool IsFinite(double value)
+        => !double.IsNaN(value) && !double.IsInfinity(value);
 
     public UNITEROptions()
     {

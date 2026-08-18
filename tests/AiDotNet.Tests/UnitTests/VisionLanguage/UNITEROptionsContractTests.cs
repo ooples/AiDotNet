@@ -56,14 +56,22 @@ public sealed class UNITEROptionsContractTests
         var cases = new (Action<UNITEROptions> Mutate, string ParameterName)[]
         {
             (options => options.LearningRate = 0.0, nameof(UNITEROptions.LearningRate)),
+            (options => options.LearningRate = double.NaN, nameof(UNITEROptions.LearningRate)),
+            (options => options.LearningRate = double.PositiveInfinity, nameof(UNITEROptions.LearningRate)),
             (options => options.WeightDecay = -0.01, nameof(UNITEROptions.WeightDecay)),
+            (options => options.WeightDecay = double.NegativeInfinity, nameof(UNITEROptions.WeightDecay)),
             (options => options.WarmupSteps = -1, nameof(UNITEROptions.WarmupSteps)),
             (options => options.TotalTrainingSteps = 0, nameof(UNITEROptions.TotalTrainingSteps)),
             (options => options.WarmupSteps = options.TotalTrainingSteps + 1, nameof(UNITEROptions.WarmupSteps)),
             (options => options.WarmupInitialLearningRate = double.NaN,
                 nameof(UNITEROptions.WarmupInitialLearningRate)),
+            (options => options.WarmupInitialLearningRate = double.PositiveInfinity,
+                nameof(UNITEROptions.WarmupInitialLearningRate)),
             (options => options.EndLearningRate = -1e-6, nameof(UNITEROptions.EndLearningRate)),
-            (options => options.MaxGradientNorm = 0.0, nameof(UNITEROptions.MaxGradientNorm))
+            (options => options.EndLearningRate = double.NegativeInfinity, nameof(UNITEROptions.EndLearningRate)),
+            (options => options.MaxGradientNorm = 0.0, nameof(UNITEROptions.MaxGradientNorm)),
+            (options => options.MaxGradientNorm = double.PositiveInfinity,
+                nameof(UNITEROptions.MaxGradientNorm))
         };
 
         foreach (var (mutate, parameterName) in cases)
