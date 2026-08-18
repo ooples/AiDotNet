@@ -27253,12 +27253,21 @@ public static class LayerHelper<T>
             // MSCAN blocks: multi-scale depth-wise strip convolutions + attention
             for (int block = 0; block < depths[stage]; block++)
             {
-                // Multi-scale depth-wise convolutions (strip convolutions at different scales)
-                // Approximated as 3x3 depth-wise conv for context aggregation
+                // Multi-scale depth-wise convolutions (strip convolutions at different scales),
+                // approximated as a single 3x3 depth-wise conv for context aggregation.
+                //
+                // groups: channels. Guo et al. 2022 ("SegNeXt", section 3.1) build MSCA from
+                // DEPTH-WISE strip convolutions, and depth-wise is what makes multi-scale context
+                // cheap enough to apply at every block: channels*9 + channels weights rather than
+                // channels^2*9 + channels. Written as a dense convolution it was `channels` times
+                // too large. Same defect as the SegFormer Mix-FFN and the EfficientNet MBConv, and
+                // it survived the first sweep for it because that grep spelled the word
+                // "depthwise" while this comment spells it "depth-wise".
                 yield return new ConvolutionalLayer<T>(
                     channels,
                     3, 1, 1,
-                    relu);
+                    relu,
+                    groups: channels);
 
                 // 1x1 attention weight projection
                 yield return new ConvolutionalLayer<T>(
