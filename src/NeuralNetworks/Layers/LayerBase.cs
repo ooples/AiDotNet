@@ -5612,6 +5612,34 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     /// </summary>
     internal IReadOnlyList<TrainableParameterValueSlot> GetOwnTrainableParameterValueSlots()
     {
+        // Materialize first, exactly as GetOwnParameterStateChunks does. This is an explicit VALUE
+        // boundary -- every caller is about to read or write real scalars -- and the rule stated on
+        // EnsureOwnParametersMaterialized applies here verbatim: "This is an explicit value boundary,
+        // so materializing a countable declaration is expected; bare ParameterCount remains
+        // allocation-free."
+        //
+        // Without this the two surfaces described different models. A component whose weights are
+        // still lazy has no value slot to report, so it is silently skipped, while the chunk stream
+        // materializes the same component and counts it. On a cloned UNetNoisePredictor that split
+        // measured 954,084 from ParameterCount and the chunk stream against 904,740 from the flat
+        // vector -- the object disagreeing with itself by 49,344 scalars -- and Clone() then fed the
+        // larger stream into a SetParameters sized by the smaller one:
+        //
+        //     ArgumentException : Expected 904740 parameters, got 954084
+        //
+        // which is the whole of failure class P1. The identical asymmetry was already fixed once on
+        // the chunk path, where the remark on EnsureOwnParametersMaterialized records that it "made
+        // the save side write a manifest describing fewer tensors than a trained instance holds".
+        //
+        // This does NOT eagerly allocate the library. EnsureOwnParametersMaterialized is gated on
+        // IsShapeResolved || ParametersAreConstructionSized || a countable declaration, so a layer
+        // that genuinely cannot size itself yet is left alone -- the same gate the chunk path already
+        // runs on every layer in the repository.
+        if (_pendingParameterRestore is not null)
+            EnsureParametersMaterialized();
+        else
+            EnsureOwnParametersMaterialized();
+
         var components = GetOrderedParameterComponents();
         var slots = new List<TrainableParameterValueSlot>();
         for (int i = 0; i < components.Length; i++)
