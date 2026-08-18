@@ -1,4 +1,5 @@
 using AiDotNet.Models.Options;
+using AiDotNet.Solvers;
 using AiDotNet.Solvers.InteriorPoint;
 using AiDotNet.Solvers.LinearProgramming;
 using AiDotNet.Solvers.QuadraticProgramming;
@@ -126,6 +127,104 @@ public class InteriorPointFreeVariableQpTests
             $"x2: interior {interior.Solution[1]}, active set {activeSet.Solution[1]}");
         Assert.True(Math.Abs(interior.ObjectiveValue - activeSet.ObjectiveValue) < 1e-3,
             $"objective: interior {interior.ObjectiveValue}, active set {activeSet.ObjectiveValue}");
+    }
+
+    [Fact]
+    public void ReportedMultipliersSatisfyTheLibrarysOwnKktConditions()
+    {
+        // A QuadraticProgramSolution reports KKT MULTIPLIERS, which are the NEGATION of the shadow
+        // prices a LinearProgramSolution reports -- the iteration computes the latter. Getting that
+        // backwards is not cosmetic: mu >= 0 is a KKT condition rather than a convention, so a
+        // flipped sign makes every inequality multiplier infeasible.
+        //
+        // Measured before the fix on this program: KktConditions.Evaluate returned stationarity
+        // 1.20E+002 and dual feasibility 3.00E+001 on this solver's own output, while the active-set
+        // solver -- same interface, same program -- passed at 1.4E-014.
+        var quadratic = new Matrix<double>(2, 2);
+        quadratic[0, 0] = 4.0;
+        quadratic[1, 1] = 2.0;
+
+        var linear = new Vector<double>(2);
+
+        var equality = new Matrix<double>(1, 2);
+        equality[0, 0] = 1.0;
+        equality[0, 1] = 1.0;
+
+        var inequality = new Matrix<double>(1, 2);
+        inequality[0, 0] = 0.0;
+        inequality[0, 1] = 1.0;
+
+        var inequalityBounds = Vector<double>.FromArray(new[] { 15.0 });
+        var equalityBounds = Vector<double>.FromArray(new[] { 30.0 });
+
+        var solution = new InteriorPointSolver<double>().Solve(Program(false));
+
+        var residual = KktConditions.Evaluate<double>(
+            quadratic: quadratic,
+            linear: linear,
+            solution: solution.Solution!,
+            inequalityMatrix: inequality,
+            inequalityBounds: inequalityBounds,
+            inequalityMultipliers: solution.InequalityMultipliers,
+            equalityMatrix: equality,
+            equalityBounds: equalityBounds,
+            equalityMultipliers: solution.EqualityMultipliers);
+
+        Assert.True(residual.Stationarity < 1e-4, $"stationarity {residual.Stationarity}");
+        Assert.True(residual.PrimalFeasibility < 1e-4, $"primal feasibility {residual.PrimalFeasibility}");
+        Assert.True(residual.DualFeasibility < 1e-4, $"dual feasibility {residual.DualFeasibility}");
+        Assert.True(residual.ComplementarySlackness < 1e-4,
+            $"complementary slackness {residual.ComplementarySlackness}");
+    }
+
+    [Fact]
+    public void ReportedMultipliersMatchTheActiveSetSolverInSignAndMagnitude()
+    {
+        // Two implementations of IQuadraticProgramSolver must be substitutable. Before the fix they
+        // disagreed on the sign of BOTH multiplier vectors on every problem tried.
+        foreach (double capacity in new[] { 15.0, 10.0, 5.0 })
+        {
+            var interior = new InteriorPointSolver<double>().Solve(ProgramWithCapacity(capacity));
+            var activeSet = new ActiveSetQuadraticProgramSolver<double>()
+                .Solve(ProgramWithCapacity(capacity));
+
+            Assert.True(
+                Math.Abs(interior.InequalityMultipliers![0] - activeSet.InequalityMultipliers![0]) < 1e-2,
+                $"cap {capacity}: interior mu {interior.InequalityMultipliers[0]}, " +
+                $"active set mu {activeSet.InequalityMultipliers[0]}");
+            Assert.True(
+                Math.Abs(interior.EqualityMultipliers![0] - activeSet.EqualityMultipliers![0]) < 1e-2,
+                $"cap {capacity}: interior lambda {interior.EqualityMultipliers[0]}, " +
+                $"active set lambda {activeSet.EqualityMultipliers[0]}");
+
+            // And the inequality multiplier is non-negative, which is the condition rather than a
+            // convention.
+            Assert.True(interior.InequalityMultipliers[0] >= -1e-6,
+                $"cap {capacity}: mu was {interior.InequalityMultipliers[0]}");
+        }
+    }
+
+    private static QuadraticProgram<double> ProgramWithCapacity(double capacity)
+    {
+        var quadratic = new Matrix<double>(2, 2);
+        quadratic[0, 0] = 4.0;
+        quadratic[1, 1] = 2.0;
+
+        var equality = new Matrix<double>(1, 2);
+        equality[0, 0] = 1.0;
+        equality[0, 1] = 1.0;
+
+        var inequality = new Matrix<double>(1, 2);
+        inequality[0, 0] = 0.0;
+        inequality[0, 1] = 1.0;
+
+        return new QuadraticProgram<double>(
+            quadratic: quadratic,
+            linear: new Vector<double>(2),
+            inequalityMatrix: inequality,
+            inequalityBounds: Vector<double>.FromArray(new[] { capacity }),
+            equalityMatrix: equality,
+            equalityBounds: Vector<double>.FromArray(new[] { 30.0 }));
     }
 
     [Fact]

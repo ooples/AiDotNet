@@ -189,9 +189,23 @@ public sealed class InteriorPointSolver<T> : ILinearProgramSolver<T>, IQuadratic
 
         var (inequalityDuals, equalityDuals) = SplitDuals(standard, outcome);
 
+        // A LinearProgramSolution reports SHADOW PRICES, the convention the iteration computes
+        // directly and the one the simplex solver shares. A QuadraticProgramSolution reports KKT
+        // MULTIPLIERS, which are their negation: the iteration's y satisfies Qz + c = A'y + s, while
+        // this library's KKT convention is L = f + lambda'(Ax - b) + mu'(Gx - h) with stationarity
+        // Qx + c + A'lambda + G'mu = 0, giving lambda = -y.
+        //
+        // Reporting the shadow prices here was not a cosmetic mismatch. mu >= 0 is a KKT CONDITION
+        // rather than a convention, so the sign flip made every inequality multiplier infeasible,
+        // and the library's own checker said so: feeding this solver's output for
+        // min 2x1^2 + x2^2 subject to x1 + x2 = 30, x2 <= 15 into KktConditions.Evaluate returned
+        // stationarity 1.20E+002 and dual feasibility 3.00E+001, where negating both vectors brought
+        // them to 5.5E-011 and 0. ActiveSetQuadraticProgramSolver solves the same program through
+        // the same IQuadraticProgramSolver interface and already reported +30, passing the checker
+        // at 1.4E-014 -- so the two implementations could not be substituted for one another.
         return new QuadraticProgramSolution<T>(
             outcome.Status, solution, objectiveValue, outcome.Iterations,
-            inequalityDuals, equalityDuals);
+            NegateForKktConvention(inequalityDuals), NegateForKktConvention(equalityDuals));
     }
 
     /// <summary>
@@ -322,6 +336,21 @@ public sealed class InteriorPointSolver<T> : ILinearProgramSolver<T>, IQuadratic
     /// added to encode a finite upper bound have no counterpart to report and are dropped.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Converts shadow prices into the KKT multipliers a quadratic program reports.
+    /// </summary>
+    /// <param name="duals">The duals as the iteration computes them, or <c>null</c>.</param>
+    /// <returns>Their negation, or <c>null</c>.</returns>
+    private static Vector<T>? NegateForKktConvention(Vector<T>? duals)
+    {
+        if (duals is null) return null;
+
+        var converted = new Vector<T>(duals.Length);
+        for (int i = 0; i < duals.Length; i++) converted[i] = NumOps.Negate(duals[i]);
+
+        return converted;
+    }
+
     private static (Vector<T>? Inequality, Vector<T>? Equality) SplitDuals(
         LinearProgramStandardForm<T> standard, Outcome outcome)
     {
@@ -332,6 +361,10 @@ public sealed class InteriorPointSolver<T> : ILinearProgramSolver<T>, IQuadratic
 
         var duals = outcome.RowDuals;
 
+        // Reported as the iteration computes them, which is the LP shadow-price convention the
+        // simplex solver also uses -- InteriorPointSolverIntegrationTests.Solve_DualValues_
+        // AgreeWithSimplex pins the two together. The QP path negates these before reporting; see
+        // the note in Solve(QuadraticProgram{T}).
         Vector<T>? inequality = null;
         if (standard.InequalityRowCount > 0)
         {
