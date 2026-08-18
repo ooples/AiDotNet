@@ -341,53 +341,7 @@ public partial class RecurrentNeuralNetwork<T> : SequenceModelLayoutBase<T>
         return metadata;
     }
 
-    /// <summary>
-    /// Serializes network-specific data for the Recurrent Neural Network.
-    /// </summary>
-    /// <param name="writer">The BinaryWriter to write the data to.</param>
-    /// <remarks>
-    /// <para>
-    /// This method writes the specific configuration and state of the RNN to a binary stream.
-    /// It includes RNN-specific parameters that are essential for later reconstruction of the network.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method saves the unique settings of your RNN.
-    /// 
-    /// It writes:
-    /// - The size of the hidden state (which determines the network's memory capacity)
-    /// - The length of sequences the network is designed to handle
-    /// - Any other RNN-specific parameters
-    /// 
-    /// Saving these details allows you to recreate the exact same network structure later.
-    /// It's like writing down a recipe so you can make the same dish again in the future.
-    /// </para>
-    /// </remarks>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(Convert.ToDouble(_learningRate));
-    }
 
-    /// <summary>
-    /// Deserializes network-specific data for the Recurrent Neural Network.
-    /// </summary>
-    /// <param name="reader">The BinaryReader to read the data from.</param>
-    /// <remarks>
-    /// <para>
-    /// This method reads the specific configuration and state of the RNN from a binary stream.
-    /// It reconstructs the RNN-specific parameters to match the state of the network when it was serialized.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method loads the unique settings of your RNN.
-    /// 
-    /// It reads:
-    /// - The size of the hidden state (which determines the network's memory capacity)
-    /// - The length of sequences the network is designed to handle
-    /// - Any other RNN-specific parameters
-    /// 
-    /// Loading these details allows you to recreate the exact same network structure that was previously saved.
-    /// It's like following a recipe to recreate a dish exactly as it was made before.
-    /// </para>
-    /// </remarks>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _learningRate = NumOps.FromDouble(reader.ReadDouble());
-    }
+
+
 }

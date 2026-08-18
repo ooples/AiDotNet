@@ -282,19 +282,9 @@ namespace AiDotNet.NeuralNetworks
             return metadata;
         }
 
-        /// <inheritdoc/>
-        protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-        {
-            base.SerializeNetworkSpecificData(writer);
-            writer.Write(_outputDim);
-        }
 
-        /// <inheritdoc/>
-        protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-        {
-            base.DeserializeNetworkSpecificData(reader);
-            _outputDim = reader.ReadInt32();
-        }
+
+
 
         #endregion
     }

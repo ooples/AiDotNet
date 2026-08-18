@@ -687,69 +687,9 @@ public partial class DeepBeliefNetwork<T> : VectorModelLayoutBase<T>
         };
     }
 
-    /// <summary>
-    /// Serializes network-specific data for the Deep Belief Network.
-    /// </summary>
-    /// <param name="writer">The BinaryWriter to write the data to.</param>
-    /// <remarks>
-    /// <para>
-    /// This method writes the specific configuration and state of the Deep Belief Network
-    /// to a binary stream. This includes training parameters and RBM layer configurations
-    /// that need to be preserved for later reconstruction of the network.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method saves the unique settings of your Deep Belief Network.
-    /// 
-    /// It writes:
-    /// - The number of RBM layers
-    /// - The configuration of each RBM layer
-    /// - Training parameters like learning rate, epochs, and batch size
-    /// 
-    /// Saving these details allows you to recreate the exact same network structure and state later.
-    /// </para>
-    /// </remarks>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        // Write training parameters
-        writer.Write(_epochs);
-        writer.Write(Convert.ToDouble(_learningRate));
-        writer.Write(_batchSize);
 
-        // Serialize the loss function using the helper method
-        SerializationHelper<T>.SerializeInterface(writer, _lossFunction);
-    }
 
-    /// <summary>
-    /// Deserializes network-specific data for the Deep Belief Network.
-    /// </summary>
-    /// <param name="reader">The BinaryReader to read the data from.</param>
-    /// <remarks>
-    /// <para>
-    /// This method reads the specific configuration and state of the Deep Belief Network from a binary stream.
-    /// It reconstructs the network's structure, including RBM layers and training parameters, to match
-    /// the state of the network when it was serialized.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method loads the unique settings of your Deep Belief Network.
-    /// 
-    /// It reads:
-    /// - The number of RBM layers
-    /// - The configuration of each RBM layer
-    /// - Training parameters like learning rate, epochs, and batch size
-    /// 
-    /// Loading these details allows you to recreate the exact same network structure and state that was previously saved.
-    /// </para>
-    /// </remarks>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        // Read training parameters
-        _epochs = reader.ReadInt32();
-        _learningRate = NumOps.FromDouble(reader.ReadDouble());
-        _batchSize = reader.ReadInt32();
 
-        // Read and set the loss function if a custom one was used
-        var lossFunction = DeserializationHelper.DeserializeInterface<ILossFunction<T>>(reader) ??
-            throw new InvalidOperationException("Failed to deserialize the loss function. The loss function cannot be null.");
-        _lossFunction = lossFunction;
-    }
 
     /// <summary>
     /// Creates a new instance of the deep belief network model.

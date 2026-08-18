@@ -320,41 +320,9 @@ public partial class QuantumNeuralNetwork<T> : VectorModelLayoutBase<T>
         };
     }
 
-    /// <summary>
-    /// Serializes quantum neural network-specific data to a binary writer.
-    /// </summary>
-    /// <param name="writer">The BinaryWriter to write the data to.</param>
-    /// <remarks>
-    /// <para>
-    /// This method writes the specific parameters and state of the quantum neural network to a binary stream.
-    /// </para>
-    /// <para>
-    /// <b>For Beginners:</b> This saves the current state of the quantum neural network to a file.
-    /// It records all the important information about the network so you can reload it later exactly as it is now.
-    /// </para>
-    /// </remarks>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_numQubits);
-    }
 
-    /// <summary>
-    /// Deserializes quantum neural network-specific data from a binary reader.
-    /// </summary>
-    /// <param name="reader">The BinaryReader to read the data from.</param>
-    /// <remarks>
-    /// <para>
-    /// This method reads the specific parameters and state of the quantum neural network from a binary stream.
-    /// </para>
-    /// <para>
-    /// <b>For Beginners:</b> This loads a saved quantum neural network state from a file. It rebuilds the
-    /// network exactly as it was when you saved it, including all its learned information and quantum-specific settings.
-    /// </para>
-    /// </remarks>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _numQubits = reader.ReadInt32();
-    }
+
+
 
     /// <summary>
     /// Prepares a quantum state from a classical input tensor.

@@ -372,71 +372,9 @@ public partial class ExtremeLearningMachine<T> : VectorModelLayoutBase<T>
         };
     }
 
-    /// <summary>
-    /// Serializes Extreme Learning Machine-specific data to a binary writer.
-    /// </summary>
-    /// <param name="writer">The BinaryWriter to write the data to.</param>
-    /// <remarks>
-    /// <para>
-    /// This method writes ELM-specific configuration data to a binary stream. It includes
-    /// properties such as the hidden layer size and the weights of all layers. This data is needed
-    /// to reconstruct the ELM when deserializing.
-    /// </para>
-    /// <para><b>For Beginners:</b> This saves the special configuration of your ELM.
-    /// 
-    /// It's like writing down the recipe for how your specific ELM was built:
-    /// - How many hidden neurons it has
-    /// - The random weights used in the input-to-hidden connections
-    /// - The trained weights used in the hidden-to-output connections
-    /// 
-    /// This allows you to save the model and reload it later, without having to retrain it.
-    /// </para>
-    /// </remarks>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        // Write hidden layer size
-        writer.Write(_hiddenLayerSize);
 
-        // Write whether we're in training mode
-        writer.Write(IsTrainingMode);
-    }
 
-    /// <summary>
-    /// Deserializes Extreme Learning Machine-specific data from a binary reader.
-    /// </summary>
-    /// <param name="reader">The BinaryReader to read the data from.</param>
-    /// <remarks>
-    /// <para>
-    /// This method reads ELM-specific configuration data from a binary stream. It retrieves
-    /// properties such as the hidden layer size and the weights of all layers. After reading this data,
-    /// the ELM's state is fully restored to what it was when saved.
-    /// </para>
-    /// <para><b>For Beginners:</b> This restores the special configuration of your ELM from saved data.
-    /// 
-    /// It's like following the recipe to rebuild your ELM exactly as it was:
-    /// - Setting the hidden layer to the right size
-    /// - Restoring the random weights for the input-to-hidden connections
-    /// - Restoring the trained weights for the hidden-to-output connections
-    /// 
-    /// By reading these details, the ELM can be reconstructed exactly as it was
-    /// when it was saved, preserving all its behavior and learned patterns.
-    /// </para>
-    /// </remarks>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        // Read hidden layer size
-        int hiddenLayerSize = reader.ReadInt32();
 
-        // Check if the hiddenLayerSize matches the current instance
-        if (hiddenLayerSize != _hiddenLayerSize)
-        {
-            Console.WriteLine($"Warning: Loaded ELM has hidden layer size {hiddenLayerSize}, " +
-                             $"but current instance has size {_hiddenLayerSize}");
-        }
-
-        // Read training mode
-        IsTrainingMode = reader.ReadBoolean();
-    }
 
     /// <summary>
     /// Trains the ELM using regularized least squares for improved generalization.

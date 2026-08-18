@@ -830,31 +830,7 @@ public partial class VariationalAutoencoder<T> : VectorModelLayoutBase<T>, IAuxi
         };
     }
 
-    /// <summary>
-    /// Serializes network-specific data for the Variational Autoencoder.
-    /// </summary>
-    /// <param name="writer">The BinaryWriter to write the data to.</param>
-    /// <remarks>
-    /// This method writes the specific configuration and state of the VAE to a binary stream.
-    /// It includes network-specific parameters that are essential for later reconstruction of the network.
-    /// </remarks>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(LatentSize);
-        SerializationHelper<T>.SerializeInterface(writer, _optimizer);
-    }
 
-    /// <summary>
-    /// Deserializes network-specific data for the Variational Autoencoder.
-    /// </summary>
-    /// <param name="reader">The BinaryReader to read the data from.</param>
-    /// <remarks>
-    /// This method reads the specific configuration and state of the VAE from a binary stream.
-    /// It reconstructs the network-specific parameters to match the state of the network when it was serialized.
-    /// </remarks>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        LatentSize = reader.ReadInt32();
-        _optimizer = DeserializationHelper.DeserializeInterface<IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>>(reader) ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
-    }
+
+
 }
