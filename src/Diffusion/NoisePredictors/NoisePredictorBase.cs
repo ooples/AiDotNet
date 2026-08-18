@@ -1792,6 +1792,13 @@ public abstract partial class NoisePredictorBase<T> : INoisePredictor<T>, IModel
         }
     }
 
+    /// <summary>Marks a payload whose weights are streamed per tensor rather than flattened.</summary>
+    /// <remarks>
+    /// Negative on purpose: a payload written before streaming existed opens with a vector LENGTH,
+    /// so the reader can tell the two apart without a version field.
+    /// </remarks>
+    private const int ChunkedParameterMarker = -424242;
+
     /// <summary>
     /// COW clone lever (#1624): shares each trainable weight tensor's STORAGE with <paramref name="source"/>
     /// via the global <see cref="AiDotNet.Helpers.CopyOnWriteCloneHelper"/> (O(1)-until-write), instead of
@@ -1944,8 +1951,32 @@ public abstract partial class NoisePredictorBase<T> : INoisePredictor<T>, IModel
                 $"vs current ({InputChannels}, {OutputChannels}, {BaseChannels}, {TimeEmbeddingDim}).");
         }
 
-        // Load model parameters
-        SetParameters(SerializationHelper<T>.DeserializeVector(reader));
+        // Matches the writer above, and still reads a file written before it: a legacy payload opens
+        // with the vector length, so anything that is not the sentinel is handed to the flat reader
+        // with that length already consumed.
+        int parameterMarker = reader.ReadInt32();
+        if (parameterMarker == ChunkedParameterMarker)
+        {
+            int chunkCount = reader.ReadInt32();
+            var restored = new List<Tensor<T>>(chunkCount);
+            for (int c = 0; c < chunkCount; c++)
+            {
+                int length = reader.ReadInt32();
+                var values = new T[length];
+                for (int i = 0; i < length; i++)
+                {
+                    values[i] = NumOps.FromDouble(reader.ReadDouble());
+                }
+
+                restored.Add(new Tensor<T>(new[] { length }, new Vector<T>(values)));
+            }
+
+            SetParameterChunks(restored);
+        }
+        else
+        {
+            SetParameters(SerializationHelper<T>.DeserializeVector(reader, parameterMarker));
+        }
     }
 
     #endregion

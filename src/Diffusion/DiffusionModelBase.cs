@@ -1211,6 +1211,13 @@ public abstract partial class DiffusionModelBase<T> : IDiffusionModel<T>, IConfi
         _qatHook = null;
     }
 
+    /// <summary>Marks a payload whose weights are streamed per tensor rather than flattened.</summary>
+    /// <remarks>
+    /// Negative on purpose: a payload written before streaming existed opens with a vector LENGTH,
+    /// so the reader can tell the two apart without a version field.
+    /// </remarks>
+    private const int ChunkedParameterMarker = -424242;
+
     /// <summary>
     /// Whether quantization-aware training is engaged for <see cref="Train"/> (G5, #1624). Opt-in and OFF
     /// by default at every model size; turn it on/off explicitly via
@@ -1707,8 +1714,25 @@ public abstract partial class DiffusionModelBase<T> : IDiffusionModel<T>, IConfi
         writer.Write((int)_scheduler.Config.PredictionType);
         writer.Write(_scheduler.Config.ClipSample);
 
-        // Save model parameters using SerializationHelper
-        SerializationHelper<T>.SerializeVector(writer, GetParameters());
+        // STREAM THE WEIGHTS, DO NOT FLATTEN THEM. GetParameters() materialises every weight into
+        // one Vector<T>, and a foundation-scale model crosses the CLR's ~2 GB single-array ceiling on
+        // the way in -- six diffusion clone contracts failed here with "Array dimensions exceeded
+        // supported range". DeepCopy was already fixed to stream chunks; this path never was.
+        //
+        // A sentinel keeps old files readable: it is negative, and a legacy payload starts with a
+        // vector LENGTH, which never is.
+        writer.Write(ChunkedParameterMarker);
+        var parameterChunks = new List<Tensor<T>>(GetParameterChunks());
+        writer.Write(parameterChunks.Count);
+        foreach (var chunk in parameterChunks)
+        {
+            writer.Write(chunk.Length);
+            var span = chunk.AsSpan();
+            for (int i = 0; i < span.Length; i++)
+            {
+                writer.Write(NumOps.ToDouble(span[i]));
+            }
+        }
 
         stream.Flush();
     }
@@ -1789,8 +1813,32 @@ public abstract partial class DiffusionModelBase<T> : IDiffusionModel<T>, IConfi
                 $"current={_scheduler.Config.ClipSample}. Create a model with matching scheduler config.");
         }
 
-        // Load model parameters using SerializationHelper
-        SetParameters(SerializationHelper<T>.DeserializeVector(reader));
+        // Matches the writer above, and still reads a file written before it: a legacy payload opens
+        // with the vector length, so anything that is not the sentinel is handed to the flat reader
+        // with that length already consumed.
+        int parameterMarker = reader.ReadInt32();
+        if (parameterMarker == ChunkedParameterMarker)
+        {
+            int chunkCount = reader.ReadInt32();
+            var restored = new List<Tensor<T>>(chunkCount);
+            for (int c = 0; c < chunkCount; c++)
+            {
+                int length = reader.ReadInt32();
+                var values = new T[length];
+                for (int i = 0; i < length; i++)
+                {
+                    values[i] = NumOps.FromDouble(reader.ReadDouble());
+                }
+
+                restored.Add(new Tensor<T>(new[] { length }, new Vector<T>(values)));
+            }
+
+            SetParameterChunks(restored);
+        }
+        else
+        {
+            SetParameters(SerializationHelper<T>.DeserializeVector(reader, parameterMarker));
+        }
     }
 
     #endregion
