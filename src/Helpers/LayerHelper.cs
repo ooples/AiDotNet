@@ -27106,11 +27106,24 @@ public static class LayerHelper<T>
                     1, 1, 0,
                     relu);
 
-                // Depthwise-style conv for positional encoding
+                // The Mix-FFN's 3x3, and it is DEPTHWISE -- groups: ffnDim, not the default 1.
+                // Xie et al. 2021 ("SegFormer", eq. 4) put a 3x3 depthwise convolution inside the
+                // feed-forward block to supply positional information without an explicit
+                // positional encoding, and depthwise is the whole reason that is affordable: it
+                // costs ffnDim*9 + ffnDim parameters instead of ffnDim^2*9 + ffnDim.
+                //
+                // Built as a dense convolution this was ffnDim times too large, and the effect
+                // compounded across all eight blocks. Measured on B0, whose documented size is
+                // 3.8M parameters: the stage-4 pair reported 9,438,208 each (1024*1024*9 + 1024)
+                // where depthwise is 10,240 (1024*9 + 1024), and the whole model reported
+                // 30,966,117 -- eight times the paper's figure. The over-count is also what pushed
+                // B4 past the 500M weight-streaming threshold, where a quantized inference store
+                // made the first convolution's activation buffer unwritable and Predict threw.
                 yield return new ConvolutionalLayer<T>(
                     ffnDim,
                     3, 1, 1,
-                    relu);
+                    relu,
+                    groups: ffnDim);
 
                 // Project back
                 yield return new ConvolutionalLayer<T>(
