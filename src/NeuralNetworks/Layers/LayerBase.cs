@@ -5328,7 +5328,6 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         // format: one authoritative shape+value contract is safer than retaining an ambiguous
         // count-only payload that forced hundreds of layer-specific restore overrides.
         writer.Write(ParameterSerializationMagic);
-        WriteResolvedInputShape(writer);
         WriteParameterLayout(writer);
         writer.Write(parameters.Length);
         for (int i = 0; i < parameters.Length; i++)
@@ -5367,8 +5366,6 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
                 "regenerated with the shape-aware layer serialization format.");
         }
 
-        ReadAndApplyResolvedInputShape(reader);
-
         var layout = ParameterLayoutNode.Read(reader);
         ApplyParameterLayout(layout);
 
@@ -5381,9 +5378,10 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         SetParameters(parameters);
     }
 
-    // Bumped from 0xA1D07E01 when the resolved input shape joined the payload. An older stream now
-    // fails loudly on the magic check rather than misreading the shape block as a layout node.
-    private const int ParameterSerializationMagic = unchecked((int)0xA1D07E02);
+    // 0xA1D07E01 -> 0xA1D07E02 when the resolved input shape joined the payload; -> 0xA1D07E03 when
+    // it moved from a single root-level block into every layout node, so nested lazy layers carry
+    // their own. An older stream fails loudly on the magic check rather than misreading the bytes.
+    private const int ParameterSerializationMagic = unchecked((int)0xA1D07E03);
 
     /// <summary>
     /// Persists the layer's resolved input shape ahead of the parameter layout.
@@ -5438,17 +5436,12 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     /// proceeds exactly as it did before this block existed. Any other exception is a real fault and
     /// propagates.
     /// </remarks>
-    private void ReadAndApplyResolvedInputShape(BinaryReader reader)
+    private void ApplyResolvedInputShape(int[] shape)
     {
-        int rank = reader.ReadInt32();
-        if (rank <= 0) return;
-
-        var shape = new int[rank];
-        for (int i = 0; i < rank; i++) shape[i] = reader.ReadInt32();
-
+        if (shape is null || shape.Length == 0) return;
         if (IsShapeResolved) return;
 
-        for (int i = 0; i < rank; i++)
+        for (int i = 0; i < shape.Length; i++)
         {
             if (shape[i] <= 0) return;
         }
@@ -5467,8 +5460,8 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
             // SwinPatchEmbeddingLayer rank-4 [B,C,H,W], so a persisted [C,T] / [C,H,W] arrived one
             // axis short and threw. That throw was swallowed, the layer stayed unresolved, and every
             // restored weight was dropped on the floor -- measured as Conv1DLayer round-tripping 28
-            // parameters to 0 with the 288-byte payload intact on disk, so the data was written and
-            // then had nowhere to land. SwinPatchEmbeddingLayer's own message spells out the remedy:
+            // parameters to 0 with the 288-byte payload intact, so the data was written and then had
+            // nowhere to land. SwinPatchEmbeddingLayer's own message spells out the remedy:
             // "Add a batch dimension before calling Forward."
             //
             // Retry with a singleton batch. Batch is never a parameter-shaping axis -- weights are
@@ -5477,9 +5470,9 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
             // republishes InputShape=[2,8], identical to what was serialized. The retry is confined
             // to the case where the unbatched attempt already failed, and ResolveFromShape returns
             // early once IsShapeResolved, so a layer that resolved on the first attempt never sees it.
-            var batched = new int[rank + 1];
+            var batched = new int[shape.Length + 1];
             batched[0] = 1;
-            Array.Copy(shape, 0, batched, 1, rank);
+            Array.Copy(shape, 0, batched, 1, shape.Length);
 
             try
             {
@@ -5488,7 +5481,7 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
             catch (ArgumentException)
             {
                 // Genuinely not this layer's shape. Leave it unresolved; the pre-existing restore
-                // path still applies below, exactly as it did before either attempt existed.
+                // path still applies, exactly as it did before either attempt existed.
             }
         }
     }
@@ -5792,6 +5785,7 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         // unmaterialized layer writes an empty layout beside an empty vector, which is consistent
         // and is what PyTorch saves for a lazy module that has never run a forward.
         writer.Write(Parameters.Length);
+        WriteResolvedInputShape(writer);
 
         var components = GetOrderedParameterComponents();
         int trainableCount = 0;
@@ -5846,7 +5840,8 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
 
     private static void WriteEmptyLayout(System.IO.BinaryWriter writer)
     {
-        writer.Write(0); writer.Write(0); writer.Write(0); writer.Write(0);
+        // OwnLength, resolved-input-shape rank, trainable count, buffer count, sub-layer count.
+        writer.Write(0); writer.Write(0); writer.Write(0); writer.Write(0); writer.Write(0);
     }
 
     /// <summary>
@@ -5860,6 +5855,16 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     /// </remarks>
     internal void ApplyParameterLayout(ParameterLayoutNode layout)
     {
+        // FIRST, because everything below reads this layer's parameter slots and a lazy layer has
+        // none until its input shape is known. Recording the shape per node is what makes this work
+        // at depth: the root used to carry the only copy, so a composite -- which is NOT itself
+        // lazy and therefore returned early from the resolve -- passed its lazy children straight
+        // to the rebind below, where RegisteredTrainableParameterCount was 0, the rebind was
+        // skipped as designed, and the values never landed. Measured on CifAlignmentLayer, a
+        // composite holding a single DenseLayer: 18 parameters restored as 0, while that same
+        // DenseLayer round-tripped perfectly on its own.
+        ApplyResolvedInputShape(layout.ResolvedInputShape);
+
         EnsureMaterializedForParameterSurface();
 
         // A restore is a VALUE boundary, so it needs storage, not merely a known shape.

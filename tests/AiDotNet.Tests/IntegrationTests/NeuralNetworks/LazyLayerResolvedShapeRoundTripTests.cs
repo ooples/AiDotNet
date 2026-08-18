@@ -93,6 +93,38 @@ public class LazyLayerResolvedShapeRoundTripTests
     }
 
     /// <summary>
+    /// A composite is NOT itself lazy, so it returned early from the root-level shape restore and
+    /// handed its lazy children straight to the rebind -- where their registered-slot count was 0,
+    /// the rebind was skipped as designed, and the values never landed.
+    /// </summary>
+    /// <remarks>
+    /// CifAlignmentLayer is the minimal case: one DenseLayer child and nothing else. It restored
+    /// 18 parameters as 0 while that same DenseLayer round-tripped perfectly standing alone, which
+    /// is what located the defect in the NESTING rather than in DenseLayer. Recording the resolved
+    /// input shape per layout node instead of once at the root is what lets a child at any depth
+    /// rebuild itself.
+    /// </remarks>
+    [Fact]
+    public void Composite_WithLazyChild_RestoresChildParameters()
+    {
+        const int encoderDim = 4;
+        var input = Ramp([1, 3, encoderDim]);
+
+        var probe = new CifAlignmentLayer<double>(encoderDim);
+        probe.SetTrainingMode(false);
+        probe.Forward(input);
+        int expected = probe.GetParameters().Length;
+        Assert.True(expected > 0,
+            "the composite reported no parameters at all, so this test would pass vacuously");
+
+        AssertRoundTripsParameters(
+            new CifAlignmentLayer<double>(encoderDim),
+            new CifAlignmentLayer<double>(encoderDim),
+            input,
+            expected);
+    }
+
+    /// <summary>
     /// The negative control: a shape the layer genuinely cannot accept must still be refused rather
     /// than forced through by the batch retry, so the retry cannot mask a real mismatch.
     /// </summary>
