@@ -50,9 +50,19 @@ public partial class ClozeAttentionLayer<T> : LayerBase<T>, IShapeContract
 {
     private readonly int _modelDim;
 
+    // All four projections read this layer's own input, so their width is _modelDim and is known
+    // from construction. Declaring it is what lets ParameterCount see them: a lazily-built child
+    // whose shape is undeclared stays ShapeDeferred and contributes NOTHING to the count, and then
+    // materializes during GetParameters and contributes its full length -- so the two surfaces
+    // disagree by exactly the children's size. ABINet, which holds one of these, reported 195744
+    // against 208224, and the difference was 3 x 4160, three of these projections.
+    [SubLayerInput("_modelDim")]
     private readonly DenseLayer<T> _query;
+    [SubLayerInput("_modelDim")]
     private readonly DenseLayer<T> _key;
+    [SubLayerInput("_modelDim")]
     private readonly DenseLayer<T> _value;
+    [SubLayerInput("_modelDim")]
     private readonly DenseLayer<T> _output;
 
     /// <inheritdoc/>
@@ -124,17 +134,10 @@ public partial class ClozeAttentionLayer<T> : LayerBase<T>, IShapeContract
         return unbatched ? Engine.Reshape(result, [S, D]) : result;
     }
 
-    /// <summary>
-    /// Materializes the lazily-allocated Q/K/V/output projections from the known model width,
-    /// without executing them. Guarded by <c>IsShapeResolved</c>.
-    /// </summary>
-    private void ResolveChildShapes()
-    {
-        if (!_query.IsShapeResolved) _query.ResolveFromShape(new[] { 1, 1, _modelDim });
-        if (!_key.IsShapeResolved) _key.ResolveFromShape(new[] { 1, 1, _modelDim });
-        if (!_value.IsShapeResolved) _value.ResolveFromShape(new[] { 1, 1, _modelDim });
-        if (!_output.IsShapeResolved) _output.ResolveFromShape(new[] { 1, 1, _modelDim });
-    }
+    // ResolveChildShapes lived here: it read _modelDim and resolved the four projections without
+    // executing them, which is exactly what the count needs -- and nothing ever called it. The
+    // [SubLayerInput("_modelDim")] declarations above state the same width to the generator, which
+    // emits DeclaredSubLayerShapes and puts it on the path the base already walks.
 
     // The four projections' tensors used to be listed here as this layer's own, on the stated
     // grounds that "LayerBase does not recurse into registered sub-layers". That is true of the base
