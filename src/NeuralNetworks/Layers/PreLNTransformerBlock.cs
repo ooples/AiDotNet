@@ -29,7 +29,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </remarks>
 [LayerCategory(LayerCategory.Attention)]
 [LayerTask(LayerTask.SequenceModeling)]
-[LayerProperty(IsTrainable = true, HasTrainingMode = false, TestInputShape = "1, 4, 8", TestConstructorArgs = "")]
+[LayerProperty(IsTrainable = true, HasTrainingMode = false, TestInputShape = "1, 4, 8", TestConstructorArgs = "8, 16, new AiDotNet.NeuralNetworks.Layers.MultiHeadAttentionLayer<double>(2, 4)")]
 // Roles from this block's own forward: "Self-attention sublayer expects [B, S, H] (or [S, H])", so one
 // declaration with BatchOptional covers both ranks. Time rather than Length because the block is built
 // for causal decoder stacks (T5 / LLaMA / Gemma / Qwen2), where the sequence axis IS temporal.

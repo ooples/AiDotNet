@@ -37,7 +37,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Graph)]
 [LayerTask(LayerTask.GraphProcessing)]
 [LayerTask(LayerTask.Projection)]
-[LayerProperty(IsTrainable = true, ChangesShape = true)]
+[LayerProperty(IsTrainable = true, ChangesShape = true, TestConstructorArgs = "4, 3, (AiDotNet.Interfaces.IActivationFunction<double>)new AiDotNet.ActivationFunctions.IdentityActivation<double>()", TestInputShape = "1, 4")]
 // Ranks 1 and 2, the two forms ForwardTraced round-trips: a rank-1 input is reshaped to [1, inputSize]
 // and returned as [OutputShape[0]], and a rank-2 input passes straight through the matmul. Higher ranks
 // are flattened into a batch and restored from _originalInputShape, but a readout head has nothing to say

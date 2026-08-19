@@ -23,7 +23,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </remarks>
 [LayerCategory(LayerCategory.FeedForward)]
 [LayerTask(LayerTask.SequenceModeling)]
-[LayerProperty(IsTrainable = false, HasTrainingMode = false, TestInputShape = "1, 4, 8", TestConstructorArgs = "")]
+[LayerProperty(IsTrainable = false, HasTrainingMode = false, TestInputShape = "1, 4, 8", TestConstructorArgs = "8, 16, 2, 1")]
 // Sparse routing changes WHICH weights a token sees, never how many numbers come back. The last line of
 // ForwardTraced is `Engine.Reshape(output, input._shape)` - the caller's exact shape, at any rank - and
 // the accumulator it reshapes is [n, _hidden], so the trailing width is preserved too (the input's own

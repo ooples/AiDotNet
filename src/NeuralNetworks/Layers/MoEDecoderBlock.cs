@@ -12,7 +12,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 [LayerCategory(LayerCategory.Attention)]
 [LayerTask(LayerTask.SequenceModeling)]
-[LayerProperty(IsTrainable = false, HasTrainingMode = false, TestInputShape = "1, 4, 8", TestConstructorArgs = "")]
+[LayerProperty(IsTrainable = false, HasTrainingMode = false, TestInputShape = "1, 4, 8", TestConstructorArgs = "8, new AiDotNet.NeuralNetworks.Layers.MultiHeadAttentionLayer<double>(2, 4), new AiDotNet.NeuralNetworks.Layers.MoEFeedForwardLayer<double>(8, 16, 2, 1)")]
 // Pre-LN residual block, so shape preservation is structural rather than incidental: ForwardTraced is two
 // `Engine.TensorAdd(residual, sublayerOut)` pairs, and each one only types when the sublayer returned the
 // residual's exact shape. That holds whatever attention implementation is injected - a sublayer that

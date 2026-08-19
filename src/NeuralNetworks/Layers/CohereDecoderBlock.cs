@@ -17,7 +17,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </remarks>
 [LayerCategory(LayerCategory.Attention)]
 [LayerTask(LayerTask.SequenceModeling)]
-[LayerProperty(IsTrainable = false, HasTrainingMode = false, TestInputShape = "1, 4, 8", TestConstructorArgs = "")]
+[LayerProperty(IsTrainable = false, HasTrainingMode = false, TestInputShape = "1, 4, 8", TestConstructorArgs = "8, 16, new AiDotNet.NeuralNetworks.Layers.MultiHeadAttentionLayer<double>(2, 4)")]
 // Shape-preserving by CONSTRUCTION, not by coincidence. The last statement of ForwardTraced is
 // "Engine.TensorAdd(Engine.TensorAdd(input, attnOut), ffnOut)" -- a residual add against the untouched
 // input -- and the FFN branch is explicitly restored to the input's shape one line earlier

@@ -37,7 +37,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 [LayerCategory(LayerCategory.Dense)]
 [LayerTask(LayerTask.FeatureExtraction)]
-[LayerProperty(IsTrainable = true, ChangesShape = true)]
+[LayerProperty(IsTrainable = true, ChangesShape = true, TestConstructorArgs = "4", TestInputShape = "1, 4")]
 // Ranks 1 and 2, which is exactly what ForwardTraced round-trips: an unbatched rank-1 input is reshaped
 // to [1, features] for the kernel and the batch axis is stripped again on the way out
 // ("wasUnbatched ? Engine.Reshape(output, [output.Shape[1]]) : output"). One declaration with

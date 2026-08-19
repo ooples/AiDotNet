@@ -13,7 +13,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 [LayerCategory(LayerCategory.Attention)]
 [LayerTask(LayerTask.SequenceModeling)]
-[LayerProperty(IsTrainable = false, HasTrainingMode = false, TestInputShape = "1, 4, 8", TestConstructorArgs = "")]
+[LayerProperty(IsTrainable = false, HasTrainingMode = false, TestInputShape = "1, 4, 8", TestConstructorArgs = "8, 16, new AiDotNet.NeuralNetworks.Layers.MultiHeadAttentionLayer<double>(2, 4)")]
 // Shape-preserving at rank 3 [Batch, Time, Features], which the residual structure guarantees rather
 // than merely happens to satisfy: ForwardTraced ends at TensorAdd(afterAttn, ffnOut), and TensorAdd
 // requires both operands to match - so the block's output is pinned to afterAttn's shape, which is

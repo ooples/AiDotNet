@@ -14,7 +14,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 [LayerCategory(LayerCategory.Attention)]
 [LayerTask(LayerTask.SequenceModeling)]
-[LayerProperty(IsTrainable = false, HasTrainingMode = false, TestInputShape = "1, 4, 8", TestConstructorArgs = "")]
+[LayerProperty(IsTrainable = false, HasTrainingMode = false, TestInputShape = "1, 4, 8", TestConstructorArgs = "8, 16, new AiDotNet.NeuralNetworks.Layers.MultiHeadAttentionLayer<double>(2, 4)")]
 // Shape-preserving at any rank, and structurally so rather than incidentally: ForwardTraced is two
 // residual adds, `Engine.TensorAdd(input, attnNormed)` and `Engine.TensorAdd(afterAttn, ffnNormed)`,
 // and a residual can only add a tensor of its own shape. The FFN widens to ffnDim internally but the
