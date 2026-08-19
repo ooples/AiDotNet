@@ -67,10 +67,21 @@ jobs:
         run: dotnet build tests/AiDotNet.Tests/AiDotNetTests.csproj -c Release --framework net10.0 --no-restore
 
       - name: Run heavy-timeout models (best-effort, non-gating)
-        # Only the tagged models. Match the heavy shards in sonarcloud.yml: a category filter alone does
-        # NOT keep xUnit serial, so rewrite the built xunit.runner.json to serialize collection execution
-        # (one model in flight at a time) and switch to Workstation GC. Without this the heaviest models
-        # stack memory and OOM/cancel the lane instead of giving the visibility this workflow exists for.
+        # Only the tagged models. A category filter alone does NOT keep xUnit serial, so the built
+        # xunit.runner.json is rewritten to serialize collection execution (one model in flight at a
+        # time) and Workstation GC is selected. Without this the heaviest models stack memory and
+        # OOM/cancel the lane instead of giving the visibility this workflow exists for.
+        #
+        # Hardening comes from harden-xunit-runner.ps1 rather than being repeated here. This lane had
+        # its own copy, and the copy had already drifted: it serialized and disabled theory
+        # pre-enumeration but never turned the discovery diagnostics off, so this job still paid for
+        # ~72k discovery lines the shared script exists to suppress. That is the same drift that left
+        # the sonarcloud.yml jobs unhardened until they were switched to the script.
+        #
+        # Invoked inline in THIS pwsh process on purpose: the script sets DOTNET_gcServer for the
+        # current process (and GITHUB_ENV for a later step), and environment variables are
+        # process-wide, so the dotnet test below inherits it without a separate step that
+        # workflow-level env would override.
         shell: pwsh
         continue-on-error: true
         # Scoped to this test step only (not job-wide) so the credential is not exposed to other steps or
@@ -80,26 +91,10 @@ jobs:
           # swaps it for the deterministic synthetic offline license for the suite; it also validates online.
           AIDOTNET_LICENSE_KEY: ${{ secrets.AIDOTNET_LICENSE_KEY }}
         run: |
-          $runnerJson = 'tests/AiDotNet.Tests/bin/Release/net10.0/xunit.runner.json'
-          if (Test-Path $runnerJson) {
-            $cfg = Get-Content $runnerJson -Raw | ConvertFrom-Json
-            $cfg.parallelizeTestCollections = $false
-            $cfg.maxParallelThreads = 1
-            # Don't materialize every [Theory]'s data rows at discovery time — the assembly discovers
-            # tens of thousands of cases and pre-enumeration inflates the retained baseline before a
-            # single test runs.
-            $cfg | Add-Member -NotePropertyName preEnumerateTheories -NotePropertyValue $false -Force
-            $cfg | ConvertTo-Json -Depth 10 | Set-Content $runnerJson -Encoding utf8
-            Write-Host "Serialized heavy-timeout runner config: $runnerJson"
-          } else {
-            # These models are flagged heavy precisely because they OOM without serialization; fail fast
-            # rather than fall through to a parallel run that will OOM and waste the runner.
-            throw "runner config not found at $runnerJson - cannot serialize heavy-timeout lane"
-          }
-          # The default Server GC reserves a heap segment per core (high steady-state footprint chosen for
-          # throughput under parallel collections). This lane is now serial, so switch to Workstation GC,
-          # which has a much smaller footprint and collects eagerly under memory pressure.
-          $env:DOTNET_gcServer = '0'
+          # Exits 1 when the runner config is missing, which is the same fail-fast this lane had: these
+          # models are flagged heavy precisely because they OOM without serialization, so falling
+          # through to a parallel run would waste the runner to reach the same failure.
+          ./.github/scripts/harden-xunit-runner.ps1 -RunnerJson 'tests/AiDotNet.Tests/bin/Release/net10.0/xunit.runner.json'
           dotnet test tests/AiDotNet.Tests/AiDotNetTests.csproj `
             -c Release --framework net10.0 --no-build --no-restore `
             --filter 'Category=HeavyTimeout' `
