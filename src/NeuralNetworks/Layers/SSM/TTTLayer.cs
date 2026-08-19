@@ -125,7 +125,9 @@ public partial class TTTLayer<T> : LayerBase<T>, IShapeContract
     private Tensor<T> _outputProjectionBias;
 
     // Layer normalization parameters for the inner model input (pre-norm)
+    [TrainableParameter(Role = PersistentTensorRole.NormalizationParams)]
     private Tensor<T> _lnGamma; // [modelDim]
+    [TrainableParameter(Role = PersistentTensorRole.NormalizationParams)]
     private Tensor<T> _lnBeta;  // [modelDim]
 
     // Cached values for backward pass
