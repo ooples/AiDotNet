@@ -5747,6 +5747,42 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     }
 
     /// <summary>
+    /// Every slot the FLAT PARAMETER VECTOR carries: trainable tensors AND persistent buffers, in
+    /// the order <see cref="GetParameters"/> lays them out.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The sibling above is deliberately trainable-only, and both are needed. Gradients and
+    /// copy-on-write concern themselves with what TRAINS, so a running mean has no place in them.
+    /// The flat vector and the chunk stream concern themselves with what must be RESTORED, and a
+    /// checkpoint that drops a BatchNorm's running statistics does not reproduce the model it
+    /// claims to.
+    /// </para>
+    /// <para>
+    /// Using the trainable-only view for a value surface is what makes the two disagree on width:
+    /// ParameterCount answers from the declaration, which counts buffers, while an enumeration that
+    /// skips them yields a shorter vector. SetParameters(GetParameters()) then fails on its own
+    /// output, which is failure class P1 arriving from the buffer side instead of the lazy side.
+    /// </para>
+    /// </remarks>
+    internal IReadOnlyList<TrainableParameterValueSlot> GetOwnParameterStateValueSlots()
+    {
+        var components = GetOrderedParameterComponents();
+        var slots = new List<TrainableParameterValueSlot>();
+        for (int i = 0; i < components.Length; i++)
+        {
+            // Legacy storage is excluded on purpose: it is carried by the Parameters vector itself
+            // rather than by a component tensor, and FillParameters already emits it separately.
+            if (components[i].Kind is DeclaredParameterComponentKind.Trainable
+                or DeclaredParameterComponentKind.Buffer)
+            {
+                slots.Add(ValueSlot(components[i]));
+            }
+        }
+        return slots;
+    }
+
+    /// <summary>
     /// Produces the authoritative value tensors used by copy-on-write validation. Ordinary slots
     /// return their existing tensor; resident fp16 slots return a transient full-precision snapshot.
     /// </summary>

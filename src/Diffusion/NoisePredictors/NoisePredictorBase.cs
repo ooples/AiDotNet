@@ -663,7 +663,17 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape,
                     lifecycle.PrepareParameterSurface(AiDotNet.Models.Parameters.ParameterSurfaceIntent.Read);
             }
 
-            foreach (var slot in lb.GetOwnTrainableParameterValueSlots())
+            // STATE slots, not trainable-only: this enumeration backs the flat vector and the chunk
+            // stream, and both must carry everything a restore has to reproduce. ParameterCount
+            // answers from the declaration, which counts persistent buffers, so enumerating only
+            // the trainable ones made the two surfaces disagree on width -- and
+            // SetParameters(GetParameters()) then failed on this predictor's own output. A
+            // checkpoint that silently drops a BatchNorm's running statistics does not restore the
+            // model it claims to either.
+            //
+            // The trainable-only view is still correct for gradients and copy-on-write, which are
+            // about what TRAINS rather than what must be RESTORED, and those paths keep using it.
+            foreach (var slot in lb.GetOwnParameterStateValueSlots())
             {
                 if (slot.ScalarCount == 0) continue;
                 yield return slot;
