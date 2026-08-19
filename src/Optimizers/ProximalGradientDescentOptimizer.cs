@@ -189,7 +189,12 @@ public partial class ProximalGradientDescentOptimizer<T, TInput, TOutput> : Grad
     /// Think of it as adding a preference for simpler, more stable solutions that are less likely to overfit.
     /// </para>
     /// </remarks>
-    private IRegularization<T, TInput, TOutput> _regularizationOperator;
+    // Initialized at declaration so the backing field is definitely assigned: the constructor
+    // assigns through the property below, which the compiler cannot see through. The identity
+    // operator is the correct stand-in -- it is what BuildProximalOperator returns for options
+    // carrying no regularization -- and the constructor overwrites it either way.
+    private IRegularization<T, TInput, TOutput> _regularizationOperator
+        = new NoRegularization<T, TInput, TOutput>();
 
     /// <summary>Strength the cached proximal operator was built from, for staleness detection.</summary>
     private double? _regularizationBuiltForStrength;
