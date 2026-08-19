@@ -142,6 +142,36 @@ public class AdamWOptimizerOptions<T, TInput, TOutput> : GradientBasedOptimizerO
     public double WeightDecay { get; set; } = 0.01;
 
     /// <summary>
+    /// Gets or sets a per-parameter multiplier applied to the decay term, or <c>null</c> to decay
+    /// every parameter equally.
+    /// </summary>
+    /// <value>A vector as long as the flat parameter vector, or <c>null</c>. Defaults to <c>null</c>.</value>
+    /// <remarks>
+    /// <para>
+    /// <see cref="WeightDecay"/> is a single coefficient applied to the whole flat parameter vector, so
+    /// there is otherwise no way to express "decay these parameters but not those". Published recipes
+    /// routinely need exactly that: RecurrentGemma (Botev et al., 2024) Section 2 states "we do not
+    /// apply weight decay to the parameters of the recurrent (RG-LRU) layers during training", and the
+    /// usual transformer recipe exempts biases and normalization gains.
+    /// </para>
+    /// <para>
+    /// Entries multiply the decay term elementwise: 1 decays normally, 0 exempts, and values in
+    /// between scale it. The gradient update is untouched -- this is decoupled decay only.
+    /// </para>
+    /// <para>
+    /// <b>Setting this opts the optimizer out of fused compilation.</b> The fused config carries decay
+    /// as a single float, so a masked run cannot be expressed there; rather than let the compiled path
+    /// silently decay parameters the eager path exempts,
+    /// <c>TryGetFusedOptimizerConfig</c> declines when a mask is present.
+    /// </para>
+    /// <para><b>For Beginners:</b> Leave this null unless a recipe tells you some layers must not be
+    /// decayed. Weight decay pulls weights toward zero, which helps most layers generalize but corrupts
+    /// parameters whose value carries meaning rather than magnitude -- a recurrence's decay rate, for
+    /// instance.</para>
+    /// </remarks>
+    public Vector<T>? WeightDecayMask { get; set; }
+
+    /// <summary>
     /// Gets or sets whether to apply AMSGrad variant for improved convergence guarantees.
     /// </summary>
     /// <value>True to use AMSGrad variant, false for standard AdamW. Default: false</value>
