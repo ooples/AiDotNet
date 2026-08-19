@@ -27,8 +27,8 @@ public abstract class TTSModelTestBase<T> : NeuralNetworkModelTestBase<T>
         using var _arena = TensorArena.Create();
         var network = CreateNetwork();
 
-        var text1 = CreateConstantTensor(InputShape, 0.2);
-        var text2 = CreateConstantTensor(InputShape, 0.8);
+        var text1 = CreateConstantTensor(EffectiveInputShape, 0.2);
+        var text2 = CreateConstantTensor(EffectiveInputShape, 0.8);
 
         var audio1 = network.Predict(text1);
         var audio2 = network.Predict(text2);
@@ -59,7 +59,7 @@ public abstract class TTSModelTestBase<T> : NeuralNetworkModelTestBase<T>
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var network = CreateNetwork();
-        var input = CreateRandomTensor(InputShape, rng);
+        var input = CreateRandomTensor(EffectiveInputShape, rng);
 
         var output = network.Predict(input);
         Assert.True(output.Length > 0,
@@ -79,7 +79,7 @@ public abstract class TTSModelTestBase<T> : NeuralNetworkModelTestBase<T>
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var network = CreateNetwork();
-        var input = CreateRandomTensor(InputShape, rng);
+        var input = CreateRandomTensor(EffectiveInputShape, rng);
 
         var output = network.Predict(input);
         for (int i = 0; i < output.Length; i++)
@@ -106,7 +106,7 @@ public abstract class TTSModelTestBase<T> : NeuralNetworkModelTestBase<T>
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var network = CreateNetwork();
-        var input = CreateRandomTensor(InputShape, rng);
+        var input = CreateRandomTensor(EffectiveInputShape, rng);
 
         var out1 = network.Predict(input);
         var out2 = network.Predict(input);
