@@ -46,7 +46,7 @@ public sealed class Conv3DPackageIntegrationTests : IDisposable
         using (GradientTape<double>.NoGrad())
         {
             var convolution = engine.Conv3D(input, kernel, [1, 1, 1], [1, 1, 1], [1, 1, 1]);
-            expected = engine.TensorBroadcastAdd(
+            expected = engine.TensorAdd(
                 convolution,
                 engine.Reshape(bias, [1, 3, 1, 1, 1]));
         }
