@@ -177,6 +177,76 @@ public class LearnedTensorsSurviveSaveTests
             "what was written, so the layer trains a tensor it does not persist");
     }
 
+    public static TheoryData<string, string> AutoParametersCases() => new()
+    {
+        // Confirmed lost before this fix: the layer's ONLY learned parameter.
+        { "Quantum", "_rotationAngles" },
+        // Controls -- all marked [AutoParameters] and all already correct, so a regression in the
+        // generated plumbing shows up here rather than only in the one broken case.
+        { "LoRA", "_loraA" },
+        { "LoRA", "_loraB" },
+        { "NoisyDense", "_muWeights" },
+        { "NoisyDense", "_sigmaWeights" },
+        { "Dueling", "_valueWeights" },
+        { "Dueling", "_advantageWeights" },
+    };
+
+    /// <summary>
+    /// <c>[AutoParameters]</c> looks like it registers every tensor field on the class and does
+    /// not: its own documentation says it "does not classify fields", and the generator is driven
+    /// by the per-field declarations instead. These cases check the classes that rely on it.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(AutoParametersCases))]
+    public void AutoParametersLayers_PersistTheirLearnedTensors(string layerName, string fieldName)
+    {
+        var (make, shape) = AutoParamSpec(layerName);
+
+        var layer = make();
+        layer.SetTrainingMode(false);
+        layer.ResetState();
+        layer.Forward(Ramp(shape));
+
+        var field = layer.GetType().GetField(fieldName, BindingFlags.Instance | BindingFlags.NonPublic);
+        Assert.True(field is not null, $"{layerName} has no field named {fieldName}");
+
+        var tensor = field!.GetValue(layer) as Tensor<double>;
+        Assert.True(tensor is not null && tensor.Length > 0,
+            $"{layerName}.{fieldName} is not a populated Tensor<double>");
+
+        for (int i = 0; i < tensor!.Length; i++) tensor[i] = tensor[i] + 0.25;
+        var expected = tensor.Clone();
+
+        using var ms = new MemoryStream();
+        using (var writer = new BinaryWriter(ms, System.Text.Encoding.UTF8, leaveOpen: true))
+            layer.Serialize(writer);
+
+        var restored = make();
+        ms.Position = 0;
+        using (var reader = new BinaryReader(ms, System.Text.Encoding.UTF8, leaveOpen: true))
+            restored.Deserialize(reader);
+
+        var restoredTensor = (Tensor<double>)restored.GetType()
+            .GetField(fieldName, BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(restored)!;
+
+        double drift = 0;
+        for (int i = 0; i < expected.Length; i++)
+            drift = Math.Max(drift, Math.Abs(expected[i] - restoredTensor[i]));
+
+        Assert.True(drift <= 1e-12,
+            $"{layerName}.{fieldName} was LOST on save: the field came back {drift:E3} away from " +
+            "what was written, so the layer trains a tensor it does not persist");
+    }
+
+    private static (Func<LayerBase<double>> Make, int[] Shape) AutoParamSpec(string name) => name switch
+    {
+        "Quantum" => (() => new QuantumLayer<double>(4, 4, 2), [1, 4]),
+        "LoRA" => (() => new AiDotNet.LoRA.LoRALayer<double>(4, 4, 2), [1, 4]),
+        "NoisyDense" => (() => new NoisyDenseLayer<double>(4, 4), [1, 4]),
+        "Dueling" => (() => new DuelingCombinationLayer<double>(4, 3), [1, 4]),
+        _ => throw new ArgumentOutOfRangeException(nameof(name), name, "unknown layer"),
+    };
+
     private static (Func<LayerBase<double>> Make, int[] Shape) Spec(string name) => name switch
     {
         // modelDimension 8 / numHeads 4 so the head split is valid.
