@@ -24,13 +24,24 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [AutoParameters]
 public partial class Gemma2DecoderBlock<T> : LayerBase<T>
 {
+    // Every child reads the block input; only the down-projection reads the expanded width.
+    // Chained sizing walked registration order instead and built the second projection from
+    // the first's output, so a restore met a differently shaped layer than the checkpoint.
+    [SubLayerInput("_hiddenSize")]
     private readonly RMSNormalizationLayer<T> _normInput;
+    [SubLayerInput("1, _hiddenSize")]
     private readonly LayerBase<T> _attention;
+    [SubLayerInput("_hiddenSize")]
     private readonly RMSNormalizationLayer<T> _normPostAttn;
+    [SubLayerInput("_hiddenSize")]
     private readonly RMSNormalizationLayer<T> _normPreFfn;
+    [SubLayerInput("_hiddenSize")]
     private readonly DenseLayer<T> _ffnGate;
+    [SubLayerInput("_hiddenSize")]
     private readonly DenseLayer<T> _ffnUp;
+    [SubLayerInput("_ffnDim")]
     private readonly DenseLayer<T> _ffnDown;
+    [SubLayerInput("_hiddenSize")]
     private readonly RMSNormalizationLayer<T> _normPostFfn;
     private readonly int _hiddenSize;
 

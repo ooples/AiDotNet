@@ -290,7 +290,15 @@ public class TrainableParameterGenerator : IIncrementalGenerator
                 {
                     var isNullable = field.NullableAnnotation == NullableAnnotation.Annotated ||
                                      field.Type.NullableAnnotation == NullableAnnotation.Annotated;
-                    subLayerFields.Add(new SubLayerFieldInfo(field.Name, isNullable, IsCollection: true));
+                    // The declaration is read here too. It was only read on the single-layer branch,
+                    // so a collection carrying [SubLayerInput] recorded no shape and was silently
+                    // dropped from DeclaredSubLayerShapes -- the attribute compiled, appeared to
+                    // apply, and did nothing.
+                    var collectionShape = field.GetAttributes()
+                        .FirstOrDefault(a => a.AttributeClass?.Name == "SubLayerInputAttribute")
+                        ?.ConstructorArguments.FirstOrDefault().Value as string;
+                    subLayerFields.Add(new SubLayerFieldInfo(
+                        field.Name, isNullable, IsCollection: true, InputShape: collectionShape));
                 }
             }
 
@@ -510,8 +518,14 @@ public class TrainableParameterGenerator : IIncrementalGenerator
         // A composite's children do not all receive the composite's own input, and only the
         // composite knows which gets what. Declaring it on the field lets the generator supply that
         // fact to LayerBase.BringUpDeclaredSubLayers, so no composite implements the method.
+        // Collections included. A declaration names ONE width, which is exactly right for a bank of
+        // siblings that all read the same tensor -- an MoE's experts, for instance. Excluding them
+        // left those children to chained sizing, which walks the registration order and hands each
+        // expert whatever the PREVIOUS child emitted: MoEFeedForwardLayer registers its router
+        // first, so every expert was built against the router's numExperts-wide output instead of
+        // the hidden width, and a restore then rejected the saved weights outright.
         var shapedSubLayers = subLayerFields
-            .Where(sl => !sl.IsCollection && !string.IsNullOrWhiteSpace(sl.InputShape))
+            .Where(sl => !string.IsNullOrWhiteSpace(sl.InputShape))
             .ToList();
         if (shapedSubLayers.Count > 0)
         {
@@ -538,14 +552,28 @@ public class TrainableParameterGenerator : IIncrementalGenerator
             sb.AppendLine($"    protected override System.Collections.Generic.IReadOnlyList<{subTuple}> DeclaredSubLayerShapes()");
             sb.AppendLine("    {");
             sb.AppendLine("        if (__declaredSubLayerShapes is not null) return __declaredSubLayerShapes;");
-            foreach (var sl in shapedSubLayers.Where(sl => !sl.IsNullable))
+            foreach (var sl in shapedSubLayers.Where(sl => !sl.IsNullable && !sl.IsCollection))
             {
                 sb.AppendLine($"        if ({sl.Name} is null) return System.Array.Empty<{subArray}>();");
             }
             sb.AppendLine($"        var __sub = new System.Collections.Generic.List<{subArray}>({shapedSubLayers.Count});");
+            string tp = GetTypeParamName(classSymbol);
             foreach (var sl in shapedSubLayers)
             {
                 var axes = string.Join(", ", sl.InputShape!.Split(',').Select(a => a.Trim()).Where(a => a.Length > 0));
+                if (sl.IsCollection)
+                {
+                    // Every element gets the declared width. Elements are filtered by type because a
+                    // collection may be declared as ILayer<T>, which carries no shape resolution.
+                    sb.AppendLine($"        if ({sl.Name} is not null)");
+                    sb.AppendLine("        {");
+                    sb.AppendLine($"            foreach (var __child in {sl.Name})");
+                    sb.AppendLine($"                if (__child is LayerBase<{tp}> __element)");
+                    sb.AppendLine($"                    __sub.Add((__element, ShapeOf({axes})));");
+                    sb.AppendLine("        }");
+                    continue;
+                }
+
                 string entry = $"__sub.Add(({sl.Name}, ShapeOf({axes})));";
                 if (sl.IsNullable) sb.AppendLine($"        if ({sl.Name} is not null) {entry}");
                 else sb.AppendLine($"        {entry}");
@@ -554,7 +582,11 @@ public class TrainableParameterGenerator : IIncrementalGenerator
             sb.AppendLine("        {");
             sb.AppendLine("            var __s = __sub[__i].Item2;");
             sb.AppendLine("            for (int __d = 0; __d < __s.Length; __d++)");
-            sb.AppendLine($"                if (__s[__d] < 0) return System.Array.Empty<{subArray}>();");
+            // <= 0, not < 0. Every int field reads ZERO before the constructor assigns it, so a
+            // declaration consulted mid-construction produced a zero-width shape that passed a
+            // negative-only check and was then CACHED for the life of the layer. A width of zero is
+            // never a real one, so treating it as "not ready yet" is correct either way.
+            sb.AppendLine($"                if (__s[__d] <= 0) return System.Array.Empty<{subArray}>();");
             sb.AppendLine("        }");
             sb.AppendLine("        __declaredSubLayerShapes = __sub.ToArray();");
             sb.AppendLine("        return __declaredSubLayerShapes;");

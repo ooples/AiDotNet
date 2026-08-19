@@ -51,14 +51,23 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [AutoParameters]
 public partial class PreLNTransformerBlock<T> : LayerBase<T>, IShapeContract
 {
+    // Every child reads the block input; only the down-projection reads the expanded width.
+    // Chained sizing walked registration order instead and built the second projection from
+    // the first's output, so a restore met a differently shaped layer than the checkpoint.
+    [SubLayerInput("_hiddenSize")]
     private readonly RMSNormalizationLayer<T> _norm1;
     // Non-readonly so the inference optimizer can swap the attention sublayer in place (e.g.
     // GroupedQueryAttentionLayer -> CachedGroupedQueryAttention for KV-cached decode) via ReplaceAttention,
     // the same contract TransformerEncoderBlock uses.
+    [SubLayerInput("1, _hiddenSize")]
     private LayerBase<T> _attention;
+    [SubLayerInput("_hiddenSize")]
     private readonly RMSNormalizationLayer<T> _norm2;
+    [SubLayerInput("_hiddenSize")]
     private readonly DenseLayer<T>? _ffnGate;
+    [SubLayerInput("_hiddenSize")]
     private readonly DenseLayer<T> _ffnUp;
+    [SubLayerInput("_ffnDim")]
     private readonly DenseLayer<T> _ffnDown;
     private readonly IActivationFunction<T> _ffnActivation;
     private readonly bool _gated;

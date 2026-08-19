@@ -35,9 +35,17 @@ public partial class MoEFeedForwardLayer<T> : LayerBase<T>, IShapeContract
 {
     private static readonly INumericOperations<T> Ops = MathHelper.GetNumericOperations<T>();
 
+    // Every child reads the token, not its predecessor's output. Chained sizing assumed otherwise and
+    // built each expert against the ROUTER's numExperts-wide output, so a restore met [2, 16] where
+    // the checkpoint held [8, 16] and refused it. The experts are siblings, so one declared width
+    // covers the whole bank.
+    [SubLayerInput("_hidden")]
     private readonly DenseLayer<T> _router;               // hidden -> numExperts (no bias, identity)
+    [SubLayerInput("_hidden")]
     private readonly DenseLayer<T>[] _gate;               // per expert: hidden -> ffn (activation)
+    [SubLayerInput("_hidden")]
     private readonly DenseLayer<T>[] _up;                 // per expert: hidden -> ffn (identity)
+    [SubLayerInput("_ffnDim")]
     private readonly DenseLayer<T>[] _down;               // per expert: ffn -> hidden (identity)
     private readonly int _hidden;
     private readonly int _ffnDim;
@@ -46,9 +54,13 @@ public partial class MoEFeedForwardLayer<T> : LayerBase<T>, IShapeContract
 
     // Optional always-on shared expert (Qwen2-MoE): its SwiGLU output, gated by sigmoid(sharedGate(x)), is
     // added to the routed output for every token. Null when the model has no shared expert (Mixtral).
+    [SubLayerInput("_hidden")]
     private readonly DenseLayer<T>? _sharedGate;          // hidden -> sharedFfn (activation)
+    [SubLayerInput("_hidden")]
     private readonly DenseLayer<T>? _sharedUp;            // hidden -> sharedFfn (identity)
+    [SubLayerInput("_sharedFfnDim")]
     private readonly DenseLayer<T>? _sharedDown;          // sharedFfn -> hidden (identity)
+    [SubLayerInput("_hidden")]
     private readonly DenseLayer<T>? _sharedGateLogit;     // hidden -> 1 (sigmoid gate)
     private readonly int _sharedFfnDim;
 

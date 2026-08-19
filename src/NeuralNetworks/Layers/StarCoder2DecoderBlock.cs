@@ -30,10 +30,18 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [AutoParameters]
 public partial class StarCoder2DecoderBlock<T> : LayerBase<T>, IShapeContract
 {
+    // Every child reads the block input; only the down-projection reads the expanded width.
+    // Chained sizing walked registration order instead and built the second projection from
+    // the first's output, so a restore met a differently shaped layer than the checkpoint.
+    [SubLayerInput("_hiddenSize")]
     private readonly LayerNormalizationLayer<T> _norm1;
+    [SubLayerInput("1, _hiddenSize")]
     private readonly LayerBase<T> _attention;
+    [SubLayerInput("_hiddenSize")]
     private readonly LayerNormalizationLayer<T> _norm2;
+    [SubLayerInput("_hiddenSize")]
     private readonly DenseLayer<T> _cFc;
+    [SubLayerInput("_ffnDim")]
     private readonly DenseLayer<T> _cProj;
     private readonly int _hiddenSize;
 
