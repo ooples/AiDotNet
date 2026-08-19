@@ -1117,6 +1117,31 @@ public abstract class LayerTestBase<T>
         {
             if (p is SparseTensor<T> sp) sp.DataVector[i] = ToT(v);
             else p[i] = ToT(v);
+
+            // INVALIDATE THE INFERENCE WEIGHT CACHES. Both engines cache a DERIVED form of a weight
+            // array -- packed GEMM B panels, weight-only int8 packs, pre-transposed conv kernels --
+            // keyed by the array's OBJECT IDENTITY, and never re-read its contents. InferenceWeightCache
+            // documents the resulting contract explicitly: "Mutating a weight array IN PLACE (an
+            // optimizer step, a SetParameters/WithParameters-style bulk load, manual tensor writes)
+            // therefore leaves those caches stale: subsequent inference would silently compute with
+            // the OLD weights. Callers that mutate weights in place must call InvalidateAll."
+            //
+            // A finite difference IS a manual in-place tensor write, so without this the perturbed
+            // forward recomputes with the UNPERTURBED weights and the numerical gradient measures
+            // nothing at all. Measured on SVTRThinPlateSplineLayer._controlWeights, a [512,40] GEMM
+            // weight: setting every one of its 20,480 elements to 1.0 moved the loss by exactly 0.0
+            // on the GPU engine (-3477.814038 before and after) while the same write on CpuEngine
+            // moved it by 3477.88. With this flush the GPU matches the CPU control, and the one-sided
+            // derivatives at that scalar go from 0/0 to 1339.42/149.89 -- which finally brackets the
+            // analytical 1248.91, showing the TAPE WAS CORRECT and the harness was the broken side.
+            //
+            // Only weights that flow through a cached path are affected, which is why this hid for so
+            // long: _controlBias, a [40] bias add, responded to perturbation normally throughout.
+            //
+            // Cost is an interlocked epoch bump, not a re-pack, so this is safe on the write path.
+            InferenceWeightCache.InvalidateAll();
+            if (AiDotNetEngine.Current is DirectGpuTensorEngine gpuEngine)
+                gpuEngine.InvalidateAllWeightCaches();
         }
         // The analytical gradient of a SPARSE parameter is not necessarily sparse. When it comes back
         // DENSE, index i (a position in the sparse nnz payload) addresses a completely different
