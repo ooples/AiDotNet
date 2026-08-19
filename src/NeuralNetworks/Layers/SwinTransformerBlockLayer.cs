@@ -67,11 +67,18 @@ public partial class SwinTransformerBlockLayer<T> : LayerBase<T>, IShapeContract
     private long _dropPathForwardCounter;
 
     // Pre-norm layer normalizations
+    // Pre-norm Swin: every child reads the block width except the MLP contraction, which reads the
+    // expanded one. Chained sizing got _outProj wrong -- it handed it the QKV projection's 3*dim
+    // output, where the real forward reshapes into heads and gives it dim.
+    [SubLayerInput("_dim")]
     private readonly LayerNormalizationLayer<T> _norm1;
+    [SubLayerInput("_dim")]
     private readonly LayerNormalizationLayer<T> _norm2;
 
     // Window attention projections
+    [SubLayerInput("_dim")]
     private readonly DenseLayer<T> _qkvProj;
+    [SubLayerInput("_dim")]
     private readonly DenseLayer<T> _outProj;
 
     // Relative position bias table: (2*windowSize-1)^2 entries for each head
@@ -79,7 +86,9 @@ public partial class SwinTransformerBlockLayer<T> : LayerBase<T>, IShapeContract
     private readonly int[,] _relativePositionIndex;
 
     // MLP layers
+    [SubLayerInput("_dim")]
     private readonly DenseLayer<T> _mlpFc1;
+    [SubLayerInput("_dim * _mlpRatio")]
     private readonly DenseLayer<T> _mlpFc2;
 
     // Cached values for backward pass

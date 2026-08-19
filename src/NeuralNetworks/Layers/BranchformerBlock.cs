@@ -57,15 +57,26 @@ public partial class BranchformerBlock<T> : LayerBase<T>, IShapeContract
     private readonly int _cgmlpHiddenDim;
     private readonly int _kernelSize;
 
+    // Both branches read the block width; inside the cgMLP the CSGU splits the expanded width in
+    // half, so everything after it reads half; the merge reads the concatenation of the two
+    // branches. A literal 1 stands in for batch and time, which no child's parameters depend on.
+    [SubLayerInput("1, 1, _modelDim")]
     private readonly MultiHeadAttentionLayer<T> _attention;
+    [SubLayerInput("1, 1, _modelDim")]
     private readonly LayerNormalizationLayer<T> _attentionNorm;
 
+    [SubLayerInput("1, 1, _modelDim")]
     private readonly LayerNormalizationLayer<T> _cgmlpNorm;
+    [SubLayerInput("1, 1, _modelDim")]
     private readonly DenseLayer<T> _cgmlpExpand;
+    [SubLayerInput("1, 1, _cgmlpHiddenDim / 2")]
     private readonly LayerNormalizationLayer<T> _csguNorm;
+    [SubLayerInput("1, _kernelSize, _cgmlpHiddenDim / 2")]
     private readonly DepthwiseConv1DLayer<T> _csguConv;
+    [SubLayerInput("1, 1, _cgmlpHiddenDim / 2")]
     private readonly DenseLayer<T> _cgmlpProject;
 
+    [SubLayerInput("1, 1, _modelDim * 2")]
     private readonly DenseLayer<T> _merge;
 
     /// <inheritdoc/>
