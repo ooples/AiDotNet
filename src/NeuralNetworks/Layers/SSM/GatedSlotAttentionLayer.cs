@@ -327,19 +327,19 @@ public partial class GatedSlotAttentionLayer<T> : LayerBase<T>, IShapeContract
         _lastValue = v;
 
         // Step 2: Gates
-        var forgetRaw = Engine.Reshape(Engine.TensorBroadcastAdd(
+        var forgetRaw = Engine.Reshape(Engine.TensorAdd(
             Engine.TensorMatMul(inputFlat, _forgetGateWeights),
             Engine.Reshape(_forgetGateBias, new[] { 1, _numHeads })), new[] { batchSize, seqLen, _numHeads });
         var forgetGate = Engine.Sigmoid(forgetRaw);
         _lastForgetGate = forgetGate;
 
-        var inputGateRaw = Engine.Reshape(Engine.TensorBroadcastAdd(
+        var inputGateRaw = Engine.Reshape(Engine.TensorAdd(
             Engine.TensorMatMul(inputFlat, _inputGateWeights),
             Engine.Reshape(_inputGateBias, new[] { 1, _numHeads })), new[] { batchSize, seqLen, _numHeads });
         var inputGate = Engine.Sigmoid(inputGateRaw);
         _lastInputGate = inputGate;
 
-        var gateRaw = Engine.Reshape(Engine.TensorBroadcastAdd(
+        var gateRaw = Engine.Reshape(Engine.TensorAdd(
             Engine.TensorMatMul(inputFlat, _outputGateWeights),
             Engine.Reshape(_outputGateBias, new[] { 1, _modelDimension })), new[] { batchSize, seqLen, _modelDimension });
         var outputGate = Engine.Swish(gateRaw);
@@ -363,10 +363,10 @@ public partial class GatedSlotAttentionLayer<T> : LayerBase<T>, IShapeContract
             kHeads,
             NumOps.FromDouble(1.0 / Math.Sqrt(_headDimension)));
         var countedKey = Engine.Reshape(
-            Engine.TensorBroadcastMultiply(scaledKeyHeads, countTensor),
+            Engine.TensorMultiply(scaledKeyHeads, countTensor),
             new[] { batchSize, seqLen, _modelDimension });
         var dynamicValue = Engine.Reshape(
-            Engine.TensorBroadcastMultiply(
+            Engine.TensorMultiply(
                 Engine.Reshape(v, new[] { batchSize, seqLen, _numHeads, _headDimension }),
                 Engine.TensorExpandDims(inputGate, axis: 3)),
             new[] { batchSize, seqLen, _modelDimension });
@@ -397,7 +397,7 @@ public partial class GatedSlotAttentionLayer<T> : LayerBase<T>, IShapeContract
             new[] { batchSize, seqLen, _numHeads, _headDimension });
         var decay = Engine.TensorCumProd(forgetGate, axis: 1);
         var decayedInitialRead = Engine.Reshape(
-            Engine.TensorBroadcastMultiply(initialRead, Engine.TensorExpandDims(decay, axis: 3)),
+            Engine.TensorMultiply(initialRead, Engine.TensorExpandDims(decay, axis: 3)),
             new[] { batchSize, seqLen, _modelDimension });
         var slotOutput = Engine.TensorAdd(dynamicOutput, decayedInitialRead);
         _lastSlotReadOutput = slotOutput;
@@ -409,7 +409,7 @@ public partial class GatedSlotAttentionLayer<T> : LayerBase<T>, IShapeContract
         var gatedFlat = Engine.Reshape(gatedOutput, new[] { batchSize * seqLen, _modelDimension });
         var outputFlat = Engine.TensorMatMul(gatedFlat, _outputProjectionWeights);
         var outBias = Engine.Reshape(_outputProjectionBias, new[] { 1, _modelDimension });
-        outputFlat = Engine.TensorBroadcastAdd(outputFlat, outBias);
+        outputFlat = Engine.TensorAdd(outputFlat, outBias);
         var output3D = Engine.Reshape(outputFlat, new[] { batchSize, seqLen, _modelDimension });
 
         var result = ApplyActivation(output3D);

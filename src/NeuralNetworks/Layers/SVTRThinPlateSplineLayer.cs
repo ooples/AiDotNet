@@ -174,7 +174,7 @@ public sealed class SVTRThinPlateSplineLayer<T> : LayerBase<T>, IShapeContract
         localization = Engine.Reshape(localization, [batch, _localizationFeatureSize]);
         var features = _featureProjection.Forward(localization);
         features = Engine.TensorMultiplyScalar(features, NumOps.FromDouble(LocalizationScale));
-        var flatControl = Engine.TensorBroadcastAdd(
+        var flatControl = Engine.TensorAdd(
             Engine.TensorMatMul(features, _controlWeights), _controlBias);
         var sourceControl = Engine.Reshape(flatControl, [batch, _controlPointCount, 2]);
         var padding = new Tensor<T>([batch, 3, 2]);

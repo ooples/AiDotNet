@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -115,7 +115,7 @@ public sealed partial class RowParallelLinear<T> : LayerBase<T>, IShapeContract
         // ḡ: all-reduce forward (Y = Σ_r Y_r), identity backward.
         var reduced = _g.Apply(partial);
         // Bias is replicated and added ONCE after the reduce (adding before would sum it worldSize times).
-        var biased = Engine.TensorBroadcastAdd(reduced, Engine.Reshape(_bias, new[] { 1, _outputSize }));
+        var biased = Engine.TensorAdd(reduced, Engine.Reshape(_bias, new[] { 1, _outputSize }));
         return ApplyActivation(biased);
     }
 

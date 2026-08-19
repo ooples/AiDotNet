@@ -1081,22 +1081,22 @@ public partial class ConvLSTMLayer<T> : LayerBase<T>, IShapeContract
     private (Tensor<T> hiddenState, Tensor<T> cellState) ConvLSTMCell(Tensor<T> input, Tensor<T> prevHiddenState, Tensor<T> prevCellState)
     {
         // Compute gate pre-activations by convolving input and hidden state, then adding bias
-        // Use Engine.TensorBroadcastAdd for biases since they have shape [1,1,1,filters] and need to broadcast
+        // Use Engine.TensorAdd for biases since they have shape [1,1,1,filters] and need to broadcast
         // to the convolution output shape [batchSize, height, width, filters]
         var forgetPreact = Engine.TensorAdd(Convolve(input, _weightsFi), Convolve(prevHiddenState, _weightsFh));
-        forgetPreact = Engine.TensorBroadcastAdd(forgetPreact, _biasF);
+        forgetPreact = Engine.TensorAdd(forgetPreact, _biasF);
         var forgetGate = Engine.Sigmoid(forgetPreact);
 
         var inputPreact = Engine.TensorAdd(Convolve(input, _weightsIi), Convolve(prevHiddenState, _weightsIh));
-        inputPreact = Engine.TensorBroadcastAdd(inputPreact, _biasI);
+        inputPreact = Engine.TensorAdd(inputPreact, _biasI);
         var inputGate = Engine.Sigmoid(inputPreact);
 
         var candidatePreact = Engine.TensorAdd(Convolve(input, _weightsCi), Convolve(prevHiddenState, _weightsCh));
-        candidatePreact = Engine.TensorBroadcastAdd(candidatePreact, _biasC);
+        candidatePreact = Engine.TensorAdd(candidatePreact, _biasC);
         var candidateCell = ApplyActivation(candidatePreact);
 
         var outputPreact = Engine.TensorAdd(Convolve(input, _weightsOi), Convolve(prevHiddenState, _weightsOh));
-        outputPreact = Engine.TensorBroadcastAdd(outputPreact, _biasO);
+        outputPreact = Engine.TensorAdd(outputPreact, _biasO);
         var outputGate = Engine.Sigmoid(outputPreact);
 
         // Compute new cell state: c_t = f_t * c_{t-1} + i_t * candidate
@@ -1350,10 +1350,10 @@ public partial class ConvLSTMLayer<T> : LayerBase<T>, IShapeContract
     {
         // Use Engine.Sigmoid for vectorized/GPU-accelerated sigmoid activations
         // Bias is [1,1,1,filters] — use BroadcastAdd since Tensor.Add doesn't broadcast
-        var f = Engine.Sigmoid(Engine.TensorBroadcastAdd(Convolve(xt, _weightsFi).Add(Convolve(prevH, _weightsFh)), _biasF));
-        var i = Engine.Sigmoid(Engine.TensorBroadcastAdd(Convolve(xt, _weightsIi).Add(Convolve(prevH, _weightsIh)), _biasI));
-        var c = ApplyActivation(Engine.TensorBroadcastAdd(Convolve(xt, _weightsCi).Add(Convolve(prevH, _weightsCh)), _biasC));
-        var o = Engine.Sigmoid(Engine.TensorBroadcastAdd(Convolve(xt, _weightsOi).Add(Convolve(prevH, _weightsOh)), _biasO));
+        var f = Engine.Sigmoid(Engine.TensorAdd(Convolve(xt, _weightsFi).Add(Convolve(prevH, _weightsFh)), _biasF));
+        var i = Engine.Sigmoid(Engine.TensorAdd(Convolve(xt, _weightsIi).Add(Convolve(prevH, _weightsIh)), _biasI));
+        var c = ApplyActivation(Engine.TensorAdd(Convolve(xt, _weightsCi).Add(Convolve(prevH, _weightsCh)), _biasC));
+        var o = Engine.Sigmoid(Engine.TensorAdd(Convolve(xt, _weightsOi).Add(Convolve(prevH, _weightsOh)), _biasO));
 
         var newC = Engine.TensorAdd(Engine.TensorMultiply(f, prevC), Engine.TensorMultiply(i, c));
         var newH = Engine.TensorMultiply(o, ApplyActivation(newC));

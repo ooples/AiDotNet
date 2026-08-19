@@ -1,4 +1,4 @@
-﻿using AiDotNet.ActivationFunctions;
+using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
@@ -301,10 +301,10 @@ public partial class VideoGigaGANGeneratorLayer<T> : LayerBase<T>, IShapeContrac
                     new[] { batch * frames, _numFeatures });
                 scale = Engine.Reshape(scale, new[] { batch * frames, _numFeatures, 1, 1 });
                 bias = Engine.Reshape(bias, new[] { batch * frames, _numFeatures, 1, 1 });
-                blockOutput = Engine.TensorBroadcastMultiply(
+                blockOutput = Engine.TensorMultiply(
                     blockOutput,
                     Engine.TensorAddScalar(scale, NumOps.One));
-                blockOutput = Engine.TensorBroadcastAdd(blockOutput, bias);
+                blockOutput = Engine.TensorAdd(blockOutput, bias);
             }
 
             features = Engine.TensorAdd(

@@ -684,14 +684,14 @@ public partial class MessagePassingLayer<T> : LayerBase<T>, IGraphConvolutionLay
         // Layer 1: input @ W1 + b1, ReLU.
         var bias1Broadcast = Engine.Reshape(_messageBias1, [1, _messageFeatures]);
         var hidden = Engine.TensorMatMul(inputFlat, _messageWeights1);
-        hidden = Engine.TensorBroadcastAdd(hidden, bias1Broadcast);
+        hidden = Engine.TensorAdd(hidden, bias1Broadcast);
         hidden = Engine.ReLU(hidden);
         _lastMessageHidden = Engine.Reshape(hidden, [batchSize, numNodes, numNodes, _messageFeatures]);
 
         // Layer 2: hidden @ W2 + b2.
         var bias2Broadcast = Engine.Reshape(_messageBias2, [1, _messageFeatures]);
         var messagesFlat = Engine.TensorMatMul(hidden, _messageWeights2);
-        messagesFlat = Engine.TensorBroadcastAdd(messagesFlat, bias2Broadcast);
+        messagesFlat = Engine.TensorAdd(messagesFlat, bias2Broadcast);
 
         // Mask non-adjacent edges by multiplying by adjacency. Reshape adjacency
         // to [B, N, N, 1] so it broadcasts across the message-feature axis. For
@@ -729,7 +729,7 @@ public partial class MessagePassingLayer<T> : LayerBase<T>, IGraphConvolutionLay
         var resetBiasBcast = Engine.Reshape(_resetBias, [1, _outputFeatures]);
         var resetLogitsFlat = Engine.TensorMatMul(inputFlatBN, _resetWeights);
         resetLogitsFlat = Engine.TensorAdd(resetLogitsFlat, Engine.TensorMatMul(aggFlatBN, _resetMessageWeights));
-        resetLogitsFlat = Engine.TensorBroadcastAdd(resetLogitsFlat, resetBiasBcast);
+        resetLogitsFlat = Engine.TensorAdd(resetLogitsFlat, resetBiasBcast);
         var resetFlat = Engine.Sigmoid(resetLogitsFlat);
         _lastResetGate = Engine.Reshape(resetFlat, [batchSize, numNodes, _outputFeatures]);
 
@@ -737,7 +737,7 @@ public partial class MessagePassingLayer<T> : LayerBase<T>, IGraphConvolutionLay
         var updateBiasBcast = Engine.Reshape(_updateBias, [1, _outputFeatures]);
         var updateLogitsFlat = Engine.TensorMatMul(inputFlatBN, _updateWeights);
         updateLogitsFlat = Engine.TensorAdd(updateLogitsFlat, Engine.TensorMatMul(aggFlatBN, _updateMessageWeights));
-        updateLogitsFlat = Engine.TensorBroadcastAdd(updateLogitsFlat, updateBiasBcast);
+        updateLogitsFlat = Engine.TensorAdd(updateLogitsFlat, updateBiasBcast);
         var updateFlat = Engine.Sigmoid(updateLogitsFlat);
         _lastUpdateGate = Engine.Reshape(updateFlat, [batchSize, numNodes, _outputFeatures]);
 

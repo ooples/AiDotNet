@@ -1009,7 +1009,7 @@ internal partial class DeepARLstmCellTape<T> : NeuralNetworks.Layers.LayerBase<T
         var fromH = Engine.TensorMatMul(_wh, hPrev);   // [4H, B]
         var preact = Engine.TensorAdd(fromX, fromH);
         var biasCol = Engine.Reshape(_bias, new[] { 4 * _hiddenSize, 1 });
-        preact = Engine.TensorBroadcastAdd(preact, biasCol);
+        preact = Engine.TensorAdd(preact, biasCol);
 
         // Slice the stacked pre-activations into the four gates along axis 0.
         var iPre = Engine.TensorNarrow(preact, 0, 0, _hiddenSize);

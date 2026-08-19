@@ -1,4 +1,4 @@
-﻿using AiDotNet.Helpers;
+using AiDotNet.Helpers;
 using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
@@ -312,7 +312,7 @@ public partial class Conv1DTransposeLayer<T> : LayerBase<T>, IShapeContract
             new[] { 0, _outputPadding });
 
         var biasReshaped = Engine.Reshape(_biases, new[] { 1, _outputChannels, 1, 1 });
-        var withBias = Engine.TensorBroadcastAdd(deconv, biasReshaped);
+        var withBias = Engine.TensorAdd(deconv, biasReshaped);
         var activated = ApplyActivation(withBias);
 
         // [B, C_out, 1, T_out] -> [B, C_out, T_out]

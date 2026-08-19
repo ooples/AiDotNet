@@ -1,4 +1,4 @@
-﻿using System.IO;
+using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Finance.Interfaces;
@@ -1006,8 +1006,8 @@ public partial class TFT<T> : ForecastingModelBase<T>
             // zeroed all gradients. Stats are constants (paper-faithful reverse).
             if (features == storedFeatures && _instanceMean.Shape[0] == batchSize)
             {
-                var scaledAll = Engine.TensorBroadcastMultiply(input, _instanceStd);
-                return Engine.TensorBroadcastAdd(scaledAll, _instanceMean);
+                var scaledAll = Engine.TensorMultiply(input, _instanceStd);
+                return Engine.TensorAdd(scaledAll, _instanceMean);
             }
 
             var denormalized = new Tensor<T>(input._shape);

@@ -304,7 +304,7 @@ public partial class S5Layer<T> : LayerBase<T>, IShapeContract
         var input2D = Engine.Reshape(input3D, new[] { batchSize * seqLen, _modelDimension });
         var projected = Engine.TensorMatMul(input2D, _inputProjectionWeights);
         var bias2D = Engine.Reshape(_inputProjectionBias, new[] { 1, _modelDimension });
-        var projectedWithBias = Engine.TensorBroadcastAdd(projected, bias2D);
+        var projectedWithBias = Engine.TensorAdd(projected, bias2D);
         var projected3D = Engine.Reshape(projectedWithBias, new[] { batchSize, seqLen, _modelDimension });
         _lastProjectedInput = projected3D;
 
@@ -316,7 +316,7 @@ public partial class S5Layer<T> : LayerBase<T>, IShapeContract
         var scanFlat = Engine.Reshape(scanOutput, new[] { batchSize * seqLen, _modelDimension });
         var outputFlat = Engine.TensorMatMul(scanFlat, _outputProjectionWeights);
         var outBias2D = Engine.Reshape(_outputProjectionBias, new[] { 1, _modelDimension });
-        var outputWithBias = Engine.TensorBroadcastAdd(outputFlat, outBias2D);
+        var outputWithBias = Engine.TensorAdd(outputFlat, outBias2D);
         var output3D = Engine.Reshape(outputWithBias, new[] { batchSize, seqLen, _modelDimension });
 
         var result = ApplyActivation(output3D);
@@ -392,11 +392,11 @@ public partial class S5Layer<T> : LayerBase<T>, IShapeContract
         var quotientReal2D = Engine.Reshape(quotientReal, new[] { _stateDimension, 1 });
         var quotientImag2D = Engine.Reshape(quotientImag, new[] { _stateDimension, 1 });
         var bBarReal = Engine.TensorSubtract(
-            Engine.TensorBroadcastMultiply(_bReal, quotientReal2D),
-            Engine.TensorBroadcastMultiply(_bImag, quotientImag2D));
+            Engine.TensorMultiply(_bReal, quotientReal2D),
+            Engine.TensorMultiply(_bImag, quotientImag2D));
         var bBarImag = Engine.TensorAdd(
-            Engine.TensorBroadcastMultiply(_bImag, quotientReal2D),
-            Engine.TensorBroadcastMultiply(_bReal, quotientImag2D));
+            Engine.TensorMultiply(_bImag, quotientReal2D),
+            Engine.TensorMultiply(_bReal, quotientImag2D));
 
         var groupedInput = Engine.Reshape(u, new[] { batchSize, seqLen, 1, _modelDimension });
         var output = Engine.ComplexDiagonalSsmScanForward(

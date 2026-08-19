@@ -820,7 +820,7 @@ public partial class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, I
                 var sumAgg = Engine.TensorMatMul(_adjacencyMatrix!, transformed);
                 // Expand degrees for broadcasting: [batch, nodes] -> [batch, nodes, 1]
                 var degreesExpanded = safeDegrees.Reshape([batchSize, numNodes, 1]);
-                return Engine.TensorBroadcastDivide(sumAgg, degreesExpanded);
+                return Engine.TensorDivide(sumAgg, degreesExpanded);
 
             case PNAAggregator.Max:
                 // Max aggregation requires masking non-neighbors with -inf then taking max
@@ -921,12 +921,12 @@ public partial class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, I
         // Mean: E[X] = (A @ X) / degree
         var sumAgg = Engine.TensorMatMul(_adjacencyMatrix!, transformed);
         var degreesExpanded = safeDegrees.Reshape([batchSize, numNodes, 1]);
-        var mean = Engine.TensorBroadcastDivide(sumAgg, degreesExpanded);
+        var mean = Engine.TensorDivide(sumAgg, degreesExpanded);
 
         // E[X^2] = (A @ X^2) / degree
         var transformedSquared = Engine.TensorMultiply(transformed, transformed);
         var sumSquared = Engine.TensorMatMul(_adjacencyMatrix!, transformedSquared);
-        var meanSquared = Engine.TensorBroadcastDivide(sumSquared, degreesExpanded);
+        var meanSquared = Engine.TensorDivide(sumSquared, degreesExpanded);
 
         // Variance = E[X^2] - E[X]^2
         var meanSq = Engine.TensorMultiply(mean, mean);
@@ -960,8 +960,8 @@ public partial class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, I
                 var avgDegreeTensor = TensorAllocator.Rent<T>([batchSize, numNodes, 1]);
                 avgDegreeTensor.Fill(NumOps.FromDouble(_avgDegree));
                 var degreesExpanded = safeDegrees.Reshape([batchSize, numNodes, 1]);
-                var ampFactor = Engine.TensorBroadcastDivide(degreesExpanded, avgDegreeTensor);
-                return Engine.TensorBroadcastMultiply(aggregated, ampFactor);
+                var ampFactor = Engine.TensorDivide(degreesExpanded, avgDegreeTensor);
+                return Engine.TensorMultiply(aggregated, ampFactor);
 
             case PNAScaler.Attenuation:
                 // Scale by avgDegree / degree (attenuate high-degree nodes)
@@ -969,8 +969,8 @@ public partial class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, I
                 var avgDegTensor = TensorAllocator.Rent<T>([batchSize, numNodes, 1]);
                 avgDegTensor.Fill(NumOps.FromDouble(_avgDegree));
                 var degExpanded = safeDegrees.Reshape([batchSize, numNodes, 1]);
-                var attFactor = Engine.TensorBroadcastDivide(avgDegTensor, degExpanded);
-                return Engine.TensorBroadcastMultiply(aggregated, attFactor);
+                var attFactor = Engine.TensorDivide(avgDegTensor, degExpanded);
+                return Engine.TensorMultiply(aggregated, attFactor);
 
             default:
                 return aggregated;
@@ -1028,7 +1028,7 @@ public partial class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, I
                 // For mean, also divide by degree
                 if (_aggregators[aggIdx] == PNAAggregator.Mean)
                 {
-                    aggGrad = Engine.TensorBroadcastDivide(aggGrad, degExpanded);
+                    aggGrad = Engine.TensorDivide(aggGrad, degExpanded);
                 }
 
                 transformedGrad = Engine.TensorAdd(transformedGrad, aggGrad);
