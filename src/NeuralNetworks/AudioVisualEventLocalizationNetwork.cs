@@ -1596,22 +1596,6 @@ public partial class AudioVisualEventLocalizationNetwork<T> : MultimodalModelLay
     }
 
     /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        // The audio-embedding widths MUST ride along. Omitting them rebuilds VGGish at its paper
-        // defaults (FC 4096, embedding 128) while the source may hold a smaller configured variant,
-        // so the clone is a structurally different model: its predictions diverge from the original
-        // and, at paper scale, materialising it can exhaust the test host.
-        return new AudioVisualEventLocalizationNetwork<T>(
-            Architecture,
-            _embeddingDimension,
-            _temporalResolution,
-            _numEncoderLayers,
-            _supportedCategories,
-            audioEmbeddingFullyConnectedWidth: _audioEmbeddingFullyConnectedWidth,
-            audioEmbeddingSize: _audioEmbeddingSize);
-    }
-
     /// <inheritdoc/>
     public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
     {

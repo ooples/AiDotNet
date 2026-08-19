@@ -5712,6 +5712,20 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         // tensors, and SetParameters below writes into tensors that already exist. The first forward
         // finds an initialized layer and leaves it alone.
         var savedShape = ReadResolvedShape(reader);
+
+        // A shape carrying a FREE AXIS is not a resolution. A block that declares its input as
+        // [-1, hiddenSize] publishes exactly that, and resolving from it threw at its own
+        // declaration -- then the batched retry below prepended a 1 and threw again on the same
+        // -1, this time uncaught, so the restore died rather than deferring to the first forward.
+        // Treat it as "the source had not resolved either" and leave the layer lazy.
+        if (savedShape is not null)
+        {
+            for (int __axis = 0; __axis < savedShape.Length; __axis++)
+            {
+                if (savedShape[__axis] <= 0) { savedShape = null; break; }
+            }
+        }
+
         if (savedShape is not null && !IsShapeResolved)
         {
             // The saved shape is what the layer PUBLISHED for itself, and a layer may publish one
