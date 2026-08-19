@@ -33492,7 +33492,9 @@ public static class LayerHelper<T>
         int inputSize = 512,
         int embeddingDimension = 256,
         int numEncoderLayers = 4,
-        int numCategories = 35)
+        int numCategories = 35,
+        int audioEmbeddingFullyConnectedWidth = VGGishAudioEmbedding<T>.PaperFullyConnectedWidth,
+        int audioEmbeddingSize = VGGishAudioEmbedding<T>.PaperEmbeddingSize)
     {
         // Per Tian et al. 2018, "Audio-Visual Event Localization in
         // Unconstrained Videos" (ECCV 2018): dual-stream model with separate
@@ -33570,6 +33572,17 @@ public static class LayerHelper<T>
         yield return new DenseLayer<T>(2, nullActivation);                  // temporal boundary [start, end]
         yield return new DenseLayer<T>(4, nullActivation);                  // spatial bbox [x, y, w, h]
         yield return new DenseLayer<T>(1, nullActivation);                  // anomaly score
+
+        // Audio front-end embedding, yielded LAST and deliberately so: every index the parent
+        // model's InitializeLayers already parses keeps exactly the position it had, so adding a
+        // front-end cannot shift the [idx++] contract described at the top of this method.
+        //
+        // VGGish (Hershey et al. 2017) is the network the AVEL paper takes its audio features from.
+        // Widths default to the published values; the parameters exist so a test fixture can build
+        // a small variant without a second, divergent implementation existing anywhere.
+        yield return new VGGishAudioEmbedding<T>(
+            fullyConnectedWidth: audioEmbeddingFullyConnectedWidth,
+            embeddingSize: audioEmbeddingSize);
     }
 
     /// <summary>
