@@ -1273,9 +1273,13 @@ public class TrainableParameterGenerator : IIncrementalGenerator
         List<SubLayerFieldInfo> subLayerFields,
         List<(string Field, string Name, string Role, string StateRole)> bufferFields)
     {
+        // Buffers no longer disqualify the formula outright; the emitted method checks at RUNTIME
+        // that none is live. Excluding them statically cost DenseLayer -- the most restored layer in
+        // the library -- its inference, purely because it declares two optimizer-velocity buffers
+        // that are null until training allocates them, and training cannot precede the resolution
+        // this infers. A restore into a fresh deferred layer therefore always sees them empty.
         bool completeLocalFormula = paramFields.Count > 0
             && subLayerFields.Count == 0
-            && bufferFields.Count == 0
             && paramFields.All(field => field.CollectionKind == ParameterCollectionKind.Direct
                 && !field.Optional
                 && field.Condition is null
@@ -1297,7 +1301,21 @@ public class TrainableParameterGenerator : IIncrementalGenerator
         sb.AppendLine("    /// <summary>Infers one deferred input axis from complete generated parameter-shape formulas.</summary>");
         sb.AppendLine("    protected override bool TryInferInputShapeFromParameterCount(int parameterCount, out int[] inputShape)");
         sb.AppendLine("    {");
-        sb.AppendLine("        if (Parameters.Length == 0)");
+        if (bufferFields.Count > 0)
+        {
+            sb.AppendLine("        // The formula below counts this layer's PARAMETERS. A live buffer is counted too, so");
+            sb.AppendLine("        // inferring while one exists would solve the wrong equation and resolve to a wrong width.");
+            sb.AppendLine("        bool __noLiveBuffer = true;");
+            foreach (var buffer in bufferFields)
+            {
+                sb.AppendLine($"        if ({buffer.Field} is not null) __noLiveBuffer = false;");
+            }
+            sb.AppendLine("        if (__noLiveBuffer && Parameters.Length == 0)");
+        }
+        else
+        {
+            sb.AppendLine("        if (Parameters.Length == 0)");
+        }
         sb.AppendLine("        {");
 
         foreach (int axis in referencedAxes)
