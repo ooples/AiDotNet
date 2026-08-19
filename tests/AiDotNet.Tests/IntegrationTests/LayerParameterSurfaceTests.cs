@@ -93,9 +93,13 @@ public class LayerParameterSurfaceTests
             // convolutions, the transformer blocks. The declared TestInputShape is the missing half
             // of the same metadata the constructor arguments come from, so feeding it is what turns
             // those into real measurements.
-            bool warm = TryWarmUp(closed, layer);
+            bool warm = TryWarmUp(closed, layer, out string? warmFailure);
             if (warm) warmedUp++;
-            else notWarmedUp++;
+            else
+            {
+                notWarmedUp++;
+                log?.WriteLine($"NOT WARMED {name}: {warmFailure}");
+            }
 
             try
             {
@@ -192,19 +196,29 @@ public class LayerParameterSurfaceTests
     /// </remarks>
     private static object? TryConstruct(Type closed)
     {
+        // THE DECLARATION WINS over a defaults constructor. TestConstructorArgs and TestInputShape
+        // are one statement about one configuration, and preferring the defaults ctor built a
+        // DIFFERENT layer than the shape was written for: RRDBLayer and ResidualDenseBlock came up
+        // at their default 64 channels and then rejected the declared 4-channel input, and
+        // UNetDiscriminator came up with numBlocks=4 and rejected an 8x8 input that numBlocks=2
+        // accepts. All three read as "cannot be driven" when the real fault was building the wrong
+        // instance.
+        var declared = TestConstructorArgs(closed);
+        if (!string.IsNullOrWhiteSpace(declared))
+        {
+            var fromDeclaration = Instantiate(closed, declared!);
+            if (fromDeclaration is not null) return fromDeclaration;
+        }
+
         var ctor = closed.GetConstructors(BindingFlags.Public | BindingFlags.Instance)
             .Where(c => c.GetParameters().All(p => p.HasDefaultValue) || c.GetParameters().Length == 0)
             .OrderBy(c => c.GetParameters().Length)
             .FirstOrDefault();
-        if (ctor is not null)
-        {
-            var defaults = ctor.GetParameters()
-                .Select(p => p.DefaultValue == DBNull.Value ? null : p.DefaultValue).ToArray();
-            return ctor.Invoke(defaults);
-        }
+        if (ctor is null) return null;
 
-        var declared = TestConstructorArgs(closed);
-        return string.IsNullOrWhiteSpace(declared) ? null : Instantiate(closed, declared);
+        var defaults = ctor.GetParameters()
+            .Select(p => p.DefaultValue == DBNull.Value ? null : p.DefaultValue).ToArray();
+        return ctor.Invoke(defaults);
     }
 
     /// <summary>
@@ -217,22 +231,34 @@ public class LayerParameterSurfaceTests
     /// state it reached -- the alternative, skipping it, would shrink the denominator to the layers
     /// that happened to cooperate and call the result full coverage.
     /// </remarks>
-    private static bool TryWarmUp(Type closed, object layer)
+    private static bool TryWarmUp(Type closed, object layer, out string? failure)
     {
+        failure = null;
         var declared = closed.GetCustomAttributes(inherit: false)
             .OfType<AiDotNet.Attributes.LayerPropertyAttribute>()
             .FirstOrDefault()?.TestInputShape;
-        if (string.IsNullOrWhiteSpace(declared)) return false;
+        if (string.IsNullOrWhiteSpace(declared))
+        {
+            failure = "declares no TestInputShape";
+            return false;
+        }
 
         var dims = new List<int>();
         foreach (var token in declared!.Split(','))
         {
             if (!int.TryParse(token.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture,
                     out int dim) || dim <= 0)
+            {
+                failure = $"TestInputShape '{declared}' is not all positive integers";
                 return false;
+            }
             dims.Add(dim);
         }
-        if (dims.Count == 0) return false;
+        if (dims.Count == 0)
+        {
+            failure = "TestInputShape is empty";
+            return false;
+        }
 
         // Pick the TENSOR overload by its parameter type. LayerBase declares three one-argument
         // Forwards -- Tensor, params Tensor[], and IReadOnlyDictionary -- and taking whichever
@@ -244,21 +270,32 @@ public class LayerParameterSurfaceTests
                 && m.GetParameters()[0].ParameterType.IsGenericType
                 && m.GetParameters()[0].ParameterType.GetGenericTypeDefinition().Name
                     .StartsWith("Tensor", StringComparison.Ordinal));
-        if (forward is null) return false;
+        if (forward is null)
+        {
+            failure = "no single-tensor Forward overload";
+            return false;
+        }
 
         var tensorType = forward.GetParameters()[0].ParameterType;
 
         try
         {
             var input = Activator.CreateInstance(tensorType, new object[] { dims.ToArray() });
-            if (input is null) return false;
+            if (input is null)
+            {
+                failure = "could not build the input tensor";
+                return false;
+            }
             forward.Invoke(layer, new[] { input });
             return true;
         }
-        catch (Exception)
+        catch (Exception ex)
         {
             // A layer may need several inputs, a mask, or a shape this one declaration does not
-            // describe. It stays measured; it just stays deferred.
+            // describe. It stays measured; it just stays deferred. The REASON is recorded, because
+            // "could not be driven" is only actionable if it says what went wrong.
+            var root = ex.GetBaseException();
+            failure = $"{root.GetType().Name}: {root.Message}";
             return false;
         }
     }

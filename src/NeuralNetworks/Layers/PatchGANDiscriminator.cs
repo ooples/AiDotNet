@@ -73,6 +73,11 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [TensorLayout(TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
     Direction = TensorLayoutDirection.Output)]
 [AutoParameters]
+// See the note on ObliviousDecisionTreeLayer: without this the scaffold generator emits no test
+// for the layer and nothing reports the omission. Two layers over a 16x16 image keeps the
+// downsampling pyramid valid.
+[LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 3,
+    TestInputShape = "3, 16, 16", TestConstructorArgs = "2, 8")]
 public partial class PatchGANDiscriminator<T> : LayerBase<T>, IShapeContract
 {
     #region Constants

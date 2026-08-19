@@ -35,6 +35,11 @@ namespace AiDotNet.NeuralNetworks.Layers;
     Note = "Unbatched or higher-rank data must be reshaped to [batch, features] upstream.")]
 [TensorLayout(TensorAxis.Batch, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
 [AutoParameters]
+// Declared so this layer is GENERATED A TEST AT ALL. TestScaffoldGenerator skips any layer with
+// neither a parameterless constructor nor TestConstructorArgs, and the skip is a bare continue
+// with no diagnostic, so an undeclared layer simply vanishes from generated coverage.
+[LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 2,
+    TestInputShape = "1, 4", TestConstructorArgs = "4, 3, 2")]
 public partial class ObliviousDecisionTreeLayer<T> : LayerBase<T>, IShapeContract
 {
     /// <inheritdoc />
