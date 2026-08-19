@@ -33,7 +33,7 @@ public abstract class FinancialModelTestBase<T> : NeuralNetworkModelTestBase<T>
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var network = CreateNetwork();
-        var input = CreateRandomTensor(InputShape, rng);
+        var input = CreateRandomTensor(EffectiveInputShape, rng);
 
         var output = network.Predict(input);
         Assert.True(output.Length > 0, "Financial model produced empty output.");
@@ -59,8 +59,8 @@ public abstract class FinancialModelTestBase<T> : NeuralNetworkModelTestBase<T>
         using var _arena = TensorArena.Create();
         var network = CreateNetwork();
 
-        var bullish = CreateConstantTensor(InputShape, 0.8);  // simulating upward data
-        var bearish = CreateConstantTensor(InputShape, 0.2);  // simulating downward data
+        var bullish = CreateConstantTensor(EffectiveInputShape, 0.8);  // simulating upward data
+        var bearish = CreateConstantTensor(EffectiveInputShape, 0.2);  // simulating downward data
 
         var predBull = network.Predict(bullish);
         var predBear = network.Predict(bearish);
@@ -93,7 +93,7 @@ public abstract class FinancialModelTestBase<T> : NeuralNetworkModelTestBase<T>
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var network = CreateNetwork();
-        var input = CreateRandomTensor(InputShape, rng);
+        var input = CreateRandomTensor(EffectiveInputShape, rng);
 
         var output = network.Predict(input);
         for (int i = 0; i < output.Length; i++)
@@ -116,7 +116,7 @@ public abstract class FinancialModelTestBase<T> : NeuralNetworkModelTestBase<T>
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var network = CreateNetwork();
-        var zeroInput = CreateConstantTensor(InputShape, 0.0);
+        var zeroInput = CreateConstantTensor(EffectiveInputShape, 0.0);
 
         var output = network.Predict(zeroInput);
         Assert.True(output.Length > 0, "Financial model produced empty output for zero input.");

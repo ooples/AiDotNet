@@ -13344,12 +13344,17 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             sb.AppendLine("        using var _arena = AiDotNet.Tensors.Helpers.TensorArena.Create();");
             sb.AppendLine("        var rng = AiDotNet.Tests.ModelFamilyTests.Base.ModelTestHelpers.CreateSeededRandom();");
             sb.AppendLine("        using var network = CreateNetwork();");
-            sb.AppendLine("        var trainInput = CreateRandomTensor(InputShape, rng);");
+            // EffectiveInputShape, not InputShape. The fixture helpers resolve the model's value
+            // domain by matching the requested shape against EffectiveInputShape; handed the raw
+            // declared shape they find no match, fall back to Continuous, and fill an embedding's
+            // input with rng.NextDouble(). The target below already used the Effective variant --
+            // only the input side was missed.
+            sb.AppendLine("        var trainInput = CreateRandomTensor(EffectiveInputShape, rng);");
             sb.AppendLine("        var trainTarget = CreateRandomTargetTensor(EffectiveOutputShape, rng);");
             sb.AppendLine("        int iterations = ResolveConformanceTrainingIterations(network, TrainingIterations);");
             sb.AppendLine("        for (int i = 0; i < iterations; i++) network.Train(trainInput, trainTarget);");
-            sb.AppendLine("        var input1 = CreateConstantTensor(InputShape, 0.1);");
-            sb.AppendLine("        var input2 = CreateConstantTensor(InputShape, 0.9);");
+            sb.AppendLine("        var input1 = CreateConstantTensor(EffectiveInputShape, 0.1);");
+            sb.AppendLine("        var input2 = CreateConstantTensor(EffectiveInputShape, 0.9);");
             sb.AppendLine("        var output1 = network.Predict(input1);");
             sb.AppendLine("        var output2 = network.Predict(input2);");
             sb.AppendLine("        double sumSquared = 0;");
@@ -13514,15 +13519,20 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 sb.AppendLine("        using var _arena = AiDotNet.Tensors.Helpers.TensorArena.Create();");
                 sb.AppendLine("        var rng = AiDotNet.Tests.ModelFamilyTests.Base.ModelTestHelpers.CreateSeededRandom();");
                 sb.AppendLine("        using var network = CreateNetwork();");
-                sb.AppendLine("        var trainInput = CreateRandomTensor(InputShape, rng);");
+                // EffectiveInputShape, not InputShape -- see the sibling emission above. The training
+                // input here is what actually threw: CreateRandomTensor could not match the raw
+                // declared shape against EffectiveInputShape, fell back to Continuous, and handed the
+                // embedding rng.NextDouble(). The hand-built token tensors below are integral and so
+                // survived the value check, but they must span the same shape the model accepts.
+                sb.AppendLine("        var trainInput = CreateRandomTensor(EffectiveInputShape, rng);");
                 sb.AppendLine("        var trainTarget = CreateRandomTargetTensor(EffectiveOutputShape, rng);");
                 sb.AppendLine("        int iterations = ResolveConformanceTrainingIterations(network, TrainingIterations);");
                 sb.AppendLine("        for (int i = 0; i < iterations; i++) network.Train(trainInput, trainTarget);");
                 sb.AppendLine("        // Build two DIFFERENT integer-token sequences so EmbeddingLayer's");
                 sb.AppendLine("        // int-truncation produces distinct lookups (constant float inputs all");
                 sb.AppendLine("        // collapse to token 0 under (int) truncation).");
-                sb.AppendLine("        var input1 = new AiDotNet.Tensors.LinearAlgebra.Tensor<double>(InputShape);");
-                sb.AppendLine("        var input2 = new AiDotNet.Tensors.LinearAlgebra.Tensor<double>(InputShape);");
+                sb.AppendLine("        var input1 = new AiDotNet.Tensors.LinearAlgebra.Tensor<double>(EffectiveInputShape);");
+                sb.AppendLine("        var input2 = new AiDotNet.Tensors.LinearAlgebra.Tensor<double>(EffectiveInputShape);");
                 sb.AppendLine($"        for (int i = 0; i < input1.Length; i++) input1[i] = {elemCast}(i % 50);");
                 sb.AppendLine($"        for (int i = 0; i < input2.Length; i++) input2[i] = {elemCast}((i + 25) % 50);");
                 sb.AppendLine("        var output1 = network.Predict(input1);");
