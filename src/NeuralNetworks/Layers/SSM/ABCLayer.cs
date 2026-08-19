@@ -97,6 +97,7 @@ public partial class ABCLayer<T> : LayerBase<T>, IShapeContract
     private Tensor<T> _valueWeights;
 
     // Slot key embeddings: [numHeads, numSlots, headDim]
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
     private Tensor<T> _slotKeys;
 
     // Forget gate projection: [modelDim, numHeads]
@@ -567,6 +568,12 @@ public partial class ABCLayer<T> : LayerBase<T>, IShapeContract
         RegisterTrainableParameter(_queryWeights, PersistentTensorRole.Weights);
         RegisterTrainableParameter(_keyWeights, PersistentTensorRole.Weights);
         RegisterTrainableParameter(_valueWeights, PersistentTensorRole.Weights);
+        // Register trainable parameters for tape-based autodiff. These belong here with the rest:
+        // UpdateParameters above applies gradients to every one of them, so they are trained on the
+        // legacy path, but leaving them unregistered made them invisible to the tape path -- which
+        // trains exclusively from registered parameters -- and to GetParameters/SetParameters, and
+        // therefore to serialization.
+        RegisterTrainableParameter(_slotKeys, PersistentTensorRole.Weights);
         RegisterTrainableParameter(_forgetGateWeights, PersistentTensorRole.Weights);
         RegisterTrainableParameter(_forgetGateBias, PersistentTensorRole.Biases);
         RegisterTrainableParameter(_outputGateWeights, PersistentTensorRole.Weights);
