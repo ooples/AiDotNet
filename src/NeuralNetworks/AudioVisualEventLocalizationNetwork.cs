@@ -72,27 +72,8 @@ public partial class AudioVisualEventLocalizationNetwork<T> : MultimodalModelLay
     #region Constants
 
     private const int DEFAULT_EMBEDDING_DIM = 512;
-    private const int SPECTROGRAM_BINS = 128;
     private const double DEFAULT_TEMPORAL_RESOLUTION = 0.1; // 100ms resolution
     private const int DEFAULT_NUM_CATEGORIES = 100;
-
-    /// <summary>
-    /// FFT window length used to turn the waveform into a spectrogram.
-    /// </summary>
-    /// <remarks>
-    /// 512 samples gives 257 frequency bins, comfortably more than the <see cref="SPECTROGRAM_BINS"/>
-    /// mel bands the filterbank collapses them into, so no band ends up empty.
-    /// </remarks>
-    private const int SPECTROGRAM_FFT_LENGTH = 512;
-
-    /// <summary>
-    /// Hop between successive spectrogram frames, in samples.
-    /// </summary>
-    /// <remarks>
-    /// A quarter of the window, the usual choice for a Hann window: successive frames overlap by
-    /// 75%, so no part of the signal falls in a window taper and gets under-counted.
-    /// </remarks>
-    private const int SPECTROGRAM_HOP_LENGTH = 128;
 
     /// <summary>
     /// Number of patches each video frame is split into before the visual encoder sees it.
@@ -124,14 +105,12 @@ public partial class AudioVisualEventLocalizationNetwork<T> : MultimodalModelLay
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private readonly ILossFunction<T> _lossFunction;
 
-    /// <summary>
-    /// Turns raw waveforms into the [frames, bands] representation the audio encoder consumes.
-    /// </summary>
-    /// <remarks>
-    /// Built once and reused: it precomputes an FFT window and a mel filterbank, neither of which
-    /// depends on the signal, so rebuilding it per call would repeat that work on every prediction.
-    /// </remarks>
-    private readonly MelSpectrogram<T> _melSpectrogram;
+    // Audio front-end. The mel transform holds no trainable parameters (its filterbank is fixed),
+    // so it is NOT part of Layers; the VGGish embedding IS trainable and is registered there.
+    private readonly AiDotNet.Diffusion.Audio.MelSpectrogram<T> _audioFrontEnd;
+    private readonly int _audioEmbeddingFullyConnectedWidth;
+    private readonly int _audioEmbeddingSize;
+    private VGGishAudioEmbedding<T> _audioEmbedding;
 
     // Audio encoder
     private DenseLayer<T> _audioInputProjection;
@@ -194,7 +173,9 @@ public partial class AudioVisualEventLocalizationNetwork<T> : MultimodalModelLay
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         int? seed = null,
-        AudioVisualEventLocalizationOptions? options = null)
+        AudioVisualEventLocalizationOptions? options = null,
+        int audioEmbeddingFullyConnectedWidth = VGGishAudioEmbedding<T>.PaperFullyConnectedWidth,
+        int audioEmbeddingSize = VGGishAudioEmbedding<T>.PaperEmbeddingSize)
         : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
     {
         _options = options ?? new AudioVisualEventLocalizationOptions();
@@ -204,6 +185,11 @@ public partial class AudioVisualEventLocalizationNetwork<T> : MultimodalModelLay
         _embeddingDimension = embeddingDimension;
         _temporalResolution = temporalResolution;
         _numEncoderLayers = numEncoderLayers;
+        // Published VGGish widths by default. Exposed because the published network is ~67M
+        // parameters, which is right for fidelity and wrong for a fixture; a caller can shrink it
+        // without a second implementation existing.
+        _audioEmbeddingFullyConnectedWidth = audioEmbeddingFullyConnectedWidth;
+        _audioEmbeddingSize = audioEmbeddingSize;
         _random = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomHelper.CreateSeededRandom(42);
         _lossFunction = lossFunction ?? new CrossEntropyWithLogitsLoss<T>();
         _optimizer = optimizer ?? new Optimizers.AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
@@ -211,10 +197,19 @@ public partial class AudioVisualEventLocalizationNetwork<T> : MultimodalModelLay
         // Default event categories
         _supportedCategories = (eventCategories?.ToList() ?? GetDefaultEventCategories()).AsReadOnly();
 
-        _melSpectrogram = new MelSpectrogram<T>(
-            nMels: SPECTROGRAM_BINS,
-            nFft: SPECTROGRAM_FFT_LENGTH,
-            hopLength: SPECTROGRAM_HOP_LENGTH);
+        // Real log-mel at the geometry VGGish was defined against. Previously this model computed
+        // its own "spectrogram" -- the waveform chopped into 128 chunks with each chunk's RMS energy
+        // -- which had no FFT, no mel filterbank, no log, and, fatally, no time axis: it returned a
+        // single rank-1 vector, so the attention encoder below had no sequence to attend over and
+        // MultiHeadAttentionLayer rejected it outright.
+        _audioFrontEnd = new AiDotNet.Diffusion.Audio.MelSpectrogram<T>(
+            sampleRate: VGGishMelSpectrogramDefaults.SampleRate,
+            nMels: VGGishMelSpectrogramDefaults.MelBins,
+            nFft: VGGishMelSpectrogramDefaults.WindowLengthSamples,
+            hopLength: VGGishMelSpectrogramDefaults.HopLengthSamples,
+            fMin: VGGishMelSpectrogramDefaults.MinFrequencyHz,
+            fMax: VGGishMelSpectrogramDefaults.MaxFrequencyHz,
+            logOffset: VGGishMelSpectrogramDefaults.LogOffset);
 
         InitializeLayers();
     }
@@ -225,6 +220,7 @@ public partial class AudioVisualEventLocalizationNetwork<T> : MultimodalModelLay
 
     /// <inheritdoc/>
     [System.Diagnostics.CodeAnalysis.MemberNotNull(
+        nameof(_audioEmbedding),
         nameof(_audioInputProjection), nameof(_audioEncoderLayers), nameof(_audioOutputProjection),
         nameof(_visualInputProjection), nameof(_visualEncoderLayers), nameof(_visualOutputProjection),
         nameof(_temporalAttentionLayers), nameof(_temporalProposalHead),
@@ -245,7 +241,9 @@ public partial class AudioVisualEventLocalizationNetwork<T> : MultimodalModelLay
                 inputSize: Architecture.InputSize,
                 embeddingDimension: _embeddingDimension,
                 numEncoderLayers: _numEncoderLayers,
-                numCategories: _supportedCategories.Count));
+                numCategories: _supportedCategories.Count,
+                audioEmbeddingFullyConnectedWidth: _audioEmbeddingFullyConnectedWidth,
+                audioEmbeddingSize: _audioEmbeddingSize));
         }
 
         // Distribute layers to internal fields
@@ -281,6 +279,12 @@ public partial class AudioVisualEventLocalizationNetwork<T> : MultimodalModelLay
         _temporalBoundaryHead = (DenseLayer<T>)Layers[idx++];
         _spatialLocalizationHead = (DenseLayer<T>)Layers[idx++];
         _anomalyDetectionHead = (DenseLayer<T>)Layers[idx++];
+
+        // Appended LAST on purpose: every index above keeps the position it had before the audio
+        // front-end existed, so this addition cannot shift the existing [idx++] contract.
+        // This claim reads idx without advancing it, since nothing below consumes another layer.
+        // Anything appended after this one must restore the increment here first.
+        _audioEmbedding = (VGGishAudioEmbedding<T>)Layers[idx];
     }
 
     private static List<string> GetDefaultEventCategories()
@@ -302,13 +306,67 @@ public partial class AudioVisualEventLocalizationNetwork<T> : MultimodalModelLay
 
     #region Audio/Visual Encoding
 
+    /// <summary>
+    /// Runs the audio branch and returns the pooled embedding as a TENSOR, keeping every step on the
+    /// autodiff tape.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This exists because <see cref="EncodeAudio"/> returns <c>Vector&lt;T&gt;</c>, and a
+    /// Tensor -> Vector -> Tensor round-trip severs the tape: the conversion copies values out of the
+    /// graph, so no gradient reaches the audio encoder, the VGGish embedding, or anything before
+    /// them. Training then reports "no parameters changed" while the forward pass keeps producing
+    /// plausible numbers -- a silent failure, which is why the training path uses this method and
+    /// <see cref="EncodeAudio"/> is left for the inference callers that genuinely want a vector.
+    /// </para>
+    /// </remarks>
+    private Tensor<T> EncodeAudioTensor(Tensor<T> audioWaveform)
+    {
+        var segmentEmbeddings = ComputeAudioSegmentEmbeddings(audioWaveform);
+        var projected = _audioInputProjection.Forward(segmentEmbeddings);
+
+        var encoded = projected;
+        foreach (var layer in _audioEncoderLayers)
+        {
+            encoded = layer.Forward(encoded);
+        }
+
+        var output = _audioOutputProjection.Forward(encoded);
+        return MeanOverSegments(output);
+    }
+
+    /// <summary>
+    /// Averages a <c>[segments, features]</c> sequence over its segment axis using traced ops.
+    /// </summary>
+    /// <remarks>
+    /// Slice-add-scale rather than a manual loop, so the mean stays part of the graph. The previous
+    /// pooling flattened the tensor and averaged arbitrary contiguous CHUNKS of it, which is not a
+    /// mean over time and also left the tape behind.
+    /// </remarks>
+    private Tensor<T> MeanOverSegments(Tensor<T> sequence)
+    {
+        if (sequence.Shape.Length < 2) return sequence;
+
+        int segments = sequence.Shape[0];
+        if (segments <= 1) return Engine.TensorSliceAxis(sequence, 0, 0);
+
+        var accumulated = Engine.TensorSliceAxis(sequence, 0, 0);
+        for (int i = 1; i < segments; i++)
+        {
+            accumulated = Engine.TensorAdd(accumulated, Engine.TensorSliceAxis(sequence, 0, i));
+        }
+
+        return Engine.TensorMultiplyScalar(accumulated, _numOps.FromDouble(1.0 / segments));
+    }
+
     private Vector<T> EncodeAudio(Tensor<T> audioWaveform)
     {
-        // Convert waveform to spectrogram representation
-        var spectrogram = ComputeSpectrogram(audioWaveform);
+        // [segments, embeddingSize] -- a real sequence, which is what the attention stack below
+        // requires and what the previous rank-1 energy vector could never provide.
+        var segmentEmbeddings = ComputeAudioSegmentEmbeddings(audioWaveform);
 
         // Project to embedding dimension
-        var projected = _audioInputProjection.Forward(spectrogram);
+        var projected = _audioInputProjection.Forward(segmentEmbeddings);
 
         // Apply transformer encoder layers
         var encoded = projected;
@@ -357,38 +415,73 @@ public partial class AudioVisualEventLocalizationNetwork<T> : MultimodalModelLay
     }
 
     /// <summary>
-    /// Turns a waveform into a mel spectrogram of shape [frames, <see cref="SPECTROGRAM_BINS"/>].
+    /// Turns a waveform into the sequence of per-segment embeddings the audio encoder consumes.
     /// </summary>
-    /// <param name="waveform">The raw audio samples.</param>
-    /// <returns>One row of mel-band energies per short-time frame.</returns>
+    /// <param name="waveform">Raw audio samples.</param>
+    /// <returns>A <c>[segments, embeddingSize]</c> tensor.</returns>
     /// <remarks>
     /// <para>
-    /// A spectrogram has two axes: time and frequency. The previous implementation had neither. It
-    /// cut the waveform into <see cref="SPECTROGRAM_BINS"/> contiguous chunks of samples and took the
-    /// root-mean-square of each, which is an energy envelope over TIME with no frequency content at
-    /// all, returned as a rank-1 tensor. That is why the audio encoder's attention stack rejected it:
-    /// <see cref="MultiHeadAttentionLayer{T}"/> needs a sequence to attend over and there was no
-    /// sequence axis.
+    /// The published pipeline (Tian et al. 2018) takes its audio features from VGGish: a stabilised
+    /// log-mel spectrogram at 16 kHz, 25 ms window, 10 ms hop, 64 mel bins over 125-7500 Hz, cut
+    /// into 96-frame (0.96 s) patches, each patch reduced to one embedding. That yields a genuine
+    /// time axis, which is the whole point -- an event localiser has to say WHEN something happened,
+    /// and attention cannot localise across a sequence of length one.
     /// </para>
     /// <para>
-    /// This uses the library's own <see cref="MelSpectrogram{T}"/> — short-time Fourier transform with
-    /// a Hann window, then a mel filterbank — which produces the [frames, bands] representation the
-    /// encoder was designed for. The band count is fixed at <see cref="SPECTROGRAM_BINS"/> whatever the
-    /// waveform length, so the lazily-sized audio input projection locks onto one width and keeps it;
-    /// only the frame count varies with duration, and that is the axis attention is meant to consume.
+    /// Short clips are edge-padded to fill a patch rather than rejected. Repeating the final frame
+    /// keeps the spectral content of the clip's end, where zero-padding would inject a silence edge
+    /// that the convolution reads as a real onset.
     /// </para>
     /// </remarks>
-    private Tensor<T> ComputeSpectrogram(Tensor<T> waveform)
+    private Tensor<T> ComputeAudioSegmentEmbeddings(Tensor<T> waveform)
     {
-        var samples = waveform.ToVector();
-        var signal = new Tensor<T>(new[] { samples.Length });
-
-        for (int i = 0; i < samples.Length; i++)
+        var mel = _audioFrontEnd.Forward(waveform);
+        if (mel.Shape.Length < 2)
         {
-            signal[i] = samples[i];
+            throw new InvalidOperationException(
+                $"The mel front-end returned rank {mel.Shape.Length}; a [frames, mels] tensor is required.");
         }
 
-        return _melSpectrogram.Forward(signal);
+        int frames = mel.Shape[mel.Shape.Length - 2];
+        int mels = mel.Shape[mel.Shape.Length - 1];
+        int patchFrames = VGGishAudioEmbedding<T>.PaperPatchFrames;
+        int segments = Math.Max(1, frames / patchFrames);
+
+        var melSpan = mel.Data.Span;
+        var segmentEmbeddings = new Tensor<T>[segments];
+
+        for (int segment = 0; segment < segments; segment++)
+        {
+            // The PATCH may be assembled by copy: it is cut from the mel spectrogram, and nothing
+            // upstream of the mel transform carries trainable parameters (its filterbank is fixed),
+            // so there is no gradient to lose here.
+            var patch = new Tensor<T>(new[] { patchFrames, mels });
+            var patchSpan = patch.Data.Span;
+            for (int f = 0; f < patchFrames; f++)
+            {
+                // Clamp rather than wrap: past the end of a short clip we repeat the last frame.
+                int sourceFrame = Math.Min(frames - 1, (segment * patchFrames) + f);
+                for (int m = 0; m < mels; m++)
+                {
+                    patchSpan[(f * mels) + m] = melSpan[(sourceFrame * mels) + m];
+                }
+            }
+
+            // The OUTPUT may not. Writing the embedding's values into a fresh tensor element by
+            // element severs the autodiff tape: the copy is not a traced operation, so no gradient
+            // reaches VGGish or anything before it and the whole audio branch trains to a standstill
+            // -- silently, since the forward pass still produces plausible numbers. Keep each
+            // segment's embedding as the tensor the layer returned and join them with a traced
+            // concatenation instead.
+            var embedded = _audioEmbedding.Forward(patch);
+            segmentEmbeddings[segment] = embedded.Shape.Length == 1
+                ? embedded.Reshape(new[] { 1, embedded.Shape[0] })
+                : embedded;
+        }
+
+        return segments == 1
+            ? segmentEmbeddings[0]
+            : Engine.TensorConcatenate(segmentEmbeddings, axis: 0);
     }
 
     private Vector<T> FlattenFrame(Tensor<T> frame, int targetSize)
@@ -1443,6 +1536,25 @@ public partial class AudioVisualEventLocalizationNetwork<T> : MultimodalModelLay
     #region NeuralNetworkBase Implementation
 
     /// <inheritdoc/>
+    /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// Mirrors <see cref="PredictCore"/> instead of inheriting the base's sequential walk over
+    /// <c>Layers</c>. That walk is not this model's topology: <c>Layers</c> holds two independent
+    /// encoder stacks (audio and visual), the temporal and cross-modal attention blocks and four
+    /// task heads, and chaining them end to end feeds each stage an activation the next was never
+    /// built to receive. It also bypasses the audio front-end entirely, handing the raw rank-1
+    /// waveform straight to the first layer.
+    /// </para>
+    /// <para>
+    /// Training therefore runs the same audio path inference does -- log-mel, VGGish per segment,
+    /// then the audio encoder -- so the gradients the optimizer sees correspond to the computation
+    /// the model actually performs. A single training tensor is the audio waveform, which is the
+    /// interpretation <see cref="PredictCore"/> already fixes for this model.
+    /// </para>
+    /// </remarks>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input) => EncodeAudioTensor(input);
+
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         // GPU-resident optimization: use TryForwardGpuOptimized for speedup
@@ -1495,6 +1607,12 @@ public partial class AudioVisualEventLocalizationNetwork<T> : MultimodalModelLay
         writer.Write(_embeddingDimension);
         writer.Write(_temporalResolution);
         writer.Write(_numEncoderLayers);
+        // The audio-embedding widths are part of the ARCHITECTURE, so they have to persist. Without
+        // them a restored model rebuilds VGGish at its paper defaults whatever the source used, and
+        // the parameter vector is then applied to a differently shaped network -- the restored model
+        // predicts differently from the one that was saved.
+        writer.Write(_audioEmbeddingFullyConnectedWidth);
+        writer.Write(_audioEmbeddingSize);
         writer.Write(_supportedCategories.Count);
         foreach (var category in _supportedCategories)
         {
@@ -1509,6 +1627,8 @@ public partial class AudioVisualEventLocalizationNetwork<T> : MultimodalModelLay
         int embDim = reader.ReadInt32();
         double tempRes = reader.ReadDouble();
         int numLayers = reader.ReadInt32();
+        int audioEmbedWidth = reader.ReadInt32();
+        int audioEmbedSize = reader.ReadInt32();
         int categoryCount = reader.ReadInt32();
         var categories = new List<string>();
         for (int i = 0; i < categoryCount; i++)
@@ -1517,6 +1637,15 @@ public partial class AudioVisualEventLocalizationNetwork<T> : MultimodalModelLay
         }
 
         // Validate that loaded values match current instance configuration
+        if (audioEmbedWidth != _audioEmbeddingFullyConnectedWidth || audioEmbedSize != _audioEmbeddingSize)
+        {
+            throw new InvalidOperationException(
+                $"Loaded audio-embedding shape ({audioEmbedWidth}x{audioEmbedSize}) doesn't match current " +
+                $"({_audioEmbeddingFullyConnectedWidth}x{_audioEmbeddingSize}). Restoring parameters into a " +
+                "differently shaped VGGish embedding would silently produce a model that predicts " +
+                "differently from the one that was saved.");
+        }
+
         if (embDim != _embeddingDimension)
         {
             throw new InvalidOperationException(
@@ -1545,12 +1674,18 @@ public partial class AudioVisualEventLocalizationNetwork<T> : MultimodalModelLay
     /// <inheritdoc/>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
+        // The audio-embedding widths MUST ride along. Omitting them rebuilds VGGish at its paper
+        // defaults (FC 4096, embedding 128) while the source may hold a smaller configured variant,
+        // so the clone is a structurally different model: its predictions diverge from the original
+        // and, at paper scale, materialising it can exhaust the test host.
         return new AudioVisualEventLocalizationNetwork<T>(
             Architecture,
             _embeddingDimension,
             _temporalResolution,
             _numEncoderLayers,
-            _supportedCategories);
+            _supportedCategories,
+            audioEmbeddingFullyConnectedWidth: _audioEmbeddingFullyConnectedWidth,
+            audioEmbeddingSize: _audioEmbeddingSize);
     }
 
     /// <inheritdoc/>
@@ -1563,7 +1698,9 @@ public partial class AudioVisualEventLocalizationNetwork<T> : MultimodalModelLay
             _numEncoderLayers,
             _supportedCategories,
             _optimizer,
-            _lossFunction);
+            _lossFunction,
+            audioEmbeddingFullyConnectedWidth: _audioEmbeddingFullyConnectedWidth,
+            audioEmbeddingSize: _audioEmbeddingSize);
 
         // Copy trained weights PER LAYER from the (materialized) source rather than via the
         // model-level SetParameters(GetParameters()). The freshly-constructed copy's layers are lazy

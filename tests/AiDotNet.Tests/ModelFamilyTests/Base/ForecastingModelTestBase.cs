@@ -20,7 +20,7 @@ public abstract class ForecastingModelTestBase<T> : FinancialModelTestBase<T>
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var network = CreateNetwork();
-        var input = CreateRandomTensor(InputShape, rng);
+        var input = CreateRandomTensor(EffectiveInputShape, rng);
         var output = network.Predict(input);
         Assert.True(output.Length > 0, "Forecasting model produced empty forecast.");
     }
@@ -31,8 +31,8 @@ public abstract class ForecastingModelTestBase<T> : FinancialModelTestBase<T>
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var network = CreateNetwork();
-        var history1 = CreateConstantTensor(InputShape, 0.1);
-        var history2 = CreateConstantTensor(InputShape, 0.9);
+        var history1 = CreateConstantTensor(EffectiveInputShape, 0.1);
+        var history2 = CreateConstantTensor(EffectiveInputShape, 0.9);
 
         var forecast1 = network.Predict(history1);
         var forecast2 = network.Predict(history2);

@@ -196,10 +196,34 @@ public abstract class AudioNeuralNetworkBase<T> : NeuralNetworkBase<T>, IShapeCo
         }
     }
 
+    private MelSpectrogram<T>? _melSpec;
+
     /// <summary>
-    /// Gets the mel spectrogram extractor for preprocessing.
+    /// Gets the mel spectrogram extractor for preprocessing. Never null.
     /// </summary>
-    protected MelSpectrogram<T>? MelSpec { get; set; }
+    /// <remarks>
+    /// <para>
+    /// Defaults to a transform built for <see cref="SampleRate"/> the first time it is read, so a
+    /// model that never assigns one still gets a real front-end instead of nothing.
+    /// </para>
+    /// <para>
+    /// <b>Why this is not nullable.</b> It used to be, and the two behaviours that grew around that
+    /// were both wrong. Most models call <c>MelSpec.Forward(rawAudio)</c> bare, which relies on some
+    /// constructor having assigned it and gives a null dereference when none did. A few instead
+    /// wrote <c>MelSpec is not null ? MelSpec.Forward(raw) : raw</c> — silently forwarding the RAW
+    /// WAVEFORM, a rank-1 tensor with no time or frequency axis, into a transformer encoder. That
+    /// second form is the more damaging: it does not fail, it just feeds meaningless features
+    /// forward until an attention layer rejects the rank far from the cause.
+    /// </para>
+    /// </remarks>
+    protected MelSpectrogram<T> MelSpec
+    {
+        get => _melSpec ??= new MelSpectrogram<T>(sampleRate: SampleRate);
+        set => _melSpec = value ?? throw new ArgumentNullException(
+            nameof(value),
+            "MelSpec cannot be null. Audio models require a front-end; assign a configured " +
+            "MelSpectrogram or leave it unset to get the SampleRate default.");
+    }
 
     /// <summary>
     /// Initializes a new instance of the AudioNeuralNetworkBase class with the specified architecture.
@@ -239,7 +263,46 @@ public abstract class AudioNeuralNetworkBase<T> : NeuralNetworkBase<T>, IShapeCo
     /// This method converts raw audio into the format the model expects.
     /// </para>
     /// </remarks>
-    protected abstract Tensor<T> PreprocessAudio(Tensor<T> rawAudio);
+    /// <remarks>
+    /// <para>
+    /// The default is the log-mel transform from <see cref="MelSpec"/>, which is what the large
+    /// majority of audio models want. It was abstract, and 92 models each restated exactly this one
+    /// line; those overrides are gone. Models with genuinely different preprocessing still override.
+    /// </para>
+    /// <para>
+    /// <b>The rank check is the point.</b> Audio features must carry a time axis. A rank-1 result is
+    /// a waveform or a single pooled frame, and feeding either to an attention stack gives a
+    /// sequence of length one — attention over one token is a no-op, so a model built to localise
+    /// events in time silently stops being able to. That used to surface far from here, as
+    /// <c>MultiHeadAttentionLayer requires rank&gt;=2 input; got rank 1</c> deep inside an encoder.
+    /// Failing at the boundary names the model instead.
+    /// </para>
+    /// </remarks>
+    protected virtual Tensor<T> PreprocessAudio(Tensor<T> rawAudio)
+    {
+        var features = MelSpec.Forward(rawAudio);
+        RequireTimeAxis(features);
+        return features;
+    }
+
+    /// <summary>
+    /// Throws when preprocessed audio features have no time axis.
+    /// </summary>
+    /// <param name="features">The features returned by <see cref="PreprocessAudio"/>.</param>
+    /// <exception cref="InvalidOperationException">The features are rank-1 or lower.</exception>
+    /// <remarks>
+    /// Available to overrides so a model with custom preprocessing can assert the same contract.
+    /// </remarks>
+    protected void RequireTimeAxis(Tensor<T> features)
+    {
+        if (features is null) throw new ArgumentNullException(nameof(features));
+        if (features.Shape.Length >= 2) return;
+
+        throw new InvalidOperationException(
+            $"{GetType().Name}.PreprocessAudio returned rank {features.Shape.Length}; audio features " +
+            "must have at least a [frames, features] shape. A rank-1 result is a raw waveform or a " +
+            "single pooled frame, which gives any downstream attention a sequence of length one.");
+    }
 
     /// <summary>
     /// Postprocesses model output into the final result format.

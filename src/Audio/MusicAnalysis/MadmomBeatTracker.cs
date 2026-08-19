@@ -74,6 +74,16 @@ public class MadmomBeatTracker<T> : AudioNeuralNetworkBase<T>, IBeatTracker<T>
         : base(architecture)
     {
         _options = options ?? new MadmomBeatTrackerOptions();
+
+        // Onset detection needs a SPECTRAL front-end. SampleRate, FftSize and HopLength were all
+        // declared in the options and then never used for preprocessing: PreprocessAudio returned the
+        // raw waveform, so the onset network read sample amplitudes instead of the time-frequency
+        // picture that makes an onset visible. Nothing crashed, because the dense stack resolves its
+        // input width lazily -- it simply learned from the wrong representation.
+        MelSpec = new AiDotNet.Diffusion.Audio.MelSpectrogram<T>(
+            sampleRate: _options.SampleRate,
+            nFft: _options.FftSize,
+            hopLength: _options.HopLength);
         _useNativeMode = false;
         base.SampleRate = _options.SampleRate;
         _options.ModelPath = modelPath;
@@ -89,6 +99,16 @@ public class MadmomBeatTracker<T> : AudioNeuralNetworkBase<T>, IBeatTracker<T>
         : base(architecture)
     {
         _options = options ?? new MadmomBeatTrackerOptions();
+
+        // Onset detection needs a SPECTRAL front-end. SampleRate, FftSize and HopLength were all
+        // declared in the options and then never used for preprocessing: PreprocessAudio returned the
+        // raw waveform, so the onset network read sample amplitudes instead of the time-frequency
+        // picture that makes an onset visible. Nothing crashed, because the dense stack resolves its
+        // input width lazily -- it simply learned from the wrong representation.
+        MelSpec = new AiDotNet.Diffusion.Audio.MelSpectrogram<T>(
+            sampleRate: _options.SampleRate,
+            nFft: _options.FftSize,
+            hopLength: _options.HopLength);
         _useNativeMode = true;
         // Honor the model's configured LearningRate and clip gradients. The bare AdamWOptimizer(this) dropped
         // both: it ran at Adam's own 1e-3 default, which blew the beat-activation regressor into a high-loss
@@ -245,7 +265,6 @@ public class MadmomBeatTracker<T> : AudioNeuralNetworkBase<T>, IBeatTracker<T>
     /// write on every parameter surface, so the guard is stated once here instead of being
     /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
     protected override bool SupportsParameterMutation => _useNativeMode;
-    protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio) => rawAudio;
     protected override Tensor<T> PostprocessOutput(Tensor<T> o) => o;
 
     public override ModelMetadata<T> GetModelMetadata()
