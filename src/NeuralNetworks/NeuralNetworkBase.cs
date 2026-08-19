@@ -11762,6 +11762,28 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     internal void ResetBaseTrainOptimizerState()
     {
         _baseTrainOptimizer?.Reset();
+
+        // The fused compiled path must be invalidated too, and that is not an optimisation detail.
+        // Adam/AdamW/SGD moment buffers live INSIDE the compiled plan (wired through
+        // ICompiledTrainingPlan.ConfigureOptimizer), so resetting _baseTrainOptimizer alone clears the
+        // OUTER optimizer while the plan keeps every moment it accumulated. A caller that resets
+        // between runs then silently continues the previous trajectory -- exactly the divergence from
+        // eager semantics that the strict single-plan design exists to prevent.
+        //
+        // Measured on AdversarialImageEvaluator (three fixed features into one Dense(3 -> 1) head, 4
+        // parameters, BinaryCrossEntropy). Training on a target, then on a target MIRRORED about the
+        // prediction so the residual is exactly negated, must give an anti-parallel update:
+        //
+        //   eager   first-step delta  -1.000047e-3  ->  +1.000047e-3   (cosine -1, correct)
+        //   fused   first-step delta  -1.000047e-3  ->  -3.987948e-4   (cosine +1, wrong)
+        //
+        // The fused loss was correct for BOTH targets (0.363874 against 0.762947), so the target did
+        // reach the forward; the moments left over from the first target simply outweighed the second's
+        // gradient and held the update's sign. Six unrelated families reported that same cosine of
+        // exactly 1.000000 in CI for this reason.
+        Training.CompiledTapeTrainingStep<T>.Invalidate();
+        _fusedTrainingCommitted = false;
+        _fusedPersistenceVerified = false;
     }
 
     /// <summary>
