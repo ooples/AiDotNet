@@ -3,6 +3,7 @@ using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
+using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.NeuralNetworks.Options;
 
 namespace AiDotNet.NeuralNetworks;
@@ -38,6 +39,7 @@ namespace AiDotNet.NeuralNetworks;
 public class RecurrentGemmaLanguageModel<T> : TokenLanguageModelLayoutBase<T>
 {
     private readonly RecurrentGemmaOptions _options;
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private readonly int _vocabSize;
     private readonly int _modelDimension;
     private readonly int _numLayers;
@@ -67,7 +69,8 @@ public class RecurrentGemmaLanguageModel<T> : TokenLanguageModelLayoutBase<T>
         int numLayers = 4,
         int maxSeqLength = 512,
         ILossFunction<T>? lossFunction = null,
-        RecurrentGemmaOptions? options = null)
+        RecurrentGemmaOptions? options = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
         : base(architecture,
             // The recurrent Gemma LM head emits raw logits. Use the paper-faithful
             // fused log-softmax/NLL objective rather than categorical CE, which expects
@@ -80,6 +83,7 @@ public class RecurrentGemmaLanguageModel<T> : TokenLanguageModelLayoutBase<T>
         _modelDimension = modelDimension;
         _numLayers = numLayers;
         _maxSeqLength = maxSeqLength;
+        _optimizer = optimizer ?? CreateDefaultOptimizer();
         InitializeLayers();
     }
 
@@ -98,11 +102,73 @@ public class RecurrentGemmaLanguageModel<T> : TokenLanguageModelLayoutBase<T>
             Layers.AddRange(LayerHelper<T>.CreateRecurrentGemmaLayers(
                 _vocabSize, _modelDimension, _numLayers, _maxSeqLength));
         }
+
+        // RecurrentGemma, Section 2: "multiply the input embeddings by a constant equal to the square
+        // root of model width." Set on the embedding only -- the paper states the constant is not
+        // applied to the output, so the LM head is left alone. EmbeddingLayer already implements the
+        // scaling (Vaswani et al. 2017 Section 3.4); it just defaults to off.
+        if (_options.ScaleEmbeddingsBySqrtWidth)
+        {
+            foreach (var layer in Layers)
+            {
+                if (layer is EmbeddingLayer<T> embedding)
+                {
+                    embedding.ScaleBySqrtDimension = true;
+                    break;
+                }
+            }
+        }
     }
 
     #endregion
 
     #region NeuralNetworkBase Overrides
+
+    /// <summary>
+    /// Trains through the eager tape rather than the fused compiled step, as Griffin and Hawk do.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The three models build the SAME RG-LRU stack, and both siblings already opt out here. This one
+    /// did not, so it inherited the base default of <c>true</c> and was the only member of the family
+    /// training through the fused path.
+    /// </para>
+    /// <para>
+    /// That path is what produced the non-finite parameters. Measured on this model at its test scale
+    /// (vocab 4096, width 256, four layers): the forward is finite with logits in [-1.41, 1.33], the
+    /// loss is finite at 376.27, and <c>ComputeGradients</c> — which runs the eager tape — returns
+    /// 0 of 3,417,600 entries non-finite with a largest magnitude of 0.12. A single <c>Train</c> call
+    /// through the fused step on the identical model returns 3,417,600 of 3,417,600 non-finite. The
+    /// gradients are not being computed wrongly; the fused training step is the only stage that turns
+    /// them into NaN, which is also why every downstream invariant (parameter finiteness, forward
+    /// after training, loss decrease, clone equality) failed together.
+    /// </para>
+    /// </remarks>
+    protected override bool SupportsFusedCompiledTraining => false;
+
+    /// <summary>
+    /// Uses the constructor-selected optimizer, as the Griffin and Hawk siblings do.
+    /// </summary>
+    /// <remarks>
+    /// Without this the model fell through to the base default, so none of the training configuration
+    /// its options describe reached the optimizer at all.
+    /// </remarks>
+    protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> GetOrCreateBaseOptimizer()
+        => _optimizer;
+
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreateDefaultOptimizer()
+        => new AiDotNet.Optimizers.AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new AiDotNet.Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate,
+                WeightDecay = _options.WeightDecay,
+                Beta1 = _options.Beta1,
+                Beta2 = _options.Beta2,
+                Epsilon = _options.Epsilon,
+                EnableGradientClipping = _options.EnableGradientClipping,
+                MaxGradientNorm = _options.MaxGradientNorm
+            });
 
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
