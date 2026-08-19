@@ -1426,6 +1426,30 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         return count;
     }
 
+    /// <summary>
+    /// Whether this layer's declared parameter surface still has values left to materialize.
+    /// </summary>
+    /// <remarks>
+    /// The value surface and the chunk surface must describe the same model, but only the chunk
+    /// path materialized before it counted. A component whose weights are still lazy has no value
+    /// slot to report, so it was silently skipped and the flat vector came out narrower than the
+    /// manifest -- 904,740 against 954,084 on a cloned UNet predictor, which is what turned a
+    /// Clone() into "Expected 904740 parameters, got 954084".
+    ///
+    /// Materializing unconditionally on the value path closes that gap but pays for it everywhere:
+    /// preparing every layer on every enumeration recurses through each sub-layer tree repeatedly
+    /// and lifts peak memory enough to abort a whole diffusion run (measured: the family aborted
+    /// after 65 of 206 tests on a host crash where the unmodified base completed all 206).
+    ///
+    /// The declaration already knows which layers are the problem. It is computed from the
+    /// generated manifest without allocating a value, and its materialized flag is false exactly
+    /// for the layers whose slots would come up short. Gating on it leaves the already-resident
+    /// majority untouched and reaches only the lazy remainder -- the same set the chunk path
+    /// would have materialized anyway.
+    /// </remarks>
+    internal bool DeclaredSurfaceNeedsMaterialization()
+        => TryGetDeclaredParameterCount(out _, out bool materialized) && !materialized;
+
     private bool TryGetDeclaredParameterCount(out long count, out bool materialized)
     {
         EnsureDeclaredSubLayerStructure();
@@ -5712,34 +5736,6 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     /// </summary>
     internal IReadOnlyList<TrainableParameterValueSlot> GetOwnTrainableParameterValueSlots()
     {
-        // Materialize first, exactly as GetOwnParameterStateChunks does. This is an explicit VALUE
-        // boundary -- every caller is about to read or write real scalars -- and the rule stated on
-        // EnsureOwnParametersMaterialized applies here verbatim: "This is an explicit value boundary,
-        // so materializing a countable declaration is expected; bare ParameterCount remains
-        // allocation-free."
-        //
-        // Without this the two surfaces described different models. A component whose weights are
-        // still lazy has no value slot to report, so it is silently skipped, while the chunk stream
-        // materializes the same component and counts it. On a cloned UNetNoisePredictor that split
-        // measured 954,084 from ParameterCount and the chunk stream against 904,740 from the flat
-        // vector -- the object disagreeing with itself by 49,344 scalars -- and Clone() then fed the
-        // larger stream into a SetParameters sized by the smaller one:
-        //
-        //     ArgumentException : Expected 904740 parameters, got 954084
-        //
-        // which is the whole of failure class P1. The identical asymmetry was already fixed once on
-        // the chunk path, where the remark on EnsureOwnParametersMaterialized records that it "made
-        // the save side write a manifest describing fewer tensors than a trained instance holds".
-        //
-        // This does NOT eagerly allocate the library. EnsureOwnParametersMaterialized is gated on
-        // IsShapeResolved || ParametersAreConstructionSized || a countable declaration, so a layer
-        // that genuinely cannot size itself yet is left alone -- the same gate the chunk path already
-        // runs on every layer in the repository.
-        if (_pendingParameterRestore is not null)
-            EnsureParametersMaterialized();
-        else
-            EnsureOwnParametersMaterialized();
-
         var components = GetOrderedParameterComponents();
         var slots = new List<TrainableParameterValueSlot>();
         for (int i = 0; i < components.Length; i++)

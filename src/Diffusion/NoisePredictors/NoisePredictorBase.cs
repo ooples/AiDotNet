@@ -1,4 +1,4 @@
-using System.Linq;
+﻿using System.Linq;
 using AiDotNet.Autodiff;
 using AiDotNet.Engines;
 using AiDotNet.Extensions;
@@ -623,9 +623,45 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape,
     /// </summary>
     private IEnumerable<LayerBase<T>.TrainableParameterValueSlot> EnumerateParameterValueSlots()
     {
+        bool streamingEngaged = false;
+
         foreach (var layer in ReflectInstanceLayers(this))
         {
             if (layer is not LayerBase<T> lb) continue;
+
+            // This is a VALUE boundary -- every caller below is about to read or write real
+            // scalars -- and a component whose weights are still lazy reports ScalarCount 0 and is
+            // then skipped, silently shrinking the surface this method describes. GetParameterChunks
+            // materializes per layer and so has no such gap: on a cloned UNetNoisePredictor it
+            // counted 954,084 scalars while this enumeration yielded 904,740, and Clone() handed the
+            // larger stream to a SetParameters sized by the smaller one -- "Expected 904740
+            // parameters, got 954084", the whole of failure class P1.
+            //
+            // Only the layers the DECLARATION reports as not yet materialized are prepared. That
+            // set is exactly the one whose slots would come up short, it is computed from the
+            // generated manifest without allocating a value, and it is the same set the chunk path
+            // would have materialized anyway. Preparing every layer unconditionally instead also
+            // fixes P1, but recurses through each sub-layer tree on every enumeration and lifts
+            // peak memory enough to abort the run: the diffusion family died on a host crash after
+            // 65 of 206 tests where the unmodified base completed all 206.
+            if (lb.DeclaredSurfaceNeedsMaterialization())
+            {
+                // Engage streaming before the first materialization, exactly as GetParameterChunks
+                // does and for the reason recorded there: materializing lazy weights routes through
+                // TensorAllocator.RentPinned and accumulates the whole weight set in the pinned heap,
+                // which OOMs a billion-parameter predictor. Streaming flags the layers so
+                // AllocateLazyWeight routes to WeightRegistry.AllocateStreaming and the resident set
+                // stays bounded. Deferred to here so a fully-resident predictor -- the common case --
+                // never pays for the ParameterCount walk the threshold test needs.
+                if (!streamingEngaged)
+                {
+                    MaybeEngageWeightStreaming();
+                    streamingEngaged = true;
+                }
+
+                if (lb is AiDotNet.Models.Parameters.IParameterSurfaceLifecycle lifecycle)
+                    lifecycle.PrepareParameterSurface(AiDotNet.Models.Parameters.ParameterSurfaceIntent.Read);
+            }
 
             foreach (var slot in lb.GetOwnTrainableParameterValueSlots())
             {
