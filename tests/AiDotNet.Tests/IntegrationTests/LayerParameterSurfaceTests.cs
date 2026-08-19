@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Reflection;
 using Xunit;
@@ -134,16 +135,120 @@ public class LayerParameterSurfaceTests
             string.Join("\n", violations.OrderBy(v => v, StringComparer.Ordinal).Select(v => "  " + v)));
     }
 
+    /// <summary>
+    /// Builds a layer for measurement, preferring a default constructor and falling back to the
+    /// constructor arguments the layer already declares for scaffold generation.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Requiring a parameterless constructor reached 39 layers. Every composite this invariant is
+    /// actually about — ClozeAttention, BranchformerBlock, ConformerBlock, VideoGigaGAN, the ResNet
+    /// blocks — takes its widths as constructor arguments, so all of them sat outside the sweep and
+    /// it reported agreement across a set that excluded them. That is the worse failure: a green
+    /// sweep over the layers that were never at risk reads exactly like a green sweep over all of
+    /// them.
+    /// </para>
+    /// <para>
+    /// The widths are not guessed here. <c>[LayerProperty(TestConstructorArgs = "...")]</c> already
+    /// states them on the layer, and the test scaffold generator emits real constructor calls from
+    /// that same string; this replays it through reflection.
+    /// </para>
+    /// <para>
+    /// Only all-numeric argument lists can be replayed — the declaration is C# source, so an entry
+    /// like <c>new int[] { 8, 12 }</c> has no reflection equivalent. Those layers stay unmeasured
+    /// and are COUNTED as unconstructable, because a sweep that silently dropped them would report
+    /// the same clean result whether a layer agreed or was simply never asked.
+    /// </para>
+    /// </remarks>
     private static object? TryConstruct(Type closed)
     {
         var ctor = closed.GetConstructors(BindingFlags.Public | BindingFlags.Instance)
             .Where(c => c.GetParameters().All(p => p.HasDefaultValue) || c.GetParameters().Length == 0)
             .OrderBy(c => c.GetParameters().Length)
             .FirstOrDefault();
-        if (ctor is null) return null;
-        var args = ctor.GetParameters()
-            .Select(p => p.DefaultValue == DBNull.Value ? null : p.DefaultValue).ToArray();
-        return ctor.Invoke(args);
+        if (ctor is not null)
+        {
+            var defaults = ctor.GetParameters()
+                .Select(p => p.DefaultValue == DBNull.Value ? null : p.DefaultValue).ToArray();
+            return ctor.Invoke(defaults);
+        }
+
+        var declared = DeclaredTestArguments(closed);
+        if (declared is null) return null;
+
+        foreach (var candidate in closed.GetConstructors(BindingFlags.Public | BindingFlags.Instance)
+                     .OrderBy(c => c.GetParameters().Length))
+        {
+            var parameters = candidate.GetParameters();
+            if (parameters.Length < declared.Length) continue;
+            // Anything the declaration does not supply must carry its own default, or this overload
+            // is not the one the declaration was written against.
+            if (!parameters.Skip(declared.Length).All(p => p.HasDefaultValue)) continue;
+
+            var args = new object?[parameters.Length];
+            bool usable = true;
+            for (int i = 0; i < parameters.Length; i++)
+            {
+                if (i >= declared.Length)
+                {
+                    args[i] = parameters[i].DefaultValue == DBNull.Value
+                        ? null
+                        : parameters[i].DefaultValue;
+                    continue;
+                }
+
+                var target = Nullable.GetUnderlyingType(parameters[i].ParameterType)
+                             ?? parameters[i].ParameterType;
+                // Numeric primitives only. bool and char are primitives too, and silently turning
+                // a declared 1 into true would construct a DIFFERENT layer than the declaration
+                // describes and then measure it as though it were the right one.
+                if (!target.IsPrimitive || target == typeof(bool) || target == typeof(char))
+                {
+                    usable = false;
+                    break;
+                }
+
+                try { args[i] = Convert.ChangeType(declared[i], target, CultureInfo.InvariantCulture); }
+                catch (Exception ex) when (ex is InvalidCastException or OverflowException or FormatException)
+                {
+                    usable = false;
+                    break;
+                }
+            }
+
+            if (usable) return candidate.Invoke(args);
+        }
+
+        return null;
+    }
+
+    /// <summary>True when the layer states constructor arguments for scaffold generation.</summary>
+    private static bool DeclaresTestArguments(Type closed)
+        => !string.IsNullOrWhiteSpace(TestConstructorArgs(closed));
+
+    private static string? TestConstructorArgs(Type closed)
+        => closed.GetCustomAttributes(inherit: false)
+            .OfType<AiDotNet.Attributes.LayerPropertyAttribute>()
+            .FirstOrDefault()?.TestConstructorArgs;
+
+    /// <summary>
+    /// The numeric constructor arguments a layer declares for scaffold generation, or <c>null</c>
+    /// when it declares none or declares one reflection cannot reconstruct.
+    /// </summary>
+    private static double[]? DeclaredTestArguments(Type closed)
+    {
+        var args = TestConstructorArgs(closed);
+        if (string.IsNullOrWhiteSpace(args)) return null;
+
+        var tokens = args.Split(',');
+        var values = new double[tokens.Length];
+        for (int i = 0; i < tokens.Length; i++)
+        {
+            if (!double.TryParse(tokens[i].Trim(), NumberStyles.Float, CultureInfo.InvariantCulture,
+                    out values[i]))
+                return null;
+        }
+        return values;
     }
 
     private static IEnumerable<Type> GetConstructableLayerTypes()
@@ -163,8 +268,14 @@ public class LayerParameterSurfaceTests
                 { isLayer = true; break; }
             if (!isLayer) continue;
 
+            // Gated on DECLARING test arguments, not on their being replayable. A layer whose
+            // declaration this sweep cannot reconstruct is a coverage MISS, and it has to land in
+            // the "not constructable" bucket to be visible as one; filtering it out here instead
+            // would drop it from the denominator, so the summary would report full coverage of a
+            // set that had quietly shrunk to the layers that happened to be easy.
             if (!closed.GetConstructors(BindingFlags.Public | BindingFlags.Instance)
-                    .Any(c => c.GetParameters().Length == 0 || c.GetParameters().All(p => p.HasDefaultValue)))
+                    .Any(c => c.GetParameters().Length == 0 || c.GetParameters().All(p => p.HasDefaultValue))
+                && !DeclaresTestArguments(closed))
                 continue;
 
             yield return closed;
