@@ -215,34 +215,13 @@ public partial class BranchformerBlock<T> : LayerBase<T>, IShapeContract
         _csguNorm, _csguConv, _cgmlpProject, _merge
     };
 
-    /// <inheritdoc/>
-    /// <remarks>
-    /// Enumerates the children explicitly, since <c>LayerBase</c> does not recurse into
-    /// registered sub-layers.
-    /// </remarks>
-    public override IReadOnlyList<Tensor<T>> GetTrainableParameters()
-    {
-        var result = new List<Tensor<T>>();
-        foreach (var c in Children) result.AddRange(c.GetTrainableParameters());
-        return result;
-    }
-
-    /// <inheritdoc/>
-    public override void SetTrainableParameters(IReadOnlyList<Tensor<T>> parameters)
-    {
-        var children = Children;
-        var counts = children.Select(c => c.GetTrainableParameters().Count).ToArray();
-
-        if (parameters.Count != counts.Sum())
-            throw new ArgumentException($"Expected {counts.Sum()} trainable tensors, got {parameters.Count}.", nameof(parameters));
-
-        int at = 0;
-        for (int c = 0; c < children.Length; c++)
-        {
-            children[c].SetTrainableParameters(parameters.Skip(at).Take(counts[c]).ToList());
-            at += counts[c];
-        }
-    }
+    // The eight children's tensors used to be enumerated here as this block's own, "since LayerBase
+    // does not recurse into registered sub-layers". That holds for the base GetTrainableParameters,
+    // which returns only this layer's own registrations, and not for the walk ParameterCount,
+    // GetParameters and SetParameters are built from: it appends every registered sub-layer that no
+    // declaration already covers, and its duplicate check compares LAYER references, so a child's
+    // tensors arriving through the parent's own list are invisible to it. Nineteen tensors — the
+    // whole block — were counted twice.
 
     /// <inheritdoc/>
     internal override Dictionary<string, string> GetMetadata()
