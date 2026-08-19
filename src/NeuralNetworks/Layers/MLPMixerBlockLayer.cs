@@ -43,14 +43,35 @@ public partial class MLPMixerBlockLayer<T> : LayerBase<T>, IShapeContract
     private readonly int _hiddenDim;
     private readonly int _expansionFactor;
 
+    // Every child is built with its OUTPUT size alone, so each stays shape-deferred until a forward
+    // runs. ParameterCount does not materialize -- it cannot, since counting is read from Dispose
+    // and from fingerprinting -- so it saw nothing and reported 0 while GetParameters materialized
+    // the whole block on its way past and returned 388. Two surfaces, one walk, and no way for
+    // either to notice. Declaring the width each child receives puts it on the walk the base
+    // already does, which is what DeclaredSubLayerShapes is for.
+    //
+    // The widths are the ones the mixer comments below already spell out: the temporal branch runs
+    // on the transposed tensor, so its Dense layers see the PATCH axis last, and the channel branch
+    // sees the hidden axis last.
+    [SubLayerInput("_numPatches, _hiddenDim")]
     private readonly LayerNormalizationLayer<T> _norm1;
+    // The transposes carry the batch axis: TransposeLayer's rank is permutation.Length + 1 EXACTLY,
+    // so the rank-2 shape its neighbours take makes it throw. The other children take the logical
+    // shape alone, which is the convention this block's own initializer already uses.
+    [SubLayerInput("1, _numPatches, _hiddenDim")]
     private readonly TransposeLayer<T> _toPatchAxis;
+    [SubLayerInput("_hiddenDim, _numPatches")]
     private readonly DenseLayer<T> _temporalMlpExpand;
+    [SubLayerInput("_hiddenDim, _numPatches * _expansionFactor")]
     private readonly DenseLayer<T> _temporalMlpContract;
+    [SubLayerInput("1, _hiddenDim, _numPatches")]
     private readonly TransposeLayer<T> _fromPatchAxis;
 
+    [SubLayerInput("_numPatches, _hiddenDim")]
     private readonly LayerNormalizationLayer<T> _norm2;
+    [SubLayerInput("_numPatches, _hiddenDim")]
     private readonly DenseLayer<T> _channelMlpExpand;
+    [SubLayerInput("_numPatches, _hiddenDim * _expansionFactor")]
     private readonly DenseLayer<T> _channelMlpContract;
 
     /// <inheritdoc/>

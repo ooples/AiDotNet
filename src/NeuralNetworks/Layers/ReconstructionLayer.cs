@@ -109,6 +109,7 @@ public partial class ReconstructionLayer<T> : LayerBase<T>, IShapeContract
     /// </remarks>
     private int _hidden1Dim;
     private int _hidden2Dim;
+    [SubLayerInput("_inputDimension")]
     private readonly FullyConnectedLayer<T> _fc1;
 
     /// <summary>
@@ -118,6 +119,7 @@ public partial class ReconstructionLayer<T> : LayerBase<T>, IShapeContract
     /// This layer takes the output from the first layer and transforms it to the second hidden dimension.
     /// It also applies the hidden activation function to its output.
     /// </remarks>
+    [SubLayerInput("_hidden1Dimension")]
     private readonly FullyConnectedLayer<T> _fc2;
 
     /// <summary>
@@ -127,6 +129,7 @@ public partial class ReconstructionLayer<T> : LayerBase<T>, IShapeContract
     /// This layer takes the output from the second layer and transforms it to the final output dimension.
     /// It applies the output activation function, which is often sigmoid for reconstruction tasks.
     /// </remarks>
+    [SubLayerInput("_hidden2Dimension")]
     private readonly FullyConnectedLayer<T> _fc3;
 
     /// <summary>

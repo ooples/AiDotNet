@@ -524,32 +524,39 @@ public class TrainableParameterGenerator : IIncrementalGenerator
             sb.AppendLine("    /// Auto-generated — do not modify. Edit the [SubLayerInput(\"...\")] arguments instead.");
             sb.AppendLine("    /// </summary>");
             sb.AppendLine("    /// <remarks>");
-            sb.AppendLine("    /// Empty while any declared child is still null or any axis is still negative: a composite");
-            sb.AppendLine("    /// builds its children inside its initializer, so both are ordinary states before that runs.");
-            sb.AppendLine("    /// Cached, because the initializer deliberately re-enters.");
+            sb.AppendLine("    /// Empty while a REQUIRED declared child is still null or any axis is still negative: a");
+            sb.AppendLine("    /// composite builds its children inside its initializer, so both are ordinary states before");
+            sb.AppendLine("    /// that runs. Cached, because the initializer deliberately re-enters.");
+            sb.AppendLine("    /// <para>");
+            sb.AppendLine("    /// A NULLABLE declared child is skipped instead, because null is a configuration there rather");
+            sb.AppendLine("    /// than a not-built-yet: a transformer block whose dropout rate is zero never constructs its");
+            sb.AppendLine("    /// dropout layers. Treating that as \"declaration not ready\" abandoned the whole declaration");
+            sb.AppendLine("    /// for the common configuration, so the composite fell back to chained sizing and its counted");
+            sb.AppendLine("    /// and materialized surfaces disagreed again.");
+            sb.AppendLine("    /// </para>");
             sb.AppendLine("    /// </remarks>");
             sb.AppendLine($"    protected override System.Collections.Generic.IReadOnlyList<{subTuple}> DeclaredSubLayerShapes()");
             sb.AppendLine("    {");
             sb.AppendLine("        if (__declaredSubLayerShapes is not null) return __declaredSubLayerShapes;");
-            foreach (var sl in shapedSubLayers)
+            foreach (var sl in shapedSubLayers.Where(sl => !sl.IsNullable))
             {
                 sb.AppendLine($"        if ({sl.Name} is null) return System.Array.Empty<{subArray}>();");
             }
-            sb.AppendLine($"        var __sub = new {subArray}[]");
-            sb.AppendLine("        {");
+            sb.AppendLine($"        var __sub = new System.Collections.Generic.List<{subArray}>({shapedSubLayers.Count});");
             foreach (var sl in shapedSubLayers)
             {
                 var axes = string.Join(", ", sl.InputShape!.Split(',').Select(a => a.Trim()).Where(a => a.Length > 0));
-                sb.AppendLine($"            ({sl.Name}, ShapeOf({axes})),");
+                string entry = $"__sub.Add(({sl.Name}, ShapeOf({axes})));";
+                if (sl.IsNullable) sb.AppendLine($"        if ({sl.Name} is not null) {entry}");
+                else sb.AppendLine($"        {entry}");
             }
-            sb.AppendLine("        };");
-            sb.AppendLine("        for (int __i = 0; __i < __sub.Length; __i++)");
+            sb.AppendLine("        for (int __i = 0; __i < __sub.Count; __i++)");
             sb.AppendLine("        {");
             sb.AppendLine("            var __s = __sub[__i].Item2;");
             sb.AppendLine("            for (int __d = 0; __d < __s.Length; __d++)");
             sb.AppendLine($"                if (__s[__d] < 0) return System.Array.Empty<{subArray}>();");
             sb.AppendLine("        }");
-            sb.AppendLine("        __declaredSubLayerShapes = __sub;");
+            sb.AppendLine("        __declaredSubLayerShapes = __sub.ToArray();");
             sb.AppendLine("        return __declaredSubLayerShapes;");
             sb.AppendLine("    }");
             sb.AppendLine();

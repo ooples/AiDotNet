@@ -105,7 +105,17 @@ public class LayerParameterSurfaceTests
                     : Convert.ToInt64(vec.GetType().GetProperty("Length")!.GetValue(vec));
 
                 checkedCount++;
-                if (declared == actual) { if (pending) unsized++; continue; }
+                if (declared == actual)
+                {
+                    // The AGREED value, not just the fact of agreement. A layer can be moved out of
+                    // the violation list by making both surfaces report NOTHING -- suppressing the
+                    // fallback that was materializing its children is enough -- and that reads
+                    // identically to a real fix unless the number is written down. Recording it is
+                    // what lets "agrees at 592" be told apart from "agrees at 0".
+                    log?.WriteLine($"AGREE {name}: {declared}{(pending ? " [deferred]" : "")}");
+                    if (pending) unsized++;
+                    continue;
+                }
 
                 var row = $"{name}: ParameterCount={declared}, GetParameters().Length={actual} " +
                           $"(difference {declared - actual}){(pending ? " [deferred]" : "")}";

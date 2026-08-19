@@ -1017,7 +1017,49 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     /// all follow from that one answer.
     /// </para>
     /// </remarks>
-    protected virtual bool ParametersAreConstructionSized => DeclaredShapesAreFullyConcrete();
+    protected virtual bool ParametersAreConstructionSized
+        => DeclaredShapesAreFullyConcrete() || DeclaredSubLayerShapesCoverEveryChild();
+
+    /// <summary>
+    /// True when every registered sub-layer's input width is declared, with concrete axes.
+    /// </summary>
+    /// <remarks>
+    /// A composite of its own holds no parameter shapes, so the derivation above answers false for
+    /// every one of them and the declared-count fast path was unreachable for exactly the layers
+    /// whose children are lazy. But a composite that states which width each child receives HAS
+    /// said its size is known at construction -- that is the whole content of the claim -- and the
+    /// count can then be derived without materializing anything, which is what
+    /// <see cref="ParameterCount"/> needs to stay allocation-free while still agreeing with
+    /// <see cref="GetParameters"/>.
+    /// <para>
+    /// Concreteness is already guaranteed by the declaration itself: it returns empty if any child
+    /// is still null or any axis is still negative, so a non-empty one is a resolved one.
+    /// </para>
+    /// </remarks>
+    private bool DeclaredSubLayerShapesCoverEveryChild()
+    {
+        var declared = DeclaredSubLayerShapes();
+        if (declared is null || declared.Count == 0) return false;
+
+        var subs = GetSubLayers();
+        if (subs is null || subs.Count == 0) return false;
+
+        for (int i = 0; i < subs.Count; i++)
+        {
+            var child = subs[i];
+            if (child is null) continue;
+
+            bool covered = false;
+            for (int j = 0; j < declared.Count; j++)
+            {
+                if (ReferenceEquals(declared[j].Child, child)) { covered = true; break; }
+            }
+            // A partially declared composite must NOT claim to be construction-sized: the children
+            // it left out are the ones that would go missing from the total.
+            if (!covered) return false;
+        }
+        return true;
+    }
 
     /// <summary>
     /// True when every declared parameter axis is already a positive size, i.e. nothing this layer
@@ -1457,6 +1499,18 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     private bool TryGetDeclaredParameterCount(out long count, out bool materialized)
     {
         EnsureDeclaredSubLayerStructure();
+
+        // Shapes, never weights. A declared child that has not resolved cannot report a declared
+        // count, so the whole fast path fails and the caller falls back to the walk that sees a
+        // deferred child as zero. Resolving under the shapes-only flag is what the declaration is
+        // for -- it fixes the dimensions and allocates nothing, which is the one thing counting is
+        // allowed to do (this property is read from Dispose and from fingerprinting, and
+        // allocating there threw OutOfMemoryException on a 774M-parameter model).
+        bool wasResolvingShapesOnly = IsResolvingShapesOnly;
+        IsResolvingShapesOnly = true;
+        try { BringUpDeclaredSubLayers(); }
+        finally { IsResolvingShapesOnly = wasResolvingShapesOnly; }
+
         if (!TryGetOwnDeclaredParameterCount(out count, out materialized)) return false;
 
         var subs = GetSubLayers();
@@ -1725,6 +1779,19 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         // stay correct with NO override of its own: the base already knows the children, so
         // asking each of them the same question is the whole implementation. EnsureInitialized
         // is idempotent, so re-entry through a diamond costs a branch.
+        //
+        // DECLARED children first. BringUpDeclaredSubLayers was written for exactly this moment and
+        // nothing in this class called it -- two layers in the library invoked it by hand and every
+        // other composite's [SubLayerInput] declaration was inert. That made declaring a width
+        // actively HARMFUL: the chain below returns early once a declaration exists, so a layer that
+        // gained one stopped materializing its children altogether and reported an empty parameter
+        // surface from both sides. Agreeing at zero is not agreement, and a sweep comparing the two
+        // surfaces cannot tell the difference -- SwinPatchMerging, ClozeAttention and
+        // TransformerEncoderLayer all sat at 0 == 0 looking fixed.
+        //
+        // The chain stays as the fallback for composites that declare nothing, and still guards
+        // itself on the declaration being empty, so the two never both run.
+        BringUpDeclaredSubLayers();
         BringUpUndeclaredSubLayersByChain();
 
         var subs = GetSubLayers();
