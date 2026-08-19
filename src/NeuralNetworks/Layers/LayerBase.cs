@@ -1058,12 +1058,12 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         // Sound as a latch because it records SHAPES, which change only when the parameter set
         // does, and every such mutation already bumps the epoch this checks against.
         if (_subLayerShapesResolvedEpoch == System.Threading.Volatile.Read(ref s_parameterEpoch)) return;
+        if (_subLayerShapeResolutionInProgress) return;
 
         var subs = GetSubLayers();
         if (subs is null || subs.Count == 0) return;
 
-        _subLayerShapesResolvedEpoch = System.Threading.Volatile.Read(ref s_parameterEpoch);
-
+        _subLayerShapeResolutionInProgress = true;
         bool wasResolvingShapesOnly = IsResolvingShapesOnly;
         IsResolvingShapesOnly = true;
         try
@@ -1074,13 +1074,29 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         finally
         {
             IsResolvingShapesOnly = wasResolvingShapesOnly;
+            _subLayerShapeResolutionInProgress = false;
         }
+
+        // LATCH ONLY ON SUCCESS. Re-entry is prevented by the flag above; this epoch stamp means
+        // "there is nothing left to resolve", and stamping it before the work conflated that with
+        // "an attempt was made". A composite consulted once before its declaration was ready --
+        // during construction, when an int field still reads zero -- was then locked out of every
+        // later attempt in the same epoch, and its children stayed deferred for good.
+        for (int i = 0; i < subs.Count; i++)
+        {
+            if (subs[i] is LayerBase<T> child && !child.IsShapeResolved) return;
+        }
+
+        _subLayerShapesResolvedEpoch = System.Threading.Volatile.Read(ref s_parameterEpoch);
     }
 
     /// <summary>
     /// Parameter epoch at which this layer last resolved its children's shapes for counting.
     /// </summary>
     private int _subLayerShapesResolvedEpoch = -1;
+
+    /// <summary>Guards re-entry while a resolution pass is running.</summary>
+    private bool _subLayerShapeResolutionInProgress;
 
     private bool DeclaredSubLayerShapesCoverEveryChild()
     {
@@ -1885,11 +1901,26 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     /// </remarks>
     private void BringUpUndeclaredSubLayersByChain()
     {
+        // A DECLARATION COVERS ITS OWN CHILDREN, NOT THE WHOLE COMPOSITE. Returning outright the
+        // moment one existed made a PARTIAL declaration worse than none: VGGish can state the widths
+        // of the two dense layers after its flatten and cannot state the convolutions', because its
+        // own input is [-1, -1], and declaring the pair it knows silenced the walk for the ten it
+        // does not -- so the count lost exactly those children. Chain the undeclared remainder
+        // instead, and let a declared child contribute its output width to whatever follows it.
         var declared = DeclaredSubLayerShapes();
-        if (declared is not null && declared.Count > 0) return;
 
         var subs = GetSubLayers();
         if (subs is null || subs.Count == 0) return;
+
+        bool IsDeclaredChild(ILayer<T> candidate)
+        {
+            if (declared is null) return false;
+            for (int i = 0; i < declared.Count; i++)
+            {
+                if (ReferenceEquals(declared[i].Child, candidate)) return true;
+            }
+            return false;
+        }
 
         int[] width;
         try
@@ -1908,7 +1939,9 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         {
             if (subs[i] is not LayerBase<T> child) continue;
 
-            if (!child.IsShapeResolved && System.Array.TrueForAll(width, d => d > 0))
+            bool isDeclared = IsDeclaredChild(subs[i]);
+
+            if (!isDeclared && !child.IsShapeResolved && System.Array.TrueForAll(width, d => d > 0))
             {
                 var batched = new int[width.Length + 1];
                 batched[0] = 1;
