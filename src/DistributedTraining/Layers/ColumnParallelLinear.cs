@@ -19,7 +19,7 @@ namespace AiDotNet.DistributedTraining.Layers;
 /// </summary>
 [LayerCategory(LayerCategory.Dense)]
 [LayerTask(LayerTask.Projection)]
-[LayerProperty(IsTrainable = true, ChangesShape = true)]
+[LayerProperty(IsTrainable = true, ChangesShape = true, TestConstructorArgs = "new AiDotNet.DistributedTraining.InMemoryCommunicationBackend<double>(0, 1), 4, 8", TestInputShape = "1, 4")]
 // Rank 2 [Batch, Features] and nothing else, read off ForwardTraced's own arithmetic: the matmul is
 // against a rank-2 weightT ([inputSize, localOut]) and the bias is broadcast from a rank-2
 // [1, _localOutputSize]. Those two shapes only line up with a rank-2 activation, so no other rank is

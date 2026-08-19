@@ -17,7 +17,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </remarks>
 [LayerCategory(LayerCategory.Convolution)]
 [LayerTask(LayerTask.TemporalProcessing)]
-[LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 5)]
+[LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 5, TestConstructorArgs = "2, 4, 3", TestInputShape = "1, 2, 4, 4, 4")]
 [TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Time, TensorAxis.Height, TensorAxis.Width,
     Direction = TensorLayoutDirection.Input)]
 [TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Time, TensorAxis.Height, TensorAxis.Width,
