@@ -112,6 +112,71 @@ public class LearnedTensorsSurviveSaveTests
             "layer trains a tensor it does not persist");
     }
 
+    public static TheoryData<string> RwkvFields() => new()
+    {
+        "_timeMixR", "_timeMixK", "_timeMixV",      // the mixing coefficients RWKV is named for
+        "_channelMixR", "_channelMixK",
+        "_bonus",                                    // RWKV-4 time_first (u)
+        "_normGamma1", "_normBeta1", "_normGamma2", "_normBeta2",
+        "_decayBias",                                // control: already carried the attribute
+    };
+
+    /// <summary>
+    /// RWKV is checked by reading the FIELD back rather than by comparing outputs, because its
+    /// output cannot see the difference.
+    /// </summary>
+    /// <remarks>
+    /// <c>_outputWeights</c> and <c>_channelValueWeights</c> are deliberately zero-initialized so
+    /// each block is an identity residual at init -- the standard trick for keeping a deep stack
+    /// stable. That multiplies every upstream parameter's influence by exactly zero: a freshly
+    /// built RWKVLayer returns its input bit-for-bit, in training and eval mode alike, at every
+    /// shape tried. So an output-based round-trip check reports success no matter what was
+    /// dropped, and all ten of these fields were in fact being dropped. Reading the field back
+    /// sidesteps the blindness entirely.
+    /// </remarks>
+    [Theory]
+    [MemberData(nameof(RwkvFields))]
+    public void RwkvLearnedTensors_SurviveARoundTrip(string fieldName)
+    {
+        var input = Ramp([1, 4, 8]);
+
+        var layer = new RWKVLayer<double>(4, 8, 4);
+        layer.SetTrainingMode(false);
+        layer.ResetState();
+        layer.Forward(input);
+
+        var field = layer.GetType().GetField(fieldName, BindingFlags.Instance | BindingFlags.NonPublic);
+        Assert.True(field is not null, $"RWKVLayer has no field named {fieldName}");
+
+        var tensor = field!.GetValue(layer) as Tensor<double>;
+        Assert.True(tensor is not null && tensor.Length > 0,
+            $"RWKVLayer.{fieldName} is not a populated Tensor<double>");
+
+        for (int i = 0; i < tensor!.Length; i++) tensor[i] = tensor[i] + 0.25;
+        var expected = tensor.Clone();
+
+        using var ms = new MemoryStream();
+        using (var writer = new BinaryWriter(ms, System.Text.Encoding.UTF8, leaveOpen: true))
+            layer.Serialize(writer);
+
+        var restored = new RWKVLayer<double>(4, 8, 4);
+        ms.Position = 0;
+        using (var reader = new BinaryReader(ms, System.Text.Encoding.UTF8, leaveOpen: true))
+            restored.Deserialize(reader);
+
+        var restoredTensor = (Tensor<double>)restored.GetType()
+            .GetField(fieldName, BindingFlags.Instance | BindingFlags.NonPublic)!
+            .GetValue(restored)!;
+
+        double drift = 0;
+        for (int i = 0; i < expected.Length; i++)
+            drift = Math.Max(drift, Math.Abs(expected[i] - restoredTensor[i]));
+
+        Assert.True(drift <= 1e-12,
+            $"RWKVLayer.{fieldName} was LOST on save: the field came back {drift:E3} away from " +
+            "what was written, so the layer trains a tensor it does not persist");
+    }
+
     private static (Func<LayerBase<double>> Make, int[] Shape) Spec(string name) => name switch
     {
         // modelDimension 8 / numHeads 4 so the head split is valid.

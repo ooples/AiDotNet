@@ -76,11 +76,24 @@ namespace AiDotNet.NeuralNetworks.Layers.SSM;
     BatchOptional = true, Direction = TensorLayoutDirection.Input)]
 [TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
     BatchOptional = true, Direction = TensorLayoutDirection.Output)]
-// [AutoParameters]: every non-nullable tensor field here is a trainable parameter unless it opts
-// out. Before this, the layer registered its 8 weight matrices and silently omitted 10 more
-// LEARNED tensors -- _timeMixR/K/V and _channelMixR/K (the mixing coefficients RWKV is named
-// for), _bonus, and both LayerNorm affine pairs. The optimizer never updated them, so the layer
-// only partly trained and nothing reported it.
+// The layer registered its 8 weight matrices and silently omitted 10 more LEARNED tensors --
+// _timeMixR/K/V and _channelMixR/K (the mixing coefficients RWKV is named for), _bonus, and both
+// LayerNorm affine pairs. The optimizer never updated them, so the layer only partly trained and
+// nothing reported it.
+//
+// [AutoParameters] alone did NOT fix that, though the comment here used to say it did. That
+// attribute is a migration MARKER; its own documentation states it "does not classify fields" and
+// that the generator is driven by the per-field semantic declarations instead. So the ten fields
+// stayed unregistered: absent from the tape training path, which trains only from registered
+// parameters, and absent from the saved checkpoint. Measured by perturbing each field and reading
+// it back after a round trip -- all ten discarded a 0.25 change while _decayBias, the one field
+// that already carried [TrainableParameter], kept it exactly. They now carry the attribute too.
+//
+// The output cannot show this. _outputWeights and _channelValueWeights are deliberately
+// zero-initialized (see InitializeParameters) so the block is an identity residual at init, which
+// multiplies every upstream parameter's influence by zero: a freshly built RWKVLayer returns its
+// input bit-for-bit. Any check that compares outputs is therefore blind here and will report a
+// clean round trip no matter what was dropped.
 [AutoParameters]
 public partial class RWKVLayer<T> : LayerBase<T>, IShapeContract
 {
@@ -124,8 +137,11 @@ public partial class RWKVLayer<T> : LayerBase<T>, IShapeContract
     private readonly int _headDimension;
 
     // Time mixing parameters
+    [TrainableParameter(Role = PersistentTensorRole.ScaleParameters)]
     private Tensor<T> _timeMixR;  // [modelDim] lerp coefficient for receptance
+    [TrainableParameter(Role = PersistentTensorRole.ScaleParameters)]
     private Tensor<T> _timeMixK;  // [modelDim] lerp coefficient for key
+    [TrainableParameter(Role = PersistentTensorRole.ScaleParameters)]
     private Tensor<T> _timeMixV;  // [modelDim] lerp coefficient for value
 
     // Time mixing projections: [modelDim, modelDim]
@@ -148,10 +164,13 @@ public partial class RWKVLayer<T> : LayerBase<T>, IShapeContract
     private Tensor<T> _decayBias;     // [modelDim] — RWKV-4 time_decay
 
     // RWKV-4 time_first (u): per-channel current-token bonus [numHeads, headDim] == [modelDim].
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
     private Tensor<T> _bonus;
 
     // Channel mixing parameters
+    [TrainableParameter(Role = PersistentTensorRole.ScaleParameters)]
     private Tensor<T> _channelMixR;  // [modelDim]
+    [TrainableParameter(Role = PersistentTensorRole.ScaleParameters)]
     private Tensor<T> _channelMixK;  // [modelDim]
     [TrainableParameter(Role = PersistentTensorRole.Weights)]
 
@@ -164,9 +183,13 @@ public partial class RWKVLayer<T> : LayerBase<T>, IShapeContract
     private Tensor<T> _channelReceptanceWeights;  // [modelDim, modelDim]
 
     // Layer norm parameters
+    [TrainableParameter(Role = PersistentTensorRole.NormalizationParams)]
     private Tensor<T> _normGamma1;
+    [TrainableParameter(Role = PersistentTensorRole.NormalizationParams)]
     private Tensor<T> _normBeta1;
+    [TrainableParameter(Role = PersistentTensorRole.NormalizationParams)]
     private Tensor<T> _normGamma2;
+    [TrainableParameter(Role = PersistentTensorRole.NormalizationParams)]
     private Tensor<T> _normBeta2;
 
     // Cached values for backward pass
