@@ -29,8 +29,53 @@ namespace AiDotNet.Optimizers;
 /// </remarks>
 [ComponentType(ComponentType.Optimizer)]
 [PipelineStage(PipelineStage.Training)]
-public class TrustRegionOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TInput, TOutput>
+public class TrustRegionOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TInput, TOutput>, Fused.IFusedOptimizerSpec
 {
+    /// <summary>
+    /// Describes this optimizer for the compiled fused-training kernel.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The Cauchy point with B = I (Nocedal &amp; Wright, Algorithm 4.1 / eq. 4.11) is
+    /// <c>alpha = min(radius/‖g‖, lr); x -= alpha*g</c> — the same update
+    /// <see cref="UpdateParameters(Vector{T}, Vector{T})"/> computes, including the learning-rate cap. The
+    /// norm couples every parameter, so it is a global reduction followed by an elementwise step: not a
+    /// per-element kernel, but exactly the two-phase shape the plan already runs for HypergradientSGD, and
+    /// <see cref="Tensors.Engines.Compilation.OptimizerType.TrustRegion"/> implements it.
+    /// </para>
+    /// <para>
+    /// <b>Radius adaptation is what decides whether this fuses.</b> Measuring the actual reduction needs
+    /// the loss at the trial point, and a fused step has one gradient and no loss evaluation — so the
+    /// kernel holds the radius fixed. That matches this optimizer exactly when
+    /// <see cref="TrustRegionOptimizerOptions{T, TInput, TOutput}.AdaptTrustRegionRadius"/> is off. With it
+    /// on (the default, since resizing the region is the method) the eager path can shrink the radius or
+    /// reject a step that the fused path would take, so the spec declines.
+    /// </para>
+    /// <para>
+    /// The radius travels in <c>TrustRegionRadius</c>; the learning-rate slot carries the cap, which is
+    /// what the kernel's <c>min(radius/‖g‖, lr)</c> reads.
+    /// </para>
+    /// </remarks>
+    bool Fused.IFusedOptimizerSpec.TryGetFusedOptimizerConfig(out Fused.FusedOptimizerConfig config)
+    {
+        config = default;
+        if (_options.UseAdaptiveLearningRate) return false;
+        if (_options.AdaptTrustRegionRadius) return false;
+        if (!TryGetFusedLrSchedule(out var schedule)) return false;
+
+        config = new Fused.FusedOptimizerConfig(
+            Tensors.Engines.Compilation.OptimizerType.TrustRegion,
+            (float)GetCurrentLearningRate(),
+            0f, 0f, 0f, 0f, schedule)
+        {
+            Extras = new Tensors.Engines.Compilation.FusedOptimizerExtras
+            {
+                TrustRegionRadius = (float)_options.InitialTrustRegionRadius,
+            },
+        };
+        return true;
+    }
+
     /// <summary>
     /// The options for configuring the Trust Region optimizer.
     /// </summary>
@@ -800,19 +845,116 @@ public class TrustRegionOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBa
         // and for embedding params that already have a dense entry.
         SparseEmbeddingOptimizerHelpers.MaterializeSparseIntoGradientsDict(context, Engine);
 
-        var updated = UpdateParameters(context.GetFlatParameters(), context.GetFlatGradients());
+        var original = context.GetFlatParameters();
+        var gradient = context.GetFlatGradients();
+
+        // Snapshot the radius: UpdateParameters adapts it from a gradient-norm proxy because the flat-vector
+        // path has no loss to measure. Here there IS one, so the proxy is replaced by the real ratio test
+        // rather than compounded with it.
+        T radiusBeforeStep = _trustRegionRadius;
+
+        var updated = UpdateParameters(original, gradient);
         context.SetFlatParameters(updated);
 
-        // Trust Region benefits from re-evaluation to adjust the trust region radius
-        if (context.SupportsReevaluation)
+        if (!_options.AdaptTrustRegionRadius || !context.SupportsReevaluation)
         {
-            T origLoss = context.Loss;
-            T newLoss = context.Reevaluate();
-            if (NumOps.GreaterThan(newLoss, origLoss))
-            {
-                var retry = UpdateParameters(context.GetFlatParameters(), context.GetFlatGradients());
-                context.SetFlatParameters(retry);
-            }
+            // Restore, do not just return. UpdateParameters adapts the radius unconditionally from its
+            // gradient-norm proxy, so leaving it be would let the radius drift on a path that has
+            // adaptation switched OFF — and the fused spec hands the kernel a constant
+            // InitialTrustRegionRadius on the strength of that switch, so the eager and fused paths would
+            // separate from the second step onward.
+            _trustRegionRadius = radiusBeforeStep;
+            return;
+        }
+
+        T originalLoss = context.Loss;
+        T newLoss = context.Reevaluate();
+        _trustRegionRadius = radiusBeforeStep;
+        ApplyTrustRegionRatioTest(context, original, updated, gradient, originalLoss, newLoss);
+    }
+
+    /// <summary>
+    /// Accepts or rejects the step and resizes the trust region from the ratio of actual to predicted
+    /// reduction.
+    /// </summary>
+    /// <param name="context">The tape step context, currently holding the trial point.</param>
+    /// <param name="originalParameters">The parameters before the step.</param>
+    /// <param name="trialParameters">The trial point.</param>
+    /// <param name="gradient">The gradient at <paramref name="originalParameters"/>.</param>
+    /// <param name="originalLoss">The loss at <paramref name="originalParameters"/>.</param>
+    /// <param name="trialLoss">The loss at <paramref name="trialParameters"/>.</param>
+    /// <remarks>
+    /// <para>
+    /// Nocedal &amp; Wright, <i>Numerical Optimization</i>, Algorithm 4.1. With B = I the model is
+    /// <c>m(Δ) = f + gᵀΔ + ½ΔᵀΔ</c>, so the predicted reduction is <c>-(gᵀΔ + ½‖Δ‖²)</c> and
+    /// <c>ρ = (f(x) − f(x+Δ)) / predicted</c>. The paper's constants: shrink below ¼, grow above ¾ when the
+    /// step reached the boundary (growing an interior step is pointless — the region was not what limited
+    /// it), and reject any step with ρ ≤ 0.
+    /// </para>
+    /// <para>
+    /// This is what the re-evaluation was always for. It previously computed both losses, discarded the
+    /// comparison, and — when the loss had gone UP — applied a SECOND full step from the worse point,
+    /// under a comment saying it adjusted the radius. It adjusted nothing, and moving further away from a
+    /// point just measured as worse is the opposite of what a trust region does.
+    /// </para>
+    /// </remarks>
+    private void ApplyTrustRegionRatioTest(
+        TapeStepContext<T> context,
+        Vector<T> originalParameters,
+        Vector<T> trialParameters,
+        Vector<T> gradient,
+        T originalLoss,
+        T trialLoss)
+    {
+        T gradientDotStep = NumOps.Zero;
+        T stepSquaredNorm = NumOps.Zero;
+        for (int i = 0; i < trialParameters.Length; i++)
+        {
+            T delta = NumOps.Subtract(trialParameters[i], originalParameters[i]);
+            gradientDotStep = NumOps.Add(gradientDotStep, NumOps.Multiply(gradient[i], delta));
+            stepSquaredNorm = NumOps.Add(stepSquaredNorm, NumOps.Multiply(delta, delta));
+        }
+
+        T predictedReduction = NumOps.Negate(NumOps.Add(
+            gradientDotStep, NumOps.Multiply(NumOps.FromDouble(0.5), stepSquaredNorm)));
+
+        // A non-positive predicted reduction means the model expects no improvement, so the ratio carries
+        // no information. Leave the radius alone rather than resizing on a meaningless number.
+        if (NumOps.LessThanOrEquals(predictedReduction, NumOps.FromDouble(1e-30)))
+        {
+            return;
+        }
+
+        T actualReduction = NumOps.Subtract(originalLoss, trialLoss);
+        T rho = NumOps.Divide(actualReduction, predictedReduction);
+        T stepNorm = NumOps.Sqrt(stepSquaredNorm);
+
+        // The three thresholds are the options this class already exposes for exactly this test, rather
+        // than the textbook constants inlined: a caller who tuned UnsuccessfulThreshold and found it did
+        // nothing on the tape path would have no way to tell that the number was being ignored.
+        if (NumOps.LessThan(rho, NumOps.FromDouble(_options.UnsuccessfulThreshold)))
+        {
+            _trustRegionRadius = NumOps.Multiply(
+                _trustRegionRadius, NumOps.FromDouble(_options.ContractionFactor));
+        }
+        else if (NumOps.GreaterThan(rho, NumOps.FromDouble(_options.VerySuccessfulThreshold))
+            && NumOps.GreaterThanOrEquals(stepNorm, NumOps.Multiply(_trustRegionRadius, NumOps.FromDouble(0.99))))
+        {
+            _trustRegionRadius = NumOps.Multiply(
+                _trustRegionRadius, NumOps.FromDouble(_options.ExpansionFactor));
+        }
+
+        _trustRegionRadius = MathHelper.Clamp(
+            _trustRegionRadius,
+            NumOps.FromDouble(_options.MinTrustRegionRadius),
+            NumOps.FromDouble(_options.MaxTrustRegionRadius));
+
+        // Reject: the model's prediction was too poor to accept the step, so it is not taken. The shrunken
+        // radius means the next attempt is shorter, which is the mechanism by which a trust region
+        // recovers. Nocedal & Wright's eta lives in [0, 1/4); AcceptanceThreshold defaults to 0.1.
+        if (NumOps.LessThanOrEquals(rho, NumOps.FromDouble(_options.AcceptanceThreshold)))
+        {
+            context.SetFlatParameters(originalParameters);
         }
     }
 }

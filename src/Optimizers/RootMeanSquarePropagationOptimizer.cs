@@ -50,6 +50,13 @@ public class RootMeanSquarePropagationOptimizer<T, TInput, TOutput> : GradientBa
     {
         config = default;
         if (_options.UseAdaptiveLearningRate) return false;
+
+        // Note for anyone auditing this against Optimize(): that loop calls ApplyMomentum and
+        // InitialMomentum defaults to 0.9, which looks like a mismatch with the momentum-free RMSprop
+        // kernel. It is not. Optimize()'s flat-vector loop drives non-neural models and never reaches the
+        // compiled plan; Step() — the tape path this kernel actually replaces — applies no momentum, so
+        // fused and eager agree. Declining here on non-zero InitialMomentum would needlessly drop every
+        // default-configured RMSprop off the fused path.
         if (!TryGetFusedLrSchedule(out var schedule)) return false;
         config = new Fused.FusedOptimizerConfig(
             Tensors.Engines.Compilation.OptimizerType.RMSprop,

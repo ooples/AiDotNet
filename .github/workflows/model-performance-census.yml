@@ -272,9 +272,19 @@ jobs:
             '--output', 'artifacts/model-performance/summary.json',
             '--write-baseline', 'artifacts/model-performance/baseline.json',
             '--expected-count', '${{ steps.inventory.outputs.count }}',
-            '--max-regression-ratio', '1.25',
+            # Per-metric regression limits, sized to each metric's measured run-over-run noise
+            # rather than one number for all of them. See MetricStability in ModelPerfProbe.
+            '--max-regression-ratio', '2.5',
+            '--max-allocation-regression-ratio', '2.5',
+            '--max-memory-regression-ratio', '1.6',
+            '--max-volatile-timing-regression-ratio', '5.0',
+            '--uncorroborated-timing-ratio', '4.0',
+            '--corroboration-ratio', '1.25',
             '--max-train-step-ms', '120000',
             '--max-steady-forward-p95-ms', '30000',
+            # Foundation-scale fixtures are bounded per parameter instead of by the flat ceiling,
+            # matching --max-peak-bytes-per-parameter below. Only bites above ~469M parameters.
+            '--max-steady-forward-ns-per-parameter', '64',
             '--max-fixture-wall-ms', '120000',
             # Ordinary models must stay below roughly half of a 16 GiB runner. Foundation models
             # additionally receive at most 32 bytes per trainable fp32 parameter (8x the weight

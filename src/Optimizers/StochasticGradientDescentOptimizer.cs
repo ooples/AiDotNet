@@ -97,11 +97,27 @@ public class StochasticGradientDescentOptimizer<T, TInput, TOutput> : GradientBa
     }
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// Reports plain <see cref="Tensors.Engines.Compilation.OptimizerType.SGD"/>, because that is what
+    /// <see cref="Step"/> does: <c>param -= lr * grad</c>, with the sparse path passing an explicit
+    /// <c>momentum: 0.0</c>.
+    /// </para>
+    /// <para>
+    /// <c>Optimize</c> DOES call <c>ApplyMomentum</c>, and <c>InitialMomentum</c> defaults to 0.9 — which
+    /// makes it tempting to conclude this should map to SGDMomentum. It should not. The two are different
+    /// paths: <c>Optimize</c>'s flat-vector loop drives non-neural models (regression, clustering) and never
+    /// reaches the compiled plan at all, while <c>Step</c> is the per-tensor tape path that the fused kernel
+    /// actually replaces. The spec must match <c>Step</c>; mapping it to SGDMomentum would ADD momentum on the
+    /// fused path that the eager tape path does not apply.
+    /// </para>
+    /// </remarks>
     bool Fused.IFusedOptimizerSpec.TryGetFusedOptimizerConfig(out Fused.FusedOptimizerConfig config)
     {
         config = default;
         if (_options.UseAdaptiveLearningRate) return false;
         if (!TryGetFusedLrSchedule(out var schedule)) return false;
+
         config = new Fused.FusedOptimizerConfig(
             Tensors.Engines.Compilation.OptimizerType.SGD,
             (float)GetCurrentLearningRate(),

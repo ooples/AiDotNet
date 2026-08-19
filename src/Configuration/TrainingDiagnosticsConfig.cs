@@ -112,6 +112,73 @@ public static class TrainingDiagnosticsConfig
     public static void ResetStepCounter() =>
         System.Threading.Interlocked.Exchange(ref _stepCounter, 0);
 
+    private static int _fusedOptimizerHits;
+    private static int _fusedOptimizerMisses;
+    private static string? _lastFusedOptimizerMissReason;
+
+    /// <summary>
+    /// How many training steps ran on the fused compiled path since the last
+    /// <see cref="ResetFusedOptimizerCounters"/>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Counted regardless of <see cref="Level"/>, unlike
+    /// <see cref="FusedOptimizerPathEvent"/>. That is the whole point: the event only fires for someone
+    /// who already suspected something and turned diagnostics on beforehand, whereas this answers "did
+    /// the fused path engage at all?" after a run has already finished and behaved oddly.
+    /// </para>
+    /// <para>
+    /// Issue #1930 is the worked example. RWKVForecaster produced NaN across its parameter buffer after
+    /// one training step, intermittently, and the control arm used an optimizer with no fused spec — so
+    /// compiled training never engaged for that arm and nothing said so. The investigation read the
+    /// correlation as evidence of an allocator fault caused by optimizer state. A hit count of zero would
+    /// have pointed at the real variable immediately.
+    /// </para>
+    /// </remarks>
+    public static int FusedOptimizerHits => _fusedOptimizerHits;
+
+    /// <summary>
+    /// How many training steps fell back to the eager tape since the last
+    /// <see cref="ResetFusedOptimizerCounters"/>.
+    /// </summary>
+    public static int FusedOptimizerMisses => _fusedOptimizerMisses;
+
+    /// <summary>
+    /// Why the most recent fallback happened, or <c>null</c> if the fused path has not missed.
+    /// </summary>
+    /// <remarks>
+    /// The reason strings name the specific cause — an opted-out model, an unsupported numeric type, an
+    /// optimizer with no fused spec, and so on — so a zero hit count can be explained without re-running
+    /// under diagnostics.
+    /// </remarks>
+    public static string? LastFusedOptimizerMissReason => _lastFusedOptimizerMissReason;
+
+    /// <summary>Resets the fused-path hit/miss counters and the last miss reason.</summary>
+    public static void ResetFusedOptimizerCounters()
+    {
+        System.Threading.Interlocked.Exchange(ref _fusedOptimizerHits, 0);
+        System.Threading.Interlocked.Exchange(ref _fusedOptimizerMisses, 0);
+        System.Threading.Volatile.Write(ref _lastFusedOptimizerMissReason, null);
+    }
+
+    /// <summary>Internal — records one fused-path decision.</summary>
+    /// <param name="hit"><c>true</c> when the step ran fused; <c>false</c> when it fell back.</param>
+    /// <param name="reason">The fallback reason, when <paramref name="hit"/> is <c>false</c>.</param>
+    internal static void RecordFusedOptimizerPath(bool hit, string? reason)
+    {
+        if (hit)
+        {
+            System.Threading.Interlocked.Increment(ref _fusedOptimizerHits);
+            return;
+        }
+
+        System.Threading.Interlocked.Increment(ref _fusedOptimizerMisses);
+        if (reason is not null)
+        {
+            System.Threading.Volatile.Write(ref _lastFusedOptimizerMissReason, reason);
+        }
+    }
+
     /// <summary>Internal — advances and returns the new step index.</summary>
     internal static int AdvanceStep() => System.Threading.Interlocked.Increment(ref _stepCounter);
 

@@ -10790,10 +10790,17 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         if (typeof(T) != typeof(float) && typeof(T) != typeof(double))
             return EmitFusedMissAndFallback($"numeric type {typeof(T).Name} not supported by fused kernel");
 
-        if (!TryMapToFusedOptimizerConfig(
-                resolvedOptimizer, out var fusedType, out float lr, out float b1, out float b2, out float eps, out float wd,
-                out AiDotNet.Tensors.Engines.Compilation.LrSchedule? lrSched, out bool useBf16Moments))
+        if (!TryMapToFusedOptimizerConfig(resolvedOptimizer, out var fusedCfg))
             return EmitFusedMissAndFallback($"optimizer {resolvedOptimizer.GetType().Name} not compatible with fused kernel");
+
+        var fusedType = fusedCfg.Type;
+        float lr = fusedCfg.LearningRate;
+        float b1 = fusedCfg.Beta1;
+        float b2 = fusedCfg.Beta2;
+        float eps = fusedCfg.Epsilon;
+        float wd = fusedCfg.WeightDecay;
+        var lrSched = fusedCfg.Schedule;
+        bool useBf16Moments = fusedCfg.UseBf16Moments;
 
         // Use the existing recursive trainable-layer collector instead of the
         // top-level-only scan — composite layers with trainable children (e.g.,
@@ -10891,6 +10898,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 // fused optimizers beyond the inline Adam/SGD fast paths by applying this
                 // optimizer's own master update to the FP16-computed FP32 gradients.
                 eagerOptimizer: resolvedOptimizer,
+                fusedExtras: fusedCfg.Extras,
                 // Publish the fused kernel's gradients onto the layer surface. The fused path
                 // updates parameters in-replay and returns without ever passing through the eager
                 // gradient code below, which is why the surface stayed empty for every model that
@@ -11214,6 +11222,13 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
 
     private static void EmitFusedPathEventIfEnabled(bool hit, string? reason)
     {
+        // Counted unconditionally, BEFORE the level gate. The event below only fires when the caller
+        // already suspected something and turned diagnostics on; the counter answers "did the fused path
+        // engage at all?" after the fact, which is the question that would have shortened the RWKV
+        // NaN investigation (#1930) — there, the control arm silently never compiled because its optimizer
+        // had no fused spec, and nothing recorded that. One interlocked increment per training step.
+        Configuration.TrainingDiagnosticsConfig.RecordFusedOptimizerPath(hit, reason);
+
         if (Configuration.TrainingDiagnosticsConfig.Level
             < Configuration.TrainingDiagnosticLevel.PerStep)
             return;
@@ -11227,12 +11242,34 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     }
 
     /// <summary>
-    /// Inspects a pluggable optimizer and maps it onto the fixed set supported
-    /// by the Tensors-side fused kernel (<c>SGD</c>, <c>Adam</c>, <c>AdamW</c>).
-    /// Returns <c>false</c> when the optimizer is outside that set OR when
-    /// per-step hyperparameter mutation would defeat the fused plan's
-    /// configure-once contract: adaptive learning rates, attached LR schedulers,
-    /// or AMSGrad mode (which the fused kernel doesn't model).
+    /// Asks a pluggable optimizer to describe itself for the Tensors-side fused kernel, returning the
+    /// whole <see cref="Optimizers.Fused.FusedOptimizerConfig"/>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Returns <c>false</c> when the optimizer has no fused kernel, or when per-step hyperparameter
+    /// mutation would defeat the plan's configure-once contract — adaptive learning rates, adaptive
+    /// momentum, or an LR scheduler the fused side cannot express.
+    /// </para>
+    /// <para>
+    /// This returns the config rather than a list of <c>out</c> parameters so that optimizer-specific
+    /// fields — <c>Extras</c> for LARS/FTRL/ASGD/Rprop, <c>UseBf16Moments</c> — ride along without
+    /// changing the signature and every call site again. The previous shape had eight <c>out</c>
+    /// parameters and most callers discarded half of them with <c>out _</c>.
+    /// </para>
+    /// </remarks>
+    internal static bool TryMapToFusedOptimizerConfig(
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> optimizer,
+        out Optimizers.Fused.FusedOptimizerConfig config)
+    {
+        config = default;
+        return optimizer is Optimizers.Fused.IFusedOptimizerSpec spec
+            && spec.TryGetFusedOptimizerConfig(out config);
+    }
+
+    /// <summary>
+    /// Legacy out-parameter shape, retained so the existing fused call sites keep compiling while they
+    /// migrate to the config-returning overload above. New code should use that one.
     /// </summary>
     internal static bool TryMapToFusedOptimizerConfig(
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> optimizer,
@@ -11245,14 +11282,9 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         out AiDotNet.Tensors.Engines.Compilation.LrSchedule? lrSchedule,
         out bool useBf16Moments)
     {
-        // Open/closed-compliant dispatch: the optimizer self-describes its fused
-        // config (incl. selecting the AMSGrad kernel variant when it opts in, and
-        // converting any attached LR scheduler) via IFusedOptimizerSpec. Replaces
-        // the old type-switch that had to be edited for every new optimizer and
-        // silently rejected AMSGrad. Only optimizers that actually have a fused
-        // SIMD kernel implement the interface, so there is no central whitelist to
-        // maintain — an optimizer without a kernel simply isn't an
-        // IFusedOptimizerSpec and uses the eager tape.
+        // Delegates to the config-returning overload rather than repeating the dispatch check. Two copies
+        // of one rule drift the moment a future edit touches only one of them, and this overload exists
+        // solely to unpack what that one already decided.
         optimizerType = default;
         learningRate = 0f;
         beta1 = 0f;
@@ -11262,8 +11294,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         lrSchedule = null;
         useBf16Moments = false;
 
-        if (optimizer is not Optimizers.Fused.IFusedOptimizerSpec spec
-            || !spec.TryGetFusedOptimizerConfig(out var cfg))
+        if (!TryMapToFusedOptimizerConfig(optimizer, out var cfg))
             return false;
 
         optimizerType = cfg.Type;

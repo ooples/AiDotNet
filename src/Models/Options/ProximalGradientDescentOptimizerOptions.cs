@@ -75,12 +75,21 @@ public class ProximalGradientDescentOptimizerOptions<T, TInput, TOutput> : Gradi
     /// being used. This parameter is often one of the most important hyperparameters to tune, as it directly
     /// controls the trade-off between fitting the training data and maintaining model simplicity.
     /// </para>
+    /// <para>
+    /// <b>Null means "use the strength the regularizer was built with."</b> The proximal operator itself is
+    /// chosen through <c>Regularization</c>, and every regularizer already carries its own
+    /// <c>Strength</c>. Setting a value here overrides that strength for the L1 and L2 operators, which is
+    /// the path the facade's <c>regularization</c> / <c>l2regularization</c> / <c>weightdecay</c>
+    /// hyperparameter takes. Leaving it null — the default — keeps whatever the regularizer was
+    /// constructed with, so the two knobs can never silently contradict each other.
+    /// </para>
     /// <para><b>For Beginners:</b> This setting controls how strongly the regularization penalties affect your model.
-    /// 
-    /// The default value of 0.01 means:
+    ///
+    /// Leaving it unset means:
+    /// - The regularizer you chose keeps its own strength (0.01 for the default L2)
     /// - The regularization has a moderate influence on the model
     /// - There's a balance between minimizing errors and keeping the model simple
-    /// 
+    ///
     /// Think of regularization like a budget constraint:
     /// - Your model wants to "spend" parameter values to fit the data perfectly
     /// - Regularization sets a "budget" that limits this spending
@@ -104,14 +113,18 @@ public class ProximalGradientDescentOptimizerOptions<T, TInput, TOutput> : Gradi
     /// </remarks>
     /// <remarks>
     /// <para>
-    /// Defaults to 0, meaning no proximal shrinkage. That is what this optimizer has always
-    /// ACTUALLY done -- the value was never read, and the proximal step came only from
-    /// <c>Regularization</c>, which defaults to null. Documenting the default as 0.01 while
-    /// applying 0 made the discrepancy invisible. The value is now read; the default states what
-    /// happens.
+    /// This used to be declared, documented at length, and read by nothing: the proximal step came only
+    /// from <c>Regularization</c>, so an optimizer configured with a strength alone applied no shrinkage
+    /// at all. It is read now.
+    /// </para>
+    /// <para>
+    /// Null means "not set", which leaves <c>Regularization</c> exactly as configured. A non-null value
+    /// overrides that regularizer's strength instead. Nullable rather than a sentinel 0.0 so the two ways
+    /// of expressing a strength cannot contradict each other, and so that an explicit zero stays
+    /// distinguishable from "I never touched this".
     /// </para>
     /// </remarks>
-    public double RegularizationStrength { get; set; } = 0.0;
+    public double? RegularizationStrength { get; set; }
 
     /// <summary>
     /// Gets or sets the step size for the proximal operator component of the algorithm.

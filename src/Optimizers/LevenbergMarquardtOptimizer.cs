@@ -26,8 +26,32 @@ namespace AiDotNet.Optimizers;
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 [ComponentType(ComponentType.Optimizer)]
 [PipelineStage(PipelineStage.Training)]
-public class LevenbergMarquardtOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TInput, TOutput>
+public class LevenbergMarquardtOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TInput, TOutput>, Fused.IFusedOptimizerSpec
 {
+    /// <summary>
+    /// Declines to fuse, always.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Stated explicitly rather than by omission, so that "no fused equivalent" is not confused with "no
+    /// kernel written yet". Levenberg-Marquardt solves
+    /// <c>(JᵀJ + λ·diag(JᵀJ))·δ = -Jᵀr</c>, which needs the residual Jacobian J and the residual vector r
+    /// — not the loss gradient. A fused step receives only <c>∇L = 2Jᵀr</c>, and J is not recoverable from
+    /// that product: the same gradient arises from infinitely many (J, r) pairs. No kernel can supply
+    /// what the caller never computed, which is why this optimizer's <c>Step</c> throws rather than
+    /// falling back to something gradient-shaped.
+    /// </para>
+    /// <para>
+    /// Fusing a least-squares method would mean the fused path running a different algorithm from the
+    /// eager one under the same name — the exact failure this interface exists to prevent.
+    /// </para>
+    /// </remarks>
+    bool Fused.IFusedOptimizerSpec.TryGetFusedOptimizerConfig(out Fused.FusedOptimizerConfig config)
+    {
+        config = default;
+        return false;
+    }
+
     /// <summary>
     /// The options specific to the Levenberg-Marquardt algorithm.
     /// </summary>
@@ -562,16 +586,38 @@ public class LevenbergMarquardtOptimizer<T, TInput, TOutput> : GradientBasedOpti
     }
 
     /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// Levenberg-Marquardt cannot run on the tape path, and this method says so rather than quietly doing
+    /// something else.
+    /// </para>
+    /// <para>
+    /// LM solves the damped normal equations <c>(J^T J + lambda*diag(J^T J)) delta = J^T r</c>, which needs the
+    /// JACOBIAN of the per-sample residuals with respect to the parameters. A gradient tape supplies only
+    /// <c>grad L = J^T r</c> — a single vector. J cannot be recovered from it: the product J^T r collapses the
+    /// residual dimension, and infinitely many Jacobians produce the same gradient. There is no approximation
+    /// of LM available here, only a different algorithm wearing its name.
+    /// </para>
+    /// <para>
+    /// Until this override existed, <c>Step</c> fell through to
+    /// <see cref="GradientBasedOptimizerBase{T, TInput, TOutput}"/>'s default <c>theta -= lr * g</c> — so
+    /// training a neural network with LevenbergMarquardtOptimizer silently ran plain gradient descent. It
+    /// converged, reported progress, and was not Levenberg-Marquardt. Throwing is the correct outcome: a
+    /// caller who asked for LM should learn that they cannot have it here, not receive SGD unannounced.
+    /// </para>
+    /// <para>
+    /// LM remains fully available through <see cref="Optimize"/>, which has the model and data it needs to
+    /// build the Jacobian — its intended use, non-linear least squares over an explicit dataset.
+    /// </para>
+    /// </remarks>
+    /// <exception cref="NotSupportedException">Always, when driven from a gradient tape.</exception>
     public override void Step(TapeStepContext<T> context)
     {
-        // Sparse-by-default: walk any embedding params whose gradient lives
-        // only in the sparse list (Tensors stopped seeding dense alongside) and
-        // materialise via ToDense into context.Gradients before GetFlatGradients
-        // / Hessian assembly reads from the dict. No-op for non-embedding params
-        // and for embedding params that already have a dense entry.
-        SparseEmbeddingOptimizerHelpers.MaterializeSparseIntoGradientsDict(context, Engine);
-
-        var updated = UpdateParameters(context.GetFlatParameters(), context.GetFlatGradients());
-        context.SetFlatParameters(updated);
+        throw new NotSupportedException(
+            "LevenbergMarquardtOptimizer cannot be used for tape-based (neural network) training. It solves " +
+            "the damped normal equations (J^T J + lambda*diag) delta = J^T r, which require the Jacobian of " +
+            "the residuals; a gradient tape provides only grad L = J^T r, and J cannot be recovered from " +
+            "that product. Use Optimize() with an explicit dataset for non-linear least squares, or choose a " +
+            "gradient-based optimizer (Adam, SGD, LBFGS) for neural network training.");
     }
 }

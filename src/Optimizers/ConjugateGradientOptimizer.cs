@@ -524,4 +524,95 @@ public class ConjugateGradientOptimizer<T, TInput, TOutput> : GradientBasedOptim
             => _sinceRestart++;
     }
 
+
+    /// <summary>
+    /// Applies one Fletcher-Reeves conjugate-gradient step to a flat parameter vector.
+    /// </summary>
+    /// <param name="parameters">The current parameters.</param>
+    /// <param name="gradient">The gradient at those parameters.</param>
+    /// <returns>The updated parameters.</returns>
+    /// <remarks>
+    /// <para>
+    /// This override exists because without it this optimizer was not conjugate gradient at all on the
+    /// tape path. <see cref="Step"/> calls <c>UpdateParameters</c>, and with no override that resolved to
+    /// <see cref="GradientBasedOptimizerBase{T, TInput, TOutput}"/>'s default, which is plain
+    /// <c>theta -= lr * g</c>. The conjugate direction was only ever computed in <see cref="Optimize"/>'s
+    /// flat-vector loop, so anyone selecting this optimizer to train a neural network silently got SGD.
+    /// </para>
+    /// <para>
+    /// The step is the standard Fletcher-Reeves recurrence:
+    /// </para>
+    /// <code>
+    /// beta_t = (g_t . g_t) / (g_{t-1} . g_{t-1})
+    /// d_t    = -g_t + beta_t * d_{t-1}
+    /// theta  = theta + lr * d_t
+    /// </code>
+    /// <para>
+    /// Note the sign: <c>d</c> already points downhill, so the parameter update ADDS <c>lr * d</c> rather
+    /// than subtracting it. On the first step, and after a restart, <c>d = -g</c>, which makes that step
+    /// identical to gradient descent — the correct behaviour, and the reason this change does not alter the
+    /// very first update of an existing run.
+    /// </para>
+    /// <para>
+    /// Two guards keep the recurrence stable, both standard practice rather than local invention. The
+    /// denominator is checked before dividing, since a vanishing previous gradient would otherwise produce a
+    /// non-finite beta and poison every later direction. And the new direction is restarted to steepest
+    /// descent whenever it is not a descent direction (<c>d . g &gt;= 0</c>) — a Powell-style restart. Without
+    /// it, accumulated non-linearity can turn the conjugate direction uphill and the optimizer walks away
+    /// from the minimum while still reporting progress.
+    /// </para>
+    /// <para>
+    /// Unlike <see cref="Optimize"/>, this path takes no line search: the tape gives one gradient per step
+    /// and re-evaluating the loss at trial points would mean extra forward passes the caller did not ask
+    /// for. The configured learning rate is used as the step length instead.
+    /// </para>
+    /// </remarks>
+    public override Vector<T> UpdateParameters(Vector<T> parameters, Vector<T> gradient)
+    {
+        if (parameters.Length != gradient.Length)
+        {
+            throw new ArgumentException(
+                $"Parameter vector length ({parameters.Length}) must match gradient vector length ({gradient.Length}).",
+                nameof(gradient));
+        }
+
+        // Captured into locals so the compiler can see `_previousDirection` stays non-null through the
+        // block below. `_previousGradient` is not nullable — it starts as an empty vector, which the
+        // length check below rejects, giving the same restart.
+        var previousGradient = _previousGradient;
+        var previousDirection = _previousDirection;
+
+        var negGradient = (Vector<T>)Engine.Multiply(gradient, NumOps.Negate(NumOps.One));
+
+        // Restart whenever the history is missing or stale (e.g. the parameter count changed).
+        bool canContinue = previousDirection is not null
+            && previousGradient.Length == gradient.Length
+            && previousDirection.Length == gradient.Length;
+
+        Vector<T> direction = negGradient;
+        if (canContinue && previousDirection is not null)
+        {
+            var denominator = previousGradient.DotProduct(previousGradient);
+            if (NumOps.GreaterThan(NumOps.Abs(denominator), NumOps.FromDouble(1e-30)))
+            {
+                var beta = NumOps.Divide(gradient.DotProduct(gradient), denominator);
+                var conjugate = (Vector<T>)Engine.Add(
+                    negGradient,
+                    Engine.Multiply(previousDirection, beta));
+
+                // Powell restart: only adopt the conjugate direction while it still points downhill.
+                // Otherwise keep steepest descent rather than following it uphill.
+                if (NumOps.LessThan(conjugate.DotProduct(gradient), NumOps.Zero))
+                {
+                    direction = conjugate;
+                }
+            }
+        }
+
+        _previousGradient = gradient.Clone();
+        _previousDirection = direction;
+        _iteration++;
+
+        return (Vector<T>)Engine.Add(parameters, Engine.Multiply(direction, CurrentLearningRate));
+    }
 }

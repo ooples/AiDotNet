@@ -70,6 +70,97 @@ public class GradientBasedOptimizerOptions<T, TInput, TOutput> : OptimizationAlg
     }
 
     /// <summary>
+    /// Copies every settable option inherited by a concrete gradient optimizer.
+    /// </summary>
+    /// <param name="other">The options instance to copy.</param>
+    /// <remarks>
+    /// <para>
+    /// Concrete optimizer option classes call this from their copy constructors before copying their own
+    /// properties. Keeping the inherited list here prevents newly added optimizers from silently losing shared
+    /// configuration such as reproducibility seeds, schedulers, clipping, caching, or early-stopping policy.
+    /// </para>
+    /// <para>
+    /// <b>The copy is SHALLOW for reference-typed collaborators, and several of them hold per-run state.</b>
+    /// <see cref="GradientCache"/>, <c>ModelCache</c>, <c>FitDetector</c>, <c>FitnessCalculator</c>,
+    /// <c>PredictionOptions</c> and <c>ModelStatsOptions</c> are shared with <paramref name="other"/>, not
+    /// duplicated — so two optimizers built from one options instance write into the same caches and one
+    /// run's entries are visible to the other. That is deliberate (the caches exist to be shared, and
+    /// cloning a fitness calculator mid-run would be worse), but it is the opposite of what "a complete
+    /// copy" suggests. Assign fresh instances after copying when the two runs must be independent.
+    /// </para>
+    /// </remarks>
+    protected void CopyInheritedPropertiesFrom(GradientBasedOptimizerOptions<T, TInput, TOutput> other)
+    {
+        if (other is null) throw new ArgumentNullException(nameof(other));
+
+        Seed = other.Seed;
+        MaxIterations = other.MaxIterations;
+        UseEarlyStopping = other.UseEarlyStopping;
+        EarlyStoppingPatience = other.EarlyStoppingPatience;
+        BadFitPatience = other.BadFitPatience;
+        MinimumFeatures = other.MinimumFeatures;
+        MaximumFeatures = other.MaximumFeatures;
+        UseExpressionTrees = other.UseExpressionTrees;
+        InitialLearningRate = other.InitialLearningRate;
+        UseAdaptiveLearningRate = other.UseAdaptiveLearningRate;
+        LearningRateDecay = other.LearningRateDecay;
+        MinLearningRate = other.MinLearningRate;
+        MaxLearningRate = other.MaxLearningRate;
+        MaxLearningRateReductionsOnPlateau = other.MaxLearningRateReductionsOnPlateau;
+        PlateauLearningRateReductionFactor = other.PlateauLearningRateReductionFactor;
+        UseAdaptiveMomentum = other.UseAdaptiveMomentum;
+        InitialMomentum = other.InitialMomentum;
+        MomentumIncreaseFactor = other.MomentumIncreaseFactor;
+        MomentumDecreaseFactor = other.MomentumDecreaseFactor;
+        MinMomentum = other.MinMomentum;
+        MaxMomentum = other.MaxMomentum;
+        ExplorationRate = other.ExplorationRate;
+        MinExplorationRate = other.MinExplorationRate;
+        MaxExplorationRate = other.MaxExplorationRate;
+        Tolerance = other.Tolerance;
+        OptimizationMode = other.OptimizationMode;
+        ParameterAdjustmentScale = other.ParameterAdjustmentScale;
+        SignFlipProbability = other.SignFlipProbability;
+        FeatureSelectionProbability = other.FeatureSelectionProbability;
+        ParameterAdjustmentProbability = other.ParameterAdjustmentProbability;
+        PredictionOptions = other.PredictionOptions;
+        ModelStatsOptions = other.ModelStatsOptions;
+        FitDetector = other.FitDetector;
+        FitnessCalculator = other.FitnessCalculator;
+        ModelCache = other.ModelCache;
+
+        GradientCache = other.GradientCache;
+        _lossFunction = other._lossFunction;
+        LossFunctionExplicitlySet = other.LossFunctionExplicitlySet;
+        Regularization = other.Regularization;
+        DataSampler = other.DataSampler;
+        ShuffleData = other.ShuffleData;
+        DropLastBatch = other.DropLastBatch;
+        RandomSeed = other.RandomSeed;
+        EnableGradientClipping = other.EnableGradientClipping;
+        GradientClippingMethod = other.GradientClippingMethod;
+        MaxGradientNorm = other.MaxGradientNorm;
+        MaxGradientValue = other.MaxGradientValue;
+        LearningRateScheduler = other.LearningRateScheduler;
+        SchedulerStepMode = other.SchedulerStepMode;
+        UseTrainingLossAsFitness = other.UseTrainingLossAsFitness;
+
+        // The line-search settings belong here for the same reason as everything above: a concrete
+        // optimizer's copy constructor calls this and nothing else, so anything omitted is silently
+        // reset to its default in the copy. They were absent while this helper and the settings
+        // themselves were added on separate branches -- the helper could not name properties that did
+        // not exist yet, and each side was complete on its own.
+        LineSearchMaxSteps = other.LineSearchMaxSteps;
+        ArmijoConstant = other.ArmijoConstant;
+        LineSearchContractionFactor = other.LineSearchContractionFactor;
+        LineSearchFallbackStep = other.LineSearchFallbackStep;
+        UseStrongWolfeLineSearch = other.UseStrongWolfeLineSearch;
+        WolfeCurvatureConstant = other.WolfeCurvatureConstant;
+        LineSearchMaxZoomSteps = other.LineSearchMaxZoomSteps;
+        LineSearchMaxStep = other.LineSearchMaxStep;
+    }
+
+    /// <summary>
     /// Gets or sets the gradient cache to use for storing and retrieving computed gradients.
     /// </summary>
     /// <remarks>
