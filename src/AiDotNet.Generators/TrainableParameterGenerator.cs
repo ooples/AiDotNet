@@ -611,7 +611,6 @@ public class TrainableParameterGenerator : IIncrementalGenerator
             // misses one that was divided: `-1 / Groups` is 0 for any Groups >= 2, and a declared 0
             // reads as a real axis. See CollectDeclaredShapeSentinelRoots for the full case.
             var sentinelRoots = new HashSet<string>(System.StringComparer.Ordinal);
-            var sentinelVisited = new HashSet<string>(System.StringComparer.Ordinal);
             foreach (var pf in shapedFields)
             {
                 foreach (var axis in pf.Shape!.Split(','))
@@ -620,11 +619,18 @@ public class TrainableParameterGenerator : IIncrementalGenerator
                     if (trimmed.Length == 0 || trimmed == "*") continue;
                     if (TryGetAdaptiveAxisBinding(trimmed, out string bound)) trimmed = bound;
 
-                    // Each axis gets its own walk: the hazard question is per-axis, while the roots
-                    // accumulate across all of them because any one unresolved root sinks the whole
-                    // declaration. `visited` is likewise shared, so a member reached twice is
-                    // followed once.
+                    // Each axis gets its own walk AND its own `visited` set. The hazard verdict is
+                    // per-axis, and `visited` short-circuits on re-entry: sharing it let the first
+                    // axis consume an identifier so that every later axis reading the same one
+                    // never reached the `member is null` branch and never recorded its unfollowable
+                    // read. Two axes computing over the same unfollowable member would then report
+                    // only the first, leaving the second unguarded AND unreported -- the precise
+                    // failure this diagnostic exists to catch.
+                    //
+                    // Roots stay shared: any one unresolved root sinks the whole declaration, and
+                    // the HashSet keeps the emitted guards unique.
                     var walk = new DeclaredAxisWalk();
+                    var sentinelVisited = new HashSet<string>(System.StringComparer.Ordinal);
                     CollectDeclaredShapeSentinelRoots(classSymbol, trimmed, sentinelRoots, sentinelVisited, 0, walk);
 
                     // Computes something, and reads something we could not follow to a dimension.
@@ -1618,8 +1624,15 @@ public class TrainableParameterGenerator : IIncrementalGenerator
 
             // A field whose initializer is a bare literal is a root, not a conduit -- following it
             // would add nothing and `int _n = 8;` has no members to guard.
+            //
+            // Unwrap unary +/- first. `private int _inputDepth = -1;` is a
+            // PrefixUnaryExpressionSyntax wrapping the literal 1, NOT a LiteralExpressionSyntax, so
+            // testing the outer node alone treated it as a conduit and returned "-1" as a body.
+            // Recursing into "-1" finds no identifier, so no guard was emitted -- for the exact
+            // sentinel this whole feature exists to catch, merely because the layer wrote it as a
+            // field initializer instead of a constructor assignment.
             if (node is VariableDeclaratorSyntax { Initializer.Value: { } initializer } &&
-                initializer is not LiteralExpressionSyntax)
+                Unwrap(initializer) is not LiteralExpressionSyntax)
             {
                 return initializer.ToString();
             }
@@ -1638,6 +1651,28 @@ public class TrainableParameterGenerator : IIncrementalGenerator
         "int" or "long" or "checked" or "unchecked" or "this" or "new" or "true" or "false" => true,
         _ => false,
     };
+
+    /// <summary>
+    /// Strips parentheses and unary +/- so a signed literal is recognised as the literal it is.
+    /// </summary>
+    private static ExpressionSyntax Unwrap(ExpressionSyntax expression)
+    {
+        while (true)
+        {
+            switch (expression)
+            {
+                case ParenthesizedExpressionSyntax parenthesized:
+                    expression = parenthesized.Expression;
+                    continue;
+                case PrefixUnaryExpressionSyntax unary when unary.IsKind(SyntaxKind.UnaryMinusExpression)
+                                                         || unary.IsKind(SyntaxKind.UnaryPlusExpression):
+                    expression = unary.Operand;
+                    continue;
+                default:
+                    return expression;
+            }
+        }
+    }
 
     /// <summary>C# identifiers in an expression, in source order, without allocating a regex.</summary>
     private static IEnumerable<string> ExtractIdentifiers(string expression)
