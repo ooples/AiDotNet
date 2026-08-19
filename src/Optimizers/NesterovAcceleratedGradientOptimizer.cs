@@ -27,8 +27,47 @@ namespace AiDotNet.Optimizers;
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 [ComponentType(ComponentType.Optimizer)]
 [PipelineStage(PipelineStage.Training)]
-public class NesterovAcceleratedGradientOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TInput, TOutput>
+public class NesterovAcceleratedGradientOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TInput, TOutput>, Fused.IFusedOptimizerSpec
 {
+    /// <summary>
+    /// Describes this optimizer for the compiled fused-training kernel.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Maps to <see cref="Tensors.Engines.Compilation.OptimizerType.SGDMomentum"/> with the Nesterov flag
+    /// set, which runs exactly the three lines <see cref="Step"/> and <see cref="UpdateParameters"/> run:
+    /// <c>v = mu*v + g; update = g + mu*v; p -= lr*update</c>.
+    /// </para>
+    /// <para>
+    /// This spec could not be written correctly until two things were fixed. The kernel took a hardcoded
+    /// <c>false</c> for its nesterov argument, so the flag had no way to reach it (Tensors #949). And this
+    /// optimizer applied CLASSICAL momentum despite its name, so requesting Nesterov here would have run a
+    /// different algorithm from the eager path — the divergence a comment in this file had already recorded,
+    /// and the reason the CUDA path was left unwired. Both are now closed, so eager, fused and GPU agree.
+    /// </para>
+    /// <para>
+    /// Unlike the CoordinateDescent mapping, no constant-schedule guard is needed. The learning rate is no
+    /// longer folded into the velocity, so <c>v</c> means the same thing on both sides at every step and a
+    /// moving lr rescales only the current update rather than the accumulated history.
+    /// </para>
+    /// </remarks>
+    bool Fused.IFusedOptimizerSpec.TryGetFusedOptimizerConfig(out Fused.FusedOptimizerConfig config)
+    {
+        config = default;
+        if (_options.UseAdaptiveLearningRate) return false;
+        if (!TryGetFusedLrSchedule(out var schedule)) return false;
+
+        config = new Fused.FusedOptimizerConfig(
+            Tensors.Engines.Compilation.OptimizerType.SGDMomentum,
+            (float)GetCurrentLearningRate(),
+            (float)NumOps.ToDouble(CurrentMomentum),   // Beta1 carries the momentum coefficient
+            0f, 0f, 0f, schedule)
+        {
+            Extras = new Tensors.Engines.Compilation.FusedOptimizerExtras { Nesterov = true },
+        };
+        return true;
+    }
+
     /// <summary>
     /// The options specific to the Nesterov Accelerated Gradient optimizer.
     /// </summary>
@@ -300,8 +339,24 @@ public class NesterovAcceleratedGradientOptimizer<T, TInput, TOutput> : Gradient
             _velocity = new Vector<T>(parameters.Length);
         }
 
-        // The gradient is evaluated at the lookahead position by the caller. Fuse the
-        // velocity and parameter updates so the only per-step vector is the result.
+        // Nesterov look-ahead, in the Sutskever et al. (2013) reformulation that PyTorch's
+        // nesterov=True uses:
+        //
+        //     v      = momentum*v + g
+        //     update = g + momentum*v          <- the look-ahead term
+        //     theta -= lr*update
+        //
+        // This class previously applied v = momentum*v + lr*g; theta -= v, which is CLASSICAL
+        // momentum, not Nesterov — an optimizer named for an algorithm it did not implement. The
+        // divergence was already recorded in a comment here: the CUDA nag_update kernel does the true
+        // look-ahead, so the GPU path was left unwired rather than reconcile the two. Reconciling in
+        // the other direction — making the CPU formula correct — removes the divergence AND lets this
+        // optimizer reach the fused SGDMomentum kernel with nesterov set, which implements exactly
+        // these three lines.
+        //
+        // Note lr is no longer folded into the velocity. That matters beyond tidiness: with lr inside
+        // v, a moving learning rate rescales the whole accumulated history rather than just the
+        // current step, so a schedule would silently change the meaning of the stored state.
         var updatedParameters = new Vector<T>(parameters.Length, skipZeroInit: true);
         var parameterSpan = parameters.AsSpan();
         var gradientSpan = gradient.AsSpan();
@@ -312,9 +367,11 @@ public class NesterovAcceleratedGradientOptimizer<T, TInput, TOutput> : Gradient
         {
             T velocity = NumOps.Add(
                 NumOps.Multiply(CurrentMomentum, velocitySpan[i]),
-                NumOps.Multiply(CurrentLearningRate, gradientSpan[i]));
+                gradientSpan[i]);
             velocitySpan[i] = velocity;
-            updatedSpan[i] = NumOps.Subtract(parameterSpan[i], velocity);
+
+            T update = NumOps.Add(gradientSpan[i], NumOps.Multiply(CurrentMomentum, velocity));
+            updatedSpan[i] = NumOps.Subtract(parameterSpan[i], NumOps.Multiply(CurrentLearningRate, update));
         }
 
         return updatedParameters;
@@ -328,42 +385,36 @@ public class NesterovAcceleratedGradientOptimizer<T, TInput, TOutput> : Gradient
     {
         PrepareTapeState(context);
 
-        // NOTE: this CPU "NAG" applies plain momentum (velocity = momentum*velocity
-        // + lr*grad; param -= velocity), whereas the CUDA nag_update kernel applies
-        // the true Nesterov look-ahead — they differ (parity harness ~9e-4 at step 1,
-        // growing over steps). GPU path NOT wired to avoid a silent behavior change;
-        // reconcile the kernel with this formula (or switch this to true Nesterov)
-        // before enabling.
+        // Nesterov look-ahead (Sutskever et al. 2013 reformulation, as in PyTorch's nesterov=True).
+        // This path previously applied v = momentum*v + lr*grad; param -= v, i.e. CLASSICAL momentum —
+        // which is why the CUDA nag_update kernel, which does the true look-ahead, was left unwired to
+        // avoid a silent behaviour change. The CPU formula is now the correct one, so the two agree and
+        // the fused SGDMomentum kernel can be reached with nesterov set.
         foreach (var param in context.Parameters)
         {
-            // True sparse scatter NAG: velocity + param at touched indices only.
-            // Note: this AiDotNet "NAG" is actually plain SGD-momentum in formula
-            // (see comment above re: trust-ratio kernel divergence). Same wiring
-            // as MomentumOptimizer.
-            if (SparseEmbeddingOptimizerHelpers.HasSparseEmbeddingGrad(param))
-            {
-                if (!_tapeVelocity.TryGetValue(param, out var velSp)) { velSp = new Tensor<T>(param._shape); _tapeVelocity[param] = velSp; }
-                if (SparseEmbeddingOptimizerHelpers.TryApplySgdSparse(
-                        param, velSp,
-                        NumOps.ToDouble(CurrentLearningRate),
-                        NumOps.ToDouble(CurrentMomentum),
-                        weightDecay: 0.0))
-                {
-                    continue;
-                }
-            }
+            // No sparse fast path here, deliberately. TryApplySgdSparse applies CLASSICAL momentum
+            // (velocity = mu*v + lr*g; param -= v) and has no look-ahead term, so routing embedding
+            // parameters through it would run a different algorithm from the dense parameters in the
+            // same step — the silent-substitution failure this optimizer just stopped committing.
+            // Densifying costs throughput on sparse embeddings; running the wrong optimizer costs
+            // correctness, so the dense path below handles every parameter until a Nesterov-capable
+            // sparse helper exists.
 
             if (!SparseEmbeddingOptimizerHelpers.TryGetEffectiveGradient(context, param, Engine, out var grad))
                 continue;
 
             if (!_tapeVelocity.TryGetValue(param, out var vel)) { vel = new Tensor<T>(param._shape); _tapeVelocity[param] = vel; }
 
-            // velocity = momentum * velocity + lr * grad
-            var velNew = Engine.TensorAdd(Engine.TensorMultiplyScalar(vel, CurrentMomentum), Engine.TensorMultiplyScalar(grad, CurrentLearningRate));
+            // Nesterov look-ahead, matching UpdateParameters and the fused SGDMomentum kernel's
+            // nesterov branch exactly:
+            //     v      = momentum*v + g
+            //     update = g + momentum*v
+            //     param -= lr*update
+            var velNew = Engine.TensorAdd(Engine.TensorMultiplyScalar(vel, CurrentMomentum), grad);
             Engine.TensorCopy(velNew, vel);
 
-            // param -= velocity
-            Engine.TensorSubtractInPlace(param, vel);
+            var update = Engine.TensorAdd(grad, Engine.TensorMultiplyScalar(vel, CurrentMomentum));
+            Engine.TensorSubtractInPlace(param, Engine.TensorMultiplyScalar(update, CurrentLearningRate));
         }
     }
 
