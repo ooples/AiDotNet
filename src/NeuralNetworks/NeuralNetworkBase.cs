@@ -11784,6 +11784,53 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         Training.CompiledTapeTrainingStep<T>.Invalidate();
         _fusedTrainingCommitted = false;
         _fusedPersistenceVerified = false;
+
+        ResetOwnedOptimizerState();
+    }
+
+    /// <summary>
+    /// Resets every optimizer this instance already holds, wherever in the hierarchy it lives.
+    /// </summary>
+    /// <remarks>
+    /// _baseTrainOptimizer is only the optimizer the BASE Train path creates. A model that overrides
+    /// Train commonly trains through an optimizer its own base class owns -- SegmentationModelBase,
+    /// ForecastingModelBase, TimeSeriesFoundationModelBase, FrameInterpolationBase and
+    /// VideoSuperResolutionBase each keep one, and 63 models call TrainWithTape(input, target, Optimizer)
+    /// through them. Resetting only _baseTrainOptimizer left those untouched, so momentum survived a
+    /// reset and the next trajectory continued the previous one.
+    ///
+    /// Discovered by walking fields rather than by a virtual each base overrides, because the failure
+    /// mode here is a base that FORGETS to participate: a new model family holding its own optimizer
+    /// would silently reintroduce the bug, and nothing would fail until an invariant caught it much
+    /// later. Walking the fields keeps this automatic, which is the same reason the parameter and
+    /// layer surfaces are discovered rather than hand-registered.
+    ///
+    /// FIELDS, never the Optimizer property: those properties are lazily initialising
+    /// (`_optimizer ??= CreateDefaultOptimizer()`), so reading them here would CONSTRUCT an optimizer
+    /// for a model that never trained, allocating moment buffers for nothing. A field that is still
+    /// null has no state to reset.
+    /// </remarks>
+    private void ResetOwnedOptimizerState()
+    {
+        const BindingFlags Flags = BindingFlags.Instance | BindingFlags.Public
+            | BindingFlags.NonPublic | BindingFlags.DeclaredOnly;
+
+        for (var type = GetType(); type is not null && type != typeof(object); type = type.BaseType)
+        {
+            foreach (var field in type.GetFields(Flags))
+            {
+                if (!typeof(IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>).IsAssignableFrom(field.FieldType))
+                    continue;
+
+                // ReferenceEquals guards the common case where a subclass field aliases the base one,
+                // so a single optimizer is not Reset twice.
+                if (field.GetValue(this) is IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> owned
+                    && !ReferenceEquals(owned, _baseTrainOptimizer))
+                {
+                    owned.Reset();
+                }
+            }
+        }
     }
 
     /// <summary>
