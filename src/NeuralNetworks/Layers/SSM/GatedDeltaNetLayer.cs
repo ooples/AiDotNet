@@ -309,6 +309,23 @@ public partial class GatedDeltaNetLayer<T> : LayerBase<T>, IShapeContract
         int seqLen = rank >= 2 ? input.Shape[rank - 2] : 1;
         int modelDim = input.Shape[rank - 1];
 
+        // The feature axis is FIXED by the projection weights, which are [_modelDimension, *] and
+        // were sized at construction. Sequence length is not: it is read from the input on every
+        // call and threaded through the recurrence, so a shorter or longer sequence is legitimate.
+        //
+        // Without this check modelDim above was computed and then never consulted -- the reshape
+        // below uses _modelDimension regardless, so a mismatched feature axis surfaced as a reshape
+        // element-count failure from inside the engine, naming neither this layer nor the axis that
+        // was actually wrong.
+        if (modelDim != _modelDimension)
+        {
+            throw new ArgumentException(
+                $"GatedDeltaNetLayer was constructed for model dimension {_modelDimension}, but the " +
+                $"input's last axis is {modelDim} (input shape [{string.Join(",", input.Shape)}]). The " +
+                "feature dimension is fixed by the projection weights; only the sequence length may vary.",
+                nameof(input));
+        }
+
         int batchSize = 1;
         for (int d = 0; d < rank - 2; d++)
             batchSize *= input.Shape[d];

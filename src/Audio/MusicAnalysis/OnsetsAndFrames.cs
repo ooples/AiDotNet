@@ -254,9 +254,14 @@ public partial class OnsetsAndFrames<T> : AudioNeuralNetworkBase<T>, IMusicTrans
     /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
     protected override bool SupportsParameterMutation => _useNativeMode;
     protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio)
-    {
-        if (_melSpectrogram is not null) return _melSpectrogram.Forward(rawAudio);
-        return rawAudio;
+        {
+        // Falls back to the base's guaranteed front-end rather than to the RAW WAVEFORM. Returning
+        // rawAudio here meant that whenever _melSpectrogram had not been built yet, a rank-1 signal
+        // went straight into the encoder: no time axis, no frequency axis, and the failure surfaced
+        // far away as a rank complaint from an attention layer.
+        var features = (_melSpectrogram ?? MelSpec).Forward(rawAudio);
+        RequireTimeAxis(features);
+        return features;
     }
 
     protected override Tensor<T> PostprocessOutput(Tensor<T> o) => o;

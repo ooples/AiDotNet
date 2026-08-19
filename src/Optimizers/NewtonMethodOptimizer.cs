@@ -25,8 +25,31 @@ namespace AiDotNet.Optimizers;
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 [ComponentType(ComponentType.Optimizer)]
 [PipelineStage(PipelineStage.Training)]
-public partial class NewtonMethodOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TInput, TOutput>
+public partial class NewtonMethodOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TInput, TOutput>, Fused.IFusedOptimizerSpec
 {
+    /// <summary>
+    /// Declines to fuse, always.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Stated explicitly rather than by omission, so that "no fused equivalent" is not confused with "no
+    /// kernel written yet". Newton's method solves <c>H·d = -g</c>, and this optimizer forms the
+    /// Hessian-vector products for that solve by running extra forward-over-reverse passes through the
+    /// tape — one per CG iteration. A fused step has exactly one gradient and no way to run the model
+    /// again, so the curvature the method is defined by simply is not present.
+    /// </para>
+    /// <para>
+    /// This is the same reason <c>Step</c> throws on a context that cannot re-evaluate, rather than
+    /// falling through to the base class's <c>θ -= lr·g</c>: a first-order step wearing a second-order
+    /// name converges plausibly and never says so.
+    /// </para>
+    /// </remarks>
+    bool Fused.IFusedOptimizerSpec.TryGetFusedOptimizerConfig(out Fused.FusedOptimizerConfig config)
+    {
+        config = default;
+        return false;
+    }
+
     /// <summary>
     /// The options specific to the Newton's Method optimizer.
     /// </summary>
@@ -433,9 +456,20 @@ public partial class NewtonMethodOptimizer<T, TInput, TOutput> : GradientBasedOp
         }
         else
         {
-            // Fall back to approximate Newton via flat parameter vector
-            var updated = UpdateParameters(context.GetFlatParameters(), context.GetFlatGradients());
-            context.SetFlatParameters(updated);
+            // No re-evaluation means no Hessian-vector products, and without those there is no Newton step
+            // to take. This used to fall through to UpdateParameters, which — with no override on this class
+            // — resolved to GradientBasedOptimizerBase's plain `theta -= lr * g`. So a caller who selected
+            // Newton's method on a context that cannot re-evaluate silently received gradient descent: a
+            // first-order method wearing a second-order name, converging plausibly and never saying so.
+            //
+            // Refuse instead. Newton needs curvature; if the context cannot supply it, that is a fact the
+            // caller has to know, not one to paper over with a different algorithm.
+            throw new NotSupportedException(
+                "NewtonMethodOptimizer requires a training context that supports loss re-evaluation, so it " +
+                "can form Hessian-vector products for the Newton-CG step. This context does not " +
+                "(TapeStepContext.SupportsReevaluation is false), and there is no Newton step available " +
+                "without curvature. Use Optimize() with an explicit dataset, or choose a first-order " +
+                "optimizer (Adam, SGD) or a quasi-Newton one (LBFGS) for this path.");
         }
     }
 

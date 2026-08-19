@@ -578,4 +578,188 @@ public enum OptimizerType
     /// </para>
     /// </remarks>
     NestedLearning,
+
+    /// <summary>
+    /// Averaged Stochastic Gradient Descent: decayed SGD that also tracks a running average of the iterates.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Plain SGD never quite settles down, because every step reacts to one noisy batch of
+    /// data, so the model keeps jittering around the right answer instead of stopping on it. ASGD does not try to
+    /// stop the jitter; it just keeps a running average of everywhere the model has been, and reads out the
+    /// average at the end. It is the same reason the average of many dart throws finds the bullseye far better
+    /// than any single dart does. Note that the averaging is deliberately started late in training (controlled by
+    /// the T0 setting), because averaging in the early steps would drag the answer back toward where training
+    /// started.
+    /// </para>
+    /// </remarks>
+    ASGD,
+
+    /// <summary>
+    /// Resilient backpropagation: adapts a per-weight step size from the sign of the gradient, ignoring its size.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Every other optimizer here decides how far to move partly from how big the gradient
+    /// is. Rprop deliberately throws that magnitude away and uses only the direction (the sign). Each weight
+    /// keeps its own step size: if the direction stays the same two steps running, the step grows; if the
+    /// direction flips, it overshot, so the step shrinks. This makes it immune to gradients that are tiny or
+    /// enormous, which is very useful for networks whose gradients vanish. The catch is that it needs the true
+    /// gradient over the whole dataset, so it is for full-batch training only -- on mini-batches the sign flips
+    /// for reasons that are just noise, and the step sizes collapse.
+    /// </para>
+    /// </remarks>
+    Rprop,
+
+    /// <summary>
+    /// Layer-wise Adaptive Moments optimizer for Batch training — Adam with a per-layer trust ratio.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> When you train with very large batches, a single learning rate that suits one
+    /// layer is usually wrong for another, and training destabilizes. LAMB fixes this by scaling each layer's
+    /// step by the ratio of how big that layer's weights are to how big its proposed update is — so every
+    /// layer moves by a sensible fraction of itself rather than by one shared amount. This is what makes it
+    /// possible to train large models with enormous batches.
+    /// </para>
+    /// </remarks>
+    LAMB,
+
+    /// <summary>
+    /// Layer-wise Adaptive Rate Scaling — SGD with momentum plus a per-layer trust ratio.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> The same layer-wise idea as LAMB, but built on plain SGD with momentum instead
+    /// of Adam. It is the classic recipe for training image models with very large batches. Note that the
+    /// papers deliberately exclude biases and normalization parameters from the layer-wise scaling.
+    /// </para>
+    /// </remarks>
+    LARS,
+
+    /// <summary>
+    /// Mini-batch gradient descent — plain gradient descent over fixed-size batches.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> The middle ground between using one example at a time and using the entire
+    /// dataset at once. It updates the model after every small batch, which is both faster than waiting for
+    /// the whole dataset and steadier than reacting to single examples.
+    /// </para>
+    /// </remarks>
+    MiniBatchGradientDescent,
+
+    /// <summary>
+    /// Adam with 8-bit quantized optimizer state.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Adam normally stores two extra numbers per weight, which for a large model can
+    /// use more memory than the model itself. This variant stores them compressed to 8 bits each, cutting
+    /// that overhead roughly fourfold, while doing the arithmetic at full precision so the training result
+    /// stays close to ordinary Adam.
+    /// </para>
+    /// </remarks>
+    Adam8Bit,
+
+    /// <summary>
+    /// Broyden-Fletcher-Goldfarb-Shanno — a quasi-Newton method that builds an approximate inverse Hessian.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Gradient descent only knows which way is downhill. BFGS also builds up a picture
+    /// of how the slope is curving as it goes, which lets it take much better-aimed steps. That picture is a
+    /// full matrix, so it costs memory proportional to the square of the parameter count — excellent for
+    /// smaller problems, impractical for large neural networks (use LBFGS there instead).
+    /// </para>
+    /// </remarks>
+    BFGS,
+
+    /// <summary>
+    /// Davidon-Fletcher-Powell — the earlier quasi-Newton update formula that BFGS refined.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> A close relative of BFGS that builds the same kind of curvature picture using a
+    /// different update rule. BFGS is usually the better default; DFP is here for problems where it happens
+    /// to behave better, and for comparison.
+    /// </para>
+    /// </remarks>
+    DFP,
+
+    /// <summary>
+    /// Newton's method — uses the exact second derivative (Hessian) rather than an approximation.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> The most informed step you can take: it uses the true curvature instead of an
+    /// estimate, so near a solution it converges extremely fast. The catch is that computing and inverting
+    /// the exact curvature is expensive, so it suits small problems where each step is worth a lot.
+    /// </para>
+    /// </remarks>
+    NewtonMethod,
+
+    /// <summary>
+    /// Levenberg-Marquardt — interpolates between gradient descent and Gauss-Newton for least-squares fits.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Built specifically for curve fitting, where the error is a sum of squared
+    /// residuals. It behaves like cautious gradient descent when it is far from a solution and switches to
+    /// fast Gauss-Newton steps as it closes in, which makes it the standard choice for non-linear
+    /// least-squares problems.
+    /// </para>
+    /// </remarks>
+    LevenbergMarquardt,
+
+    /// <summary>
+    /// Proximal gradient descent — a gradient step followed by a proximal operator, for non-smooth penalties.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Some useful penalties, notably the L1 penalty that drives weights exactly to
+    /// zero, have a kink that ordinary gradient descent cannot handle. This method takes a normal gradient
+    /// step and then applies a small correction that knows how to deal with the kink, which is how it
+    /// produces genuinely sparse models rather than merely small weights.
+    /// </para>
+    /// </remarks>
+    ProximalGradientDescent,
+
+    /// <summary>
+    /// Alternating Direction Method of Multipliers — splits a problem into pieces solved in turn.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> When a problem is hard as a whole but easy in parts, ADMM splits it up, solves
+    /// each part separately, and adds a coordinating term that pulls the partial answers into agreement.
+    /// This makes it well suited to constrained problems and to work spread across machines.
+    /// </para>
+    /// </remarks>
+    ADMM,
+
+    /// <summary>
+    /// Covariance Matrix Adaptation Evolution Strategy — a derivative-free evolutionary optimizer.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Needs no gradients at all. It samples a cloud of candidate solutions, keeps the
+    /// better ones, and reshapes the cloud to point along whichever directions have been paying off. That
+    /// makes it a strong choice when the thing you are optimizing is noisy, or when you simply cannot
+    /// differentiate it.
+    /// </para>
+    /// </remarks>
+    CMAES,
+
+    /// <summary>
+    /// Tabu search — local search that keeps a short-term memory of recent moves and forbids repeating them.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Ordinary local search gets stuck bouncing between the same few states. Tabu
+    /// search keeps a list of the moves it has just made and refuses to undo them for a while, which forces
+    /// it out of that loop and onward to unexplored ground. It is mostly used for combinatorial problems
+    /// such as scheduling and routing.
+    /// </para>
+    /// </remarks>
+    TabuSearch,
 }

@@ -318,11 +318,25 @@
          selective checkpoint parameter sources, requested-source pruning, bounded lazy compilation,
          and thread-budget-aware Goto GEMM routing. -->
 
-    <!-- These packages are published and consumed as a lockstep release set. -->
-    <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.127.0" />
-    <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.127.0" />
-    <PackageVersion Include="AiDotNet.Tensors" Version="0.127.0" />
-    <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.127.0" />
+    <!-- These packages are published and consumed as a lockstep release set, so they move together.
+         The natives were left at 0.126.0 when Tensors went to 0.127.0, which contradicted that and would
+         have quietly become a real mismatch the first time a native binary changed. 0.128.0 of all four
+         is published.
+
+         Bumped 0.127.0 -> 0.128.0: 0.127.0 is the last release whose StreamingTensorPool leaks its
+         backing store. The pool deletes its directory in Dispose, which never runs when the test host is
+         killed or OOMs, and that is the ordinary outcome here rather than the exotic one. 0.128.0 opens
+         the backing file with FileOptions.DeleteOnClose so the kernel reclaims it even on an abnormal
+         exit, and sweeps directories stranded by earlier runs.
+
+         Measured on a developer machine running this suite: three orphaned backing.bin files totalling
+         97 GB in %TEMP% from a single interrupted run. That filled the drive far enough that Windows
+         began compressing files to reclaim space, which silently corrupted a Docker VHDX, since a
+         compressed virtual disk fails every write. -->
+    <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.128.0" />
+    <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.128.0" />
+    <PackageVersion Include="AiDotNet.Tensors" Version="0.128.0" />
+    <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.128.0" />
     <!-- Microsoft / .NET -->
     <PackageVersion Include="Microsoft.CSharp" Version="4.7.0" />
     <PackageVersion Include="Microsoft.Data.Sqlite" Version="10.0.11" />

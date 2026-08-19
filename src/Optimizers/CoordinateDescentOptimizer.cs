@@ -25,8 +25,52 @@ namespace AiDotNet.Optimizers;
 /// </remarks>
 [ComponentType(ComponentType.Optimizer)]
 [PipelineStage(PipelineStage.Training)]
-public partial class CoordinateDescentOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TInput, TOutput>
+public partial class CoordinateDescentOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TInput, TOutput>, Fused.IFusedOptimizerSpec
 {
+    /// <summary>
+    /// Describes this optimizer for the compiled fused-training kernel.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Maps to <see cref="Tensors.Engines.Compilation.OptimizerType.SGDMomentum"/>, which is this optimizer's
+    /// update EXACTLY rather than an approximation of it. The sweep applies
+    /// <c>u_t = lr*g_t + m*u_{t-1}; x -= u_t</c>; substituting <c>u = lr*v</c> gives
+    /// <c>v_t = g_t + m*v_{t-1}</c> and <c>x -= lr*v_t</c>, which is precisely the kernel's
+    /// <c>v = mu*v + g; p -= lr*v</c> with <c>mu = m</c>. The two differ only in whether the stored state is
+    /// scaled by lr, and both start that state at zero.
+    /// </para>
+    /// <para>
+    /// The per-coordinate rate vectors do not break the mapping. They are seeded uniformly from the options
+    /// and <c>UpdateAdaptiveParameters</c> only ever scales the whole vector by one factor and clamps it to
+    /// uniform bounds, so every coordinate carries the same value for the life of the optimizer. Were that to
+    /// change — a genuinely per-coordinate rate — this mapping would no longer hold and the spec would have
+    /// to decline.
+    /// </para>
+    /// <para>
+    /// Declines on a non-constant learning-rate schedule, and that guard is load-bearing rather than
+    /// defensive. The <c>u = lr*v</c> identity holds across steps only while lr is fixed: with a changing
+    /// rate the eager recurrence carries <c>m*u_{t-1}</c> while the kernel carries
+    /// <c>(lr_t/lr_{t-1})*m*u_{t-1}</c>, so the two paths would diverge silently the moment a schedule moved.
+    /// </para>
+    /// </remarks>
+    bool Fused.IFusedOptimizerSpec.TryGetFusedOptimizerConfig(out Fused.FusedOptimizerConfig config)
+    {
+        config = default;
+        if (_options.UseAdaptiveLearningRate) return false;
+        if (!TryGetFusedLrSchedule(out var schedule)) return false;
+        if (schedule is not null) return false;
+
+        // Deliberately the OPTION value, not CurrentLearningRate: the sweep reads _learningRates, which is
+        // seeded from InitialLearningRate. With the guards above the two agree, but naming the one the eager
+        // path actually uses keeps that true if the base class's notion of "current" ever drifts.
+        config = new Fused.FusedOptimizerConfig(
+            Tensors.Engines.Compilation.OptimizerType.SGDMomentum,
+            (float)_options.InitialLearningRate,
+            (float)_options.InitialMomentum,   // Beta1 carries the momentum coefficient
+            0f, 0f, 0f, schedule);
+        return true;
+    }
+
     /// <summary>
     /// The options specific to the Coordinate Descent optimization algorithm.
     /// </summary>
@@ -345,5 +389,68 @@ public partial class CoordinateDescentOptimizer<T, TInput, TOutput> : GradientBa
 
         var updated = UpdateParameters(context.GetFlatParameters(), context.GetFlatGradients());
         context.SetFlatParameters(updated);
+    }
+
+    /// <summary>
+    /// Applies one full coordinate sweep to a flat parameter vector, using per-coordinate learning rates and
+    /// per-coordinate momentum.
+    /// </summary>
+    /// <param name="parameters">The current parameters.</param>
+    /// <param name="gradient">The gradient at those parameters.</param>
+    /// <returns>The updated parameters.</returns>
+    /// <remarks>
+    /// <para>
+    /// Without this override, <see cref="Step"/> resolved to
+    /// <see cref="GradientBasedOptimizerBase{T, TInput, TOutput}"/>'s default of plain
+    /// <c>theta -= lr * g</c>, so training a neural network with this optimizer silently produced gradient
+    /// descent with a single global learning rate — discarding the per-coordinate rates and momentum that are
+    /// the entire reason to choose it.
+    /// </para>
+    /// <para>
+    /// This reproduces exactly what <see cref="Optimize"/>'s sweep does, coordinate by coordinate:
+    /// </para>
+    /// <code>
+    /// update_i = -(lr_i * g_i + momentum_i * previousUpdate_i)
+    /// theta_i += update_i
+    /// </code>
+    /// <para>
+    /// One difference, and it is an improvement rather than a deviation: <see cref="Optimize"/> obtains each
+    /// partial derivative from <c>CalculatePartialDerivative</c>, a one-sided finite difference with a fixed
+    /// 1e-6 epsilon costing one model evaluation per coordinate. The tape hands us every partial exactly, in
+    /// one backward pass. Same update rule, exact derivatives, and O(1) rather than O(n) evaluations.
+    /// </para>
+    /// <para>
+    /// The per-coordinate state is sized lazily here because the tape path never calls the private
+    /// <c>InitializeAdaptiveParameters(IFullModel)</c> overload — that one needs a model to read the
+    /// parameter count from, and <see cref="Step"/> has only the flat vector.
+    /// </para>
+    /// </remarks>
+    public override Vector<T> UpdateParameters(Vector<T> parameters, Vector<T> gradient)
+    {
+        if (parameters.Length != gradient.Length)
+        {
+            throw new ArgumentException(
+                $"Parameter vector length ({parameters.Length}) must match gradient vector length ({gradient.Length}).",
+                nameof(gradient));
+        }
+
+        int n = parameters.Length;
+
+        // Size (or resize) the per-coordinate state against the vector we were actually handed.
+        if (_learningRates is null || _learningRates.Length != n)
+        {
+            _learningRates = Vector<T>.CreateDefault(n, NumOps.FromDouble(_options.InitialLearningRate));
+            _momentums = Vector<T>.CreateDefault(n, NumOps.FromDouble(_options.InitialMomentum));
+            _previousUpdate = Vector<T>.CreateDefault(n, NumOps.Zero);
+        }
+
+        var updated = parameters.Clone();
+        for (int i = 0; i < n; i++)
+        {
+            var update = CalculateUpdate(gradient[i], i);
+            updated[i] = NumOps.Add(updated[i], update);
+        }
+
+        return updated;
     }
 }

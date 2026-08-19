@@ -556,10 +556,18 @@ public partial class ConditionalRandomFieldLayer<T> : LayerBase<T>, IShapeContra
     protected override void EnsureInitialized()
     {
         if (_isInitialized) return;
-        if (_sequenceLength <= 0)
-            throw new InvalidOperationException(
-                "ConditionalRandomFieldLayer cannot initialize until OnFirstForward has resolved the sequence length from input shape.");
 
+        // Deliberately NO sequence-length precondition here, unlike the sibling lazy layers
+        // (RBFLayer, RBMLayer, ObliviousDecisionTreeLayer, PrimaryCapsuleLayer, DigitCapsuleLayer).
+        // Those allocate their parameter tensors against a dimension that only the first input
+        // reveals, so running before OnFirstForward would size them wrongly. This layer does not:
+        // the transition matrix and the start/end scores are [numClasses, numClasses] and
+        // [numClasses], all known at construction and already allocated and initialized by the
+        // lazy ctor. Nothing below reads _sequenceLength.
+        //
+        // Requiring it anyway made ParameterCount and GetParameters() throw before the first
+        // forward, even though the parameters they report exist and are final from construction --
+        // which is precisely what the remarks above promise.
         _isInitialized = true;
     }
 

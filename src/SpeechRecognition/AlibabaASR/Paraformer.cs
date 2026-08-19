@@ -136,7 +136,6 @@ public partial class Paraformer<T> : AudioNeuralNetworkBase<T>, ISpeechRecognize
     /// write on every parameter surface, so the guard is stated once here instead of being
     /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
     protected override bool SupportsParameterMutation => _useNativeMode;
-    protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio) { if (MelSpec is not null) return MelSpec.Forward(rawAudio); return rawAudio; }
     protected override Tensor<T> PostprocessOutput(Tensor<T> o) => o;
     public override ModelMetadata<T> GetModelMetadata() => new() { Name = _useNativeMode ? "Paraformer-Native" : "Paraformer-ONNX", Description = "Paraformer: CIF + parallel Transformer (Alibaba DAMO, 2022)", FeatureCount = _options.NumMels, Complexity = _options.NumEncoderLayers, AdditionalInfo = BaseAudioMetadataInfo() };
     /// <summary>Whether <c>_optimizer</c> is the one this class built rather than the caller's.</summary>

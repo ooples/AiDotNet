@@ -25,8 +25,30 @@ namespace AiDotNet.Optimizers;
 /// </remarks>
 [ComponentType(ComponentType.Optimizer)]
 [PipelineStage(PipelineStage.Training)]
-public partial class DFPOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TInput, TOutput>
+public partial class DFPOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TInput, TOutput>, Fused.IFusedOptimizerSpec
 {
+    /// <summary>
+    /// Declines to fuse, always.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Same reason as <see cref="BFGSOptimizer{T, TInput, TOutput}"/>, of which DFP is the dual: it
+    /// maintains a dense n×n approximation and updates it with rank-one terms that couple every element.
+    /// That state is quadratic in the parameter count, so a fused optimizer — which owns per-parameter
+    /// buffers and applies a flat step — has nowhere to put it, and at the sizes fused training exists for
+    /// it does not fit in memory regardless.
+    /// </para>
+    /// <para>
+    /// This is a property of the method, not a missing kernel. The limited-memory form that solves it is
+    /// L-BFGS (Byrd, Nocedal &amp; Schnabel, 1994), which does fuse here.
+    /// </para>
+    /// </remarks>
+    bool Fused.IFusedOptimizerSpec.TryGetFusedOptimizerConfig(out Fused.FusedOptimizerConfig config)
+    {
+        config = default;
+        return false;
+    }
+
     /// <summary>
     /// The options specific to the DFP optimization algorithm.
     /// </summary>

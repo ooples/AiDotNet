@@ -29,8 +29,39 @@ namespace AiDotNet.Optimizers;
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 [ComponentType(ComponentType.Optimizer)]
 [PipelineStage(PipelineStage.Training)]
-public partial class GradientDescentOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TInput, TOutput>
+public partial class GradientDescentOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TInput, TOutput>, Fused.IFusedOptimizerSpec
 {
+    /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// Maps to plain <see cref="Tensors.Engines.Compilation.OptimizerType.SGD"/>, matching what
+    /// <see cref="Step"/> does: <c>param -= lr * grad</c>, with the sparse path passing an explicit
+    /// <c>momentum: 0.0</c>.
+    /// </para>
+    /// <para>
+    /// <c>Optimize</c> calls <c>ApplyMomentum</c> and <c>InitialMomentum</c> defaults to 0.9, which suggests
+    /// SGDMomentum — but that is the wrong loop to match. <c>Optimize</c>'s flat-vector path serves non-neural
+    /// models and never reaches the compiled plan; <c>Step</c> is the tape path the fused kernel replaces.
+    /// Mapping to SGDMomentum would add momentum on the fused path that the eager tape path does not apply.
+    /// </para>
+    /// <para>
+    /// Declines when the learning rate adapts during training, since the fused plan bakes it in when
+    /// the plan is built.
+    /// </para>
+    /// </remarks>
+    bool Fused.IFusedOptimizerSpec.TryGetFusedOptimizerConfig(out Fused.FusedOptimizerConfig config)
+    {
+        config = default;
+        if (GradientOptions.UseAdaptiveLearningRate) return false;
+        if (!TryGetFusedLrSchedule(out var schedule)) return false;
+
+        config = new Fused.FusedOptimizerConfig(
+            Tensors.Engines.Compilation.OptimizerType.SGD,
+            (float)GetCurrentLearningRate(),
+            0f, 0f, 0f, 0f, schedule);
+        return true;
+    }
+
     /// <summary>
     /// Options specific to the Gradient Descent optimizer.
     /// </summary>

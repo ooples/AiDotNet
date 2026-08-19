@@ -39,6 +39,39 @@ namespace AiDotNet.Models.Options;
 /// </remarks>
 public class TrustRegionOptimizerOptions<T, TInput, TOutput> : GradientBasedOptimizerOptions<T, TInput, TOutput>
 {
+    /// <summary>Initializes a new instance with the documented defaults.</summary>
+    public TrustRegionOptimizerOptions()
+    {
+    }
+
+    /// <summary>Creates a complete copy of an existing trust-region options instance.</summary>
+    /// <param name="other">The options instance to copy.</param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="other"/> is null.</exception>
+    /// <remarks>
+    /// Reference-typed collaborators are shared rather than duplicated — see
+    /// <see cref="GradientBasedOptimizerOptions{T, TInput, TOutput}"/>'s copy helper for what that means.
+    /// </remarks>
+    public TrustRegionOptimizerOptions(TrustRegionOptimizerOptions<T, TInput, TOutput> other)
+    {
+        if (other is null) throw new ArgumentNullException(nameof(other));
+
+        CopyInheritedPropertiesFrom(other);
+        BatchSize = other.BatchSize;
+        InitialTrustRegionRadius = other.InitialTrustRegionRadius;
+        AdaptTrustRegionRadius = other.AdaptTrustRegionRadius;
+        MinTrustRegionRadius = other.MinTrustRegionRadius;
+        MaxTrustRegionRadius = other.MaxTrustRegionRadius;
+        AcceptanceThreshold = other.AcceptanceThreshold;
+        VerySuccessfulThreshold = other.VerySuccessfulThreshold;
+        UnsuccessfulThreshold = other.UnsuccessfulThreshold;
+        ExpansionFactor = other.ExpansionFactor;
+        ContractionFactor = other.ContractionFactor;
+        UseAdaptiveTrustRegionRadius = other.UseAdaptiveTrustRegionRadius;
+        AdaptationRate = other.AdaptationRate;
+        MaxCGIterations = other.MaxCGIterations;
+        CGTolerance = other.CGTolerance;
+    }
+
     /// <summary>
     /// Gets or sets the batch size for gradient computation.
     /// </summary>
@@ -92,6 +125,45 @@ public class TrustRegionOptimizerOptions<T, TInput, TOutput> : GradientBasedOpti
     /// </para>
     /// </remarks>
     public double InitialTrustRegionRadius { get; set; } = 1.0;
+
+    /// <summary>
+    /// Gets or sets whether the trust region is resized (and unsuccessful steps rejected) after every step.
+    /// Default: <c>true</c>.
+    /// </summary>
+    /// <value>
+    /// <c>true</c> to resize the radius from the actual-versus-predicted reduction ratio and reject steps
+    /// that fail <see cref="AcceptanceThreshold"/>; <c>false</c> to hold the radius at
+    /// <see cref="InitialTrustRegionRadius"/> for the whole run. Defaults to <c>true</c>.
+    /// </value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> A trust region is a limit on how far one step may move the parameters.
+    /// Left on (the default), that limit grows when the steps are turning out well and shrinks when they
+    /// are not, and a step that makes things worse is thrown away instead of applied. Turn it off only if
+    /// you need every step to use the same fixed limit — for example to let the compiled fused kernel run
+    /// this optimizer, which cannot measure whether a step helped.</para>
+    /// <para>
+    /// Resizing the region from the ratio of actual to predicted reduction is the trust-region method —
+    /// without it, "trust region" just names a fixed cap on the step length. Leaving this on is what makes
+    /// the region adapt to how well the quadratic model is predicting.
+    /// </para>
+    /// <para>
+    /// Turning it off fixes the radius at <see cref="InitialTrustRegionRadius"/>, which is the only form
+    /// the compiled fused kernel can run: measuring the actual reduction needs the loss at the trial
+    /// point, and a fused step has one gradient and no loss evaluation. So this doubles as the switch that
+    /// decides whether trust region can fuse.
+    /// </para>
+    /// <para>
+    /// <b>Not the same switch as <see cref="UseAdaptiveTrustRegionRadius"/>.</b> This one governs the
+    /// per-step ratio test on the tape path: evaluate the loss at the trial point, resize from
+    /// actual-versus-predicted reduction, and reject the step when the ratio falls below
+    /// <see cref="AcceptanceThreshold"/>. <see cref="UseAdaptiveTrustRegionRadius"/> governs the
+    /// history-based adjustment used where no trial loss is available, which infers success from the
+    /// gradient norm instead. They are independent and can both be on: the tape path then uses the ratio
+    /// test (strictly better information) and does not additionally apply the gradient-norm proxy, so the
+    /// radius is resized once per step, not twice.
+    /// </para>
+    /// </remarks>
+    public bool AdaptTrustRegionRadius { get; set; } = true;
 
     /// <summary>
     /// Gets or sets the minimum allowed radius of the trust region.

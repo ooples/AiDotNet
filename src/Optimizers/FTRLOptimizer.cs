@@ -37,8 +37,65 @@ namespace AiDotNet.Optimizers;
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 [ComponentType(ComponentType.Optimizer)]
 [PipelineStage(PipelineStage.Training)]
-public partial class FTRLOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TInput, TOutput>
+public partial class FTRLOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TInput, TOutput>, Fused.IFusedOptimizerSpec
 {
+    /// <summary>
+    /// Describes this optimizer for the compiled fused-training kernel.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Maps to <see cref="Tensors.Engines.Compilation.OptimizerType.FTRL"/>, which implements the same
+    /// FTRL-Proximal update (McMahan et al., 2013) this optimizer runs:
+    /// </para>
+    /// <code>
+    /// sigma = (sqrt(n_new) - sqrt(n_old)) / alpha
+    /// z    += g - sigma*w
+    /// w     = 0                                                                  if |z| &lt;= lambda1
+    /// w     = -sign(z)*(|z| - lambda1) / (lambda2 + (sqrt(n_new) + beta)/alpha)  otherwise
+    /// </code>
+    /// <para>
+    /// The kernel expresses the same thing with a general learning-rate power:
+    /// <c>sigma = (n_new^-p - n_old^-p)/lr</c> and <c>denom = (beta + n_new^-p)/lr + l2</c>. Passing
+    /// <c>LrPower = -0.5</c> turns both powers into square roots, so the two coincide with <c>lr = Alpha</c>
+    /// and <c>l2 = Lambda2</c>. The kernel's numerator <c>-(z - sign(z)*l1)</c> is algebraically identical
+    /// to <c>-sign(z)*(|z| - l1)</c>, since <c>z = sign(z)*|z|</c>.
+    /// </para>
+    /// <para>
+    /// <c>FtrlBeta</c> has to be passed because the kernel previously assumed beta = 0 — it computed
+    /// <c>sqrt(n)/lr</c> with no beta term at all. McMahan's paper uses beta = 1 and this optimizer defaults
+    /// to 1, so fusing before that flag existed would have run a different per-coordinate learning-rate
+    /// schedule from the eager path on every step.
+    /// </para>
+    /// <para>
+    /// The learning rate is <c>Alpha</c>, not <c>CurrentLearningRate</c>, because Alpha is what the eager
+    /// update actually reads. A learning-rate schedule therefore has nothing to act on here, so one being
+    /// attached means the caller expects behaviour this optimizer does not have — hence the decline rather
+    /// than silently ignoring it.
+    /// </para>
+    /// </remarks>
+    bool Fused.IFusedOptimizerSpec.TryGetFusedOptimizerConfig(out Fused.FusedOptimizerConfig config)
+    {
+        config = default;
+        if (_options.UseAdaptiveLearningRate) return false;
+        if (!TryGetFusedLrSchedule(out var schedule)) return false;
+        if (schedule is not null) return false;
+
+        config = new Fused.FusedOptimizerConfig(
+            Tensors.Engines.Compilation.OptimizerType.FTRL,
+            (float)_options.Alpha,
+            0f, 0f, 0f, 0f, schedule)
+        {
+            Extras = new Tensors.Engines.Compilation.FusedOptimizerExtras
+            {
+                L1 = (float)_options.Lambda1,
+                L2 = (float)_options.Lambda2,
+                FtrlBeta = (float)_options.Beta,
+                LrPower = -0.5f,
+            },
+        };
+        return true;
+    }
+
     /// <summary>
     /// The options specific to the FTRL algorithm.
     /// </summary>

@@ -742,24 +742,62 @@ public partial class AudioEventDetector<T> : AudioClassifierBase<T>, IAudioEvent
         return scores;
     }
 
+    /// <summary>
+    /// Reduces per-frame class scores to one score per class by taking each class's maximum over
+    /// the frame axis.
+    /// </summary>
+    /// <param name="framewise">Either <c>[frames, numClasses]</c> or an already-pooled vector.</param>
+    /// <param name="numClasses">Number of classes to emit.</param>
+    private Tensor<T> MaxPoolOverFrames(Tensor<T> framewise, int numClasses)
+    {
+        if (framewise.Shape.Length < 2) return framewise;
+
+        int frames = framewise.Shape[0];
+        int classes = Math.Min(numClasses, framewise.Shape[framewise.Shape.Length - 1]);
+        var pooled = new Tensor<T>(new[] { classes });
+
+        for (int c = 0; c < classes; c++)
+        {
+            var best = framewise[0, c];
+            for (int f = 1; f < frames; f++)
+            {
+                var v = framewise[f, c];
+                if (NumOps.GreaterThan(v, best)) best = v;
+            }
+
+            pooled[c] = best;
+        }
+
+        return pooled;
+    }
+
     private T[] ClassifyWithNative(Tensor<T> melSpec)
     {
-        // Flatten mel spectrogram for neural network
-        var input = new Tensor<T>([melSpec.Length]);
-        int idx = 0;
-        for (int t = 0; t < melSpec.Shape[0]; t++)
-        {
-            for (int f = 0; f < melSpec.Shape[1]; f++)
-            {
-                input[idx++] = melSpec[t, f];
-            }
-        }
+        // Pass the spectrogram through as a SEQUENCE, [frames, mels]. This used to flatten it into
+        // one long vector, which destroyed the time axis the stack is built around: the layer chain
+        // is Dense -> LayerNorm -> PositionalEncoding(maxFrames, hiddenDim) -> MultiHeadAttention xN,
+        // and positional encoding and attention are meaningless without frames to order and attend
+        // over. MultiHeadAttentionLayer rejected the rank-1 input outright, which is how this
+        // surfaced; had it not, the model would have been silently attending over nothing.
+        var input = melSpec;
 
         // Run through network. PredictCore already applies the per-class SIGMOID for this
         // MULTI-LABEL task (each event is independently present/absent), so `output` is already
         // per-class presence PROBABILITIES in [0, 1]. Copy them directly — re-applying a sigmoid
         // here would compute sigmoid(sigmoid(x)) and flatten every native-mode / Detect* score.
-        var output = Predict(input);
+        var framewise = Predict(input);
+
+        // Temporal MAX pooling over frames. The stack emits per-frame class scores and the caller
+        // wants one score per class for the window, so the frame axis has to be reduced.
+        //
+        // Max is the multiple-instance-learning aggregation standard for weakly-labelled sound
+        // event detection -- frame-level predictions are pooled by temporal max to match clip-level
+        // targets (Wang et al., "A Comparison of Five Multiple Instance Learning Pooling Functions
+        // for Sound Event Detection with Weak Labeling", 2018). It also states the right thing for
+        // THIS model, whose scores are independent per-class presence probabilities: an event is
+        // present in the window if it is present in ANY frame. Mean pooling would dilute a short
+        // event across a long window, which is the opposite of what a detector wants.
+        var output = MaxPoolOverFrames(framewise, ClassLabels.Count);
 
         var scores = new T[ClassLabels.Count];
         for (int i = 0; i < Math.Min(output.Length, scores.Length); i++)

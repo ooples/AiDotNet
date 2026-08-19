@@ -26,8 +26,56 @@ namespace AiDotNet.Optimizers;
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 [ComponentType(ComponentType.Optimizer)]
 [PipelineStage(PipelineStage.Training)]
-public partial class LBFGSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TInput, TOutput>
+public partial class LBFGSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TInput, TOutput>, Fused.IFusedOptimizerSpec
 {
+    /// <summary>
+    /// Describes this optimizer for the compiled fused-training kernel.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// L-BFGS is not a per-element update — every one of the 2m+2 inner products in the two-loop recursion
+    /// couples all parameters — but the plan does not require one. It already runs two-phase optimizers
+    /// (HypergradientSGD, DAdaptationSGD) as a global reduction followed by an elementwise pass, and
+    /// <see cref="Tensors.Engines.Compilation.OptimizerType.LBFGS"/> is the same shape repeated 2m times.
+    /// So "not expressible as a SIMD kernel" was never the same statement as "cannot fuse".
+    /// </para>
+    /// <para>
+    /// The plan implements Nocedal &amp; Wright Algorithm 7.4 exactly as this optimizer does: the same
+    /// curvature-pair guard (<c>sᵀy &gt; 1e-10</c>), the same initial scaling <c>γ = (sᵀy)/(yᵀy)</c> from the
+    /// newest pair, the same FIFO memory of <c>MemorySize</c> pairs, and the same
+    /// <c>x ← x - lr·H·g</c> write. <c>LbfgsMemorySize</c> carries the memory depth; there are no other
+    /// hyperparameters to carry.
+    /// </para>
+    /// <para>
+    /// <b>The line search is what decides whether this fuses.</b> A fused step has one gradient and no way
+    /// to evaluate the loss at a trial point, so the plan takes the full <c>lr</c> step — which is exactly
+    /// this optimizer with <see cref="LBFGSOptimizerOptions{T, TInput, TOutput}.UseLineSearch"/> off, and
+    /// exactly what PyTorch's <c>LBFGS</c> does with its default <c>line_search_fn=None</c>. With the line
+    /// search on (the default here, because it is what Algorithm 3.1 requires for the convergence argument)
+    /// the eager path can shorten or reject a step that the fused path would take in full, so the spec
+    /// declines rather than quietly dropping it.
+    /// </para>
+    /// </remarks>
+    bool Fused.IFusedOptimizerSpec.TryGetFusedOptimizerConfig(out Fused.FusedOptimizerConfig config)
+    {
+        config = default;
+        if (_options.UseAdaptiveLearningRate) return false;
+        if (_options.UseLineSearch) return false;
+        if (!TryGetFusedLrSchedule(out var schedule)) return false;
+
+        config = new Fused.FusedOptimizerConfig(
+            Tensors.Engines.Compilation.OptimizerType.LBFGS,
+            (float)GetCurrentLearningRate(),
+            0f, 0f, 0f, 0f, schedule)
+        {
+            Extras = new Tensors.Engines.Compilation.FusedOptimizerExtras
+            {
+                LbfgsMemorySize = _options.MemorySize,
+            },
+        };
+        return true;
+    }
+
     /// <summary>
     /// Options specific to the L-BFGS optimizer.
     /// </summary>
@@ -535,25 +583,17 @@ public partial class LBFGSOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
         // and for embedding params that already have a dense entry.
         SparseEmbeddingOptimizerHelpers.MaterializeSparseIntoGradientsDict(context, Engine);
 
-        var updated = UpdateParameters(context.GetFlatParameters(), context.GetFlatGradients());
+        var original = context.GetFlatParameters();
+        var gradient = context.GetFlatGradients();
+        var updated = UpdateParameters(original, gradient);
         context.SetFlatParameters(updated);
 
-        // L-BFGS benefits from re-evaluation for line search
-        if (context.SupportsReevaluation)
+        // The two-loop recursion gives a direction; the step length along it is the line search's job
+        // (Nocedal & Wright, Algorithm 3.1). Without a loss to evaluate there is nothing to search over,
+        // so the full step stands.
+        if (_options.UseLineSearch && context.SupportsReevaluation)
         {
-            T origLoss = context.Loss;
-            T newLoss = context.Reevaluate();
-            if (NumOps.GreaterThan(newLoss, origLoss))
-            {
-                // Re-materialize sparse-embedding contributions before reading the
-                // retry's flat gradient — Reevaluate refreshes the dense dict but
-                // leaves SparseEmbeddingGradient<T> entries from the autodiff
-                // backward unconsumed, so the retry's GetFlatGradients() would
-                // silently omit sparse-only embedding params without this call.
-                SparseEmbeddingOptimizerHelpers.MaterializeSparseIntoGradientsDict(context, Engine);
-                var retry = UpdateParameters(context.GetFlatParameters(), context.GetFlatGradients());
-                context.SetFlatParameters(retry);
-            }
+            ApplyBacktrackingLineSearch(context, original, updated, gradient, _options.MaxLineSearchIterations);
         }
     }
 }

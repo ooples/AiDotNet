@@ -119,7 +119,6 @@ public partial class FasterWhisper<T> : AudioNeuralNetworkBase<T>, ISpeechRecogn
     /// write on every parameter surface, so the guard is stated once here instead of being
     /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
     protected override bool SupportsParameterMutation => _useNativeMode;
-    protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio) { if (MelSpec is not null) return MelSpec.Forward(rawAudio); return rawAudio; }
     protected override Tensor<T> PostprocessOutput(Tensor<T> o) => o;
     public override ModelMetadata<T> GetModelMetadata() => new() { Name = _useNativeMode ? "FasterWhisper-Native" : "FasterWhisper-ONNX", Description = "Faster-Whisper: CTranslate2-optimized Whisper with int8 quantization (SYSTRAN, 2023)", FeatureCount = _options.NumMels, Complexity = _options.NumEncoderLayers + _options.NumDecoderLayers, AdditionalInfo = new Dictionary<string, object> { { "ModelName", "FasterWhisper" }, { "Mode", _useNativeMode ? "Native" : "ONNX" }, { "SampleRate", _options.SampleRate }, { "NumMels", _options.NumMels }, { "EncoderDim", _options.EncoderDim }, { "DecoderDim", _options.DecoderDim }, { "NumEncoderLayers", _options.NumEncoderLayers }, { "NumDecoderLayers", _options.NumDecoderLayers }, { "NumAttentionHeads", _options.NumAttentionHeads }, { "VocabSize", _options.VocabSize }, { "ComputeType", _options.ComputeType }, { "BeamSize", _options.BeamSize } }, ModelData = SerializeForMetadata() };
 

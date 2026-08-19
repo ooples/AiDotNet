@@ -75,12 +75,21 @@ public class ProximalGradientDescentOptimizerOptions<T, TInput, TOutput> : Gradi
     /// being used. This parameter is often one of the most important hyperparameters to tune, as it directly
     /// controls the trade-off between fitting the training data and maintaining model simplicity.
     /// </para>
+    /// <para>
+    /// <b>Null means "use the strength the regularizer was built with."</b> The proximal operator itself is
+    /// chosen through <c>Regularization</c>, and every regularizer already carries its own
+    /// <c>Strength</c>. Setting a value here overrides that strength for the L1 and L2 operators, which is
+    /// the path the facade's <c>regularization</c> / <c>l2regularization</c> / <c>weightdecay</c>
+    /// hyperparameter takes. Leaving it null — the default — keeps whatever the regularizer was
+    /// constructed with, so the two knobs can never silently contradict each other.
+    /// </para>
     /// <para><b>For Beginners:</b> This setting controls how strongly the regularization penalties affect your model.
-    /// 
-    /// The default value of 0.01 means:
+    ///
+    /// Leaving it unset means:
+    /// - The regularizer you chose keeps its own strength (0.01 for the default L2)
     /// - The regularization has a moderate influence on the model
     /// - There's a balance between minimizing errors and keeping the model simple
-    /// 
+    ///
     /// Think of regularization like a budget constraint:
     /// - Your model wants to "spend" parameter values to fit the data perfectly
     /// - Regularization sets a "budget" that limits this spending
@@ -102,7 +111,7 @@ public class ProximalGradientDescentOptimizerOptions<T, TInput, TOutput> : Gradi
     /// Finding the right regularization strength often requires experimentation with different values.
     /// </para>
     /// </remarks>
-    public double RegularizationStrength { get; set; } = 0.01;
+    public double? RegularizationStrength { get; set; }
 
     /// <summary>
     /// Gets or sets the step size for the proximal operator component of the algorithm.
