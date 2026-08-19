@@ -77,3 +77,4 @@ AIDN094 | AiDotNet.ParameterAutomation | Error | ParameterAutomationAnalyzer, Tr
 AIDN095 | AiDotNet.ParameterAutomation | Warning | TrainableParameterGenerator, Declared parameter shapes suppressed by a dynamic registration
 AIDN096 | AiDotNet.FacadeConfiguration | Warning | FacadeConfigurationValidationGenerator, Configure* method stores a value nothing ever reads
 AIDN097 | AiDotNet.FacadeConfiguration | Warning | FacadeConfigurationValidationGenerator, Configured value is only reachable through an accessor nobody calls
+AIDN046 | AiDotNet.TestCoverage | Warning | TestScaffoldGenerator, Layer cannot be scaffolded and produces no generated tests
