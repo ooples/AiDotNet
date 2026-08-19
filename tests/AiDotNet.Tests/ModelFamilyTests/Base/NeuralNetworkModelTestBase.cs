@@ -3337,6 +3337,42 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
             return ConvertToDouble(lossTensor[0]);
         }
 
+        // GENERAL CASE: measure the objective the model actually descends. The three branches above
+        // exist because each needed shape-specific handling, but everything else fell through to MSE --
+        // including plain BinaryCrossEntropyLoss. That is the same mistake those branches were written
+        // to fix, just for the losses nobody had hit yet, and it is not cosmetic: on
+        // AdversarialImageEvaluator (BinaryCrossEntropy, prediction 0.250981) two targets scored
+        // 0.363874 and 0.762947 under the model's real loss while MSE scored BOTH at 0.033304, because
+        // MSE is symmetric about the prediction and BCE is not. Every invariant that compares losses
+        // was reading a number the optimizer never minimises.
+        //
+        // Falls back to MSE only when the model configures no loss, or when the configured loss cannot
+        // score this (output, target) pair -- a loss with a stricter domain than the fixture provides
+        // must not turn a measurement into an exception.
+        if (network is AiDotNet.NeuralNetworks.NeuralNetworkBase<T> lossNet
+            && lossNet.DefaultLossFunction is AiDotNet.LossFunctions.LossFunctionBase<T> configured)
+        {
+            if (output.Length == 0 || target.Length == 0) return double.NaN;
+            try
+            {
+                var predicted = output;
+                var outShape = output.Shape.ToArray();
+                var tgtShape = target.Shape.ToArray();
+                if (!outShape.SequenceEqual(tgtShape) && output.Length == target.Length)
+                    predicted = output.Reshape(tgtShape);
+                var lossTensor = configured.ComputeTapeLoss(predicted, target);
+                if (lossTensor.Length > 0)
+                {
+                    double value = ConvertToDouble(lossTensor[0]);
+                    if (IsFinite(value)) return value;
+                }
+            }
+            catch (Exception)
+            {
+                // fall through to MSE
+            }
+        }
+
         return ComputeMSE(output, target);
     }
 
