@@ -1036,6 +1036,52 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     /// is still null or any axis is still negative, so a non-empty one is a resolved one.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Fixes every child's dimensions without allocating, so a count folds the same graph a value
+    /// read would.
+    /// </summary>
+    /// <remarks>
+    /// The declaration is authoritative where one exists; the chain covers the rest, including
+    /// children held in collections, which a per-field declaration cannot describe. Both are
+    /// idempotent and both are already run by the value path, so this adds no state the layer would
+    /// not have reached the moment anyone asked for its parameters.
+    /// </remarks>
+    private void ResolveSubLayerShapesForCounting()
+    {
+        // ONCE PER LAYER, and never re-entrantly. The walk below folds each child's ParameterCount,
+        // which runs this same resolution for that child's subtree -- so without a latch a single
+        // count re-walked every descendant once per ancestor, and the bring-up itself reads shapes
+        // that can ask a child for its count again. That crashed the test host outright rather than
+        // failing a test: UnitTests.TimeSeries died after 109 tests with "Test host process
+        // crashed", and passed 115/115 with this method removed.
+        //
+        // Sound as a latch because it records SHAPES, which change only when the parameter set
+        // does, and every such mutation already bumps the epoch this checks against.
+        if (_subLayerShapesResolvedEpoch == System.Threading.Volatile.Read(ref s_parameterEpoch)) return;
+
+        var subs = GetSubLayers();
+        if (subs is null || subs.Count == 0) return;
+
+        _subLayerShapesResolvedEpoch = System.Threading.Volatile.Read(ref s_parameterEpoch);
+
+        bool wasResolvingShapesOnly = IsResolvingShapesOnly;
+        IsResolvingShapesOnly = true;
+        try
+        {
+            BringUpDeclaredSubLayers();
+            BringUpUndeclaredSubLayersByChain();
+        }
+        finally
+        {
+            IsResolvingShapesOnly = wasResolvingShapesOnly;
+        }
+    }
+
+    /// <summary>
+    /// Parameter epoch at which this layer last resolved its children's shapes for counting.
+    /// </summary>
+    private int _subLayerShapesResolvedEpoch = -1;
+
     private bool DeclaredSubLayerShapesCoverEveryChild()
     {
         var declared = DeclaredSubLayerShapes();
@@ -5514,6 +5560,20 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
             // Layers that aggregate their parameters differently (a
             // GAN reading from frozen modules, a model with shared-weight
             // tying) can still override.
+            // Resolve the children's SHAPES before folding them, never their weights. Counting a
+            // shape-deferred child yields zero, so a composite holding its children in an ARRAY --
+            // which no [SubLayerInput] can name, since a declaration binds one field to one shape --
+            // reported only what it owned outright while GetParameters chained the same children
+            // into existence and returned their full length. VAEEncoder counted 30,014,492 against a
+            // vector of 35,471,772 that way.
+            //
+            // This runs the same walk the value path runs, under the shapes-only flag, so it fixes
+            // dimensions and allocates nothing: the constraint on counting is that it must not
+            // allocate (it is read from Dispose and from fingerprinting, and allocating there threw
+            // OutOfMemoryException on a 774M-parameter model), not that it must not learn shapes.
+            // Two surfaces derived from one resolved graph cannot disagree.
+            ResolveSubLayerShapesForCounting();
+
             long total = 0;
             var components = GetOrderedParameterComponents();
             for (int i = 0; i < components.Length; i++)
