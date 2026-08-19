@@ -54,6 +54,7 @@ public class LayerParameterSurfaceTests
         // that silently omitted it -- inflating coverage in exactly the way the counting exists
         // to prevent.
         int checkedCount = 0, unconstructable = 0, unsized = 0, noParameterApi = 0;
+        int warmedUp = 0, notWarmedUp = 0;
 
         var logPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "layer-parameter-surface.txt");
         // DISPOSED ON EVERY PATH, AND A FAILURE TO OPEN IS REPORTED. The manual dispose ran only
@@ -85,6 +86,17 @@ public class LayerParameterSurfaceTests
             catch { layer = null; }
             if (layer is null) { unconstructable++; continue; }
 
+            // Drive one forward before measuring. A layer built from its declared arguments alone
+            // knows its OUTPUT width and nothing else, so it sits shape-deferred with no weights
+            // allocated -- and 0 == 0 satisfies this invariant without testing anything. Sixty-odd
+            // weight-holding layers passed that way: LSTM, GRU, Attention, BatchNormalization, the
+            // convolutions, the transformer blocks. The declared TestInputShape is the missing half
+            // of the same metadata the constructor arguments come from, so feeding it is what turns
+            // those into real measurements.
+            bool warm = TryWarmUp(closed, layer);
+            if (warm) warmedUp++;
+            else notWarmedUp++;
+
             try
             {
                 long declared = Convert.ToInt64(
@@ -112,7 +124,12 @@ public class LayerParameterSurfaceTests
                     // fallback that was materializing its children is enough -- and that reads
                     // identically to a real fix unless the number is written down. Recording it is
                     // what lets "agrees at 592" be told apart from "agrees at 0".
-                    log?.WriteLine($"AGREE {name}: {declared}{(pending ? " [deferred]" : "")}");
+                    // Warm status on the line, because a zero means two different things. A layer
+                    // that RAN a forward and still holds nothing is parameter-free; one that could
+                    // not be driven is merely untested, and telling them apart is the whole point
+                    // of warming up at all.
+                    log?.WriteLine($"AGREE {name}: {declared}" +
+                                   $"{(pending ? " [deferred]" : "")}{(warm ? "" : " [not warmed]")}");
                     if (pending) unsized++;
                     continue;
                 }
@@ -131,7 +148,8 @@ public class LayerParameterSurfaceTests
 
         _output.WriteLine($"Checked {checkedCount} layers; {unsized} agree at zero (deferred); " +
                           $"{noParameterApi} expose no public GetParameters(); " +
-                          $"{unconstructable} not constructable; {violations.Count} violations.");
+                          $"{unconstructable} not constructable; {warmedUp} warmed up, " +
+                          $"{notWarmedUp} measured without a forward; {violations.Count} violations.");
         foreach (var v in violations.OrderBy(v => v, StringComparer.Ordinal))
             _output.WriteLine("  " + v);
 
@@ -187,6 +205,62 @@ public class LayerParameterSurfaceTests
 
         var declared = TestConstructorArgs(closed);
         return string.IsNullOrWhiteSpace(declared) ? null : Instantiate(closed, declared);
+    }
+
+    /// <summary>
+    /// Runs one forward from the layer's declared <c>TestInputShape</c>, so its weights exist by
+    /// the time the two surfaces are compared. False when the layer declares no usable shape or
+    /// refuses the input.
+    /// </summary>
+    /// <remarks>
+    /// Reported rather than required. A layer that cannot be driven is still measured, in whatever
+    /// state it reached -- the alternative, skipping it, would shrink the denominator to the layers
+    /// that happened to cooperate and call the result full coverage.
+    /// </remarks>
+    private static bool TryWarmUp(Type closed, object layer)
+    {
+        var declared = closed.GetCustomAttributes(inherit: false)
+            .OfType<AiDotNet.Attributes.LayerPropertyAttribute>()
+            .FirstOrDefault()?.TestInputShape;
+        if (string.IsNullOrWhiteSpace(declared)) return false;
+
+        var dims = new List<int>();
+        foreach (var token in declared!.Split(','))
+        {
+            if (!int.TryParse(token.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture,
+                    out int dim) || dim <= 0)
+                return false;
+            dims.Add(dim);
+        }
+        if (dims.Count == 0) return false;
+
+        // Pick the TENSOR overload by its parameter type. LayerBase declares three one-argument
+        // Forwards -- Tensor, params Tensor[], and IReadOnlyDictionary -- and taking whichever
+        // reflection listed first selected a non-tensor one for every layer in the library, so the
+        // warm-up silently did nothing at all: 0 of 210 warmed up.
+        var forward = closed.GetMethods(BindingFlags.Public | BindingFlags.Instance)
+            .FirstOrDefault(m => m.Name == "Forward"
+                && m.GetParameters().Length == 1
+                && m.GetParameters()[0].ParameterType.IsGenericType
+                && m.GetParameters()[0].ParameterType.GetGenericTypeDefinition().Name
+                    .StartsWith("Tensor", StringComparison.Ordinal));
+        if (forward is null) return false;
+
+        var tensorType = forward.GetParameters()[0].ParameterType;
+
+        try
+        {
+            var input = Activator.CreateInstance(tensorType, new object[] { dims.ToArray() });
+            if (input is null) return false;
+            forward.Invoke(layer, new[] { input });
+            return true;
+        }
+        catch (Exception)
+        {
+            // A layer may need several inputs, a mask, or a shape this one declaration does not
+            // describe. It stays measured; it just stays deferred.
+            return false;
+        }
     }
 
     /// <summary>True when the layer states constructor arguments for scaffold generation.</summary>
