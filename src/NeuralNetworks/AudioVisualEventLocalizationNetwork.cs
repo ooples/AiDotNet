@@ -265,7 +265,9 @@ public partial class AudioVisualEventLocalizationNetwork<T> : MultimodalModelLay
 
         // Appended LAST on purpose: every index above keeps the position it had before the audio
         // front-end existed, so this addition cannot shift the existing [idx++] contract.
-        _audioEmbedding = (VGGishAudioEmbedding<T>)Layers[idx++];
+        // This claim reads idx without advancing it, since nothing below consumes another layer.
+        // Anything appended after this one must restore the increment here first.
+        _audioEmbedding = (VGGishAudioEmbedding<T>)Layers[idx];
     }
 
     private static List<string> GetDefaultEventCategories()
@@ -427,7 +429,6 @@ public partial class AudioVisualEventLocalizationNetwork<T> : MultimodalModelLay
         int mels = mel.Shape[mel.Shape.Length - 1];
         int patchFrames = VGGishAudioEmbedding<T>.PaperPatchFrames;
         int segments = Math.Max(1, frames / patchFrames);
-        int embeddingSize = _audioEmbedding.EmbeddingSize;
 
         var melSpan = mel.Data.Span;
         var segmentEmbeddings = new Tensor<T>[segments];

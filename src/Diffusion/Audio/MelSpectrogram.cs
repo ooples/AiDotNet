@@ -195,7 +195,11 @@ public class MelSpectrogram<T>
         // whose published recipe specifies the offset form need it exactly -- VGGish (AudioSet)
         // uses log(mel + 0.01), and feeding it dB instead changes the input distribution its
         // architecture was designed around.
-        if (logOffset is { } off && !(off > 0.0))
+        // NaN is spelled out rather than folded into `off <= 0.0`. The two are not the same test:
+        // every comparison against NaN is false, so `off <= 0.0` ADMITS NaN while the intent here is
+        // to reject it. A NaN offset would otherwise reach log(mel + NaN) and turn the whole
+        // spectrogram into NaN, far from this constructor and long after the cause is visible.
+        if (logOffset is { } off && (double.IsNaN(off) || off <= 0.0))
             throw new ArgumentOutOfRangeException(nameof(logOffset), "Log offset must be positive.");
         _logOffset = logOffset;
 
