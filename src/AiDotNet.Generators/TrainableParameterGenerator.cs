@@ -144,7 +144,7 @@ public class TrainableParameterGenerator : IIncrementalGenerator
             var gradientFields = new Dictionary<string, GradientFieldInfo>();
             var subLayerFields = new List<SubLayerFieldInfo>();
 
-            var bufferFields = new List<(string Field, string Name, string Role, string StateRole)>();
+            var bufferFields = new List<(string Field, string Name, string Role, string StateRole, bool InputSized, bool ReadOnly)>();
 
             foreach (var member in classSymbol.GetMembers())
             {
@@ -250,15 +250,40 @@ public class TrainableParameterGenerator : IIncrementalGenerator
                                 bufName = bn;
                         }
                     }
+                    // [FittedParameter(InputSized = true)] separates "persist this" from "count
+                    // this". A member whose extent comes from the caller's DATA cannot be part of
+                    // the flat vector: its width would change under a forward pass, and every
+                    // count-versus-vector contract in the base is written against a width that
+                    // only construction can move. It still registers as a buffer below, which is
+                    // what serializes and deep-copies it by name.
+                    bool inputSized = false;
+                    var fittedAttr = field.GetAttributes().FirstOrDefault(a =>
+                        a.AttributeClass?.ToDisplayString()
+                            == ParameterMemberSemanticModel.FittedAttribute);
+                    if (fittedAttr is not null)
+                    {
+                        foreach (var na in fittedAttr.NamedArguments)
+                        {
+                            if (na.Key == "InputSized" && na.Value.Value is bool flag)
+                                inputSized = flag;
+                        }
+                    }
+
                     string stateRole = classification.Kind switch
                     {
+                        // InputSized fitted state registers under its own role. The base sweep that
+                        // declares every registered buffer keys off exactly this value to leave it
+                        // out of the component list, so the role -- not the generated declaration
+                        // alone -- is what keeps a caller-sized tensor out of the parameter vector.
+                        ParameterMemberSemanticModel.Kind.Fitted when inputSized =>
+                            "global::AiDotNet.Models.Parameters.ParameterSlotRole.InputSizedState",
                         ParameterMemberSemanticModel.Kind.Fitted =>
                             "global::AiDotNet.Models.Parameters.ParameterSlotRole.LearnedState",
                         ParameterMemberSemanticModel.Kind.Frozen =>
                             "global::AiDotNet.Models.Parameters.ParameterSlotRole.Frozen",
                         _ => "global::AiDotNet.Models.Parameters.ParameterSlotRole.Buffer"
                     };
-                    bufferFields.Add((field.Name, bufName, bufRole, stateRole));
+                    bufferFields.Add((field.Name, bufName, bufRole, stateRole, inputSized, field.IsReadOnly));
                 }
 
                 // Check for gradient fields (convention: {name}Gradient)
@@ -425,7 +450,7 @@ public class TrainableParameterGenerator : IIncrementalGenerator
         List<ParameterFieldInfo> paramFields,
         Dictionary<string, GradientFieldInfo> gradientFields,
         List<SubLayerFieldInfo> subLayerFields,
-        List<(string Field, string Name, string Role, string StateRole)> bufferFields,
+        List<(string Field, string Name, string Role, string StateRole, bool InputSized, bool ReadOnly)> bufferFields,
         bool useRuntimeParameterRegistry,
         bool emitParameterFreeContract)
     {
@@ -508,6 +533,36 @@ public class TrainableParameterGenerator : IIncrementalGenerator
             sb.AppendLine("    {");
             sb.AppendLine("        EnsureBuffersRegistered();");
             sb.AppendLine("        return base.GetRegisteredBuffers();");
+            sb.AppendLine("    }");
+            sb.AppendLine();
+
+            // Restoring a buffer means writing the FIELD, not just the registry: EnsureBuffersRegistered
+            // reads each buffer out of its field, so a registration the field does not back is invisible
+            // to the layer's own code. The name-to-field mapping is emitted because only the generator
+            // has it; reflecting over it at runtime would turn a rename into a silent no-op.
+            sb.AppendLine("    /// <inheritdoc />");
+            sb.AppendLine($"    protected override bool TryRestoreBufferField(string name, Tensor<{GetTypeParamName(classSymbol)}> tensor)");
+            sb.AppendLine("    {");
+            sb.AppendLine("        switch (name)");
+            sb.AppendLine("        {");
+            foreach (var bf in bufferFields)
+            {
+                // A readonly buffer is assigned once, by the constructor, so it is ALWAYS live and
+                // the caller's write-through path restores it in place. Emitting a case for it
+                // would not compile, and would answer a question the restore never has to ask.
+                if (bf.ReadOnly) continue;
+
+                sb.AppendLine($"            case \"{EscapeStringLiteral(bf.Name)}\":");
+                sb.AppendLine($"                {bf.Field} = tensor;");
+                // Register HERE, not in the caller. A bare RegisterBuffer(tensor, name) takes the
+                // default state role, which silently promoted an input-sized slot back into the
+                // parameter vector the moment a clone or a restore installed one.
+                sb.AppendLine("                EnsureBuffersRegistered();");
+                sb.AppendLine("                return true;");
+            }
+            sb.AppendLine("            default:");
+            sb.AppendLine("                return base.TryRestoreBufferField(name, tensor);");
+            sb.AppendLine("        }");
             sb.AppendLine("    }");
             sb.AppendLine();
         }
@@ -1197,7 +1252,7 @@ public class TrainableParameterGenerator : IIncrementalGenerator
         INamedTypeSymbol classSymbol,
         List<ParameterFieldInfo> paramFields,
         List<SubLayerFieldInfo> subLayerFields,
-        List<(string Field, string Name, string Role, string StateRole)> bufferFields)
+        List<(string Field, string Name, string Role, string StateRole, bool InputSized, bool ReadOnly)> bufferFields)
     {
         if (paramFields.Count == 0 && subLayerFields.Count == 0 && bufferFields.Count == 0)
             return;
@@ -1238,6 +1293,15 @@ public class TrainableParameterGenerator : IIncrementalGenerator
 
             if (buffersByName.TryGetValue(field.Name, out var buffer))
             {
+                // An input-sized member is registered (and therefore serialized and deep-copied)
+                // but never declared as a component, so it contributes no width to the parameter
+                // vector and ParameterCount stays a function of construction alone.
+                if (buffer.InputSized)
+                {
+                    sb.AppendLine($"        // {buffer.Field}: [FittedParameter(InputSized = true)] -- persisted as a buffer, not a parameter.");
+                    continue;
+                }
+
                 sb.AppendLine($"        DeclareParameterBuffer(components, {buffer.Field}, \"{EscapeStringLiteral(buffer.Name)}\", {buffer.StateRole});");
                 continue;
             }
@@ -1303,7 +1367,7 @@ public class TrainableParameterGenerator : IIncrementalGenerator
         INamedTypeSymbol classSymbol,
         List<ParameterFieldInfo> paramFields,
         List<SubLayerFieldInfo> subLayerFields,
-        List<(string Field, string Name, string Role, string StateRole)> bufferFields)
+        List<(string Field, string Name, string Role, string StateRole, bool InputSized, bool ReadOnly)> bufferFields)
     {
         // Buffers no longer disqualify the formula outright; the emitted method checks at RUNTIME
         // that none is live. Excluding them statically cost DenseLayer -- the most restored layer in
@@ -1333,12 +1397,15 @@ public class TrainableParameterGenerator : IIncrementalGenerator
         sb.AppendLine("    /// <summary>Infers one deferred input axis from complete generated parameter-shape formulas.</summary>");
         sb.AppendLine("    protected override bool TryInferInputShapeFromParameterCount(int parameterCount, out int[] inputShape)");
         sb.AppendLine("    {");
-        if (bufferFields.Count > 0)
+        var countedBuffers = bufferFields.Where(buffer => !buffer.InputSized).ToList();
+        if (countedBuffers.Count > 0)
         {
             sb.AppendLine("        // The formula below counts this layer's PARAMETERS. A live buffer is counted too, so");
             sb.AppendLine("        // inferring while one exists would solve the wrong equation and resolve to a wrong width.");
+            sb.AppendLine("        // Input-sized buffers are absent from the vector, so they never perturb the equation");
+            sb.AppendLine("        // and must NOT block inference -- a graph layer holds one for its whole life.");
             sb.AppendLine("        bool __noLiveBuffer = true;");
-            foreach (var buffer in bufferFields)
+            foreach (var buffer in countedBuffers)
             {
                 sb.AppendLine($"        if ({buffer.Field} is not null) __noLiveBuffer = false;");
             }

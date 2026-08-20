@@ -233,6 +233,8 @@ public static class LayerCloning
         // 16 values into a DenseLayer rebuilt from `outputSize` alone threw "Expected 0 parameters,
         // but got 16". That is why cloning a layer which had been USED failed while cloning a fresh
         // one appeared to work: both sides were unresolved and agreed at zero.
+        CopyRegisteredBuffers(source, clone, settings);
+
         var tensors = source.GetTrainableParameters();
         if (tensors.Count == 0) return;
 
@@ -252,6 +254,53 @@ public static class LayerCloning
         }
 
         clone.SetTrainableParameters(installed);
+    }
+
+    /// <summary>Copies registered buffer values, which the trainable install cannot reach.</summary>
+    /// <remarks>
+    /// <c>GetTrainableParameters</c> is the OPTIMIZER view and omits every buffer, so the only
+    /// reason a clone ever came back holding one was that buffers rode the flat parameter vector.
+    /// An input-sized buffer cannot ride it -- its width is the caller's data rather than the
+    /// architecture -- so the values are copied here instead.
+    ///
+    /// By NAME, for the reason the serialized block is keyed by name: registration order can differ
+    /// between a used instance and a freshly reconstructed one, and pairing by position would load
+    /// an adjacency matrix into an edge-feature slot. A clone that already holds a same-width tensor
+    /// is written through, matching the restore path; otherwise the generated field map installs it.
+    /// </remarks>
+    private static void CopyRegisteredBuffers<T>(LayerBase<T> source, LayerBase<T> clone, CloneOptions settings)
+    {
+        var sourceBuffers = source.GetRegisteredBuffers();
+        if (sourceBuffers is null || sourceBuffers.Count == 0) return;
+
+        var target = new Dictionary<string, Tensor<T>>(StringComparer.Ordinal);
+        var cloneBuffers = clone.GetRegisteredBuffers();
+        if (cloneBuffers is not null)
+        {
+            foreach (var (name, tensor) in cloneBuffers)
+            {
+                if (tensor is not null) target[name] = tensor;
+            }
+        }
+
+        foreach (var (name, tensor) in sourceBuffers)
+        {
+            if (tensor is null || string.IsNullOrEmpty(name)) continue;
+
+            if (target.TryGetValue(name, out var existing) && existing.Length == tensor.Length)
+            {
+                if (ReferenceEquals(existing, tensor)) continue;
+                for (int i = 0; i < tensor.Length; i++) existing[i] = tensor[i];
+                continue;
+            }
+
+            // Shared hands over the original tensor for the same reason CopyOwnTensors does; a
+            // CloneShared view is observationally a deep copy until the first write splits it.
+            var installed = settings.Mode == CloneMode.Shared
+                ? tensor
+                : (Tensor<T>)tensor.CloneShared();
+            clone.InstallRestoredBuffer(name, installed);
+        }
     }
 
     /// <summary>Copies each registered sub-layer's parameters into the matching sub-layer.</summary>

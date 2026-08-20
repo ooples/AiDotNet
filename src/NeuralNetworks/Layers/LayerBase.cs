@@ -819,11 +819,18 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
                 for (int i = 0; i < buffers.Count; i++)
                 {
                     var (name, tensor) = buffers[i];
-                    if (tensor is not null && !ContainsDeclaredTensor(components, tensor))
-                    {
-                        DeclareParameterBuffer(
-                            components, tensor, name, GetRegisteredBufferStateRole(name));
-                    }
+                    if (tensor is null || ContainsDeclaredTensor(components, tensor)) continue;
+
+                    // An input-sized slot is registered so it serializes and deep-copies, but it
+                    // must not become a component: its width is the caller's data, and a width the
+                    // caller can move is a width no count-versus-vector contract can hold. Skipping
+                    // it HERE and not only in the generated declaration is what actually keeps it
+                    // out -- this sweep re-adds every registered buffer the declaration omitted,
+                    // which is exactly the "capable machinery reached by a second path" shape.
+                    var stateRole = GetRegisteredBufferStateRole(name);
+                    if (stateRole == ParameterSlotRole.InputSizedState) continue;
+
+                    DeclareParameterBuffer(components, tensor, name, stateRole);
                 }
             }
 
@@ -5919,9 +5926,25 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
             // Write THROUGH the registered tensor rather than replacing it. The engine's persistent
             // tensor registry and any GPU-resident copy hold this reference; swapping the object
             // would leave those pointing at the pre-restore values.
-            if (!live.TryGetValue(name, out var target) || target.Length != length) continue;
+            if (live.TryGetValue(name, out var target) && target.Length == length)
+            {
+                for (int i = 0; i < length; i++) target[i] = NumOps.FromDouble(values[i]);
+                continue;
+            }
 
-            for (int i = 0; i < length; i++) target[i] = NumOps.FromDouble(values[i]);
+            // Nothing live under that name, or a different width. Skipping here is what made a
+            // buffer that only EXISTS once the caller supplies it unrestorable: a graph layer
+            // rebuilt from its construction state has no adjacency matrix yet, so the payload it
+            // was handed had nowhere to land and the restored model still could not predict. Build
+            // the tensor the payload describes and hand it to the generated field map, which is the
+            // only thing that knows which member the name belongs to. A layer without that map, or
+            // with no member under this name, keeps the old behaviour and skips.
+            var restored = new Tensor<T>(shape);
+            for (int i = 0; i < length; i++) restored[i] = NumOps.FromDouble(values[i]);
+
+            // The generated map registers under the member's own state role; registering here
+            // instead would take RegisterBuffer's default and change what the slot means.
+            TryRestoreBufferField(name, restored);
         }
     }
 
@@ -6460,8 +6483,15 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
             if (buffers is not null)
                 foreach (var (n, t) in buffers)
                     if (string.Equals(n, entry.Name, StringComparison.Ordinal)) { existing = t; break; }
-            if (existing is null || !ShapeMatches(existing, entry.Shape))
-                RegisterBuffer(new Tensor<T>(entry.Shape), entry.Name);
+            if (existing is not null && ShapeMatches(existing, entry.Shape)) continue;
+
+            // Through the generated field map first. A bare RegisterBuffer takes the DEFAULT state
+            // role, so allocating a slot here re-registered an input-sized buffer as an ordinary
+            // counted one -- the clone then expected a wider vector than the original produced.
+            // The map also writes the member, which a registration alone never does.
+            var allocated = new Tensor<T>(entry.Shape);
+            if (!TryRestoreBufferField(entry.Name, allocated))
+                RegisterBuffer(allocated, entry.Name);
         }
 
         var subs = GetSubLayers();
@@ -6924,9 +6954,27 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
 
         if (!currentLayoutMatches)
         {
+            // Name every component and its width. A bare count pair says only THAT the two
+            // sides disagree, never WHICH member accounts for the difference -- and the usual
+            // cause is a caller that built its vector from a different walk (the optimizer view
+            // omits buffers, the full vector carries them), where the missing width is the
+            // whole diagnosis.
+            var breakdown = new System.Text.StringBuilder();
+            for (int i = 0; i < components.Length; i++)
+            {
+                if (i > 0) breakdown.Append(", ");
+                breakdown.Append(components[i].Kind);
+                if (components[i].Name is { Length: > 0 } componentName)
+                    breakdown.Append(' ').Append(componentName);
+                breakdown.Append('=').Append(
+                    components[i].Kind == DeclaredParameterComponentKind.Legacy
+                        ? Parameters.Length
+                        : ParameterComponentScalarCount(components[i]));
+            }
+
             throw new ArgumentException(
                 $"Expected {currentConcreteCount} parameters, but got {parameters.Length} " +
-                $"(layer {GetType().Name}, ordered components {components.Length}).",
+                $"(layer {GetType().Name}, ordered components {components.Length}: {breakdown}).",
                 nameof(parameters));
         }
 
@@ -7532,6 +7580,43 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     /// needs to be saved and loaded with the model, but it's not something the optimizer
     /// should try to change. Use RegisterBuffer for these kinds of tensors.</para>
     /// </remarks>
+    /// <summary>
+    /// Assigns a restored buffer to the member that registers it, when the layer has no live tensor
+    /// under that name yet.
+    /// </summary>
+    /// <param name="name">The registered buffer name, as written by the serializer.</param>
+    /// <param name="tensor">The tensor rebuilt from the payload.</param>
+    /// <returns><see langword="true"/> when a member accepted it.</returns>
+    /// <remarks>
+    /// <para>
+    /// Registering a tensor is not the same as installing it. The generated
+    /// <c>EnsureBuffersRegistered</c> reads each buffer OUT of its field, so a registration that
+    /// does not also write the field leaves the layer computing with whatever the field still holds
+    /// -- usually <see langword="null"/>. Only the generator knows which field a name belongs to,
+    /// so the mapping is emitted rather than reflected over: a name typo then fails to compile
+    /// instead of silently restoring nothing.
+    /// </para>
+    /// <para>
+    /// The base returns <see langword="false"/>, which preserves the previous behaviour for any
+    /// layer that has no generated map -- an unknown name is skipped, never guessed at.
+    /// </para>
+    /// </remarks>
+    protected virtual bool TryRestoreBufferField(string name, Tensor<T> tensor) => false;
+
+    /// <summary>
+    /// Installs a buffer into the member that owns it and registers it, for callers outside the
+    /// layer such as the clone path.
+    /// </summary>
+    /// <returns><see langword="true"/> when a member accepted it.</returns>
+    internal bool InstallRestoredBuffer(string name, Tensor<T> tensor)
+    {
+        if (tensor is null || string.IsNullOrWhiteSpace(name)) return false;
+
+        // TryRestoreBufferField registers under the member's own state role. Registering here would
+        // take RegisterBuffer's default and turn an input-sized slot back into a counted one.
+        return TryRestoreBufferField(name, tensor);
+    }
+
     protected void RegisterBuffer(
         Tensor<T> tensor,
         string name,
