@@ -53,7 +53,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 [LayerTask(LayerTask.FeatureExtraction)]
-[LayerProperty(IsTrainable = true, ChangesShape = true, Cost = ComputeCost.High)]
+[LayerProperty(IsTrainable = true, ChangesShape = true, Cost = ComputeCost.High, TestConstructorArgs = "4, 8, 8, new System.Collections.Generic.List<AiDotNet.Interfaces.ILayer<double>> { new AiDotNet.NeuralNetworks.Layers.ReadoutLayer<double>(2, 8, (AiDotNet.Interfaces.IActivationFunction<double>)new AiDotNet.ActivationFunctions.IdentityActivation<double>()) }, new System.Collections.Generic.List<AiDotNet.Interfaces.ILayer<double>> { new AiDotNet.NeuralNetworks.Layers.ReadoutLayer<double>(2, 8, (AiDotNet.Interfaces.IActivationFunction<double>)new AiDotNet.ActivationFunctions.IdentityActivation<double>()) }", TestInputShape = "1, 4")]
 // A TWO-STREAM decorator. ForwardTraced slices the last axis in half, runs each half through its own
 // sub-layer list, and returns "Engine.TensorConcatenate([outputA, outputB], axis: rank - 1)" - so the
 // leading axes are the input's untouched and the trailing axis is the SUM of the two streams' widths.

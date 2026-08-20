@@ -36,7 +36,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 [LayerCategory(LayerCategory.Regularization)]
 [LayerTask(LayerTask.Regularization)]
-[LayerProperty(IsTrainable = true)]
+[LayerProperty(IsTrainable = true, TestConstructorArgs = "new AiDotNet.NeuralNetworks.Layers.ReadoutLayer<double>(4, 8, (AiDotNet.Interfaces.IActivationFunction<double>)new AiDotNet.ActivationFunctions.IdentityActivation<double>())", TestInputShape = "1, 4")]
 // A DECORATOR: this layer rescales the inner layer's WEIGHTS and then returns
 // `_innerLayer.Forward(input)` verbatim (ForwardTraced), so it has no shape law of its own - it has the
 // inner layer's. The constructor says the same thing, chaining

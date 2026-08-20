@@ -58,7 +58,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.MixtureOfExperts)]
 [LayerTask(LayerTask.Routing)]
 [LayerTask(LayerTask.FeatureExtraction)]
-[LayerProperty(IsTrainable = true, ChangesShape = true, Cost = ComputeCost.High, TestInputShape = "1, 4")]
+[LayerProperty(IsTrainable = true, ChangesShape = true, Cost = ComputeCost.High, TestInputShape = "1, 4", TestConstructorArgs = "new System.Collections.Generic.List<AiDotNet.Interfaces.ILayer<double>> { new AiDotNet.NeuralNetworks.Layers.ReadoutLayer<double>(4, 8, (AiDotNet.Interfaces.IActivationFunction<double>)new AiDotNet.ActivationFunctions.IdentityActivation<double>()), new AiDotNet.NeuralNetworks.Layers.ReadoutLayer<double>(4, 8, (AiDotNet.Interfaces.IActivationFunction<double>)new AiDotNet.ActivationFunctions.IdentityActivation<double>()) }, new AiDotNet.NeuralNetworks.Layers.ReadoutLayer<double>(4, 2, (AiDotNet.Interfaces.IActivationFunction<double>)new AiDotNet.ActivationFunctions.IdentityActivation<double>()), new[] { 4 }, new[] { 8 }, 1")]
 // Feature-last, with batch optional: OnFirstForward treats the leading axis as batch and everything after
 // it as the per-sample shape it configures the router and experts against, and ForwardTraced restores a
 // rank-1 input to rank 1 before returning. Those two ranks are the ones whose behaviour is coherent, so

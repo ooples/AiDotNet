@@ -56,7 +56,15 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </remarks>
 [LayerCategory(LayerCategory.Other)]
 [LayerTask(LayerTask.SequenceModeling)]
-[LayerProperty(IsTrainable = true, ChangesShape = true)]
+[LayerProperty(IsTrainable = true, ChangesShape = true, TestConstructorArgs = "10, 4, 8, 3, 5, 4, 6", TestInputShape = "4, 7")]
+// The input carries TOKEN IDS, not measurements. Without this the layer had no port
+// declaration at all, so a generated test fed it continuous random values -- negatives
+// included -- and it failed on "Packed indices must be non-negative". EmbeddingLayer
+// declares the same thing; this one simply never did.
+[TensorPort("input", TensorPortDirection.Input, LayerInputDomainKind.IntegerIndices,
+    Role = TensorPortRole.TokenIds, MaxExclusiveMember = "_wordVocabSize")]
+[TensorPort("output", TensorPortDirection.Output, LayerInputDomainKind.Continuous,
+    Role = TensorPortRole.Features)]
 // Rank 2 and ONLY rank 2 - ForwardTraced opens with an explicit guard that throws for anything else:
 // "expects rank-2 packed input [sequenceLength, 1 + maxWordLength]". No batch axis is declared because
 // the layer does not have one; a sentence IS the unit, and the character BiLSTM already spends the
@@ -102,7 +110,12 @@ public partial class WordCharEmbeddingLayer<T> : LayerBase<T>, IShapeContract
         };
     }
 
+    // These read ONE-HOT vocabularies, not the packed id tensor this layer receives. Chained
+    // sizing seeded them from the layer's own [seq, 1 + maxWordLength] input, so the word
+    // embedding came up 7 wide against a checkpoint holding the 10-wide vocabulary.
+    [SubLayerInput("_wordVocabSize")]
     private readonly DenseLayer<T> _wordEmbedding;
+    [SubLayerInput("_charVocabSize")]
     private readonly DenseLayer<T> _charEmbedding;
     private readonly BidirectionalLayer<T> _charBiLstm;
 

@@ -37,7 +37,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.MixtureOfExperts)]
 [LayerTask(LayerTask.Routing)]
 [LayerTask(LayerTask.FeatureExtraction)]
-[LayerProperty(IsTrainable = true, ChangesShape = true, Cost = ComputeCost.High)]
+[LayerProperty(IsTrainable = true, ChangesShape = true, Cost = ComputeCost.High, TestConstructorArgs = "new System.Collections.Generic.List<AiDotNet.Interfaces.ILayer<double>> { new AiDotNet.NeuralNetworks.Layers.ReadoutLayer<double>(4, 8, (AiDotNet.Interfaces.IActivationFunction<double>)new AiDotNet.ActivationFunctions.IdentityActivation<double>()) }, new[] { 4 }, new[] { 8 }", TestInputShape = "1, 4")]
 // A CONTAINER decorator: ForwardTraced runs "foreach (var layer in _layers) output = layer.Forward(output)"
 // and then ApplyActivation, which is element-wise. So this layer's output shape is the LAST sub-layer's
 // output shape - which is exactly what OnFirstForward publishes too, walking the chain and taking the
