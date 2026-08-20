@@ -11871,9 +11871,8 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
 
         foreach (var field in plan.ModelSequences)
             if (field.GetValue(this) is System.Collections.IEnumerable sequence)
-                foreach (var item in sequence)
-                    if (item is NeuralNetworkBase<T> nested)
-                        nested.ResetOwnedOptimizerState(resetOptimizers, visitedModels);
+                foreach (var nested in sequence.OfType<NeuralNetworkBase<T>>())
+                    nested.ResetOwnedOptimizerState(resetOptimizers, visitedModels);
     }
 
     private static void ResetIfOptimizer(object? value, HashSet<object> resetOptimizers)
@@ -11947,10 +11946,16 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                     // sequences on a path that is only supposed to be reading optimizer state.
                     var element = GetEnumerableElementType(fieldType);
                     if (element is null) continue;
+
                     if (optimizerType.IsAssignableFrom(element)) optimizerSequences.Add(field);
                     else if (modelType.IsAssignableFrom(element)) modelSequences.Add(field);
                 }
             }
+
+            // Discovery is a four-way classification with an early exit per field, so it stays a loop
+            // rather than becoming four Where passes over the same reflected field set: the LINQ form
+            // would call GetFields once per category and re-run every assignability test three more
+            // times, for no gain in either clarity or cost.
 
             return new OwnedOptimizerPlan
             {
