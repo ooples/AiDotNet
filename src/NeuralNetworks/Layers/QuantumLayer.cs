@@ -242,11 +242,25 @@ public partial class QuantumLayer<T> : LayerBase<T>, IShapeContract
         var imagState = new Tensor<T>(realState._shape);
 
         // Normalize each batch item: divide by sqrt(sum(|state|^2) + eps)
+        //
+        // The Sqrt was missing. ReduceSum gives sum(|state|^2) — the SQUARED L2 norm — and dividing
+        // the amplitudes by that instead of by the norm leaves a state of length 1/||state||, not 1.
+        // The Born-rule convention this layer documents (and that the QNN fixture relies on) requires
+        // ||psi||_2 == 1. The error compounds: at the default 128-feature input the squared norm is
+        // roughly 128x the norm, and the network stacks TWO quantum layers, so the amplitudes are
+        // crushed by orders of magnitude before the output head ever sees them. That is why the
+        // quantum model produced ~1e-4 outputs whose gradients underflowed to zero
+        // (Training_ShouldChangeParameters, GradientFlow_ShouldBeNonZeroAndFinite) and why
+        // perturbing the input direction moved the output by less than the comparison tolerance
+        // (ScaledInput_ShouldChangeOutput).
+        //
+        // The epsilon stays INSIDE the Sqrt so the denominator is still strictly positive for a
+        // zero state, which is what keeps this total rather than trading a scale bug for a NaN.
         var magnitudeSquared = Engine.ComplexMagnitudeSquared(realState, imagState);
         var normPerBatch = Engine.ReduceSum(magnitudeSquared, [1], keepDims: true);
         var epsilonTensor = new Tensor<T>(normPerBatch._shape);
         epsilonTensor.Fill(NumOps.FromDouble(1e-10));
-        var safeDenom = Engine.TensorAdd(normPerBatch, epsilonTensor);
+        var safeDenom = Engine.TensorSqrt(Engine.TensorAdd(normPerBatch, epsilonTensor));
         var denomExpanded = Engine.TensorRepeatElements(safeDenom, dimension, axis: 1);
         var normalizedReal = Engine.TensorDivide(realState, denomExpanded);
         var normalizedImag = Engine.TensorDivide(imagState, denomExpanded);
