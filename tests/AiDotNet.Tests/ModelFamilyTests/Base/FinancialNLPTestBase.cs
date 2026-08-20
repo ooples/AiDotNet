@@ -44,8 +44,8 @@ public abstract class FinancialNLPTestBase<T> : FinancialModelTestBase<T>
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var network = CreateNetwork();
-        var positive = CreateConstantTensor(InputShape, 0.9);
-        var negative = CreateConstantTensor(InputShape, 0.1);
+        var positive = CreateConstantTensor(EffectiveInputShape, 0.9);
+        var negative = CreateConstantTensor(EffectiveInputShape, 0.1);
 
         var out1 = network.Predict(positive);
         var out2 = network.Predict(negative);
@@ -71,7 +71,7 @@ public abstract class FinancialNLPTestBase<T> : FinancialModelTestBase<T>
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var network = CreateNetwork();
-        var input = CreateRandomTensor(InputShape, rng);
+        var input = CreateRandomTensor(EffectiveInputShape, rng);
         var output = network.Predict(input);
 
         for (int i = 0; i < output.Length; i++)

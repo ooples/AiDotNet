@@ -26,8 +26,32 @@ namespace AiDotNet.Optimizers;
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 [ComponentType(ComponentType.Optimizer)]
 [PipelineStage(PipelineStage.Training)]
-public class MiniBatchGradientDescentOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TInput, TOutput>
+public class MiniBatchGradientDescentOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TInput, TOutput>, Fused.IFusedOptimizerSpec
 {
+    /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// Unlike <c>GradientDescentOptimizer</c> and <c>StochasticGradientDescentOptimizer</c>, this
+    /// optimizer's loop does NOT call <c>ApplyMomentum</c> — its update is plain
+    /// <c>param -= lr * grad</c> over a mini-batch, which is exactly the fused <c>SGD</c> kernel.
+    /// </para>
+    /// <para>
+    /// Declines when the learning rate adapts during training, since the fused plan bakes it in when
+    /// the plan is built.
+    /// </para>
+    /// </remarks>
+    bool Fused.IFusedOptimizerSpec.TryGetFusedOptimizerConfig(out Fused.FusedOptimizerConfig config)
+    {
+        config = default;
+        if (GradientOptions.UseAdaptiveLearningRate) return false;
+        if (!TryGetFusedLrSchedule(out var schedule)) return false;
+        config = new Fused.FusedOptimizerConfig(
+            Tensors.Engines.Compilation.OptimizerType.SGD,
+            (float)GetCurrentLearningRate(),
+            0f, 0f, 0f, 0f, schedule);
+        return true;
+    }
+
     /// <summary>
     /// The options specific to the Mini-Batch Gradient Descent algorithm.
     /// </summary>

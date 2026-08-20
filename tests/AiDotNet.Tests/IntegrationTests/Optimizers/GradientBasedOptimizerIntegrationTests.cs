@@ -1,8 +1,10 @@
 #nullable disable
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.Optimizers;
+using AiDotNet.Regularization;
 using Xunit;
 using System.Threading.Tasks;
 
@@ -2509,14 +2511,31 @@ public class GradientBasedOptimizerIntegrationTests
             $"Proximal GD should significantly reduce loss. Initial: {initialLoss}, Final: {finalLoss}");
     }
 
+    /// <summary>
+    /// Proximal GD with an L1 operator drives small coordinates to EXACTLY zero, which is the property
+    /// that makes it worth choosing over a subgradient step.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The assertion is exact zeros, not "near zero". An earlier version tolerated |x| &lt; 0.01 after 100
+    /// steps and passed while the proximal operator was not being applied at all: the constant gradient
+    /// alone walked the first coordinate from 0.1 through zero in exactly 100 steps of 0.1×0.01. A
+    /// tolerance that a plain gradient step satisfies cannot distinguish shrinking-toward-zero from
+    /// setting-to-zero, which is the entire difference between L1 as a penalty and L1 as a prox.
+    /// </para>
+    /// <para>
+    /// The operator is configured through <c>Regularization</c> because that is what the optimizer reads.
+    /// </para>
+    /// </remarks>
     [Fact(Timeout = 120000)]
     public async Task ProximalGradientDescent_L1Regularization_PromotesSparsity()
     {
-        // Proximal GD with L1 should drive small values to zero
+        await Task.Yield();
         var options = new ProximalGradientDescentOptimizerOptions<double, Vector<double>, Vector<double>>
         {
             InitialLearningRate = 0.1,
-            RegularizationStrength = 0.5 // L1 regularization
+            Regularization = new L1Regularization<double, Vector<double>, Vector<double>>(
+                new RegularizationOptions { Strength = 0.5 }),
         };
         var optimizer = new ProximalGradientDescentOptimizer<double, Vector<double>, Vector<double>>(null, options);
 
@@ -2535,10 +2554,53 @@ public class GradientBasedOptimizerIntegrationTests
             }
         }
 
-        // Assert - Some values should be near zero due to soft thresholding
-        int nearZeroCount = x.Count(xi => Math.Abs(xi) < 0.01);
-        Assert.True(nearZeroCount >= 1,
-            $"Proximal GD with L1 should promote sparsity. Near-zero count: {nearZeroCount}");
+        // Every coordinate starts well inside the threshold, so the very first prox zeroes all three and
+        // they stay there: |0 - lr*g| = 0.001 < 0.5 on every subsequent step.
+        Assert.All(x, xi => Assert.Equal(0.0, xi, 12));
+    }
+
+    /// <summary>
+    /// <c>RegularizationStrength</c> has to reach the proximal operator, since that is the property the
+    /// facade's <c>regularization</c> hyperparameter maps onto.
+    /// </summary>
+    /// <remarks>
+    /// It was previously read by nothing: the optimizer took its operator from <c>Regularization</c> and
+    /// the strength went nowhere, so tuning it changed no number in the update.
+    /// </remarks>
+    [Fact(Timeout = 120000)]
+    public async Task ProximalGradientDescent_RegularizationStrength_OverridesTheOperatorsOwnStrength()
+    {
+        await Task.Yield();
+        var parameters = new Vector<double>(new[] { 1.0, -1.0, 0.2 });
+        var gradient = new Vector<double>(new[] { 0.0, 0.0, 0.0 });
+
+        // The regularizer is built with 0.01; the option asks for 0.3.
+        var options = new ProximalGradientDescentOptimizerOptions<double, Vector<double>, Vector<double>>
+        {
+            InitialLearningRate = 0.1,
+            Regularization = new L1Regularization<double, Vector<double>, Vector<double>>(
+                new RegularizationOptions { Strength = 0.01 }),
+            RegularizationStrength = 0.3,
+        };
+        var optimizer = new ProximalGradientDescentOptimizer<double, Vector<double>, Vector<double>>(null, options);
+
+        var updated = optimizer.UpdateParameters(parameters, gradient);
+
+        // Soft-thresholded at 0.3, not at 0.01.
+        Assert.Equal(0.7, updated[0], 12);
+        Assert.Equal(-0.7, updated[1], 12);
+        Assert.Equal(0.0, updated[2], 12);
+
+        // Left unset, the regularizer keeps its own strength — the two knobs never contradict.
+        var untouchedOptions = new ProximalGradientDescentOptimizerOptions<double, Vector<double>, Vector<double>>
+        {
+            InitialLearningRate = 0.1,
+            Regularization = new L1Regularization<double, Vector<double>, Vector<double>>(
+                new RegularizationOptions { Strength = 0.01 }),
+        };
+        var untouched = new ProximalGradientDescentOptimizer<double, Vector<double>, Vector<double>>(null, untouchedOptions);
+        var unchanged = untouched.UpdateParameters(parameters, gradient);
+        Assert.Equal(0.99, unchanged[0], 12);
     }
 
     #endregion

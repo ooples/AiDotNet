@@ -40,6 +40,31 @@ public class LBFGSOptimizerOptions<T, TInput, TOutput> : GradientBasedOptimizerO
         MaxIterations = 1000;
     }
 
+    /// <summary>Creates a complete copy of an existing L-BFGS options instance.</summary>
+    /// <param name="other">The options instance to copy.</param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="other"/> is null.</exception>
+    /// <remarks>
+    /// Reference-typed collaborators are shared rather than duplicated — see
+    /// <see cref="GradientBasedOptimizerOptions{T, TInput, TOutput}"/>'s copy helper for what that means.
+    /// </remarks>
+    public LBFGSOptimizerOptions(LBFGSOptimizerOptions<T, TInput, TOutput> other)
+    {
+        if (other is null) throw new ArgumentNullException(nameof(other));
+
+        CopyInheritedPropertiesFrom(other);
+        BatchSize = other.BatchSize;
+        MemorySize = other.MemorySize;
+        UseLineSearch = other.UseLineSearch;
+        MaxLineSearchIterations = other.MaxLineSearchIterations;
+        InitialLearningRate = other.InitialLearningRate;
+        // `new` shadows of the base properties: CopyInheritedPropertiesFrom copies the BASE ones and
+        // leaves these at their defaults, so they have to be named here.
+        MinLearningRate = other.MinLearningRate;
+        MaxLearningRate = other.MaxLearningRate;
+        LearningRateIncreaseFactor = other.LearningRateIncreaseFactor;
+        LearningRateDecreaseFactor = other.LearningRateDecreaseFactor;
+    }
+
     /// <summary>
     /// Gets or sets the batch size for gradient computation.
     /// </summary>
@@ -79,6 +104,47 @@ public class LBFGSOptimizerOptions<T, TInput, TOutput> : GradientBasedOptimizerO
     /// Generally, values between 3 and 20 are common, with diminishing returns as you increase beyond that.</para>
     /// </remarks>
     public int MemorySize { get; set; } = 10;
+
+    /// <summary>
+    /// Gets or sets whether each step is checked against the Armijo sufficient-decrease condition and
+    /// shortened (or rejected) when it fails.
+    /// </summary>
+    /// <value><c>true</c> to line-search each step; <c>false</c> to take the full step. Default: <c>true</c>.</value>
+    /// <remarks>
+    /// <para>
+    /// The two-loop recursion produces a DIRECTION. Nocedal &amp; Wright pair it with a line search
+    /// (Algorithm 3.1) because the direction is only guaranteed to point downhill — the full step along it
+    /// is not guaranteed to improve anything, and on a non-convex objective it regularly does not. Leaving
+    /// this on is what makes the method's convergence argument apply.
+    /// </para>
+    /// <para>
+    /// Turning it off makes every step exactly <c>lr</c> along the direction, which is what PyTorch's
+    /// <c>LBFGS</c> does with its default <c>line_search_fn=None</c>, and it is also the only form the
+    /// compiled fused kernel can run: a fused step has one gradient and no way to evaluate the loss at a
+    /// trial point. So this doubles as the switch that decides whether L-BFGS can fuse.
+    /// </para>
+    /// <para><b>For Beginners:</b> A line search is "try the step, and if it made things worse, take a
+    /// smaller one instead". It costs an extra forward pass per attempt and usually pays for itself.
+    /// </para>
+    /// </remarks>
+    public bool UseLineSearch { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets how many times a failing step is halved before it is rejected outright.
+    /// </summary>
+    /// <value>A positive integer, defaulting to 20.</value>
+    /// <remarks>
+    /// <para>
+    /// Backtracking terminates on its own for a genuine descent direction, so this bound only matters when
+    /// the direction is not one — which happens when the curvature history has gone stale. 20 halvings
+    /// takes the step below 1e-6 of its original length (0.5^20), well past the point where continuing is
+    /// useful.
+    /// </para>
+    /// <para><b>For Beginners:</b> How many times to try a smaller step before giving up on this one and
+    /// leaving the parameters where they were. You rarely need to change it.
+    /// </para>
+    /// </remarks>
+    public int MaxLineSearchIterations { get; set; } = 20;
 
     /// <summary>
     /// Gets or sets the initial learning rate for the L-BFGS algorithm, which controls the initial

@@ -24,8 +24,35 @@ namespace AiDotNet.Optimizers;
 /// </remarks>
 [ComponentType(ComponentType.Optimizer)]
 [PipelineStage(PipelineStage.Training)]
-public class BFGSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TInput, TOutput>
+public class BFGSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TInput, TOutput>, Fused.IFusedOptimizerSpec
 {
+    /// <summary>
+    /// Declines to fuse, always.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Stated explicitly rather than by omission, because an absent spec reads as "nobody got to it yet"
+    /// and that has twice been the wrong reading in this codebase. This one is a property of the method:
+    /// BFGS carries a dense n×n inverse-Hessian approximation and updates it with two rank-one terms per
+    /// step. That state is quadratic in the parameter count and every element of the update touches all of
+    /// it, so there is nothing for a fused optimizer — which owns per-parameter buffers and a flat step —
+    /// to hold or apply. At the sizes fused training exists for, the n×n matrix does not fit in memory at
+    /// all.
+    /// </para>
+    /// <para>
+    /// The field's own answer to that is the compact representation of Byrd, Nocedal &amp; Schnabel (1994),
+    /// which stores m curvature PAIRS instead of the matrix — and that is L-BFGS, which does fuse here.
+    /// PyTorch ships only <c>LBFGS</c> from this family and documents it as supporting neither
+    /// <c>foreach</c> nor <c>fused</c>. So the way to fuse BFGS is to use <see cref="LBFGSOptimizer{T,
+    /// TInput, TOutput}"/> with a large enough memory, not to write a BFGS kernel.
+    /// </para>
+    /// </remarks>
+    bool Fused.IFusedOptimizerSpec.TryGetFusedOptimizerConfig(out Fused.FusedOptimizerConfig config)
+    {
+        config = default;
+        return false;
+    }
+
     /// <summary>
     /// The options specific to the BFGS optimization algorithm.
     /// </summary>
@@ -545,24 +572,12 @@ public class BFGSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
         var updated = UpdateParameters(pv, gv);
         context.SetFlatParameters(updated);
 
-        // If re-evaluation is available, use backtracking line search
-        if (context.SupportsReevaluation)
+        // BFGS gives a direction; the step length along it is the line search's job (Nocedal & Wright,
+        // Algorithm 3.1). This used to claim to be a backtracking line search while doing the opposite —
+        // taking a SECOND full step from the point it had just measured as worse.
+        if (_options.UseLineSearch && context.SupportsReevaluation)
         {
-            T origLoss = context.Loss;
-            T newLoss = context.Reevaluate();
-            if (NumOps.GreaterThan(newLoss, origLoss))
-            {
-                // Re-materialize sparse-embedding contributions before reading the
-                // retry's flat gradient: context.Reevaluate() recomputes the dense
-                // gradient dictionary but leaves SparseEmbeddingGradient<T> entries
-                // untouched, so GetFlatGradients on the retry would silently miss
-                // any embedding parameter whose only contribution is sparse.
-                SparseEmbeddingOptimizerHelpers.MaterializeSparseIntoGradientsDict(context, Engine);
-                var pv2 = context.GetFlatParameters();
-                var gv2 = context.GetFlatGradients();
-                var retry = UpdateParameters(pv2, gv2);
-                context.SetFlatParameters(retry);
-            }
+            ApplyBacktrackingLineSearch(context, pv, updated, gv, _options.MaxLineSearchIterations);
         }
     }
 }

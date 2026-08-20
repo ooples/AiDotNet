@@ -89,6 +89,11 @@ public class MelSpectrogram<T>
     private readonly double _minDb;
 
     /// <summary>
+    /// When set, compression is <c>log(mel + offset)</c> instead of <see cref="PowerToDb"/>.
+    /// </summary>
+    private readonly double? _logOffset;
+
+    /// <summary>
     /// The STFT processor.
     /// </summary>
     private readonly ShortTimeFourierTransform<T> _stft;
@@ -167,7 +172,8 @@ public class MelSpectrogram<T>
         IWindowFunction<T>? windowFunction = null,
         bool logMel = true,
         double refDb = 1.0,
-        double minDb = -80.0)
+        double minDb = -80.0,
+        double? logOffset = null)
     {
         if (sampleRate <= 0)
             throw new ArgumentOutOfRangeException(nameof(sampleRate), "Sample rate must be positive.");
@@ -181,6 +187,21 @@ public class MelSpectrogram<T>
         _logMel = logMel;
         _refDb = refDb;
         _minDb = minDb;
+
+        // Stabilised log-mel, log(mel + offset), as an alternative to dB. Both compress the same
+        // spectrogram and are monotonically related, but they are NOT interchangeable: dB is
+        // 10*log10(power/ref) floored at minDb, while this is a natural log with a small additive
+        // floor and no clamp, so the two produce different scales and different gradients. Models
+        // whose published recipe specifies the offset form need it exactly -- VGGish (AudioSet)
+        // uses log(mel + 0.01), and feeding it dB instead changes the input distribution its
+        // architecture was designed around.
+        // NaN is spelled out rather than folded into `off <= 0.0`. The two are not the same test:
+        // every comparison against NaN is false, so `off <= 0.0` ADMITS NaN while the intent here is
+        // to reject it. A NaN offset would otherwise reach log(mel + NaN) and turn the whole
+        // spectrogram into NaN, far from this constructor and long after the cause is visible.
+        if (logOffset is { } off && (double.IsNaN(off) || off <= 0.0))
+            throw new ArgumentOutOfRangeException(nameof(logOffset), "Log offset must be positive.");
+        _logOffset = logOffset;
 
         if (_fMax > sampleRate / 2.0)
             throw new ArgumentOutOfRangeException(nameof(fMax), "fMax cannot exceed Nyquist frequency.");
@@ -231,7 +252,12 @@ public class MelSpectrogram<T>
             {
                 T fMinT = NumOps.FromDouble(_fMin);
                 T fMaxT = NumOps.FromDouble(_fMax);
-                return Engine.MelSpectrogram(signal, _sampleRate, _nFft, _hopLength, _nMels, fMinT, fMaxT, _windowTensor, _logMel);
+                // The fused kernel only knows dB compression, so when the offset form is requested
+                // ask it for the raw mel power and apply the compression here. The STFT and
+                // filterbank -- the expensive part -- still run on the GPU.
+                bool fusedLog = _logMel && _logOffset is null;
+                var gpuMel = Engine.MelSpectrogram(signal, _sampleRate, _nFft, _hopLength, _nMels, fMinT, fMaxT, _windowTensor, fusedLog);
+                return _logOffset is null ? gpuMel : ApplyLogOffset(gpuMel);
             }
             catch
             {
@@ -247,10 +273,7 @@ public class MelSpectrogram<T>
         var melSpec = ApplyMelFilterbank(powerSpec);
 
         // Apply log compression if requested
-        if (_logMel)
-        {
-            melSpec = PowerToDb(melSpec);
-        }
+        melSpec = Compress(melSpec);
 
         return melSpec;
     }
@@ -264,12 +287,39 @@ public class MelSpectrogram<T>
     {
         var melSpec = ApplyMelFilterbank(powerSpectrogram);
 
-        if (_logMel)
-        {
-            melSpec = PowerToDb(melSpec);
-        }
+        melSpec = Compress(melSpec);
 
         return melSpec;
+    }
+
+    /// <summary>
+    /// Applies the configured compression: <c>log(mel + offset)</c> when an offset was supplied,
+    /// otherwise dB, otherwise none.
+    /// </summary>
+    private Tensor<T> Compress(Tensor<T> melSpec)
+    {
+        if (_logOffset is not null) return ApplyLogOffset(melSpec);
+        return _logMel ? PowerToDb(melSpec) : melSpec;
+    }
+
+    /// <summary>
+    /// Stabilised log compression, <c>log(mel + offset)</c>, as used by VGGish.
+    /// </summary>
+    /// <remarks>
+    /// Natural log with an additive floor rather than a clamp: the offset alone keeps log(0)
+    /// from being taken, so quiet bins stay ordered instead of piling up on a minimum-dB floor.
+    /// </remarks>
+    private Tensor<T> ApplyLogOffset(Tensor<T> melSpec)
+    {
+        double offset = _logOffset ?? 0.01;
+        var result = new Tensor<T>(melSpec._shape);
+        for (int i = 0; i < melSpec.Data.Length; i++)
+        {
+            double v = NumOps.ToDouble(melSpec.Data.Span[i]) + offset;
+            result.Data.Span[i] = NumOps.FromDouble(Math.Log(v));
+        }
+
+        return result;
     }
 
     /// <summary>
