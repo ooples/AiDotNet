@@ -74,9 +74,14 @@ jobs:
         #
         # Hardening comes from harden-xunit-runner.ps1 rather than being repeated here. This lane had
         # its own copy, and the copy had already drifted: it serialized and disabled theory
-        # pre-enumeration but never turned the discovery diagnostics off, so this job still paid for
-        # ~72k discovery lines the shared script exists to suppress. That is the same drift that left
-        # the sonarcloud.yml jobs unhardened until they were switched to the script.
+        # pre-enumeration but never turned the discovery diagnostics off, which is the one setting
+        # that keeps this job's log under GitHub's per-job cap. --filter is applied AFTER xUnit has
+        # discovered the WHOLE assembly, so the diagnostic volume is set by the assembly's ~72k cases
+        # and not by the 11 tests this lane selects; see harden-xunit-runner.ps1, which records a job
+        # that emitted 57,102 discovery lines and a 16.9 MB log covering only its first 2m44s, with
+        # zero test results retained. (The 20-lines-to-0 figure in the PR description is a different
+        # scope: a local --no-build run already filtered to the 11 tests.) That is the same drift that
+        # left the sonarcloud.yml jobs unhardened until they were switched to the script.
         #
         # Invoked inline in THIS pwsh process on purpose: the script sets DOTNET_gcServer for the
         # current process (and GITHUB_ENV for a later step), and environment variables are
