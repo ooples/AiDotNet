@@ -88,7 +88,7 @@ public partial class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, I
     private Tensor<T> _bias;
 
     // The adjacency matrix defining graph structure
-    [AiDotNet.Attributes.FittedParameter]
+    [AiDotNet.Attributes.FittedParameter(InputSized = true)]
     private Tensor<T>? _adjacencyMatrix;
 
     // Cached values for backward pass

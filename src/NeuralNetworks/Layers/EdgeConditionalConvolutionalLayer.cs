@@ -117,13 +117,13 @@ public partial class EdgeConditionalConvolutionalLayer<T> : LayerBase<T>, IGraph
     /// <summary>
     /// The adjacency matrix defining graph structure.
     /// </summary>
-    [AiDotNet.Attributes.FittedParameter]
+    [AiDotNet.Attributes.FittedParameter(InputSized = true)]
     private Tensor<T>? _adjacencyMatrix;
 
     /// <summary>
     /// Edge features tensor.
     /// </summary>
-    [AiDotNet.Attributes.FittedParameter]
+    [AiDotNet.Attributes.FittedParameter(InputSized = true)]
     private Tensor<T>? _edgeFeatures;
     [AiDotNet.Attributes.Scratch]
     private Tensor<T>? _normalizedAdjacencyMatrix;

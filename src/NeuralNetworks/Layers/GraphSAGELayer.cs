@@ -106,7 +106,7 @@ public partial class GraphSAGELayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
     /// <summary>
     /// The adjacency matrix defining graph structure.
     /// </summary>
-    [AiDotNet.Attributes.FittedParameter]
+    [AiDotNet.Attributes.FittedParameter(InputSized = true)]
     private Tensor<T>? _adjacencyMatrix;
 
     /// <summary>

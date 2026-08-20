@@ -187,13 +187,13 @@ public partial class MessagePassingLayer<T> : LayerBase<T>, IGraphConvolutionLay
     /// <summary>
     /// The adjacency matrix defining graph structure.
     /// </summary>
-    [AiDotNet.Attributes.FittedParameter]
+    [AiDotNet.Attributes.FittedParameter(InputSized = true)]
     private Tensor<T>? _adjacencyMatrix;
 
     /// <summary>
     /// Edge features tensor (optional).
     /// </summary>
-    [AiDotNet.Attributes.FittedParameter]
+    [AiDotNet.Attributes.FittedParameter(InputSized = true)]
     private Tensor<T>? _edgeFeatures;
 
     /// <summary>

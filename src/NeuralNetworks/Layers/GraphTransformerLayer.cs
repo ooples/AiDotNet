@@ -140,7 +140,7 @@ public partial class GraphTransformerLayer<T> : LayerBase<T>, IGraphConvolutionL
     /// <summary>
     /// Structural bias for attention (learned from graph structure): [numHeads, maxNodes, maxNodes]
     /// </summary>
-    [AiDotNet.Attributes.FittedParameter]
+    [AiDotNet.Attributes.FittedParameter(InputSized = true)]
     private Tensor<T>? _structuralBias;
 
     /// <summary>
@@ -202,7 +202,7 @@ public partial class GraphTransformerLayer<T> : LayerBase<T>, IGraphConvolutionL
     /// <summary>
     /// The adjacency matrix defining graph structure.
     /// </summary>
-    [AiDotNet.Attributes.FittedParameter]
+    [AiDotNet.Attributes.FittedParameter(InputSized = true)]
     private Tensor<T>? _adjacencyMatrix;
 
     /// <summary>

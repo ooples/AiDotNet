@@ -180,17 +180,10 @@ public partial class GraphGenerationModel<T> : GraphModelLayoutBase<T>
     /// </summary>
     private readonly Random _random;
 
-    /// <summary>
-    /// Gradient for mean weights.
-    /// </summary>
-    [Scratch]
-    private Tensor<T>? _meanWeightsGradient;
-
-    /// <summary>
-    /// Gradient for log-variance weights.
-    /// </summary>
-    [Scratch]
-    private Tensor<T>? _logVarWeightsGradient;
+    // _meanWeightsGradient and _logVarWeightsGradient are gone with the hand-written
+    // GetParameterGradients override that was their only reader. The tape's gradients for
+    // these two tensors now reach the surface through PublishParameterGradients, which
+    // keys them by tensor identity rather than by a field the model has to remember to set.
 
     /// <summary>
     /// Initializes a new instance of the <see cref="GraphGenerationModel{T}"/> class.
@@ -792,42 +785,11 @@ public partial class GraphGenerationModel<T> : GraphModelLayoutBase<T>
         return count;
     }
 
-    /// <summary>
-    /// Gets all parameter gradients as a vector (encoder layers + variational weights).
-    /// </summary>
-    public override Vector<T> GetParameterGradients()
-    {
-        // Encoder layer gradients
-        var baseGradients = base.GetParameterGradients();
-        var allGrads = new List<T>();
-        for (int i = 0; i < baseGradients.Length; i++)
-            allGrads.Add(baseGradients[i]);
-
-        // Variational layer gradients
-        if (_meanWeightsGradient != null)
-        {
-            for (int i = 0; i < _meanWeightsGradient.Length; i++)
-                allGrads.Add(_meanWeightsGradient.GetFlat(i));
-        }
-        else
-        {
-            for (int i = 0; i < _meanWeights.Length; i++)
-                allGrads.Add(NumOps.Zero);
-        }
-
-        if (_logVarWeightsGradient != null)
-        {
-            for (int i = 0; i < _logVarWeightsGradient.Length; i++)
-                allGrads.Add(_logVarWeightsGradient.GetFlat(i));
-        }
-        else
-        {
-            for (int i = 0; i < _logVarWeights.Length; i++)
-                allGrads.Add(NumOps.Zero);
-        }
-
-        return new Vector<T>(allGrads.ToArray());
-    }
+    // The GetParameterGradients override that used to live here appended _meanWeights and
+    // _logVarWeights to base.GetParameterGradients(). The base already folds every tensor
+    // GetExtraTrainableTensors declares -- these two -- so the override appended them a
+    // second time and returned a vector longer than GetParameters(). Deleted so the one
+    // ordering in the base is the only ordering.
 
     #region Abstract Method Implementations
 
@@ -872,7 +834,13 @@ public partial class GraphGenerationModel<T> : GraphModelLayoutBase<T>
         return Decode(mean);
     }
 
-    [AiDotNet.Attributes.TrainableParameter]
+    // NOT a parameter. This is the self-loop identity matrix EnsureAdjacencyMatrix derives when a
+    // caller predicts without supplying a graph, and it is rebuilt from scratch the moment the node
+    // count changes -- so there is nothing here a checkpoint needs to carry. Declaring it trainable
+    // put a graph in the optimizer's hands: Adam moved the self-loops off 1, two encoder layers
+    // propagated the drift, and the ELBO went to NaN. It was input-sized as well, so it moved
+    // ParameterCount under a forward pass for the same reason the layer-side adjacency did.
+    [Scratch]
     private Tensor<T>? _autoAdjacencyMatrix;
 
     private Tensor<T> EnsureAdjacencyMatrix(int numNodes)
@@ -945,12 +913,6 @@ public partial class GraphGenerationModel<T> : GraphModelLayoutBase<T>
         foreach (var layer in Layers)
             layer.SetTrainingMode(true);
 
-        // Collect encoder layer parameter tensors via the tape training
-        // helper (walks ITrainableLayer.GetTrainableParameters on every
-        // layer). Variational weights are tracked separately below.
-        var encoderParams = Training.TapeTrainingStep<T>.CollectParameters(
-            Layers.Cast<ILayer<T>>().ToList(), structureVersion: -1);
-
         using var tape = new Tensors.Engines.Autodiff.GradientTape<T>();
 
         // Tape-tracked forward: Encode → Reparameterize → Decode.
@@ -1006,54 +968,22 @@ public partial class GraphGenerationModel<T> : GraphModelLayoutBase<T>
         // Backward: differentiate the ELBO w.r.t. every registered param.
         var allGrads = tape.ComputeGradients(lossTensor, sources: null);
 
-        // Build the flat gradient vector in the SAME order as GetParameters():
-        // encoder-layer params (per-layer GetParameters flat) followed by
-        // _meanWeights then _logVarWeights. For each encoder param tensor
-        // (collected above), look up its gradient; for any tensor the tape
-        // didn't visit (e.g. a bias buffer that's registered but not used
-        // on this forward path), fall back to zero.
-        var gradList = new List<T>();
-        foreach (var p in encoderParams)
-        {
-            if (allGrads.TryGetValue(p, out var g))
-            {
-                for (int i = 0; i < g.Length; i++)
-                    gradList.Add(g.GetFlat(i));
-            }
-            else
-            {
-                for (int i = 0; i < p.Length; i++)
-                    gradList.Add(NumOps.Zero);
-            }
-        }
-        // Variational weight gradients: append to the flat vector AND
-        // persist the tensor-shaped gradients on _meanWeightsGradient /
-        // _logVarWeightsGradient so GetParameterGradients() returns the
-        // real numbers instead of the all-zero defaults. Without this
-        // persist step, callers walking GetParameterGradients() saw
-        // zeros even though the optimizer step had moved the weights.
-        if (allGrads.TryGetValue(_meanWeights, out var mg))
-        {
-            for (int i = 0; i < mg.Length; i++) gradList.Add(mg.GetFlat(i));
-            _meanWeightsGradient = mg;
-        }
-        else
-        {
-            for (int i = 0; i < _meanWeights.Length; i++) gradList.Add(NumOps.Zero);
-            _meanWeightsGradient = new Tensor<T>(_meanWeights._shape);
-        }
-        if (allGrads.TryGetValue(_logVarWeights, out var lvg))
-        {
-            for (int i = 0; i < lvg.Length; i++) gradList.Add(lvg.GetFlat(i));
-            _logVarWeightsGradient = lvg;
-        }
-        else
-        {
-            for (int i = 0; i < _logVarWeights.Length; i++) gradList.Add(NumOps.Zero);
-            _logVarWeightsGradient = new Tensor<T>(_logVarWeights._shape);
-        }
-
-        var parameterGradients = new Vector<T>(gradList.ToArray());
+        // Publish the tape through the base gradient surface rather than walking the
+        // parameters again here. The base scatters each layer's slice by mirroring
+        // FillParameters and then folds the variational extras in the order
+        // GetExtraTrainableTensors declares them, so the gradient vector lines up
+        // scalar-for-scalar with the GetParameters() vector below.
+        //
+        // The walk this replaces enumerated ITrainableLayer.GetTrainableParameters,
+        // which is the OPTIMIZER view: it omits every declared non-trainable component.
+        // The two agreed only for as long as no encoder layer had one. The moment
+        // GraphConvolutionalLayer declared its adjacency matrix, GetParameters() grew by
+        // the graph's size and this vector did not, so the optimizer returned a vector
+        // that no longer described the model and the restore failed on the layer where
+        // the shortfall landed. That is precisely the drift FillParameterGradients exists
+        // to prevent, and why a second ordering must not be written by hand.
+        PublishParameterGradients(allGrads);
+        var parameterGradients = GetParameterGradients();
 
         // Use the configured _optimizer so Adam momentum / scheduler state
         // accumulates across batches. The previous code created a fresh

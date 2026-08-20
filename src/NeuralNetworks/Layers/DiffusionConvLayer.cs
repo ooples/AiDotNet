@@ -176,13 +176,13 @@ public partial class DiffusionConvLayer<T> : LayerBase<T>, IShapeContract
     /// <summary>
     /// Laplacian matrix for the current mesh [numVertices, numVertices].
     /// </summary>
-    [AiDotNet.Attributes.FittedParameter]
+    [AiDotNet.Attributes.FittedParameter(InputSized = true)]
     private Tensor<T>? _laplacian;
 
     /// <summary>
     /// Mass matrix (vertex areas) for the current mesh [numVertices].
     /// </summary>
-    [AiDotNet.Attributes.FittedParameter]
+    [AiDotNet.Attributes.FittedParameter(InputSized = true)]
     private Tensor<T>? _massMatrix;
 
     /// <summary>
@@ -193,7 +193,7 @@ public partial class DiffusionConvLayer<T> : LayerBase<T>, IShapeContract
     /// <summary>
     /// Eigenvectors of the Laplacian [numVertices, numEigenvalues].
     /// </summary>
-    [AiDotNet.Attributes.FittedParameter]
+    [AiDotNet.Attributes.FittedParameter(InputSized = true)]
     private Tensor<T>? _eigenvectors;
 
     /// <summary>

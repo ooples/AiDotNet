@@ -62,7 +62,7 @@ public partial class GraphConvolutionalLoRAAdapter<T> : LoRAAdapterBase<T>, IGra
     /// <summary>
     /// Cached adjacency matrix for graph operations.
     /// </summary>
-    [AiDotNet.Attributes.FittedParameter]
+    [AiDotNet.Attributes.FittedParameter(InputSized = true)]
     private Tensor<T>? _adjacencyMatrix;
 
     /// <summary>
