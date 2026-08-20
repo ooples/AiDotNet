@@ -112,6 +112,30 @@ public class TransitivelyOwnedOptimizerResetTests
         internal CyclicModel? Back;
     }
 
+    /// <summary>
+    /// A child model held in an INTERFACE-typed field. NeuralNetworkBase implements
+    /// INeuralNetworkModel rather than deriving from it, so a one-directional assignability test
+    /// misses this shape entirely.
+    /// </summary>
+    private sealed class InterfaceTypedChildModel : ProbeModel
+    {
+        internal readonly INeuralNetworkModel<double> Child = new DirectFieldModel();
+    }
+
+    /// <summary>Optimizers held as dictionary VALUES, which enumerate as KeyValuePair.</summary>
+    private sealed class OptimizerDictionaryModel : ProbeModel
+    {
+        internal readonly Dictionary<string, IGradientBasedOptimizer<double, Tensor<double>, Tensor<double>>> Owned =
+            new() { ["a"] = new ResetCountingAdam(), ["b"] = new ResetCountingAdam() };
+    }
+
+    /// <summary>Child models held as dictionary values.</summary>
+    private sealed class ModelDictionaryModel : ProbeModel
+    {
+        internal readonly Dictionary<string, DirectFieldModel> Children =
+            new() { ["x"] = new DirectFieldModel(), ["y"] = new DirectFieldModel() };
+    }
+
     [Fact]
     public void DirectlyTypedField_IsReset()
     {
@@ -161,6 +185,47 @@ public class TransitivelyOwnedOptimizerResetTests
         var model = new AliasedOptimizerModel();
         model.ResetBaseTrainOptimizerState();
         Assert.Equal(1, model.Owned.ResetCount);
+    }
+
+    [Fact]
+    public void OptimizerOwnedByAnInterfaceTypedChildModel_IsReset()
+    {
+        var model = new InterfaceTypedChildModel();
+        model.ResetBaseTrainOptimizerState();
+        Assert.Equal(1, ((DirectFieldModel)model.Child).Owned.ResetCount);
+    }
+
+    [Fact]
+    public void OptimizerHeldAsADictionaryValue_IsReset()
+    {
+        var model = new OptimizerDictionaryModel();
+        model.ResetBaseTrainOptimizerState();
+        foreach (var optimizer in model.Owned.Values)
+            Assert.Equal(1, ((ResetCountingAdam)optimizer).ResetCount);
+    }
+
+    [Fact]
+    public void OptimizerOwnedByModelsHeldAsDictionaryValues_IsReset()
+    {
+        var model = new ModelDictionaryModel();
+        model.ResetBaseTrainOptimizerState();
+        foreach (var child in model.Children.Values)
+            Assert.Equal(1, child.Owned.ResetCount);
+    }
+
+    /// <summary>
+    /// A model that never records a loss must not look like one that recorded zero. T is unconstrained,
+    /// so for double the T? annotation is only a nullable-reference annotation and a null test on the
+    /// value can never fire - the flag is the only thing that can answer this.
+    /// </summary>
+    [Fact]
+    public void AModelThatNeverTrained_ReportsNoRecordedLoss()
+    {
+        var untrained = new DirectFieldModel();
+        Assert.False(untrained.HasRecordedLoss,
+            "a model that has never trained reported a recorded loss; for a value-type T the null "
+            + "test this used to rely on is always false, so every model claimed to have one.");
+        Assert.Equal(0.0, untrained.GetLastLoss());
     }
 
     [Fact]
