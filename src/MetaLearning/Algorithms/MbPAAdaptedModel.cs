@@ -189,10 +189,29 @@ public partial class MbPAAdaptedModel<T, TInput, TOutput> : MetaLearningModelBas
 
             if (rows.Count == 1) return (TOutput)(object)rows[0];
 
-            throw new NotSupportedException(
-                $"MbPA cannot pack {rows.Count} predictions of {outputDim} components each into a " +
-                "flat Vector<T> without discarding components. Use Matrix<T> or Tensor<T> as the " +
-                "meta-learning output type for a batched multi-component head.");
+            // BATCHED MULTI-COMPONENT: FLATTEN, DO NOT REFUSE. The concern that motivated the throw
+            // was TRUNCATION -- the old code kept component 0 of each row and silently dropped the
+            // rest. Refusing fixed that, but it over-corrected: a flat Vector<T> holds
+            // rows.Count * outputDim values perfectly well, so writing the rows out consecutively
+            // discards nothing. The result is ordered row-major (example 0's components, then
+            // example 1's, ...) and OutputDimension is what a caller reshapes by, exactly as it is
+            // for the Matrix<T> branch below.
+            //
+            // This cannot regress an existing caller: the combination it replaces THREW, so no
+            // working code path could have depended on the previous behaviour. What it does fix is a
+            // model configured with a multi-component head being unable to predict a batch at all
+            // (MbPAMechanismTests.AdaptedModel_PredictsWithoutRetainingAnyAdaptation predicts a
+            // 4-row query through a 3-component head and never reached its transience assertions).
+            var flattened = new Vector<T>(rows.Count * outputDim);
+            for (int i = 0; i < rows.Count; i++)
+            {
+                for (int j = 0; j < outputDim; j++)
+                {
+                    flattened[(i * outputDim) + j] = j < rows[i].Length ? rows[i][j] : NumOps.Zero;
+                }
+            }
+
+            return (TOutput)(object)flattened;
         }
 
         if (typeof(TOutput) == typeof(Matrix<T>))
