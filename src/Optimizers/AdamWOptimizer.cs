@@ -148,6 +148,10 @@ public class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
     {
         config = default;
         if (_options.UseAdaptiveLearningRate) return false;
+        // A masked run cannot be expressed here: the config below carries decay as a single float, so
+        // the compiled kernel would decay every parameter including the ones the mask exempts. Decline
+        // rather than diverge from the eager path.
+        if (_options.WeightDecayMask is not null) return false;
         if (!TryGetFusedLrSchedule(out var schedule)) return false;
         // AdamW + AMSGrad uses the same max-second-moment kernel; decoupled weight
         // decay is carried in WeightDecay and applied by the AdamW update path.
@@ -360,6 +364,10 @@ public class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
         // DECOUPLED WEIGHT DECAY: Apply weight decay directly to parameters
         // AdamW: parameters = parameters - lr * adam_update - lr * weight_decay * parameters
         var weightDecayTerm = (Vector<T>)Engine.Multiply(parameters, weightDecay);
+        // Per-parameter exemption (see AdamWOptimizerOptions.WeightDecayMask). Null means decay
+        // everything, which is the behaviour every caller had before the mask existed.
+        if (_options.WeightDecayMask is { } decayMask)
+            weightDecayTerm = (Vector<T>)Engine.Multiply(weightDecayTerm, decayMask);
         var scaledWeightDecay = (Vector<T>)Engine.Multiply(weightDecayTerm, CurrentLearningRate);
 
         // Combine: parameters = parameters - scaledAdamUpdate - scaledWeightDecay
@@ -454,6 +462,8 @@ public class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
         var outSpan = updatedParameters.AsWritableSpan();
         bool amsGrad = _options.UseAMSGrad && _vMax != null;
         var vMaxSpan = amsGrad ? _vMax!.AsWritableSpan() : default;
+        // Empty when no mask is configured, which keeps the per-element branch off the common path.
+        var maskSpan = _options.WeightDecayMask is { } wdMask ? wdMask.AsWritableSpan() : default;
         T learningRate = CurrentLearningRate;
 
         for (int i = 0; i < pSpan.Length; i++)
@@ -481,9 +491,14 @@ public class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
 
             T adamUpdate = NumOps.Divide(mHat, NumOps.Add(NumOps.Sqrt(vHat), epsilon));
             T afterAdam = NumOps.Subtract(p, NumOps.Multiply(adamUpdate, learningRate));
+            // Per-parameter exemption (see AdamWOptimizerOptions.WeightDecayMask). Null means decay
+            // everything, which is the behaviour every caller had before the mask existed.
+            T decayForThisParameter = weightDecay;
+            if (maskSpan.Length > 0)
+                decayForThisParameter = NumOps.Multiply(decayForThisParameter, maskSpan[i]);
             outSpan[i] = NumOps.Subtract(
                 afterAdam,
-                NumOps.Multiply(NumOps.Multiply(p, weightDecay), learningRate));
+                NumOps.Multiply(NumOps.Multiply(p, decayForThisParameter), learningRate));
         }
 
         return updatedParameters;
@@ -578,6 +593,10 @@ public class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
 
         // Decoupled weight decay
         var weightDecayTerm = (Vector<T>)Engine.Multiply(parameters, weightDecay);
+        // Per-parameter exemption (see AdamWOptimizerOptions.WeightDecayMask). Null means decay
+        // everything, which is the behaviour every caller had before the mask existed.
+        if (_options.WeightDecayMask is { } decayMask)
+            weightDecayTerm = (Vector<T>)Engine.Multiply(weightDecayTerm, decayMask);
         var scaledWeightDecay = (Vector<T>)Engine.Multiply(weightDecayTerm, CurrentLearningRate);
 
         var afterAdamUpdate = (Vector<T>)Engine.Subtract(parameters, scaledAdamUpdate);
