@@ -3385,6 +3385,39 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         // invariant measures the optimizer instead of an impossible objective. It weakens nothing --
         // the strict-decrease assertion is unchanged, and a Born-rule model that genuinely fails to
         // learn a REACHABLE target still fails.
+        // A BINARY-CROSS-ENTROPY HEAD NEEDS A TARGET IN [0, 1], AND IS UNBOUNDED BELOW WITHOUT ONE.
+        // BCE-with-logits is max(x,0) - x*y + log(1 + exp(-|x|)). For a legal target that expression
+        // is non-negative, but y only appears in the -x*y term, so an out-of-range y makes the loss
+        // unbounded below and the optimizer simply drives x*y toward +infinity. A uniform-random
+        // target straddling zero is exactly such a y.
+        //
+        // MEASURED on SAMHQ, whose segmentation head defaults to BinaryCrossEntropyWithLogitsLoss:
+        // step 1 loss 0.698 (about ln 2, healthy at init), step 2 -2.11, step 5 -1397, step 20
+        // -3.45e11, step 60 -1.98e19, and at step 70 the parameters overflow -- 8,483,329 of
+        // 8,501,761 non-finite. Nothing about the model is wrong there; a NEGATIVE cross-entropy is
+        // the tell that the objective itself was ill-posed, because no valid one can go below zero.
+        //
+        // PyTorch documents binary_cross_entropy_with_logits targets as probabilities between 0 and
+        // 1, so clamping into that range is what makes the objective the one the loss is defined for.
+        // Same treatment, same reason, as the CrossEntropyWithLogitsLoss branch below.
+        if (target.Length > 0
+            && network is AiDotNet.NeuralNetworks.NeuralNetworkBase<T> binary
+            && binary.DefaultLossFunction is AiDotNet.LossFunctions.BinaryCrossEntropyWithLogitsLoss<T>)
+        {
+            var projected = new Tensor<T>(target.Shape.ToArray());
+            var zero = NumOps.Zero;
+            var one = NumOps.One;
+            for (int i = 0; i < target.Length; i++)
+            {
+                var value = target[i];
+                if (NumOps.LessThan(value, zero)) value = zero;
+                else if (NumOps.GreaterThan(value, one)) value = one;
+                projected[i] = value;
+            }
+
+            return projected;
+        }
+
         if (target.Length > 0
             && network is AiDotNet.NeuralNetworks.NeuralNetworkBase<T> born
             && born.DefaultLossFunction is AiDotNet.LossFunctions.BornRuleMseLoss<T>)
