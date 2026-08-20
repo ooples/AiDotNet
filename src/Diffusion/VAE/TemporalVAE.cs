@@ -796,16 +796,6 @@ public partial class TemporalVAE<T> : VAEModelBase<T>
         }
     }
 
-    /// <inheritdoc />
-    public override IEnumerable<Tensor<T>> GetParameterChunks()
-    {
-        foreach (var layer in EnumerateAllLayers())
-        {
-            foreach (var parameter in EnumerateMaterializedParameters(layer))
-                yield return parameter;
-        }
-    }
-
     private IEnumerable<ILayer<T>?> EnumerateAllLayers()
     {
         yield return _inputConv;

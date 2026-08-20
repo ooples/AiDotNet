@@ -78,14 +78,6 @@ public partial class DiTNoisePredictor<T> : NoisePredictorBase<T>
 {
 
     /// <inheritdoc />
-    /// <remarks>DiT builds its blocks lazily, so nothing is reflectable until this runs. Without it
-    /// SiTPredictor, which derives from this type, reported 0 parameters against a real 49,328.</remarks>
-    protected override void EnsureParametersReady()
-    {
-        EnsureLayersInitialized();
-    }
-
-    /// <inheritdoc />
     protected override void EnsureParameterStructureReady()
     {
         // This creates the fixed-shape LazyDense/normalization graph only. LazyDense uses

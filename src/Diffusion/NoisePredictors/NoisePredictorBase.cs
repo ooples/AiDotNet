@@ -574,7 +574,7 @@ public abstract partial class NoisePredictorBase<T> : INoisePredictor<T>, IModel
             if (TryGetDeclaredParameterCount(out long declaredCount, out _))
                 return declaredCount;
 
-            EnsureParametersReadyGuarded();
+            PrepareParameterSurface(AiDotNet.Models.Parameters.ParameterSurfaceIntent.Read);
             long total = 0;
             foreach (var slot in EnumerateParameterValueSlots())
             {
@@ -623,8 +623,8 @@ public abstract partial class NoisePredictorBase<T> : INoisePredictor<T>, IModel
 
     /// <summary>
     /// Builds any layer objects whose dimensions are fixed by construction, without allocating
-    /// their weight tensors. Deferred-construction predictors override this independently from
-    /// <see cref="EnsureParametersReady"/>, whose explicit read/write path may materialize values.
+    /// their weight tensors. Deferred-construction predictors override this shape-only hook;
+    /// concrete reads and writes are materialized uniformly by the layer lifecycle below.
     /// </summary>
     protected virtual void EnsureParameterStructureReady()
     {
@@ -696,79 +696,23 @@ public abstract partial class NoisePredictorBase<T> : INoisePredictor<T>, IModel
         }
     }
 
-    /// <summary>
-    /// Brings lazily-built layers into existence before their parameters are read or written.
-    /// Does nothing by default, which is correct for the predictors that build eagerly.
-    /// </summary>
-    /// <remarks>
-    /// A predictor with lazy weights overrides this, and must use the SAME resolution on every
-    /// path. UNetNoisePredictor is the cautionary case: it resolved shape-only when read and for
-    /// real when written, so the count described one model and the restore built another, and
-    /// restoring grew it from 3,146,496 to 5,006,595.
-    /// </remarks>
-    protected virtual void EnsureParametersReady()
-    {
-    }
-
-    /// <summary>
-    /// The instance whose <see cref="EnsureParametersReady"/> is currently running on this thread,
-    /// or null. Per-thread so concurrent predictors never suppress each other's resolution, and
-    /// saved/restored around each call so a nested resolution on a DIFFERENT predictor still runs.
-    /// </summary>
-    [ThreadStatic]
-    private static object? _resolvingParametersFor;
-
-    /// <summary>
-    /// Calls <see cref="EnsureParametersReady"/>, but returns immediately if this same predictor is
-    /// already resolving on this thread.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// Lazy predictors resolve their shapes by running a real forward pass, and the forward path
-    /// consults the weight-streaming heuristic, which reads <see cref="ParameterCount"/> -- which
-    /// resolves. That closes a cycle with no base case:
-    /// </para>
-    /// <para>
-    /// ParameterCount -&gt; EnsureParametersReady -&gt; TriggerLazyShapeResolution -&gt; PredictNoise
-    /// -&gt; BeginWeightStreamingForward -&gt; MaybeEngageWeightStreaming -&gt; ParameterCount.
-    /// </para>
-    /// <para>
-    /// It overflowed the stack rather than failing a test, so it killed the whole test host: the
-    /// parameter sweeps reported "Test Run Aborted" with empty logs and no artifacts instead of
-    /// naming a failing model. The <c>_streamingEngaged</c> flag cannot break the cycle because the
-    /// re-entry happens at the ParameterCount READ, before anything has engaged.
-    /// </para>
-    /// <para>
-    /// Returning early is correct, not just a stack guard: the outer call is already resolving, so
-    /// the inner read sees whatever is materialized so far. The streaming heuristic that triggers
-    /// the re-entry only needs a count to compare against a threshold, and a predictor mid-resolve
-    /// is by definition not yet finished building.
-    /// </para>
-    /// </remarks>
-    private protected void EnsureParametersReadyGuarded()
-    {
-        if (ReferenceEquals(_resolvingParametersFor, this)) return;
-
-        object? previous = _resolvingParametersFor;
-        _resolvingParametersFor = this;
-        try
-        {
-            EnsureParametersReady();
-        }
-        finally
-        {
-            _resolvingParametersFor = previous;
-        }
-    }
-
     /// <inheritdoc />
     void AiDotNet.Models.Parameters.IParameterSurfaceLifecycle.PrepareParameterSurface(
+        AiDotNet.Models.Parameters.ParameterSurfaceIntent intent)
+        => PrepareParameterSurface(intent);
+
+    /// <summary>
+    /// Advances the reflected layer graph through the one shared parameter lifecycle. Shape-only
+    /// queries never allocate; every concrete operation asks each generated layer manifest to
+    /// materialize exactly its construction-declared slots. Predictor authors therefore do not
+    /// need value-readiness overrides or dummy forwards.
+    /// </summary>
+    private void PrepareParameterSurface(
         AiDotNet.Models.Parameters.ParameterSurfaceIntent intent)
     {
         EnsureParameterStructureReady();
         if (intent == AiDotNet.Models.Parameters.ParameterSurfaceIntent.Describe) return;
 
-        EnsureParametersReadyGuarded();
         foreach (var layer in ReflectInstanceLayers(this))
         {
             if (layer is AiDotNet.Models.Parameters.IParameterSurfaceLifecycle lifecycle)
@@ -884,7 +828,7 @@ public abstract partial class NoisePredictorBase<T> : INoisePredictor<T>, IModel
         // freshly cloned predictor that path then threw "Expected 88860 parameters, got 95116": the
         // copy's own weights had never been brought up. Readying first leaves the fallback for what it
         // was meant for -- genuinely non-LayerBase weight storage.
-        EnsureParametersReadyGuarded();
+        PrepareParameterSurface(AiDotNet.Models.Parameters.ParameterSurfaceIntent.Read);
 
         long total = 0;
         foreach (var slot in EnumerateParameterStateValueSlots())
@@ -1741,7 +1685,7 @@ public abstract partial class NoisePredictorBase<T> : INoisePredictor<T>, IModel
     /// this explicit value read materializes lazy tensors and emits those concrete values.</remarks>
     public virtual Vector<T> GetParameters()
     {
-        EnsureParametersReadyGuarded();
+        PrepareParameterSurface(AiDotNet.Models.Parameters.ParameterSurfaceIntent.Read);
 
         long total = 0;
         var slots = EnumerateParameterValueSlots().ToList();
@@ -1769,7 +1713,7 @@ public abstract partial class NoisePredictorBase<T> : INoisePredictor<T>, IModel
     public virtual void SetParameters(Vector<T> parameters)
     {
         if (parameters is null) throw new ArgumentNullException(nameof(parameters));
-        EnsureParametersReadyGuarded();
+        PrepareParameterSurface(AiDotNet.Models.Parameters.ParameterSurfaceIntent.Restore);
 
         long expected = 0;
         var slots = EnumerateParameterValueSlots().ToList();

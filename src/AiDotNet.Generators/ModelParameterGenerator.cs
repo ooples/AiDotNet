@@ -402,6 +402,7 @@ public class ModelParameterGenerator : IIncrementalGenerator
             sb.AppendLine("    /// rather than yielded -- an unfitted model has no weights there yet. Declare");
             sb.AppendLine($"    /// {ExtraTensorsHook}() by hand to take ownership and this disappears.");
             sb.AppendLine("    /// </remarks>");
+            sb.AppendLine("    [global::System.CodeDom.Compiler.GeneratedCode(\"AiDotNet.Generators.ModelParameterGenerator\", \"1.0.0\")]");
             sb.AppendLine($"    protected override global::System.Collections.Generic.IEnumerable<Tensor<{elem}>> {ExtraTensorsHook}()");
             sb.AppendLine("    {");
             sb.AppendLine($"        foreach (var __t in base.{ExtraTensorsHook}()) yield return __t;");
@@ -437,6 +438,7 @@ public class ModelParameterGenerator : IIncrementalGenerator
             sb.AppendLine("    /// twice in ParameterCount and emit them twice from GetParameters.");
             sb.AppendLine("    /// </para>");
             sb.AppendLine("    /// </remarks>");
+            sb.AppendLine("    [global::System.CodeDom.Compiler.GeneratedCode(\"AiDotNet.Generators.ModelParameterGenerator\", \"1.0.0\")]");
             sb.AppendLine("    protected override global::System.Collections.Generic.IEnumerable<"
                           + "global::AiDotNet.NeuralNetworks.Layers.LayerBase<" + elem + ">?> GetExtraTrainableLayers()");
             sb.AppendLine("    {");
@@ -479,6 +481,7 @@ public class ModelParameterGenerator : IIncrementalGenerator
             sb.AppendLine("    /// Auto-generated: rebinds named fields and collection views when the canonical");
             sb.AppendLine("    /// <c>Layers</c> graph is replaced by deserialization or eager cloning.");
             sb.AppendLine("    /// </summary>");
+            sb.AppendLine("    [global::System.CodeDom.Compiler.GeneratedCode(\"AiDotNet.Generators.ModelParameterGenerator\", \"1.0.0\")]");
             sb.AppendLine($"    protected override void {RebindLayerAliasesHook}(");
             sb.AppendLine($"        global::System.Collections.Generic.IReadOnlyList<global::AiDotNet.Interfaces.ILayer<{elem}>> previousLayers,");
             sb.AppendLine($"        global::System.Collections.Generic.IReadOnlyList<global::AiDotNet.Interfaces.ILayer<{elem}>> replacementLayers)");
@@ -1105,6 +1108,7 @@ public class ModelParameterGenerator : IIncrementalGenerator
         sb.AppendLine("    /// <summary>");
         sb.AppendLine("    /// Auto-generated stable-ID registration for this model's weight-bearing members.");
         sb.AppendLine("    /// </summary>");
+        sb.AppendLine("    [global::System.CodeDom.Compiler.GeneratedCode(\"AiDotNet.Generators.ModelParameterGenerator\", \"1.0.0\")]");
         sb.AppendLine($"    void global::AiDotNet.Models.Parameters.IGeneratedParameterRegistrar<{elem}>.RegisterGeneratedParameters(");
         sb.AppendLine($"        global::AiDotNet.Models.Parameters.ParameterComponentRegistry<{elem}> registry)");
         sb.AppendLine("    {");
@@ -1112,6 +1116,7 @@ public class ModelParameterGenerator : IIncrementalGenerator
         sb.AppendLine("    }");
         sb.AppendLine();
         sb.AppendLine("    /// <summary>Composes this type's generated parameter fields with inherited fields.</summary>");
+        sb.AppendLine("    [global::System.CodeDom.Compiler.GeneratedCode(\"AiDotNet.Generators.ModelParameterGenerator\", \"1.0.0\")]");
         sb.AppendLine("    protected override void RegisterGeneratedParameterComponents(");
         sb.AppendLine($"        global::AiDotNet.Models.Parameters.ParameterComponentRegistry<{elem}> registry)");
         sb.AppendLine("    {");

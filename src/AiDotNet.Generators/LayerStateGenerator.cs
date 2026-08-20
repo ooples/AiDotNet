@@ -608,6 +608,7 @@ public class LayerStateGenerator : IIncrementalGenerator
         sb.AppendLine($"partial class {model.TypeName}{generics}");
         sb.AppendLine("{");
         sb.AppendLine("    /// <inheritdoc/>");
+        sb.AppendLine("    [global::System.CodeDom.Compiler.GeneratedCode(\"AiDotNet.Generators.LayerStateGenerator\", \"1.0.0\")]");
         sb.AppendLine("    internal override void WriteConstructionState(global::System.Collections.Generic.Dictionary<string, string> __metadata)");
         sb.AppendLine("    {");
         sb.AppendLine("        base.WriteConstructionState(__metadata);");
@@ -696,6 +697,7 @@ public class LayerStateGenerator : IIncrementalGenerator
         sb.AppendLine("/// no dimension is inferred from the saved shape and a dynamic axis cannot corrupt a rebuild.");
         sb.AppendLine("/// </remarks>");
         sb.AppendLine("/// <typeparam name=\"T\">The layer's numeric type.</typeparam>");
+        sb.AppendLine("[global::System.CodeDom.Compiler.GeneratedCode(\"AiDotNet.Generators.LayerStateGenerator\", \"1.0.0\")]");
         sb.AppendLine("internal static class GeneratedLayerFactories<T>");
         sb.AppendLine("{");
         sb.AppendLine("    /// <summary>Number of layer types with generated factories.</summary>");

@@ -70,13 +70,6 @@ namespace AiDotNet.Diffusion.NoisePredictors;
     [ResearchPaper("Video Diffusion Models", "https://arxiv.org/abs/2204.03458")]
 public partial class VideoUNetPredictor<T> : NoisePredictorBase<T>
 {
-
-    /// <inheritdoc />
-    /// <remarks>Lazy weights, same reasoning as UNetNoisePredictor.</remarks>
-    protected override void EnsureParametersReady()
-    {
-        TriggerLazyShapeResolution();
-    }
     /// <summary>
     /// Channel multipliers for each resolution level.
     /// </summary>
@@ -1899,15 +1892,13 @@ public partial class VideoUNetPredictor<T> : NoisePredictorBase<T>
 
     #endregion
 
-    #region ICloneable Implementation
+    #region Lazy Shape Resolution
 
     /// <summary>
     /// Runs a single dummy forward through the network at the configured
     /// spatial / frame size so every lazy layer (time-embedding MLPs,
     /// temporal + cross attention, and the image-condition projection)
-    /// resolves its weight shapes. Used by <see cref="Clone"/> to make the
-    /// clone's layer parameter counts match the original's before
-    /// <see cref="SetParameters"/> copies weights across. Mirrors
+    /// resolves its weight shapes for the shared parameter lifecycle. Mirrors
     /// UNetNoisePredictor.TriggerLazyShapeResolution.
     /// </summary>
     internal void TriggerLazyShapeResolution(

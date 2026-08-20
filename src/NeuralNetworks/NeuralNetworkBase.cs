@@ -13233,6 +13233,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                         largeBase.DeserializeNetworkSpecificData(nsReader);
                     }
                 }
+                CopyDeclaredStateTo(largeBase);
                 // CreateNewInstance implementations sometimes receive an Architecture whose layer
                 // objects still belong to the source. Generated aliases must always point at the
                 // destination's canonical graph before its manifest or forward path is observed.
@@ -13248,7 +13249,12 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             }
         }
 
-        byte[] serialized = SerializeInternalUnchecked();
+        // Internal clones must carry the generated declared-state envelope too. Public Serialize
+        // appends it outside SerializeInternalUnchecked, while this trusted path deliberately calls
+        // the non-virtual body directly. Omitting the envelope made models whose hand-written
+        // serializers were replaced by RegisterGeneratedState lose runtime topology (for example
+        // AutoDiffTabGenerator._dataWidth) even though every layer tensor restored successfully.
+        byte[] serialized = ModelStateEnvelope.Append(DeclaredState, SerializeInternalUnchecked());
         var copy = CreateNewInstance();
         if (copy is NeuralNetworkBase<T> copyBase)
         {
@@ -13258,7 +13264,8 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             // "unknown handle"). A transient in-memory clone keeps its weights resident — see the
             // matching guard in the large/custom-layer copy path above.
             copyBase.DisableAutoStreaming();
-            copyBase.DeserializeInternalUnchecked(serialized);
+            byte[] inner = ModelStateEnvelope.Extract(copyBase.DeclaredState, serialized);
+            copyBase.DeserializeInternalUnchecked(inner);
             CopyCloneRuntimeConfigurationTo(copyBase);
             // Base LayerBase.Serialize does NOT persist the per-layer RandomSeed, so the
             // serialize/deserialize roundtrip drops it. Transfer it (and the wired latch) so the
@@ -13552,6 +13559,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                 copyBase.DeserializeNetworkSpecificData(nsReader);
             }
         }
+        CopyDeclaredStateTo(copyBase);
         copyBase.RebindLayerAliases(_layers, copyBase._layers);
 
         // Copy MODEL-OWNED TRAINABLE tensors — the ones surfaced by GetExtraTrainableTensors()
@@ -13609,6 +13617,18 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         CopyLayerRandomSeedsTo(copyBase);
         copyBase.InvalidateWeightCachesAfterSuccessfulWeightUpdate();
         return true;
+    }
+
+    /// <summary>
+    /// Copies generated/model-declared state without routing an internal clone through a public,
+    /// overridable persistence API.
+    /// </summary>
+    private void CopyDeclaredStateTo(NeuralNetworkBase<T> destination)
+    {
+        byte[] envelope = ModelStateEnvelope.Append(DeclaredState, Array.Empty<byte>());
+        byte[] inner = ModelStateEnvelope.Extract(destination.DeclaredState, envelope);
+        if (inner.Length != 0)
+            throw new InvalidOperationException("Declared-state clone envelope retained an unexpected payload.");
     }
 
     /// <summary>

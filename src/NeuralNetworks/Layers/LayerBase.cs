@@ -1453,6 +1453,13 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     {
         EnsureDeclaredSubLayerStructure();
 
+        // The detailed manifest must observe the same allocation-free child-shape bring-up as
+        // ParameterCount. Network-level manifests call this method directly instead of folding the
+        // aggregate count, so omitting the walk left constructor-sized composite children marked
+        // ShapeDeferred even though their owner had declared every input width. A subsequent value
+        // read materialized those children and produced a longer vector than the manifest described.
+        ResolveSubLayerShapesForCounting();
+
         // Preserve mixed readiness at the same granularity as the recursive value walk. A
         // composite is not one indivisible parameter slot: its own tensors and each child become
         // ready independently. Collapsing the whole subtree into a single aggregate meant one

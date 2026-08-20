@@ -789,6 +789,26 @@ public class ParameterManifestTests
     }
 
     [Fact]
+    public async Task LayerManifest_ResolvesDeclaredCompositeChildShapesBeforeValueRead()
+    {
+        await Task.Yield();
+        using var layer = new TransformerEncoderBlock<double>(
+            hiddenSize: 8,
+            numHeads: 2,
+            ffnDim: 16);
+
+        var layout = layer.GetParameterLayout();
+
+        Assert.DoesNotContain(layout, slot =>
+            slot.Readiness == ParameterReadiness.ShapeDeferred || !slot.ParameterCount.HasValue);
+        Assert.Contains(layout, slot =>
+            slot.Readiness == ParameterReadiness.ShapeResolvedUnmaterialized);
+        Assert.Equal(
+            layout.Sum(slot => slot.ParameterCount!.Value),
+            layer.GetParameters().Length);
+    }
+
+    [Fact]
     public async Task KeyedCollections_UseCanonicalKeyOrder()
     {
         await Task.Yield();

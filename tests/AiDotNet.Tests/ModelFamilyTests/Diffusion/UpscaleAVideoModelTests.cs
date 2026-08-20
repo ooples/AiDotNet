@@ -62,6 +62,52 @@ public class UpscaleAVideoModelTests : DiffusionModelTestBase<float>
             temporalWindowOverlap: 0);
     }
 
+    [Fact]
+    public void Clone_OwnsIndependentNoiseScheduler()
+    {
+        using var model = Assert.IsType<UpscaleAVideoModel<float>>(CreateModel());
+        using var clone = Assert.IsType<UpscaleAVideoModel<float>>(model.Clone());
+
+        Assert.NotSame(model.Scheduler, clone.Scheduler);
+        Assert.Equal(model.Scheduler.Config.TrainTimesteps, clone.Scheduler.Config.TrainTimesteps);
+        Assert.Equal(model.Scheduler.Timesteps, clone.Scheduler.Timesteps);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task Clone_AfterPrediction_PreservesComponentParameterValues()
+    {
+        await Task.Yield();
+        using var model = Assert.IsType<UpscaleAVideoModel<float>>(CreateModel());
+        var input = new Tensor<float>(InputShape);
+        for (int i = 0; i < input.Length; i++) input[i] = -0.2f + (i * 0.01f);
+        _ = PredictModel(model, input);
+
+        using var clone = Assert.IsType<UpscaleAVideoModel<float>>(model.Clone());
+
+        AssertParametersEqual(
+            "noise predictor",
+            model.NoisePredictor.GetParameters(),
+            clone.NoisePredictor.GetParameters());
+        AssertParametersEqual(
+            "temporal VAE",
+            model.VAE.GetParameters(),
+            clone.VAE.GetParameters());
+    }
+
+    private static void AssertParametersEqual(
+        string component,
+        Vector<float> expected,
+        Vector<float> actual)
+    {
+        Assert.True(expected.Length == actual.Length,
+            $"{component} parameter length differs: source={expected.Length}, clone={actual.Length}.");
+        for (int i = 0; i < expected.Length; i++)
+        {
+            Assert.True(expected[i].Equals(actual[i]),
+                $"{component} parameter[{i}] differs: source={expected[i]}, clone={actual[i]}.");
+        }
+    }
+
     [Fact(Timeout = 120000)]
     public override async Task Training_ShouldReducePredictionError()
     {

@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using System.Threading.Tasks;
+using AiDotNet.AutoML;
 using AiDotNet.Models;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
@@ -36,6 +37,19 @@ public class CloneRoundTripTests
     /// <summary>Initializes a new instance of the <see cref="CloneRoundTripTests"/> class.</summary>
     /// <param name="output">Sink for the coverage summary.</param>
     public CloneRoundTripTests(ITestOutputHelper output) => _output = output;
+
+    [Fact]
+    public void SerializationShell_DeclinesValueInvalidConstructorCandidate()
+    {
+        var original = new AutoMLEnsembleModel<double>();
+
+        var clone = Assert.IsType<AutoMLEnsembleModel<double>>(
+            CloneEngine.CopyConfiguration(original));
+
+        Assert.Empty(clone.Members);
+        Assert.Empty(clone.Weights);
+        Assert.Equal(original.PredictionType, clone.PredictionType);
+    }
 
     /// <summary>
     /// Round-trips every type holding a compile-time clone plan.
@@ -107,7 +121,9 @@ public class CloneRoundTripTests
             }
             catch (Exception ex)
             {
-                failures.Add($"{type.Name}: clone threw {ex.GetType().Name}: {ex.Message}");
+                Exception cause = ex;
+                while (cause.InnerException is not null) cause = cause.InnerException;
+                failures.Add($"{type.Name}: clone threw {cause.GetType().Name}: {cause.Message}");
                 continue;
             }
 
@@ -259,6 +275,13 @@ public class CloneRoundTripTests
 
         foreach (var entry in plan.Entries)
         {
+            // The probe models what a creator can configure. Reflecting through a private setter
+            // can manufacture states the public API and every constructor reject -- for example a
+            // 39-voxel grid paired with eleven pooling blocks. Such a derived property remains in
+            // the plan so legitimate internal state can be carried, but it is not independently
+            // mutated by this public-configuration census.
+            if (entry.Property.SetMethod?.IsPublic != true) continue;
+
             object? current;
             try
             {

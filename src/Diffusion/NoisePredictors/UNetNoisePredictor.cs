@@ -58,22 +58,6 @@ namespace AiDotNet.Diffusion.NoisePredictors;
 public partial class UNetNoisePredictor<T> : NoisePredictorBase<T>
 {
 
-    /// <inheritdoc />
-    /// <remarks>The SAME resolution the write path uses. Reading through the shape-only
-    /// ResolveShapesViaForward instead left seven lazy layers reporting zero, so restoring the
-    /// model grew it from 3,146,496 to 5,006,595.</remarks>
-    protected override void EnsureParametersReady()
-    {
-        TriggerLazyShapeResolution();
-    }
-
-    /// <inheritdoc />
-    protected override void EnsureParameterStructureReady()
-    {
-        // Run the real topology in shape-inference mode. This resolves decoder-concat and
-        // attention dimensions without allocating the paper-scale U-Net's weight tensors.
-        ResolveShapesViaForward();
-    }
     /// <summary>
     /// Channel multipliers for each resolution level.
     /// </summary>
@@ -303,12 +287,14 @@ public partial class UNetNoisePredictor<T> : NoisePredictorBase<T>
             encoderBlocks is { Count: > 0 } &&
             middleBlocks is { Count: > 0 } &&
             decoderBlocks is { Count: > 0 };
-        bool hasCustomArchitecture = architecture?.Layers is { Count: > 0 };
-
-        if (hasCustomBlocks || hasCustomArchitecture)
-        {
-            InitializeLayers(architecture, encoderBlocks, middleBlocks, decoderBlocks);
-        }
+        // Building the module graph is allocation-free: every paper-scale weight uses a lazy
+        // factory below. Construct it once here so parameter/layout/clone code can discover the
+        // same graph mechanically without a model-specific readiness override.
+        InitializeLayers(
+            architecture,
+            hasCustomBlocks ? encoderBlocks : null,
+            hasCustomBlocks ? middleBlocks : null,
+            hasCustomBlocks ? decoderBlocks : null);
     }
 
     [MemberNotNull(nameof(_inputConv), nameof(_outputConv), nameof(_timeEmbedMlp1), nameof(_timeEmbedMlp2))]
@@ -352,23 +338,21 @@ public partial class UNetNoisePredictor<T> : NoisePredictorBase<T>
             return;
         }
 
-        // Create input/output convolutions and time embedding MLP via LayerHelper
-        var baseLayers = LayerHelper<T>.CreateUNetNoisePredictorEncoderLayers(
-            _inputChannels, _baseChannels, _channelMultipliers, _numResBlocks,
-            _contextDim, _numHeads).ToList();
-
-        // First layer is input conv, next two are time embedding MLP
-        _inputConv = (ConvolutionalLayer<T>)baseLayers[0];
-        _timeEmbedMlp1 = (DenseLayer<T>)baseLayers[1];
-        _timeEmbedMlp2 = (DenseLayer<T>)baseLayers[2];
-
-        // input/output convs are left fully lazy; the predictor's shape-only forward
-        // (ResolveShapesViaForward) resolves their true InputDepth from the topology.
-
-        // Output conv from decoder layers
-        var decoderBaseLayers = LayerHelper<T>.CreateUNetNoisePredictorDecoderLayers(
-            _outputChannels, _baseChannels, _channelMultipliers, _numResBlocks).ToList();
-        _outputConv = (ConvolutionalLayer<T>)decoderBaseLayers[^1];
+        // All four fan-ins are fixed by the U-Net architecture. These factories record their
+        // exact shapes without allocating values, so metadata stays cheap while the shared layer
+        // lifecycle can materialize reads/restores without a dummy forward.
+        _inputConv = LazyConv2D(
+            _inputChannels, _inputHeight, _inputHeight, _baseChannels,
+            kernelSize: 3, stride: 1, padding: 1,
+            activation: new IdentityActivation<T>());
+        _timeEmbedMlp1 = LazyDense(
+            _timeEmbeddingDim, _timeEmbeddingDim, new ReLUActivation<T>());
+        _timeEmbedMlp2 = LazyDense(
+            _timeEmbeddingDim, _timeEmbeddingDim, new ReLUActivation<T>());
+        _outputConv = LazyConv2D(
+            _baseChannels * _channelMultipliers[0], _inputHeight, _inputHeight, _outputChannels,
+            kernelSize: 3, stride: 1, padding: 1,
+            activation: new IdentityActivation<T>());
 
         // Priority 1: Use custom blocks passed directly
         if (customEncoderBlocks != null && customEncoderBlocks.Count > 0 &&
@@ -1206,7 +1190,8 @@ public partial class UNetNoisePredictor<T> : NoisePredictorBase<T>
     {
         // spatialSize here is the current (smaller) spatial size before upsampling.
         // Fully lazy: shape resolved by the predictor's shape-only forward.
-        return new DeconvolutionalLayer<T>(
+        return DeconvolutionalLayer<T>.WithInputDepth(
+            inputDepth: channels,
             outputDepth: channels,
             kernelSize: 4,
             stride: 2,
@@ -1430,12 +1415,11 @@ public partial class UNetNoisePredictor<T> : NoisePredictorBase<T>
         // stage (2^stages, doubled so the bottleneck stays >= 2) allocates the
         // identical weight tensors with trivial compute. Cap at _inputHeight so
         // models whose native size is already small aren't enlarged.
-        int numDownsamples = System.Math.Max(0, _channelMultipliers.Length - 1);
-        int safeSpatial = System.Math.Max(2, (1 << numDownsamples) * 2);
-        int resolveSpatial = System.Math.Min(_inputHeight, safeSpatial);
-        if (resolveSpatial < 1) resolveSpatial = _inputHeight;
-
-        var dummy = new Tensor<T>(new[] { 1, _inputChannels, resolveSpatial, resolveSpatial });
+        // Shape inference is allocation-free, so it must use the configured extent. Several
+        // composite blocks legitimately declare that spatial shape at construction; probing a
+        // smaller tensor made the symbolic path add a configured [H,W] residual to a probe-sized
+        // [h,w] branch when a fresh clone prepared its destination manifest.
+        var dummy = new Tensor<T>(new[] { 1, _inputChannels, _inputHeight, _inputHeight });
         Tensor<T>? dummyCtx = _contextDim > 0
             ? new Tensor<T>(new[] { 1, 1, _contextDim })
             : null;

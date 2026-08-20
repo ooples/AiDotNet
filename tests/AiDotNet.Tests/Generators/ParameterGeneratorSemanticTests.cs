@@ -5,6 +5,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Xunit;
 
 namespace AiDotNet.Tests.Generators;
@@ -147,6 +148,114 @@ namespace AiDotNet.Models
         GeneratorDriver driver = CSharpGeneratorDriver.Create(generator);
         driver = driver.RunGenerators(compilation);
         return driver.GetRunResult().Diagnostics;
+    }
+
+    private static void AssertGeneratedExecutableMembersAreMarked(string generated, string generatorName)
+    {
+        SyntaxNode root = CSharpSyntaxTree.ParseText(generated).GetRoot();
+        var members = root.DescendantNodes()
+            .OfType<MemberDeclarationSyntax>()
+            .Where(member => member is MethodDeclarationSyntax or PropertyDeclarationSyntax)
+            .ToList();
+
+        Assert.NotEmpty(members);
+        foreach (MemberDeclarationSyntax member in members)
+        {
+            Assert.Contains(
+                $"GeneratedCode(\"AiDotNet.Generators.{generatorName}\"",
+                member.AttributeLists.ToFullString(),
+                StringComparison.Ordinal);
+        }
+    }
+
+    [Fact]
+    public void LayerGenerator_MarksAllGeneratedExecutableMembersAsGeneratedCode()
+    {
+        const string source = @"
+using AiDotNet.Attributes;
+[AutoParameters]
+public partial class GeneratedCoverageLayer<T> : AiDotNet.NeuralNetworks.Layers.LayerBase<T>
+{
+    [TrainableParameter(Shape = ""4, 4"")]
+    private AiDotNet.Tensors.LinearAlgebra.Tensor<T> _weight = new();
+}";
+
+        string generated = Run(new AiDotNet.Generators.TrainableParameterGenerator(), source);
+        AssertGeneratedExecutableMembersAreMarked(generated, "TrainableParameterGenerator");
+    }
+
+    [Fact]
+    public void ModelGenerator_MarksAllGeneratedExecutableMembersAsGeneratedCode()
+    {
+        const string source = @"
+using AiDotNet.Attributes;
+public partial class GeneratedCoverageModel<T> : AiDotNet.Models.ModelBase<T, object, object>
+{
+    [TrainableParameter]
+    private AiDotNet.Tensors.LinearAlgebra.Tensor<T> _weight = new();
+}";
+
+        string generated = Run(new AiDotNet.Generators.ModelParameterGenerator(), source);
+        AssertGeneratedExecutableMembersAreMarked(generated, "ModelParameterGenerator");
+    }
+
+    [Fact]
+    public void ClonePlanGenerator_MarksItsGeneratedRegistryAsGeneratedCode()
+    {
+        const string source = @"
+public class GeneratedCoverageClone<T> : AiDotNet.NeuralNetworks.Layers.LayerBase<T>
+{
+    public int Width { get; set; }
+}
+public class SecondGeneratedCoverageClone<T> : AiDotNet.NeuralNetworks.Layers.LayerBase<T>
+{
+    public int Height { get; set; }
+}";
+
+        string generated = Run(new AiDotNet.Generators.ClonePlanGenerator(), source);
+        Assert.Contains(
+            "[global::System.CodeDom.Compiler.GeneratedCode(\"AiDotNet.Generators.ClonePlanGenerator\", \"1.0.0\")]\ninternal static class CloneRegistrations",
+            generated.Replace("\r\n", "\n"),
+            StringComparison.Ordinal);
+
+        SyntaxNode root = CSharpSyntaxTree.ParseText(generated).GetRoot();
+        ClassDeclarationSyntax registry = Assert.Single(
+            root.DescendantNodes().OfType<ClassDeclarationSyntax>(),
+            declaration => declaration.Identifier.ValueText == "CloneRegistrations");
+        MethodDeclarationSyntax dispatcher = Assert.Single(
+            registry.Members.OfType<MethodDeclarationSyntax>(),
+            method => method.Identifier.ValueText == "RegisterAll");
+        var registrationMethods = registry.Members
+            .OfType<MethodDeclarationSyntax>()
+            .Where(method => method.Identifier.ValueText.StartsWith("Register_", StringComparison.Ordinal))
+            .ToList();
+
+        Assert.Equal(2, registrationMethods.Count);
+        Assert.DoesNotContain("new List<ClonePlanEntry>", dispatcher.Body!.ToFullString(), StringComparison.Ordinal);
+        Assert.All(registrationMethods, method =>
+            Assert.Contains("new List<ClonePlanEntry>", method.Body!.ToFullString(), StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void ClonePlanGenerator_EmitsToolingSafeMethodBodies()
+    {
+        Type registry = typeof(AiDotNet.Models.CloneRegistry).Assembly.GetType(
+            "AiDotNet.Generated.CloneRegistrations",
+            throwOnError: true)!;
+        var generatedMethods = registry
+            .GetMethods(System.Reflection.BindingFlags.Static |
+                        System.Reflection.BindingFlags.Public |
+                        System.Reflection.BindingFlags.NonPublic |
+                        System.Reflection.BindingFlags.DeclaredOnly)
+            .Select(method => (method.Name, Size: method.GetMethodBody()?.GetILAsByteArray()?.Length ?? 0))
+            .ToList();
+
+        Assert.NotEmpty(generatedMethods);
+        Assert.All(generatedMethods, method =>
+            Assert.True(
+                method.Size < 64 * 1024,
+                $"Generated clone method {method.Name} is {method.Size:N0} bytes of IL; " +
+                "large monolithic methods make coverage control-flow analysis pathological."));
     }
 
     [Fact]

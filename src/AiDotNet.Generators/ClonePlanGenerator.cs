@@ -177,6 +177,7 @@ public class ClonePlanGenerator : IIncrementalGenerator
         sb.AppendLine("/// <summary>");
         sb.AppendLine("/// Compile-time clone plans. Registered once, on first use of the clone registry.");
         sb.AppendLine("/// </summary>");
+        sb.AppendLine("[global::System.CodeDom.Compiler.GeneratedCode(\"AiDotNet.Generators.ClonePlanGenerator\", \"1.0.0\")]");
         sb.AppendLine("internal static class CloneRegistrations");
         sb.AppendLine("{");
         sb.AppendLine("    private static bool _done;");
@@ -188,13 +189,20 @@ public class ClonePlanGenerator : IIncrementalGenerator
         sb.AppendLine("        _done = true;");
         sb.AppendLine();
 
+        var registrationMethods = new StringBuilder();
+        int registrationIndex = 0;
         foreach (var type in distinct)
         {
-            EmitRegistration(sb, type);
+            if (EmitRegistration(registrationMethods, type, registrationIndex))
+            {
+                sb.AppendLine($"        Register_{registrationIndex:D6}();");
+                registrationIndex++;
+            }
         }
 
         sb.AppendLine("    }");
         sb.AppendLine();
+        sb.Append(registrationMethods);
         sb.AppendLine("    /// <summary>");
         sb.AppendLine("    /// Binds one configuration property, skipping it if the shape changed since generation.");
         sb.AppendLine("    /// </summary>");
@@ -213,7 +221,7 @@ public class ClonePlanGenerator : IIncrementalGenerator
         context.AddSource("CloneRegistrations.g.cs", sb.ToString());
     }
 
-    private static void EmitRegistration(StringBuilder sb, INamedTypeSymbol type)
+    private static bool EmitRegistration(StringBuilder sb, INamedTypeSymbol type, int registrationIndex)
     {
         var entries = CollectConfiguration(type);
         var candidates = CollectConstructorCandidates(
@@ -224,7 +232,7 @@ public class ClonePlanGenerator : IIncrementalGenerator
         // recorded. That is the normal shape of a model: the arguments it was built from live in
         // private fields, so the property scan finds nothing, and skipping it here is what left
         // every model without a plan and forced a hand-written CreateNewInstance.
-        if (entries.Count == 0 && constructor is null) return;
+        if (entries.Count == 0 && constructor is null) return false;
 
         // An open generic cannot be reified here; typeof(Foo<>) is the runtime handle the registry
         // keys on, and a closed instantiation resolves through it.
@@ -232,17 +240,23 @@ public class ClonePlanGenerator : IIncrementalGenerator
             ? type.ConstructUnboundGenericType().ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)
             : type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
 
-        sb.AppendLine("        {");
-        sb.AppendLine($"            var t = typeof({display});");
-        sb.AppendLine("            var e = new List<ClonePlanEntry>();");
+        // Keep each plan in its own method. A single RegisterAll body containing every plan grew
+        // beyond 1.1 MB of IL in the main assembly. Coverage and static-analysis tools construct a
+        // control-flow graph before applying generated-code exclusions, so that monolith consumed
+        // an entire CI shard budget even when the shard never cloned a model. Small generated
+        // methods keep total work linear while RegisterAll remains the one idempotent entry point.
+        sb.AppendLine($"    private static void Register_{registrationIndex:D6}()");
+        sb.AppendLine("    {");
+        sb.AppendLine($"        var t = typeof({display});");
+        sb.AppendLine("        var e = new List<ClonePlanEntry>();");
 
         foreach (var (name, kind) in entries)
         {
-            sb.AppendLine($"            Add(e, t, \"{name}\", CloneCopyKind.{kind});");
+            sb.AppendLine($"        Add(e, t, \"{name}\", CloneCopyKind.{kind});");
         }
         if (constructor is null)
         {
-            sb.AppendLine("            CloneRegistry.Register(new ClonePlan(t, e));");
+            sb.AppendLine("        CloneRegistry.Register(new ClonePlan(t, e));");
         }
         else
         {
@@ -250,11 +264,12 @@ public class ClonePlanGenerator : IIncrementalGenerator
             var all = string.Join(", ", candidates!.Select(c =>
                 "new string[] { " + string.Join(", ", c.Select(n => $"\"{n}\"")) + " }"));
             sb.AppendLine(
-                $"            CloneRegistry.Register(new ClonePlan(t, e, new[] {{ {names} }}, "
+                $"        CloneRegistry.Register(new ClonePlan(t, e, new[] {{ {names} }}, "
                 + $"new IReadOnlyList<string>[] {{ {all} }}));");
         }
-        sb.AppendLine("        }");
+        sb.AppendLine("    }");
         sb.AppendLine();
+        return true;
     }
 
     /// <summary>

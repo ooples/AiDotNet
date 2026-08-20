@@ -591,17 +591,6 @@ public partial class StandardVAE<T> : VAEModelBase<T>
         if (layer != null) count += (int)layer.ParameterCount;
     }
 
-    /// <inheritdoc />
-    public override IEnumerable<Tensor<T>> GetParameterChunks()
-    {
-        EnsureLayersInitialized();
-        foreach (var layer in EnumerateAllLayers())
-        {
-            foreach (var parameter in EnumerateMaterializedParameters(layer))
-                yield return parameter;
-        }
-    }
-
     private IEnumerable<ILayer<T>?> EnumerateAllLayers()
     {
         yield return _inputConv;

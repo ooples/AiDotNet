@@ -101,7 +101,7 @@ public partial class RoomImpulseResponse<T> : AudioNeuralNetworkBase<T>, IAudioE
     /// would fail for a reason that has nothing to do with the learned weights. Serialized with the
     /// model so a reload reproduces the same response.
     /// </remarks>
-    [Buffer]
+    [Buffer(Availability = AiDotNet.Models.Parameters.ParameterAvailability.Conditional)]
     private Tensor<T>? _noiseSignal;
 
     #endregion

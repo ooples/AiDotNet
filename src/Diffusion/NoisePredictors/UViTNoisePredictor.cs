@@ -63,6 +63,7 @@ public partial class UViTNoisePredictor<T> : NoisePredictorBase<T>
     private readonly int _numHeads;
     private readonly int _patchSize;
     private readonly int _contextDim;
+    private readonly int _latentSpatialSize;
 
     /// <summary>
     /// Maximum number of patches (computed from latent size and patch size).
@@ -155,7 +156,12 @@ public partial class UViTNoisePredictor<T> : NoisePredictorBase<T>
         _numHeads = numHeads;
         _patchSize = patchSize;
         _contextDim = contextDim;
-        _maxPatches = (latentSpatialSize / patchSize) * (latentSpatialSize / patchSize);
+        // Preserve the constructor-level configuration, not only its derived patch count. The
+        // generated clone plan can carry an argument only from state the instance still owns;
+        // retaining the source value lets it reconstruct the same position/attention shapes
+        // without any UViT-specific clone method.
+        _latentSpatialSize = latentSpatialSize;
+        _maxPatches = (_latentSpatialSize / patchSize) * (_latentSpatialSize / patchSize);
 
         _encoderBlocks = [];
         _decoderBlocks = [];
@@ -176,7 +182,10 @@ public partial class UViTNoisePredictor<T> : NoisePredictorBase<T>
         _patchEmbed = LazyDense(patchDim, _hiddenSize);
 
         // Time embedding MLP
-        _timeEmbed1 = LazyDense(_hiddenSize, timeEmbedDim, new SiLUActivation<T>());
+        // NoisePredictorBase emits [1, TimeEmbeddingDim], so the first projection's fan-in is
+        // architecture-known. Declaring hiddenSize here made a fresh clone materialize 32x128 while
+        // the first real forward correctly rebuilt the source as 128x128.
+        _timeEmbed1 = LazyDense(timeEmbedDim, timeEmbedDim, new SiLUActivation<T>());
         _timeEmbed2 = LazyDense(timeEmbedDim, _hiddenSize);
 
         // Encoder blocks
@@ -197,7 +206,7 @@ public partial class UViTNoisePredictor<T> : NoisePredictorBase<T>
         }
 
         // Final norm and output
-        _finalNorm = new LayerNormalizationLayer<T>();
+        _finalNorm = LazyLayerNorm(_hiddenSize);
         int outPatchDim = _inputChannels * _patchSize * _patchSize;
         _outputProj = LazyDense(_hiddenSize, outPatchDim);
 
@@ -217,9 +226,9 @@ public partial class UViTNoisePredictor<T> : NoisePredictorBase<T>
     {
         return new UViTBlock
         {
-            Norm1 = new LayerNormalizationLayer<T>(),
+            Norm1 = LazyLayerNorm(_hiddenSize),
             Attention = LazySelfAttention(_maxPatches, _hiddenSize, _numHeads),
-            Norm2 = new LayerNormalizationLayer<T>(),
+            Norm2 = LazyLayerNorm(_hiddenSize),
             MLP1 = LazyDense(_hiddenSize, _hiddenSize * 4, new GELUActivation<T>()),
             MLP2 = LazyDense(_hiddenSize * 4, _hiddenSize)
         };

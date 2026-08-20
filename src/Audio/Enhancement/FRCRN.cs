@@ -61,7 +61,7 @@ public partial class FRCRN<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
     private ShortTimeFourierTransform<T> _stft;
     [Scratch]
     private Tensor<T>? _lastPhase;
-    [Buffer]
+    [Buffer(Availability = AiDotNet.Models.Parameters.ParameterAvailability.Conditional)]
     private Tensor<T>? _noiseProfile;
     private bool _useNativeMode;
     private bool _disposed;

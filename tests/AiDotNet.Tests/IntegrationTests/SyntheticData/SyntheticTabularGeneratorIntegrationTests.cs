@@ -833,6 +833,31 @@ public class SyntheticTabularGeneratorIntegrationTests
     }
 
     [Fact(Timeout = 120000)]
+    public async Task AutoDiffTabGenerator_ClonePreservesRuntimeSizedTopology()
+    {
+        await Task.Yield();
+        var architecture = CreateArchitecture(10, 10);
+        using var generator = new AutoDiffTabGenerator<double>(
+            architecture,
+            new AutoDiffTabOptions<double>
+            {
+                Seed = Seed,
+                MLPDimensions = [16],
+                TimestepEmbeddingDimension = 8
+            });
+        var input = new Tensor<double>([4]);
+        for (int i = 0; i < input.Length; i++) input[i] = 0.1 * (i + 1);
+
+        var expected = generator.Predict(input);
+        using var clone = generator.Clone();
+        var actual = clone.Predict(input);
+
+        Assert.Equal(expected.Length, actual.Length);
+        for (int i = 0; i < expected.Length; i++)
+            Assert.Equal(expected[i], actual[i], 12);
+    }
+
+    [Fact(Timeout = 120000)]
     public async Task FinDiffGenerator_FitAndGenerate_ProducesValidOutput()
     {
         var (data, columns) = CreateTestData();

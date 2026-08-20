@@ -106,11 +106,11 @@ public partial class AutoDiffTabGenerator<T> : NeuralSyntheticTabularGeneratorBa
 
     // Diffusion parameters (set after search)
     private int _numTimesteps;
-    [Buffer]
+    [Buffer(Availability = AiDotNet.Models.Parameters.ParameterAvailability.Conditional)]
     private Vector<T>? _betas;
-    [Buffer]
+    [Buffer(Availability = AiDotNet.Models.Parameters.ParameterAvailability.Conditional)]
     private Vector<T>? _alphas;
-    [Buffer]
+    [Buffer(Availability = AiDotNet.Models.Parameters.ParameterAvailability.Conditional)]
     private Vector<T>? _alphasCumprod;
 
     // Whether custom layers are being used

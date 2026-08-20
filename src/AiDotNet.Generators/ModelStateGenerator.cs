@@ -499,11 +499,13 @@ public class ModelStateGenerator : IIncrementalGenerator
         sb.AppendLine($"{indent}    /// <summary>Auto-generated state declarations for this model's own members.</summary>");
         if (declaresHook)
         {
+            sb.AppendLine($"{indent}    [global::System.CodeDom.Compiler.GeneratedCode(\"AiDotNet.Generators.ModelStateGenerator\", \"1.0.0\")]");
             sb.AppendLine($"{indent}    private void RegisterGeneratedStateCore(global::AiDotNet.Models.ModelStateRegistry<{numeric}> state)");
             sb.AppendLine($"{indent}    {{");
         }
         else
         {
+            sb.AppendLine($"{indent}    [global::System.CodeDom.Compiler.GeneratedCode(\"AiDotNet.Generators.ModelStateGenerator\", \"1.0.0\")]");
             sb.AppendLine($"{indent}    protected override void RegisterGeneratedState(global::AiDotNet.Models.ModelStateRegistry<{numeric}> state)");
             sb.AppendLine($"{indent}    {{");
             sb.AppendLine($"{indent}        base.RegisterGeneratedState(state);");

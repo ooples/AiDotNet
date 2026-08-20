@@ -282,19 +282,18 @@ public abstract partial class VAEModelBase<T> : IVAEModel<T>, IModelShape,
     }
 
     /// <summary>
-    /// Streams the VAE's trainable weight tensors per-tensor without
+    /// Streams the VAE's registered parameter state in canonical stable-ID order without
     /// materialising a flat aggregate, mirroring PyTorch's
-    /// <c>nn.Module.parameters()</c> generator pattern. Default
-    /// implementation yields a single chunk wrapping
-    /// <see cref="GetParameters"/>; subclasses with separable
-    /// encoder/decoder weight stores can override to yield each piece
-    /// independently.
+    /// <c>nn.Module.parameters()</c> generator pattern. The shared registry lifecycle prepares
+    /// and materialises lazy sources before enumeration, so every VAE exposes the same complete
+    /// surface through flat reads, chunk reads, cloning, and checkpointing without model-specific
+    /// plumbing.
     /// </summary>
     public virtual IEnumerable<Tensor<T>> GetParameterChunks()
     {
-        var p = GetParameters();
-        if (p.Length == 0) yield break;
-        yield return new Tensor<T>(new[] { p.Length }, p);
+        EnsureComponentsRegistered();
+        foreach (var chunk in _parameterRegistry.GetParameterStateChunks())
+            yield return chunk.Tensor;
     }
 
     /// <summary>

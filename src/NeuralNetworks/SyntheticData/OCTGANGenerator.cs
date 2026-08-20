@@ -107,10 +107,10 @@ public partial class OCTGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
     // Cached pre-activations for proper backward passes
 
     // SVDD center in embedding space
-    [Buffer]
+    [Buffer(Availability = AiDotNet.Models.Parameters.ParameterAvailability.Conditional)]
     private Tensor<T>? _svddCenter;
 
-    [Buffer]
+    [Buffer(Availability = AiDotNet.Models.Parameters.ParameterAvailability.Conditional)]
     private Matrix<T>? _minorityData;
     private bool _usingCustomLayers;
 

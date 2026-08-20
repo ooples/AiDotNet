@@ -496,6 +496,7 @@ public class TrainableParameterGenerator : IIncrementalGenerator
         if (emitParameterFreeContract)
         {
             sb.AppendLine("    /// <summary>Auto-generated: this migrated layer declares no persistent parameter state.</summary>");
+            sb.AppendLine("    [global::System.CodeDom.Compiler.GeneratedCode(\"AiDotNet.Generators.TrainableParameterGenerator\", \"1.0.0\")]");
             sb.AppendLine("    protected override bool IsDeclaredParameterFree => true;");
             sb.AppendLine();
         }
@@ -520,6 +521,7 @@ public class TrainableParameterGenerator : IIncrementalGenerator
         if (bufferFields.Count > 0)
         {
             sb.AppendLine("    /// <summary>Auto-generated: registers [Buffer] fields as persistent non-trainable state.</summary>");
+            sb.AppendLine("    [global::System.CodeDom.Compiler.GeneratedCode(\"AiDotNet.Generators.TrainableParameterGenerator\", \"1.0.0\")]");
             sb.AppendLine("    private void EnsureBuffersRegistered()");
             sb.AppendLine("    {");
             foreach (var bf in bufferFields)
@@ -529,6 +531,7 @@ public class TrainableParameterGenerator : IIncrementalGenerator
             sb.AppendLine("    }");
             sb.AppendLine();
             sb.AppendLine("    /// <inheritdoc />");
+            sb.AppendLine("    [global::System.CodeDom.Compiler.GeneratedCode(\"AiDotNet.Generators.TrainableParameterGenerator\", \"1.0.0\")]");
             sb.AppendLine($"    public override System.Collections.Generic.IReadOnlyList<(string Name, Tensor<{GetTypeParamName(classSymbol)}> Tensor)> GetRegisteredBuffers()");
             sb.AppendLine("    {");
             sb.AppendLine("        EnsureBuffersRegistered();");
@@ -541,6 +544,7 @@ public class TrainableParameterGenerator : IIncrementalGenerator
             // to the layer's own code. The name-to-field mapping is emitted because only the generator
             // has it; reflecting over it at runtime would turn a rename into a silent no-op.
             sb.AppendLine("    /// <inheritdoc />");
+            sb.AppendLine("    [global::System.CodeDom.Compiler.GeneratedCode(\"AiDotNet.Generators.TrainableParameterGenerator\", \"1.0.0\")]");
             sb.AppendLine($"    protected override bool TryRestoreBufferField(string name, Tensor<{GetTypeParamName(classSymbol)}> tensor)");
             sb.AppendLine("    {");
             sb.AppendLine("        switch (name)");
@@ -604,6 +608,7 @@ public class TrainableParameterGenerator : IIncrementalGenerator
             sb.AppendLine("    /// and materialized surfaces disagreed again.");
             sb.AppendLine("    /// </para>");
             sb.AppendLine("    /// </remarks>");
+            sb.AppendLine("    [global::System.CodeDom.Compiler.GeneratedCode(\"AiDotNet.Generators.TrainableParameterGenerator\", \"1.0.0\")]");
             sb.AppendLine($"    protected override System.Collections.Generic.IReadOnlyList<{subTuple}> DeclaredSubLayerShapes()");
             sb.AppendLine("    {");
             sb.AppendLine("        if (__declaredSubLayerShapes is not null) return __declaredSubLayerShapes;");
@@ -671,6 +676,7 @@ public class TrainableParameterGenerator : IIncrementalGenerator
                 ? "true"
                 : string.Join(" || ", shapedFields.Select(field => $"({field.Condition})"));
             sb.AppendLine("    /// <summary>Whether an active parameter declaration is waiting for its shape.</summary>");
+            sb.AppendLine("    [global::System.CodeDom.Compiler.GeneratedCode(\"AiDotNet.Generators.TrainableParameterGenerator\", \"1.0.0\")]");
             sb.AppendLine($"    protected override bool HasActiveDeclaredParameterShapes => {activeShapeDeclarations};");
             sb.AppendLine();
 
@@ -683,6 +689,7 @@ public class TrainableParameterGenerator : IIncrementalGenerator
             sb.AppendLine("    /// signal that this layer cannot answer yet. An axis written as * becomes -2, meaning the layer");
             sb.AppendLine("    /// adapts that axis and a mismatch there is normal rather than a broken restore.");
             sb.AppendLine("    /// </remarks>");
+            sb.AppendLine("    [global::System.CodeDom.Compiler.GeneratedCode(\"AiDotNet.Generators.TrainableParameterGenerator\", \"1.0.0\")]");
             sb.AppendLine($"    protected override System.Collections.Generic.IReadOnlyList<{tupleType}> DeclaredParameterShapes()");
             sb.AppendLine("    {");
             sb.AppendLine($"        var __declared = new System.Collections.Generic.List<{tupleType}>({shapedFields.Count});");
@@ -721,6 +728,7 @@ public class TrainableParameterGenerator : IIncrementalGenerator
         {
             const string countShapeType = "AiDotNet.Tensors.LinearAlgebra.TensorShape";
             sb.AppendLine("    /// <summary>Concrete sizing view for bound adaptive parameter axes.</summary>");
+            sb.AppendLine("    [global::System.CodeDom.Compiler.GeneratedCode(\"AiDotNet.Generators.TrainableParameterGenerator\", \"1.0.0\")]");
             sb.AppendLine($"    protected override System.Collections.Generic.IReadOnlyList<{countShapeType}> DeclaredParameterCountShapes()");
             sb.AppendLine("    {");
             sb.AppendLine($"        var __declared = new System.Collections.Generic.List<{countShapeType}>({shapedFields.Count});");
@@ -756,6 +764,7 @@ public class TrainableParameterGenerator : IIncrementalGenerator
                 sb.AppendLine($"    private System.Collections.ObjectModel.ReadOnlyCollection<{tensorType}>? __aidnTrainableParameterView;");
                 sb.AppendLine();
                 sb.AppendLine("    /// <summary>Returns the stable, allocation-free view of fixed generated parameter fields.</summary>");
+                sb.AppendLine("    [global::System.CodeDom.Compiler.GeneratedCode(\"AiDotNet.Generators.TrainableParameterGenerator\", \"1.0.0\")]");
                 sb.AppendLine($"    private System.Collections.Generic.IReadOnlyList<{tensorType}> __aidnGetTrainableParameterView()");
                 sb.AppendLine("    {");
                 sb.AppendLine("        var __storage = System.Threading.Volatile.Read(ref __aidnTrainableParameterViewStorage);");
@@ -777,6 +786,7 @@ public class TrainableParameterGenerator : IIncrementalGenerator
                 sb.AppendLine("        return __view;");
                 sb.AppendLine("    }");
                 sb.AppendLine();
+                sb.AppendLine("    [global::System.CodeDom.Compiler.GeneratedCode(\"AiDotNet.Generators.TrainableParameterGenerator\", \"1.0.0\")]");
                 sb.AppendLine("    private void __aidnRefreshTrainableParameterViewIfCreated()");
                 sb.AppendLine("    {");
                 sb.AppendLine("        var __storage = System.Threading.Volatile.Read(ref __aidnTrainableParameterViewStorage);");
@@ -811,6 +821,7 @@ public class TrainableParameterGenerator : IIncrementalGenerator
                 sb.AppendLine("    /// emitted symmetrically (consumes a slot only for currently-present fields).");
             }
             sb.AppendLine("    /// </remarks>");
+            sb.AppendLine("    [global::System.CodeDom.Compiler.GeneratedCode(\"AiDotNet.Generators.TrainableParameterGenerator\", \"1.0.0\")]");
             sb.AppendLine($"    public override System.Collections.Generic.IReadOnlyList<Tensor<{GetTypeParamName(classSymbol)}>> GetTrainableParameters()");
             sb.AppendLine("    {");
             if (subLayerFields.Count > 0)
@@ -845,6 +856,7 @@ public class TrainableParameterGenerator : IIncrementalGenerator
             // 774M-parameter model. Sub-layer registration is still performed -- it allocates
             // nothing and the count would otherwise miss children.
             sb.AppendLine("    /// <summary>Field list for ParameterCount: no lazy materialization.</summary>");
+            sb.AppendLine("    [global::System.CodeDom.Compiler.GeneratedCode(\"AiDotNet.Generators.TrainableParameterGenerator\", \"1.0.0\")]");
             sb.AppendLine($"    protected override System.Collections.Generic.IReadOnlyList<Tensor<{GetTypeParamName(classSymbol)}>> GetTrainableParametersUnmaterialized()");
             sb.AppendLine("    {");
             if (subLayerFields.Count > 0)
@@ -872,6 +884,7 @@ public class TrainableParameterGenerator : IIncrementalGenerator
             sb.AppendLine("    /// Replaces trainable parameter tensors (e.g., with ParameterBuffer views).");
             sb.AppendLine("    /// Auto-generated — updates both the field and the registered tensor list.");
             sb.AppendLine("    /// </summary>");
+            sb.AppendLine("    [global::System.CodeDom.Compiler.GeneratedCode(\"AiDotNet.Generators.TrainableParameterGenerator\", \"1.0.0\")]");
             sb.AppendLine($"    public override void SetTrainableParameters(System.Collections.Generic.IReadOnlyList<Tensor<{GetTypeParamName(classSymbol)}>> parameters)");
             sb.AppendLine("    {");
             // Local helper: emit the assignment of a field from a parameters[idx]
@@ -1060,6 +1073,7 @@ public class TrainableParameterGenerator : IIncrementalGenerator
             sb.AppendLine("    /// Clears all gradient fields discovered by convention ({paramName}Gradient).");
             sb.AppendLine("    /// Auto-generated from [TrainableParameter] field naming conventions.");
             sb.AppendLine("    /// </summary>");
+            sb.AppendLine("    [global::System.CodeDom.Compiler.GeneratedCode(\"AiDotNet.Generators.TrainableParameterGenerator\", \"1.0.0\")]");
             sb.AppendLine("    public override void ZeroGrad()");
             sb.AppendLine("    {");
             sb.AppendLine("        base.ZeroGrad();");
@@ -1094,6 +1108,7 @@ public class TrainableParameterGenerator : IIncrementalGenerator
             sb.AppendLine("    /// Auto-generated from [TrainableParameter] fields per issue #1136 plan part 3.");
             sb.AppendLine("    /// Called from <see cref=\"LayerBase{T}.Dispose(bool)\"/>; do not call directly.");
             sb.AppendLine("    /// </summary>");
+            sb.AppendLine("    [global::System.CodeDom.Compiler.GeneratedCode(\"AiDotNet.Generators.TrainableParameterGenerator\", \"1.0.0\")]");
             sb.AppendLine("    protected override void ReturnPooledParameters()");
             sb.AppendLine("    {");
             sb.AppendLine("        // Lazy-init layers that never received a Forward have zero-length");
@@ -1136,6 +1151,7 @@ public class TrainableParameterGenerator : IIncrementalGenerator
             // layers -- ColumnParallelLinear, RowParallelLinear, Stage3ShardedLinear -- hit
             // exactly that once they became partial. A sealed class cannot be derived from, so
             // the modifier carries no meaning there anyway.
+            sb.AppendLine("    [global::System.CodeDom.Compiler.GeneratedCode(\"AiDotNet.Generators.TrainableParameterGenerator\", \"1.0.0\")]");
             sb.AppendLine($"    public {(classSymbol.IsSealed ? "" : "virtual ")}System.Collections.Generic.Dictionary<string, string> GetParameterRoles()");
             sb.AppendLine("    {");
             sb.AppendLine($"        return new System.Collections.Generic.Dictionary<string, string>");
@@ -1156,6 +1172,7 @@ public class TrainableParameterGenerator : IIncrementalGenerator
         {
             sb.AppendLine();
             sb.AppendLine("    /// <summary>Auto-generated: this layer owns child-module structure.</summary>");
+            sb.AppendLine("    [global::System.CodeDom.Compiler.GeneratedCode(\"AiDotNet.Generators.TrainableParameterGenerator\", \"1.0.0\")]");
             sb.AppendLine("    protected override bool HasDeclaredSubLayerStructure => true;");
             sb.AppendLine();
             sb.AppendLine("    private bool _subLayersRegistered;");
@@ -1172,6 +1189,7 @@ public class TrainableParameterGenerator : IIncrementalGenerator
             sb.AppendLine("    /// Register what exists and latch only when nothing was missing — registration is");
             sb.AppendLine("    /// identity-based and idempotent, so the retry after initialization is free.");
             sb.AppendLine("    /// </remarks>");
+            sb.AppendLine("    [global::System.CodeDom.Compiler.GeneratedCode(\"AiDotNet.Generators.TrainableParameterGenerator\", \"1.0.0\")]");
             sb.AppendLine("    private void EnsureSubLayersRegistered()");
             sb.AppendLine("    {");
             sb.AppendLine("        if (_subLayersRegistered) return;");
@@ -1209,6 +1227,7 @@ public class TrainableParameterGenerator : IIncrementalGenerator
                 sb.AppendLine("    /// Auto-generated EnsureInitialized: registers sub-layers (cheap), then");
                 sb.AppendLine("    /// delegates to base for weight allocation.");
                 sb.AppendLine("    /// </summary>");
+                sb.AppendLine("    [global::System.CodeDom.Compiler.GeneratedCode(\"AiDotNet.Generators.TrainableParameterGenerator\", \"1.0.0\")]");
                 sb.AppendLine("    protected override void EnsureInitialized()");
                 sb.AppendLine("    {");
                 sb.AppendLine("        EnsureSubLayersRegistered();");
@@ -1228,6 +1247,7 @@ public class TrainableParameterGenerator : IIncrementalGenerator
                 // constructor: that places children in front of the pre-step buffer-view walk
                 // beside the parent that already handles them, which silently breaks training.
                 sb.AppendLine("    /// <inheritdoc />");
+                sb.AppendLine("    [global::System.CodeDom.Compiler.GeneratedCode(\"AiDotNet.Generators.TrainableParameterGenerator\", \"1.0.0\")]");
                 sb.AppendLine($"    public override System.Collections.Generic.IReadOnlyList<ILayer<{GetTypeParamName(classSymbol)}>> GetSubLayers()");
                 sb.AppendLine("    {");
                 sb.AppendLine("        EnsureSubLayersRegistered();");
@@ -1276,6 +1296,7 @@ public class TrainableParameterGenerator : IIncrementalGenerator
         var emittedParameters = new HashSet<string>(System.StringComparer.Ordinal);
 
         sb.AppendLine("    /// <summary>Appends generated parameter components in inheritance and declaration order.</summary>");
+        sb.AppendLine("    [global::System.CodeDom.Compiler.GeneratedCode(\"AiDotNet.Generators.TrainableParameterGenerator\", \"1.0.0\")]");
         sb.AppendLine("    protected override void AppendDeclaredParameterComponents(");
         sb.AppendLine("        System.Collections.Generic.List<DeclaredParameterComponent> components)");
         sb.AppendLine("    {");
@@ -1395,6 +1416,7 @@ public class TrainableParameterGenerator : IIncrementalGenerator
         if (referencedAxes.Count == 0) return;
 
         sb.AppendLine("    /// <summary>Infers one deferred input axis from complete generated parameter-shape formulas.</summary>");
+        sb.AppendLine("    [global::System.CodeDom.Compiler.GeneratedCode(\"AiDotNet.Generators.TrainableParameterGenerator\", \"1.0.0\")]");
         sb.AppendLine("    protected override bool TryInferInputShapeFromParameterCount(int parameterCount, out int[] inputShape)");
         sb.AppendLine("    {");
         var countedBuffers = bufferFields.Where(buffer => !buffer.InputSized).ToList();

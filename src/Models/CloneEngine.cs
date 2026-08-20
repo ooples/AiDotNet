@@ -173,6 +173,8 @@ public static class CloneEngine
         // null. That is what distinguishes a model loaded from an ONNX file, which has its path
         // stored, from one trained natively, which does not: taking the widest constructor
         // unconditionally passed null for onnxModelPath and made 51 models throw on clone.
+        var rejectedCandidates = new List<string>();
+
         foreach (var candidate in plan.ConstructorCandidates)
         {
             var arguments = new object?[candidate.Count];
@@ -258,8 +260,21 @@ public static class CloneEngine
             // parameter -- which is 307 of them.
             if (satisfied)
             {
-                return withArgs.Invoke(
-                    BindingFlags.OptionalParamBinding, binder: null, arguments, culture: null);
+                try
+                {
+                    return withArgs.Invoke(
+                        BindingFlags.OptionalParamBinding, binder: null, arguments, culture: null);
+                }
+                catch (TargetInvocationException ex) when (ex.InnerException is ArgumentException validation)
+                {
+                    // Type compatibility is necessary but not sufficient to identify how an
+                    // instance was created. A serialization-only shell can hold an empty collection
+                    // that matches a public constructor's parameter type while that constructor
+                    // requires at least one element. That is a rejected candidate, not a reason to
+                    // stop before trying the narrower candidates or parameterless reconstruction.
+                    rejectedCandidates.Add(
+                        $"[{string.Join(", ", candidate)}] -- {validation.GetType().Name}: {validation.Message}");
+                }
             }
         }
 
@@ -302,6 +317,9 @@ public static class CloneEngine
             // one declined are what a reader actually needs.
             var detail = plan.ConstructorCandidates.Count == 0
                 ? "the clone plan recorded no constructor for it (see ADN0059)"
+                : rejectedCandidates.Count > 0
+                  ? "its recorded constructors rejected the stored configuration: "
+                    + string.Join("; ", rejectedCandidates)
                 : "none of its recorded constructors could be satisfied by this instance: "
                   + string.Join("; ", plan.ConstructorCandidates.Select(c => DescribeCandidate(type, c, source)));
 
@@ -365,6 +383,21 @@ public static class CloneEngine
     {
         if (value is null) return null;
 
+        // Noise schedulers are mutable model components even though they are not IFullModel and do
+        // not implement AiDotNet's ICloneable<T>. Passing one straight through a reconstructed
+        // diffusion model makes the source and clone share Timesteps and solver history. Rebuild it
+        // from its strongly typed Config and restore an independent copy of its checkpoint state,
+        // matching the hand-written CloneScheduler helpers this engine replaces.
+        var schedulerInterface = value.GetType().GetInterfaces().FirstOrDefault(i =>
+            i.IsGenericType
+            && i.GetGenericTypeDefinition().Name == "INoiseScheduler`1"
+            && i.Namespace == "AiDotNet.Interfaces");
+        if (schedulerInterface is not null)
+        {
+            object? schedulerCopy = DuplicateNoiseScheduler(value, schedulerInterface);
+            if (schedulerCopy is not null) return schedulerCopy;
+        }
+
         var cloneable = value.GetType().GetInterfaces().FirstOrDefault(i =>
             i.IsGenericType
             && i.GetGenericTypeDefinition().Name == "ICloneable`1"
@@ -383,6 +416,37 @@ public static class CloneEngine
         {
             return value;
         }
+    }
+
+    private static object? DuplicateNoiseScheduler(object source, Type schedulerInterface)
+    {
+        var configProperty = schedulerInterface.GetProperty("Config");
+        object? config = configProperty?.GetValue(source);
+        if (config is null) return null;
+
+        var constructor = source.GetType()
+            .GetConstructors(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance)
+            .FirstOrDefault(c =>
+            {
+                var parameters = c.GetParameters();
+                return parameters.Length == 1
+                    && parameters[0].ParameterType.IsInstanceOfType(config);
+            });
+        if (constructor is null) return null;
+
+        object copy = constructor.Invoke(new[] { config });
+        if (schedulerInterface.GetMethod("GetState", Type.EmptyTypes)?.Invoke(source, null)
+            is Dictionary<string, object> sourceState)
+        {
+            var copiedState = new Dictionary<string, object>(sourceState.Count, StringComparer.Ordinal);
+            foreach (var (name, stateValue) in sourceState)
+                copiedState[name] = Duplicate(stateValue) ?? stateValue;
+
+            schedulerInterface.GetMethod("LoadState", new[] { typeof(Dictionary<string, object>) })
+                ?.Invoke(copy, new object[] { copiedState });
+        }
+
+        return copy;
     }
 
     private static object? Duplicate(object? value)
