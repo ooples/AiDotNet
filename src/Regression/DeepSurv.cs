@@ -922,6 +922,10 @@ public class DeepSurv<T> : AsyncDecisionTreeRegressionBase<T>
         int epochsWithoutImprovement = 0;
         List<Matrix<T>>? bestWeights = null;
         List<Vector<T>>? bestBiases = null;
+        List<Vector<T>>? bestBnGamma = null;
+        List<Vector<T>>? bestBnBeta = null;
+        List<Vector<T>>? bestBnRunningMean = null;
+        List<Vector<T>>? bestBnRunningVariance = null;
 
         var order = Enumerable.Range(0, n).ToArray();
 
@@ -988,7 +992,11 @@ public class DeepSurv<T> : AsyncDecisionTreeRegressionBase<T>
                 bestLoss = meanLoss;
                 epochsWithoutImprovement = 0;
                 bestWeights = CloneWeights(_weights);
-                bestBiases = CloneBiases(_biases);
+                bestBiases = CloneVectors(_biases);
+                bestBnGamma = CloneVectors(_bnGamma);
+                bestBnBeta = CloneVectors(_bnBeta);
+                bestBnRunningMean = CloneVectors(_bnRunningMean);
+                bestBnRunningVariance = CloneVectors(_bnRunningVariance);
             }
             else
             {
@@ -1001,11 +1009,20 @@ public class DeepSurv<T> : AsyncDecisionTreeRegressionBase<T>
             }
         }
 
-        // Restore the best parameters seen, so early stopping keeps the best model rather than the last.
-        if (bestWeights is not null && bestBiases is not null)
+        // Restore one coherent best-epoch checkpoint. Batch-normalization scale, shift and running
+        // statistics are part of the model state just as much as the dense weights are. Restoring only
+        // weights/biases paired the best dense checkpoint with normalization state from a later, possibly
+        // unstable epoch; that produced initialization-dependent NaN/Infinity predictions after training.
+        if (bestWeights is not null && bestBiases is not null &&
+            bestBnGamma is not null && bestBnBeta is not null &&
+            bestBnRunningMean is not null && bestBnRunningVariance is not null)
         {
             _weights = bestWeights;
             _biases = bestBiases;
+            _bnGamma = bestBnGamma;
+            _bnBeta = bestBnBeta;
+            _bnRunningMean = bestBnRunningMean;
+            _bnRunningVariance = bestBnRunningVariance;
         }
     }
 
@@ -1309,9 +1326,9 @@ public class DeepSurv<T> : AsyncDecisionTreeRegressionBase<T>
     }
 
     /// <summary>
-    /// Deep-copies the bias vectors, so early stopping can restore the best epoch.
+    /// Deep-copies model-state vectors, so early stopping can restore the best epoch.
     /// </summary>
-    private static List<Vector<T>> CloneBiases(List<Vector<T>> source)
+    private static List<Vector<T>> CloneVectors(List<Vector<T>> source)
     {
         var copy = new List<Vector<T>>(source.Count);
         foreach (var b in source)
@@ -1409,34 +1426,56 @@ public class DeepSurv<T> : AsyncDecisionTreeRegressionBase<T>
         var hazardValues = new List<T>();
 
         T cumulativeHazard = NumOps.Zero;
-        T riskSum = NumOps.Zero;
         T epsilon = NumOps.FromDouble(1e-10);
 
-        // Compute sum of exp(risk) for all at risk at end
-        for (int i = 0; i < x.Rows; i++)
+        // Build each risk set with a reverse cumulative sum. Starting with the full sum and repeatedly
+        // subtracting exp(risk) is numerically unsafe: the clamp still permits an exp(40) dynamic range,
+        // so small tail terms can disappear when added to the full sum. Subtracting the large terms later
+        // then leaves a zero or negative denominator and corrupts the cumulative hazard. Reverse summation
+        // constructs the small late-time risk sets before adding the large early-time terms.
+        var riskSetSums = new T[sortedIndices.Length];
+        T runningRiskSum = NumOps.Zero;
+        for (int position = sortedIndices.Length - 1; position >= 0; position--)
         {
-            riskSum = NumOps.Add(riskSum, ClampedExpRisk(riskScores[i]));
+            runningRiskSum = NumOps.Add(
+                runningRiskSum,
+                ClampedExpRisk(riskScores[sortedIndices[position]]));
+            riskSetSums[position] = runningRiskSum;
         }
 
-        T lastTime = NumOps.MinValue;
-
-        for (int i = 0; i < sortedIndices.Length; i++)
+        // Breslow's estimator adds d(t) / sum_{j in R(t)} exp(r_j) once per distinct event time.
+        // Grouping ties is both the correct estimator and ensures all subjects at a tied time remain in
+        // that time's risk set.
+        for (int groupStart = 0; groupStart < sortedIndices.Length;)
         {
-            int idx = sortedIndices[i];
-            T t = times[idx];
-
-            if (NumOps.Compare(events[idx], NumOps.One) == 0 && NumOps.GreaterThan(t, lastTime))
+            T t = times[sortedIndices[groupStart]];
+            int groupEnd = groupStart + 1;
+            while (groupEnd < sortedIndices.Length &&
+                   NumOps.Compare(times[sortedIndices[groupEnd]], t) == 0)
             {
-                // Add to baseline hazard
-                cumulativeHazard = NumOps.Add(cumulativeHazard,
-                    NumOps.Divide(NumOps.One, NumOps.Add(riskSum, epsilon)));
-                uniqueTimes.Add(t);
-                hazardValues.Add(cumulativeHazard);
-                lastTime = t;
+                groupEnd++;
             }
 
-            // Remove from risk set
-            riskSum = NumOps.Subtract(riskSum, ClampedExpRisk(riskScores[idx]));
+            int eventCount = 0;
+            for (int position = groupStart; position < groupEnd; position++)
+            {
+                if (NumOps.Compare(events[sortedIndices[position]], NumOps.One) == 0)
+                {
+                    eventCount++;
+                }
+            }
+
+            if (eventCount > 0)
+            {
+                cumulativeHazard = NumOps.Add(cumulativeHazard,
+                    NumOps.Divide(
+                        NumOps.FromDouble(eventCount),
+                        NumOps.Add(riskSetSums[groupStart], epsilon)));
+                uniqueTimes.Add(t);
+                hazardValues.Add(cumulativeHazard);
+            }
+
+            groupStart = groupEnd;
         }
 
         _baselineHazardTimes = new Vector<T>(uniqueTimes.ToArray());

@@ -739,7 +739,11 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         List<DeclaredParameterComponent> components,
         ILayer<T>? layer)
     {
-        if (layer is not null)
+        // A child can be reachable through more than one field (for example, a direct named field
+        // plus separate "parameter layers" and "all layers" bookkeeping arrays). Those are aliases,
+        // not independent checkpoint slots. Generated declarations and the runtime registry must
+        // therefore share the same reference-identity idempotence as RegisterSubLayer.
+        if (layer is not null && !ContainsDeclaredSubLayer(components, layer))
             components.Add(new DeclaredParameterComponent(
                 DeclaredParameterComponentKind.SubLayer, layer: layer));
     }
@@ -1456,6 +1460,13 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         try
         {
             EnsureInitializationSerialized();
+            // Registration establishes WHO the children are; their generated [SubLayerInput]
+            // declarations establish the exact geometry each one receives. Consume both pieces
+            // while the shape-only guard is active so a manifest read can count every declared
+            // child without allocating its tensors. Without this second step a composite exposed
+            // its child graph but left lazy Dense projections at ShapeDeferred, while the later
+            // GetParameters value boundary resolved them and returned a longer vector.
+            BringUpDeclaredSubLayers();
         }
         finally
         {
@@ -1666,6 +1677,18 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     protected virtual void EnsureParametersMaterialized()
     {
         EnsureOwnParametersMaterialized();
+
+        // A registered child can still be shape-deferred. The generated [SubLayerInput]
+        // declarations are the owner's authoritative description of the internal topology, so
+        // bring those children to storage before the generic recursion. This is the value-boundary
+        // counterpart of EnsureDeclaredSubLayerStructure's allocation-free manifest pass.
+        // A parent's [SubLayerInput] declaration is authoritative only once the parent itself has
+        // a real input geometry (or explicitly promises constructor-sized parameters). An unresolved
+        // standalone composite must keep its deferred children deferred: resolving them from constant
+        // member dimensions here would turn GetParameters into an implicit architecture decision and
+        // change a partial, honest manifest into allocated state before the parent has seen an input.
+        if (IsShapeResolved || ParametersAreConstructionSized)
+            BringUpDeclaredSubLayers();
 
         // Then the children, because a composite's parameter surface IS its children's:
         // ParameterCount, GetParameters and SetParameters all fold GetSubLayers(). Materializing
@@ -5195,6 +5218,11 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
                 && _cachedParameterEpoch == System.Threading.Volatile.Read(ref s_parameterEpoch)
                 && _cachedOwnLength == Parameters.Length)
                 return _cachedParameterCount;
+
+            // Cold path only. Generated child-input declarations can resolve a composite's lazy
+            // descendants without allocating them. Do that before counting the live tree so this
+            // allocation-free surface predicts the same slots GetParameters will materialize.
+            EnsureDeclaredSubLayerStructure();
 
             // A constructor-sized composite has explicitly promised that every parameter dimension
             // is known without observing data. A declared LEAF has the same proof directly in its

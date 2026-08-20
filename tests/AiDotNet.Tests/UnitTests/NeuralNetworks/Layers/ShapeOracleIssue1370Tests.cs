@@ -139,6 +139,79 @@ public class ShapeOracleIssue1370Tests
     }
 
     /// <summary>
+    /// Constructor-known transformer blocks must consume their generated child-input declarations
+    /// during the allocation-free count, then materialize exactly that same surface on value read.
+    /// No dummy forward is needed and the count must not allocate the lazy Dense projections.
+    /// </summary>
+    [Fact]
+    public void DeclaredSubLayerShape_TransformerBlocksStayInParityBeforeForward()
+    {
+        using var encoder = new TransformerEncoderBlock<float>(8, 2, 16);
+
+        long encoderCount = encoder.ParameterCount;
+        Assert.False(encoder.FfnUpLayer.IsInitialized);
+        Assert.Equal(encoderCount, encoder.GetParameters().Length);
+        Assert.True(encoder.FfnUpLayer.IsInitialized);
+
+        using var decoder = new TransformerDecoderBlock<float>(8, 2, 16);
+        long decoderCount = decoder.ParameterCount;
+        Assert.False(decoder.FfnUpLayer.IsInitialized);
+        Assert.Equal(decoderCount, decoder.GetParameters().Length);
+        Assert.True(decoder.FfnUpLayer.IsInitialized);
+
+        using var timeSformer = new TimeSformerBlockLayer<float>(8, 2, 16, 2);
+        long timeSformerCount = timeSformer.ParameterCount;
+        Assert.True(timeSformerCount > 0);
+        Assert.Equal(timeSformerCount, timeSformer.GetParameters().Length);
+    }
+
+    /// <summary>
+    /// A composite may keep aliases to the same children in bookkeeping collections. Generated
+    /// discovery must preserve one identity-owned parameter slot per child instead of flattening
+    /// every alias into the checkpoint vector.
+    /// </summary>
+    [Fact]
+    public void DeclaredSubLayers_AliasedCollectionsDoNotDuplicateParameterSlots()
+    {
+        using var block = new InternImageBlockLayer<float>(channels: 2);
+        var layout = ((AiDotNet.Models.Parameters.IParameterLayoutSource)block).GetParameterLayout();
+        long restorable = layout.Sum(slot =>
+            slot.ParameterCount ?? slot.MaterializedParameterCount);
+
+        Assert.Equal(6, block.GetSubLayers().Count);
+        Assert.Equal(restorable, block.ParameterCount);
+        Assert.Equal(restorable, block.GetParameters().Length);
+    }
+
+    /// <summary>
+    /// The pre-LN block receives a deferred GQA instance from model factories. Its constructor-known
+    /// hidden width must resolve that injected child during the allocation-free manifest pass.
+    /// </summary>
+    [Fact]
+    public void DeclaredSubLayerShape_PreLnBlockResolvesDeferredAttentionBeforeValueRead()
+    {
+        using var attention = new GroupedQueryAttentionLayer<float>(
+            sequenceLength: 16,
+            embeddingDimension: 8,
+            numHeads: 2,
+            numKVHeads: 1,
+            deferAllocation: true);
+        attention.ConfigurePositionalEncoding(
+            AiDotNet.Enums.PositionalEncodingType.Rotary,
+            maxSequenceLength: 16);
+        using var block = new PreLNTransformerBlock<float>(
+            hiddenSize: 8,
+            ffnDim: 16,
+            attention,
+            gated: true);
+
+        long declared = block.ParameterCount;
+
+        Assert.True(declared > 0);
+        Assert.Equal(declared, block.GetParameters().Length);
+    }
+
+    /// <summary>
     /// Eager-init <see cref="LayerNormalizationLayer{T}"/> ctor (AiDotNet#1370):
     /// passing featureSize at construction allocates gamma/beta immediately and
     /// resolves the layer's input + output shapes. <see cref="LayerBase{T}.IsShapeResolved"/>

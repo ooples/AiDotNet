@@ -186,8 +186,23 @@ public class OnlineSGDRegressor<T> : OnlineLearningModelBase<T>
         // Compute gradient based on loss type
         double gradientMultiplier = ComputeLossGradient(prediction, target);
 
-        // Get current learning rate
+        // Get the scheduled learning rate, then cap it by the local quadratic curvature. For
+        // 0.5 * (prediction - target)^2, an update changes the residual by the factor
+        // (1 - eta * (||x||^2 + intercept)); keeping that product at most one prevents a single
+        // large-scale feature from making the online update overshoot into infinity. This is the
+        // normalized-LMS stability bound and leaves ordinary updates untouched whenever the
+        // caller's scheduled rate is already below it.
         double lr = NumOps.ToDouble(GetLearningRate());
+        double localCurvature = _fitIntercept ? 1.0 : 0.0;
+        for (int i = 0; i < NumFeatures; i++)
+        {
+            double xi = NumOps.ToDouble(x[i]);
+            localCurvature += xi * xi;
+        }
+        localCurvature += _l2Penalty;
+
+        if (double.IsFinite(localCurvature) && localCurvature > 0.0)
+            lr = Math.Min(lr, 1.0 / localCurvature);
 
         // Update weights
         for (int i = 0; i < NumFeatures; i++)

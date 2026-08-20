@@ -85,7 +85,7 @@ public class CGNNAlgorithm<T> : DeepCausalBase<T>
         T corrThreshold = NumOps.FromDouble(EdgeThreshold);
         T eps = NumOps.FromDouble(1e-10);
 
-        var result = new Matrix<T>(d, d);
+        var candidates = new List<(int From, int To, T Weight, double Confidence)>();
 
         // For each pair with significant correlation, determine direction via MMD
         for (int i = 0; i < d; i++)
@@ -100,30 +100,69 @@ public class CGNNAlgorithm<T> : DeepCausalBase<T>
                 T mmdJI = TrainAndComputeMMD(data, j, i, h, n, rng);
 
                 // Direction with lower MMD wins
-                T varFrom, olsWeight;
+                int from, to;
                 if (NumOps.GreaterThan(mmdJI, mmdIJ))
                 {
-                    // i→j
-                    varFrom = cov[i, i];
-                    if (NumOps.GreaterThan(varFrom, eps))
-                    {
-                        olsWeight = NumOps.Divide(cov[i, j], varFrom);
-                        if (NumOps.GreaterThan(NumOps.Abs(olsWeight), NumOps.FromDouble(0.1)))
-                            result[i, j] = olsWeight;
-                    }
+                    (from, to) = (i, j);
                 }
                 else
                 {
-                    // j→i
-                    varFrom = cov[j, j];
-                    if (NumOps.GreaterThan(varFrom, eps))
-                    {
-                        olsWeight = NumOps.Divide(cov[j, i], varFrom);
-                        if (NumOps.GreaterThan(NumOps.Abs(olsWeight), NumOps.FromDouble(0.1)))
-                            result[j, i] = olsWeight;
-                    }
+                    (from, to) = (j, i);
+                }
+
+                T varFrom = cov[from, from];
+                if (!NumOps.GreaterThan(varFrom, eps)) continue;
+
+                T olsWeight = NumOps.Divide(cov[from, to], varFrom);
+                if (!NumOps.GreaterThan(NumOps.Abs(olsWeight), NumOps.FromDouble(0.1))) continue;
+
+                double confidence = Math.Abs(NumOps.ToDouble(mmdIJ) - NumOps.ToDouble(mmdJI));
+                if (!double.IsFinite(confidence)) confidence = 0.0;
+                candidates.Add((from, to, olsWeight, confidence));
+            }
+
+        // Pairwise MMD preferences are local: three individually preferred directions can still form
+        // A->B->C->A. CGNN's output contract is a DAG, so assemble the graph globally in descending
+        // orientation confidence and omit a weaker edge when it would close a directed cycle. The
+        // deterministic tie-break also makes equal-score projections reproducible.
+        candidates.Sort((a, b) =>
+        {
+            int byConfidence = b.Confidence.CompareTo(a.Confidence);
+            if (byConfidence != 0) return byConfidence;
+            int byFrom = a.From.CompareTo(b.From);
+            return byFrom != 0 ? byFrom : a.To.CompareTo(b.To);
+        });
+
+        var result = new Matrix<T>(d, d);
+
+        bool CreatesCycle(int from, int to)
+        {
+            var seen = new bool[d];
+            var pending = new Stack<int>();
+            pending.Push(to);
+
+            while (pending.Count > 0)
+            {
+                int node = pending.Pop();
+                if (node == from) return true;
+                if (seen[node]) continue;
+
+                seen[node] = true;
+                for (int next = 0; next < d; next++)
+                {
+                    if (next != node && NumOps.GreaterThan(NumOps.Abs(result[node, next]), eps))
+                        pending.Push(next);
                 }
             }
+
+            return false;
+        }
+
+        foreach (var candidate in candidates)
+        {
+            if (!CreatesCycle(candidate.From, candidate.To))
+                result[candidate.From, candidate.To] = candidate.Weight;
+        }
 
         return result;
     }

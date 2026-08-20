@@ -12,6 +12,63 @@ public class DeepSurvTests : RegressionModelTestBase
     protected override IFullModel<double, Matrix<double>, Vector<double>> CreateModel()
         => new DeepSurv<double>();
 
+    [Fact(Timeout = 180000)]
+    public async Task EarlyStopping_RestoresCompleteBatchNormCheckpoint()
+    {
+        var rng = ModelTestHelpers.CreateSeededRandom();
+        var (trainX, trainY) = ModelTestHelpers.GenerateLinearData(200, 2, rng, noise: 0.01);
+        var probe = new Matrix<double>(5, 2);
+        for (int i = 0; i < 5; i++)
+        {
+            probe[i, 0] = i * 5.0 - 5.0;
+            probe[i, 1] = 5.0;
+        }
+
+        // Seed 1 deterministically drives a later epoch into unstable normalization state. The dense
+        // weights from the best epoch were restored, but gamma/beta and running statistics were not,
+        // so the resulting mixed checkpoint predicted Infinity despite having a finite best epoch.
+        using var model = new DeepSurv<double>(new DeepSurvOptions<double> { Seed = 1 });
+        await model.TrainAsync(trainX, trainY);
+
+        var riskScores = model.PredictRiskScores(probe);
+        var predictions = await model.PredictAsync(probe);
+        for (int i = 0; i < predictions.Length; i++)
+        {
+            Assert.True(double.IsFinite(riskScores[i]),
+                $"Restored risk score {i} is non-finite: {riskScores[i]:G17}.");
+            Assert.True(double.IsFinite(predictions[i]),
+                $"Restored expected survival time {i} is non-finite: {predictions[i]:G17}.");
+        }
+    }
+
+    [Fact(Timeout = 180000)]
+    public async Task BreslowBaselineHazard_ExtremeRiskSpread_RemainsFinite()
+    {
+        var rng = ModelTestHelpers.CreateSeededRandom();
+        var (trainX, trainY) = ModelTestHelpers.GenerateLinearData(200, 2, rng, noise: 0.01);
+        var probe = new Matrix<double>(5, 2);
+        for (int i = 0; i < 5; i++)
+        {
+            probe[i, 0] = i * 5.0 - 5.0;
+            probe[i, 1] = 5.0;
+        }
+
+        // Seed 3 yields finite fitted risk scores spanning more than 32 log-hazard units. The old
+        // full-sum/subtraction algorithm lost the small late-risk-set terms to cancellation and returned
+        // Infinity for four of these five predictions.
+        using var model = new DeepSurv<double>(new DeepSurvOptions<double> { Seed = 3 });
+        await model.TrainAsync(trainX, trainY);
+        var risks = model.PredictRiskScores(probe);
+        var predictions = await model.PredictAsync(probe);
+        for (int i = 0; i < predictions.Length; i++)
+        {
+            Assert.True(double.IsFinite(risks[i]),
+                $"Fitted risk score {i} is non-finite: {risks[i]:G17}.");
+            Assert.True(double.IsFinite(predictions[i]),
+                $"Expected survival time {i} is non-finite: {predictions[i]:G17}.");
+        }
+    }
+
     /// <summary>
     /// DeepSurv is a Cox proportional-hazards model, so the identity-link invariants do not describe it.
     /// </summary>

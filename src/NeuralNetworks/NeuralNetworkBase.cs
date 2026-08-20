@@ -2404,10 +2404,11 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             if (layout.DeclaredParameterCount.HasValue)
                 return layout.DeclaredParameterCount.Value;
 
-            // Unknown slots contribute no invented width. KnownParameterCount retains independently
-            // resolved declarations; MaterializedParameterCount retains any real storage already
-            // owned by a partially deferred graph.
-            return Math.Max(layout.KnownParameterCount, layout.MaterializedParameterCount);
+            // Unknown slots contribute no invented width. A partially deferred graph can still own
+            // live values in those unknown slots while different, shape-resolved slots are waiting
+            // to materialize. GetParameters emits BOTH groups, so taking the larger aggregate loses
+            // one disjoint subtotal (ConformerFP lost 384 values; InternImage lost 59,392).
+            return layout.RestorableParameterCount;
         }
     }
 
