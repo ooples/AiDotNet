@@ -95,6 +95,13 @@ public partial class MbPAAdaptedModel<T, TInput, TOutput> : MetaLearningModelBas
     public override TOutput Predict(TInput input)
     {
         int batchSize = MbPAConversions<T>.GetBatchSize(input);
+        if (batchSize > 1 && typeof(TOutput) == typeof(Vector<T>) && _options.OutputDimension > 1)
+        {
+            throw new NotSupportedException(
+                $"MbPA cannot represent {batchSize} predictions with {_options.OutputDimension} components each " +
+                "as Vector<T>. Use Matrix<T> or Tensor<T> for batched multi-component outputs.");
+        }
+
         var rows = new List<Vector<T>>(batchSize);
 
         for (int i = 0; i < batchSize; i++)

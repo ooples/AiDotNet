@@ -3390,18 +3390,28 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
             && born.DefaultLossFunction is AiDotNet.LossFunctions.BornRuleMseLoss<T>)
         {
             var projected = new Tensor<T>(target.Shape.ToArray());
-            var total = NumOps.Zero;
+            var maxMagnitude = NumOps.Zero;
             for (int i = 0; i < target.Length; i++)
             {
-                projected[i] = NumOps.Abs(target[i]);
-                total = NumOps.Add(total, projected[i]);
+                var magnitude = NumOps.Abs(target[i]);
+                if (NumOps.GreaterThan(magnitude, maxMagnitude))
+                {
+                    maxMagnitude = magnitude;
+                }
             }
 
-            if (NumOps.GreaterThan(total, NumOps.Zero))
+            if (NumOps.GreaterThan(maxMagnitude, NumOps.Zero))
             {
+                var scaledTotal = NumOps.Zero;
                 for (int i = 0; i < projected.Length; i++)
                 {
-                    projected[i] = NumOps.Divide(projected[i], total);
+                    projected[i] = NumOps.Divide(NumOps.Abs(target[i]), maxMagnitude);
+                    scaledTotal = NumOps.Add(scaledTotal, projected[i]);
+                }
+
+                for (int i = 0; i < projected.Length; i++)
+                {
+                    projected[i] = NumOps.Divide(projected[i], scaledTotal);
                 }
             }
             else

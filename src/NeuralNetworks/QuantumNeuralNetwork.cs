@@ -414,10 +414,10 @@ public class QuantumNeuralNetwork<T> : VectorModelLayoutBase<T>
             if (NumOps.GreaterThan(magnitude, maxMagnitude)) maxMagnitude = magnitude;
         }
 
-        // A zero (or numerically degenerate) vector has no direction to encode. The neutral state is
+        // A zero vector has no direction to encode. The neutral state is
         // the uniform superposition, which is normalised and finite; dividing by the zero norm would
         // reintroduce the NaN this method exists to avoid.
-        if (!NumOps.GreaterThan(maxMagnitude, NumOps.FromDouble(1e-12)))
+        if (!NumOps.GreaterThan(maxMagnitude, NumOps.Zero))
         {
             var uniform = NumOps.Divide(NumOps.One, NumOps.Sqrt(NumOps.FromDouble(flatInput.Length)));
             for (int i = 0; i < flatInput.Length; i++)
@@ -436,7 +436,7 @@ public class QuantumNeuralNetwork<T> : VectorModelLayoutBase<T>
         }
 
         var scaledNorm = NumOps.Sqrt(scaledSumOfSquares);
-        if (!NumOps.GreaterThan(scaledNorm, NumOps.FromDouble(1e-12)))
+        if (!NumOps.GreaterThan(scaledNorm, NumOps.Zero))
         {
             var uniform = NumOps.Divide(NumOps.One, NumOps.Sqrt(NumOps.FromDouble(flatInput.Length)));
             for (int i = 0; i < flatInput.Length; i++)
