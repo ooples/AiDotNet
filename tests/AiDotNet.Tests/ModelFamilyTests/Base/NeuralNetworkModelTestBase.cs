@@ -4891,7 +4891,29 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
 
                 double prediction = ConvertToDouble(scalarProbe[0]);
                 double original = ConvertToDouble(targetA[0]);
-                double mirroredValue = (2.0 * prediction) - original;
+
+                // MIRROR IN THE SPACE THE LOSS COMPARES, which for a *WithLogits objective is NOT the
+                // space the model outputs. Those losses fuse the activation: the quantity they difference
+                // against the target is sigmoid(z), so the residual that drives the backward is
+                // sigmoid(z) - t, not z - t. Reflecting the target about the raw logit therefore does not
+                // negate the residual, and the invariant asserts on an update that was never asked to flip.
+                //
+                // MEASURED on SegGPT (BinaryCrossEntropyWithLogits, logit z = 0.014393, tA = 0.068487):
+                //   raw-logit mirror  tB = 2z - tA        = -0.039702
+                //     residual_A = sigmoid(z) - tA = +0.435  residual_B = sigmoid(z) - tB = +0.543
+                //     -> SAME SIGN, so a CORRECT backward returns cosine +1 and is reported as a defect.
+                //   probability mirror tB = 2*sigmoid(z) - tA = 0.938665
+                //     residual_A = +0.435                    residual_B = -0.435
+                //     -> exactly negated, which is what the comparison below claims to have built.
+                //
+                // The distinction is real rather than cosmetic: AdversarialImageEvaluator uses plain
+                // BinaryCrossEntropy behind a Sigmoid head, so its prediction ALREADY is a probability,
+                // the raw mirror is correct there, and it reports a genuine defect. Reflecting in the
+                // wrong space is what made five logit-output families look identical to it.
+                double mirrorBasis = LossComparesActivatedOutput(network)
+                    ? 1.0 / (1.0 + Math.Exp(-prediction))
+                    : prediction;
+                double mirroredValue = (2.0 * mirrorBasis) - original;
 
                 if (!IsFinite(prediction) || !IsFinite(mirroredValue) || mirroredValue == original)
                 {
@@ -5662,6 +5684,20 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
     }
 
     /// <summary>Length of the effective output, so a scalar-output model can be identified.</summary>
+    /// <summary>
+    /// Whether this model's objective differences the target against an ACTIVATED output rather than
+    /// against the tensor the model returns.
+    /// </summary>
+    /// <remarks>
+    /// True for the fused *WithLogits objectives, which apply sigmoid/softmax inside the loss. Their
+    /// residual is sigmoid(z) - t, so any construction that needs to negate the residual has to reflect
+    /// the target about sigmoid(z); reflecting about z leaves both residuals on the same side.
+    /// </remarks>
+    private static bool LossComparesActivatedOutput(INeuralNetworkModel<T> network)
+        => network is AiDotNet.NeuralNetworks.NeuralNetworkBase<T> nn
+           && nn.DefaultLossFunction is AiDotNet.LossFunctions.BinaryCrossEntropyWithLogitsLoss<T>
+              or AiDotNet.LossFunctions.CrossEntropyWithLogitsLoss<T>;
+
     private int EffectiveOutputLength()
     {
         var shape = EffectiveOutputShape;
