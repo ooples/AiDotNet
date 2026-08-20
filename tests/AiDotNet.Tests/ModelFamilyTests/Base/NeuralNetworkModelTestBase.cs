@@ -3277,12 +3277,40 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
     /// keeps <see cref="ComputeMSE"/> byte-identical, since this branch only triggers when the model's
     /// loss function is cross-entropy-with-logits.
     /// </summary>
+    /// <summary>
+    /// Whether <paramref name="ex"/> is a configured loss DECLINING an (output, target) pair whose
+    /// shape or value range is outside its domain — the one case where falling back to MSE is right.
+    /// </summary>
+    /// <remarks>
+    /// Argument-validation exceptions are the signal: that is what a loss throws when it validates its
+    /// inputs and this fixture's pair does not qualify. Anything else — a null dereference, an engine
+    /// or tape failure, an overflow, a cancellation — is a genuine defect, and returning MSE for it
+    /// would substitute a different objective and let the invariant pass while the real loss is broken.
+    /// Kept deliberately narrow: widening it re-creates the bare <c>catch (Exception)</c> this replaced.
+    /// </remarks>
+    private static bool IsExpectedLossDomainRejection(Exception ex) =>
+        ex is ArgumentException or NotSupportedException or RankException;
+
     protected double MeasureLoss(INeuralNetworkModel<T> network, Tensor<T> output, Tensor<T> target)
     {
+        // FAIL, do not return NaN. Every branch below used to answer an empty output or target with
+        // double.NaN, and the callers treat NaN as "not measurable, skip": Training_ShouldReduceLoss
+        // and the train/test comparison both guard their Assert on !IsNaN. So a model that predicted
+        // NOTHING produced a GREEN training test that had never compared two losses -- the exact
+        // failure these invariants exist to catch, reported as a pass. An empty tensor here is a
+        // broken fixture or a broken Predict, and either way it is a result, not a measurement.
+        if (output.Length == 0 || target.Length == 0)
+        {
+            throw new InvalidOperationException(
+                $"Cannot measure loss for {network.GetType().Name}: output length {output.Length}, " +
+                $"target length {target.Length}. One of them is empty, so no loss can be computed. " +
+                "This is a fixture or Predict defect -- it must not be reported as an unmeasurable " +
+                "loss, because the training invariants skip their assertions on a NaN measurement.");
+        }
+
         if (network is AiDotNet.NeuralNetworks.NeuralNetworkBase<T> nn
             && nn.DefaultLossFunction is AiDotNet.LossFunctions.CrossEntropyWithLogitsLoss<T> ce)
         {
-            if (output.Length == 0 || target.Length == 0) return double.NaN;
 
             // Measure the model's ACTUAL training objective — the same per-position, class-axis
             // softmax-CE (spatially/temporally mean-reduced) that ComputeTapeLoss descends during
@@ -3312,7 +3340,6 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         if (network is AiDotNet.NeuralNetworks.NeuralNetworkBase<T> stftNet
             && stftNet.DefaultLossFunction is AiDotNet.LossFunctions.MultiResolutionStftLoss<T> stft)
         {
-            if (output.Length == 0 || target.Length == 0) return double.NaN;
             var lossTensor = stft.ComputeTapeLoss(output, target);
             return lossTensor.Length > 0 ? ConvertToDouble(lossTensor[0]) : double.NaN;
         }
@@ -3327,7 +3354,6 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         if (network is AiDotNet.NeuralNetworks.NeuralNetworkBase<T> bceNet
             && bceNet.DefaultLossFunction is AiDotNet.LossFunctions.BinaryCrossEntropyWithLogitsLoss<T> bce)
         {
-            if (output.Length == 0 || target.Length == 0) return double.NaN;
             var predicted = output;
             var outShape = output.Shape.ToArray();
             var tgtShape = target.Shape.ToArray();
@@ -3349,10 +3375,16 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         // Falls back to MSE only when the model configures no loss, or when the configured loss cannot
         // score this (output, target) pair -- a loss with a stricter domain than the fixture provides
         // must not turn a measurement into an exception.
+        // ILossFunction<T>, not LossFunctionBase<T>: ComputeTapeLoss is declared on the INTERFACE, and
+        // DefaultLossFunction/SetLossFunction both traffic in the interface, so a loss that implements
+        // it directly (ConfiguredLossFunctionTests.CustomTapeLoss does) is a fully valid configured
+        // loss. Matching on the base class narrowed the model's own contract and sent exactly those
+        // losses to MSE -- reintroducing, for direct implementers, the measure-a-different-objective
+        // bug the branches above exist to fix.
         if (network is AiDotNet.NeuralNetworks.NeuralNetworkBase<T> lossNet
-            && lossNet.DefaultLossFunction is AiDotNet.LossFunctions.LossFunctionBase<T> configured)
+            && lossNet.DefaultLossFunction is AiDotNet.Interfaces.ILossFunction<T> configured)
         {
-            if (output.Length == 0 || target.Length == 0) return double.NaN;
+            Tensor<T> lossTensor;
             try
             {
                 var predicted = output;
@@ -3360,17 +3392,47 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
                 var tgtShape = target.Shape.ToArray();
                 if (!outShape.SequenceEqual(tgtShape) && output.Length == target.Length)
                     predicted = output.Reshape(tgtShape);
-                var lossTensor = configured.ComputeTapeLoss(predicted, target);
-                if (lossTensor.Length > 0)
-                {
-                    double value = ConvertToDouble(lossTensor[0]);
-                    if (IsFinite(value)) return value;
-                }
+                lossTensor = configured.ComputeTapeLoss(predicted, target);
             }
-            catch (Exception)
+            catch (Exception ex) when (IsExpectedLossDomainRejection(ex))
             {
-                // fall through to MSE
+                // The ONLY tolerated failure: the configured loss declines this (output, target) pair
+                // because its domain is stricter than the fixture's -- a shape it cannot broadcast, or
+                // a value range it validates. That is the documented reason this fallback exists, and
+                // it is signalled by argument validation. Every other exception is a defect (a bug in
+                // the loss, the tape, or the engine) and used to be swallowed by a bare
+                // catch (Exception), which turned a broken loss into a silently-different metric.
+                return ComputeMSE(output, target);
             }
+
+            // A scalar objective, or nothing. Accepting "Length > 0" and reading element zero measured
+            // ONE COMPONENT of a vector-valued result and reported it as the whole loss, so a loss that
+            // never reduced could still look like it did. There is no correct way to compare partial
+            // objectives across two training steps, so this is a defect rather than a fallback.
+            if (lossTensor.Length != 1)
+            {
+                throw new InvalidOperationException(
+                    $"{configured.GetType().Name}.ComputeTapeLoss returned {lossTensor.Length} elements " +
+                    $"(shape [{string.Join(",", lossTensor.Shape)}]) for {network.GetType().Name}; the " +
+                    "training invariants need a single scalar to compare across steps. Reading element " +
+                    "zero would measure one component of a vector-valued result as if it were the loss.");
+            }
+
+            double value = ConvertToDouble(lossTensor[0]);
+
+            // Non-finite propagates too. Falling back to MSE here reported a FINITE number for a model
+            // whose real objective had overflowed, so "training reduced the loss" was measured against
+            // an objective the optimizer was not descending -- the precise substitution this method
+            // exists to remove.
+            if (!IsFinite(value))
+            {
+                throw new InvalidOperationException(
+                    $"{configured.GetType().Name}.ComputeTapeLoss returned {value} for " +
+                    $"{network.GetType().Name}. A non-finite loss is a numerical defect in the model or " +
+                    "the loss; it must not be masked by silently measuring MSE instead.");
+            }
+
+            return value;
         }
 
         return ComputeMSE(output, target);

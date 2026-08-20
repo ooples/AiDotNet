@@ -11812,26 +11812,52 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// </remarks>
     private void ResetOwnedOptimizerState()
     {
-        const BindingFlags Flags = BindingFlags.Instance | BindingFlags.Public
-            | BindingFlags.NonPublic | BindingFlags.DeclaredOnly;
-
-        for (var type = GetType(); type is not null && type != typeof(object); type = type.BaseType)
+        foreach (var field in GetOwnedOptimizerFields(GetType()))
         {
-            foreach (var field in type.GetFields(Flags))
+            // ReferenceEquals guards the common case where a subclass field aliases the base one,
+            // so a single optimizer is not Reset twice.
+            if (field.GetValue(this) is IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> owned
+                && !ReferenceEquals(owned, _baseTrainOptimizer))
             {
-                if (!typeof(IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>).IsAssignableFrom(field.FieldType))
-                    continue;
-
-                // ReferenceEquals guards the common case where a subclass field aliases the base one,
-                // so a single optimizer is not Reset twice.
-                if (field.GetValue(this) is IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> owned
-                    && !ReferenceEquals(owned, _baseTrainOptimizer))
-                {
-                    owned.Reset();
-                }
+                owned.Reset();
             }
         }
     }
+
+    /// <summary>
+    /// The optimizer-typed fields declared anywhere in <paramref name="concreteType"/>'s hierarchy.
+    /// </summary>
+    /// <remarks>
+    /// Cached per concrete model type. The field SET is a property of the type, not of the instance
+    /// or of its current state, so it can be discovered once; only <c>GetValue</c> has to run per
+    /// reset. Reset is on the conformance path, where a trajectory comparison resets every model in
+    /// the zoo, and re-walking the inheritance chain on each of those calls was pure repeat work.
+    /// </remarks>
+    private static FieldInfo[] GetOwnedOptimizerFields(Type concreteType) =>
+        _ownedOptimizerFields.GetOrAdd(concreteType, static type =>
+        {
+            const BindingFlags Flags = BindingFlags.Instance | BindingFlags.Public
+                | BindingFlags.NonPublic | BindingFlags.DeclaredOnly;
+
+            var discovered = new List<FieldInfo>();
+            for (var current = type; current is not null && current != typeof(object); current = current.BaseType)
+            {
+                foreach (var field in current.GetFields(Flags))
+                {
+                    if (typeof(IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>).IsAssignableFrom(field.FieldType))
+                        discovered.Add(field);
+                }
+            }
+
+            return discovered.ToArray();
+        });
+
+    /// <summary>
+    /// Per-concrete-type cache behind <see cref="GetOwnedOptimizerFields"/>. Static on the closed
+    /// generic, so each <typeparamref name="T"/> keeps its own entries and the assignability test
+    /// baked into them stays correct.
+    /// </summary>
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<Type, FieldInfo[]> _ownedOptimizerFields = new();
 
     /// <summary>
     /// Persistent optimizer for models using the standard TrainStep pattern.
