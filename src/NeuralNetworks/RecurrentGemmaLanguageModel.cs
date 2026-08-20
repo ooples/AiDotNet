@@ -109,14 +109,25 @@ public class RecurrentGemmaLanguageModel<T> : TokenLanguageModelLayoutBase<T>
         // scaling (Vaswani et al. 2017 Section 3.4); it just defaults to off.
         if (_options.ScaleEmbeddingsBySqrtWidth)
         {
-            foreach (var layer in Layers)
+            var embedding = Layers.OfType<EmbeddingLayer<T>>().FirstOrDefault();
+
+            // Say so, rather than doing nothing. The option is only reachable through an
+            // EmbeddingLayer, so with a caller-supplied architecture that has none -- pre-embedded
+            // inputs, or a custom layer stack -- asking for the scaling used to be accepted and then
+            // silently skipped. The model then trained WITHOUT the sqrt(d_model) factor the paper
+            // requires while reporting the option as enabled, which is exactly the kind of quiet
+            // substitution that only shows up as slightly-wrong convergence much later.
+            if (embedding is null)
             {
-                if (layer is EmbeddingLayer<T> embedding)
-                {
-                    embedding.ScaleBySqrtDimension = true;
-                    break;
-                }
+                throw new InvalidOperationException(
+                    $"{nameof(RecurrentGemmaOptions.ScaleEmbeddingsBySqrtWidth)} is enabled, but this " +
+                    $"model has no {nameof(EmbeddingLayer<T>)} to apply it to. RecurrentGemma applies " +
+                    "the sqrt(model width) constant to the input embeddings (Section 2), so the option " +
+                    "cannot be honoured by any other layer. Either supply an architecture that includes " +
+                    "an embedding layer, or leave the option off if the inputs are already embedded.");
             }
+
+            embedding.ScaleBySqrtDimension = true;
         }
     }
 
@@ -157,7 +168,26 @@ public class RecurrentGemmaLanguageModel<T> : TokenLanguageModelLayoutBase<T>
         => _optimizer;
 
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreateDefaultOptimizer()
-        => new AiDotNet.Optimizers.AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+    {
+        // Validated HERE, at the boundary where the caller's numbers turn into an optimizer. Neither
+        // AdamWOptimizerOptions nor AdamWOptimizer range-checks any of these, so a negative or NaN
+        // learning rate, or a beta at/above 1, was accepted and produced silently invalid training --
+        // NaN moments, or a bias correction dividing by zero. The failure surfaced much later as a
+        // non-finite loss with nothing pointing back at the option that caused it.
+        AiDotNet.Validation.Guard.Positive(_options.LearningRate);
+        AiDotNet.Validation.Guard.NonNegative(_options.WeightDecay);
+        AiDotNet.Validation.Guard.Positive(_options.Epsilon);
+
+        // Half-open [0, 1): Adam's bias correction divides by (1 - beta^t), so beta == 1 is a division
+        // by zero on the first step, and the running averages never decay.
+        AiDotNet.Validation.Guard.InRange(_options.Beta1, 0.0, NearestBelowOne);
+        AiDotNet.Validation.Guard.InRange(_options.Beta2, 0.0, NearestBelowOne);
+
+        // Only meaningful when clipping is on; an unset default must not be rejected.
+        if (_options.EnableGradientClipping)
+            AiDotNet.Validation.Guard.Positive(_options.MaxGradientNorm);
+
+        return new AiDotNet.Optimizers.AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
             this,
             new AiDotNet.Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
             {
@@ -169,6 +199,20 @@ public class RecurrentGemmaLanguageModel<T> : TokenLanguageModelLayoutBase<T>
                 EnableGradientClipping = _options.EnableGradientClipping,
                 MaxGradientNorm = _options.MaxGradientNorm
             });
+    }
+
+    /// <summary>
+    /// The largest double strictly below 1, used as the inclusive upper bound for the Adam betas.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="AiDotNet.Validation.Guard.InRange(double, double, double, string?)"/> is inclusive on
+    /// both ends, and the betas need a half-open [0, 1). Bounding at the representable neighbour below
+    /// 1 expresses that exactly, rather than rejecting at some arbitrary epsilon short of it.
+    ///
+    /// Written as a literal rather than <c>Math.BitDecrement(1.0)</c> because that API does not exist
+    /// on net471, which this project still targets.
+    /// </remarks>
+    private const double NearestBelowOne = 0.99999999999999989;
 
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
