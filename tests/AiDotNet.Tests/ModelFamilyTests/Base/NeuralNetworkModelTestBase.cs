@@ -3590,6 +3590,16 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
     protected virtual int GradientCheckSampleCount => 12;
 
     /// <summary>
+    /// Wall-clock ceiling, measured on the gradient check's own clock, past which the exhaustive
+    /// one-coordinate-per-slot LOCALIZATION sweep stops and reports how far it got. Mirrors the
+    /// ceiling its admitting pre-gate already estimates against, but is checked against the REAL
+    /// elapsed time on every coordinate — the pre-gate alone cannot bound a sweep whose per-forward
+    /// price turns out higher than the single cold sample it was quoted from. Leaves head-room under
+    /// the 120 s <c>[Fact(Timeout)]</c> for the remaining coordinate plus teardown.
+    /// </summary>
+    private const double GradCheckLocalizationDeadlineSeconds = 105.0;
+
+    /// <summary>
     /// Exception types that represent a documented, EXPECTED gradcheck skip: lazy parameters not yet
     /// materialized, a custom-forward model whose gradient path is not yet routed through
     /// <c>ComputeGradients</c>, or a model whose flat <c>GetParameters</c>/<c>UpdateParameters</c>
@@ -4059,6 +4069,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
             }
         }
 
+
         if (checkedCount == 0) return;   // every perturbation produced a NaN loss — inconclusive
 
         if (kinkCoordinates > 0)
@@ -4238,6 +4249,33 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
                         exhaustiveLocalizationRan = true;
                         foreach (var coordinate in direction)
                         {
+                            // THE PRE-GATE ABOVE IS AN ESTIMATE, AND AN ESTIMATE IS NOT A BUDGET.
+                            // It admits this block when 32 forwards per coordinate — priced at the
+                            // forwardSeconds sampled ONCE, cold, before the sample loop — appear to
+                            // fit. Nothing re-checked the real clock afterwards, so when that price
+                            // is optimistic the block still walked every coordinate to completion
+                            // and blew the 120 s [Fact(Timeout)] above.
+                            //
+                            // MEASURED on RecurrentGemma (fp32, instrumented): the test reached the
+                            // end of the sample loop at 7.5 s and never reached the end of the
+                            // method, timing out at 120 s in three consecutive class runs while
+                            // every other test in the class stayed healthy (memorization 38 s,
+                            // training-step 13 s, remainder under 4 s). Isolated, the same test
+                            // finishes in 8 s — the estimate is simply cheaper than the reality it
+                            // is standing in for.
+                            //
+                            // Re-checking the actual elapsed time each coordinate turns the
+                            // all-or-nothing gate into a genuine cap: localization runs for as many
+                            // coordinates as the budget really affords and then falls back to the
+                            // documented NOT-RUN path below, which reports the shortfall instead of
+                            // judging on a partial sweep. A timeout diagnoses nothing; a bounded
+                            // sweep that says how far it got diagnoses something.
+                            if (gradCheckClock.Elapsed.TotalSeconds > GradCheckLocalizationDeadlineSeconds)
+                            {
+                                exhaustiveLocalizationRan = false;
+                                break;
+                            }
+
                             var ownerSlot = trainableSlots.First(slot =>
                                 coordinate.FlatIndex >= slot.Offset &&
                                 coordinate.FlatIndex < slot.Offset + slot.Length);
