@@ -443,12 +443,17 @@ public partial class SileroVad<T> : AudioNeuralNetworkBase<T>, IVoiceActivityDet
             var frame = new T[_frameSize];
             Array.Copy(samples, i, frame, 0, _frameSize);
 
-            // Create tensor from frame data
-            var frameTensor = new Tensor<T>([_frameSize]);
-            var frameVector = frameTensor.ToVector();
+            // Write directly into the tensor's backing storage, and dispose it per frame.
+            // ToVector() returns a COPY, so assigning into that copy left frameTensor ALL ZEROS
+            // and every frame reached the model as silence -- the same defect PreprocessAudio
+            // below already documents, surviving here. Speech detection was therefore independent
+            // of the audio. Disposal is safe because PreprocessAudio allocates its own result, so
+            // nothing downstream holds a reference to this tensor once the call returns.
+            using var frameTensor = new Tensor<T>([_frameSize]);
+            var frameSpan = frameTensor.Data.Span;
             for (int j = 0; j < _frameSize; j++)
             {
-                frameVector[j] = frame[j];
+                frameSpan[j] = frame[j];
             }
 
             var prob = GetSpeechProbability(frameTensor);
@@ -506,12 +511,14 @@ public partial class SileroVad<T> : AudioNeuralNetworkBase<T>, IVoiceActivityDet
             var frame = new T[_frameSize];
             Array.Copy(samples, i * _frameSize, frame, 0, _frameSize);
 
-            // Create tensor from frame data
-            var frameTensor = new Tensor<T>([_frameSize]);
-            var frameVector = frameTensor.ToVector();
+            // Same direct write and per-frame disposal as DetectSpeechSegments above: assigning
+            // into the ToVector() copy left this tensor all zeros, so every probability was
+            // computed from silence rather than from the frame.
+            using var frameTensor = new Tensor<T>([_frameSize]);
+            var frameSpan = frameTensor.Data.Span;
             for (int j = 0; j < _frameSize; j++)
             {
-                frameVector[j] = frame[j];
+                frameSpan[j] = frame[j];
             }
 
             probabilities[i] = GetSpeechProbability(frameTensor);
