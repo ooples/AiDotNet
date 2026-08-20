@@ -5221,17 +5221,33 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         // So ask the model instead of the harness: train on each target from the same restored start and
         // compare the loss IT reports. Identical to the bit means the supervision collapsed, which is a
         // fixture limitation for that family, not a broken backward. Anything else still asserts.
-        try
+        // NOT on the mirrored-scalar path. targetB there is targetA reflected about the prediction, so
+        // the residual is exactly negated: under a symmetric objective the two losses are EQUAL BY
+        // CONSTRUCTION while the correct gradients are anti-parallel. Equal reported losses are
+        // therefore the expected reading, not evidence of collapsed supervision, and skipping on them
+        // would let a target-blind update through unasserted on the one construction built to catch it.
+        // The sibling guard above already excludes this case for the same reason.
+        //
+        // The probe also needs BOTH runs to have genuinely reported a loss. GetLastLoss returns zero
+        // when nothing was recorded, so a Train override that never sets it yields 0.0 == 0.0 -- finite
+        // and equal -- and every such family would skip this invariant while looking like it had
+        // measured something. HasRecordedLoss separates "reported zero" from "reported nothing".
+        var lossReporter = network as AiDotNet.NeuralNetworks.NeuralNetworkBase<T>;
+        if (!usedMirroredScalarTarget && lossReporter is not null)
         {
+            try
+            {
             parameterProbe.Restore();
             network.Train(input, targetA);
             double ownLossA = ConvertToDouble(network.GetLastLoss());
+            bool reportedA = lossReporter.HasRecordedLoss;
             parameterProbe.Restore();
             network.Train(input, targetB);
             double ownLossB = ConvertToDouble(network.GetLastLoss());
+            bool reportedB = lossReporter.HasRecordedLoss;
             parameterProbe.Restore();
 
-            if (IsFinite(ownLossA) && IsFinite(ownLossB) && ownLossA == ownLossB)
+            if (reportedA && reportedB && IsFinite(ownLossA) && IsFinite(ownLossB) && ownLossA == ownLossB)
             {
                 ReportGradientFinding(GradientReportFile, model,
                     $"SKIPPED: the model's OWN training objective scores both targets identically "
@@ -5242,11 +5258,12 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
                 return;
             }
         }
-        catch (Exception ex)
-        {
-            // A model that cannot report its own loss simply does not get this reprieve.
-            ReportGradientFinding(GradientReportFile, model,
-                $"own-objective probe threw {ex.GetType().Name}; asserting on the harness measurement.");
+            catch (Exception ex)
+            {
+                // A model that cannot report its own loss simply does not get this reprieve.
+                ReportGradientFinding(GradientReportFile, model,
+                    $"own-objective probe threw {ex.GetType().Name}; asserting on the harness measurement.");
+            }
         }
 
         string evidence = usedMirroredScalarTarget

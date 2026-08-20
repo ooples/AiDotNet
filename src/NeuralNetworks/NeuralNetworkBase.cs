@@ -8330,6 +8330,18 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// Think of it like a score in a game - the lower the score, the better your network is performing.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Whether a training pass has actually recorded a loss on this instance.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="GetLastLoss"/> returns zero when no loss was recorded, which is indistinguishable
+    /// from a genuine zero loss at the call site. A conformance probe that treats two equal reported
+    /// losses as evidence of equal supervision therefore reads "this model never records a loss" as
+    /// "both targets produced the same loss". This separates the two so such a probe can require that
+    /// a loss was reported before drawing any conclusion from its value.
+    /// </remarks>
+    internal bool HasRecordedLoss => LastLoss is not null;
+
     public virtual T GetLastLoss()
     {
         // A missing loss means training has not produced one yet. Preserve NaN/Infinity:
@@ -11812,52 +11824,169 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// </remarks>
     private void ResetOwnedOptimizerState()
     {
-        foreach (var field in GetOwnedOptimizerFields(GetType()))
-        {
-            // ReferenceEquals guards the common case where a subclass field aliases the base one,
-            // so a single optimizer is not Reset twice.
-            if (field.GetValue(this) is IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> owned
-                && !ReferenceEquals(owned, _baseTrainOptimizer))
-            {
-                owned.Reset();
-            }
-        }
+        // _baseTrainOptimizer is seeded as already-reset: ResetBaseTrainOptimizerState above Resets it
+        // before calling here, and this is the same "do not Reset a single optimizer twice" guarantee
+        // the previous ReferenceEquals check gave, extended to every optimizer reached below. A model
+        // that aliases one optimizer across several fields, or shares one with a sub-network, now gets
+        // it Reset exactly once no matter how many routes reach it.
+        var resetOptimizers = NewReferenceSet();
+        if (_baseTrainOptimizer is not null) resetOptimizers.Add(_baseTrainOptimizer);
+
+        ResetOwnedOptimizerState(resetOptimizers, NewReferenceSet());
     }
 
     /// <summary>
-    /// The optimizer-typed fields declared anywhere in <paramref name="concreteType"/>'s hierarchy.
+    /// Resets every optimizer reachable from this instance's fields, following collections and
+    /// nested sub-networks.
+    /// </summary>
+    /// <param name="resetOptimizers">Optimizers already Reset on this walk; each is Reset once.</param>
+    /// <param name="visitedModels">Models already walked, so a cycle terminates.</param>
+    private void ResetOwnedOptimizerState(HashSet<object> resetOptimizers, HashSet<object> visitedModels)
+    {
+        // A sub-network can hold a reference back to its parent, or two parents can share one child.
+        // Without this the first case is infinite and the second is duplicated work.
+        if (!visitedModels.Add(this)) return;
+
+        var plan = GetOwnedOptimizerPlan(GetType());
+
+        foreach (var field in plan.Optimizers)
+            ResetIfOptimizer(field.GetValue(this), resetOptimizers);
+
+        // A field typed as a COLLECTION of optimizers is not assignable to the optimizer interface,
+        // so the direct scan skipped it entirely. DomainDecompositionPINN keeps its per-subdomain
+        // optimizers in a List, so every one of them survived a reset with its momentum intact and
+        // the next trajectory continued the previous one -- the exact defect this method exists to
+        // fix, on the models that hold the most optimizer state.
+        foreach (var field in plan.OptimizerSequences)
+            if (field.GetValue(this) is System.Collections.IEnumerable sequence)
+                foreach (var item in sequence)
+                    ResetIfOptimizer(item, resetOptimizers);
+
+        // Same gap one level down: a model that delegates training to sub-networks owns their
+        // optimizer state transitively, and "every optimizer this instance already holds" has to mean
+        // that or the promise is empty for exactly the composite families.
+        foreach (var field in plan.Models)
+            if (field.GetValue(this) is NeuralNetworkBase<T> nested)
+                nested.ResetOwnedOptimizerState(resetOptimizers, visitedModels);
+
+        foreach (var field in plan.ModelSequences)
+            if (field.GetValue(this) is System.Collections.IEnumerable sequence)
+                foreach (var item in sequence)
+                    if (item is NeuralNetworkBase<T> nested)
+                        nested.ResetOwnedOptimizerState(resetOptimizers, visitedModels);
+    }
+
+    private static void ResetIfOptimizer(object? value, HashSet<object> resetOptimizers)
+    {
+        if (value is IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> owned && resetOptimizers.Add(owned))
+            owned.Reset();
+    }
+
+    /// <summary>
+    /// Reference-identity set. <c>ReferenceEqualityComparer</c> is .NET 5+, and this project still
+    /// targets net471, so identity is spelled out rather than imported.
+    /// </summary>
+    private static HashSet<object> NewReferenceSet() => new HashSet<object>(ReferenceIdentityComparer.Instance);
+
+    private sealed class ReferenceIdentityComparer : IEqualityComparer<object>
+    {
+        internal static readonly ReferenceIdentityComparer Instance = new();
+        public new bool Equals(object? x, object? y) => ReferenceEquals(x, y);
+        public int GetHashCode(object obj) => System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(obj);
+    }
+
+    /// <summary>
+    /// The four kinds of optimizer-owning field, discovered once per concrete model type.
+    /// </summary>
+    private sealed class OwnedOptimizerPlan
+    {
+        internal FieldInfo[] Optimizers = System.Array.Empty<FieldInfo>();
+        internal FieldInfo[] OptimizerSequences = System.Array.Empty<FieldInfo>();
+        internal FieldInfo[] Models = System.Array.Empty<FieldInfo>();
+        internal FieldInfo[] ModelSequences = System.Array.Empty<FieldInfo>();
+    }
+
+    /// <summary>
+    /// The optimizer-owning fields declared anywhere in <paramref name="concreteType"/>'s hierarchy,
+    /// split by how the optimizer is reached.
     /// </summary>
     /// <remarks>
     /// Cached per concrete model type. The field SET is a property of the type, not of the instance
-    /// or of its current state, so it can be discovered once; only <c>GetValue</c> has to run per
-    /// reset. Reset is on the conformance path, where a trajectory comparison resets every model in
-    /// the zoo, and re-walking the inheritance chain on each of those calls was pure repeat work.
+    /// or of its current state, so it is discovered once; only <c>GetValue</c> runs per reset. Reset
+    /// is on the conformance path, where a trajectory comparison resets every model in the zoo, and
+    /// re-walking the inheritance chain on each of those calls was pure repeat work.
+    ///
+    /// Classification is by DECLARED type, which is what makes the cache sound: an instance's current
+    /// contents can change between resets, its field types cannot.
     /// </remarks>
-    private static FieldInfo[] GetOwnedOptimizerFields(Type concreteType) =>
+    private static OwnedOptimizerPlan GetOwnedOptimizerPlan(Type concreteType) =>
         _ownedOptimizerFields.GetOrAdd(concreteType, static type =>
         {
             const BindingFlags Flags = BindingFlags.Instance | BindingFlags.Public
                 | BindingFlags.NonPublic | BindingFlags.DeclaredOnly;
 
-            var discovered = new List<FieldInfo>();
+            var optimizerType = typeof(IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>);
+            var modelType = typeof(NeuralNetworkBase<T>);
+
+            var optimizers = new List<FieldInfo>();
+            var optimizerSequences = new List<FieldInfo>();
+            var models = new List<FieldInfo>();
+            var modelSequences = new List<FieldInfo>();
+
             for (var current = type; current is not null && current != typeof(object); current = current.BaseType)
             {
                 foreach (var field in current.GetFields(Flags))
                 {
-                    if (typeof(IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>).IsAssignableFrom(field.FieldType))
-                        discovered.Add(field);
+                    var fieldType = field.FieldType;
+
+                    if (optimizerType.IsAssignableFrom(fieldType)) { optimizers.Add(field); continue; }
+                    if (modelType.IsAssignableFrom(fieldType)) { models.Add(field); continue; }
+
+                    // Only a sequence whose DECLARED element type is one of the two is followed.
+                    // Walking every IEnumerable field would enumerate datasets, caches and lazy
+                    // sequences on a path that is only supposed to be reading optimizer state.
+                    var element = GetEnumerableElementType(fieldType);
+                    if (element is null) continue;
+                    if (optimizerType.IsAssignableFrom(element)) optimizerSequences.Add(field);
+                    else if (modelType.IsAssignableFrom(element)) modelSequences.Add(field);
                 }
             }
 
-            return discovered.ToArray();
+            return new OwnedOptimizerPlan
+            {
+                Optimizers = optimizers.ToArray(),
+                OptimizerSequences = optimizerSequences.ToArray(),
+                Models = models.ToArray(),
+                ModelSequences = modelSequences.ToArray(),
+            };
         });
 
     /// <summary>
-    /// Per-concrete-type cache behind <see cref="GetOwnedOptimizerFields"/>. Static on the closed
-    /// generic, so each <typeparamref name="T"/> keeps its own entries and the assignability test
-    /// baked into them stays correct.
+    /// The element type of <paramref name="candidate"/> when it is an array or an
+    /// <see cref="IEnumerable{T}"/>, otherwise null. Returns null for a non-generic
+    /// <c>IEnumerable</c>, whose element type says nothing worth following.
     /// </summary>
-    private static readonly System.Collections.Concurrent.ConcurrentDictionary<Type, FieldInfo[]> _ownedOptimizerFields = new();
+    private static Type? GetEnumerableElementType(Type candidate)
+    {
+        if (candidate == typeof(string)) return null;
+        if (candidate.IsArray) return candidate.GetElementType();
+
+        if (candidate.IsGenericType && candidate.GetGenericTypeDefinition() == typeof(IEnumerable<>))
+            return candidate.GetGenericArguments()[0];
+
+        foreach (var contract in candidate.GetInterfaces())
+            if (contract.IsGenericType && contract.GetGenericTypeDefinition() == typeof(IEnumerable<>))
+                return contract.GetGenericArguments()[0];
+
+        return null;
+    }
+
+    /// <summary>
+    /// Per-concrete-type cache behind <see cref="GetOwnedOptimizerPlan"/>. Static on the closed
+    /// generic, so each <typeparamref name="T"/> keeps its own entries and the assignability tests
+    /// baked into them stay correct.
+    /// </summary>
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<Type, OwnedOptimizerPlan> _ownedOptimizerFields = new();
 
     /// <summary>
     /// Persistent optimizer for models using the standard TrainStep pattern.
