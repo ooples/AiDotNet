@@ -177,12 +177,47 @@ public partial class SpectralNormalizationLayer<T> : LayerBase<T>, IShapeContrac
         // therefore had nowhere to put the saved vectors and silently kept its own random ones. With
         // a single power iteration by default the norm depends heavily on where it starts, so that
         // is the difference between a reloaded model and the one that was saved.
-        int weightCount = InnerWeightCount();
-        if (weightCount > 0)
+        SeedPowerIteration();
+    }
+
+    /// <summary>
+    /// Builds the iteration vectors and refines them once, so sigma is meaningful from the start.
+    /// </summary>
+    /// <remarks>
+    /// Power iteration begins at a RANDOM vector, and u^T W v on a random pair is an arbitrary
+    /// bilinear form -- near zero or negative as easily as not -- so dividing by it does not
+    /// normalize anything. In eval the vectors are deliberately frozen, which means a layer used for
+    /// inference before it ever trained divided its weights by that arbitrary number: the output
+    /// swung between -1.99 and 3.15 across a serialize round trip purely on which random pair each
+    /// instance drew. PyTorch leaves them random until the first training forward and inherits the
+    /// same hole; seeding here closes it.
+    /// </remarks>
+    private void SeedPowerIteration()
+    {
+        if (_innerLayer is not LayerBase<T> innerBase) return;
+
+        Tensor<T>? weight = null;
+        try
         {
-            int rows = (int)Math.Ceiling(Math.Sqrt(weightCount));
-            EnsurePowerIterationVectors(rows, (weightCount + rows - 1) / rows);
+            var tensors = innerBase.GetTrainableParameters();
+            for (int i = 0; i < tensors.Count; i++)
+            {
+                if (tensors[i] is { } candidate && candidate.Shape.Length >= 2) { weight = candidate; break; }
+            }
         }
+        catch (Exception)
+        {
+            // A lazy inner layer cannot be asked yet; the first forward seeds it instead.
+            return;
+        }
+
+        if (weight is null || weight.Length == 0) return;
+
+        int rows = weight.Shape[0];
+        int cols = weight.Length / rows;
+        EnsurePowerIterationVectors(rows, cols);
+        RefinePowerIterationVectors(
+            weight.Shape.Length == 2 ? weight : Engine.Reshape(weight, [rows, cols]), force: true);
     }
 
     /// <summary>Weights the inner layer holds, or zero while it cannot yet say.</summary>
@@ -363,7 +398,8 @@ public partial class SpectralNormalizationLayer<T> : LayerBase<T>, IShapeContrac
         epsilon[0, 0] = _epsilon;
         var denominator = Engine.TensorBroadcastAdd(sigma, epsilon);
 
-        var normalizedMatrix = Engine.TensorBroadcastDivide(matrix, denominator);
+        var reciprocal = Engine.TensorReciprocal(denominator);
+        var normalizedMatrix = Engine.TensorBroadcastMultiply(matrix, reciprocal);
         var normalizedWeight = weight.Shape.Length == 2
             ? normalizedMatrix
             : Engine.Reshape(normalizedMatrix, weight.Shape.ToArray());
@@ -390,9 +426,11 @@ public partial class SpectralNormalizationLayer<T> : LayerBase<T>, IShapeContrac
     }
 
     /// <summary>Refines u and v from the current weights, outside the gradient graph.</summary>
-    private void RefinePowerIterationVectors(Tensor<T> matrix)
+    /// <param name="matrix">The weight matrix to iterate against.</param>
+    /// <param name="force">Refine even outside training, used once at construction.</param>
+    private void RefinePowerIterationVectors(Tensor<T> matrix, bool force = false)
     {
-        if (!IsTrainingMode) return;
+        if (!force && !IsTrainingMode) return;
 
         int rows = matrix.Shape[0];
         int cols = matrix.Shape[1];
