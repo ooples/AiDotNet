@@ -5161,6 +5161,52 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
             return;
         }
 
+        // UNDER-POWERED, NOT TARGET-BLIND: re-measure with more steps before asserting.
+        //
+        // A deficit of EXACTLY zero means the two updates are bit-identical and no number of steps
+        // will separate them -- that is the defect this invariant exists to catch, and it still
+        // asserts immediately. A deficit that is non-zero but under the threshold is a different
+        // animal: the target IS steering the update, just by less than this many steps can resolve.
+        // Three steps of a float32 model cannot express a cosine deficit near 1e-11 at all.
+        //
+        // MEASURED on Informer (MeanSquaredError, 12,288 outputs): 3 steps give a cross deficit of
+        // 7.261E-011 against a perfectly deterministic control (self deficit 0), so the fixed 1e-9
+        // floor decides the outcome. At 12 steps the same model separates cleanly and passes. The
+        // other five families that reached this point sat at exactly 0.000E+000 and are unaffected.
+        //
+        // Escalating rather than lowering the threshold keeps the teeth: the cost is paid ONLY by a
+        // family that would otherwise be reported, and a genuinely target-blind model still fails.
+        if (crossDeficit > 0.0)
+        {
+            int escalatedSteps = Math.Max(4, Math.Max(1, TargetDependenceStepCount) * 4);
+            try
+            {
+                var escalatedA = MeanUpdateDirection(parameterProbe, network, input, targetA, escalatedSteps);
+                var escalatedA2 = MeanUpdateDirection(parameterProbe, network, input, targetA, escalatedSteps);
+                var escalatedB = MeanUpdateDirection(parameterProbe, network, input, targetB, escalatedSteps);
+                parameterProbe.Restore();
+
+                double escalatedSelf = VectorCosine(escalatedA, escalatedA2);
+                double escalatedCross = VectorCosine(escalatedA, escalatedB);
+                if (!double.IsNaN(escalatedSelf) && !double.IsNaN(escalatedCross))
+                {
+                    double escalatedSelfDeficit = 1.0 - escalatedSelf;
+                    double escalatedCrossDeficit = 1.0 - escalatedCross;
+                    if (escalatedCrossDeficit > Math.Max(
+                            escalatedSelfDeficit * TargetDependenceDeficitRatio, IdenticalDirectionEpsilon))
+                    {
+                        // The target does steer the update; the shorter run simply could not see it.
+                        return;
+                    }
+                }
+            }
+            catch (Exception)
+            {
+                // Escalation is an extra chance, never a new failure mode: fall through and assert
+                // on the measurement that was already taken.
+            }
+        }
+
         // LAST GUARD, and it runs only on the failing path so no passing family changes outcome.
         // Everything above compares the two targets with MeasureLoss, which scores the model's declared
         // objective on the target AS SUPPLIED. A model that TRANSFORMS the target before supervising on
@@ -5237,7 +5283,8 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
     /// entirely; the delta is the part that carries it.
     /// </remarks>
     private Vector<T> MeanUpdateDirection(
-        ParameterProbe probe, INeuralNetworkModel<T> network, Tensor<T> input, Tensor<T> target)
+        ParameterProbe probe, INeuralNetworkModel<T> network, Tensor<T> input, Tensor<T> target,
+        int stepOverride = -1)
     {
         var start = probe.Start;
         int repeats = Math.Max(1, TargetDependenceRepeatCount);
@@ -5274,7 +5321,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
                 break;
             }
 
-            var after = RunGradientStepFrom(probe, network, input, target);
+            var after = RunGradientStepFrom(probe, network, input, target, stepOverride);
             if (after.Length != start.Length) return new Vector<T>(0);
             for (int i = 0; i < start.Length; i++)
                 accumulator[i] += ConvertToDouble(after[i]) - ConvertToDouble(start[i]);
@@ -5656,12 +5703,13 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
     /// resulting parameters.
     /// </summary>
     private Vector<T> RunGradientStepFrom(
-        ParameterProbe probe, INeuralNetworkModel<T> network, Tensor<T> input, Tensor<T> target)
+        ParameterProbe probe, INeuralNetworkModel<T> network, Tensor<T> input, Tensor<T> target,
+        int stepOverride = -1)
     {
         probe.Restore();
         if (network is AiDotNet.NeuralNetworks.NeuralNetworkBase<T> neuralNetwork)
             neuralNetwork.ResetBaseTrainOptimizerState();
-        int steps = Math.Max(1, TargetDependenceStepCount);
+        int steps = Math.Max(1, stepOverride > 0 ? stepOverride : TargetDependenceStepCount);
         for (int i = 0; i < steps; i++) network.Train(input, target);
         return probe.SampleCurrent();
     }
