@@ -1909,6 +1909,15 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         // instead, and let a declared child contribute its output width to whatever follows it.
         var declared = DeclaredSubLayerShapes();
 
+        // EMPTY MEANS TWO DIFFERENT THINGS and only HasDeclaredSubLayerStructure separates them. A
+        // layer that declares widths returns empty while any declared child is still null, which is
+        // the ordinary state PART-WAY THROUGH ITS OWN CONSTRUCTOR -- and registration happens there,
+        // so the chain ran at exactly that moment, sized the children it could already see from this
+        // layer's own input, and those wrong widths stuck. WordCharEmbedding's word projection came
+        // up 7 wide, the packed id width, against the 10-wide vocabulary its checkpoint holds.
+        // Waiting costs nothing: whoever needs the shapes asks again once the declaration is ready.
+        if (declared is { Count: 0 } && HasDeclaredSubLayerStructure) return;
+
         var subs = GetSubLayers();
         if (subs is null || subs.Count == 0) return;
 
