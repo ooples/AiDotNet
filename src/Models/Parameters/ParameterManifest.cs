@@ -68,19 +68,6 @@ public enum ParameterSlotRole
     /// <summary>Fitted state that is restored but is not updated by a gradient optimizer.</summary>
     LearnedState,
 
-    /// <summary>
-    /// Fitted state whose extent comes from the caller's data, so it is restored by name but never
-    /// joins the flat parameter vector.
-    /// </summary>
-    /// <remarks>
-    /// <see cref="LearnedState"/> is sized once at construction, which is what lets it travel in
-    /// the flat vector alongside the weights. A graph layer's adjacency matrix is sized by the
-    /// graph it was handed, so counting it there would make ParameterCount change under a forward
-    /// pass and would bind a checkpoint to the node count it was trained on. Same persistence, but
-    /// deliberately outside the count.
-    /// </remarks>
-    InputSizedState,
-
     /// <summary>Persistent auxiliary state that is neither fitted nor optimizer-updated.</summary>
     Buffer,
 
@@ -97,7 +84,28 @@ public enum ParameterSlotRole
     Scratch,
 
     /// <summary>State owned by an external runtime, such as a loaded ONNX graph.</summary>
-    External
+    External,
+
+    /// <summary>
+    /// Fitted state whose extent comes from the caller's data, so it is restored by name but never
+    /// joins the flat parameter vector.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <see cref="LearnedState"/> is sized once at construction, which is what lets it travel in
+    /// the flat vector alongside the weights. A graph layer's adjacency matrix is sized by the
+    /// graph it was handed, so counting it there would make ParameterCount change under a forward
+    /// pass and would bind a checkpoint to the node count it was trained on. Same persistence, but
+    /// deliberately outside the count.
+    /// </para>
+    /// <para>
+    /// APPENDED, not inserted. These members are compared and stored as ordinals in places that do
+    /// not all travel together, so adding one in the middle silently renumbers every later role --
+    /// slotting it after LearnedState turned every [Buffer] into a Frozen slot and made a graph
+    /// model refuse to report its parameters at all.
+    /// </para>
+    /// </remarks>
+    InputSizedState
 }
 
 /// <summary>Declares which mechanism is allowed to change a numeric state slot.</summary>
