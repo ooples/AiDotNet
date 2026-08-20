@@ -139,8 +139,6 @@ public partial class LogLinearAttentionLayer<T> : LayerBase<T>, IShapeContract
     private Tensor<T>? _lastGate;
     private Tensor<T>? _lastGateRaw;
     private Tensor<T>? _lastLogLinearOutput;
-    private Tensor<T>? _lastLevelOutputs; // [batch, seqLen, numHeads, numLevels, headDim]
-    private Tensor<T>? _lastLevelMixSoftmax; // [batch, seqLen, numHeads, numLevels]
     private int[]? _originalInputShape;
 
     // Gradients
@@ -369,167 +367,119 @@ public partial class LogLinearAttentionLayer<T> : LayerBase<T>, IShapeContract
     /// <summary>
     /// Log-linear forward: hierarchical state accumulation with periodic compression.
     /// </summary>
+    /// <remarks>
+    /// <code>
+    ///   S_0    += v_t (x) (k_t / sqrt(d))                     every step
+    ///   O_t     = sum_l alpha[h,l] * (S_l * q_t)              alpha = softmax_l(levelMixWeights)
+    ///   S_{l+1} += C_l * S_l ; S_l = 0                        every B_l steps, B_l = base^(l+1)
+    /// </code>
+    /// Built from Engine ops so the whole thing stays on the autodiff tape. The NumOps scalar loop
+    /// this replaces was detached from it, so q/k/v with their biases, the level-mix weights and the
+    /// compression weights - 8 of this layer's 12 trainable tensors - received no gradient and never
+    /// learned. The layer has no Backward override, so the tape was its only gradient path.
+    /// The compression schedule depends only on the timestep, never on the data, so the counters and
+    /// block sizes stay ordinary control flow; only the tensor math needed to move onto the tape.
+    /// </remarks>
     private Tensor<T> LogLinearForward(
         Tensor<T> q, Tensor<T> k, Tensor<T> v,
         int batchSize, int seqLen)
     {
-        var output = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
+        int headBatch = batchSize * _numHeads;
+        T keyScale = NumOps.FromDouble(1.0 / Math.Sqrt(_headDimension));
 
-        // State per level per head: S_l [headDim, headDim]
-        // states[batch, head, level, headDim, headDim]
-        var states = new T[batchSize, _numHeads, _numLevels, _headDimension, _headDimension];
+        var qHeads = ToHeadMajor(q, batchSize, seqLen);                         // [HB, S, D]
+        var kHeads = Engine.TensorMultiplyScalar(ToHeadMajor(k, batchSize, seqLen), keyScale);
+        var vHeads = ToHeadMajor(v, batchSize, seqLen);
 
-        // Counters for when to compress each level
-        var levelCounters = new int[_numLevels];
+        // Level mixing is per head and constant across batch and time: softmax over levels.
+        var levelAlpha = Engine.Softmax(_levelMixWeights, axis: -1);            // [H, L]
 
-        // Block sizes: B_l = baseBlockSize^(l+1)
+        // One state matrix per level, shared shape [HB, D, D], all starting at zero.
+        var states = new Tensor<T>[_numLevels];
+        for (int l = 0; l < _numLevels; l++)
+            states[l] = Tensor<T>.CreateDefault(
+                new[] { headBatch, _headDimension, _headDimension }, NumOps.Zero);
+
+        // B_l = baseBlockSize^(l+1), capped so a level never fires past the sequence.
         var blockSizes = new int[_numLevels];
         for (int l = 0; l < _numLevels; l++)
-        {
-            blockSizes[l] = (int)Math.Pow(_baseBlockSize, l + 1);
-            // Ensure block sizes do not exceed int range by capping
-            blockSizes[l] = Math.Min(blockSizes[l], seqLen + 1);
-        }
+            blockSizes[l] = Math.Min((int)Math.Pow(_baseBlockSize, l + 1), seqLen + 1);
+        var levelCounters = new int[_numLevels];
 
-        // Precompute softmax of level mixing weights per head
-        var levelAlpha = new T[_numHeads, _numLevels];
-        var levelOutputs = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _numHeads, _numLevels, _headDimension });
-        var levelMixSoftmax = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _numHeads, _numLevels });
-
-        for (int hi = 0; hi < _numHeads; hi++)
-        {
-            // Softmax over levels
-            T maxVal = _levelMixWeights[new[] { hi, 0 }];
-            for (int l = 1; l < _numLevels; l++)
-            {
-                T w = _levelMixWeights[new[] { hi, l }];
-                if (NumOps.GreaterThan(w, maxVal))
-                    maxVal = w;
-            }
-
-            T sumExp = NumOps.Zero;
-            for (int l = 0; l < _numLevels; l++)
-            {
-                T expVal = NumOps.Exp(NumOps.Subtract(_levelMixWeights[new[] { hi, l }], maxVal));
-                levelAlpha[hi, l] = expVal;
-                sumExp = NumOps.Add(sumExp, expVal);
-            }
-
-            for (int l = 0; l < _numLevels; l++)
-                levelAlpha[hi, l] = NumOps.Divide(levelAlpha[hi, l], sumExp);
-        }
-
-        T keyScale = NumOps.FromDouble(1.0 / Math.Sqrt(_headDimension));
+        var outputs = new List<Tensor<T>>(seqLen);
 
         for (int t = 0; t < seqLen; t++)
         {
-            for (int hi = 0; hi < _numHeads; hi++)
+            var qCol = Engine.Reshape(Engine.TensorSliceAxis(qHeads, 1, t),
+                new[] { headBatch, _headDimension, 1 });
+            var kRow = Engine.Reshape(Engine.TensorSliceAxis(kHeads, 1, t),
+                new[] { headBatch, 1, _headDimension });
+            var vCol = Engine.Reshape(Engine.TensorSliceAxis(vHeads, 1, t),
+                new[] { headBatch, _headDimension, 1 });
+
+            // Level 0 accumulates the key-value outer product at every step.
+            states[0] = Engine.TensorAdd(states[0], Engine.BatchMatMul(vCol, kRow));
+
+            // Read every level and mix by the per-head level weights. Level 0 seeds the sum so the
+            // accumulator is non-null by construction (there is always at least one level).
+            var combined = Engine.TensorMultiply(
+                Engine.BatchMatMul(states[0], qCol),                             // [HB, D, 1]
+                BroadcastPerHead(levelAlpha, 0, batchSize));
+            for (int l = 1; l < _numLevels; l++)
             {
-                int dimStart = hi * _headDimension;
-
-                for (int bi = 0; bi < batchSize; bi++)
-                {
-                    // Extract key, value for this head
-                    var kHead = new T[_headDimension];
-                    var vHead = new T[_headDimension];
-                    for (int di = 0; di < _headDimension; di++)
-                    {
-                        kHead[di] = NumOps.Multiply(k[new[] { bi, t, dimStart + di }], keyScale);
-                        vHead[di] = v[new[] { bi, t, dimStart + di }];
-                    }
-
-                    // Accumulate key-value outer product into Level 0
-                    for (int di = 0; di < _headDimension; di++)
-                        for (int dj = 0; dj < _headDimension; dj++)
-                            states[bi, hi, 0, di, dj] = NumOps.Add(
-                                states[bi, hi, 0, di, dj],
-                                NumOps.Multiply(vHead[di], kHead[dj]));
-
-                    // Query all levels and combine with mixing weights
-                    var qHead = new T[_headDimension];
-                    for (int di = 0; di < _headDimension; di++)
-                        qHead[di] = q[new[] { bi, t, dimStart + di }];
-
-                    var combinedOutput = new T[_headDimension];
-                    for (int l = 0; l < _numLevels; l++)
-                    {
-                        T alpha = levelAlpha[hi, l];
-
-                        // Save per-level softmax for backward
-                        levelMixSoftmax[new[] { bi, t, hi, l }] = alpha;
-
-                        // S_l * q
-                        for (int di = 0; di < _headDimension; di++)
-                        {
-                            T slq = NumOps.Zero;
-                            for (int dj = 0; dj < _headDimension; dj++)
-                                slq = NumOps.Add(slq,
-                                    NumOps.Multiply(states[bi, hi, l, di, dj], qHead[dj]));
-
-                            // Save per-level output for backward
-                            levelOutputs[new[] { bi, t, hi, l, di }] = slq;
-
-                            combinedOutput[di] = NumOps.Add(combinedOutput[di],
-                                NumOps.Multiply(alpha, slq));
-                        }
-                    }
-
-                    for (int di = 0; di < _headDimension; di++)
-                        output[new[] { bi, t, dimStart + di }] = combinedOutput[di];
-                }
+                var levelOut = Engine.BatchMatMul(states[l], qCol);
+                combined = Engine.TensorAdd(combined,
+                    Engine.TensorMultiply(levelOut, BroadcastPerHead(levelAlpha, l, batchSize)));
             }
+            outputs.Add(Engine.Reshape(combined, new[] { headBatch, 1, _headDimension }));
 
-            // Periodic compression: check if any level should be compressed
+            // Periodic compression, promoting each full level into the next one.
             levelCounters[0]++;
             for (int l = 0; l < _numLevels - 1; l++)
             {
-                if (levelCounters[l] >= blockSizes[l])
-                {
-                    // Compress level l and promote to level l+1
-                    for (int hi = 0; hi < _numHeads; hi++)
-                    {
-                        for (int bi = 0; bi < batchSize; bi++)
-                        {
-                            // Compressed state = C_l * S_l where C_l is the compression matrix
-                            var compressed = new T[_headDimension, _headDimension];
-                            for (int di = 0; di < _headDimension; di++)
-                            {
-                                for (int dj = 0; dj < _headDimension; dj++)
-                                {
-                                    T val = NumOps.Zero;
-                                    for (int dk = 0; dk < _headDimension; dk++)
-                                        val = NumOps.Add(val,
-                                            NumOps.Multiply(
-                                                _compressionWeights[new[] { l, di, dk }],
-                                                states[bi, hi, l, dk, dj]));
-                                    compressed[di, dj] = val;
-                                }
-                            }
-
-                            // Add compressed state to level l+1
-                            for (int di = 0; di < _headDimension; di++)
-                                for (int dj = 0; dj < _headDimension; dj++)
-                                    states[bi, hi, l + 1, di, dj] = NumOps.Add(
-                                        states[bi, hi, l + 1, di, dj],
-                                        compressed[di, dj]);
-
-                            // Reset level l
-                            for (int di = 0; di < _headDimension; di++)
-                                for (int dj = 0; dj < _headDimension; dj++)
-                                    states[bi, hi, l, di, dj] = NumOps.Zero;
-                        }
-                    }
-
-                    levelCounters[l + 1]++;
-                    levelCounters[l] = 0;
-                }
+                if (levelCounters[l] < blockSizes[l]) continue;
+                var cl = Engine.TensorTile(
+                    Engine.Reshape(
+                        Engine.TensorSlice(_compressionWeights,
+                            new[] { l, 0, 0 }, new[] { 1, _headDimension, _headDimension }),
+                        new[] { 1, _headDimension, _headDimension }),
+                    new[] { headBatch, 1, 1 });
+                states[l + 1] = Engine.TensorAdd(states[l + 1], Engine.BatchMatMul(cl, states[l]));
+                // Reset: the level genuinely restarts, so no gradient should flow past this point.
+                states[l] = Tensor<T>.CreateDefault(
+                    new[] { headBatch, _headDimension, _headDimension }, NumOps.Zero);
+                levelCounters[l + 1]++;
+                levelCounters[l] = 0;
             }
         }
 
-        _lastLevelOutputs = levelOutputs;
-        _lastLevelMixSoftmax = levelMixSoftmax;
-        return output;
+        return FromHeadMajor(Engine.TensorConcatenate(outputs.ToArray(), 1), batchSize, seqLen);
     }
+
+    /// <summary>
+    /// Takes column <paramref name="level"/> of a per-head [numHeads, numLevels] tensor and lays it
+    /// out as [batch*numHeads, 1, 1], matching the head-major ordering (index = b*numHeads + h).
+    /// </summary>
+    private Tensor<T> BroadcastPerHead(Tensor<T> perHeadLevel, int level, int batchSize) =>
+        Engine.Reshape(
+            Engine.TensorTile(
+                Engine.Reshape(
+                    Engine.TensorSlice(perHeadLevel, new[] { 0, level }, new[] { _numHeads, 1 }),
+                    new[] { 1, _numHeads, 1 }),
+                new[] { batchSize, 1, 1 }),
+            new[] { batchSize * _numHeads, 1, 1 });
+
+    private Tensor<T> ToHeadMajor(Tensor<T> value, int batchSize, int seqLen) =>
+        Engine.Reshape(Engine.TensorPermute(
+            Engine.Reshape(value, new[] { batchSize, seqLen, _numHeads, _headDimension }),
+            new[] { 0, 2, 1, 3 }),
+            new[] { batchSize * _numHeads, seqLen, _headDimension });
+
+    private Tensor<T> FromHeadMajor(Tensor<T> value, int batchSize, int seqLen) =>
+        Engine.Reshape(Engine.TensorPermute(
+            Engine.Reshape(value, new[] { batchSize, _numHeads, seqLen, _headDimension }),
+            new[] { 0, 2, 1, 3 }),
+            new[] { batchSize, seqLen, _modelDimension });
 
     private Tensor<T> ComputeSiLUDerivative(Tensor<T> x)
     {
@@ -628,8 +578,6 @@ public partial class LogLinearAttentionLayer<T> : LayerBase<T>, IShapeContract
         _lastGate = null;
         _lastGateRaw = null;
         _lastLogLinearOutput = null;
-        _lastLevelOutputs = null;
-        _lastLevelMixSoftmax = null;
         _originalInputShape = null;
         _queryWeightsGradient = null;
         _queryBiasGradient = null;
