@@ -443,12 +443,15 @@ public partial class SileroVad<T> : AudioNeuralNetworkBase<T>, IVoiceActivityDet
             var frame = new T[_frameSize];
             Array.Copy(samples, i, frame, 0, _frameSize);
 
-            // Create tensor from frame data
-            var frameTensor = new Tensor<T>([_frameSize]);
-            var frameVector = frameTensor.ToVector();
+            // Create tensor from frame data. Tensor.ToVector() hands back a COPY, so
+            // the samples have to be written into the tensor's own storage -- the same
+            // mistake PreprocessAudio documents, which left every frame all zeros and
+            // scored silence no matter what the caller passed in.
+            using var frameTensor = new Tensor<T>([_frameSize]);
+            var frameSpan = frameTensor.Data.Span;
             for (int j = 0; j < _frameSize; j++)
             {
-                frameVector[j] = frame[j];
+                frameSpan[j] = frame[j];
             }
 
             var prob = GetSpeechProbability(frameTensor);
@@ -506,12 +509,13 @@ public partial class SileroVad<T> : AudioNeuralNetworkBase<T>, IVoiceActivityDet
             var frame = new T[_frameSize];
             Array.Copy(samples, i * _frameSize, frame, 0, _frameSize);
 
-            // Create tensor from frame data
-            var frameTensor = new Tensor<T>([_frameSize]);
-            var frameVector = frameTensor.ToVector();
+            // Create tensor from frame data. As above, write into the tensor's storage:
+            // ToVector() returns a copy and assigning into it leaves the tensor zeroed.
+            using var frameTensor = new Tensor<T>([_frameSize]);
+            var frameSpan = frameTensor.Data.Span;
             for (int j = 0; j < _frameSize; j++)
             {
-                frameVector[j] = frame[j];
+                frameSpan[j] = frame[j];
             }
 
             probabilities[i] = GetSpeechProbability(frameTensor);
