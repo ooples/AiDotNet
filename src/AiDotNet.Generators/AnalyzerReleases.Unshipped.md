@@ -75,3 +75,4 @@ AIDN095 | AiDotNet.ParameterAutomation | Warning | TrainableParameterGenerator, 
 AIDN096 | AiDotNet.FacadeConfiguration | Warning | FacadeConfigurationValidationGenerator, Configure* method stores a value nothing ever reads
 AIDN097 | AiDotNet.FacadeConfiguration | Warning | FacadeConfigurationValidationGenerator, Configured value is only reachable through an accessor nobody calls
 AIDN098 | AiDotNet.ParameterAutomation | Warning | TrainableParameterGenerator, Declared parameter axis cannot be proven resolved
+AIDN099 | AiDotNet.ParameterAutomation | Warning | TrainableParameterGenerator, [TrainableParameter] on a non-partial class does nothing
