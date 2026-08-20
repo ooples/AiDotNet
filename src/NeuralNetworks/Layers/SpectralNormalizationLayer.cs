@@ -312,80 +312,111 @@ public partial class SpectralNormalizationLayer<T> : LayerBase<T>, IShapeContrac
     {
         _lastInput = ShouldCacheForBackward ? input : null; // #1668: skip in inference (arena safety)
 
-        // Get weights from inner layer
-        var parameters = _innerLayer.GetParameters();
-        int paramCount = parameters.Length;
-
-        if (paramCount == 0)
+        // The normalization runs on the inner layer's LIVE weight tensor and the quotient is bound
+        // back in its place, which is how PyTorch's spectral_norm parametrization works. The previous
+        // form copied the weights into a Vector, divided the numbers with NumOps and wrote them back
+        // through SetParameters, so the tape never saw the division: sigma depends on W, and the
+        // analytical gradient was missing that dependence entirely while finite differences measured
+        // it. It also meant the layer mutated the module it wraps.
+        if (_innerLayer is not LayerBase<T> innerBase)
         {
-            // No parameters to normalize, just forward through inner layer
-            var result = _innerLayer.Forward(input);
-            _lastOutput = result;
-            return result;
+            var passthrough = _innerLayer.Forward(input);
+            _lastOutput = passthrough;
+            return passthrough;
         }
 
-        // Store original parameters to restore after Backward
-        _originalParameters = parameters.Clone();
-
-        int biasCount = GetBiasCount(paramCount);
-        int weightCount = paramCount - biasCount;
-
-        // Reshape weight parameters into 2D matrix for spectral norm computation
-        // Use square-ish shape to minimize condition number issues
-        int rows = (int)Math.Ceiling(Math.Sqrt(weightCount));
-        int cols = (weightCount + rows - 1) / rows;
-
-        // Create weight tensor [rows, cols] with zero-padding if needed
-        var weights = new Tensor<T>([rows, cols]);
-        for (int i = 0; i < rows; i++)
+        var tensors = innerBase.GetTrainableParameters();
+        int weightIndex = -1;
+        for (int i = 0; i < tensors.Count; i++)
         {
-            for (int j = 0; j < cols; j++)
-            {
-                int idx = i * cols + j;
-                weights[new int[] { i, j }] = idx < weightCount ? parameters[idx] : NumOps.Zero;
-            }
+            if (tensors[i] is { } candidate && candidate.Shape.Length >= 2) { weightIndex = i; break; }
         }
+
+        if (weightIndex < 0)
+        {
+            var unnormalized = _innerLayer.Forward(input);
+            _lastOutput = unnormalized;
+            return unnormalized;
+        }
+
+        var weight = tensors[weightIndex];
+        int rows = weight.Shape[0];
+        int cols = weight.Length / rows;
+        var matrix = weight.Shape.Length == 2 ? weight : Engine.Reshape(weight, [rows, cols]);
 
         EnsurePowerIterationVectors(rows, cols);
 
-        // Compute spectral norm
-        T spectralNorm = ComputeSpectralNorm(weights);
-        T normPlusEps = NumOps.Add(spectralNorm, _epsilon);
+        // Power iteration refines u and v from the CURRENT weights and, per the paper and every
+        // reference implementation, contributes no gradient of its own: it is an estimate of the
+        // singular vectors, not a function being differentiated. Detaching keeps sigma's gradient to
+        // the weight alone. Updated only while training, so inference is reproducible.
+        RefinePowerIterationVectors(matrix);
 
-        // Normalize weight parameters by spectral norm
-        var normalizedParams = new Vector<T>(paramCount);
-        for (int i = 0; i < weightCount; i++)
-        {
-            normalizedParams[i] = NumOps.Divide(parameters[i], normPlusEps);
-        }
+        var u = _u ?? throw new InvalidOperationException("Power iteration vector u has not been initialized.");
+        var v = _v ?? throw new InvalidOperationException("Power iteration vector v has not been initialized.");
 
-        // Copy bias parameters unchanged
-        for (int i = weightCount; i < paramCount; i++)
-        {
-            normalizedParams[i] = parameters[i];
-        }
+        // sigma = u^T W v, built from the live weight so the tape carries d(sigma)/dW.
+        var wv = Engine.TensorMatMul(matrix, Engine.Reshape(v, [cols, 1]));          // [rows, 1]
+        var sigma = Engine.TensorMatMul(Engine.Reshape(u, [1, rows]), wv);           // [1, 1]
 
-        _innerLayer.SetParameters(normalizedParams);
-        _normalizedWeightsApplied = true;
+        var epsilon = new Tensor<T>([1, 1]);
+        epsilon[0, 0] = _epsilon;
+        var denominator = Engine.TensorBroadcastAdd(sigma, epsilon);
 
-        // RESTORED IN A FINALLY, not only when the forward throws. Restoring solely on the
-        // exception path left the inner layer holding NORMALIZED weights after every ordinary
-        // forward, so each pass divided them by the spectral norm again: the weights decayed
-        // pass over pass, GetParameters handed back the shrunken values, and a checkpoint
-        // written after a forward reloaded into a layer that normalized them once more. It
-        // surfaced as the layer changing its own output across a serialize round trip.
-        // The tape already recorded the values it needs, so putting the originals back now
-        // costs the backward pass nothing.
+        var normalizedMatrix = Engine.TensorBroadcastDivide(matrix, denominator);
+        var normalizedWeight = weight.Shape.Length == 2
+            ? normalizedMatrix
+            : Engine.Reshape(normalizedMatrix, weight.Shape.ToArray());
+
+        var rebound = new Tensor<T>[tensors.Count];
+        for (int i = 0; i < tensors.Count; i++) rebound[i] = tensors[i];
+        rebound[weightIndex] = normalizedWeight;
+
+        var originals = new Tensor<T>[tensors.Count];
+        for (int i = 0; i < tensors.Count; i++) originals[i] = tensors[i];
+
+        innerBase.SetTrainableParameters(rebound);
         try
         {
-            // Forward through inner layer with normalized weights
             _lastOutput = _innerLayer.Forward(input);
             return _lastOutput;
         }
         finally
         {
-            RestoreOriginalWeights();
+            // The wrapped layer keeps the weights it came with. Leaving the quotient bound would
+            // divide them again on the next pass, which is how they used to decay pass over pass.
+            innerBase.SetTrainableParameters(originals);
         }
+    }
+
+    /// <summary>Refines u and v from the current weights, outside the gradient graph.</summary>
+    private void RefinePowerIterationVectors(Tensor<T> matrix)
+    {
+        if (!IsTrainingMode) return;
+
+        int rows = matrix.Shape[0];
+        int cols = matrix.Shape[1];
+        var u = _u;
+        var v = _v;
+        if (u is null || v is null) return;
+
+        // Values only: a detached copy, so nothing here reaches the tape.
+        var detached = Tensor<T>.FromVector(matrix.ToVector()).Reshape(rows, cols);
+        var transposed = Engine.TensorTranspose(detached);
+
+        for (int iteration = 0; iteration < _powerIterations; iteration++)
+        {
+            var next = Engine.TensorMatMul(transposed, u.Reshape(rows, 1)).Reshape(cols);
+            NormalizeVector(ref next);
+            v = next;
+
+            var refreshed = Engine.TensorMatMul(detached, v.Reshape(cols, 1)).Reshape(rows);
+            NormalizeVector(ref refreshed);
+            u = refreshed;
+        }
+
+        _u = u;
+        _v = v;
     }
 
     /// <summary>
