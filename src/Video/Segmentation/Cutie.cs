@@ -645,22 +645,63 @@ public class Cutie<T> : NeuralNetworkBase<T>
         if (_memoryBank.Count > 0)
         {
             T scale = NumOps.FromDouble(1.0 / Math.Sqrt(query.Shape[1]));
-            Tensor<T>? accumulated = null;
-            foreach (var (key, value) in _memoryBank)
+
+            // STABLE, NORMALISED SOFTMAX OVER THE MEMORY BANK. This read-out previously did
+            //     weight = exp(score * scale)                       (no max subtraction)
+            //     attended = sum_k value_k * weight_k / memoryCount (divide by COUNT, not by the sum)
+            // which departs from the reference read-out in two independent ways.
+            //
+            // 1. NO MAX SUBTRACTION. exp() of an unshifted score overflows to +Infinity as soon as the
+            //    scaled dot product grows, and the accumulation then carries Infinity into the decoder,
+            //    where Infinity * 0 or Infinity / Infinity becomes NaN. XMem/Cutie (Cheng et al.)
+            //    computes affinity in memory_util.py as
+            //        maxes = torch.max(similarity, dim=1, keepdim=True)[0]
+            //        x_exp = torch.exp(similarity - maxes)
+            //    and labels it "softmax in a numerically stable way". Subtracting the elementwise max
+            //    over the memory entries leaves every exponent <= 0, so the largest term is exactly 1
+            //    and nothing can overflow. The shift cancels in the ratio, so the result is unchanged
+            //    in exact arithmetic -- this is a stability fix, not a behaviour change.
+            //
+            // 2. WRONG NORMALISER. A softmax divides by the SUM of the exponentials so the weights sum
+            //    to one; dividing by the number of memory entries leaves them unnormalised, so the
+            //    read-out's magnitude scales with how large the scores happen to be and grows without
+            //    bound as memory accumulates. That unbounded read-out is what turned a finite first
+            //    step (loss 0.578) into NaN a few steps later.
+            //
+            // Two passes are needed because the max must be known before any exponential is taken.
+            var scaledScores = new List<Tensor<T>>(_memoryBank.Count);
+            Tensor<T>? maxScore = null;
+            foreach (var (key, _) in _memoryBank)
             {
                 // score[b,1,h,w] = sum_c query*key  (reduce over the channel axis, keep it for broadcast).
-                var score = Engine.ReduceSum(Engine.TensorMultiply(query, key), new[] { 1 }, keepDims: true);
-                var weight = Engine.TensorExp(Engine.TensorMultiplyScalar(score, scale)); // [b,1,h,w]
-                var term = Engine.TensorBroadcastMultiply(value, weight);                 // [b,C,h,w]
-                accumulated = accumulated is null ? term : Engine.TensorAdd(accumulated, term);
+                var score = Engine.TensorMultiplyScalar(
+                    Engine.ReduceSum(Engine.TensorMultiply(query, key), new[] { 1 }, keepDims: true), scale);
+                scaledScores.Add(score);
+                maxScore = maxScore is null ? score : Engine.TensorMax(maxScore, score);
             }
+
             // The loop above runs at least once because this branch is only entered for a
-            // non-empty bank, so accumulated is set. Assert it rather than suppress, so a change
+            // non-empty bank, so maxScore is set. Assert it rather than suppress, so a change
             // to the enclosing condition surfaces here instead of as a NullReferenceException.
-            if (accumulated is null)
+            if (maxScore is null)
                 throw new InvalidOperationException("Memory readout accumulated no terms despite a non-empty memory bank.");
 
-            attended = Engine.TensorMultiplyScalar(accumulated, NumOps.FromDouble(1.0 / _memoryBank.Count));
+            Tensor<T>? accumulated = null;
+            Tensor<T>? weightSum = null;
+            for (int k = 0; k < scaledScores.Count; k++)
+            {
+                var weight = Engine.TensorExp(Engine.TensorSubtract(scaledScores[k], maxScore)); // [b,1,h,w], max term == 1
+                var term = Engine.TensorBroadcastMultiply(_memoryBank[k].Value, weight);          // [b,C,h,w]
+                accumulated = accumulated is null ? term : Engine.TensorAdd(accumulated, term);
+                weightSum = weightSum is null ? weight : Engine.TensorAdd(weightSum, weight);
+            }
+
+            if (accumulated is null || weightSum is null)
+                throw new InvalidOperationException("Memory readout accumulated no terms despite a non-empty memory bank.");
+
+            // Divide by the softmax denominator. weightSum >= 1 everywhere (the max term contributes
+            // exactly exp(0) = 1), so this division is always well defined -- no epsilon needed.
+            attended = Engine.TensorBroadcastDivide(accumulated, weightSum);
         }
 
         // ALWAYS run the memory-attention layers (indices 10-13), even when the memory bank is empty, so
