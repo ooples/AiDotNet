@@ -90,13 +90,18 @@ public partial class SpectralNormalizationLayer<T> : LayerBase<T>, IShapeContrac
     /// <summary>
     /// The left singular vector used for power iteration to compute the spectral norm.
     /// </summary>
-    [AiDotNet.Attributes.Scratch]
+    // A BUFFER, not scratch. Power iteration starts from a RANDOM vector and refines it, and the
+    // spectral norm it converges to is what divides the weights -- so a layer that regenerates it
+    // on load computes a different norm and predicts differently from the model that was saved.
+    // Marked scratch, it was dropped from the checkpoint and the restored layer's output moved
+    // from 0.664 to 0.355. This is the same reason PyTorch registers u and v as buffers.
+    [AiDotNet.Attributes.Buffer]
     private Tensor<T>? _u;
 
     /// <summary>
     /// The right singular vector used for power iteration.
     /// </summary>
-    [AiDotNet.Attributes.Scratch]
+    [AiDotNet.Attributes.Buffer]
     private Tensor<T>? _v;
 
     /// <summary>
@@ -166,7 +171,34 @@ public partial class SpectralNormalizationLayer<T> : LayerBase<T>, IShapeContrac
         _powerIterations = powerIterations;
         _epsilon = NumOps.FromDouble(1e-12);
 
-        // u and v are lazily initialized based on the actual weight matrix shape.
+        // Built HERE rather than on the first forward, whenever the inner layer can already say how
+        // many weights it has. A buffer is registered only if it is non-null, so leaving these until
+        // the first forward meant a freshly constructed layer had no slot for them -- and a restore
+        // therefore had nowhere to put the saved vectors and silently kept its own random ones. With
+        // a single power iteration by default the norm depends heavily on where it starts, so that
+        // is the difference between a reloaded model and the one that was saved.
+        int weightCount = InnerWeightCount();
+        if (weightCount > 0)
+        {
+            int rows = (int)Math.Ceiling(Math.Sqrt(weightCount));
+            EnsurePowerIterationVectors(rows, (weightCount + rows - 1) / rows);
+        }
+    }
+
+    /// <summary>Weights the inner layer holds, or zero while it cannot yet say.</summary>
+    private int InnerWeightCount()
+    {
+        try
+        {
+            int paramCount = _innerLayer.GetParameters().Length;
+            return paramCount == 0 ? 0 : paramCount - GetBiasCount(paramCount);
+        }
+        catch (Exception)
+        {
+            // A lazy inner layer that has not resolved cannot be asked yet; the first forward will
+            // build the vectors as before.
+            return 0;
+        }
     }
 
     /// <summary>
@@ -336,17 +368,23 @@ public partial class SpectralNormalizationLayer<T> : LayerBase<T>, IShapeContrac
         _innerLayer.SetParameters(normalizedParams);
         _normalizedWeightsApplied = true;
 
+        // RESTORED IN A FINALLY, not only when the forward throws. Restoring solely on the
+        // exception path left the inner layer holding NORMALIZED weights after every ordinary
+        // forward, so each pass divided them by the spectral norm again: the weights decayed
+        // pass over pass, GetParameters handed back the shrunken values, and a checkpoint
+        // written after a forward reloaded into a layer that normalized them once more. It
+        // surfaced as the layer changing its own output across a serialize round trip.
+        // The tape already recorded the values it needs, so putting the originals back now
+        // costs the backward pass nothing.
         try
         {
             // Forward through inner layer with normalized weights
             _lastOutput = _innerLayer.Forward(input);
             return _lastOutput;
         }
-        catch
+        finally
         {
-            // Restore original weights on exception
             RestoreOriginalWeights();
-            throw;
         }
     }
 
@@ -439,11 +477,10 @@ public partial class SpectralNormalizationLayer<T> : LayerBase<T>, IShapeContrac
             }
             throw new InvalidOperationException("Inner layer does not support ForwardGpu.");
         }
-        catch
+        finally
         {
-            // Restore original weights on exception
+            // Same reason as the traced path above: the inner weights must not stay normalized.
             RestoreOriginalWeights();
-            throw;
         }
     }
 
