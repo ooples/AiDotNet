@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Tensors;
@@ -109,5 +110,47 @@ public class QuantumNeuralNetworkTests : NeuralNetworkModelTestBase<float>
             "Quantum network output didn't change when input direction was perturbed. "
             + "Forward pass may ignore input values (note: scalar scaling is a no-op for "
             + "unit-norm-encoded quantum networks; this test perturbs the input DIRECTION instead).");
+    }
+
+    [Fact]
+    public void LargeFiniteInput_DoesNotCollapseTheQuantumStateToZero()
+    {
+        using var network = CreateNetwork();
+        var input = new Tensor<float>(InputShape);
+        for (int i = 0; i < input.Length; i++)
+            input[i] = (i & 1) == 0 ? float.MaxValue : -float.MaxValue;
+
+        var output = network.Predict(input);
+
+        Assert.All(output.ToArray(), value => Assert.True(float.IsFinite(value)));
+        Assert.Contains(output.ToArray(), value => value > 0.0f);
+    }
+
+    [Fact]
+    public void BornRuleTargets_AreProjectedOntoTheProbabilitySimplex()
+    {
+        using var network = CreateNetwork();
+        var target = new Tensor<float>([3]);
+        target[0] = -2.0f;
+        target[1] = 1.0f;
+        target[2] = -1.0f;
+
+        var projected = MakeTargetWellPosedForLoss(network, target, new Random(1));
+
+        Assert.Equal(0.5f, projected[0], 6);
+        Assert.Equal(0.25f, projected[1], 6);
+        Assert.Equal(0.25f, projected[2], 6);
+        Assert.Equal(1.0f, projected.ToArray().Sum(), 6);
+    }
+
+    [Fact]
+    public void ZeroBornRuleTarget_UsesAUniformDistribution()
+    {
+        using var network = CreateNetwork();
+        var target = new Tensor<float>([4]);
+
+        var projected = MakeTargetWellPosedForLoss(network, target, new Random(1));
+
+        Assert.All(projected.ToArray(), value => Assert.Equal(0.25f, value, 6));
     }
 }

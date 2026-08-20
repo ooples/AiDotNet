@@ -189,29 +189,14 @@ public partial class MbPAAdaptedModel<T, TInput, TOutput> : MetaLearningModelBas
 
             if (rows.Count == 1) return (TOutput)(object)rows[0];
 
-            // BATCHED MULTI-COMPONENT: FLATTEN, DO NOT REFUSE. The concern that motivated the throw
-            // was TRUNCATION -- the old code kept component 0 of each row and silently dropped the
-            // rest. Refusing fixed that, but it over-corrected: a flat Vector<T> holds
-            // rows.Count * outputDim values perfectly well, so writing the rows out consecutively
-            // discards nothing. The result is ordered row-major (example 0's components, then
-            // example 1's, ...) and OutputDimension is what a caller reshapes by, exactly as it is
-            // for the Matrix<T> branch below.
-            //
-            // This cannot regress an existing caller: the combination it replaces THREW, so no
-            // working code path could have depended on the previous behaviour. What it does fix is a
-            // model configured with a multi-component head being unable to predict a batch at all
-            // (MbPAMechanismTests.AdaptedModel_PredictsWithoutRetainingAnyAdaptation predicts a
-            // 4-row query through a 3-component head and never reached its transience assertions).
-            var flattened = new Vector<T>(rows.Count * outputDim);
-            for (int i = 0; i < rows.Count; i++)
-            {
-                for (int j = 0; j < outputDim; j++)
-                {
-                    flattened[(i * outputDim) + j] = j < rows[i].Length ? rows[i][j] : NumOps.Zero;
-                }
-            }
-
-            return (TOutput)(object)flattened;
+            // A flat Vector<T> has no row boundary. Although all components could be copied into it,
+            // the meta-learning consumers treat a vector as one prediction: ComputeAccuracy takes one
+            // global argmax and ComputeLossFromOutput passes it directly to the configured loss. Until
+            // those consumers become OutputDimension-aware, returning row-major data here would make a
+            // valid representation locally and give it the wrong meaning everywhere downstream.
+            throw new NotSupportedException(
+                $"MbPA cannot represent {rows.Count} predictions with {outputDim} components each " +
+                "as Vector<T>. Use Matrix<T> or Tensor<T> for batched multi-component outputs.");
         }
 
         if (typeof(TOutput) == typeof(Matrix<T>))

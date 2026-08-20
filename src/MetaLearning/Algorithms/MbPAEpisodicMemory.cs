@@ -145,9 +145,9 @@ public sealed class MbPAEpisodicMemory<T>
 
         // NEAREST FIRST. `kept` is a MAX-heap, so kept[0] is the FARTHEST of the k selected and the
         // remainder sit in heap order rather than distance order. Copying it out as-is made a method
-        // documented as returning "the k nearest" hand back its neighbours worst-first: the nearest
-        // key was not at index 0, and the weight that belongs to the nearest entry was reported
-        // against the farthest one.
+        // documented as returning "the k nearest" return a result that was not fully ordered, with
+        // the farthest survivor first. Kernels still matched their entries; only the public ordering
+        // was incorrect.
         //
         // The selection above is still the O(n log k) partial scan the comment describes -- ordering
         // only the k SURVIVORS costs O(k log k) on a set that is already tiny (k << MemorySize), so

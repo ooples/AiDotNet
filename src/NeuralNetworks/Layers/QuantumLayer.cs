@@ -338,7 +338,7 @@ public partial class QuantumLayer<T> : LayerBase<T>, IShapeContract
         IGpuBuffer? stateImagBuffer = null;
         IGpuBuffer? squaredBuffer = null;
         IGpuBuffer? normSqBuffer = null;
-        IGpuBuffer? normSqClampedBuffer = null;
+        IGpuBuffer? normSqRegularizedBuffer = null;
         IGpuBuffer? normBuffer = null;
         IGpuBuffer? invNormBuffer = null;
         IGpuBuffer? resultRealBuffer = null;
@@ -390,15 +390,15 @@ public partial class QuantumLayer<T> : LayerBase<T>, IShapeContract
             normSqBuffer = normSq;
             backend.SumAxis(squared, normSq, batchSize, dimension);
 
-            // Step 3: Clamp to avoid division by zero (add epsilon)
-            var normSqClamped = backend.AllocateBuffer(batchSize);
-            normSqClampedBuffer = normSqClamped;
-            backend.Clamp(normSq, normSqClamped, 1e-10f, float.MaxValue, batchSize);
+            // Step 3: Add epsilon before the square root, matching ForwardTraced exactly.
+            var normSqRegularized = backend.AllocateBuffer(batchSize);
+            normSqRegularizedBuffer = normSqRegularized;
+            backend.AddScalar(normSq, normSqRegularized, 1e-10f, batchSize);
 
             // Step 4: Sqrt to get L2 norm
             var norm = backend.AllocateBuffer(batchSize);
             normBuffer = norm;
-            backend.Sqrt(normSqClamped, norm, batchSize);
+            backend.Sqrt(normSqRegularized, norm, batchSize);
 
             // Step 5: Reciprocal to get 1/norm
             var invNorm = backend.AllocateBuffer(batchSize);
@@ -462,7 +462,7 @@ public partial class QuantumLayer<T> : LayerBase<T>, IShapeContract
             stateImagBuffer?.Dispose();
             squaredBuffer?.Dispose();
             normSqBuffer?.Dispose();
-            normSqClampedBuffer?.Dispose();
+            normSqRegularizedBuffer?.Dispose();
             normBuffer?.Dispose();
             invNormBuffer?.Dispose();
             resultRealBuffer?.Dispose();
