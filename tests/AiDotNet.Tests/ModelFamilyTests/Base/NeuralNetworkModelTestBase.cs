@@ -3369,6 +3369,60 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         // identical trajectories. The papers for these models (Paraformer/SeACo arXiv 2206.08317 /
         // 2308.03266, and the LM families) all train cross-entropy over TOKEN targets, never a dense
         // random tensor, so a per-position one-hot is both well-posed and paper-faithful.
+        // BORN-RULE HEADS CANNOT REPRESENT A NEGATIVE TARGET, and handing them one pins the loss at
+        // its floor for a model that is already at its optimum. A Born-rule model measures |psi|^2,
+        // so every component of its output is non-negative BY CONSTRUCTION; a uniform-random target
+        // straddling zero asks for an output the model provably cannot produce.
+        //
+        // MEASURED on QuantumNeuralNetwork: target -0.155572, prediction driven 0.0517 -> 0.0053 over
+        // 100 steps (i.e. the model correctly walking its output toward 0, the closest reachable
+        // point), and the loss pinned at 0.024203 == (-0.155572)^2 -- the exact residual of the
+        // unreachable sign. LossStrictlyDecreasesOnMemorizationTask then read that converged model as
+        // "loss did not strictly decrease" when the truth is that it had already arrived.
+        //
+        // This is the same projection the CrossEntropyWithLogitsLoss branch below performs for the
+        // same reason: make the target something the head's own output space can express, so the
+        // invariant measures the optimizer instead of an impossible objective. It weakens nothing --
+        // the strict-decrease assertion is unchanged, and a Born-rule model that genuinely fails to
+        // learn a REACHABLE target still fails.
+        if (target.Length > 0
+            && network is AiDotNet.NeuralNetworks.NeuralNetworkBase<T> born
+            && born.DefaultLossFunction is AiDotNet.LossFunctions.BornRuleMseLoss<T>)
+        {
+            var projected = new Tensor<T>(target.Shape.ToArray());
+            var maxMagnitude = NumOps.Zero;
+            for (int i = 0; i < target.Length; i++)
+            {
+                var magnitude = NumOps.Abs(target[i]);
+                if (NumOps.GreaterThan(magnitude, maxMagnitude))
+                {
+                    maxMagnitude = magnitude;
+                }
+            }
+
+            if (NumOps.GreaterThan(maxMagnitude, NumOps.Zero))
+            {
+                var scaledTotal = NumOps.Zero;
+                for (int i = 0; i < projected.Length; i++)
+                {
+                    projected[i] = NumOps.Divide(NumOps.Abs(target[i]), maxMagnitude);
+                    scaledTotal = NumOps.Add(scaledTotal, projected[i]);
+                }
+
+                for (int i = 0; i < projected.Length; i++)
+                {
+                    projected[i] = NumOps.Divide(projected[i], scaledTotal);
+                }
+            }
+            else
+            {
+                var uniform = NumOps.Divide(NumOps.One, NumOps.FromDouble(projected.Length));
+                for (int i = 0; i < projected.Length; i++) projected[i] = uniform;
+            }
+
+            return projected;
+        }
+
         if (target.Length > 0
             && network is AiDotNet.NeuralNetworks.NeuralNetworkBase<T> nn
             && nn.DefaultLossFunction is AiDotNet.LossFunctions.CrossEntropyWithLogitsLoss<T>)

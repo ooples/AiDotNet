@@ -391,9 +391,66 @@ public class QuantumNeuralNetwork<T> : VectorModelLayoutBase<T>
 
         var quantumState = new Tensor<Complex<T>>([flatInput.Length]);
 
+        // AMPLITUDE ENCODING, NORMALIZED. This previously took Sqrt of the raw feature value, which
+        // is only defined when every feature is non-negative AND already sums to one. Neither holds
+        // for a general input: a single negative feature makes Sqrt return NaN, and that NaN then
+        // flows through every layer into the Born-rule measurement below, so the network emitted NaN
+        // for ordinary inputs (issue N1 — non-finite training). It also produced states whose
+        // probabilities did not sum to one, which is not a valid quantum state at all.
+        //
+        // The standard construction is to normalise the feature vector to unit L2 norm and use it
+        // directly as the amplitudes — this is what Qiskit's `initialize` and PennyLane's
+        // `AmplitudeEmbedding` do. It is total on real inputs (no NaN for any finite vector), keeps
+        // the sign information that Sqrt discarded, and guarantees sum |psi_i|^2 == 1, so
+        // MeasureQuantumState returns a genuine probability distribution.
+        // Scale by the largest magnitude before squaring. Squaring a finite float/double near its
+        // maximum can overflow even though the input itself is valid; normalizing by that overflowed
+        // norm collapses every amplitude to zero. The scaled values are bounded by one, so both the
+        // accumulation and the final two-step division remain finite.
+        var maxMagnitude = NumOps.Zero;
         for (int i = 0; i < flatInput.Length; i++)
         {
-            var amplitude = NumOps.Sqrt(flatInput[i]);
+            var magnitude = NumOps.Abs(flatInput[i]);
+            if (NumOps.GreaterThan(magnitude, maxMagnitude)) maxMagnitude = magnitude;
+        }
+
+        // A zero vector has no direction to encode. The neutral state is
+        // the uniform superposition, which is normalised and finite; dividing by the zero norm would
+        // reintroduce the NaN this method exists to avoid.
+        if (!NumOps.GreaterThan(maxMagnitude, NumOps.Zero))
+        {
+            var uniform = NumOps.Divide(NumOps.One, NumOps.Sqrt(NumOps.FromDouble(flatInput.Length)));
+            for (int i = 0; i < flatInput.Length; i++)
+            {
+                quantumState[i] = new Complex<T>(uniform, NumOps.Zero);
+            }
+
+            return quantumState;
+        }
+
+        var scaledSumOfSquares = NumOps.Zero;
+        for (int i = 0; i < flatInput.Length; i++)
+        {
+            var scaled = NumOps.Divide(flatInput[i], maxMagnitude);
+            scaledSumOfSquares = NumOps.Add(scaledSumOfSquares, NumOps.Multiply(scaled, scaled));
+        }
+
+        var scaledNorm = NumOps.Sqrt(scaledSumOfSquares);
+        if (!NumOps.GreaterThan(scaledNorm, NumOps.Zero))
+        {
+            var uniform = NumOps.Divide(NumOps.One, NumOps.Sqrt(NumOps.FromDouble(flatInput.Length)));
+            for (int i = 0; i < flatInput.Length; i++)
+            {
+                quantumState[i] = new Complex<T>(uniform, NumOps.Zero);
+            }
+
+            return quantumState;
+        }
+
+        for (int i = 0; i < flatInput.Length; i++)
+        {
+            var scaled = NumOps.Divide(flatInput[i], maxMagnitude);
+            var amplitude = NumOps.Divide(scaled, scaledNorm);
             quantumState[i] = new Complex<T>(amplitude, NumOps.Zero);
         }
 

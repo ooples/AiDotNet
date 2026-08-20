@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Tensors;
@@ -109,5 +110,82 @@ public class QuantumNeuralNetworkTests : NeuralNetworkModelTestBase<float>
             "Quantum network output didn't change when input direction was perturbed. "
             + "Forward pass may ignore input values (note: scalar scaling is a no-op for "
             + "unit-norm-encoded quantum networks; this test perturbs the input DIRECTION instead).");
+    }
+
+    [Fact]
+    public void LargeFiniteInput_DoesNotCollapseTheQuantumStateToZero()
+    {
+        using var network = CreateNetwork();
+        var input = new Tensor<float>(InputShape);
+        for (int i = 0; i < input.Length; i++)
+            input[i] = (i & 1) == 0 ? float.MaxValue : -float.MaxValue;
+
+        var output = network.Predict(input);
+
+        Assert.All(output.ToArray(), value => Assert.True(IsFinite(value)));
+        Assert.Contains(output.ToArray(), value => value > 0.0f);
+    }
+
+    [Fact]
+    public void TinyFiniteInput_PreservesItsDirection()
+    {
+        using var network = CreateNetwork();
+        var tinyInput = new Tensor<float>(InputShape);
+        var unitInput = new Tensor<float>(InputShape);
+        tinyInput[0] = 1e-20f;
+        unitInput[0] = 1.0f;
+
+        var tinyOutput = network.Predict(tinyInput);
+        var unitOutput = network.Predict(unitInput);
+
+        Assert.Equal(unitOutput.Length, tinyOutput.Length);
+        for (int i = 0; i < unitOutput.Length; i++)
+        {
+            Assert.Equal(unitOutput[i], tinyOutput[i], 5);
+        }
+    }
+
+    [Fact]
+    public void BornRuleTargets_AreProjectedOntoTheProbabilitySimplex()
+    {
+        using var network = CreateNetwork();
+        var target = new Tensor<float>([3]);
+        target[0] = -2.0f;
+        target[1] = 1.0f;
+        target[2] = -1.0f;
+
+        var projected = MakeTargetWellPosedForLoss(network, target, new Random(1));
+
+        Assert.Equal(0.5f, projected[0], 6);
+        Assert.Equal(0.25f, projected[1], 6);
+        Assert.Equal(0.25f, projected[2], 6);
+        Assert.Equal(1.0f, projected.ToArray().Sum(), 6);
+    }
+
+    [Fact]
+    public void ZeroBornRuleTarget_UsesAUniformDistribution()
+    {
+        using var network = CreateNetwork();
+        var target = new Tensor<float>([4]);
+
+        var projected = MakeTargetWellPosedForLoss(network, target, new Random(1));
+
+        Assert.All(projected.ToArray(), value => Assert.Equal(0.25f, value, 6));
+    }
+
+    [Fact]
+    public void MaximumMagnitudeBornRuleTargets_RemainAProbabilityDistribution()
+    {
+        using var network = CreateNetwork();
+        var target = new Tensor<float>([3]);
+        target[0] = float.MaxValue;
+        target[1] = -float.MaxValue;
+
+        var projected = MakeTargetWellPosedForLoss(network, target, new Random(1));
+
+        Assert.Equal(0.5f, projected[0], 6);
+        Assert.Equal(0.5f, projected[1], 6);
+        Assert.Equal(0.0f, projected[2], 6);
+        Assert.Equal(1.0f, projected.ToArray().Sum(), 6);
     }
 }
