@@ -26,7 +26,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
     Direction = TensorLayoutDirection.Input)]
 [TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
     Direction = TensorLayoutDirection.Output)]
-public sealed class SVTRThinPlateSplineLayer<T> : LayerBase<T>, IShapeContract
+public sealed partial class SVTRThinPlateSplineLayer<T> : LayerBase<T>, IShapeContract
 {
     /// <inheritdoc />
     public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
@@ -62,11 +62,17 @@ public sealed class SVTRThinPlateSplineLayer<T> : LayerBase<T>, IShapeContract
     private readonly List<ILayer<T>> _localizationLayers = [];
     private readonly DenseLayer<T> _featureProjection;
 
+    // NOT readonly, and the class is partial: both are required for [TrainableParameter] to do
+    // anything at all. The generator emits its restore surface INTO the declaring class, so a
+    // non-partial class gets no generated file and the attributes are inert -- which is what had
+    // happened here. The generated SetTrainableParameters then has to rebind these two fields, which
+    // readonly forbids outside the constructor. They are still only assigned in the constructor and
+    // by that generated restore.
     [TrainableParameter(Role = PersistentTensorRole.Weights)]
-    private readonly Tensor<T> _controlWeights;
+    private Tensor<T> _controlWeights;
 
     [TrainableParameter(Role = PersistentTensorRole.Biases)]
-    private readonly Tensor<T> _controlBias;
+    private Tensor<T> _controlBias;
 
     private readonly Tensor<T> _inverseKernel;
     private readonly Tensor<T> _targetCoordinateRepresentation;

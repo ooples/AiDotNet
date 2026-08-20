@@ -69,6 +69,18 @@ public class TrainableParameterGenerator : IIncrementalGenerator
             + "generator cannot reach the roots an axis is computed from, it cannot emit the readiness guard either, and the layer can "
             + "publish a shape it has no way to know -- which then rejects a correct checkpoint as non-conforming.");
 
+    private static readonly DiagnosticDescriptor NonPartialTrainableParameter = new(
+        "AIDN099",
+        "[TrainableParameter] on a non-partial class does nothing",
+        "'{0}' declares [TrainableParameter] on {1} but is not partial, so this generator cannot emit into it and the declaration has NO effect. The layer gets no SetTrainableParameters, no DeclaredParameterTensors, and no restore path, so a checkpoint holding its trained weights is silently discarded. Add the partial modifier.",
+        "AiDotNet.ParameterAutomation",
+        DiagnosticSeverity.Warning,
+        isEnabledByDefault: true,
+        description: "Generated parameter automation is emitted as a second partial declaration of the same class, so a non-partial "
+            + "class is invisible to the generator's syntax predicate. Nothing fails at compile time -- the attribute is simply inert -- "
+            + "and the layer then falls through to fresh initialization on every restore, which surfaces only as a weight-drift or "
+            + "round-trip failure far from the declaration. SVTRThinPlateSplineLayer sat in exactly this state.");
+
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
         // Find all class declarations that might have [TrainableParameter] fields
@@ -82,6 +94,46 @@ public class TrainableParameterGenerator : IIncrementalGenerator
         var compilationAndClasses = context.CompilationProvider.Combine(classDeclarations.Collect());
 
         context.RegisterSourceOutput(compilationAndClasses, static (spc, source) => Execute(source.Left, source.Right, spc));
+
+        // The predicate above admits only partial classes, which is correct for EMISSION and is also
+        // why a missing partial is silent: the class that needs the generator most simply never
+        // reaches it. This second pass exists to make that state loud. It emits no source.
+        var nonPartialDeclarations = context.SyntaxProvider
+            .CreateSyntaxProvider(
+                predicate: static (node, _) => node is ClassDeclarationSyntax cds &&
+                    !cds.Modifiers.Any(m => m.Text == "partial") &&
+                    cds.Members.OfType<FieldDeclarationSyntax>().Any(static f =>
+                        f.AttributeLists.SelectMany(static al => al.Attributes).Any(static a =>
+                            IsTrainableParameterAttributeName(a.Name.ToString()))),
+                transform: static (ctx, _) => (ClassDeclarationSyntax)ctx.Node)
+            .Where(static c => c is not null);
+
+        context.RegisterSourceOutput(nonPartialDeclarations, static (spc, cds) =>
+        {
+            var offenders = cds.Members.OfType<FieldDeclarationSyntax>()
+                .Where(static f => f.AttributeLists.SelectMany(static al => al.Attributes)
+                    .Any(static a => IsTrainableParameterAttributeName(a.Name.ToString())))
+                .SelectMany(static f => f.Declaration.Variables.Select(static v => v.Identifier.Text))
+                .ToList();
+            if (offenders.Count == 0) return;
+
+            spc.ReportDiagnostic(Diagnostic.Create(
+                NonPartialTrainableParameter,
+                cds.Identifier.GetLocation(),
+                cds.Identifier.Text,
+                string.Join(", ", offenders)));
+        });
+    }
+
+    /// <summary>
+    /// Matches the attribute as written in source, where the <c>Attribute</c> suffix and any
+    /// namespace qualification are both optional.
+    /// </summary>
+    private static bool IsTrainableParameterAttributeName(string name)
+    {
+        int lastDot = name.LastIndexOf('.');
+        if (lastDot >= 0) name = name.Substring(lastDot + 1);
+        return name == "TrainableParameter" || name == "TrainableParameterAttribute";
     }
 
     private static void Execute(Compilation compilation, ImmutableArray<ClassDeclarationSyntax> classes, SourceProductionContext context)
