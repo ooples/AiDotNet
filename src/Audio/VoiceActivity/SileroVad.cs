@@ -443,10 +443,12 @@ public partial class SileroVad<T> : AudioNeuralNetworkBase<T>, IVoiceActivityDet
             var frame = new T[_frameSize];
             Array.Copy(samples, i, frame, 0, _frameSize);
 
-            // Create tensor from frame data. Tensor.ToVector() hands back a COPY, so
-            // the samples have to be written into the tensor's own storage -- the same
-            // mistake PreprocessAudio documents, which left every frame all zeros and
-            // scored silence no matter what the caller passed in.
+            // Write directly into the tensor's backing storage, and dispose it per frame.
+            // ToVector() returns a COPY, so assigning into that copy left frameTensor ALL ZEROS
+            // and every frame reached the model as silence -- the same defect PreprocessAudio
+            // below already documents, surviving here. Speech detection was therefore independent
+            // of the audio. Disposal is safe because PreprocessAudio allocates its own result, so
+            // nothing downstream holds a reference to this tensor once the call returns.
             using var frameTensor = new Tensor<T>([_frameSize]);
             var frameSpan = frameTensor.Data.Span;
             for (int j = 0; j < _frameSize; j++)
@@ -509,8 +511,9 @@ public partial class SileroVad<T> : AudioNeuralNetworkBase<T>, IVoiceActivityDet
             var frame = new T[_frameSize];
             Array.Copy(samples, i * _frameSize, frame, 0, _frameSize);
 
-            // Create tensor from frame data. As above, write into the tensor's storage:
-            // ToVector() returns a copy and assigning into it leaves the tensor zeroed.
+            // Same direct write and per-frame disposal as DetectSpeechSegments above: assigning
+            // into the ToVector() copy left this tensor all zeros, so every probability was
+            // computed from silence rather than from the frame.
             using var frameTensor = new Tensor<T>([_frameSize]);
             var frameSpan = frameTensor.Data.Span;
             for (int j = 0; j < _frameSize; j++)
