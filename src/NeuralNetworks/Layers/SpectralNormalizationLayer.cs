@@ -396,10 +396,11 @@ public partial class SpectralNormalizationLayer<T> : LayerBase<T>, IShapeContrac
 
         var epsilon = new Tensor<T>([1, 1]);
         epsilon[0, 0] = _epsilon;
-        var denominator = Engine.TensorBroadcastAdd(sigma, epsilon);
+        var denominator = Engine.TensorAdd(sigma, epsilon);
 
-        var reciprocal = Engine.TensorReciprocal(denominator);
-        var normalizedMatrix = Engine.TensorBroadcastMultiply(matrix, reciprocal);
+        // TensorDivide broadcasts on its own since AiDotNet.Tensors #919, so the explicit
+        // Broadcast* variant is the older spelling of the same operation.
+        var normalizedMatrix = Engine.TensorDivide(matrix, denominator);
         var normalizedWeight = weight.Shape.Length == 2
             ? normalizedMatrix
             : Engine.Reshape(normalizedMatrix, weight.Shape.ToArray());
