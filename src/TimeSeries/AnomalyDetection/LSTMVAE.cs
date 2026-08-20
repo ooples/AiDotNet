@@ -122,15 +122,51 @@ public partial class LSTMVAE<T> : TimeSeriesModelBase<T>
                     // monitor (the same lock contention that profiling on
                     // PR #1184 showed dominated this method's wall-clock).
                     var z = new Tensor<T>(mean._shape);
+                    // epsilon and sigma are kept because the reparameterization gradient needs them:
+                    // z = mu + sigma * eps means dz/dlogVar = 0.5 * sigma * eps. Regenerating eps
+                    // after the forward would differentiate a DIFFERENT sample than the one decoded.
+                    var epsilon = new Tensor<T>(mean._shape);
+                    var sigma = new Tensor<T>(mean._shape);
+                    var clampedActive = new bool[mean.Length];
                     {
                         var meanSpan = mean.Data.Span;
                         var lvSpan = logVar.Data.Span;
                         var zSpan = z.Data.Span;
                         T half = _numOps.FromDouble(0.5);
+
+                        // CLAMP THE LOG-VARIANCE BEFORE EXPONENTIATING. exp(0.5 * logVar) is unbounded
+                        // above: logVar is a free network output, so nothing stops the encoder from
+                        // driving it past the exponent's range during training. At logVar ~ 710 the
+                        // double overflows to +Infinity, std becomes Infinity, and z = mean + std * eps
+                        // is Infinity or NaN -- which then flows through the decoder into the forecast
+                        // (the observed "Out-of-sample forecast contains NaN or Infinity").
+                        //
+                        // Clamping to [-30, 20] is the standard guard for a diagonal-Gaussian latent:
+                        // CompVis latent-diffusion's DiagonalGaussianDistribution applies exactly
+                        // torch.clamp(logvar, -30.0, 20.0) before deriving std, and the same bounds are
+                        // conventional across VAE implementations. They are deliberately wide rather
+                        // than tuned -- exp(20/2) is about 2.2e4 and exp(-30/2) about 3.1e-7, so every
+                        // variance a healthy encoder actually produces passes through untouched and
+                        // only the divergent tail is bounded. The lower bound matters too: an
+                        // unbounded-below logVar underflows std to exactly 0, which silently removes
+                        // the sampling noise that makes this a VAE rather than an autoencoder.
+                        T logVarFloor = _numOps.FromDouble(-30.0);
+                        T logVarCeiling = _numOps.FromDouble(20.0);
+
+                        var epsSpan = epsilon.Data.Span;
+                        var sigmaSpan = sigma.Data.Span;
+
                         for (int j = 0; j < mean.Length; j++)
                         {
-                            T std = _numOps.Exp(_numOps.Multiply(half, lvSpan[j]));
-                            zSpan[j] = _numOps.Add(meanSpan[j], _numOps.Multiply(std, _numOps.FromDouble(random.NextGaussian())));
+                            T clampedLogVar = lvSpan[j];
+                            if (_numOps.LessThan(clampedLogVar, logVarFloor)) { clampedLogVar = logVarFloor; clampedActive[j] = true; }
+                            else if (_numOps.GreaterThan(clampedLogVar, logVarCeiling)) { clampedLogVar = logVarCeiling; clampedActive[j] = true; }
+
+                            T std = _numOps.Exp(_numOps.Multiply(half, clampedLogVar));
+                            T eps = _numOps.FromDouble(random.NextGaussian());
+                            sigmaSpan[j] = std;
+                            epsSpan[j] = eps;
+                            zSpan[j] = _numOps.Add(meanSpan[j], _numOps.Multiply(std, eps));
                         }
                     }
 
@@ -141,7 +177,73 @@ public partial class LSTMVAE<T> : TimeSeriesModelBase<T>
                     T error = ComputeReconstructionError(input, reconstruction);
                     reconstructionErrors.Add(error);
 
-                    // Compute and accumulate gradients via backpropagation
+                    // BACKPROPAGATION OF THE ELBO. This block previously did not exist: the loop
+                    // reset the gradient accumulators, ran the forward, and called ApplyGradients on
+                    // accumulators nothing had written, so every update was `w -= lr/batch * 0` and
+                    // the model never left its initialization. Nothing in the file wrote a gradient.
+                    //
+                    // The objective is the standard VAE bound (Kingma & Welling, arXiv:1312.6114),
+                    // maximised as a minimised loss:
+                    //     L = ||x - x_hat||^2 / n  +  beta * KL(q(z|x) || N(0, I))
+                    //     KL = -0.5 * sum_j (1 + logVar_j - mu_j^2 - exp(logVar_j))
+                    // with the Gaussian-likelihood reconstruction term reducing to MSE, exactly as
+                    // ComputeReconstructionError already measures it, and the LSTM-VAE anomaly
+                    // formulation of Park et al. (RA-L 2018) scoring by that same reconstruction term.
+                    int reconLength = Math.Min(input.Length, reconstruction.Length);
+                    T reconScale = _numOps.FromDouble(reconLength > 0 ? 2.0 / reconLength : 0.0);
+
+                    // dL/dx_hat = 2 (x_hat - x) / n
+                    var dOutput = new Tensor<T>(reconstruction._shape);
+                    {
+                        var dOutSpan = dOutput.Data.Span;
+                        var reconSpan = reconstruction.Data.Span;
+                        for (int j = 0; j < reconLength; j++)
+                        {
+                            dOutSpan[j] = _numOps.Multiply(reconScale, _numOps.Subtract(reconSpan[j], input[j]));
+                        }
+                    }
+
+                    var dLatent = _decoder.AccumulateGradients(z, decoderHidden, dOutput);
+
+                    // Reparameterization + KL, per latent coordinate.
+                    var dMean = new Tensor<T>(mean._shape);
+                    var dLogVar = new Tensor<T>(logVar._shape);
+                    {
+                        var dLatentSpan = dLatent.Data.Span;
+                        var dMeanSpan = dMean.Data.Span;
+                        var dLogVarSpan = dLogVar.Data.Span;
+                        var meanSpan = mean.Data.Span;
+                        var lvSpan = logVar.Data.Span;
+                        var sigmaSpan = sigma.Data.Span;
+                        var epsSpan = epsilon.Data.Span;
+                        T half = _numOps.FromDouble(0.5);
+                        T beta = _numOps.FromDouble(_options.KLWeight);
+
+                        for (int j = 0; j < mean.Length; j++)
+                        {
+                            // z = mu + sigma * eps  =>  dz/dmu = 1, dz/dlogVar = 0.5 * sigma * eps.
+                            T dz = dLatentSpan[j];
+                            T dLogVarFromRecon = _numOps.Multiply(
+                                dz, _numOps.Multiply(half, _numOps.Multiply(sigmaSpan[j], epsSpan[j])));
+
+                            // d/dmu KL = mu ; d/dlogVar KL = 0.5 * (exp(logVar) - 1).
+                            T dMeanFromKL = _numOps.Multiply(beta, meanSpan[j]);
+                            T dLogVarFromKL = _numOps.Multiply(
+                                beta,
+                                _numOps.Multiply(half, _numOps.Subtract(_numOps.Exp(lvSpan[j]), _numOps.One)));
+
+                            dMeanSpan[j] = _numOps.Add(dz, dMeanFromKL);
+
+                            // A saturated clamp has zero local derivative, so the reconstruction path
+                            // contributes nothing there. The KL term still applies: it is a function of
+                            // the RAW logVar and is what pulls a diverged coordinate back into range.
+                            dLogVarSpan[j] = clampedActive[j]
+                                ? dLogVarFromKL
+                                : _numOps.Add(dLogVarFromRecon, dLogVarFromKL);
+                        }
+                    }
+
+                    _encoder.AccumulateGradients(input, hidden, dMean, dLogVar);
                 }
 
                 // Apply accumulated gradients
@@ -453,12 +555,12 @@ internal partial class LSTMEncoderTensor<T> : NeuralNetworks.Layers.LayerBase<T>
         _hiddenSize = hiddenSize;
 
         var random = RandomHelper.CreateSeededRandom(42);
-        double stddev = Math.Sqrt(2.0 / inputSize);
+        double stddev = Math.Sqrt(2.0 / Math.Max(1, inputSize));
 
         _weights = InitTensor(new[] { hiddenSize, inputSize }, stddev, random);
         _bias = new Tensor<T>(new[] { hiddenSize });
 
-        stddev = Math.Sqrt(2.0 / hiddenSize);
+        stddev = Math.Sqrt(2.0 / Math.Max(1, hiddenSize));
         _meanWeights = InitTensor(new[] { latentDim, hiddenSize }, stddev, random);
         _meanBias = new Tensor<T>(new[] { latentDim });
         _logVarWeights = InitTensor(new[] { latentDim, hiddenSize }, stddev, random);
@@ -542,6 +644,56 @@ internal partial class LSTMEncoderTensor<T> : NeuralNetworks.Layers.LayerBase<T>
         ApplyGradientToTensor(_meanBias, _meanBiasGrad, learningRate, batchSizeT);
         ApplyGradientToTensor(_logVarWeights, _logVarWeightsGrad, learningRate, batchSizeT);
         ApplyGradientToTensor(_logVarBias, _logVarBiasGrad, learningRate, batchSizeT);
+    }
+
+    /// <summary>
+    /// Backpropagates dL/dmu and dL/dlogVar through the encoder's two projection heads and its
+    /// shared hidden layer.
+    /// </summary>
+    /// <param name="input">x, the example this forward consumed.</param>
+    /// <param name="hidden">h = tanh(W x + b), cached from <see cref="EncodeWithCache"/>.</param>
+    /// <param name="dMean">dL/dmu for this example, shape [latentDim].</param>
+    /// <param name="dLogVar">dL/dlogVar for this example, shape [latentDim].</param>
+    /// <remarks>
+    /// mu and logVar are two independent affine heads over the SAME hidden vector, so the hidden
+    /// gradient is the SUM of both paths: <c>dh = W_muᵀ dmu + W_logVarᵀ dlogVar</c>. Dropping either
+    /// term is the classic VAE-backprop error — it silently stops the posterior variance (or the
+    /// mean) from shaping the representation. From there the tanh derivative gives
+    /// <c>dpre = dh ⊙ (1 - h²)</c>, and <c>dW = dpre ⊗ x</c>, <c>db = dpre</c>.
+    /// </remarks>
+    public void AccumulateGradients(Vector<T> input, Tensor<T> hidden, Tensor<T> dMean, Tensor<T> dLogVar)
+    {
+        var hiddenRow = hidden.Reshape(new[] { 1, _hiddenSize });                      // [1,H]
+        var dMeanCol = dMean.Reshape(new[] { _latentDim, 1 });                         // [L,1]
+        var dLogVarCol = dLogVar.Reshape(new[] { _latentDim, 1 });                     // [L,1]
+
+        // Both projection heads.
+        _meanWeightsGrad = Engine.TensorAdd(_meanWeightsGrad, Engine.TensorMatMul(dMeanCol, hiddenRow));
+        _meanBiasGrad = Engine.TensorAdd(_meanBiasGrad, dMean);
+        _logVarWeightsGrad = Engine.TensorAdd(_logVarWeightsGrad, Engine.TensorMatMul(dLogVarCol, hiddenRow));
+        _logVarBiasGrad = Engine.TensorAdd(_logVarBiasGrad, dLogVar);
+
+        // The hidden vector feeds BOTH heads, so its gradient is the sum of the two paths.
+        var dHidden = Engine.TensorAdd(
+            Engine.TensorMatMul(Engine.TensorTranspose(_meanWeights), dMeanCol).Reshape(new[] { _hiddenSize }),
+            Engine.TensorMatMul(Engine.TensorTranspose(_logVarWeights), dLogVarCol).Reshape(new[] { _hiddenSize }));
+
+        var ones = new Tensor<T>(new[] { _hiddenSize });
+        ones.Fill(NumOps.One);
+        var tanhDerivative = Engine.TensorSubtract(ones, Engine.TensorMultiply(hidden, hidden));
+        var dPre = Engine.TensorMultiply(dHidden, tanhDerivative);                     // [H]
+
+        // Input projection. The forward pads or truncates x to _inputSize, so mirror that here.
+        var inputRow = new Tensor<T>(new[] { 1, _inputSize });
+        {
+            var span = inputRow.Data.Span;
+            int effective = Math.Min(input.Length, _inputSize);
+            for (int j = 0; j < effective; j++) span[j] = input[j];
+        }
+
+        _weightsGrad = Engine.TensorAdd(
+            _weightsGrad, Engine.TensorMatMul(dPre.Reshape(new[] { _hiddenSize, 1 }), inputRow));
+        _biasGrad = Engine.TensorAdd(_biasGrad, dPre);
     }
 
     private void ApplyGradientToTensor(Tensor<T> tensor, Tensor<T> grad, T learningRate, T batchSize)
@@ -696,12 +848,12 @@ internal partial class LSTMDecoderTensor<T> : NeuralNetworks.Layers.LayerBase<T>
         _hiddenSize = hiddenSize;
 
         var random = RandomHelper.CreateSeededRandom(42);
-        double stddev = Math.Sqrt(2.0 / latentDim);
+        double stddev = Math.Sqrt(2.0 / Math.Max(1, latentDim));
 
         _weights = InitTensor(new[] { hiddenSize, latentDim }, stddev, random);
         _bias = new Tensor<T>(new[] { hiddenSize });
 
-        stddev = Math.Sqrt(2.0 / hiddenSize);
+        stddev = Math.Sqrt(2.0 / Math.Max(1, hiddenSize));
         _outputWeights = InitTensor(new[] { outputSize, hiddenSize }, stddev, random);
         _outputBias = new Tensor<T>(new[] { outputSize });
 
@@ -772,6 +924,48 @@ internal partial class LSTMDecoderTensor<T> : NeuralNetworks.Layers.LayerBase<T>
         ApplyGradientToTensor(_bias, _biasGrad, learningRate, batchSizeT);
         ApplyGradientToTensor(_outputWeights, _outputWeightsGrad, learningRate, batchSizeT);
         ApplyGradientToTensor(_outputBias, _outputBiasGrad, learningRate, batchSizeT);
+    }
+
+    /// <summary>
+    /// Backpropagates the reconstruction gradient through the decoder and returns dL/dz, the
+    /// gradient with respect to the latent sample.
+    /// </summary>
+    /// <param name="latent">z, the latent sample this forward consumed.</param>
+    /// <param name="hidden">g = tanh(W_d z + b_d), cached from <see cref="DecodeWithCache"/>.</param>
+    /// <param name="dOutput">dL/dx̂ for this example.</param>
+    /// <returns>dL/dz, shape [latentDim].</returns>
+    /// <remarks>
+    /// The decoder is x̂ = W_o · tanh(W_d z + b_d) + b_o, so the chain is
+    /// <c>dW_o = dx̂ ⊗ g</c>, <c>db_o = dx̂</c>, <c>dg = W_oᵀ dx̂</c>,
+    /// <c>dpre = dg ⊙ (1 - g²)</c> (the tanh derivative), <c>dW_d = dpre ⊗ z</c>,
+    /// <c>db_d = dpre</c>, and <c>dz = W_dᵀ dpre</c>. Gradients ACCUMULATE so a batch sums before
+    /// <see cref="ApplyGradients"/> divides by the batch size.
+    /// </remarks>
+    public Tensor<T> AccumulateGradients(Tensor<T> latent, Tensor<T> hidden, Tensor<T> dOutput)
+    {
+        var dOutCol = dOutput.Reshape(new[] { _outputSize, 1 });                       // [O,1]
+        var hiddenRow = hidden.Reshape(new[] { 1, _hiddenSize });                      // [1,H]
+
+        // Output projection.
+        _outputWeightsGrad = Engine.TensorAdd(_outputWeightsGrad, Engine.TensorMatMul(dOutCol, hiddenRow));
+        _outputBiasGrad = Engine.TensorAdd(_outputBiasGrad, dOutput);
+
+        // Into the hidden activation, then through tanh: d/dx tanh(x) = 1 - tanh(x)^2.
+        var dHidden = Engine.TensorMatMul(Engine.TensorTranspose(_outputWeights), dOutCol)
+            .Reshape(new[] { _hiddenSize });                                           // [H]
+        var ones = new Tensor<T>(new[] { _hiddenSize });
+        ones.Fill(NumOps.One);
+        var tanhDerivative = Engine.TensorSubtract(ones, Engine.TensorMultiply(hidden, hidden));
+        var dPre = Engine.TensorMultiply(dHidden, tanhDerivative);                     // [H]
+
+        // Latent projection.
+        var latentRow = latent.Reshape(new[] { 1, _latentDim });                       // [1,L]
+        var dPreCol = dPre.Reshape(new[] { _hiddenSize, 1 });                          // [H,1]
+        _weightsGrad = Engine.TensorAdd(_weightsGrad, Engine.TensorMatMul(dPreCol, latentRow));
+        _biasGrad = Engine.TensorAdd(_biasGrad, dPre);
+
+        return Engine.TensorMatMul(Engine.TensorTranspose(_weights), dPreCol)
+            .Reshape(new[] { _latentDim });                                            // dL/dz, [L]
     }
 
     private void ApplyGradientToTensor(Tensor<T> tensor, Tensor<T> grad, T learningRate, T batchSize)
