@@ -182,6 +182,28 @@ public class RBMLayerLazyCtorIssue1213Tests
             "CD-1 preserved parameter identities but did not update any registered value.");
     }
 
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    public void ContrastiveDivergence_RejectsInvalidKStepsWithoutMutatingParameters(int kSteps)
+    {
+        using var layer = new RBMLayer<float>(
+            visibleUnits: 4,
+            hiddenUnits: 3,
+            scalarActivation: null);
+        var parametersBefore = layer.GetParameters().ToArray();
+
+        var exception = Assert.Throws<ArgumentOutOfRangeException>(() =>
+            layer.TrainWithContrastiveDivergence(
+                new Vector<float>([0.1f, 0.7f, 0.3f, 0.9f]),
+                learningRate: 0.05f,
+                kSteps: kSteps));
+
+        Assert.Equal(nameof(kSteps), exception.ParamName);
+        Assert.Equal(kSteps, Assert.IsType<int>(exception.ActualValue));
+        Assert.Equal(parametersBefore, layer.GetParameters().ToArray());
+    }
+
     [Fact]
     public void ContrastiveDivergence_AcceptsBatchedTensorWithoutFlatteningVisibleAxis()
     {

@@ -708,6 +708,9 @@ public partial class RBMLayer<T> : LayerBase<T>, IShapeContract
     /// <param name="input">The input data vector.</param>
     /// <param name="learningRate">The learning rate for parameter updates.</param>
     /// <param name="kSteps">The number of Gibbs sampling steps (typically 1).</param>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// Thrown when <paramref name="kSteps"/> is less than one.
+    /// </exception>
     /// <remarks>
     /// <para>
     /// This method implements the contrastive divergence (CD) algorithm for training the RBM.
@@ -747,8 +750,19 @@ public partial class RBMLayer<T> : LayerBase<T>, IShapeContract
     /// <param name="input">A rank-one sample or a batched tensor of visible activations.</param>
     /// <param name="learningRate">Contrastive-divergence learning rate.</param>
     /// <param name="kSteps">Number of Gibbs sampling steps.</param>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// Thrown when <paramref name="kSteps"/> is less than one.
+    /// </exception>
     internal void TrainWithContrastiveDivergence(Tensor<T> input, T learningRate, int kSteps = 1)
     {
+        if (kSteps < 1)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(kSteps),
+                kSteps,
+                "The number of Gibbs sampling steps must be at least one.");
+        }
+
         // Lazy-ctor guard: ContrastiveDivergence training reads _visibleUnits
         // and the weight matrices, so they need to be resolved+materialized.
         if (!IsShapeResolved) OnFirstForward(input);
