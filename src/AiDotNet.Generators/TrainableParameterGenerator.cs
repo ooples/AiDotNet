@@ -665,11 +665,10 @@ public class TrainableParameterGenerator : IIncrementalGenerator
             var sentinelRoots = new HashSet<string>(System.StringComparer.Ordinal);
             foreach (var pf in shapedFields)
             {
-                foreach (var axis in pf.Shape!.Split(','))
+                foreach (string axis in pf.Shape!.Split(',').Select(a => a.Trim()))
                 {
-                    string trimmed = axis.Trim();
-                    if (trimmed.Length == 0 || trimmed == "*") continue;
-                    if (TryGetAdaptiveAxisBinding(trimmed, out string bound)) trimmed = bound;
+                    if (axis.Length == 0 || axis == "*") continue;
+                    string trimmed = TryGetAdaptiveAxisBinding(axis, out string bound) ? bound : axis;
 
                     // Each axis gets its own walk AND its own `visited` set. The hazard verdict is
                     // per-axis, and `visited` short-circuits on re-entry: sharing it let the first
@@ -1650,9 +1649,8 @@ public class TrainableParameterGenerator : IIncrementalGenerator
     /// </summary>
     private static string? TryGetComputedMemberBody(ISymbol member)
     {
-        foreach (var reference in member.DeclaringSyntaxReferences)
+        foreach (var node in member.DeclaringSyntaxReferences.Select(r => r.GetSyntax()))
         {
-            var node = reference.GetSyntax();
 
             if (node is PropertyDeclarationSyntax property)
             {
