@@ -17814,6 +17814,17 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 "MaxRank = 2 })";
         }
 
+        // CORL samples policy actions during discovery. Its production default intentionally uses
+        // fresh entropy, but generated mathematical invariants must compare like-for-like runs: the
+        // scaling probe constructs two instances and otherwise confounds a data transformation with
+        // two unrelated action trajectories. Keep the deterministic seed in the generator-owned
+        // fixture; the public algorithm remains stochastic unless a caller explicitly supplies one.
+        if (category == AlgorithmCategory.CausalDiscovery && testClassName == "CORLAlgorithmTests")
+        {
+            constructorExpr = $"new {typeName}<{numericType}>(new AiDotNet.Models.Options.CausalDiscoveryOptions {{ " +
+                "Seed = 42 })";
+        }
+
         // DAGMA Linear's paper default remains its 30k/60k central-path schedule. The generated
         // causal scaffold keeps synthetic fixture math in double and converts at its typed boundary;
         // bound each inner stage through the public MaxIterations option. The FP64 5,000-step

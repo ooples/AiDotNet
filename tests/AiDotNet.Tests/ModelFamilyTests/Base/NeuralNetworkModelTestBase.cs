@@ -94,6 +94,54 @@ internal static class ModelFamilyTestGcGate
 /// </summary>
 public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
 {
+    /// <summary>
+    /// Describes the public target domain accepted by a model family. This belongs on the shared
+    /// family-test contract rather than on individual generated model tests: output shape alone
+    /// cannot distinguish a rank-1 dense classifier target from a rank-1 sequence of sparse class
+    /// indices.
+    /// </summary>
+    protected enum ExternalTargetEncodingKind
+    {
+        InferFromTaskAndShape,
+        Continuous,
+        SparseClassIndices,
+        DenseClassProbabilities
+    }
+
+    /// <summary>
+    /// The encoding used by the model's public training target. Specialized family bases override
+    /// this once; generated model tests inherit the correct target preparation and contrast probes.
+    /// </summary>
+    protected virtual ExternalTargetEncodingKind ExternalTargetEncoding
+        => ExternalTargetEncodingKind.InferFromTaskAndShape;
+
+    /// <summary>
+    /// Whether the model's configured training loss accepts the tensor returned by public
+    /// <c>Predict</c>. Override only when the public API applies a documented output transform after
+    /// the training graph (for example, Born-rule amplitudes become probabilities). In that case the
+    /// shared invariants measure MSE in the public output domain instead of applying the raw-training
+    /// objective a second time.
+    /// </summary>
+    protected virtual bool ConfiguredLossAcceptsPublicPrediction => true;
+
+    /// <summary>
+    /// Resolves the categorical cardinality for sparse-label families. Such families must override
+    /// this when their public target does not carry a class axis from which the value can be inferred.
+    /// </summary>
+    protected virtual int ExternalCategoricalClassCount(INeuralNetworkModel<T> network, Tensor<T> target)
+    {
+        if (network is AiDotNet.Interfaces.ISegmentationModel<T> segmentation)
+            return segmentation.NumClasses;
+
+        var outputShape = ShapeCheckedOutputShape;
+        if (outputShape.Length > target.Shape.Length && outputShape[^1] > 1)
+            return outputShape[^1];
+
+        throw new InvalidOperationException(
+            $"{GetType().Name} declares {ExternalTargetEncoding} targets but does not expose a "
+            + "categorical class count. Override ExternalCategoricalClassCount on its shared family base.");
+    }
+
     /// <summary>Numeric operations for the model's element type <typeparamref name="T"/>.</summary>
     protected static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
@@ -520,6 +568,19 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
     }
 
     protected virtual int TrainingIterations => UsesContractExpandedTrainingBudget ? 2 : 10;
+
+    /// <summary>
+    /// Performs any model-specific preparation required before a supervised-training
+    /// invariant establishes its baseline. Most networks need no preparation. Models
+    /// with a prescribed unsupervised first phase (for example, a deep belief network's
+    /// greedy layer-wise RBM pretraining) override this hook with that unique phase while
+    /// retaining the shared assertions, loss measurement, and iteration policy.
+    /// </summary>
+    protected virtual void PrepareForSupervisedTrainingInvariant(
+        INeuralNetworkModel<T> network,
+        Tensor<T> input)
+    {
+    }
 
     /// <summary>
     /// Legacy short-run budget retained for source compatibility with generated and handwritten
@@ -1119,6 +1180,8 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         var input = CreateRandomTensor(EffectiveInputShape, rng);
         var target = MakeTargetWellPosedForLoss(network, CreateRandomTargetTensor(ShapeCheckedOutputShape, rng), rng);
 
+        PrepareForSupervisedTrainingInvariant(network, input);
+
         // Measure initial loss (model's objective — MSE for most families, the model's own loss for
         // raw-logit cross-entropy LMs where MSE is meaningless; see MeasureLoss).
         var initialOutput = network.Predict(input);
@@ -1362,6 +1425,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         // emitted random floats and tripped strict label validation
         // in the CRF NLL path.
         var trainTarget = CreateRandomTargetTensor(ShapeCheckedOutputShape, rng);
+        PrepareForSupervisedTrainingInvariant(network, trainInput);
         int iterations = ResolveConformanceTrainingIterations(network, TrainingIterations);
         for (int i = 0; i < iterations; i++)
             network.Train(trainInput, trainTarget);
@@ -2145,6 +2209,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
 
         var input = CreateRandomTensor(EffectiveInputShape, rng1);
         var target = MakeTargetWellPosedForLoss(network1, CreateRandomTargetTensor(ShapeCheckedOutputShape, rng1), rng1);
+        PrepareForSupervisedTrainingInvariant(network1, input);
         int longIters = ResolveConformanceTrainingIterations(network1, MoreDataLongIterations);
 
         Assert.True(longIters > 0,
@@ -3087,6 +3152,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         // descent, so this invariant reported "loss did not strictly decrease" for a model that was
         // simply being given an unfittable objective.
         var target = MakeTargetWellPosedForLoss(network, CreateRandomTargetTensor(ShapeCheckedOutputShape, rng), rng);
+        PrepareForSupervisedTrainingInvariant(network, input);
 
         // First step establishes the baseline loss. Keep the repeated-training portion inside a
         // common wall-clock envelope so generated fixtures with a large legal receptive field do
@@ -3397,7 +3463,8 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         // loss. Matching on the base class narrowed the model's own contract and sent exactly those
         // losses to MSE -- reintroducing, for direct implementers, the measure-a-different-objective
         // bug the branches above exist to fix.
-        if (network is AiDotNet.NeuralNetworks.NeuralNetworkBase<T> lossNet
+        if (ConfiguredLossAcceptsPublicPrediction
+            && network is AiDotNet.NeuralNetworks.NeuralNetworkBase<T> lossNet
             && lossNet.DefaultLossFunction is AiDotNet.Interfaces.ILossFunction<T> configured)
         {
             Tensor<T> lossTensor;
@@ -3470,6 +3537,27 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
     /// </summary>
     protected Tensor<T> MakeTargetWellPosedForLoss(INeuralNetworkModel<T> network, Tensor<T> target, Random rng)
     {
+        if (ExternalTargetEncoding == ExternalTargetEncodingKind.SparseClassIndices)
+        {
+            int numClasses = ExternalCategoricalClassCount(network, target);
+            Assert.True(numClasses > 1,
+                $"{GetType().Name} reported {numClasses} classes for a sparse categorical target.");
+
+            for (int i = 0; i < target.Length; i++)
+            {
+                double value = ConvertToDouble(target[i]);
+                Assert.True(IsFinite(value) && value == Math.Truncate(value)
+                    && value >= 0.0 && value < numClasses,
+                    $"{GetType().Name} produced sparse class id {value} at target index {i}; "
+                    + $"expected an integer in [0, {numClasses - 1}].");
+            }
+
+            // Sparse targets already encode one legal class independently at every sequence/spatial
+            // position. Projecting this rank-1 tensor to one dense one-hot vector would collapse an
+            // entire sequence into a single supervised token.
+            return target;
+        }
+
         // Applies to every softmax-CE head whose PUBLIC target is categorical, not just segmentation.
         // The original guard was scoped to ISegmentationModel on the assumption that "other
         // CrossEntropyWithLogitsLoss families (LMs/classifiers) already receive appropriate targets
@@ -3580,9 +3668,15 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
     /// case); projecting that EXTERNAL target to one-hot because of the INTERNAL loss changes its API
     /// domain and can collapse distinct forecast trajectories onto the same quantized supervision.
     /// </summary>
-    private static bool UsesExternalCategoricalTargets(AiDotNet.NeuralNetworks.NeuralNetworkBase<T> network)
-        => network.Architecture.TaskType != AiDotNet.Enums.NeuralNetworkTaskType.Regression
-           && network.Architecture.TaskType != AiDotNet.Enums.NeuralNetworkTaskType.TimeSeriesForecasting;
+    private bool UsesExternalCategoricalTargets(AiDotNet.NeuralNetworks.NeuralNetworkBase<T> network)
+        => ExternalTargetEncoding switch
+        {
+            ExternalTargetEncodingKind.Continuous => false,
+            ExternalTargetEncodingKind.SparseClassIndices => true,
+            ExternalTargetEncodingKind.DenseClassProbabilities => true,
+            _ => network.Architecture.TaskType != AiDotNet.Enums.NeuralNetworkTaskType.Regression
+                 && network.Architecture.TaskType != AiDotNet.Enums.NeuralNetworkTaskType.TimeSeriesForecasting
+        };
 
     /// <summary>
     /// Streams every parameter tensor via <c>GetParameterChunks()</c> and
@@ -5318,13 +5412,32 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
     /// but deliberately far from it. This is the generic fallback for models that quantise or project
     /// two random targets onto the same internal supervision.
     /// </summary>
-    private Tensor<T> CreateContrastTarget(
+    protected Tensor<T> CreateContrastTarget(
         INeuralNetworkModel<T> network, Tensor<T> source, Tensor<T> input)
     {
         var shape = source.Shape.ToArray();
         var contrast = new Tensor<T>(shape);
 
         if (source.Length == 0) return contrast;
+
+        if (ExternalTargetEncoding == ExternalTargetEncodingKind.SparseClassIndices)
+        {
+            int numClasses = ExternalCategoricalClassCount(network, source);
+            Assert.True(numClasses > 1,
+                $"{GetType().Name} reported {numClasses} classes for a sparse categorical target.");
+
+            for (int i = 0; i < source.Length; i++)
+            {
+                double value = ConvertToDouble(source[i]);
+                Assert.True(IsFinite(value) && value == Math.Truncate(value)
+                    && value >= 0.0 && value < numClasses,
+                    $"{GetType().Name} produced sparse class id {value} at target index {i}; "
+                    + $"expected an integer in [0, {numClasses - 1}].");
+                contrast[i] = NumOps.FromDouble(((int)value + 1) % numClasses);
+            }
+
+            return contrast;
+        }
 
         if (network is AiDotNet.NeuralNetworks.NeuralNetworkBase<T> transformedTargetNetwork
             && !UsesExternalCategoricalTargets(transformedTargetNetwork)

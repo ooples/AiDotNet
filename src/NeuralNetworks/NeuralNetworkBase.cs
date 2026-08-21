@@ -15416,6 +15416,29 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     }
 
     /// <summary>
+    /// Computes gradients for a sample whose input has two modalities.
+    /// </summary>
+    /// <param name="input">The primary input.</param>
+    /// <param name="auxiliary">The second input exposed to the model's forward.</param>
+    /// <param name="target">The training target.</param>
+    /// <param name="lossFunction">Optional override loss function.</param>
+    /// <returns>A vector containing the concatenated gradients for all trainable parameters.</returns>
+    /// <remarks>
+    /// This is the gradient counterpart to the shared auxiliary-input <c>Predict</c> and
+    /// <c>Train</c> funnels. Keeping the scope here ensures conformance tools and optimizers
+    /// differentiate the same multimodal graph as production training without per-model plumbing.
+    /// </remarks>
+    public Vector<T> ComputeGradients(
+        Tensor<T> input,
+        Tensor<T>? auxiliary,
+        Tensor<T> target,
+        ILossFunction<T>? lossFunction = null)
+    {
+        using var _ = UseAuxiliaryInput(auxiliary);
+        return ComputeGradients(input, target, lossFunction);
+    }
+
+    /// <summary>
     /// Applies a flattened gradient vector to update the network's parameters.
     /// </summary>
     /// <param name="gradients">The concatenated gradients for all parameters.</param>

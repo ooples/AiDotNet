@@ -146,4 +146,59 @@ public class RBMLayerLazyCtorIssue1213Tests
         var scalar = new Tensor<float>(System.Array.Empty<int>());
         Assert.Throws<System.ArgumentException>(() => layer.Forward(scalar));
     }
+
+    /// <summary>
+    /// Contrastive-divergence updates must preserve the registered parameter tensor
+    /// identities. Compiled and eager optimizers capture those references; replacing a
+    /// field during CD makes subsequent supervised fine-tuning update abandoned storage
+    /// while Forward reads a different tensor.
+    /// </summary>
+    [Fact]
+    public void ContrastiveDivergence_UpdatesRegisteredParametersInPlace()
+    {
+        using var layer = new RBMLayer<float>(
+            visibleUnits: 4,
+            hiddenUnits: 3,
+            scalarActivation: null);
+
+        var registeredBefore = layer.GetTrainableParameters().ToArray();
+        var valuesBefore = registeredBefore.Select(p => p.ToArray()).ToArray();
+
+        layer.TrainWithContrastiveDivergence(
+            new Vector<float>([0.1f, 0.7f, 0.3f, 0.9f]),
+            learningRate: 0.05f,
+            kSteps: 1);
+
+        var registeredAfter = layer.GetTrainableParameters().ToArray();
+        Assert.Equal(registeredBefore.Length, registeredAfter.Length);
+        for (int i = 0; i < registeredBefore.Length; i++)
+            Assert.Same(registeredBefore[i], registeredAfter[i]);
+
+        Assert.True(
+            registeredAfter.SelectMany((p, parameterIndex) =>
+                    p.ToArray().Select((value, elementIndex) =>
+                        value != valuesBefore[parameterIndex][elementIndex]))
+                .Any(changed => changed),
+            "CD-1 preserved parameter identities but did not update any registered value.");
+    }
+
+    [Fact]
+    public void ContrastiveDivergence_AcceptsBatchedTensorWithoutFlatteningVisibleAxis()
+    {
+        using var layer = new RBMLayer<float>(
+            visibleUnits: 4,
+            hiddenUnits: 3,
+            scalarActivation: null);
+        var batch = new Tensor<float>([2, 4]);
+        float[] values = [0.1f, 0.7f, 0.3f, 0.9f, 0.8f, 0.2f, 0.6f, 0.4f];
+        for (int i = 0; i < values.Length; i++) batch[i] = values[i];
+
+        var exception = Record.Exception(() =>
+            layer.TrainWithContrastiveDivergence(
+                batch,
+                learningRate: 0.05f,
+                kSteps: 1));
+
+        Assert.Null(exception);
+    }
 }

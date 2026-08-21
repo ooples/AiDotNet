@@ -13,6 +13,9 @@ namespace AiDotNet.Tests.ModelFamilyTests.Base;
 /// </summary>
 public abstract class SegmentationTestBase<T> : NeuralNetworkModelTestBase<T>
 {
+    protected override ExternalTargetEncodingKind ExternalTargetEncoding
+        => ExternalTargetEncodingKind.DenseClassProbabilities;
+
     /// <summary>
     /// Segmentation targets are per-pixel ONE-HOT class distributions consumed by a
     /// cross-entropy loss. The base <see cref="NeuralNetworkModelTestBase{T}.CreateRandomTargetTensor"/>
