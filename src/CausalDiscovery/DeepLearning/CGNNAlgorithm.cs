@@ -117,7 +117,7 @@ public class CGNNAlgorithm<T> : DeepCausalBase<T>
                 if (!NumOps.GreaterThan(NumOps.Abs(olsWeight), NumOps.FromDouble(0.1))) continue;
 
                 double confidence = Math.Abs(NumOps.ToDouble(mmdIJ) - NumOps.ToDouble(mmdJI));
-                if (!double.IsFinite(confidence)) confidence = 0.0;
+                if (double.IsNaN(confidence) || double.IsInfinity(confidence)) confidence = 0.0;
                 candidates.Add((from, to, olsWeight, confidence));
             }
 

@@ -201,7 +201,7 @@ public class OnlineSGDRegressor<T> : OnlineLearningModelBase<T>
         }
         localCurvature += _l2Penalty;
 
-        if (double.IsFinite(localCurvature) && localCurvature > 0.0)
+        if (!double.IsNaN(localCurvature) && !double.IsInfinity(localCurvature) && localCurvature > 0.0)
             lr = Math.Min(lr, 1.0 / localCurvature);
 
         // Update weights

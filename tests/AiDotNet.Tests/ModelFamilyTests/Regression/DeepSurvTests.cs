@@ -9,6 +9,9 @@ namespace AiDotNet.Tests.ModelFamilyTests.Regression;
 
 public class DeepSurvTests : RegressionModelTestBase
 {
+    private static bool IsFinite(double value)
+        => !double.IsNaN(value) && !double.IsInfinity(value);
+
     protected override IFullModel<double, Matrix<double>, Vector<double>> CreateModel()
         => new DeepSurv<double>();
 
@@ -34,9 +37,9 @@ public class DeepSurvTests : RegressionModelTestBase
         var predictions = await model.PredictAsync(probe);
         for (int i = 0; i < predictions.Length; i++)
         {
-            Assert.True(double.IsFinite(riskScores[i]),
+            Assert.True(IsFinite(riskScores[i]),
                 $"Restored risk score {i} is non-finite: {riskScores[i]:G17}.");
-            Assert.True(double.IsFinite(predictions[i]),
+            Assert.True(IsFinite(predictions[i]),
                 $"Restored expected survival time {i} is non-finite: {predictions[i]:G17}.");
         }
     }
@@ -62,9 +65,9 @@ public class DeepSurvTests : RegressionModelTestBase
         var predictions = await model.PredictAsync(probe);
         for (int i = 0; i < predictions.Length; i++)
         {
-            Assert.True(double.IsFinite(risks[i]),
+            Assert.True(IsFinite(risks[i]),
                 $"Fitted risk score {i} is non-finite: {risks[i]:G17}.");
-            Assert.True(double.IsFinite(predictions[i]),
+            Assert.True(IsFinite(predictions[i]),
                 $"Expected survival time {i} is non-finite: {predictions[i]:G17}.");
         }
     }
