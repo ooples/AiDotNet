@@ -155,7 +155,9 @@ public class MetaLearningCoverageIntegrationTests
             $"fixed-tensor-task-{seed}");
     }
 
-    private static T InvokePrivate<T>(object instance, Type declaringType, string methodName, params object[] args)
+    // object?[] so a call can pass an explicit null for an optional/nullable parameter without
+    // reaching for the null-forgiving operator.
+    private static T InvokePrivate<T>(object instance, Type declaringType, string methodName, params object?[] args)
     {
         var method = declaringType.GetMethod(methodName, BindingFlags.Instance | BindingFlags.NonPublic);
         Assert.NotNull(method);
@@ -230,13 +232,18 @@ public class MetaLearningCoverageIntegrationTests
         input[0, 1] = -0.2;
         var expected = new Vector<double>(new[] { 0.4 });
 
+        // FOUR parameters, not three. ComputeGradientsFallback gained a trailing
+        // ILossFunction<T>? lossOverride and this reflection call was never updated, so it threw
+        // TargetParameterCountException before reaching a single assertion. null selects the
+        // learner's configured LossFunction, which is the behaviour this test is covering.
         var gradients = InvokePrivate<Vector<double>>(
             learner,
             typeof(MetaLearnerBase<double, Matrix<double>, Vector<double>>),
             "ComputeGradientsFallback",
             model,
             input,
-            expected);
+            expected,
+            null);
 
         Assert.Equal(model.ParameterCount, gradients.Length);
     }
