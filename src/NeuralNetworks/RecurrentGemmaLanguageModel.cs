@@ -136,28 +136,6 @@ public class RecurrentGemmaLanguageModel<T> : TokenLanguageModelLayoutBase<T>
     #region NeuralNetworkBase Overrides
 
     /// <summary>
-    /// Trains through the eager tape rather than the fused compiled step, as Griffin and Hawk do.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// The three models build the SAME RG-LRU stack, and both siblings already opt out here. This one
-    /// did not, so it inherited the base default of <c>true</c> and was the only member of the family
-    /// training through the fused path.
-    /// </para>
-    /// <para>
-    /// That path is what produced the non-finite parameters. Measured on this model at its test scale
-    /// (vocab 4096, width 256, four layers): the forward is finite with logits in [-1.41, 1.33], the
-    /// loss is finite at 376.27, and <c>ComputeGradients</c> — which runs the eager tape — returns
-    /// 0 of 3,417,600 entries non-finite with a largest magnitude of 0.12. A single <c>Train</c> call
-    /// through the fused step on the identical model returns 3,417,600 of 3,417,600 non-finite. The
-    /// gradients are not being computed wrongly; the fused training step is the only stage that turns
-    /// them into NaN, which is also why every downstream invariant (parameter finiteness, forward
-    /// after training, loss decrease, clone equality) failed together.
-    /// </para>
-    /// </remarks>
-    protected override bool SupportsFusedCompiledTraining => false;
-
-    /// <summary>
     /// Uses the constructor-selected optimizer, as the Griffin and Hawk siblings do.
     /// </summary>
     /// <remarks>

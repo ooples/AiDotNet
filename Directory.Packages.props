@@ -332,11 +332,16 @@
          Measured on a developer machine running this suite: three orphaned backing.bin files totalling
          97 GB in %TEMP% from a single interrupted run. That filled the drive far enough that Windows
          began compressing files to reclaim space, which silently corrupted a Docker VHDX, since a
-         compressed virtual disk fails every write. -->
-    <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.128.0" />
-    <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.128.0" />
-    <PackageVersion Include="AiDotNet.Tensors" Version="0.128.0" />
-    <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.128.0" />
+         compressed virtual disk fails every write.
+
+         Bumped 0.128.0 -> 0.129.0: consumes the upstream fused-training corrections relevant to this
+         model family, including the RG-LRU sqrt-derivative fix, non-finite-gradient-safe compiled
+         optimizer step, and compiled ABC recurrence support. RecurrentGemma remains eligible for fused
+         training and therefore receives these shared fixes instead of permanently losing the fast path. -->
+    <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.129.0" />
+    <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.129.0" />
+    <PackageVersion Include="AiDotNet.Tensors" Version="0.129.0" />
+    <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.129.0" />
     <!-- Microsoft / .NET -->
     <PackageVersion Include="Microsoft.CSharp" Version="4.7.0" />
     <PackageVersion Include="Microsoft.Data.Sqlite" Version="10.0.11" />
