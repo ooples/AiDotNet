@@ -167,11 +167,6 @@ public static class DeserializationHelper
             // [LayerState] reconstructs constructor arguments, but some layers also have
             // behavior-affecting post-construction configuration. Restore it before returning;
             // otherwise the generated factory bypasses the explicit legacy branches below.
-            if (generatedLayer is EmbeddingLayer<T> generatedEmbedding)
-                RestoreEmbeddingConfiguration(generatedEmbedding, additionalParams);
-            else if (generatedLayer is MultiHeadAttentionLayer<T> generatedAttention)
-                RestoreMultiHeadAttentionConfiguration(generatedAttention, additionalParams);
-
             // THE SAME LAZY PRE-RESOLVE THE OTHER PATHS GET. Returning straight from here bypassed
             // the block at the end of this method, so a lazy layer rebuilt through
             // GeneratedLayerFactories stayed unresolved: SetParameters then received a layer whose
@@ -190,6 +185,7 @@ public static class DeserializationHelper
                             : $"a {generatedLayer.GetType().Name}, which is not an ILayer<{typeof(T).Name}>."));
             }
 
+            RestorePostConstructionConfiguration(generatedAsLayer, additionalParams);
             PreResolveLazyShape(generatedAsLayer, inputShape);
 
             return generatedAsLayer;
@@ -4252,6 +4248,64 @@ public static class DeserializationHelper
                     $"'{scaleStr}'. Expected 'true' or 'false'.");
             embedding.ScaleBySqrtDimension = scaleVal;
         }
+    }
+
+    /// <summary>
+    /// Restores behavior selected after construction for every generated layer factory.
+    /// </summary>
+    /// <remarks>
+    /// Generated factories own constructor state, but a few reusable layer protocols intentionally
+    /// configure behavior after construction. Keeping that protocol here prevents each layer from
+    /// needing a serialization/clone override and ensures newly generated factories do not bypass it.
+    /// </remarks>
+    private static void RestorePostConstructionConfiguration<T>(
+        ILayer<T> layer,
+        Dictionary<string, object>? additionalParams)
+    {
+        if (layer is EmbeddingLayer<T> embedding)
+        {
+            RestoreEmbeddingConfiguration(embedding, additionalParams);
+        }
+
+        if (layer is MultiHeadAttentionLayer<T> attention)
+        {
+            RestoreMultiHeadAttentionConfiguration(attention, additionalParams);
+            return;
+        }
+
+        string? positionalEncoding = TryGetString(additionalParams, "PositionalEncoding");
+        if (string.IsNullOrWhiteSpace(positionalEncoding)
+            || !Enum.TryParse<Enums.PositionalEncodingType>(
+                positionalEncoding, ignoreCase: true, out var positionalType)
+            || positionalType == Enums.PositionalEncodingType.None)
+        {
+            return;
+        }
+
+        // ConfigurePositionalEncoding is a common layer protocol (GQA, cached/paged attention,
+        // flash attention). Discovering the protocol by its public signature keeps this restoration
+        // generic; a new implementation gets round-trip support without another type switch.
+        MethodInfo? configure = layer.GetType().GetMethod(
+            "ConfigurePositionalEncoding",
+            BindingFlags.Public | BindingFlags.Instance,
+            binder: null,
+            types: new[] { typeof(Enums.PositionalEncodingType), typeof(double), typeof(int) },
+            modifiers: null);
+        if (configure is null)
+        {
+            throw new InvalidOperationException(
+                $"Layer '{layer.GetType().Name}' persisted positional encoding '{positionalEncoding}' "
+                + "but does not expose ConfigurePositionalEncoding(PositionalEncodingType, double, int).");
+        }
+
+        double ropeTheta = TryGetDouble(additionalParams, "RoPETheta")
+            ?? TryGetDouble(additionalParams, "RopeTheta")
+            ?? 10000.0;
+        int maxSequenceLength = TryGetInt(additionalParams, "PositionalMaxSequenceLength")
+            ?? TryGetInt(additionalParams, "MaxSequenceLength")
+            ?? TryGetInt(additionalParams, "SequenceLength")
+            ?? 2048;
+        configure.Invoke(layer, new object[] { positionalType, ropeTheta, maxSequenceLength });
     }
 
     private static void RestoreMultiHeadAttentionConfiguration<T>(

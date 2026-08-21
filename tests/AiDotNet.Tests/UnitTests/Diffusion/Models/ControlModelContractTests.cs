@@ -1,5 +1,7 @@
 using AiDotNet.Diffusion.Control;
 using AiDotNet.Diffusion.Guidance;
+using AiDotNet.Diffusion.NoisePredictors;
+using AiDotNet.Diffusion.VAE;
 using Xunit;
 using System.Threading.Tasks;
 
@@ -238,7 +240,27 @@ public class ControlModelContractTests : DiffusionUnitTestBase
     [Fact(Timeout = 120000)]
     public async Task ControlNetPlusPlusModel_Clone_CreatesIndependentCopy()
     {
-        var model = new ControlNetPlusPlusModel<float>();
+        // Clone semantics do not require allocating the production 865M-parameter SD 1.5 U-Net.
+        // Keep the real ControlNet++ encoder while injecting the same small UNet/VAE contracts used
+        // by the diffusion parameter tests; this still detects missing component state and sharing.
+        var model = new ControlNetPlusPlusModel<float>(
+            baseUNet: new UNetNoisePredictor<float>(
+                inputChannels: 4,
+                outputChannels: 4,
+                baseChannels: 8,
+                channelMultipliers: [1],
+                numResBlocks: 1,
+                attentionResolutions: [],
+                contextDim: 0,
+                numHeads: 1,
+                inputHeight: 8),
+            vae: new StandardVAE<float>(
+                inputChannels: 3,
+                latentChannels: 4,
+                baseChannels: 8,
+                channelMultipliers: [1],
+                numResBlocksPerLevel: 1),
+            seed: 42);
         var clone = model.Clone();
 
         Assert.NotNull(clone);

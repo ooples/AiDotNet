@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -6,6 +7,8 @@ using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Tensors.LinearAlgebra;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 
 namespace AiDotNet.Models;
 
@@ -65,8 +68,29 @@ public static class ModelStateEnvelope
     /// <param name="payload">The stored bytes.</param>
     /// <returns>The payload without its trailer, or the original when there is none.</returns>
     public static byte[] Extract<T>(ModelStateRegistry<T> state, byte[] payload)
+        => Extract(state, payload, restoreAfterParameters: null);
+
+    /// <summary>
+    /// Applies structural state and strips the envelope, deferring exact native-precision
+    /// parameter shadows until the ordinary flat parameter vector has been restored.
+    /// </summary>
+    public static byte[] ExtractBeforeParameters<T>(ModelStateRegistry<T> state, byte[] payload)
+        => Extract(state, payload, restoreAfterParameters: false);
+
+    /// <summary>
+    /// Applies only exact native-precision parameter shadows from an envelope. The returned inner
+    /// payload is provided for symmetry and can be ignored by callers that already parsed it.
+    /// </summary>
+    public static byte[] ExtractAfterParameters<T>(ModelStateRegistry<T> state, byte[] payload)
+        => Extract(state, payload, restoreAfterParameters: true);
+
+    private static byte[] Extract<T>(
+        ModelStateRegistry<T> state,
+        byte[] payload,
+        bool? restoreAfterParameters)
     {
-        if (payload is null || payload.Length < TrailerLength) return payload ?? Array.Empty<byte>();
+        if (payload is null) throw new ArgumentNullException(nameof(payload));
+        if (payload.Length < TrailerLength) return payload;
 
         int magic = BitConverter.ToInt32(payload, payload.Length - sizeof(int));
         if (magic != Magic) return payload;
@@ -79,7 +103,9 @@ public static class ModelStateEnvelope
         {
             using var buffer = new MemoryStream(payload, innerLength, blockLength);
             using var reader = new BinaryReader(buffer, System.Text.Encoding.UTF8, leaveOpen: true);
-            state.ReadAll(reader);
+            if (!restoreAfterParameters.HasValue) state.ReadAll(reader);
+            else if (restoreAfterParameters.Value) state.ReadAfterParameters(reader);
+            else state.ReadBeforeParameters(reader);
         }
 
         var inner = new byte[innerLength];
@@ -116,6 +142,18 @@ public static class ModelStateEnvelope
 /// </remarks>
 public sealed class ModelStateRegistry<T>
 {
+    // A child-list payload used to begin directly with its count. A negative marker keeps old
+    // payloads readable while allowing new payloads to record each child's concrete runtime type.
+    private const int TypedChildListMarker = unchecked((int)0xA1D0C11D);
+
+    private static readonly JsonSerializerSettings ObjectStateSettings = new()
+    {
+        ConstructorHandling = ConstructorHandling.AllowNonPublicDefaultConstructor,
+        Formatting = Formatting.None,
+        TypeNameHandling = TypeNameHandling.None,
+        Converters = { new ModelSerializerJsonConverter() }
+    };
+
     private readonly List<Entry> _entries = new();
     private readonly HashSet<string> _names = new(StringComparer.Ordinal);
 
@@ -124,12 +162,17 @@ public sealed class ModelStateRegistry<T>
         public string Name = string.Empty;
         public Action<BinaryWriter> Write = _ => { };
         public Action<BinaryReader> Read = _ => { };
+        public bool RestoreAfterParameters;
     }
 
     /// <summary>Gets the number of declared state entries.</summary>
     public int Count => _entries.Count;
 
-    private void Add(string name, Action<BinaryWriter> write, Action<BinaryReader> read)
+    private void Add(
+        string name,
+        Action<BinaryWriter> write,
+        Action<BinaryReader> read,
+        bool restoreAfterParameters = false)
     {
         if (string.IsNullOrWhiteSpace(name))
             throw new ArgumentException("State name must not be empty.", nameof(name));
@@ -140,7 +183,13 @@ public sealed class ModelStateRegistry<T>
         if (!_names.Add(name))
             throw new ArgumentException($"State '{name}' is already declared on this model.", nameof(name));
 
-        _entries.Add(new Entry { Name = name, Write = write, Read = read });
+        _entries.Add(new Entry
+        {
+            Name = name,
+            Write = write,
+            Read = read,
+            RestoreAfterParameters = restoreAfterParameters
+        });
     }
 
     /// <summary>Declares a vector, such as a fitted knot vector or a set of dual coefficients.</summary>
@@ -152,6 +201,44 @@ public sealed class ModelStateRegistry<T>
             w => WriteVector(w, get()),
             r => set(ReadVector(r)));
 
+    /// <summary>Declares a byte vector, such as quantized optimizer moments.</summary>
+    public void DeclareByteVector(string name, Func<Vector<byte>?> get, Action<Vector<byte>?> set)
+        => Add(name,
+            w =>
+            {
+                var vector = get();
+                if (vector is null) { w.Write(-1); return; }
+                w.Write(vector.Length);
+                for (int i = 0; i < vector.Length; i++) w.Write(vector[i]);
+            },
+            r =>
+            {
+                int length = r.ReadInt32();
+                if (length < 0) { set(null); return; }
+                var vector = new Vector<byte>(length);
+                for (int i = 0; i < length; i++) vector[i] = r.ReadByte();
+                set(vector);
+            });
+
+    /// <summary>Declares a double vector held by a model whose primary numeric type may differ.</summary>
+    public void DeclareDoubleVector(string name, Func<Vector<double>?> get, Action<Vector<double>?> set)
+        => Add(name,
+            w =>
+            {
+                var vector = get();
+                if (vector is null) { w.Write(-1); return; }
+                w.Write(vector.Length);
+                for (int i = 0; i < vector.Length; i++) w.Write(vector[i]);
+            },
+            r =>
+            {
+                int length = r.ReadInt32();
+                if (length < 0) { set(null); return; }
+                var vector = new Vector<double>(length);
+                for (int i = 0; i < length; i++) vector[i] = r.ReadDouble();
+                set(vector);
+            });
+
     /// <summary>Declares a matrix, such as the retained training set of an instance-based model.</summary>
     /// <param name="name">A stable name, unique within the model.</param>
     /// <param name="get">Reads the current value.</param>
@@ -160,6 +247,203 @@ public sealed class ModelStateRegistry<T>
         => Add(name,
             w => WriteMatrix(w, get()),
             r => set(ReadMatrix(r)));
+
+    /// <summary>Declares an assignable fitted object, array, list, or dictionary.</summary>
+    /// <typeparam name="TState">The compile-time state type.</typeparam>
+    /// <param name="name">A stable name, unique within the model.</param>
+    /// <param name="get">Reads the current value.</param>
+    /// <param name="set">Installs the restored value.</param>
+    /// <remarks>
+    /// This is the general object-state path used by generated declarations for learned structures
+    /// that are not numeric tensors: nested tree nodes, ensemble records, jagged arrays and similar
+    /// model-owned data. Nested models still travel through their own serializer, so a POCO record
+    /// that contains a model does not reduce that child to its public properties.
+    /// </remarks>
+    public void DeclareObject<TState>(string name, Func<TState?> get, Action<TState?> set)
+        where TState : class
+        => Add(name,
+            w => WriteObjectState(w, get()),
+            r => set(ReadObjectState<TState>(r, name)));
+
+    /// <summary>Declares a readonly list or dictionary and restores its contents in place.</summary>
+    /// <typeparam name="TState">The concrete collection type.</typeparam>
+    /// <param name="name">A stable name, unique within the model.</param>
+    /// <param name="get">Reads the collection instance created by the model constructor.</param>
+    /// <remarks>
+    /// A readonly collection field means the reference is configuration, not that its fitted
+    /// contents are immutable. The generator cannot assign that field, so the registry clears and
+    /// refills the existing collection. Failing loudly when the constructor left it null prevents a
+    /// successful-looking restore that silently drops the payload.
+    /// </remarks>
+    public void DeclareObjectInPlace<TState>(string name, Func<TState?> get)
+        where TState : class
+        => Add(name,
+            w => WriteObjectState(w, get()),
+            r =>
+            {
+                var restored = ReadObjectState<TState>(r, name);
+                var current = get();
+                if (current is null)
+                {
+                    throw new InvalidOperationException(
+                        $"State '{name}' is held in a readonly collection, but its constructor left "
+                        + "the collection null, so the restored contents have nowhere to go.");
+                }
+
+                CopyCollectionState(name, current, restored);
+            });
+
+    /// <summary>Declares a readonly list of vectors and restores its contents in place.</summary>
+    public void DeclareInPlace(string name, Func<List<Vector<T>>?> get)
+        => Declare(name, get, restored => RestoreCollectionInPlace(name, get, restored));
+
+    /// <summary>Declares a readonly list of matrices and restores its contents in place.</summary>
+    public void DeclareInPlace(string name, Func<List<Matrix<T>>?> get)
+        => Declare(name, get, restored => RestoreCollectionInPlace(name, get, restored));
+
+    /// <summary>Declares a readonly list of tensors and restores its contents in place.</summary>
+    public void DeclareInPlace(string name, Func<List<Tensor<T>>?> get)
+        => Declare(name, get, restored => RestoreCollectionInPlace(name, get, restored));
+
+    /// <summary>Declares a readonly string-keyed vector table and restores it in place.</summary>
+    public void DeclareInPlace(string name, Func<Dictionary<string, Vector<T>>?> get)
+        => Declare(name, get, restored => RestoreCollectionInPlace(name, get, restored));
+
+    /// <summary>Declares a readonly integer-keyed vector table and restores it in place.</summary>
+    public void DeclareInPlace(string name, Func<Dictionary<int, Vector<T>>?> get)
+        => Declare(name, get, restored => RestoreCollectionInPlace(name, get, restored));
+
+    private static void RestoreCollectionInPlace<TState>(
+        string name,
+        Func<TState?> get,
+        TState? restored)
+        where TState : class
+    {
+        var current = get();
+        if (current is null)
+        {
+            throw new InvalidOperationException(
+                $"State '{name}' is held in a readonly collection, but its constructor left "
+                + "the collection null, so the restored contents have nowhere to go.");
+        }
+
+        CopyCollectionState(name, current, restored);
+    }
+
+    private static void WriteObjectState<TState>(BinaryWriter writer, TState? value)
+        where TState : class
+    {
+        if (value is null) { writer.Write(false); return; }
+        writer.Write(true);
+        writer.Write(JsonConvert.SerializeObject(value, ObjectStateSettings));
+    }
+
+    private static TState? ReadObjectState<TState>(BinaryReader reader, string name)
+        where TState : class
+    {
+        if (!reader.ReadBoolean()) return null;
+        string json = reader.ReadString();
+        try
+        {
+            return JsonConvert.DeserializeObject<TState>(json, ObjectStateSettings)
+                ?? throw new InvalidOperationException(
+                    $"State '{name}' deserialized to null for '{typeof(TState).FullName}'.");
+        }
+        catch (JsonException exception)
+        {
+            throw new InvalidOperationException(
+                $"State '{name}' is not valid serialized object state for "
+                + $"'{typeof(TState).FullName}'.",
+                exception);
+        }
+    }
+
+    private static void CopyCollectionState<TState>(string name, TState current, TState? restored)
+        where TState : class
+    {
+        if (current is IDictionary currentDictionary)
+        {
+            currentDictionary.Clear();
+            if (restored is IDictionary restoredDictionary)
+            {
+                foreach (DictionaryEntry pair in restoredDictionary)
+                    currentDictionary.Add(pair.Key, pair.Value);
+            }
+            return;
+        }
+
+        if (current is IList currentList)
+        {
+            currentList.Clear();
+            if (restored is IList restoredList)
+            {
+                foreach (var item in restoredList) currentList.Add(item);
+            }
+            return;
+        }
+
+        throw new InvalidOperationException(
+            $"State '{name}' requested in-place restoration for '{typeof(TState).FullName}', "
+            + "which is neither a list nor a dictionary.");
+    }
+
+    /// <summary>
+    /// Preserves nested models inside generated object state through their canonical serializer.
+    /// </summary>
+    private sealed class ModelSerializerJsonConverter : JsonConverter
+    {
+        public override bool CanConvert(Type objectType)
+            => typeof(IModelSerializer).IsAssignableFrom(objectType);
+
+        public override void WriteJson(JsonWriter writer, object? value, JsonSerializer serializer)
+        {
+            if (value is null) { writer.WriteNull(); return; }
+            if (value is not IModelSerializer model)
+                throw new JsonSerializationException(
+                    $"'{value.GetType().FullName}' does not implement IModelSerializer.");
+
+            writer.WriteStartObject();
+            writer.WritePropertyName("modelType");
+            writer.WriteValue(value.GetType().AssemblyQualifiedName);
+            writer.WritePropertyName("payload");
+            writer.WriteValue(Convert.ToBase64String(model.Serialize()));
+            writer.WriteEndObject();
+        }
+
+        public override object? ReadJson(
+            JsonReader reader,
+            Type objectType,
+            object? existingValue,
+            JsonSerializer serializer)
+        {
+            if (reader.TokenType == JsonToken.Null) return null;
+
+            var data = JObject.Load(reader);
+            string? typeName = data["modelType"]?.Value<string>();
+            string? payloadText = data["payload"]?.Value<string>();
+            Type? concrete = string.IsNullOrWhiteSpace(typeName)
+                ? objectType
+                : Type.GetType(typeName!, throwOnError: false);
+
+            if (concrete is null || !objectType.IsAssignableFrom(concrete)
+                || !typeof(IModelSerializer).IsAssignableFrom(concrete))
+            {
+                throw new JsonSerializationException(
+                    $"Nested model type '{typeName}' cannot be restored as '{objectType.FullName}'.");
+            }
+
+            var model = CreateSerializable(concrete, "generated object state");
+            try
+            {
+                model.Deserialize(Convert.FromBase64String(payloadText ?? string.Empty));
+            }
+            catch (FormatException exception)
+            {
+                throw new JsonSerializationException("Nested model payload is not valid base64.", exception);
+            }
+            return model;
+        }
+    }
 
     /// <summary>Declares a list of vectors, such as per-feature knots or per-output coefficients.</summary>
     /// <param name="name">A stable name, unique within the model.</param>
@@ -196,6 +480,26 @@ public sealed class ModelStateRegistry<T>
         => Add(name,
             w => WriteTensor(w, get()),
             r => set(ReadTensor(r)));
+
+    /// <summary>Declares a list of tensors, such as a temporal memory bank.</summary>
+    public void Declare(string name, Func<List<Tensor<T>>?> get, Action<List<Tensor<T>>?> set)
+        => Add(name,
+            w =>
+            {
+                var list = get();
+                if (list is null) { w.Write(-1); return; }
+                w.Write(list.Count);
+                foreach (var tensor in list) WriteTensor(w, tensor);
+            },
+            r =>
+            {
+                int count = r.ReadInt32();
+                if (count < 0) { set(null); return; }
+                var list = new List<Tensor<T>>(count);
+                for (int i = 0; i < count; i++)
+                    list.Add(ReadTensor(r) ?? new Tensor<T>([0]));
+                set(list);
+            });
 
     /// <summary>Declares an integer array, such as node indices or a feature mapping.</summary>
     /// <param name="name">A stable name, unique within the model.</param>
@@ -245,6 +549,13 @@ public sealed class ModelStateRegistry<T>
         public NodeShape<TNode> Int32(Func<TNode, int> get, Action<TNode, int> set)
         {
             Fields.Add(((n, w) => w.Write(get(n)), (n, r) => set(n, r.ReadInt32())));
+            return this;
+        }
+
+        /// <summary>Declares a 64-bit integer field on the node.</summary>
+        public NodeShape<TNode> Int64(Func<TNode, long> get, Action<TNode, long> set)
+        {
+            Fields.Add(((n, w) => w.Write(get(n)), (n, r) => set(n, r.ReadInt64())));
             return this;
         }
 
@@ -561,6 +872,44 @@ public sealed class ModelStateRegistry<T>
                 if (length > 0) get()?.Deserialize(bytes);
             });
 
+    /// <summary>Declares an assignable child that may not exist until its fitted state is restored.</summary>
+    /// <typeparam name="TChild">The child's concrete or abstract serializer type.</typeparam>
+    /// <param name="name">A stable name, unique within the model.</param>
+    /// <param name="get">Reads the current child, if materialized.</param>
+    /// <param name="set">Installs a child constructed from the serialized state.</param>
+    /// <remarks>
+    /// Some nested state is created by <c>Fit</c>, not by the parent's constructor. Restoring only
+    /// in place silently discarded that child's bytes on a fresh destination. This overload retains
+    /// the ordinary in-place path when an instance exists and otherwise constructs the declared
+    /// child through the same parameterless-or-all-optional convention used for child lists.
+    /// </remarks>
+    public void DeclareChild<TChild>(string name, Func<TChild?> get, Action<TChild?> set)
+        where TChild : class, IModelSerializer
+        => Add(name,
+            w =>
+            {
+                var child = get();
+                if (child is null) { w.Write(-1); return; }
+                var bytes = child.Serialize();
+                w.Write(bytes.Length);
+                w.Write(bytes);
+            },
+            r =>
+            {
+                int length = r.ReadInt32();
+                if (length < 0) { set(null); return; }
+
+                var bytes = r.ReadBytes(length);
+                var child = get();
+                if (child is null)
+                {
+                    child = CreateChild<TChild>(name, string.Empty);
+                    set(child);
+                }
+
+                if (length > 0) child.Deserialize(bytes);
+            });
+
     /// <summary>Declares a nested parameter source, such as a duelling agent's target network.</summary>
     /// <param name="name">A stable name, unique within the model.</param>
     /// <param name="get">Reads the source.</param>
@@ -663,10 +1012,14 @@ public sealed class ModelStateRegistry<T>
             w =>
             {
                 var children = get();
+                w.Write(TypedChildListMarker);
                 if (children is null) { w.Write(-1); return; }
                 w.Write(children.Count);
                 foreach (var child in children)
                 {
+                    // The declared element may be an interface or abstract base. A fresh clone has
+                    // no fitted children to inspect, so the concrete type must travel with its bytes.
+                    w.Write(child?.GetType().AssemblyQualifiedName ?? string.Empty);
                     var bytes = child?.Serialize() ?? Array.Empty<byte>();
                     w.Write(bytes.Length);
                     w.Write(bytes);
@@ -674,11 +1027,14 @@ public sealed class ModelStateRegistry<T>
             },
             r =>
             {
-                int count = r.ReadInt32();
+                int header = r.ReadInt32();
+                bool carriesTypes = header == TypedChildListMarker;
+                int count = carriesTypes ? r.ReadInt32() : header;
                 if (count < 0) return;
                 var children = get();
                 for (int i = 0; i < count; i++)
                 {
+                    string typeName = carriesTypes ? r.ReadString() : string.Empty;
                     int length = r.ReadInt32();
                     var bytes = r.ReadBytes(length);
                     if (length == 0 || children is null) continue;
@@ -692,7 +1048,7 @@ public sealed class ModelStateRegistry<T>
                     // were there, and nothing was listening.
                     while (children.Count <= i)
                     {
-                        children.Add(CreateChild<TChild>(name));
+                        children.Add(CreateChild<TChild>(name, typeName));
                     }
 
                     children[i]?.Deserialize(bytes);
@@ -701,6 +1057,7 @@ public sealed class ModelStateRegistry<T>
 
     /// <summary>Builds an empty child for a restored list to fill.</summary>
     /// <param name="name">The state name, for the error message when it cannot be built.</param>
+    /// <param name="typeName">The concrete runtime type saved beside the child payload.</param>
     /// <returns>A new child.</returns>
     /// <remarks>
     /// LOUD when it cannot. Returning null here, or skipping the child, would put back the silent drop
@@ -708,12 +1065,26 @@ public sealed class ModelStateRegistry<T>
     /// which is the hardest kind of defect to find. A child that cannot be built without arguments
     /// needs its parent to build the list before restoring, and the message says so.
     /// </remarks>
-    private static TChild CreateChild<TChild>(string name)
+    private static TChild CreateChild<TChild>(string name, string typeName)
         where TChild : class, IModelSerializer
     {
+        Type childType = typeof(TChild);
+        if (!string.IsNullOrEmpty(typeName))
+        {
+            Type? recordedType = Type.GetType(typeName, throwOnError: false);
+            if (recordedType is null || !childType.IsAssignableFrom(recordedType))
+            {
+                throw new InvalidOperationException(
+                    $"State '{name}' recorded child type '{typeName}', which cannot be restored as "
+                    + $"{childType.Name}.");
+            }
+
+            childType = recordedType;
+        }
+
         try
         {
-            if (Activator.CreateInstance(typeof(TChild), nonPublic: true) is TChild child) return child;
+            if (Activator.CreateInstance(childType, nonPublic: true) is TChild child) return child;
         }
         catch (MissingMethodException)
         {
@@ -730,7 +1101,7 @@ public sealed class ModelStateRegistry<T>
         // CloneEngine already binds this shape with OptionalParamBinding, which turns a Type.Missing
         // slot into the declared default. Doing the same here fixes every child type of this shape,
         // rather than asking each one to declare a second, empty constructor.
-        var withOptionalArguments = typeof(TChild)
+        var withOptionalArguments = childType
             .GetConstructors(System.Reflection.BindingFlags.Public
                 | System.Reflection.BindingFlags.NonPublic
                 | System.Reflection.BindingFlags.Instance)
@@ -755,7 +1126,7 @@ public sealed class ModelStateRegistry<T>
         throw new InvalidOperationException(
             $"State '{name}' carries a list of {typeof(TChild).Name}, and the model being restored has "
             + "fewer of them than the payload holds. Restoring cannot create one because "
-            + $"{typeof(TChild).Name} has no constructor callable without arguments. Either give it one, "
+            + $"{childType.Name} has no constructor callable without arguments. Either give it one, "
             + "or have the model build its list before Deserialize runs.");
     }
 
@@ -1023,8 +1394,18 @@ public sealed class ModelStateRegistry<T>
         if (value is null || target is null) return null;
 
         var bare = Nullable.GetUnderlyingType(target) ?? target;
-        return bare.IsEnum ? Enum.ToObject(bare, value) : Convert.ChangeType(
-            value, bare, System.Globalization.CultureInfo.InvariantCulture);
+        if (bare.IsEnum)
+        {
+            // Enum.ToObject requires the value to have the enum's actual underlying CLR type on
+            // newer runtimes. The payload deliberately normalizes every enum to Int64, so convert
+            // it back before constructing the enum (byte-backed options exposed this regression).
+            var underlying = Enum.GetUnderlyingType(bare);
+            var converted = Convert.ChangeType(
+                value, underlying, System.Globalization.CultureInfo.InvariantCulture);
+            return Enum.ToObject(bare, converted!);
+        }
+
+        return Convert.ChangeType(value, bare, System.Globalization.CultureInfo.InvariantCulture);
     }
 
     /// <summary>Declares an integer vector, such as a set of selected feature indices.</summary>
@@ -1173,6 +1554,56 @@ public sealed class ModelStateRegistry<T>
             w => WriteDoubles(w, get()),
             r => set(ReadDoubles(r)));
 
+    /// <summary>
+    /// Declares a double array that shadows a flat <typeparamref name="T"/> parameter slot.
+    /// Its native double payload is restored after the ordinary parameter vector so a float model
+    /// does not lose the working storage's extra precision during a checkpoint round trip.
+    /// </summary>
+    public void DeclareExact(string name, Func<double[]?> get, Action<double[]?> set)
+        => Add(name,
+            w => WriteDoubles(w, get()),
+            r => set(ReadDoubles(r)),
+            restoreAfterParameters: true);
+
+    /// <summary>Declares a readonly double array and restores its contents without replacing it.</summary>
+    public void DeclareInPlace(string name, Func<double[]?> get)
+        => Add(name,
+            w => WriteDoubles(w, get()),
+            r => CopyDoublesInPlace(name, get(), ReadDoubles(r)));
+
+    /// <summary>
+    /// Declares a readonly double parameter array whose exact payload wins after vector restore.
+    /// </summary>
+    public void DeclareExactInPlace(string name, Func<double[]?> get)
+        => Add(name,
+            w => WriteDoubles(w, get()),
+            r => CopyDoublesInPlace(name, get(), ReadDoubles(r)),
+            restoreAfterParameters: true);
+
+    /// <summary>Declares a readonly jagged double array and restores its contents in place.</summary>
+    public void DeclareInPlace(string name, Func<double[][]?> get)
+        => Add(name,
+            w => WriteJaggedDoubles(w, get()),
+            r => CopyJaggedDoublesInPlace(name, get(), ReadJaggedDoubles(r)));
+
+    /// <summary>
+    /// Declares a readonly jagged double parameter array whose exact payload wins after vector restore.
+    /// </summary>
+    public void DeclareExactInPlace(string name, Func<double[][]?> get)
+        => Add(name,
+            w => WriteJaggedDoubles(w, get()),
+            r => CopyJaggedDoublesInPlace(name, get(), ReadJaggedDoubles(r)),
+            restoreAfterParameters: true);
+
+    /// <summary>
+    /// Declares a replaceable jagged double parameter array whose exact payload wins after vector restore.
+    /// </summary>
+    public void DeclareExact(string name, Func<double[][]?> get, Action<double[][]?> set)
+        => Add(name,
+            w => WriteJaggedDoubles(w, get()),
+            r => set(ReadJaggedDoubles(r)),
+            restoreAfterParameters: true);
+
     // Scalars. A hyperparameter that PREDICTION reads is state, however small: k-nearest-neighbours
     // restored its training set correctly and still predicted differently, because K came back as the
     // constructor default and the model was voting over the wrong number of neighbours. A field does
@@ -1185,12 +1616,22 @@ public sealed class ModelStateRegistry<T>
     public void DeclareInt32(string name, Func<int> get, Action<int> set)
         => Add(name, w => w.Write(get()), r => set(r.ReadInt32()));
 
+    /// <summary>Declares a 64-bit integer, such as an online model's sample count.</summary>
+    public void DeclareInt64(string name, Func<long> get, Action<long> set)
+        => Add(name, w => w.Write(get()), r => set(r.ReadInt64()));
+
     /// <summary>Declares a double, such as a temperature or a learned threshold.</summary>
     /// <param name="name">A stable name, unique within the model.</param>
     /// <param name="get">Reads the current value.</param>
     /// <param name="set">Installs a restored value.</param>
     public void DeclareDouble(string name, Func<double> get, Action<double> set)
         => Add(name, w => w.Write(get()), r => set(r.ReadDouble()));
+
+    /// <summary>
+    /// Declares a double scalar that shadows a flat <typeparamref name="T"/> parameter slot.
+    /// </summary>
+    public void DeclareExactDouble(string name, Func<double> get, Action<double> set)
+        => Add(name, w => w.Write(get()), r => set(r.ReadDouble()), restoreAfterParameters: true);
 
     /// <summary>Declares a boolean, such as a fitted flag or a mode switch.</summary>
     /// <param name="name">A stable name, unique within the model.</param>
@@ -1351,7 +1792,23 @@ public sealed class ModelStateRegistry<T>
 
     /// <summary>Restores every entry the payload and this model have in common.</summary>
     /// <param name="reader">The reader positioned at the state block.</param>
-    public void ReadAll(BinaryReader reader)
+    public void ReadAll(BinaryReader reader) => ReadAll(reader, restoreAfterParameters: null);
+
+    /// <summary>
+    /// Restores structural/non-parameter state while leaving exact native-precision parameter
+    /// shadows for the post-parameter phase.
+    /// </summary>
+    public void ReadBeforeParameters(BinaryReader reader)
+        => ReadAll(reader, restoreAfterParameters: false);
+
+    /// <summary>
+    /// Restores only native-precision parameter shadows. This must run after the flat
+    /// <typeparamref name="T"/> vector has been distributed to its parameter sources.
+    /// </summary>
+    public void ReadAfterParameters(BinaryReader reader)
+        => ReadAll(reader, restoreAfterParameters: true);
+
+    private void ReadAll(BinaryReader reader, bool? restoreAfterParameters)
     {
         int count = reader.ReadInt32();
 
@@ -1364,7 +1821,12 @@ public sealed class ModelStateRegistry<T>
             int length = reader.ReadInt32();
             var bytes = reader.ReadBytes(length);
 
-            if (!byName.TryGetValue(name, out var entry)) continue;
+            if (!byName.TryGetValue(name, out var entry)
+                || (restoreAfterParameters.HasValue
+                    && entry.RestoreAfterParameters != restoreAfterParameters.Value))
+            {
+                continue;
+            }
 
             using var buffer = new MemoryStream(bytes);
             using var inner = new BinaryReader(buffer, System.Text.Encoding.UTF8, leaveOpen: true);
@@ -1464,5 +1926,59 @@ public sealed class ModelStateRegistry<T>
         var a = new double[length];
         for (int i = 0; i < length; i++) a[i] = r.ReadDouble();
         return a;
+    }
+
+    private static void CopyDoublesInPlace(string name, double[]? destination, double[]? source)
+    {
+        if (source is null)
+        {
+            if (destination is null) return;
+            throw new InvalidDataException(
+                $"State '{name}' was null in the checkpoint but is construction-owned in this model.");
+        }
+        if (destination is null || destination.Length != source.Length)
+        {
+            throw new InvalidDataException(
+                $"State '{name}' requires a {source.Length}-value construction-owned array, but the "
+                + $"destination has {destination?.Length.ToString() ?? "no"} values.");
+        }
+        Array.Copy(source, destination, source.Length);
+    }
+
+    private static void WriteJaggedDoubles(BinaryWriter w, double[][]? values)
+    {
+        if (values is null) { w.Write(-1); return; }
+        w.Write(values.Length);
+        foreach (var row in values) WriteDoubles(w, row);
+    }
+
+    private static double[][]? ReadJaggedDoubles(BinaryReader r)
+    {
+        int count = r.ReadInt32();
+        if (count < 0) return null;
+        var values = new double[count][];
+        for (int i = 0; i < count; i++) values[i] = ReadDoubles(r) ?? Array.Empty<double>();
+        return values;
+    }
+
+    private static void CopyJaggedDoublesInPlace(
+        string name,
+        double[][]? destination,
+        double[][]? source)
+    {
+        if (source is null)
+        {
+            if (destination is null) return;
+            throw new InvalidDataException(
+                $"State '{name}' was null in the checkpoint but is construction-owned in this model.");
+        }
+        if (destination is null || destination.Length != source.Length)
+        {
+            throw new InvalidDataException(
+                $"State '{name}' requires {source.Length} construction-owned rows, but the destination "
+                + $"has {destination?.Length.ToString() ?? "no"} rows.");
+        }
+        for (int i = 0; i < source.Length; i++)
+            CopyDoublesInPlace($"{name}[{i}]", destination[i], source[i]);
     }
 }

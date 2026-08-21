@@ -296,7 +296,14 @@ public class TrainableParameterGenerator : IIncrementalGenerator
                 }
 
                 // Check for sub-layer fields
-                if (IsLayerType(field.Type) && !field.IsStatic)
+                // A layer field is owned by default, but [ParameterAlias] explicitly says that the
+                // same child is already owned through another member. Registering both names makes
+                // the allocation-free manifest count the child's parameters twice even though the
+                // runtime registry correctly deduplicates the shared reference.
+                if (IsLayerType(field.Type) && !field.IsStatic
+                    && classification.Kind is not (ParameterMemberSemanticModel.Kind.Alias
+                        or ParameterMemberSemanticModel.Kind.Scratch
+                        or ParameterMemberSemanticModel.Kind.External))
                 {
                     var isNullable = field.NullableAnnotation == NullableAnnotation.Annotated ||
                                      field.Type.NullableAnnotation == NullableAnnotation.Annotated;
@@ -311,7 +318,10 @@ public class TrainableParameterGenerator : IIncrementalGenerator
                 // in Forward, and they silently never trained. CitrinetBlockLayer reported 0 children
                 // while holding 9. This is what PyTorch's nn.ModuleList exists to prevent -- a plain
                 // Python list of modules is likewise invisible to .parameters().
-                else if (!field.IsStatic && IsLayerCollectionType(field.Type))
+                else if (!field.IsStatic && IsLayerCollectionType(field.Type)
+                         && classification.Kind is not (ParameterMemberSemanticModel.Kind.Alias
+                             or ParameterMemberSemanticModel.Kind.Scratch
+                             or ParameterMemberSemanticModel.Kind.External))
                 {
                     var isNullable = field.NullableAnnotation == NullableAnnotation.Annotated ||
                                      field.Type.NullableAnnotation == NullableAnnotation.Annotated;

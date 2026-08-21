@@ -4,8 +4,6 @@ using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Tensors.Helpers;
 
-using AiDotNet.Models.Parameters;
-
 namespace AiDotNet.CausalInference;
 
 /// <summary>
@@ -71,18 +69,6 @@ namespace AiDotNet.CausalInference;
 public partial class InverseProbabilityWeighting<T> : CausalModelBase<T>
 {
 
-    /// <inheritdoc />
-    /// <remarks>The propensity-score coefficients, and the same off-by-one fix as CausalForest: the inherited count was NumFeatures, one less than the vector it was paired with.</remarks>
-    protected override void RegisterComponents()
-    {
-        RegisterParameterComponent(new VectorFieldParameterSource<T>(
-            () => _propensityCoefficients,
-            value =>
-            {
-                _propensityCoefficients = value;
-                NumFeatures = value.Length - 1;
-            }));
-    }
     /// <summary>
     /// Stores the logistic regression coefficients for propensity score estimation.
     /// </summary>

@@ -49,7 +49,7 @@ public partial class FinRLAgent<T> : TradingAgentBase<T>
 
     #region Fields
 
-    private readonly FinRLAgentOptions<T> _options;
+    private readonly TradingAgentOptions<T> _options;
     private readonly TradingAgentBase<T> _innerAgent;
     private readonly FinRLAlgorithm _algorithm;
     private readonly NeuralNetworkArchitecture<T> _primaryArchitecture;
@@ -93,7 +93,7 @@ public partial class FinRLAgent<T> : TradingAgentBase<T>
         NeuralNetworkArchitecture<T>? secondaryArchitecture = null)
         : base(options)
     {
-        _options = options as FinRLAgentOptions<T> ?? new FinRLAgentOptions<T>();
+        _options = options;
 
         _algorithm = algorithm;
         Guard.NotNull(primaryArchitecture);

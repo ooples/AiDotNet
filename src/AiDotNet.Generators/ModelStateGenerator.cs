@@ -91,6 +91,9 @@ public class ModelStateGenerator : IIncrementalGenerator
         if (hook.Parameters[0].Type is not INamedTypeSymbol { TypeArguments.Length: 1 } registry) return;
 
         var numeric = registry.TypeArguments[0].ToDisplayString();
+        bool persistsParametersSeparately = PersistsParametersSeparately(type);
+        bool onNeuralNetworkTrunk = InheritsNeuralNetworkBase(type);
+        bool emitSerializationSurface = NeedsGeneratedSerializationSurface(type);
 
         // The type that DECLARES the hook cannot also override it. It gets a Core method instead,
         // which its own hand-written hook calls -- so the class holding the state finally gets
@@ -98,6 +101,7 @@ public class ModelStateGenerator : IIncrementalGenerator
         var declaresHook = SymbolEqualityComparer.Default.Equals(hook.ContainingType, type);
 
         var members = new List<(string Name, string Call)>();
+        bool hasExplicitState = false;
 
         foreach (var member in type.GetMembers())
         {
@@ -110,6 +114,31 @@ public class ModelStateGenerator : IIncrementalGenerator
                 _ => null,
             };
             if (memberType is null) continue;
+
+            // NeuralNetworkBase already owns its canonical layer graph and serializes each layer's
+            // layout, parameters and buffers. ModelParameterGenerator also emits the alias rebinding
+            // and extra-layer traversal used by clone/parameter operations. Declaring those same
+            // layer fields here gives them a SECOND persistence owner: canonical aliases are restored
+            // twice, large stacks are duplicated into the state envelope, and a destination whose
+            // runtime layout differs can receive a flat vector meant for the old alias. RWKV exposed
+            // this as an exact 21,120-vs-21,440 parameter mismatch; large diffusion models paid for
+            // the duplicate graph with shard-wide timeouts.
+            //
+            // This exclusion is specific to the neural-network trunk. A sibling model base that owns
+            // a plain list of layers has no canonical graph serializer, so DeclareLayerList remains
+            // its generated persistence mechanism.
+            if (onNeuralNetworkTrunk
+                && (IsLayer(memberType) || IsLayerCollection(memberType)))
+            {
+                continue;
+            }
+
+            // These booleans are lazy-registration LATCHES owned by the framework plumbing, not
+            // model state. Restoring `_componentsRegistered = true` into a fresh instance leaves its
+            // new registry empty while preventing the registration callback from ever running. The
+            // same pattern exists on every model-base trunk, so exclude it once here rather than
+            // requiring every base and every future model family to annotate identical machinery.
+            if (IsRegistryLifecycleLatch(member)) continue;
 
             // Readonly storage cannot be REASSIGNED on restore, so declaring it would produce a
             // payload nothing could apply -- true of a vector or a matrix, and false of anything
@@ -126,10 +155,14 @@ public class ModelStateGenerator : IIncrementalGenerator
             // List<ConvLayerTensor<T>> _convLayers` before the type was ever consulted, which is the
             // same shape as the KNearestNeighbors defect above: the payload carried everything except
             // the part that decides the answer.
+            var classification = ParameterMemberSemanticModel.Classify(member);
             if (member is IFieldSymbol { IsReadOnly: true }
                 && !IsModelOptions(memberType)
                 && !IsSerializableModel(memberType)
-                && !IsLayerList(memberType))
+                && !IsSerializableModelList(memberType)
+                && !IsObjectCollection(memberType)
+                && !IsLayerList(memberType)
+                && !CanRestoreReadonlyNumericArray(memberType))
             {
                 continue;
             }
@@ -150,8 +183,6 @@ public class ModelStateGenerator : IIncrementalGenerator
                 continue;
             }
 
-            var classification = ParameterMemberSemanticModel.Classify(member);
-
             // OPT-OUT, NOT OPT-IN, and this is the whole reason 330 hand-written Serialize/Deserialize
             // pairs exist. Requiring [Fitted], [Frozen] or [Buffer] before a member is persisted means
             // an author who adds a field and annotates nothing gets a model that serialises
@@ -167,8 +198,26 @@ public class ModelStateGenerator : IIncrementalGenerator
             //   External   not this model's to save
             // Conflicting is excluded too, because a member carrying contradictory annotations is a
             // question for AIDN089 to answer rather than something to guess at here.
-            if (classification.Kind is ParameterMemberSemanticModel.Kind.Trainable
-                or ParameterMemberSemanticModel.Kind.Scratch
+            // ModelBase and NeuralNetworkBase have a separate generated parameter registry, so
+            // trainable storage on those trunks must not be written twice. Their legacy sibling
+            // bases do not: their ordinary payload knows only the base fields. On those trunks the
+            // declared-state envelope is the generated persistence mechanism for trainable storage
+            // too. Treating every trunk as if it owned a parameter registry dropped the learned
+            // coefficients from GAMLSS and ZeroInflatedRegression while their clones appeared to
+            // deserialize successfully.
+            bool carryTrainableAsState = classification.Kind == ParameterMemberSemanticModel.Kind.Trainable
+                && !persistsParametersSeparately;
+            bool carryNativePrecisionShadow =
+                (classification.Kind is ParameterMemberSemanticModel.Kind.Trainable
+                    or ParameterMemberSemanticModel.Kind.Fitted
+                    or ParameterMemberSemanticModel.Kind.Frozen
+                    or ParameterMemberSemanticModel.Kind.Buffer)
+                && persistsParametersSeparately
+                && RequiresNativePrecisionShadow(memberType, numeric);
+            if ((classification.Kind == ParameterMemberSemanticModel.Kind.Trainable
+                    && persistsParametersSeparately
+                    && !carryNativePrecisionShadow)
+                || classification.Kind is ParameterMemberSemanticModel.Kind.Scratch
                 or ParameterMemberSemanticModel.Kind.Alias
                 or ParameterMemberSemanticModel.Kind.External
                 or ParameterMemberSemanticModel.Kind.Conflicting)
@@ -180,7 +229,9 @@ public class ModelStateGenerator : IIncrementalGenerator
             // the default. It decides how loudly an unsupported shape is reported, below.
             var annotated = classification.Kind is ParameterMemberSemanticModel.Kind.Fitted
                 or ParameterMemberSemanticModel.Kind.Frozen
-                or ParameterMemberSemanticModel.Kind.Buffer;
+                or ParameterMemberSemanticModel.Kind.Buffer
+                || carryTrainableAsState
+                || carryNativePrecisionShadow;
 
             // Keyed by DECLARING TYPE and member, not by member alone. A name is unique within one
             // class and nothing more: VectorAutoRegressionModel and VARMAModel each keep a private
@@ -190,7 +241,9 @@ public class ModelStateGenerator : IIncrementalGenerator
             // own hierarchy had the same fault waiting in it.
             var call = DeclareCall(member.Name, $"{type.Name}.{member.Name}", memberType, numeric, annotated,
                 nullableTarget: memberType.NullableAnnotation == NullableAnnotation.Annotated
-                    || memberType.IsValueType);
+                    || memberType.IsValueType,
+                restoreInPlace: member is IFieldSymbol { IsReadOnly: true },
+                exactPrecisionShadow: carryNativePrecisionShadow);
 
             if (call is null)
             {
@@ -217,17 +270,25 @@ public class ModelStateGenerator : IIncrementalGenerator
             }
 
             members.Add((member.Name, call));
+            hasExplicitState |= annotated;
         }
 
         // A declaring type ALWAYS gets its Core method, even empty: its hand-written hook calls it
         // unconditionally, so omitting it would leave that call with no target.
-        if (members.Count == 0 && !declaresHook) return;
+        if (members.Count == 0 && !declaresHook && !emitSerializationSurface) return;
 
         // The type AND everything containing it. A nested partial can only be reopened inside partial
         // outers, so reporting only the inner one would name a fix that does not compile on its own.
         for (var scope = type; scope is not null; scope = scope.ContainingType)
         {
             if (IsPartial(scope)) continue;
+
+            // The opt-out sweep is an automation benefit for types already participating in source
+            // generation, not a flag-day migration for every legacy type in the assembly. An
+            // explicitly annotated state member must still fail loudly when generation is
+            // impossible; an unannotated collection on a non-partial legacy type keeps its previous
+            // behavior until that type opts in by becoming partial.
+            if (!hasExplicitState) return;
 
             spc.ReportDiagnostic(Diagnostic.Create(
                 MustBePartial,
@@ -238,7 +299,95 @@ public class ModelStateGenerator : IIncrementalGenerator
         }
 
         spc.AddSource($"{type.ToDisplayString().Replace('<', '_').Replace('>', '_').Replace(',', '_')}.State.g.cs",
-            Render(type, numeric, members, declaresHook));
+            Render(type, numeric, members, declaresHook, emitSerializationSurface));
+    }
+
+    /// <summary>Whether a field is one of the framework's lazy registry initialization latches.</summary>
+    private static bool IsRegistryLifecycleLatch(ISymbol member)
+        => member is IFieldSymbol { Type.SpecialType: SpecialType.System_Boolean }
+           && member.Name is "_componentsRegistered" or "_declaredStateRegistered" or "_stateRegistered";
+
+    /// <summary>Whether this hierarchy persists trainable storage outside declared model state.</summary>
+    private static bool PersistsParametersSeparately(INamedTypeSymbol type)
+    {
+        for (var current = type; current is not null; current = current.BaseType)
+        {
+            if (current.GetMembers("RegisterGeneratedParameterComponents")
+                .OfType<IMethodSymbol>()
+                .Any(method => method.Parameters.Length == 1))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>Whether the type inherits the canonical neural-network graph owner.</summary>
+    private static bool InheritsNeuralNetworkBase(INamedTypeSymbol type)
+    {
+        for (var current = type; current is not null; current = current.BaseType)
+        {
+            if (current.OriginalDefinition.ToDisplayString()
+                .StartsWith("AiDotNet.NeuralNetworks.NeuralNetworkBase<", System.StringComparison.Ordinal))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Whether an abstract public serializer can be implemented by delegating to common protected
+    /// base helpers. The capability is detected structurally, so the generator does not know or care
+    /// which model-family base supplies it.
+    /// </summary>
+    private static bool NeedsGeneratedSerializationSurface(INamedTypeSymbol type)
+    {
+        if (type.IsAbstract) return false;
+        if (type.GetMembers().OfType<IMethodSymbol>().Any(method =>
+            method.Name is "Serialize" or "Deserialize"))
+        {
+            return false;
+        }
+
+        bool hasSerializeHelper = false;
+        bool hasDeserializeHelper = false;
+        bool hasAbstractSerialize = false;
+        bool hasAbstractDeserialize = false;
+
+        for (var current = type.BaseType; current is not null; current = current.BaseType)
+        {
+            foreach (var method in current.GetMembers().OfType<IMethodSymbol>())
+            {
+                hasSerializeHelper |= method.Name == "SerializeGeneratedModelState"
+                    && method.Parameters.Length == 0
+                    && method.ReturnType is IArrayTypeSymbol
+                    {
+                        ElementType.SpecialType: SpecialType.System_Byte,
+                    };
+                hasDeserializeHelper |= method.Name == "DeserializeGeneratedModelState"
+                    && method.Parameters.Length == 1
+                    && method.Parameters[0].Type is IArrayTypeSymbol
+                    {
+                        ElementType.SpecialType: SpecialType.System_Byte,
+                    };
+                hasAbstractSerialize |= method.Name == "Serialize"
+                    && method.IsAbstract
+                    && method.Parameters.Length == 0;
+                hasAbstractDeserialize |= method.Name == "Deserialize"
+                    && method.IsAbstract
+                    && method.Parameters.Length == 1
+                    && method.Parameters[0].Type is IArrayTypeSymbol
+                    {
+                        ElementType.SpecialType: SpecialType.System_Byte,
+                    };
+            }
+        }
+
+        return hasSerializeHelper && hasDeserializeHelper
+            && hasAbstractSerialize && hasAbstractDeserialize;
     }
 
     /// <summary>True when the member is itself something that can serialize its own state.</summary>
@@ -270,6 +419,68 @@ public class ModelStateGenerator : IIncrementalGenerator
     private static bool IsLayerList(ITypeSymbol type)
         => type is INamedTypeSymbol { Name: "List", TypeArguments.Length: 1 } list
            && IsLayer(list.TypeArguments[0]);
+
+    /// <summary>Whether a supported collection carries layers.</summary>
+    private static bool IsLayerCollection(ITypeSymbol type)
+    {
+        if (type is IArrayTypeSymbol array) return IsLayer(array.ElementType);
+        if (type is not INamedTypeSymbol { TypeArguments.Length: 1 } collection) return false;
+
+        if (collection.Name is not ("List" or "IList" or "IReadOnlyList" or "IEnumerable"
+            or "ICollection" or "IReadOnlyCollection"))
+        {
+            return false;
+        }
+
+        return IsLayer(collection.TypeArguments[0]);
+    }
+
+    /// <summary>Whether a list carries nested models through their own serialization contract.</summary>
+    private static bool IsSerializableModelList(ITypeSymbol type)
+        => type is INamedTypeSymbol { Name: "List", TypeArguments.Length: 1 } list
+           && IsSerializableModel(list.TypeArguments[0]);
+
+    /// <summary>Whether a collection can be cleared and refilled through its readonly reference.</summary>
+    private static bool IsObjectCollection(ITypeSymbol type)
+        => type is INamedTypeSymbol { TypeArguments.Length: > 0 } named
+           && named.Name is "List" or "Dictionary";
+
+    /// <summary>
+    /// Numeric arrays own mutable contents even when their field reference is readonly. The state
+    /// registry has explicit in-place readers for these shapes, so readonly is not a reason to drop
+    /// them from generated persistence.
+    /// </summary>
+    private static bool CanRestoreReadonlyNumericArray(ITypeSymbol type)
+        => IsDoubleArray(type) || IsJaggedDoubleArray(type);
+
+    /// <summary>
+    /// A flat Vector&lt;T&gt; checkpoint cannot preserve a double-backed working value when T is float.
+    /// Emit a post-vector precision shadow for the CLR-double shapes the parameter generator owns.
+    /// Closed double models need no duplicate because their public vector is already lossless.
+    /// </summary>
+    private static bool RequiresNativePrecisionShadow(ITypeSymbol type, string numeric)
+        => numeric != "double"
+           && (type.SpecialType == SpecialType.System_Double
+               || IsDoubleArray(type)
+               || IsJaggedDoubleArray(type));
+
+    private static bool IsDoubleArray(ITypeSymbol type)
+        => type is IArrayTypeSymbol
+        {
+            Rank: 1,
+            ElementType.SpecialType: SpecialType.System_Double
+        };
+
+    private static bool IsJaggedDoubleArray(ITypeSymbol type)
+        => type is IArrayTypeSymbol
+        {
+            Rank: 1,
+            ElementType: IArrayTypeSymbol
+            {
+                Rank: 1,
+                ElementType.SpecialType: SpecialType.System_Double
+            }
+        };
 
     /// <summary>Whether a type is a layer, i.e. derives from LayerBase.</summary>
     /// <remarks>
@@ -312,7 +523,14 @@ public class ModelStateGenerator : IIncrementalGenerator
     /// model keeps its own declaration until it does.
     /// </remarks>
     private static string? DeclareCall(
-        string name, string id, ITypeSymbol memberType, string numeric, bool annotated, bool nullableTarget)
+        string name,
+        string id,
+        ITypeSymbol memberType,
+        string numeric,
+        bool annotated,
+        bool nullableTarget,
+        bool restoreInPlace,
+        bool exactPrecisionShadow)
     {
         // A nullable value type has a state the registry cannot express: "not set" is not a number,
         // and the getter cannot hand an int? to something expecting an int. MOMENT proved it -- the
@@ -353,6 +571,66 @@ public class ModelStateGenerator : IIncrementalGenerator
             : $"v => {{ if (v is not null) {name} = v; }}";
         var getter = $"() => {name}";
 
+        // The public parameter vector is typed as T. A float model whose implementation keeps
+        // double working weights therefore cannot make a bit-identical checkpoint through that
+        // vector alone. These declarations are a precision shadow, restored in a distinct phase
+        // after the vector; they are generated from the storage type and require no model hook.
+        if (exactPrecisionShadow)
+        {
+            return key switch
+            {
+                "double" => $"state.DeclareExactDouble(\"{id}\", {getter}, {setter});",
+                "double[]" when restoreInPlace =>
+                    $"state.DeclareExactInPlace(\"{id}\", {getter});",
+                "double[]" => $"state.DeclareExact(\"{id}\", {getter}, {setter});",
+                "double[][]" when restoreInPlace =>
+                    $"state.DeclareExactInPlace(\"{id}\", {getter});",
+                "double[][]" => $"state.DeclareExact(\"{id}\", {getter}, {setter});",
+                _ => null,
+            };
+        }
+
+        // Numeric collections have purpose-built binary declarations. A readonly field still owns
+        // mutable contents, so select their in-place counterparts before the ordinary switch can
+        // emit a setter that cannot compile. Keeping these on the binary path also avoids routing
+        // Tensor/Matrix/Vector through JSON, which cannot reconstruct their internal storage.
+        if (restoreInPlace)
+        {
+            var inPlaceNumericCollection = key switch
+            {
+                "List<Vector<T>>" or "List<Matrix<T>>" or "List<Tensor<T>>"
+                    or "Dictionary<string, Vector<T>>" or "Dictionary<int, Vector<T>>" =>
+                    $"state.DeclareInPlace(\"{id}\", {getter});",
+                "double[]" or "double[][]" =>
+                    $"state.DeclareInPlace(\"{id}\", {getter});",
+                _ => null,
+            };
+            if (inPlaceNumericCollection is not null) return inPlaceNumericCollection;
+        }
+
+        // A readonly collection owns fitted CONTENTS even though its reference cannot be assigned.
+        // Lists of models and layers retain their purpose-built restore paths; every other list or
+        // dictionary is reconstructed by the registry and copied into the constructor-created
+        // instance. This is what carries known-class tables, nested tree records and per-class
+        // statistics without making the model author write a hook.
+        if (restoreInPlace && IsSerializableModelList(memberType)
+            && memberType is INamedTypeSymbol { TypeArguments.Length: 1 } inPlaceChildList)
+        {
+            return $"state.DeclareChildList<{inPlaceChildList.TypeArguments[0].ToDisplayString().TrimEnd('?')}>(\"{id}\", {getter});";
+        }
+
+        if (restoreInPlace && IsLayerList(memberType)
+            && memberType is INamedTypeSymbol { TypeArguments.Length: 1 } inPlaceLayerList)
+        {
+            return $"state.DeclareLayerList<{inPlaceLayerList.TypeArguments[0].ToDisplayString().TrimEnd('?')}>(\"{id}\", {getter});";
+        }
+
+        if (restoreInPlace && IsObjectCollection(memberType)
+            && IsGeneratedObjectState(memberType, numeric))
+        {
+            return $"state.DeclareObjectInPlace(\"{id}\", {getter});";
+        }
+
         return key switch
         {
             // A DECISION TREE, carried whole instead of walked by hand: the shared hand-written
@@ -363,16 +641,21 @@ public class ModelStateGenerator : IIncrementalGenerator
             var k when k.EndsWith(".Vector<T>") || k == "Vector<T>" => $"state.Declare(\"{id}\", {getter}, {setter});",
             var k when k.EndsWith(".Matrix<T>") || k == "Matrix<T>" => $"state.Declare(\"{id}\", {getter}, {setter});",
             var k when k.EndsWith(".Tensor<T>") || k == "Tensor<T>" => $"state.Declare(\"{id}\", {getter}, {setter});",
+            "Vector<byte>" => $"state.DeclareByteVector(\"{id}\", {getter}, {setter});",
+            "Vector<double>" => $"state.DeclareDoubleVector(\"{id}\", {getter}, {setter});",
             "List<Vector<T>>" => $"state.Declare(\"{id}\", {getter}, {setter});",
             "List<Matrix<T>>" => $"state.Declare(\"{id}\", {getter}, {setter});",
+            "List<Tensor<T>>" => $"state.Declare(\"{id}\", {getter}, {setter});",
             "Matrix<T>[]" => $"state.Declare(\"{id}\", {getter}, {setter});",
             "Vector<int>" => $"state.Declare(\"{id}\", {getter}, {setter});",
+            "Dictionary<string, Vector<T>>" => $"state.Declare(\"{id}\", {getter}, {setter});",
             "Dictionary<int, Vector<T>>" => $"state.Declare(\"{id}\", {getter}, {setter});",
             "Vector<T>[]" => $"state.Declare(\"{id}\", {getter}, {setter});",
             "int[]" => $"state.Declare(\"{id}\", {getter}, {setter});",
             "double[]" => $"state.Declare(\"{id}\", {getter}, {setter});",
             "T[]" => $"state.DeclareArray(\"{id}\", {getter}, {setter});",
             "int" => $"state.DeclareInt32(\"{id}\", {getter}, {setter});",
+            "long" => $"state.DeclareInt64(\"{id}\", {getter}, {setter});",
             "double" => $"state.DeclareDouble(\"{id}\", {getter}, {setter});",
             "bool" => $"state.DeclareBoolean(\"{id}\", {getter}, {setter});",
             "string" => $"state.DeclareString(\"{id}\", {getter}, {setter});",
@@ -390,7 +673,21 @@ public class ModelStateGenerator : IIncrementalGenerator
             // tree and ensemble model families hand-wrote a Serialize to walk this structure, and
             // deleting those pairs without this failed 26 tests -- exactly the silent state loss the
             // deleter's own design warns about.
-            _ when IsRecursiveNode(memberType) is { } node => GraphCall(id, name, node, numeric),
+            _ when IsRecursiveNode(memberType, numeric) is { } node => GraphCall(id, name, node, numeric, setter),
+
+            // A fitted forest is the same recursive shape repeated. Its element type describes the
+            // walk; the list count and roots are registry concerns. This carries private tree records
+            // such as DART's without a model-specific SerializeTree/DeserializeTree pair.
+            _ when !restoreInPlace && memberType is INamedTypeSymbol { Name: "List", TypeArguments.Length: 1 } graphList
+                   && IsRecursiveNode(graphList.TypeArguments[0], numeric) is { } graphNode =>
+                GraphListCall(id, name, graphNode, numeric, setter),
+
+            // A node derived from the library's common DecisionTreeNode has children typed as the
+            // base node rather than as its own derived type, so it is not self-recursive in Roslyn's
+            // exact-type sense. Generate the predictive base fields plus derived scalar fields and
+            // cast the child links back to the concrete node type.
+            _ when IsDerivedDecisionTreeNode(memberType) is { } derivedTree =>
+                DerivedDecisionTreeGraphCall(id, name, derivedTree, numeric, setter),
 
             // THE CHILD PATHS STAY OPT-IN even though storage is now opt-out, and the difference is
             // real rather than cautious. Storage is state by its nature -- a Matrix<T> a model holds
@@ -403,6 +700,10 @@ public class ModelStateGenerator : IIncrementalGenerator
             _ when !IsInfrastructure(memberType) && memberType.AllInterfaces.Any(i => i.Name == "IParameterSource")
                    && !IsSerializableModel(memberType) =>
                 $"state.DeclareParameterSource(\"{id}\", {getter});",
+
+            _ when !IsInfrastructure(memberType) && IsSerializableModel(memberType)
+                   && nullableTarget && !restoreInPlace =>
+                $"state.DeclareChild<{memberType.ToDisplayString().TrimEnd('?')}>(\"{id}\", {getter}, {setter});",
 
             _ when !IsInfrastructure(memberType) && IsSerializableModel(memberType) =>
                 $"state.DeclareChild<{memberType.ToDisplayString().TrimEnd('?')}>(\"{id}\", {getter});",
@@ -443,8 +744,137 @@ public class ModelStateGenerator : IIncrementalGenerator
             _ when IsModelOptions(memberType) =>
                 $"state.DeclareOptions(\"{id}\", {getter});",
 
+            // General fitted object state. The boundary is intentionally structural: arrays,
+            // lists, dictionaries and a model's own nested record/node types are state-shaped;
+            // arbitrary services are not. Nested IModelSerializer values inside these objects use
+            // their canonical byte payload rather than being reduced to public JSON properties.
+            _ when !IsInfrastructure(memberType) && IsGeneratedObjectState(memberType, numeric) =>
+                $"state.DeclareObject(\"{id}\", {getter}, {setter});",
+
             _ => null,
         };
+    }
+
+    /// <summary>Whether an assignable member has a generated general-object state representation.</summary>
+    private static bool IsGeneratedObjectState(ITypeSymbol type, string numeric)
+    {
+        if (type is not IArrayTypeSymbol
+            && !IsObjectCollection(type)
+            && type is not INamedTypeSymbol { TypeKind: TypeKind.Class })
+        {
+            return false;
+        }
+
+        return CanCarryObjectState(type, numeric, new HashSet<string>(), depth: 0);
+    }
+
+    /// <summary>
+    /// Proves the JSON-backed fallback can reconstruct the complete reachable public shape.
+    /// </summary>
+    /// <remarks>
+    /// This is deliberately a proof, not a guess. A broad "every List is JSON" rule captured the
+    /// neural-network layer graph, tensor-keyed gradient dictionaries and POCOs containing Matrix,
+    /// all of which Json.NET can write but cannot reconstruct. Declining an unproven shape lets its
+    /// purpose-built base serialization remain the sole owner instead of adding a broken second copy.
+    /// </remarks>
+    private static bool CanCarryObjectState(
+        ITypeSymbol type,
+        string numeric,
+        HashSet<string> visiting,
+        int depth)
+    {
+        if (depth > 24) return false;
+        if (type.NullableAnnotation == NullableAnnotation.Annotated)
+            type = type.WithNullableAnnotation(NullableAnnotation.NotAnnotated);
+
+        if (type is ITypeParameterSymbol) return true;
+        if (type.TypeKind == TypeKind.Enum) return true;
+        if (type.SpecialType is SpecialType.System_Boolean
+            or SpecialType.System_Byte or SpecialType.System_SByte
+            or SpecialType.System_Int16 or SpecialType.System_UInt16
+            or SpecialType.System_Int32 or SpecialType.System_UInt32
+            or SpecialType.System_Int64 or SpecialType.System_UInt64
+            or SpecialType.System_Single or SpecialType.System_Double
+            or SpecialType.System_Decimal or SpecialType.System_Char
+            or SpecialType.System_String)
+        {
+            return true;
+        }
+
+        if (type is IArrayTypeSymbol array)
+            return CanCarryObjectState(array.ElementType, numeric, visiting, depth + 1);
+
+        if (type is not INamedTypeSymbol named) return false;
+        if (named.OriginalDefinition.SpecialType == SpecialType.System_Nullable_T)
+            return CanCarryObjectState(named.TypeArguments[0], numeric, visiting, depth + 1);
+
+        if (named.IsTupleType)
+        {
+            return named.TupleElements.All(element =>
+                CanCarryObjectState(element.Type, numeric, visiting, depth + 1));
+        }
+
+        if (ParameterMemberSemanticModel.IsNumericStateStorage(type)) return false;
+        if (IsInfrastructure(type)) return false;
+        if (IsSerializableModel(type)) return true;
+
+        if (named.Name is "List" or "IList" or "IReadOnlyList" or "IEnumerable"
+                or "ICollection" or "IReadOnlyCollection"
+            && named.TypeArguments.Length == 1)
+            return CanCarryObjectState(named.TypeArguments[0], numeric, visiting, depth + 1);
+
+        if (named.Name == "Dictionary" && named.TypeArguments.Length == 2)
+        {
+            var key = named.TypeArguments[0];
+            bool safeKey = key.TypeKind == TypeKind.Enum
+                || key.SpecialType is SpecialType.System_Boolean
+                    or SpecialType.System_Byte or SpecialType.System_SByte
+                    or SpecialType.System_Int16 or SpecialType.System_UInt16
+                    or SpecialType.System_Int32 or SpecialType.System_UInt32
+                    or SpecialType.System_Int64 or SpecialType.System_UInt64
+                    or SpecialType.System_Char or SpecialType.System_String;
+            return safeKey
+                && CanCarryObjectState(named.TypeArguments[1], numeric, visiting, depth + 1);
+        }
+
+        if (named.TypeKind != TypeKind.Class || named.IsAbstract) return false;
+        bool hasJsonConstructor = named.InstanceConstructors.Any(c => c.GetAttributes().Any(a =>
+            a.AttributeClass?.ToDisplayString() == "Newtonsoft.Json.JsonConstructorAttribute"));
+        if (!hasJsonConstructor
+            && !named.InstanceConstructors.Any(c => c.Parameters.Length == 0
+                || c.Parameters.All(p => p.IsOptional)))
+        {
+            return false;
+        }
+
+        string identity = named.ToDisplayString();
+        if (!visiting.Add(identity)) return true;
+
+        for (var current = named; current is not null && current.SpecialType != SpecialType.System_Object;
+            current = current.BaseType)
+        {
+            foreach (var property in current.GetMembers().OfType<IPropertySymbol>())
+            {
+                if (property.IsStatic || property.IsIndexer || property.GetMethod is null
+                    || property.GetMethod.DeclaredAccessibility != Accessibility.Public)
+                {
+                    continue;
+                }
+
+                if (!CanCarryObjectState(property.Type, numeric, visiting, depth + 1))
+                    return false;
+            }
+
+            foreach (var field in current.GetMembers().OfType<IFieldSymbol>())
+            {
+                if (field.IsStatic || field.DeclaredAccessibility != Accessibility.Public) continue;
+                if (!CanCarryObjectState(field.Type, numeric, visiting, depth + 1))
+                    return false;
+            }
+        }
+
+        visiting.Remove(identity);
+        return true;
     }
 
     /// <summary>Whether a member holds a model's options.</summary>
@@ -460,7 +890,12 @@ public class ModelStateGenerator : IIncrementalGenerator
         return false;
     }
 
-    private static string Render(INamedTypeSymbol type, string numeric, List<(string Name, string Call)> members, bool declaresHook)
+    private static string Render(
+        INamedTypeSymbol type,
+        string numeric,
+        List<(string Name, string Call)> members,
+        bool declaresHook,
+        bool emitSerializationSurface)
     {
         var sb = new StringBuilder();
         sb.AppendLine("// <auto-generated/>");
@@ -519,6 +954,19 @@ public class ModelStateGenerator : IIncrementalGenerator
         }
 
         sb.AppendLine($"{indent}    }}");
+
+        if (emitSerializationSurface)
+        {
+            sb.AppendLine();
+            sb.AppendLine($"{indent}    /// <summary>Auto-generated common model serialization surface.</summary>");
+            sb.AppendLine($"{indent}    [global::System.CodeDom.Compiler.GeneratedCode(\"AiDotNet.Generators.ModelStateGenerator\", \"1.0.0\")]");
+            sb.AppendLine($"{indent}    public override byte[] Serialize() => SerializeGeneratedModelState();");
+            sb.AppendLine();
+            sb.AppendLine($"{indent}    /// <summary>Auto-generated common model deserialization surface.</summary>");
+            sb.AppendLine($"{indent}    [global::System.CodeDom.Compiler.GeneratedCode(\"AiDotNet.Generators.ModelStateGenerator\", \"1.0.0\")]");
+            sb.AppendLine($"{indent}    public override void Deserialize(byte[] data) => DeserializeGeneratedModelState(data);");
+        }
+
         sb.AppendLine($"{indent}}}");
 
         for (var i = chain.Count - 1; i >= 0; i--)
@@ -537,23 +985,89 @@ public class ModelStateGenerator : IIncrementalGenerator
     /// registry has to make one per node on restore -- and at least one settable property is typed as
     /// the node itself, which is what makes it a graph rather than a plain object.
     /// </remarks>
-    private static INamedTypeSymbol? IsRecursiveNode(ITypeSymbol memberType)
+    private static INamedTypeSymbol? IsRecursiveNode(ITypeSymbol memberType, string numeric)
     {
         if (memberType is not INamedTypeSymbol { TypeKind: TypeKind.Class } named) return null;
         if (named.IsAbstract) return null;
 
         var self = named.ToDisplayString().TrimEnd('?');
 
-        if (!named.InstanceConstructors.Any(c => c.Parameters.Length == 0 && c.DeclaredAccessibility == Accessibility.Public))
+        if (GraphNodeFactory(named, numeric) is null)
         {
             return null;
         }
 
-        var recursive = named.GetMembers().OfType<IPropertySymbol>().Any(p =>
-            !p.IsStatic && p.SetMethod is not null && p.GetMethod is not null
-            && p.Type.ToDisplayString().TrimEnd('?') == self);
+        var properties = named.GetMembers().OfType<IPropertySymbol>()
+            .Where(p => !p.IsStatic && p.GetMethod is not null)
+            .ToList();
+
+        // The typed graph path must be COMPLETE. Its former best-effort behavior recognized a
+        // recursive node and then silently skipped dictionaries, long counters and getter-only
+        // collections. HoeffdingTree consequently restored the shape of its tree but none of the
+        // class statistics that decide a leaf prediction. When even one readable property cannot be
+        // represented, decline the typed path so the general object-state declaration carries the
+        // whole node instead.
+        foreach (var property in properties)
+        {
+            if (property.SetMethod is null) return null;
+
+            var propertyType = property.Type.ToDisplayString().TrimEnd('?');
+            var bare = System.Text.RegularExpressions.Regex
+                .Replace(propertyType, @"\b[A-Za-z_][A-Za-z0-9_]*\.", string.Empty)
+                .Replace($"<{numeric}>", "<T>");
+
+            if (propertyType != self
+                && bare is not ("int" or "long" or "double" or "double[]" or "bool" or "T" or "Vector<T>"))
+            {
+                return null;
+            }
+        }
+
+        var recursive = properties.Any(p => p.Type.ToDisplayString().TrimEnd('?') == self);
 
         return recursive ? named : null;
+    }
+
+    /// <summary>A recursive node factory expressible without model-specific code.</summary>
+    private static string? GraphNodeFactory(INamedTypeSymbol node, string numeric)
+    {
+        var qualified = "global::" + node.ToDisplayString().TrimEnd('?');
+        if (node.InstanceConstructors.Any(c => c.Parameters.Length == 0
+            && c.DeclaredAccessibility == Accessibility.Public))
+        {
+            return $"new {qualified}()";
+        }
+
+        // Tree records often take the model's numeric zero solely to initialize generic scalar
+        // properties. default(T) is exactly numeric zero for the supported numeric types and lets
+        // the generated graph factory rebuild them without requiring a ceremonial parameterless
+        // constructor on every nested node type.
+        if (node.InstanceConstructors.Any(c => c.DeclaredAccessibility == Accessibility.Public
+            && c.Parameters.Length == 1
+            && c.Parameters[0].Type.ToDisplayString() == numeric))
+        {
+            return $"new {qualified}(default!)";
+        }
+
+        return null;
+    }
+
+    private static INamedTypeSymbol? IsDerivedDecisionTreeNode(ITypeSymbol type)
+    {
+        if (type is not INamedTypeSymbol { TypeKind: TypeKind.Class } named) return null;
+        for (var current = named.BaseType; current is not null; current = current.BaseType)
+        {
+            if (current.OriginalDefinition.ToDisplayString()
+                .StartsWith("AiDotNet.LinearAlgebra.DecisionTreeNode<", System.StringComparison.Ordinal))
+            {
+                return named.InstanceConstructors.Any(c => c.Parameters.Length == 0
+                    && c.DeclaredAccessibility == Accessibility.Public)
+                    ? named
+                    : null;
+            }
+        }
+
+        return null;
     }
 
     /// <summary>Builds the DeclareGraph call that carries a node graph.</summary>
@@ -563,13 +1077,36 @@ public class ModelStateGenerator : IIncrementalGenerator
     /// a fitted sub-model, and neither is needed to reproduce a prediction. Carrying the samples would
     /// put the training set inside every saved model.
     /// </remarks>
-    private static string GraphCall(string id, string name, INamedTypeSymbol node, string numeric)
+    private static string GraphCall(
+        string id,
+        string name,
+        INamedTypeSymbol node,
+        string numeric,
+        string setter)
+    {
+        var qualified = "global::" + node.ToDisplayString().TrimEnd('?');
+        var shape = GraphShape(node, numeric);
+        return $"state.DeclareGraph<{qualified}>(\"{id}\", () => {name}, {setter}, n => n{shape});";
+    }
+
+    private static string GraphListCall(
+        string id,
+        string name,
+        INamedTypeSymbol node,
+        string numeric,
+        string setter)
+    {
+        var qualified = "global::" + node.ToDisplayString().TrimEnd('?');
+        var shape = GraphShape(node, numeric);
+        return $"state.DeclareGraphList<{qualified}>(\"{id}\", () => {name}, {setter}, n => n{shape});";
+    }
+
+    private static string GraphShape(INamedTypeSymbol node, string numeric)
     {
         var self = node.ToDisplayString().TrimEnd('?');
-        var qualified = "global::" + self;
         var shape = new StringBuilder();
 
-        shape.Append($".Create(() => new {qualified}())");
+        shape.Append($".Create(() => {GraphNodeFactory(node, numeric)})");
 
         foreach (var property in node.GetMembers().OfType<IPropertySymbol>()
             .Where(p => !p.IsStatic && p.GetMethod is not null && p.SetMethod is not null)
@@ -584,6 +1121,9 @@ public class ModelStateGenerator : IIncrementalGenerator
                 : bare switch
                 {
                     "int" => "Int32",
+                    "long" => "Int64",
+                    "double" => "Double",
+                    "double[]" => "DoubleArray",
                     "bool" => "Boolean",
                     "T" => "Scalar",
                     "Vector<T>" => "Vector",
@@ -595,7 +1135,52 @@ public class ModelStateGenerator : IIncrementalGenerator
             shape.Append($".{call}(n => n.{property.Name}, (n, v) => n.{property.Name} = v)");
         }
 
-        return $"state.DeclareGraph<{qualified}>(\"{id}\", () => {name}, v => {name} = v, n => n{shape});";
+        return shape.ToString();
+    }
+
+    private static string DerivedDecisionTreeGraphCall(
+        string id,
+        string name,
+        INamedTypeSymbol node,
+        string numeric,
+        string setter)
+    {
+        var qualified = "global::" + node.ToDisplayString().TrimEnd('?');
+        var shape = new StringBuilder()
+            .Append($".Create(() => new {qualified}())")
+            .Append(".Int32(n => n.FeatureIndex, (n, v) => n.FeatureIndex = v)")
+            .Append(".Scalar(n => n.SplitValue, (n, v) => n.SplitValue = v)")
+            .Append(".Scalar(n => n.Threshold, (n, v) => n.Threshold = v)")
+            .Append(".Scalar(n => n.Prediction, (n, v) => n.Prediction = v)")
+            .Append(".Boolean(n => n.IsLeaf, (n, v) => n.IsLeaf = v)");
+
+        foreach (var property in node.GetMembers().OfType<IPropertySymbol>()
+            .Where(p => !p.IsStatic && p.GetMethod is not null && p.SetMethod is not null)
+            .OrderBy(p => p.Name, System.StringComparer.Ordinal))
+        {
+            var bare = System.Text.RegularExpressions.Regex
+                .Replace(property.Type.ToDisplayString().TrimEnd('?'), @"\b[A-Za-z_][A-Za-z0-9_]*\.", string.Empty)
+                .Replace($"<{numeric}>", "<T>");
+            var call = bare switch
+            {
+                "int" => "Int32",
+                "long" => "Int64",
+                "double" => "Double",
+                "double[]" => "DoubleArray",
+                "bool" => "Boolean",
+                "T" => "Scalar",
+                "Vector<T>" => "Vector",
+                _ => null,
+            };
+            if (call is not null)
+                shape.Append($".{call}(n => n.{property.Name}, (n, v) => n.{property.Name} = v)");
+        }
+
+        shape
+            .Append($".Child(n => ({qualified}?)n.Left, (n, v) => n.Left = v)")
+            .Append($".Child(n => ({qualified}?)n.Right, (n, v) => n.Right = v)");
+
+        return $"state.DeclareGraph<{qualified}>(\"{id}\", () => {name}, {setter}, n => n{shape});";
     }
 
     /// <summary>True for a member that is training machinery rather than state to restore.</summary>
@@ -616,7 +1201,8 @@ public class ModelStateGenerator : IIncrementalGenerator
     {
         static bool Machinery(string name)
             => name is "IOptimizer" or "IGradientBasedOptimizer" or "ILossFunction"
-                or "ILearningRateScheduler" or "IRegularization" or "IActivationFunction";
+                or "ILearningRateScheduler" or "IRegularization" or "IActivationFunction"
+                or "Random";
 
         return Machinery(type.Name) || type.AllInterfaces.Any(i => Machinery(i.Name));
     }

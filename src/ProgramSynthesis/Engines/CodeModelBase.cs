@@ -61,6 +61,25 @@ public abstract class CodeModelBase<T> : NeuralNetworkBase<T>, ICodeModel<T>
         }
     }
 
+    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
+    {
+        CodeModelArchitectureSerialization.Write(
+            writer,
+            CodeArchitecture,
+            includeUseDataFlow: true,
+            includeEncoderDecoderLayerCounts: true);
+    }
+
+    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
+    {
+        CodeModelArchitectureSerialization.ReadAndValidate(
+            reader,
+            CodeArchitecture,
+            GetType().Name,
+            includeUseDataFlow: true,
+            includeEncoderDecoderLayerCounts: true);
+    }
+
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         SetTrainingMode(false);

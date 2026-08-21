@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using System.Threading.Tasks;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Interfaces;
@@ -27,6 +28,38 @@ namespace AiDotNet.Tests.IntegrationTests.Cloning;
 /// </remarks>
 public class DenseLayerCloneTests
 {
+    [Fact(Timeout = 120000)]
+    public async Task Deserialize_ReplacesDifferentConcreteAdaptiveInputWidth()
+    {
+        await Task.Yield();
+
+        var source = new DenseLayer<double>(9, new ReLUActivation<double>() as IActivationFunction<double>);
+        var sourceInput = new Tensor<double>([1, 200]);
+        for (int i = 0; i < sourceInput.Length; i++) sourceInput[i] = (i + 1) * 0.001;
+        _ = source.Forward(sourceInput);
+
+        var parameters = source.GetParameters();
+        for (int i = 0; i < parameters.Length; i++) parameters[i] = (i + 1) * 0.0001;
+        source.UpdateParameters(parameters);
+        var expected = source.Forward(sourceInput);
+
+        var restored = new DenseLayer<double>(9, new ReLUActivation<double>() as IActivationFunction<double>);
+        _ = restored.Forward(new Tensor<double>([1, 30]));
+
+        using var stream = new MemoryStream();
+        using (var writer = new BinaryWriter(stream, System.Text.Encoding.UTF8, leaveOpen: true))
+            source.Serialize(writer);
+        stream.Position = 0;
+        using (var reader = new BinaryReader(stream, System.Text.Encoding.UTF8, leaveOpen: true))
+            restored.Deserialize(reader);
+
+        var actual = restored.Forward(sourceInput);
+        Assert.Equal(source.GetInputShape(), restored.GetInputShape());
+        Assert.Equal(expected.Length, actual.Length);
+        for (int i = 0; i < expected.Length; i++)
+            Assert.Equal(expected[i], actual[i], precision: 12);
+    }
+
     /// <summary>
     /// A trained layer's clone must produce identical output and share no parameter storage.
     /// </summary>

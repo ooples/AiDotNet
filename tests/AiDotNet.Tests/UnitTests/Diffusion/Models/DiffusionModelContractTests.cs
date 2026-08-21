@@ -199,7 +199,11 @@ public class DiffusionModelContractTests : DiffusionUnitTestBase
     public async Task StableDiffusion15Model_Clone_PreservesLazyParameterCount()
     {
         await Task.Yield();
-        var model = new StableDiffusion15Model<float>();
+        // This invariant checks lifecycle semantics, not production-scale capacity. Cloning the
+        // default 865M-parameter U-Net just to compare two counts exceeds the test budget even in an
+        // isolated process. The tiny stack uses the same lazy UNet/VAE contracts; the following test
+        // separately materializes it and compares every cloned value plus mutation independence.
+        var model = CreateTinyStableDiffusion15Model();
         var clone = model.Clone();
 
         Assert.Equal(model.ParameterCount, clone.ParameterCount);

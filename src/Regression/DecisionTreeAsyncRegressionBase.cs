@@ -696,22 +696,18 @@ public abstract partial class AsyncDecisionTreeRegressionBase<T> : IAsyncTreeBas
     /// </remarks>
     public virtual IFullModel<T, Matrix<T>, Vector<T>> Clone()
     {
-        // Create a new instance with the same options
-        var clone = CreateNewInstance();
-
-        // Deep copy the tree structure
-        if (Root != null)
+        // Through the complete declared-state payload, not a base-class list of fields. Many models
+        // on this historical trunk are ensembles or probabilistic regressors rather than one Root;
+        // the former implementation copied only Root and FeatureImportances and forced every model
+        // to repeat the same serialize/new/deserialize override. Generated state now owns those
+        // fitted structures, so the shared base can provide the correct clone once.
+        using (ModelPersistenceGuard.InternalOperation())
         {
-            ((AsyncDecisionTreeRegressionBase<T>)clone).Root = DeepCloneNode(Root);
+            byte[] state = Serialize();
+            var clone = (AsyncDecisionTreeRegressionBase<T>)CreateNewInstance();
+            clone.Deserialize(state);
+            return clone;
         }
-
-        // Copy feature importances
-        if (FeatureImportances.Length > 0)
-        {
-            ((AsyncDecisionTreeRegressionBase<T>)clone).FeatureImportances = new Vector<T>(FeatureImportances);
-        }
-
-        return clone;
     }
 
     /// <summary>

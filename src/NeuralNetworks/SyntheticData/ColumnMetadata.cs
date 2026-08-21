@@ -154,6 +154,7 @@ public class ColumnMetadata
     /// Statistics (min, max, mean, std) are filled in automatically during fitting.
     /// </para>
     /// </remarks>
+    [Newtonsoft.Json.JsonConstructor]
     public ColumnMetadata(string name, ColumnDataType dataType, IEnumerable<string>? categories = null, int columnIndex = 0)
     {
         Name = name;

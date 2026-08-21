@@ -742,13 +742,6 @@ public partial class DARTRegression<T> : AsyncDecisionTreeRegressionBase<T>
         return tree;
     }
 
-    public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
-    {
-        var clone = new DARTRegression<T>(_options, Regularization);
-        clone.Deserialize(Serialize());
-        return clone;
-    }
-
     /// <summary>
     /// Internal tree structure for DART.
     /// </summary>

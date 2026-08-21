@@ -2012,7 +2012,8 @@ public abstract partial class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, 
         SerializeAdditionalData(writer);
         SerializeExtensionData(writer);
 
-        return AiDotNet.Models.ModelStateEnvelope.Append(DeclaredState, memoryStream.ToArray());
+        byte[] payload = AiDotNet.Models.ModelStateEnvelope.Append(DeclaredState, memoryStream.ToArray());
+        return WrapSerializedPayload(payload);
     }
 
     /// <summary>
@@ -2041,6 +2042,8 @@ public abstract partial class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, 
     /// </remarks>
     public virtual void Deserialize(byte[] data)
     {
+        data = UnwrapSerializedPayload(data);
+
         // Strips and applies any declared-state trailer, so the body below reads the payload
         // exactly as it did before this existed.
         data = AiDotNet.Models.ModelStateEnvelope.Extract(DeclaredState, data);
@@ -2071,6 +2074,25 @@ public abstract partial class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, 
         DeserializeAdditionalData(reader);
         DeserializeExtensionData(reader);
     }
+
+    /// <summary>
+    /// Optionally wraps the complete shared optimizer payload in a specialized transport envelope.
+    /// </summary>
+    /// <param name="payload">The complete payload produced by the shared optimizer serializer.</param>
+    /// <returns>The payload to return from <see cref="Serialize"/>.</returns>
+    /// <remarks>
+    /// Most optimizers use the shared payload unchanged. This hook is reserved for formats whose
+    /// external checkpoint layout must remain backward compatible while their ordinary fields and
+    /// declared state continue to be managed by the shared serializer and source generator.
+    /// </remarks>
+    protected virtual byte[] WrapSerializedPayload(byte[] payload) => payload;
+
+    /// <summary>
+    /// Optionally unwraps a specialized transport envelope before shared optimizer deserialization.
+    /// </summary>
+    /// <param name="payload">The bytes supplied to <see cref="Deserialize"/>.</param>
+    /// <returns>The complete shared optimizer payload contained by <paramref name="payload"/>.</returns>
+    protected virtual byte[] UnwrapSerializedPayload(byte[] payload) => payload;
 
     /// <summary>
     /// Serializes additional data specific to derived optimizer classes.

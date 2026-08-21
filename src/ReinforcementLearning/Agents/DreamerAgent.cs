@@ -462,37 +462,4 @@ public partial class DreamerAgent<T> : DeepReinforcementLearningAgentBase<T>
 
     public override int FeatureCount => _options.ObservationSize;
 
-    public override byte[] Serialize()
-    {
-        // FIX ISSUE 8: Use NotSupportedException with clear message
-        throw new NotSupportedException(
-            "Dreamer agent serialization is not supported. " +
-            "Use GetParameters()/SetParameters() for parameter transfer, " +
-            "or save individual network weights separately.");
-    }
-
-    public override void Deserialize(byte[] data)
-    {
-        // FIX ISSUE 8: Use NotSupportedException with clear message
-        throw new NotSupportedException(
-            "Dreamer agent deserialization is not supported. " +
-            "Use GetParameters()/SetParameters() for parameter transfer, " +
-            "or load individual network weights separately.");
-    }
-
-    public override void SaveModel(string filepath)
-    {
-        // FIX ISSUE 8: Throw NotSupportedException since Serialize is not supported
-        throw new NotSupportedException(
-            "Dreamer agent save/load is not supported. " +
-            "Use GetParameters()/SetParameters() for parameter transfer.");
-    }
-
-    public override void LoadModel(string filepath)
-    {
-        // FIX ISSUE 8: Throw NotSupportedException since Deserialize is not supported
-        throw new NotSupportedException(
-            "Dreamer agent save/load is not supported. " +
-            "Use GetParameters()/SetParameters() for parameter transfer.");
-    }
 }

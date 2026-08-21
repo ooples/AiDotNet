@@ -295,10 +295,10 @@ public partial class VideoCLIP<T> : NeuralNetworkBase<T>
         BindLayerViewsFromLayers();
 
         // Initialize embedding tables (not part of layer list)
-        _tokenEmbeddingTable = new Tensor<T>([_vocabSize, hiddenDim]);
-        InitializeEmbeddingTable(_tokenEmbeddingTable, _vocabSize, hiddenDim);
-        _positionalEmbeddingTable = new Tensor<T>([_textMaxLength, hiddenDim]);
-        InitializeEmbeddingTable(_positionalEmbeddingTable, _textMaxLength, hiddenDim);
+        _tokenEmbeddingTable = new Tensor<T>([_vocabSize, effectiveHiddenDim]);
+        InitializeEmbeddingTable(_tokenEmbeddingTable, _vocabSize, effectiveHiddenDim);
+        _positionalEmbeddingTable = new Tensor<T>([_textMaxLength, effectiveHiddenDim]);
+        InitializeEmbeddingTable(_positionalEmbeddingTable, _textMaxLength, effectiveHiddenDim);
 
         // Paper-faithful training configuration (Xu et al. 2021, arXiv:2109.14084, Training Details):
         // "Adam ... with betas of (0.9, 0.98), an initial learning rate of 5e-5, 1000 steps of

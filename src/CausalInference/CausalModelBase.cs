@@ -726,11 +726,18 @@ public abstract partial class CausalModelBase<T> : ICausalModel<T>, IModelShape,
         // clone path (closes the subclass-override bypass surface).
         using (ModelPersistenceGuard.InternalOperation())
         {
-            byte[] serialized = SerializeInternalUnchecked();
+            byte[] serialized = AiDotNet.Models.ModelStateEnvelope.Append(
+                DeclaredState, SerializeInternalUnchecked());
             var copy = CreateNewInstance();
             if (copy is CausalModelBase<T> copyBase)
             {
-                copyBase.DeserializeInternalUnchecked(serialized);
+                byte[] inner = AiDotNet.Models.ModelStateEnvelope.Extract(
+                    copyBase.DeclaredState, serialized);
+                copyBase.DeserializeInternalUnchecked(inner);
+                if (IsFitted)
+                {
+                    copyBase.SetParameters(GetParameters());
+                }
             }
             else
             {

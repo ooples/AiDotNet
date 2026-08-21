@@ -200,7 +200,8 @@ public sealed class DelegatingParameterSource<T> : IParameterSource<T>
 /// variable-length piece FIRST, which the registry cannot slice; owning the whole packing in one
 /// component keeps the layout exactly as it was and still leaves one place that decides it.
 /// </remarks>
-public sealed class VariableLengthParameterSource<T> : IVariableLengthParameterSource<T>
+public sealed class VariableLengthParameterSource<T> :
+    IVariableLengthParameterSource<T>, IParameterLayoutSource
 {
     private readonly Func<long> _count;
     private readonly Func<Vector<T>> _get;
@@ -219,6 +220,39 @@ public sealed class VariableLengthParameterSource<T> : IVariableLengthParameterS
 
     /// <inheritdoc />
     public bool CanResizeOnRestore => true;
+
+    /// <inheritdoc />
+    public IReadOnlyList<ParameterSlotDescriptor> GetParameterLayout()
+    {
+        try
+        {
+            long count = _count();
+            if (count < 0)
+                throw new InvalidOperationException(
+                    $"A variable-length parameter source reported a negative count ({count}).");
+
+            return new[]
+            {
+                new ParameterSlotDescriptor(
+                    "$", ParameterSlotRole.Trainable,
+                    count == 0 ? ParameterReadiness.ParameterFree : ParameterReadiness.Materialized,
+                    count)
+            };
+        }
+        catch (ParameterLayoutNotReadyException)
+        {
+            // A composite source often computes its width by packing a child model. Before that
+            // child is fitted, asking for the width is a metadata query, not a value read. Preserve
+            // the deferred layout so capability checks can select the direct training path without
+            // forcing the child to expose parameters prematurely.
+            return new[]
+            {
+                new ParameterSlotDescriptor(
+                    "$", ParameterSlotRole.Trainable,
+                    ParameterReadiness.FitDeferred, null)
+            };
+        }
+    }
 
     /// <inheritdoc />
     public Vector<T> GetParameters() => _get();

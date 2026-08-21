@@ -1302,7 +1302,8 @@ public abstract partial class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, ICon
     {
         // Strips and applies any declared-state trailer, so the body below reads the payload
         // exactly as it did before this existed.
-        data = AiDotNet.Models.ModelStateEnvelope.Extract(DeclaredState, data);
+        byte[] envelopedData = data;
+        data = AiDotNet.Models.ModelStateEnvelope.ExtractBeforeParameters(DeclaredState, data);
         ModelPersistenceGuard.EnforceBeforeDeserialize();
         if (data == null)
         {
@@ -1438,6 +1439,13 @@ public abstract partial class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, ICon
                 else
                     _parameterRegistry.SetMatchingParameters(parameterSnapshot, checkpointLayout);
             }
+
+            // The generator marks only trainable CLR storage whose precision can exceed T for this
+            // phase (for example double[] working weights in a float model). Restore those exact
+            // values after the public flat vector so cloning and persistence remain bit-identical
+            // without any per-model serialization override.
+            _ = AiDotNet.Models.ModelStateEnvelope.ExtractAfterParameters(
+                DeclaredState, envelopedData);
         }
         catch (Exception ex)
         {

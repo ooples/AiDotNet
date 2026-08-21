@@ -5782,7 +5782,17 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
             }
         }
 
-        if (savedShape is not null && !IsShapeResolved)
+        if (savedShape is not null && IsShapeResolved
+            && !InputShape.SequenceEqual(savedShape))
+        {
+            // A construction-sized layer can still adapt its input width at runtime. Restoring
+            // [200, 9] Dense weights into a fresh layer already resolved at [30, 9] previously
+            // kept the stale [30] declaration, so TryAdoptRestoredParameters correctly rejected
+            // the checkpoint on first forward. The checkpoint's concrete shape is authoritative
+            // at this value boundary; update the common shape metadata before adoption.
+            UpdateInputShape((int[])savedShape.Clone());
+        }
+        else if (savedShape is not null && !IsShapeResolved)
         {
             // The saved shape is what the layer PUBLISHED for itself, and a layer may publish one
             // sample while its forward requires the batch axis: Conv1DLayer resolves to
@@ -7891,6 +7901,21 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
                 $"{GetType().Name} has {_registeredTensors.Count} registered parameters but received {parameters.Count}.");
         }
 
+        // Runtime-registered layers can keep their execution handles in fields or containers that
+        // the generator cannot name. A common pattern is to allocate tensors in a loop, store them
+        // in an array/dictionary, and register the loop local. In that case replacing only
+        // _registeredTensors makes GetParameters report the new values while Forward continues to
+        // read the old tensors. Copy-on-write cloning exposed this as a particularly deceptive
+        // failure: source and clone parameter vectors were bit-identical, but their predictions
+        // differed because the clone's execution field had never been rebound.
+        //
+        // Repoint every derived-class field/container entry that aliases an OLD registry tensor.
+        // This is deliberately identity-based: unregistered buffers and external tensors are left
+        // alone, and ordinary generated setters (which assign their fields before reaching here)
+        // become a cheap no-op. Reflection is paid only at an explicit parameter-rebind boundary,
+        // never during Forward.
+        RebindRuntimeParameterHandles(_registeredTensors, parameters);
+
         for (int i = 0; i < parameters.Count; i++)
             _registeredTensors[i] = parameters[i];
 
@@ -7900,6 +7925,66 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         AdoptTrainableParameterTensors(parameters);
         _cachedParameterCount = -1;
         BumpParameterEpoch();
+    }
+
+    private void RebindRuntimeParameterHandles(
+        IReadOnlyList<Tensor<T>> previous,
+        IReadOnlyList<Tensor<T>> replacements)
+    {
+        if (previous.Count != replacements.Count || previous.Count == 0) return;
+
+        Tensor<T>? ReplacementFor(object? candidate)
+        {
+            if (candidate is not Tensor<T> tensor) return null;
+            for (int i = 0; i < previous.Count; i++)
+                if (ReferenceEquals(tensor, previous[i])) return replacements[i];
+            return null;
+        }
+
+        for (Type? type = GetType(); type is not null && type != typeof(LayerBase<T>); type = type.BaseType)
+        {
+            var fields = type.GetFields(
+                System.Reflection.BindingFlags.Instance |
+                System.Reflection.BindingFlags.Public |
+                System.Reflection.BindingFlags.NonPublic |
+                System.Reflection.BindingFlags.DeclaredOnly);
+
+            foreach (var field in fields)
+            {
+                object? value = field.GetValue(this);
+                if (value is Tensor<T>)
+                {
+                    var replacement = ReplacementFor(value);
+                    if (replacement is not null && !field.IsInitOnly && field.FieldType.IsInstanceOfType(replacement))
+                        field.SetValue(this, replacement);
+                    continue;
+                }
+
+                if (value is System.Collections.IDictionary dictionary && !dictionary.IsReadOnly)
+                {
+                    var updates = new List<(object Key, Tensor<T> Value)>();
+                    foreach (System.Collections.DictionaryEntry entry in dictionary)
+                    {
+                        var replacement = ReplacementFor(entry.Value);
+                        if (replacement is not null && entry.Key is not null)
+                            updates.Add((entry.Key, replacement));
+                    }
+                    foreach (var update in updates) dictionary[update.Key] = update.Value;
+                    continue;
+                }
+
+                if (value is System.Collections.IList list && !list.IsReadOnly)
+                {
+                    for (int i = 0; i < list.Count; i++)
+                    {
+                        var replacement = ReplacementFor(list[i]);
+                        if (replacement is not null)
+                            list[i] = replacement;
+                    }
+                }
+            }
+        }
+
     }
 
     /// <summary>

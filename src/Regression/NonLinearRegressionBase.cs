@@ -1047,17 +1047,11 @@ public abstract partial class NonLinearRegressionBase<T> : INonLinearRegression<
     /// </remarks>
     public virtual IFullModel<T, Matrix<T>, Vector<T>> Clone()
     {
-        // Create a new instance using the factory method
-        var clone = (NonLinearRegressionBase<T>)CreateInstance();
-
-        // Copy the model parameters
-        clone.SupportVectors = SupportVectors;  // Shallow copy
-        clone.Alphas = Alphas;                 // Shallow copy
-        clone.B = B;                          // Value types are copied by value
-        clone.Options = Options;              // Shallow copy
-        clone.Regularization = Regularization; // Shallow copy
-
-        return clone;
+        // One clone contract for the whole hierarchy. The old shallow copy knew only the support-
+        // vector fields declared here, so IsotonicRegression and KernelRidgeRegression lost every
+        // fitted field their generated state declaration correctly persisted. DeepCopy already
+        // routes through the complete payload and does not call Clone, so this is recursion-free.
+        return DeepCopy();
     }
 
     public virtual long ParameterCount

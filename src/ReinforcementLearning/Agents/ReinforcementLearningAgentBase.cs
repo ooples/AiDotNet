@@ -343,9 +343,85 @@ public abstract partial class ReinforcementLearningAgentBase<T> : IRLAgent<T>, I
     public abstract byte[] Serialize();
 
     /// <summary>
+    /// Implements the common generated serialization surface for agents that do not own a legacy
+    /// external format. ModelStateGenerator emits the public override that delegates here.
+    /// </summary>
+    protected byte[] SerializeGeneratedModelState()
+    {
+        ModelPersistenceGuard.EnforceBeforeSerialize();
+
+        var parameters = GetParameters();
+        using var stream = new MemoryStream();
+        using var writer = new BinaryWriter(stream, System.Text.Encoding.UTF8, leaveOpen: true);
+
+        writer.Write(AgentSerializationMagic);
+        writer.Write(GetType().FullName ?? GetType().Name);
+        writer.Write(parameters.Length);
+        for (int i = 0; i < parameters.Length; i++)
+        {
+            writer.Write(Convert.ToDouble(parameters[i]));
+        }
+
+        DeclaredState.WriteAll(writer);
+        writer.Flush();
+        return stream.ToArray();
+    }
+
+    /// <summary>
     /// Deserializes the agent from bytes.
     /// </summary>
     public abstract void Deserialize(byte[] data);
+
+    /// <summary>
+    /// Implements the common generated deserialization surface paired with
+    /// <see cref="SerializeGeneratedModelState"/>.
+    /// </summary>
+    protected void DeserializeGeneratedModelState(byte[] data)
+    {
+        if (data is null) throw new ArgumentNullException(nameof(data));
+        ModelPersistenceGuard.EnforceBeforeDeserialize();
+
+        using var stream = new MemoryStream(data);
+        using var reader = new BinaryReader(stream, System.Text.Encoding.UTF8, leaveOpen: true);
+
+        int magic = reader.ReadInt32();
+        if (magic != AgentSerializationMagic)
+        {
+            throw new InvalidDataException(
+                $"{GetType().Name}: payload is not an AiDotNet reinforcement-learning agent state block.");
+        }
+
+        string savedType = reader.ReadString();
+        string liveType = GetType().FullName ?? GetType().Name;
+        if (!string.Equals(savedType, liveType, StringComparison.Ordinal))
+        {
+            throw new InvalidDataException(
+                $"State was saved from '{savedType}' and is being loaded into '{liveType}'.");
+        }
+
+        int count = reader.ReadInt32();
+        if (count < 0)
+        {
+            throw new InvalidDataException($"Agent parameter count cannot be negative ({count}).");
+        }
+
+        var parameters = new Vector<T>(count);
+        for (int i = 0; i < count; i++)
+        {
+            parameters[i] = NumOps.FromDouble(reader.ReadDouble());
+        }
+
+        // State can materialize variable-length storage and child components. Restore it before the
+        // flat vector so SetParameters sees the saved structure and remains authoritative for values.
+        if (reader.BaseStream.Position < reader.BaseStream.Length)
+        {
+            DeclaredState.ReadAll(reader);
+        }
+
+        SetParameters(parameters);
+    }
+
+    private const int AgentSerializationMagic = unchecked((int)0xA1D0A63E);
 
     /// <summary>
     /// Gets the agent's parameters.

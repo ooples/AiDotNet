@@ -846,6 +846,13 @@ public class ControlNetEncoder<T> : IParameterSource<T>
     /// </summary>
     public Vector<T> GetParameters()
     {
+        // ParameterCount describes every shape-resolved convolution, including kernels whose storage
+        // is intentionally lazy. A concrete read must cross the lifecycle boundary before capturing
+        // the vector; otherwise Count and Get disagree and any containing model slices the following
+        // component at the wrong offset (ControlNet++ clone emitted 55,871,135 fewer values).
+        foreach (var block in _downBlocks) block.MaterializeParameters();
+        foreach (var zc in _zeroConvs) zc.MaterializeParameters();
+
         // Single-allocation concat — avoids the List<T> + per-element Add + ToArray
         // triple-copy. Vector<T>.Concatenate pre-sizes one result and vectorized-
         // copies each conv's params in once.
@@ -860,6 +867,14 @@ public class ControlNetEncoder<T> : IParameterSource<T>
     /// </summary>
     public void SetParameters(Vector<T> parameters)
     {
+        if (parameters is null) throw new ArgumentNullException(nameof(parameters));
+        if (parameters.Length != ParameterCount)
+        {
+            throw new ArgumentException(
+                $"Expected {ParameterCount} ControlNet encoder parameters, got {parameters.Length}.",
+                nameof(parameters));
+        }
+
         int offset = 0;
 
         foreach (var block in _downBlocks)

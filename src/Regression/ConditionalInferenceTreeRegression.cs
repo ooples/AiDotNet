@@ -699,14 +699,4 @@ public partial class ConditionalInferenceTreeRegression<T> : AsyncDecisionTreeRe
         return node;
     }
 
-    /// <summary>
-    /// Creates a deep copy via serialization to ensure the private _root tree is preserved.
-    /// </summary>
-    public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
-    {
-        var clone = new ConditionalInferenceTreeRegression<T>(_options, Regularization);
-        var data = Serialize();
-        clone.Deserialize(data);
-        return clone;
-    }
 }

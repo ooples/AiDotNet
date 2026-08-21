@@ -69,8 +69,13 @@ internal sealed partial class QuantizedAttentionLayer : LayerBase<float>, IShape
     private readonly ALiBiPositionalBiasLayer<float>? _alibiLayer;
 
     /// <summary>Construction state: the 'source' the layer was built with.</summary>
+    // The quantized projections own the inference weights after construction. These references
+    // are provenance only; traversing them as child layers would expose the original full-precision
+    // attention weights through an inference-only layer whose parameter contract is intentionally 0.
+    [ExternalState]
     private readonly AiDotNet.NeuralNetworks.Layers.MultiHeadAttentionLayer<float> _source = null!;
     // The two constructors take different source layer types, which cannot share one field.
+    [ExternalState]
     private readonly AiDotNet.NeuralNetworks.Layers.GroupedQueryAttentionLayer<float> _sourceGrouped = null!;
 
     /// <summary>

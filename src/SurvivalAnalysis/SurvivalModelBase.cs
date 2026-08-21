@@ -49,20 +49,8 @@ public abstract partial class SurvivalModelBase<T> : ISurvivalModel<T>, IModelSh
     /// <param name="state">The registry to declare into.</param>
     protected virtual void RegisterState(AiDotNet.Models.ModelStateRegistry<T> state)
     {
-        // ModelStateGenerator emits RegisterGeneratedState for a model's OWN members only -- it does
-        // not walk the base chain, and it cannot generate into this type at all, because FindHook
-        // starts at BaseType and this class is where RegisterGeneratedState is declared. So the four
-        // members below reach no generated file by either route and have to be declared by hand.
-        //
-        // They are not optional: NelsonAalenEstimator, WeibullAFT and LogNormalAFT each hand-wrote
-        // these into their own Serialize/Deserialize, which is the duplication ADN0060 exists to
-        // remove. Declaring them once here is what lets those three overrides go.
-        state.Declare("SurvivalModelBase.TrainedEventTimes",
-            () => TrainedEventTimes, v => TrainedEventTimes = v);
-        state.Declare("SurvivalModelBase.BaselineSurvivalFunction",
-            () => BaselineSurvivalFunction, v => BaselineSurvivalFunction = v);
-        state.DeclareBoolean("SurvivalModelBase.IsFitted", () => IsFitted, v => IsFitted = v);
-        state.DeclareInt32("SurvivalModelBase.NumFeatures", () => NumFeatures, v => NumFeatures = v);
+        // Common storage is emitted into RegisterGeneratedStateCore by ModelStateGenerator. This
+        // hook remains only for state whose shape the registry cannot express declaratively.
     }
     /// <summary>Generated state declarations for fields declared across this model's hierarchy.</summary>
     /// <param name="state">The registry to declare into.</param>
@@ -772,19 +760,17 @@ public abstract partial class SurvivalModelBase<T> : ISurvivalModel<T>, IModelSh
         // clone path (closes the subclass-override bypass surface).
         using (ModelPersistenceGuard.InternalOperation())
         {
-            byte[] serialized = SerializeInternalUnchecked();
+            byte[] serialized = AiDotNet.Models.ModelStateEnvelope.Append(
+                DeclaredState, SerializeInternalUnchecked());
             var copy = CreateNewInstance();
             if (copy is SurvivalModelBase<T> copyBase)
             {
-                copyBase.DeserializeInternalUnchecked(serialized);
+                byte[] inner = AiDotNet.Models.ModelStateEnvelope.Extract(
+                    copyBase.DeclaredState, serialized);
+                copyBase.DeserializeInternalUnchecked(inner);
 
-                // SerializeInternalUnchecked captures only NumFeatures/IsFitted — NOT the model's
-                // fitted parameters — so without this transfer every parametric survival model
-                // (LogNormalAFT/WeibullAFT/CoxPH/etc.) would clone into an unfitted shell whose
-                // Predict throws "Coefficients is null". Round-trip the fitted state through the
-                // GetParameters/SetParameters contract each subclass already implements.
-                // Non-parametric models (Kaplan-Meier, survival forests) return an empty/degenerate
-                // parameter vector, so this is a no-op for them.
+                // Declared state is restored first because it materializes fitted vector lengths;
+                // the flat parameter vector then remains authoritative for every registered value.
                 if (IsFitted)
                 {
                     copyBase.SetParameters(GetParameters());

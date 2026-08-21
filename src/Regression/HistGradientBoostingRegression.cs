@@ -1351,53 +1351,6 @@ public partial class HistGradientBoostingRegression<T> : ModelBase<T, Matrix<T>,
     /// <summary>
     /// Serializes a tree node recursively.
     /// </summary>
-    /// <summary>
-    /// Declares the two shapes the generator cannot infer: the fitted forest and the per-feature
-    /// bin thresholds.
-    /// </summary>
-    /// <param name="state">The registry to declare into.</param>
-    /// <remarks>
-    /// The node fields mirror <see cref="SerializeTree"/> exactly. <c>SampleIndices</c> is absent
-    /// from both: it indexes the training matrix, so it is scratch from fitting rather than model
-    /// state, and restoring it into a model with no training data would be meaningless.
-    /// The hand-written walk recursed only when <c>IsLeaf</c> was false; NodeShape writes a
-    /// presence flag per child instead, which represents a leaf without needing the flag to agree
-    /// with the child pointers - the old form threw if they ever disagreed.
-    /// Everything else the pair wrote is either an option replayed by the recorded constructor or a
-    /// member the generator already declares.
-    /// </remarks>
-    protected override void RegisterState(ModelStateRegistry<T> state)
-    {
-        base.RegisterState(state);
-
-        // The generator declares _initialPrediction and _featureImportances but not this;
-        // the hand-written pair wrote it, so it is declared here rather than dropped.
-        state.DeclareInt32(
-            "HistGradientBoostingRegression._numFeatures",
-            () => _numFeatures,
-            v => _numFeatures = v);
-
-        state.DeclareJaggedArray(
-            "HistGradientBoostingRegression._binThresholds",
-            () => _binThresholds,
-            v => _binThresholds = v);
-
-        state.DeclareGraphList<HistTreeNode>(
-            "HistGradientBoostingRegression._trees",
-            () => _trees,
-            v => _trees = v,
-            node => node
-                .Create(() => new HistTreeNode(NumOps.Zero))
-                .Boolean(n => n.IsLeaf, (n, v) => n.IsLeaf = v)
-                .Scalar(n => n.LeafValue, (n, v) => n.LeafValue = v)
-                .Int32(n => n.FeatureIndex, (n, v) => n.FeatureIndex = v)
-                .Int32(n => n.BinThreshold, (n, v) => n.BinThreshold = v)
-                .Scalar(n => n.Threshold, (n, v) => n.Threshold = v)
-                .Int32(n => n.Depth, (n, v) => n.Depth = v)
-                .Child(n => n.Left, (n, c) => n.Left = c)
-                .Child(n => n.Right, (n, c) => n.Right = c));
-    }
-
     private void SerializeTree(BinaryWriter writer, HistTreeNode node)
     {
         writer.Write(node.IsLeaf);

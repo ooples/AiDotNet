@@ -165,7 +165,10 @@ public partial class NeuralNetwork<T> : SequentialVectorModelLayoutBase<T>
         {
             // Use the layers provided by the user
             Layers.AddRange(Architecture.Layers);
-            ValidateCustomLayers(Layers);
+            if (!Architecture.IsValidatedCloneSnapshot)
+            {
+                ValidateCustomLayers(Layers);
+            }
         }
         else
         {

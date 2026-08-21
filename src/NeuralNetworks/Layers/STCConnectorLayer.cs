@@ -149,6 +149,7 @@ public partial class STCConnectorLayer<T> : LayerBase<T>, IShapeContract
     private readonly Conv3DLayer<T> _sampler;
     private readonly RegStageBlock[] _stage2;
     private readonly DenseLayer<T>[] _readout;
+    [Scratch]
     private readonly LayerBase<T>[] _parameterLayers;
 
     /// <inheritdoc/>
@@ -517,7 +518,9 @@ public partial class STCConnectorLayer<T> : LayerBase<T>, IShapeContract
         private readonly ConvolutionalLayer<T>? _shortcutConv;
         private readonly LayerNormalizationLayer<T>? _shortcutNorm;
         private readonly ActivationLayer<T> _outputActivation;
+        [Scratch]
         private readonly LayerBase<T>[] _parameterLayers;
+        [Scratch]
         private readonly LayerBase<T>[] _allLayers;
 
         public RegStageBlock(int inputChannels, int outputChannels)

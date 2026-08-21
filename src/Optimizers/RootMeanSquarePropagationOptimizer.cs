@@ -85,7 +85,10 @@ public partial class RootMeanSquarePropagationOptimizer<T, TInput, TOutput> : Gr
     /// This adaptive memory allows the algorithm to respond differently to different parameters based on their history.
     /// </para>
     /// </remarks>
-    [Scratch]
+    // Persistent optimizer memory: the next update depends on every value accumulated here.
+    // Calling this scratch made a restored RMSProp take a different second step even though all
+    // model parameters round-tripped correctly.
+    [Buffer]
     private Vector<T> _squaredGradient;
 
     /// <summary>

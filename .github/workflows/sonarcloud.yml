@@ -1541,6 +1541,7 @@ jobs:
           path: |
             TestResults/**/coverage.opencover.xml
             TestResults/**/*.trx
+            TestResults/**/Sequence_*.xml
           if-no-files-found: ignore
 
   parameter-enumeration-sweep:
@@ -1873,6 +1874,14 @@ jobs:
     name: SonarCloud Analysis
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    outputs:
+      failed_test_occurrences: ${{ steps.test-totals.outputs.failed_test_occurrences }}
+      distinct_failing_tests: ${{ steps.test-totals.outputs.distinct_failing_tests }}
+      executed_tests: ${{ steps.test-totals.outputs.executed_tests }}
+      discovered_tests: ${{ steps.test-totals.outputs.discovered_tests }}
+      reported_shards: ${{ steps.test-totals.outputs.reported_shards }}
+      expected_shards: ${{ steps.test-totals.outputs.expected_shards }}
+      test_totals_incomplete: ${{ steps.test-totals.outputs.test_totals_incomplete }}
     # always() is load-bearing, not cosmetic. Without it a single red shard fails the
     # test-net10-sharded matrix, Actions SKIPS this job for having a failed `needs`, and because
     # "SonarCloud Analysis" is the ONLY required status check in the `Main` ruleset, a skipped
@@ -1943,6 +1952,12 @@ jobs:
           pattern: coverage-${{ github.sha }}-*
           path: TestResults
           merge-multiple: true
+
+      - name: Report aggregate test totals
+        id: test-totals
+        if: always()
+        shell: pwsh
+        run: .github/scripts/report-test-totals.ps1
 
       - name: Restore dependencies
         run: dotnet restore
@@ -2096,6 +2111,13 @@ jobs:
           BUILD_RESULT: ${{ needs.build.result }}
           TESTS_RESULT: ${{ needs.test-net10-sharded.result }}
           SONAR_RESULT: ${{ needs.sonarcloud.result }}
+          FAILED_TEST_OCCURRENCES: ${{ needs.sonarcloud.outputs.failed_test_occurrences || 'unknown' }}
+          DISTINCT_FAILING_TESTS: ${{ needs.sonarcloud.outputs.distinct_failing_tests || 'unknown' }}
+          EXECUTED_TESTS: ${{ needs.sonarcloud.outputs.executed_tests || 'unknown' }}
+          DISCOVERED_TESTS: ${{ needs.sonarcloud.outputs.discovered_tests || 'unknown' }}
+          REPORTED_SHARDS: ${{ needs.sonarcloud.outputs.reported_shards || 'unknown' }}
+          EXPECTED_SHARDS: ${{ needs.sonarcloud.outputs.expected_shards || 'unknown' }}
+          TEST_TOTALS_INCOMPLETE: ${{ needs.sonarcloud.outputs.test_totals_incomplete || 'true' }}
         run: |
           set -euo pipefail
 
@@ -2106,6 +2128,17 @@ jobs:
           echo "| build | $BUILD_RESULT |" >> "$GITHUB_STEP_SUMMARY"
           echo "| test-net10-sharded | $TESTS_RESULT |" >> "$GITHUB_STEP_SUMMARY"
           echo "| sonarcloud | $SONAR_RESULT |" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Test result metric | Total |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|---|---:|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Failed test occurrences | $FAILED_TEST_OCCURRENCES |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Distinct failing tests | $DISTINCT_FAILING_TESTS |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Executed tests | $EXECUTED_TESTS / $DISCOVERED_TESTS |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Reported shards | $REPORTED_SHARDS / $EXPECTED_SHARDS |" >> "$GITHUB_STEP_SUMMARY"
+          if [ "$TEST_TOTALS_INCOMPLETE" = "true" ]; then
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo ":warning: **Test totals are incomplete or unknown; numeric failure counts are a floor.**" >> "$GITHUB_STEP_SUMMARY"
+          fi
 
           failed=0
           for pair in "build:$BUILD_RESULT" "test-net10-sharded:$TESTS_RESULT" "sonarcloud:$SONAR_RESULT"; do

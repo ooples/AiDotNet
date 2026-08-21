@@ -531,11 +531,4 @@ public partial class AdaBoostR2Regression<T> : AsyncDecisionTreeRegressionBase<T
         };
     }
 
-    public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
-    {
-        var clone = new AdaBoostR2Regression<T>(_options, Regularization);
-        clone.Deserialize(Serialize());
-        return clone;
-    }
-
 }

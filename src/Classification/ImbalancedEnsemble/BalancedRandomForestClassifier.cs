@@ -88,7 +88,7 @@ namespace AiDotNet.Classification.ImbalancedEnsemble;
     "https://statistics.berkeley.edu/sites/default/files/tech-reports/666.pdf",
     Year = 2004,
     Authors = "Chao Chen, Andy Liaw, Leo Breiman")]
-public class BalancedRandomForestClassifier<T> : ClassifierBase<T>
+public partial class BalancedRandomForestClassifier<T> : ClassifierBase<T>
 {
 
     // Returned _trees.Count. Same as BalancedBaggingClassifier: a count is not a weight.

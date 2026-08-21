@@ -369,6 +369,15 @@ public class SyntheticTabularGeneratorIntegrationTests
         // The generator batch-norm layers live outside the base Layers collection; verify they
         // (and the VGM transformer driving output activations) survive serialization.
         AssertAuxLayerListPreserved<BatchNormalizationLayer<double>>(generator, restored, "_genBNLayers");
+        var originalTransformer = GetPrivateField<TabularDataTransformer<double>>(generator, "_transformer");
+        var restoredTransformer = GetPrivateField<TabularDataTransformer<double>>(restored, "_transformer");
+        Assert.NotNull(restoredTransformer);
+        Assert.Equal(originalTransformer.Serialize(), restoredTransformer.Serialize());
+        var originalParameters = generator.GetParameters();
+        var restoredParameters = restored.GetParameters();
+        Assert.Equal(originalParameters.Length, restoredParameters.Length);
+        for (int i = 0; i < originalParameters.Length; i++)
+            Assert.Equal(originalParameters[i], restoredParameters[i], 10);
 
         generator.SetTrainingMode(false);
         restored.SetTrainingMode(false);
@@ -592,6 +601,15 @@ public class SyntheticTabularGeneratorIntegrationTests
         // The data-generator batch-norm layers (running mean/variance included) live outside the
         // base Layers collection; verify they survive serialization, including their extras.
         AssertAuxLayerListPreserved<BatchNormalizationLayer<double>>(generator, restored, "_dataGenBNLayers");
+        var originalTransformer = GetPrivateField<TabularDataTransformer<double>>(generator, "_transformer");
+        var restoredTransformer = GetPrivateField<TabularDataTransformer<double>>(restored, "_transformer");
+        Assert.NotNull(restoredTransformer);
+        Assert.Equal(originalTransformer.Serialize(), restoredTransformer.Serialize());
+        var originalParameters = generator.GetParameters();
+        var restoredParameters = restored.GetParameters();
+        Assert.Equal(originalParameters.Length, restoredParameters.Length);
+        for (int i = 0; i < originalParameters.Length; i++)
+            Assert.Equal(originalParameters[i], restoredParameters[i], 10);
 
         // And the eval-mode forward (used by Generate) must match exactly after restore — this also
         // exercises the restored VGM transformer via ApplyOutputActivations.

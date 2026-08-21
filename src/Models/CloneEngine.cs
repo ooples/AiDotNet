@@ -352,25 +352,23 @@ public static class CloneEngine
     /// </para>
     /// </remarks>
     /// <summary>
-    /// Clones a constructor argument that is itself a model or a layer.
+    /// Rebuilds a constructor argument that is itself a model or a layer.
     /// </summary>
     /// <param name="value">The argument value read from the source.</param>
-    /// <returns>Its clone, or the value unchanged when it is not something that clones itself.</returns>
+    /// <returns>An independent configuration copy, or the value unchanged when it is not a model component.</returns>
     /// <remarks>
     /// <para>
     /// A constructor argument used to be handed straight across, which meant a rebuilt model SHARED
-    /// its sub-modules with the one it was copied from. Nothing looks wrong at the moment of cloning
-    /// -- the payload writes the same weights back into the same tensors -- and the damage appears
-    /// later, when training the copy also trains the original. That is what roughly 180 hand-written
-    /// <c>Clone</c> overrides in the diffusion family are working around when they call
-    /// <c>_unet.Clone()</c> and <c>_vae.Clone()</c> before handing them to the constructor: the base
-    /// could not do it, so each model did it again.
+    /// its sub-modules with the one it was copied from. Rebuild the child through the same generated
+    /// configuration plan as its owner. The owning base then restores learned state once through its
+    /// parameter/state contract.
     /// </para>
     /// <para>
-    /// Cheap, because these clones are copy-on-write: a layer's <c>Clone</c> shares the parent's
-    /// weight tensors by reference and only materialises on write. So this buys independence without
-    /// buying a second copy of a foundation-scale model, which is the reason it can be applied to
-    /// every argument rather than to a hand-picked list of which sub-modules "count".
+    /// This is deliberately configuration-only. Calling the child's public <c>Clone</c> here copied
+    /// all of its weights, after which diffusion and predictor bases copied the owner's parameter
+    /// chunks into the same child a second time. Besides doubling work, that pushed foundation-model
+    /// clone tests past their timeout. Structural reconstruction followed by the owner's single state
+    /// transfer is both independent and complete.
     /// </para>
     /// <para>
     /// Matched on the library's own <c>ICloneable&lt;T&gt;</c> rather than a list of base types, so a
@@ -382,6 +380,25 @@ public static class CloneEngine
     private static object? DuplicateSubModel(object? value)
     {
         if (value is null) return null;
+
+        // Mutable blueprints can own models/layers without being models themselves. Reusing such a
+        // constructor argument makes the reconstructed parent share those owned objects before its
+        // parameter state is even restored. Let the blueprint produce an independent structural
+        // copy; parameter tensors remain the responsibility of the parent's copy-on-write path.
+        if (value is IConfigurationCloneable configuration)
+        {
+            try
+            {
+                return configuration.CloneConfiguration();
+            }
+            catch (Exception)
+            {
+                // Preserve the established fallback for a consumer-defined configuration that
+                // cannot be reconstructed. The parent's copy-on-write identity check will reject
+                // unsafe sharing and route to the eager serialization clone instead.
+                return value;
+            }
+        }
 
         // Noise schedulers are mutable model components even though they are not IFullModel and do
         // not implement AiDotNet's ICloneable<T>. Passing one straight through a reconstructed
@@ -405,9 +422,24 @@ public static class CloneEngine
 
         if (cloneable?.GetMethod("Clone", Type.EmptyTypes) is not { } clone) return value;
 
-        // A sub-module that cannot clone itself is not a reason to abandon the rebuild -- the shared
-        // reference is what happened before this existed, so falling back to it is no worse than the
-        // behaviour this replaces, and the alternative is refusing to clone the parent at all.
+        // Prefer generated configuration reconstruction. It preserves the concrete child type and
+        // all constructor settings without copying learned tensors that the owning model is about to
+        // restore through its own state contract.
+        try
+        {
+            return CopyConfiguration(value);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException
+                                   or ArgumentException
+                                   or NotSupportedException
+                                   or MissingMethodException)
+        {
+            // Consumer-defined cloneable components may not participate in the generated registry.
+            // Their public Clone remains the compatibility fallback.
+        }
+
+        // A sub-module that cannot be reconstructed from a generated plan is not a reason to abandon
+        // the parent rebuild. Preserve the established public-clone fallback for custom components.
         try
         {
             return clone.Invoke(value, null) ?? value;

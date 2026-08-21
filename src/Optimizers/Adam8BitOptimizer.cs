@@ -1603,6 +1603,208 @@ public partial class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimi
         return snapshot;
     }
 
+    /// <summary>
+    /// Persists Adam8Bit's versioned quantized tape format around the shared optimizer payload.
+    /// </summary>
+    /// <remarks>
+    /// Ordinary fields still live in the generated state envelope inside <c>baseData</c>. The
+    /// quantized per-parameter tape table is unique to Adam8Bit: it is keyed by stable parameter
+    /// order and has byte/double/BF16 alternatives that the shared tensor-dictionary extension
+    /// cannot represent. Keeping this one specialized envelope preserves existing checkpoints and
+    /// leaves the common optimizer serialization in the base.
+    /// </remarks>
+    protected override byte[] WrapSerializedPayload(byte[] baseData)
+    {
+        using var stream = new MemoryStream();
+        using var writer = new BinaryWriter(stream);
+
+        writer.Write(baseData.Length);
+        writer.Write(baseData);
+        writer.Write(JsonConvert.SerializeObject(_options));
+        writer.Write(Adam8BitV2Magic);
+        writer.Write(StateFormatVersion);
+        writer.Write(_t);
+        writer.Write(_parameterLength);
+        writer.Write(_numBlocks);
+
+        writer.Write(_options.CompressBothMoments);
+        bool hasMState = _options.CompressBothMoments
+            ? _mQuantized is not null
+            : _mFullPrecision is not null;
+        writer.Write(hasMState);
+        if (hasMState)
+        {
+            if (_options.CompressBothMoments)
+            {
+                WriteLegacyQuantizedVector(writer, _mQuantized!, _mScales, "first moment");
+            }
+            else
+            {
+                writer.Write(_mFullPrecision!.Length);
+                for (int i = 0; i < _mFullPrecision.Length; i++)
+                    writer.Write(NumOps.ToDouble(_mFullPrecision[i]));
+            }
+        }
+
+        writer.Write(_vQuantized is not null);
+        if (_vQuantized is not null)
+            WriteLegacyQuantizedVector(writer, _vQuantized, _vScales, "second moment");
+
+        writer.Write(_tapeStep);
+        WriteTapeStates(writer);
+        return stream.ToArray();
+    }
+
+    /// <inheritdoc />
+    protected override byte[] UnwrapSerializedPayload(byte[] data)
+    {
+        using var stream = new MemoryStream(data);
+        using var reader = new BinaryReader(stream);
+
+        int baseDataLength = reader.ReadInt32();
+        ValidateDeclaredCount(reader, baseDataLength, sizeof(byte), "base payload");
+        byte[] baseData = reader.ReadBytes(baseDataLength);
+
+        string optionsJson = reader.ReadString();
+        _options = JsonConvert.DeserializeObject<Adam8BitOptimizerOptions<T, TInput, TOutput>>(optionsJson)
+            ?? throw new InvalidOperationException("Adam8BitOptimizer: options payload deserialized to null.");
+
+        int magic = reader.ReadInt32();
+        if (magic != Adam8BitV2Magic)
+        {
+            throw new InvalidOperationException(
+                $"Adam8BitOptimizer: incompatible checkpoint format; expected magic "
+                + $"0x{Adam8BitV2Magic:X8}, got 0x{magic:X8}.");
+        }
+        int version = reader.ReadInt32();
+        if (version != StateFormatVersion)
+            throw new InvalidOperationException(
+                $"Adam8BitOptimizer: unsupported checkpoint version {version}; expected {StateFormatVersion}.");
+
+        _t = reader.ReadInt32();
+        _parameterLength = reader.ReadInt32();
+        _numBlocks = reader.ReadInt32();
+        ValidateTopLevelShape();
+
+        bool streamedCompressBothMoments = reader.ReadBoolean();
+        if (streamedCompressBothMoments != _options.CompressBothMoments)
+            throw new InvalidOperationException(
+                "Adam8BitOptimizer: checkpoint moment layout disagrees with its options payload.");
+
+        bool hasMState = reader.ReadBoolean();
+        if (hasMState && _options.CompressBothMoments)
+        {
+            (_mQuantized, _mScales) = ReadLegacyQuantizedVector(reader, "first moment");
+            _mFullPrecision = null;
+        }
+        else if (hasMState)
+        {
+            int length = reader.ReadInt32();
+            ValidateDeclaredCount(reader, length, sizeof(double), "full-precision first moment");
+            if (length != _parameterLength)
+                throw new InvalidOperationException(
+                    $"Adam8BitOptimizer: first-moment length {length} does not match {_parameterLength}.");
+            _mFullPrecision = new Vector<T>(length);
+            for (int i = 0; i < length; i++) _mFullPrecision[i] = NumOps.FromDouble(reader.ReadDouble());
+            _mQuantized = null;
+            _mScales = null;
+        }
+        else
+        {
+            _mQuantized = null;
+            _mScales = null;
+            _mFullPrecision = null;
+        }
+
+        if (reader.ReadBoolean())
+            (_vQuantized, _vScales) = ReadLegacyQuantizedVector(reader, "second moment");
+        else
+        {
+            _vQuantized = null;
+            _vScales = null;
+        }
+
+        _tapeStates.Clear();
+        lock (_pendingTapeStatesLock) _pendingTapeStatesByParameterIndex.Clear();
+
+        long tapeBytes = stream.Length - stream.Position;
+        if (tapeBytes == 0)
+        {
+            _tapeStep = 0;
+            InitializeAdaptiveParameters();
+            return baseData;
+        }
+        if (tapeBytes < sizeof(int))
+            throw new InvalidOperationException(
+                "Adam8BitOptimizer: truncated tape-state payload before the tape-step header.");
+
+        _tapeStep = reader.ReadInt32();
+        if (_tapeStep < 0)
+            throw new InvalidOperationException(
+                $"Adam8BitOptimizer: invalid tape-step counter {_tapeStep} in checkpoint.");
+
+        if (stream.Position < stream.Length)
+        {
+            try { ReadTapeStates(reader); }
+            catch (EndOfStreamException exception)
+            {
+                throw new InvalidOperationException(
+                    "Adam8BitOptimizer: truncated tape-state payload after the tape-step header.",
+                    exception);
+            }
+        }
+
+        InitializeAdaptiveParameters();
+        return baseData;
+    }
+
+    private void ValidateTopLevelShape()
+    {
+        if (_parameterLength < 0 || _numBlocks < 0 || _options.BlockSize <= 0)
+            throw new InvalidOperationException("Adam8BitOptimizer: invalid top-level state dimensions.");
+
+        long expected = _parameterLength == 0
+            ? 0
+            : ((long)_parameterLength + _options.BlockSize - 1) / _options.BlockSize;
+        if (expected != _numBlocks)
+            throw new InvalidOperationException(
+                $"Adam8BitOptimizer: block count {_numBlocks} does not match parameter length "
+                + $"{_parameterLength} and block size {_options.BlockSize} (expected {expected}).");
+    }
+
+    private void WriteLegacyQuantizedVector(
+        BinaryWriter writer,
+        Vector<byte> values,
+        Vector<double>? scales,
+        string name)
+    {
+        if (values.Length != _parameterLength || scales is null || scales.Length != _numBlocks)
+            throw new InvalidOperationException($"Adam8BitOptimizer: {name} state has inconsistent lengths.");
+
+        writer.Write(values.Length);
+        WriteVectorBytesChunked(writer, values);
+        for (int i = 0; i < scales.Length; i++) writer.Write(scales[i]);
+    }
+
+    private (Vector<byte> Values, Vector<double> Scales) ReadLegacyQuantizedVector(
+        BinaryReader reader,
+        string name)
+    {
+        int length = reader.ReadInt32();
+        ValidateDeclaredCount(reader, length, sizeof(byte), name);
+        if (length != _parameterLength)
+            throw new InvalidOperationException(
+                $"Adam8BitOptimizer: {name} length {length} does not match {_parameterLength}.");
+
+        var values = new Vector<byte>(length);
+        for (int i = 0; i < length; i++) values[i] = reader.ReadByte();
+
+        ValidateDeclaredCount(reader, _numBlocks, sizeof(double), $"{name} scales");
+        var scales = new Vector<double>(_numBlocks);
+        for (int i = 0; i < _numBlocks; i++) scales[i] = reader.ReadDouble();
+        return (values, scales);
+    }
+
     private void WriteTapeStates(BinaryWriter writer)
     {
         var entries = new SortedDictionary<int, QuantizedTapeState>();

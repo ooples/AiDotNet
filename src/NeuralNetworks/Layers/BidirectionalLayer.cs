@@ -183,6 +183,7 @@ public partial class BidirectionalLayer<T> : LayerBase<T>, IShapeContract
     #endregion
 
     /// <summary>Construction state: the 'innerLayer' the layer was built with.</summary>
+    [ParameterAlias(nameof(_forwardLayer))]
     private readonly AiDotNet.NeuralNetworks.Layers.LayerBase<T> _innerLayer;
 
     /// <summary>

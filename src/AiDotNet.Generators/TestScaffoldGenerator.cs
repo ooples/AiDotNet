@@ -648,6 +648,15 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // Only the memorization probe is affected; its other probes already pass.
             { "MusicTaggingTransformer", new WarmupIterationOverride(memorization: 12) },
 
+            // Madmom's FP32 audio policy previously stopped MoreData after two AdamW updates,
+            // exactly inside its deterministic initial overshoot (0.679 -> 1.324). Its ordinary
+            // six-update loss-reduction invariant is already green; ten updates keep the fixture
+            // inexpensive while judging the settled trajectory instead of the warm-up transient.
+            {
+                "MadmomBeatTracker",
+                new WarmupIterationOverride(moreDataLong: 10)
+            },
+
             // NaturalSpeech: the same shape, over a LONGER warm-up, and on every repeated-training
             // probe rather than just one. Measured evaluation loss on a fixed pair, from untrained:
             //   0.253 | 0.267, 0.292, 0.294, 0.281, 0.294, 0.301, 0.279, 0.249, 0.207, 0.175, 0.173

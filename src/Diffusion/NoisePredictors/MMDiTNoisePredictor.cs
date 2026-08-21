@@ -270,8 +270,12 @@ public partial class MMDiTNoisePredictor<T> : NoisePredictorBase<T>
         // runner just from `new MMDiTNoisePredictor()`.
         _patchEmbed = LazyDense(patchDim, _hiddenSize);
 
-        // Time embedding MLP
-        _timeEmbed1 = LazyDense(_hiddenSize, timeEmbedDim, new SiLUActivation<T>());
+        // The shared sinusoidal embedding contract emits TimeEmbeddingDim features (4*hidden).
+        // Declare that exact input width before the first forward. A hiddenSize-wide declaration was
+        // silently resized on first use, so the generated pre-forward parameter layout described a
+        // 4,096-value matrix while the live model held 16,384 values; clone/serialization then paired
+        // different chunk shapes. DiT uses the same contract and declaration.
+        _timeEmbed1 = LazyDense(TimeEmbeddingDim, timeEmbedDim, new SiLUActivation<T>());
         _timeEmbed2 = LazyDense(timeEmbedDim, timeEmbedDim, new SiLUActivation<T>());
 
         // Context projection: project text embeddings to hidden dim

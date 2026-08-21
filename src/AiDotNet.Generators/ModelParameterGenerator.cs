@@ -55,6 +55,7 @@ public class ModelParameterGenerator : IIncrementalGenerator
     private const string ExtraTensorsHook = "GetExtraTrainableTensors";
     private const string ExtraLayersHook = "GetExtraTrainableLayers";
     private const string RebindLayerAliasesHook = "RebindLayerAliases";
+    private const string AdditionalLayerGroupsHook = "GetGeneratedAdditionalLayerGroups";
 
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
@@ -112,7 +113,10 @@ public class ModelParameterGenerator : IIncrementalGenerator
             {
                 var tensors = new List<string>();
                 var layerGroups = new List<string>();
+                var additionalLayerGroups = new List<string>();
                 var layerAliasRebinders = new List<string>();
+                var layerAliasCopiers = new List<string>();
+                var trainableTensorCopiers = new List<string>();
                 var persistentFields = new List<(string Name, string SourceExpression, string Role, string Availability)>();
                 foreach (var member in classSymbol.GetMembers())
                 {
@@ -124,8 +128,14 @@ public class ModelParameterGenerator : IIncrementalGenerator
                         {
                             var rebinder = LayerAliasRebinderFor(tf, elem);
                             if (rebinder is not null) layerAliasRebinders.Add(rebinder);
+                            var copier = LayerAliasCopierFor(tf, elem);
+                            if (copier is not null) layerAliasCopiers.Add(copier);
                         }
+                        var additionalGroup = AdditionalLayerGroupFor(tf, elem, classSymbol);
+                        if (additionalGroup is not null) additionalLayerGroups.Add(additionalGroup);
                         var classification = ParameterMemberSemanticModel.Classify(tf);
+                        var trainableCopier = TrainableTensorCopierFor(tf, elem, classification.Kind);
+                        if (trainableCopier is not null) trainableTensorCopiers.Add(trainableCopier);
                         if (IsNonOptimizerPersistentState(classification.Kind) && hasRegistry)
                         {
                             var persistentSource = SourceExpressionFor(
@@ -168,9 +178,15 @@ public class ModelParameterGenerator : IIncrementalGenerator
                         {
                             var rebinder = LayerAliasRebinderFor(tp, elem);
                             if (rebinder is not null) layerAliasRebinders.Add(rebinder);
+                            var copier = LayerAliasCopierFor(tp, elem);
+                            if (copier is not null) layerAliasCopiers.Add(copier);
                         }
+                        var additionalGroup = AdditionalLayerGroupFor(tp, elem, classSymbol);
+                        if (additionalGroup is not null) additionalLayerGroups.Add(additionalGroup);
                         if (!emitLayers) continue;
                         var classification = ParameterMemberSemanticModel.Classify(tp);
+                        var trainableCopier = TrainableTensorCopierFor(tp, elem, classification.Kind);
+                        if (trainableCopier is not null) trainableTensorCopiers.Add(trainableCopier);
                         if (IsNonOptimizerPersistentState(classification.Kind) && hasRegistry)
                         {
                             var persistentSource = SourceExpressionFor(
@@ -207,12 +223,15 @@ public class ModelParameterGenerator : IIncrementalGenerator
                     }
                 }
 
-                if (tensors.Count > 0 || layerGroups.Count > 0 || layerAliasRebinders.Count > 0)
+                if (tensors.Count > 0 || layerGroups.Count > 0 || layerAliasRebinders.Count > 0
+                    || layerAliasCopiers.Count > 0 || trainableTensorCopiers.Count > 0
+                    || additionalLayerGroups.Count > 0)
                 {
                     context.AddSource(
                         HintName(classSymbol) + ".ModelExtraTensors.g.cs",
                         GenerateExtraTensorsSource(
-                            classSymbol, elem, tensors, layerGroups, layerAliasRebinders));
+                            classSymbol, elem, tensors, layerGroups, layerAliasRebinders,
+                            layerAliasCopiers, trainableTensorCopiers, additionalLayerGroups));
                 }
                 if (persistentFields.Count > 0)
                 {
@@ -226,6 +245,7 @@ public class ModelParameterGenerator : IIncrementalGenerator
 
             var fields = new List<(string Name, string SourceExpression, string Role, string Availability)>();
             var components = new List<(string Name, string SourceExpression, string Role, string Availability)>();
+            var manualRegistrations = ParameterMemberSemanticModel.GetRegistrationClassifications(classSymbol);
             foreach (var member in classSymbol.GetMembers())
             {
                 // A member that IS a parameterized component, or a collection of them. Every
@@ -234,14 +254,28 @@ public class ModelParameterGenerator : IIncrementalGenerator
                 // discovery. The collection form is re-read on each access rather than snapshotted,
                 // because members are routinely added after the one lazy registration has run.
                 var classification = ParameterMemberSemanticModel.Classify(member);
+                if (manualRegistrations.ContainsKey(member.Name))
+                {
+                    // One owner per member. Legacy RegisterComponents overrides remain valid while
+                    // they are migrated, but the generated chain must never register the same
+                    // storage a second time. The semantic analyzer separately validates conflicts.
+                    continue;
+                }
+
+                var memberType = MemberType(member);
                 if (member is IFieldSymbol or IPropertySymbol
                     && !member.IsStatic && !member.IsImplicitlyDeclared
+                    && memberType is not null
+                    // Tensor/Matrix/Vector implement IParameterSource<T> as a convenience, but they
+                    // are raw numeric STORAGE rather than nested model components. Their role must
+                    // be declared explicitly and is handled by SourceExpressionFor below.
+                    && !ParameterMemberSemanticModel.IsNumericStateStorage(memberType)
                     && classification.Kind is not ParameterMemberSemanticModel.Kind.Scratch
                         and not ParameterMemberSemanticModel.Kind.Alias
                         and not ParameterMemberSemanticModel.Kind.External
                         and not ParameterMemberSemanticModel.Kind.Conflicting)
                 {
-                    var kind = ComponentKindFor(MemberType(member), elem);
+                    var kind = ComponentKindFor(memberType, elem);
                     if (kind == "one")
                     {
                         components.Add((member.Name,
@@ -387,7 +421,10 @@ public class ModelParameterGenerator : IIncrementalGenerator
 
     private static string GenerateExtraTensorsSource(INamedTypeSymbol classSymbol, string elem,
                                                      List<string> tensors, List<string> layerGroups,
-                                                     List<string> layerAliasRebinders)
+                                                     List<string> layerAliasRebinders,
+                                                     List<string> layerAliasCopiers,
+                                                     List<string> trainableTensorCopiers,
+                                                     List<string> additionalLayerGroups)
     {
         var sb = OpenPartial(classSymbol, out var closers);
 
@@ -489,6 +526,64 @@ public class ModelParameterGenerator : IIncrementalGenerator
             sb.AppendLine($"        base.{RebindLayerAliasesHook}(previousLayers, replacementLayers);");
             foreach (var rebinder in layerAliasRebinders)
                 sb.AppendLine("        " + rebinder);
+            sb.AppendLine("    }");
+        }
+
+        if (layerAliasCopiers.Count > 0)
+        {
+            if (tensors.Count > 0 || layerGroups.Count > 0 || layerAliasRebinders.Count > 0)
+                sb.AppendLine();
+            sb.AppendLine("    /// <summary>");
+            sb.AppendLine("    /// Auto-generated: transfers the source model's canonical-layer alias map to a clone");
+            sb.AppendLine("    /// whose canonical Layers graph has already been reconstructed.");
+            sb.AppendLine("    /// </summary>");
+            sb.AppendLine("    [global::System.CodeDom.Compiler.GeneratedCode(\"AiDotNet.Generators.ModelParameterGenerator\", \"1.0.0\")]");
+            sb.AppendLine("    protected override void CopyGeneratedLayerAliasesTo(");
+            sb.AppendLine($"        global::AiDotNet.NeuralNetworks.NeuralNetworkBase<{elem}> destination)");
+            sb.AppendLine("    {");
+            sb.AppendLine("        base.CopyGeneratedLayerAliasesTo(destination);");
+            sb.AppendLine($"        if (destination is not {classSymbol.ToDisplayString()} __destination)");
+            sb.AppendLine("            throw new global::System.InvalidOperationException(\"Generated layer aliases can only be copied between models of the same concrete type.\");");
+            foreach (var copier in layerAliasCopiers)
+                sb.AppendLine("        " + copier);
+            sb.AppendLine("    }");
+        }
+
+        if (trainableTensorCopiers.Count > 0)
+        {
+            if (tensors.Count > 0 || layerGroups.Count > 0 || layerAliasRebinders.Count > 0
+                || layerAliasCopiers.Count > 0)
+                sb.AppendLine();
+            sb.AppendLine("    /// <summary>");
+            sb.AppendLine("    /// Auto-generated: transfers model-owned trainable tensors that live outside Layers.");
+            sb.AppendLine("    /// </summary>");
+            sb.AppendLine("    [global::System.CodeDom.Compiler.GeneratedCode(\"AiDotNet.Generators.ModelParameterGenerator\", \"1.0.0\")]");
+            sb.AppendLine("    protected override void CopyGeneratedTrainableTensorsTo(");
+            sb.AppendLine($"        global::AiDotNet.NeuralNetworks.NeuralNetworkBase<{elem}> destination)");
+            sb.AppendLine("    {");
+            sb.AppendLine("        base.CopyGeneratedTrainableTensorsTo(destination);");
+            sb.AppendLine($"        if (destination is not {classSymbol.ToDisplayString()} __destination)");
+            sb.AppendLine("            throw new global::System.InvalidOperationException(\"Generated trainable tensors can only be copied between models of the same concrete type.\");");
+            foreach (var copier in trainableTensorCopiers)
+                sb.AppendLine("        " + copier);
+            sb.AppendLine("    }");
+        }
+
+        if (additionalLayerGroups.Count > 0)
+        {
+            if (tensors.Count > 0 || layerGroups.Count > 0 || layerAliasRebinders.Count > 0
+                || layerAliasCopiers.Count > 0 || trainableTensorCopiers.Count > 0)
+                sb.AppendLine();
+            sb.AppendLine("    /// <summary>");
+            sb.AppendLine("    /// Auto-generated: describes stable layer-member groups so the base can rebuild");
+            sb.AppendLine("    /// fitted auxiliary topology during save/load without a model serialization hook.");
+            sb.AppendLine("    /// </summary>");
+            sb.AppendLine("    [global::System.CodeDom.Compiler.GeneratedCode(\"AiDotNet.Generators.ModelParameterGenerator\", \"1.0.0\")]");
+            sb.AppendLine("    protected override global::System.Collections.Generic.IEnumerable<GeneratedAdditionalLayerGroup> " + AdditionalLayerGroupsHook + "()");
+            sb.AppendLine("    {");
+            sb.AppendLine("        foreach (var __group in base." + AdditionalLayerGroupsHook + "()) yield return __group;");
+            foreach (var group in additionalLayerGroups)
+                sb.AppendLine("        yield return " + group + ";");
             sb.AppendLine("    }");
         }
 
@@ -634,6 +729,125 @@ public class ModelParameterGenerator : IIncrementalGenerator
             return null;
 
         return $"RebindLayerAliasCollection({member.Name}, previousLayers, replacementLayers, nameof({member.Name}));";
+    }
+
+    /// <summary>
+    /// Emits one stable auxiliary-layer ownership group. Canonical Layers aliases are filtered by
+    /// the base at runtime; the replacement callback therefore handles only independently-owned
+    /// layers and can rebuild lists whose fitted count differs from the constructor count.
+    /// </summary>
+    private static string? AdditionalLayerGroupFor(
+        ISymbol member,
+        string elem,
+        INamedTypeSymbol owner)
+    {
+        var type = MemberType(member);
+        if (type is null) return null;
+        var bare = type.WithNullableAnnotation(NullableAnnotation.NotAnnotated);
+        string id = owner.ToDisplayString() + "::" + member.Name;
+
+        if (IsLayerOf(bare, elem))
+        {
+            bool writable = member switch
+            {
+                IFieldSymbol field => !field.IsReadOnly,
+                IPropertySymbol property => property.SetMethod is not null && !property.SetMethod.IsInitOnly,
+                _ => false,
+            };
+            bool nullable = ParameterMemberSemanticModel.IsNullable(member);
+            string replace = writable
+                ? nullable
+                    ? $"__layers => {member.Name} = RestoreGeneratedAdditionalLayer({member.Name}, __layers, nameof({member.Name}))"
+                    : $"__layers => {member.Name} = RestoreRequiredGeneratedAdditionalLayer({member.Name}, __layers, nameof({member.Name}))"
+                : "null";
+            return $"new GeneratedAdditionalLayerGroup(\"{id}\", " +
+                   $"() => new global::AiDotNet.Interfaces.ILayer<{elem}>?[] {{ {member.Name} }}, {replace})";
+        }
+
+        if (bare is not INamedTypeSymbol { Name: "List", TypeArguments.Length: 1 } list)
+            return null;
+        var element = list.TypeArguments[0].WithNullableAnnotation(NullableAnnotation.NotAnnotated);
+        if (!IsLayerOf(element, elem)) return null;
+        string elementName = element.ToDisplayString();
+        bool collectionNullable = ParameterMemberSemanticModel.IsNullable(member);
+        bool collectionWritable = member switch
+        {
+            IFieldSymbol field => !field.IsReadOnly,
+            IPropertySymbol property => property.SetMethod is not null && !property.SetMethod.IsInitOnly,
+            _ => false,
+        };
+        string getter = collectionNullable
+            ? $"() => {member.Name} ?? (global::System.Collections.Generic.IEnumerable<{elementName}>)global::System.Array.Empty<{elementName}>()"
+            : $"() => {member.Name}";
+        string collectionReplace = collectionNullable
+            ? collectionWritable
+                ? $"__layers => {member.Name} = RestoreGeneratedAdditionalLayerCollection({member.Name}, __layers, nameof({member.Name}))"
+                : "null"
+            : $"__layers => ReplaceGeneratedAdditionalLayerCollection({member.Name}, __layers, nameof({member.Name}))";
+
+        return $"new GeneratedAdditionalLayerGroup(\"{id}\", {getter}, {collectionReplace})";
+    }
+
+    /// <summary>
+    /// Emits source-driven alias transfer for clone paths. Unlike replacement-time rebinding, this
+    /// also repairs aliases created only after fitting, where a fresh destination has no old alias
+    /// instance whose identity could reveal the canonical layer index.
+    /// </summary>
+    private static string? LayerAliasCopierFor(ISymbol member, string elem)
+    {
+        var type = MemberType(member);
+        if (type is null) return null;
+        var bare = type.WithNullableAnnotation(NullableAnnotation.NotAnnotated);
+
+        if (IsLayerOf(bare, elem))
+        {
+            bool writable = member switch
+            {
+                IFieldSymbol field => !field.IsReadOnly,
+                IPropertySymbol property => property.SetMethod is not null && !property.SetMethod.IsInitOnly,
+                _ => false,
+            };
+            bool nullable = ParameterMemberSemanticModel.IsNullable(member);
+            if (!writable)
+            {
+                return $"ValidateCopiedReadonlyLayerAlias({member.Name}, __destination.{member.Name}, Layers, __destination.Layers, nameof({member.Name}));";
+            }
+
+            return nullable
+                ? $"__destination.{member.Name} = CopyLayerAlias({member.Name}, __destination.{member.Name}, Layers, __destination.Layers, nameof({member.Name}));"
+                : $"__destination.{member.Name} = CopyRequiredLayerAlias({member.Name}, __destination.{member.Name}, Layers, __destination.Layers, nameof({member.Name}));";
+        }
+
+        var element = LayerCollectionElementType(bare);
+        if (element is null || !IsLayerOf(
+                element.WithNullableAnnotation(NullableAnnotation.NotAnnotated), elem))
+            return null;
+
+        return $"CopyLayerAliasCollection({member.Name}, __destination.{member.Name}, Layers, __destination.Layers, nameof({member.Name}));";
+    }
+
+    /// <summary>Emits clone transfer for one explicitly-declared model-owned tensor.</summary>
+    private static string? TrainableTensorCopierFor(
+        ISymbol member,
+        string elem,
+        ParameterMemberSemanticModel.Kind kind)
+    {
+        if (kind != ParameterMemberSemanticModel.Kind.Trainable) return null;
+        var type = MemberType(member);
+        if (type is null || NumericFamilyFor(type, elem) != "Tensor") return null;
+
+        bool writable = member switch
+        {
+            IFieldSymbol field => !field.IsReadOnly,
+            IPropertySymbol property => property.SetMethod is not null && !property.SetMethod.IsInitOnly,
+            _ => false,
+        };
+        bool nullable = ParameterMemberSemanticModel.IsNullable(member);
+        return writable
+            ? nullable
+                ? $"__destination.{member.Name} = CloneGeneratedTrainableTensor({member.Name});"
+                : $"__destination.{member.Name} = CloneRequiredGeneratedTrainableTensor({member.Name});"
+            : $"CopyGeneratedTrainableTensorValues({member.Name}, __destination.{member.Name}, nameof({member.Name}));";
     }
 
     /// <summary>Returns the element type for a supported layer collection shape.</summary>

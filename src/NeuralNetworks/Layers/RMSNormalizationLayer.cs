@@ -119,7 +119,9 @@ public partial class RMSNormalizationLayer<T> : LayerBase<T>, IShapeContract
     /// via the default implementation — no override needed.
     /// </remarks>
     /// <exception cref="ArgumentOutOfRangeException">When <paramref name="featureSize"/> is not positive.</exception>
-    public RMSNormalizationLayer(int featureSize, double epsilon = 1e-6)
+    public RMSNormalizationLayer(
+        [LayerState(OmitWhenNonPositive = true)] int featureSize,
+        double epsilon = 1e-6)
         : base(new[] { featureSize }, new[] { featureSize })
     {
         _featureSize = featureSize;

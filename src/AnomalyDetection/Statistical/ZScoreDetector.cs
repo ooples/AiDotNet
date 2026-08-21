@@ -37,9 +37,12 @@ namespace AiDotNet.AnomalyDetection.Statistical;
 public partial class ZScoreDetector<T> : AnomalyDetectorBase<T>
 {
     private readonly double _zThreshold;
-    [Buffer]
+    // These fitted statistics are absent on a fresh detector. They join the persistent state once
+    // Fit materializes them, but their absence must not make the independently constructed
+    // threshold slot unreadable.
+    [Buffer(Availability = AiDotNet.Models.Parameters.ParameterAvailability.Conditional)]
     private Vector<T>? _means;
-    [Buffer]
+    [Buffer(Availability = AiDotNet.Models.Parameters.ParameterAvailability.Conditional)]
     private Vector<T>? _stds;
 
     /// <summary>

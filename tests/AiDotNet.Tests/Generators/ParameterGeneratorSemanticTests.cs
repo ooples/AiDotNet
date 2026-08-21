@@ -45,12 +45,13 @@ namespace AiDotNet.Attributes
 }
 namespace AiDotNet.Tensors.LinearAlgebra
 {
-    public class Tensor<T> { public int Length => 1; }
-    public class Matrix<T> { }
-    public class Vector<T> { }
+    public class Tensor<T> : AiDotNet.Interfaces.IParameterSource<T> { public int Length => 1; }
+    public class Matrix<T> : AiDotNet.Interfaces.IParameterSource<T> { }
+    public class Vector<T> : AiDotNet.Interfaces.IParameterSource<T> { }
 }
 namespace AiDotNet.Interfaces
 {
+    public interface IParameterSource<T> { }
     public interface ILayer<T> { }
 }
 namespace AiDotNet.NeuralNetworks.Layers
@@ -72,11 +73,18 @@ namespace AiDotNet.NeuralNetworks
     public abstract class NeuralNetworkBase<T>
     {
         public List<ILayer<T>> Layers { get; } = new();
+        protected virtual void RegisterGeneratedState(AiDotNet.Models.ModelStateRegistry<T> state) { }
         protected virtual IEnumerable<Tensor<T>> GetExtraTrainableTensors() => new List<Tensor<T>>();
         protected virtual IEnumerable<LayerBase<T>?> GetExtraTrainableLayers() => new List<LayerBase<T>?>();
         protected virtual void RebindLayerAliases(
             IReadOnlyList<ILayer<T>> previousLayers,
             IReadOnlyList<ILayer<T>> replacementLayers) { }
+        protected virtual void CopyGeneratedLayerAliasesTo(NeuralNetworkBase<T> destination) { }
+        protected virtual void CopyGeneratedTrainableTensorsTo(NeuralNetworkBase<T> destination) { }
+        protected static Tensor<T>? CloneGeneratedTrainableTensor(Tensor<T>? source) => source;
+        protected static Tensor<T> CloneRequiredGeneratedTrainableTensor(Tensor<T> source) => source;
+        protected static void CopyGeneratedTrainableTensorValues(
+            Tensor<T>? source, Tensor<T>? destination, string memberName) { }
         protected static TLayer? RebindLayerAlias<TLayer>(
             TLayer? alias,
             IReadOnlyList<ILayer<T>> previousLayers,
@@ -97,6 +105,30 @@ namespace AiDotNet.NeuralNetworks
             IReadOnlyList<ILayer<T>> previousLayers,
             IReadOnlyList<ILayer<T>> replacementLayers,
             string memberName) where TLayer : class, ILayer<T> { }
+        protected static TLayer? CopyLayerAlias<TLayer>(
+            TLayer? sourceAlias,
+            TLayer? destinationAlias,
+            IReadOnlyList<ILayer<T>> sourceLayers,
+            IReadOnlyList<ILayer<T>> destinationLayers,
+            string memberName) where TLayer : class, ILayer<T> => destinationAlias;
+        protected static TLayer CopyRequiredLayerAlias<TLayer>(
+            TLayer sourceAlias,
+            TLayer destinationAlias,
+            IReadOnlyList<ILayer<T>> sourceLayers,
+            IReadOnlyList<ILayer<T>> destinationLayers,
+            string memberName) where TLayer : class, ILayer<T> => destinationAlias;
+        protected static void CopyLayerAliasCollection<TLayer>(
+            IEnumerable<TLayer>? sourceAliases,
+            IEnumerable<TLayer>? destinationAliases,
+            IReadOnlyList<ILayer<T>> sourceLayers,
+            IReadOnlyList<ILayer<T>> destinationLayers,
+            string memberName) where TLayer : class, ILayer<T> { }
+        protected static void ValidateCopiedReadonlyLayerAlias<TLayer>(
+            TLayer? sourceAlias,
+            TLayer? destinationAlias,
+            IReadOnlyList<ILayer<T>> sourceLayers,
+            IReadOnlyList<ILayer<T>> destinationLayers,
+            string memberName) where TLayer : class, ILayer<T> { }
     }
 }
 namespace AiDotNet.Tensors.Engines
@@ -105,11 +137,16 @@ namespace AiDotNet.Tensors.Engines
 }
 namespace AiDotNet.Models
 {
+    public sealed class ModelStateRegistry<T>
+    {
+        public void DeclareBoolean(string name, System.Func<bool> get, System.Action<bool> set) { }
+    }
     public abstract class ModelBase<T, TInput, TOutput>
     {
         protected void RegisterParameterComponent(object value) { }
         protected virtual void RegisterComponents() { }
         protected virtual void RegisterGeneratedParameterComponents(object registry) { }
+        protected virtual void RegisterGeneratedState(ModelStateRegistry<T> state) { }
     }
 }";
 
@@ -375,6 +412,47 @@ public partial class CompositeLayer<T> : AiDotNet.NeuralNetworks.Layers.LayerBas
     }
 
     [Fact]
+    public async Task LayerGenerator_ExcludesAliasedChildFromOwnedStructure()
+    {
+        await Task.Yield();
+        const string source = @"
+using AiDotNet.Attributes;
+public sealed class Child<T> : AiDotNet.Interfaces.ILayer<T> { }
+[AutoParameters]
+public partial class CompositeLayer<T> : AiDotNet.NeuralNetworks.Layers.LayerBase<T>
+{
+    private Child<T> _owned = new();
+    [ParameterAlias(nameof(_owned))] private Child<T> _alias;
+}";
+
+        string generated = Run(new AiDotNet.Generators.TrainableParameterGenerator(), source);
+        Assert.Contains("RegisterSubLayer(_owned)", generated, StringComparison.Ordinal);
+        Assert.DoesNotContain("RegisterSubLayer(_alias)", generated, StringComparison.Ordinal);
+        Assert.DoesNotContain("DeclareParameterSubLayer(components, _alias", generated, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task LayerGenerator_ExcludesNonOwningChildViewsFromOwnedStructure()
+    {
+        await Task.Yield();
+        const string source = @"
+using AiDotNet.Attributes;
+public sealed class Child<T> : AiDotNet.Interfaces.ILayer<T> { }
+[AutoParameters]
+public partial class CompositeLayer<T> : AiDotNet.NeuralNetworks.Layers.LayerBase<T>
+{
+    private Child<T> _owned = new();
+    [Scratch] private Child<T>[] _traversalView = [];
+    [ExternalState] private Child<T>? _external;
+}";
+
+        string generated = Run(new AiDotNet.Generators.TrainableParameterGenerator(), source);
+        Assert.Contains("RegisterSubLayer(_owned)", generated, StringComparison.Ordinal);
+        Assert.DoesNotContain("RegisterSubLayer(_traversalView)", generated, StringComparison.Ordinal);
+        Assert.DoesNotContain("RegisterSubLayer(_external)", generated, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task LayerGenerator_BoundAdaptiveAxisSeparatesValidationFromManifestSizing()
     {
         await Task.Yield();
@@ -486,6 +564,257 @@ public partial class CacheModel<T> : AiDotNet.Models.ModelBase<T, object, object
     }
 
     [Fact]
+    public async Task ModelGenerator_DoesNotDuplicateManuallyRegisteredMember()
+    {
+        await Task.Yield();
+        const string source = @"
+using AiDotNet.Attributes;
+public partial class MigratingModel<T> : AiDotNet.Models.ModelBase<T, object, object>
+{
+    [FittedParameter]
+    private AiDotNet.Tensors.LinearAlgebra.Vector<T> _fitted = new();
+
+    protected override void RegisterComponents()
+    {
+        RegisterParameterComponent(_fitted);
+    }
+}";
+
+        Assert.DoesNotContain("_fitted", Run(new AiDotNet.Generators.ModelParameterGenerator(), source));
+    }
+
+    [Fact]
+    public async Task ModelGenerator_StillDiscoversUnclassifiedNestedComponent()
+    {
+        await Task.Yield();
+        const string source = @"
+public sealed class Component<T> : AiDotNet.Interfaces.IParameterSource<T> { }
+public partial class CompositeModel<T> : AiDotNet.Models.ModelBase<T, object, object>
+{
+    private Component<T> _child = new();
+}";
+
+        string generated = Run(new AiDotNet.Generators.ModelParameterGenerator(), source);
+        Assert.Contains("ComponentAccessorParameterSource<T>(() => _child)", generated, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ModelStateGenerator_DoesNotPersistRegistryLifecycleLatch()
+    {
+        await Task.Yield();
+        const string source = @"
+public partial class LifecycleModel<T> : AiDotNet.Models.ModelBase<T, object, object>
+{
+    private bool _componentsRegistered;
+    private bool _trained;
+}";
+
+        string generated = Run(new AiDotNet.Generators.ModelStateGenerator(), source);
+        Assert.DoesNotContain("_componentsRegistered", generated, StringComparison.Ordinal);
+        Assert.Contains("LifecycleModel._trained", generated, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ModelStateGenerator_RestoresReadonlyCollectionsInPlace()
+    {
+        await Task.Yield();
+        const string source = @"
+using System.Collections.Generic;
+public partial class OnlineModel<T> : AiDotNet.Models.ModelBase<T, object, object>
+{
+    private readonly List<T> _knownClasses = new();
+    private readonly Dictionary<int, ClassStats> _stats = new();
+    public long SamplesSeen { get; private set; }
+    private sealed class ClassStats { public long Count { get; set; } }
+}";
+
+        string generated = Run(new AiDotNet.Generators.ModelStateGenerator(), source);
+        Assert.Contains(
+            "state.DeclareObjectInPlace(\"OnlineModel._knownClasses\", () => _knownClasses);",
+            generated,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "state.DeclareObjectInPlace(\"OnlineModel._stats\", () => _stats);",
+            generated,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "state.DeclareInt64(\"OnlineModel.SamplesSeen\"",
+            generated,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ModelStateGenerator_DeclaresNestedObjectGraphsWithoutOverrides()
+    {
+        await Task.Yield();
+        const string source = @"
+using System.Collections.Generic;
+public partial class ForestModel<T> : AiDotNet.Models.ModelBase<T, object, object>
+{
+    private Node? _root;
+    private List<TreeRecord>? _trees;
+    private double[][]? _boundaries;
+    private sealed class Node { public Node? Left { get; set; } public double Value { get; set; } }
+    private sealed class TreeRecord { public Node? Root { get; set; } }
+}";
+
+        string generated = Run(new AiDotNet.Generators.ModelStateGenerator(), source);
+        Assert.Contains("ForestModel._root", generated, StringComparison.Ordinal);
+        Assert.Contains("state.DeclareObject(\"ForestModel._trees\"", generated, StringComparison.Ordinal);
+        Assert.Contains("state.DeclareObject(\"ForestModel._boundaries\"", generated, StringComparison.Ordinal);
+        Assert.DoesNotContain("RegisterState", generated, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ModelStateGenerator_DoesNotForceLegacyCollectionsIntoPartialMigration()
+    {
+        await Task.Yield();
+        const string source = @"
+using System.Collections.Generic;
+public class LegacyModel<T> : AiDotNet.Models.ModelBase<T, object, object>
+{
+    private readonly List<string> _configuration = new();
+}";
+
+        string generated = Run(new AiDotNet.Generators.ModelStateGenerator(), source);
+        Assert.DoesNotContain("LegacyModel", generated, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ModelStateGenerator_DoesNotJsonSerializeUnreconstructableCollections()
+    {
+        await Task.Yield();
+        const string source = @"
+using System.Collections.Generic;
+public partial class NetworkState<T> : AiDotNet.Models.ModelBase<T, object, object>
+{
+    private readonly List<AiDotNet.Interfaces.ILayer<T>> _layers = new();
+    private Dictionary<AiDotNet.Tensors.LinearAlgebra.Tensor<T>, AiDotNet.Tensors.LinearAlgebra.Vector<T>>
+        _gradients = new();
+    private readonly List<Record> _records = new();
+    private sealed class Record
+    {
+        public AiDotNet.Tensors.LinearAlgebra.Matrix<T> Covariance { get; set; } = new();
+    }
+}";
+
+        string generated = Run(new AiDotNet.Generators.ModelStateGenerator(), source);
+        Assert.DoesNotContain("_layers", generated, StringComparison.Ordinal);
+        Assert.DoesNotContain("_gradients", generated, StringComparison.Ordinal);
+        Assert.DoesNotContain("_records", generated, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ModelStateGenerator_RestoresReadonlyNumericCollectionsThroughBinaryState()
+    {
+        await Task.Yield();
+        const string source = @"
+using System.Collections.Generic;
+public partial class NumericCollectionState<T> : AiDotNet.Models.ModelBase<T, object, object>
+{
+    private readonly List<AiDotNet.Tensors.LinearAlgebra.Vector<T>> _vectors = new();
+    private readonly List<AiDotNet.Tensors.LinearAlgebra.Matrix<T>> _matrices = new();
+    private readonly List<AiDotNet.Tensors.LinearAlgebra.Tensor<T>> _tensors = new();
+    private readonly Dictionary<string, AiDotNet.Tensors.LinearAlgebra.Vector<T>> _byName = new();
+}";
+
+        string generated = Run(new AiDotNet.Generators.ModelStateGenerator(), source);
+        Assert.Contains("state.DeclareInPlace(\"NumericCollectionState._vectors\"", generated, StringComparison.Ordinal);
+        Assert.Contains("state.DeclareInPlace(\"NumericCollectionState._matrices\"", generated, StringComparison.Ordinal);
+        Assert.Contains("state.DeclareInPlace(\"NumericCollectionState._tensors\"", generated, StringComparison.Ordinal);
+        Assert.Contains("state.DeclareInPlace(\"NumericCollectionState._byName\"", generated, StringComparison.Ordinal);
+        Assert.DoesNotContain("DeclareObjectInPlace", generated, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ModelStateGenerator_PersistsTrainableStorageOnLegacyStateOnlyTrunk()
+    {
+        await Task.Yield();
+        const string source = @"
+public abstract partial class LegacyStateBase<T>
+{
+    protected virtual void RegisterGeneratedState(AiDotNet.Models.ModelStateRegistry<T> state)
+        => RegisterGeneratedStateCore(state);
+}
+public partial class LegacyTrainable<T> : LegacyStateBase<T>
+{
+    [AiDotNet.Attributes.TrainableParameter]
+    private AiDotNet.Tensors.LinearAlgebra.Vector<T> _weights = new();
+    [AiDotNet.Attributes.Buffer]
+    private AiDotNet.Tensors.LinearAlgebra.Vector<byte>? _quantized;
+    [AiDotNet.Attributes.Buffer]
+    private AiDotNet.Tensors.LinearAlgebra.Vector<double>? _scales;
+}";
+
+        string generated = Run(new AiDotNet.Generators.ModelStateGenerator(), source);
+        Assert.Contains(
+            "state.Declare(\"LegacyTrainable._weights\", () => _weights",
+            generated,
+            StringComparison.Ordinal);
+        Assert.Contains("state.DeclareByteVector(\"LegacyTrainable._quantized\"", generated, StringComparison.Ordinal);
+        Assert.Contains("state.DeclareDoubleVector(\"LegacyTrainable._scales\"", generated, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ModelStateGenerator_PreservesNativeDoublePrecisionAfterFlatVectorRestore()
+    {
+        await Task.Yield();
+        const string source = @"
+public partial class WideWorkingState<T> : AiDotNet.Models.ModelBase<T, object, object>
+{
+    [AiDotNet.Attributes.TrainableParameter]
+    private readonly double[] _weights = new double[4];
+    [AiDotNet.Attributes.TrainableParameter]
+    private readonly double[][] _matrix = new[] { new double[2] };
+    [AiDotNet.Attributes.TrainableParameter]
+    private double _bias;
+    [AiDotNet.Attributes.Buffer]
+    private readonly double[] _statistics = new double[2];
+}";
+
+        string generated = Run(new AiDotNet.Generators.ModelStateGenerator(), source);
+        Assert.Contains(
+            "state.DeclareExactInPlace(\"WideWorkingState._weights\"",
+            generated,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "state.DeclareExactInPlace(\"WideWorkingState._matrix\"",
+            generated,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "state.DeclareExactDouble(\"WideWorkingState._bias\"",
+            generated,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "state.DeclareExactInPlace(\"WideWorkingState._statistics\"",
+            generated,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ModelStateGenerator_DeclaresRecursiveGraphListsWithoutSerializationHelpers()
+    {
+        await Task.Yield();
+        const string source = @"
+using System.Collections.Generic;
+public partial class ForestState<T> : AiDotNet.Models.ModelBase<T, object, object>
+{
+    private List<Node> _trees = new();
+    private sealed class Node
+    {
+        public T Value { get; set; }
+        public Node? Left { get; set; }
+        public Node? Right { get; set; }
+        public Node(T zero) { Value = zero; }
+    }
+}";
+
+        string generated = Run(new AiDotNet.Generators.ModelStateGenerator(), source);
+        Assert.Contains("state.DeclareGraphList<global::ForestState<T>.Node>", generated, StringComparison.Ordinal);
+        Assert.Contains("new global::ForestState<T>.Node(default!)", generated, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task ModelGenerator_EmitsDeclaredRoleAndAvailability()
     {
         await Task.Yield();
@@ -560,6 +889,8 @@ public partial class TreeModel<T> : AiDotNet.Models.ModelBase<T, object, object>
 using System.Collections.Generic;
 public partial class AliasNetwork<T> : AiDotNet.NeuralNetworks.NeuralNetworkBase<T>
 {
+    [AiDotNet.Attributes.TrainableParameter]
+    private AiDotNet.Tensors.LinearAlgebra.Tensor<T>? _runtimeWeight;
     private AiDotNet.Interfaces.ILayer<T>? _head;
     private AiDotNet.Interfaces.ILayer<T> _required = null!;
     private readonly List<AiDotNet.Interfaces.ILayer<T>> _encoder = new();
@@ -582,6 +913,75 @@ public partial class AliasNetwork<T> : AiDotNet.NeuralNetworks.NeuralNetworkBase
             StringComparison.Ordinal);
         Assert.Contains(
             "ValidateReadonlyLayerAlias(_readonlyAlias, previousLayers, replacementLayers, nameof(_readonlyAlias));",
+            generated,
+            StringComparison.Ordinal);
+        Assert.Contains("protected override void CopyGeneratedLayerAliasesTo(", generated,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "__destination._head = CopyLayerAlias(_head, __destination._head, Layers, __destination.Layers, nameof(_head));",
+            generated,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "CopyLayerAliasCollection(_encoder, __destination._encoder, Layers, __destination.Layers, nameof(_encoder));",
+            generated,
+            StringComparison.Ordinal);
+        Assert.Contains("protected override void CopyGeneratedTrainableTensorsTo(", generated,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "__destination._runtimeWeight = CloneGeneratedTrainableTensor(_runtimeWeight);",
+            generated,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ModelStateGenerator_DoesNotPersistCanonicalNetworkLayerViewsTwice()
+    {
+        await Task.Yield();
+        const string source = @"
+using System.Collections.Generic;
+public sealed class ConcreteLayer<T> : AiDotNet.NeuralNetworks.Layers.LayerBase<T> { }
+public partial class StateNetwork<T> : AiDotNet.NeuralNetworks.NeuralNetworkBase<T>
+{
+    private ConcreteLayer<T>? _head;
+    private readonly List<ConcreteLayer<T>> _blocks = new();
+    private ConcreteLayer<T>[] _stages = System.Array.Empty<ConcreteLayer<T>>();
+    private bool _trained;
+}";
+
+        string generated = Run(new AiDotNet.Generators.ModelStateGenerator(), source);
+        Assert.Contains("StateNetwork._trained", generated, StringComparison.Ordinal);
+        Assert.DoesNotContain("StateNetwork._head", generated, StringComparison.Ordinal);
+        Assert.DoesNotContain("StateNetwork._blocks", generated, StringComparison.Ordinal);
+        Assert.DoesNotContain("StateNetwork._stages", generated, StringComparison.Ordinal);
+        Assert.DoesNotContain("DeclareLayerList", generated, StringComparison.Ordinal);
+        Assert.DoesNotContain("DeclareParameterSource", generated, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ModelStateGenerator_ImplementsCommonAbstractSerializationSurface()
+    {
+        await Task.Yield();
+        const string source = @"
+public abstract partial class GeneratedSerializationBase<T>
+    : AiDotNet.Models.ModelBase<T, object, object>
+{
+    public abstract byte[] Serialize();
+    public abstract void Deserialize(byte[] data);
+    protected byte[] SerializeGeneratedModelState() => System.Array.Empty<byte>();
+    protected void DeserializeGeneratedModelState(byte[] data) { }
+}
+public partial class GeneratedSerializationModel<T> : GeneratedSerializationBase<T>
+{
+    private bool _trained;
+}";
+
+        string generated = Run(new AiDotNet.Generators.ModelStateGenerator(), source);
+        Assert.Contains(
+            "public override byte[] Serialize() => SerializeGeneratedModelState();",
+            generated,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "public override void Deserialize(byte[] data) => DeserializeGeneratedModelState(data);",
             generated,
             StringComparison.Ordinal);
     }

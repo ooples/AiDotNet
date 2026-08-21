@@ -61,7 +61,8 @@ public partial class FinancialPPOAgent<T> : TradingAgentBase<T>, IGradientComput
     private const double ObservationNormalizerEpsilon = 1e-8;
     private const double ObservationClipRange = 10.0;
 
-    private readonly FinancialPPOAgentOptions<T> _options;
+    private readonly TradingAgentOptions<T> _options;
+    private readonly FinancialPPOAgentOptions<T> _ppoOptions;
     private readonly INeuralNetwork<T> _actor;
     private readonly INeuralNetwork<T> _critic;
     private readonly Trajectory<T> _trajectory;
@@ -115,7 +116,8 @@ public partial class FinancialPPOAgent<T> : TradingAgentBase<T>, IGradientComput
         TradingAgentOptions<T> options)
         : base(options)
     {
-        _options = options as FinancialPPOAgentOptions<T> ?? new FinancialPPOAgentOptions<T>();
+        _options = options;
+        _ppoOptions = options as FinancialPPOAgentOptions<T> ?? new FinancialPPOAgentOptions<T>();
         _actorArchitecture = actorArchitecture;
         _criticArchitecture = criticArchitecture;
 
@@ -452,7 +454,7 @@ public partial class FinancialPPOAgent<T> : TradingAgentBase<T>, IGradientComput
 
     private int GetEffectiveEpochCount(int trajectoryLength)
     {
-        int configuredEpochs = Math.Max(1, _options.NumEpochs);
+        int configuredEpochs = Math.Max(1, _ppoOptions.NumEpochs);
         return trajectoryLength < 8 ? 1 : configuredEpochs;
     }
 
@@ -463,7 +465,7 @@ public partial class FinancialPPOAgent<T> : TradingAgentBase<T>, IGradientComput
             return 1;
         }
 
-        return Math.Max(1, Math.Min(_options.NumMiniBatches, trajectoryLength));
+        return Math.Max(1, Math.Min(_ppoOptions.NumMiniBatches, trajectoryLength));
     }
 
     private int GetMinimumRolloutSize()

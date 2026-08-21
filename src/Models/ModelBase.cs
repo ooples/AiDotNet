@@ -474,13 +474,28 @@ public abstract partial class ModelBase<T, TInput, TOutput> : IFullModel<T, TInp
             parameters[i] = NumOps.FromDouble(reader.ReadDouble());
         }
 
+        // Restore STRUCTURE before pouring the flat parameter vector into it. A fitted tree can have
+        // one constant in its constructor-created shell and two after its declared node graph is
+        // restored; setting parameters against the shell first rejects a perfectly valid payload.
+        // The vector remains authoritative for learned numeric values because it is applied last.
+        long declaredStatePosition = reader.BaseStream.Position;
+        bool hasDeclaredState = declaredStatePosition < reader.BaseStream.Length;
+        if (hasDeclaredState)
+        {
+            State.ReadBeforeParameters(reader);
+        }
+
         SetParameters(parameters);
 
-        // AFTER SetParameters: declared state may be derived from, or consistent with, the parameter
-        // vector, and restoring it first would let the parameter restore overwrite it.
-        if (reader.BaseStream.Position < reader.BaseStream.Length)
+        // A model can deliberately keep a trainable value in wider CLR storage than T (most
+        // commonly double working weights in a float model). The flat vector is still the public
+        // parameter contract, but narrowing it cannot reproduce those exact working values. The
+        // generator declares only those precision shadows for this second phase; ordinary fitted
+        // state is not replayed.
+        if (hasDeclaredState)
         {
-            State.ReadAll(reader);
+            reader.BaseStream.Position = declaredStatePosition;
+            State.ReadAfterParameters(reader);
         }
     }
 

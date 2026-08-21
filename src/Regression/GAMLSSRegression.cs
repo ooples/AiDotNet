@@ -796,14 +796,4 @@ public partial class GAMLSSRegression<T> : AsyncDecisionTreeRegressionBase<T>
         return vec;
     }
 
-    /// <summary>
-    /// Creates a deep copy via serialization to preserve private coefficient state.
-    /// </summary>
-    public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
-    {
-        var clone = new GAMLSSRegression<T>(_options, Regularization);
-        var data = Serialize();
-        clone.Deserialize(data);
-        return clone;
-    }
 }

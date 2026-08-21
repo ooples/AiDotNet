@@ -62,7 +62,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 // included -- and it failed on "Packed indices must be non-negative". EmbeddingLayer
 // declares the same thing; this one simply never did.
 [TensorPort("input", TensorPortDirection.Input, LayerInputDomainKind.IntegerIndices,
-    Role = TensorPortRole.TokenIds, MaxExclusiveMember = "_wordVocabSize")]
+    Role = TensorPortRole.TokenIds, MaxExclusiveMember = "PackedIndexUpperBound")]
 [TensorPort("output", TensorPortDirection.Output, LayerInputDomainKind.Continuous,
     Role = TensorPortRole.Features)]
 // Rank 2 and ONLY rank 2 - ForwardTraced opens with an explicit guard that throws for anything else:
@@ -130,6 +130,17 @@ public partial class WordCharEmbeddingLayer<T> : LayerBase<T>, IShapeContract
     /// (<c>wordEmbeddingDim + charHiddenDim</c>) that feeds the downstream word-level BiLSTM.
     /// </summary>
     public int OutputEmbeddingDim => _wordEmbeddingDim + _charHiddenDim;
+
+    /// <summary>
+    /// Upper bound for the packed tensor's mixed word/character index domain.
+    /// </summary>
+    /// <remarks>
+    /// Column zero uses the word vocabulary while the remaining columns use the character
+    /// vocabulary. The port contract validates the tensor as a whole, so its safe global bound is
+    /// the larger cardinality; <see cref="NormalizeIndex"/> applies the column-specific bound and
+    /// maps a legal packed value outside that column's vocabulary to UNK.
+    /// </remarks>
+    private int PackedIndexUpperBound => Math.Max(_wordVocabSize, _charVocabSize);
 
     /// <inheritdoc/>
     public override bool SupportsTraining => true;

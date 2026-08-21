@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using AiDotNet.LossFunctions;
 using AiDotNet.Models.Options;
 using AiDotNet.ReinforcementLearning.Agents;
@@ -397,7 +398,7 @@ public class DeepAgentsIntegrationTests
 
         ExerciseReplayAgent(muzero, DiscreteStateSize, DiscreteActionSize, true, 1, true);
 
-        var dreamer = new DreamerAgent<double>(new DreamerOptions<double>
+        var dreamerOptions = new DreamerOptions<double>
         {
             ObservationSize = ContinuousStateSize,
             ActionSize = ContinuousActionSize,
@@ -410,13 +411,29 @@ public class DeepAgentsIntegrationTests
             DiscountFactor = DiscountFactor,
             LossFunction = CreateLoss(),
             Seed = 121
-        });
+        };
+        var dreamer = new DreamerAgent<double>(dreamerOptions);
 
-        ExerciseReplayAgent(dreamer, ContinuousStateSize, ContinuousActionSize, false, 2, false);
-        Assert.Throws<NotSupportedException>(() => dreamer.Serialize());
-        Assert.Throws<NotSupportedException>(() => dreamer.Deserialize(new byte[] { 1 }));
-        Assert.Throws<NotSupportedException>(() => dreamer.SaveModel("dreamer.bin"));
-        Assert.Throws<NotSupportedException>(() => dreamer.LoadModel("dreamer.bin"));
+        ExerciseReplayAgent(dreamer, ContinuousStateSize, ContinuousActionSize, false, 2, true);
+
+        var serializedDreamer = dreamer.Serialize();
+        var restoredDreamer = new DreamerAgent<double>(dreamerOptions);
+        restoredDreamer.Deserialize(serializedDreamer);
+        AssertParametersEqual(dreamer, restoredDreamer);
+
+        string dreamerPath = Path.Combine(
+            Path.GetTempPath(), $"aidotnet-dreamer-{Guid.NewGuid():N}.bin");
+        try
+        {
+            dreamer.SaveModel(dreamerPath);
+            var loadedDreamer = new DreamerAgent<double>(dreamerOptions);
+            loadedDreamer.LoadModel(dreamerPath);
+            AssertParametersEqual(dreamer, loadedDreamer);
+        }
+        finally
+        {
+            if (File.Exists(dreamerPath)) File.Delete(dreamerPath);
+        }
 
         var worldModels = new WorldModelsAgent<double>(new WorldModelsOptions<double>
         {
@@ -619,6 +636,19 @@ public class DeepAgentsIntegrationTests
         {
             var data = agent.Serialize();
             agent.Deserialize(data);
+        }
+    }
+
+    private static void AssertParametersEqual(
+        ReinforcementLearningAgentBase<double> expected,
+        ReinforcementLearningAgentBase<double> actual)
+    {
+        var expectedParameters = expected.GetParameters();
+        var actualParameters = actual.GetParameters();
+        Assert.Equal(expectedParameters.Length, actualParameters.Length);
+        for (int i = 0; i < expectedParameters.Length; i++)
+        {
+            Assert.Equal(expectedParameters[i], actualParameters[i], 10);
         }
     }
 

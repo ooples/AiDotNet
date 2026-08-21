@@ -1967,7 +1967,14 @@ public abstract partial class DiffusionModelBase<T> : IDiffusionModel<T>, IConfi
             // reproduced by CopyConfiguration above, and LoadState only VALIDATES that it matches
             // rather than restoring it -- so the parameters were the sole payload this roundtrip
             // was carrying.
-            copy.SetParameterChunks(GetParameterChunks());
+            // Prefer the shared O(1)-until-write transfer for every diffusion model. Keeping this
+            // decision in the base removes the last reason for concrete diffusion types to carry
+            // bespoke clone overrides, and avoids both materializing a second foundation-scale
+            // parameter set and depending on post-forward reflection order. The helper validates
+            // the complete source/destination layer graph before rebinding anything; an unsupported
+            // graph remains untouched and takes the exact streaming fallback below.
+            if (!copy.TryShareParametersFrom(this))
+                copy.SetParameterChunks(GetParameterChunks());
             return copy;
         }
     }

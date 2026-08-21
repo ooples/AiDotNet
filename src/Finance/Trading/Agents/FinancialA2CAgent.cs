@@ -56,7 +56,7 @@ public partial class FinancialA2CAgent<T> : TradingAgentBase<T>, IGradientComput
 
     #region Fields
 
-    private readonly FinancialA2CAgentOptions<T> _options;
+    private readonly TradingAgentOptions<T> _options;
     private readonly INeuralNetwork<T> _actor;
     private readonly INeuralNetwork<T> _critic;
     private readonly ReplayBuffer<T> ReplayBuffer;
@@ -96,7 +96,7 @@ public partial class FinancialA2CAgent<T> : TradingAgentBase<T>, IGradientComput
     {
         Guard.NotNull(actorArchitecture);
         Guard.NotNull(criticArchitecture);
-        _options = options as FinancialA2CAgentOptions<T> ?? new FinancialA2CAgentOptions<T>();
+        _options = options;
         _actorArchitecture = actorArchitecture;
         _criticArchitecture = criticArchitecture;
 

@@ -76,7 +76,7 @@ namespace AiDotNet.Classification.ImbalancedEnsemble;
     "https://doi.org/10.1007/s10115-008-0180-z",
     Year = 2009,
     Authors = "Shohei Hido, Hisashi Kashima")]
-public class BalancedBaggingClassifier<T> : ClassifierBase<T>
+public partial class BalancedBaggingClassifier<T> : ClassifierBase<T>
 {
 
     // Returned _baseClassifiers.Count -- the NUMBER of estimators, not a parameter. No restore

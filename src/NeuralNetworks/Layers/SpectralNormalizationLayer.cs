@@ -360,11 +360,34 @@ public partial class SpectralNormalizationLayer<T> : LayerBase<T>, IShapeContrac
             return passthrough;
         }
 
+        // A lazy Dense/Convolution layer may expose a rank-two placeholder whose first dimension is
+        // zero until it sees an input. Resolve it from the real input before inspecting the weight
+        // shape; otherwise `weight.Length / weight.Shape[0]` divides by zero during the wrapper's
+        // first forward (and therefore during clone verification too).
+        if (!innerBase.IsShapeResolved)
+        {
+            var inputShape = input.Shape.ToArray();
+            try
+            {
+                innerBase.ResolveFromShape(inputShape);
+            }
+            catch (Exception) when (inputShape.Length > 1)
+            {
+                try { innerBase.ResolveFromShape(inputShape.Skip(1).ToArray()); }
+                catch (Exception) { /* The unnormalized first forward below can materialize it. */ }
+            }
+        }
+
         var tensors = innerBase.GetTrainableParameters();
         int weightIndex = -1;
         for (int i = 0; i < tensors.Count; i++)
         {
-            if (tensors[i] is { } candidate && candidate.Shape.Length >= 2) { weightIndex = i; break; }
+            if (tensors[i] is { } candidate && candidate.Shape.Length >= 2
+                && candidate.Shape[0] > 0 && candidate.Length > 0)
+            {
+                weightIndex = i;
+                break;
+            }
         }
 
         if (weightIndex < 0)

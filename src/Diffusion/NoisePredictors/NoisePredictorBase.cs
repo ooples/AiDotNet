@@ -871,18 +871,22 @@ public abstract partial class NoisePredictorBase<T> : INoisePredictor<T>, IModel
             // flat-free — matching the buffer-then-single-SetParameters atomicity of the legacy branch
             // and VAEModelBase/DiffusionModelBase without reintroducing the flat-vector OOM.
             var pairs = new List<(Tensor<T> Src, LayerBase<T>.ParameterStateWriteTarget Dst)>(slots.Count);
-            foreach (var dst in slots)
+            for (int chunkIndex = 0; chunkIndex < slots.Count; chunkIndex++)
             {
+                var dst = slots[chunkIndex];
                 if (!e.MoveNext())
                     throw new ArgumentException(
-                        "SetParameterChunks received fewer chunks than the predictor has parameter tensors.",
+                        $"SetParameterChunks received fewer chunks than the predictor has parameter tensors " +
+                        $"(missing chunk {chunkIndex} of {slots.Count}).",
                         nameof(chunks));
                 var src = e.Current;
                 if (src is null)
-                    throw new ArgumentException("Chunk sequence contains a null tensor.", nameof(chunks));
+                    throw new ArgumentException(
+                        $"Chunk sequence contains a null tensor at index {chunkIndex}.", nameof(chunks));
                 if (src.Length != dst.ScalarCount)
                     throw new ArgumentException(
-                        $"SetParameterChunks chunk length {src.Length} does not match parameter length {dst.ScalarCount}.",
+                        $"SetParameterChunks chunk {chunkIndex} length {src.Length} does not match " +
+                        $"parameter length {dst.ScalarCount}.",
                         nameof(chunks));
                 pairs.Add((src, dst));
             }
@@ -2013,7 +2017,12 @@ public abstract partial class NoisePredictorBase<T> : INoisePredictor<T>, IModel
             // copy weights at all from a flag that records "a forward has run", so a freshly
             // constructed model was cloned with its weights discarded. Making the base both
             // correct and cheap is what lets those overrides be deleted rather than each fixed.
-            copy.SetParameterChunks(GetParameterChunks());
+            // Make copy-on-write the common predictor clone path instead of requiring each large
+            // predictor to repeat it in an override. The helper performs a complete structural and
+            // per-tensor shape preflight before it mutates the destination, so the streaming copy
+            // remains the correctness fallback for custom or otherwise non-isomorphic graphs.
+            if (!copy.TryShareParametersFrom(this))
+                copy.SetParameterChunks(GetParameterChunks());
             return copy;
         }
     }
