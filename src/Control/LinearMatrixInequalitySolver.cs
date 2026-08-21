@@ -183,7 +183,19 @@ public sealed class LinearMatrixInequalitySolver<T>
                 bestMatrix = matrix;
             }
 
-            if (smallest >= _options.Margin) break;
+            // The estimate above comes from a power iteration on a Gershgorin-SHIFTED matrix, and
+            // that shift is what makes it unreliable as a stopping test: adding max-row-sum + 1 to
+            // every eigenvalue leaves their RELATIVE separation tiny, so a fixed iteration budget
+            // returns a dominant eigenvalue that is close but not close enough. Believing it here
+            // stopped the search early on a feasible problem and then reported IterationLimit,
+            // because the factorization below -- which is exact -- disagreed with it.
+            //
+            // Measured on a quadratic-stability LMI for a stabilised inverted pendulum: the search
+            // broke at iteration 100 of an allowed 5000 declaring success, and the returned matrix
+            // had a smallest eigenvalue of -1.46e-02. Confirming the estimate against the same
+            // factorization the result is graded by removes the disagreement entirely, at the cost
+            // of one Cholesky per candidate acceptance.
+            if (smallest >= _options.Margin && IsPositiveSemidefinite(matrix)) break;
 
             // Subgradient of lambda_max(-F(x)) with respect to x_i is -v' F_i v.
             var subgradient = new double[variableCount];
