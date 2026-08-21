@@ -352,6 +352,15 @@ public partial class EchoStateNetwork<T> : SequenceModelLayoutBase<T>
     private Matrix<T> _reservoirWeights;
 
     /// <summary>
+    /// Cached transposes of the fixed reservoir matrices. ESN input and reservoir weights never train,
+    /// so rebuilding these matrices on every settling iteration only creates avoidable work and GC churn.
+    /// </summary>
+    [Scratch]
+    private Matrix<T> _inputWeightsTransposed = null!;
+    [Scratch]
+    private Matrix<T> _reservoirWeightsTransposed = null!;
+
+    /// <summary>
     /// The weight matrix for reservoir-to-output connections.
     /// </summary>
     private Tensor<T> _outputWeights;
@@ -663,6 +672,17 @@ public partial class EchoStateNetwork<T> : SequenceModelLayoutBase<T>
         // Initialize collection lists for training
         _collectedStates = new List<Vector<T>>();
         _collectedTargets = new List<Vector<T>>();
+
+        RefreshReservoirWeightCaches();
+    }
+
+    /// <summary>
+    /// Rebuilds derived matrix layouts after the fixed reservoir weights are initialized or restored.
+    /// </summary>
+    private void RefreshReservoirWeightCaches()
+    {
+        _inputWeightsTransposed = Engine.MatrixTranspose(_inputWeights);
+        _reservoirWeightsTransposed = Engine.MatrixTranspose(_reservoirWeights);
     }
 
     /// <summary>
@@ -733,13 +753,11 @@ public partial class EchoStateNetwork<T> : SequenceModelLayoutBase<T>
     /// <param name="input">The input vector.</param>
     private void UpdateReservoirState(Vector<T> input)
     {
-        // Vectorized input contribution: transpose(input_weights) * input
-        var inputWeightsTransposed = Engine.MatrixTranspose(_inputWeights);
-        Vector<T> inputContribution = Engine.MatrixVectorMultiply(inputWeightsTransposed, input);
+        // The fixed weight layouts are transposed once during initialization/deserialization rather than
+        // once per settling step. A single prediction may need all 200 steps.
+        Vector<T> inputContribution = Engine.MatrixVectorMultiply(_inputWeightsTransposed, input);
 
-        // Vectorized reservoir contribution: transpose(reservoir_weights) * current_state
-        var reservoirWeightsTransposed = Engine.MatrixTranspose(_reservoirWeights);
-        Vector<T> reservoirContribution = Engine.MatrixVectorMultiply(reservoirWeightsTransposed, _currentState);
+        Vector<T> reservoirContribution = Engine.MatrixVectorMultiply(_reservoirWeightsTransposed, _currentState);
 
         // Vectorized sum: input_contribution + reservoir_contribution + bias
         Vector<T> preActivation = Engine.Add(Engine.Add(inputContribution, reservoirContribution), _reservoirBias);
@@ -1874,6 +1892,8 @@ public partial class EchoStateNetwork<T> : SequenceModelLayoutBase<T>
         _collectedStates = new List<Vector<T>>();
         _collectedTargets = new List<Vector<T>>();
         _isTraining = false;
+
+        RefreshReservoirWeightCaches();
     }
 
     /// <summary>
