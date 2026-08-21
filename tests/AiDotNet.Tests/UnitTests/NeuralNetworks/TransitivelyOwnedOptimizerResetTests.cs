@@ -178,6 +178,20 @@ public class TransitivelyOwnedOptimizerResetTests
             });
     }
 
+    /// <summary>
+    /// Broad declarations are legal for custom models. The runtime value, not a mutually-exclusive
+    /// reflection bucket, decides whether the field owns a nested model or an optimizer.
+    /// </summary>
+    private sealed class ObjectTypedChildModel : ProbeModel
+    {
+        internal readonly object Child = new DirectFieldModel();
+    }
+
+    private sealed class ObjectSequenceModel : ProbeModel
+    {
+        internal readonly object[] Owned = { new ResetCountingAdam(), new DirectFieldModel() };
+    }
+
     [Fact]
     public void DirectlyTypedField_IsReset()
     {
@@ -271,6 +285,23 @@ public class TransitivelyOwnedOptimizerResetTests
         model.ResetBaseTrainOptimizerState();
         foreach (var child in model.Children.Values)
             Assert.Equal(1, child.Owned.ResetCount);
+    }
+
+    [Fact]
+    public void OptimizerOwnedByAnObjectTypedChildModel_IsReset()
+    {
+        var model = new ObjectTypedChildModel();
+        model.ResetBaseTrainOptimizerState();
+        Assert.Equal(1, ((DirectFieldModel)model.Child).Owned.ResetCount);
+    }
+
+    [Fact]
+    public void ObjectSequence_ResetsBothOptimizerAndNestedModel()
+    {
+        var model = new ObjectSequenceModel();
+        model.ResetBaseTrainOptimizerState();
+        Assert.Equal(1, ((ResetCountingAdam)model.Owned[0]).ResetCount);
+        Assert.Equal(1, ((DirectFieldModel)model.Owned[1]).Owned.ResetCount);
     }
 
     /// <summary>

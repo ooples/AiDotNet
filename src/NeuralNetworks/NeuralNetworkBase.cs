@@ -12003,8 +12003,11 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 {
                     var fieldType = field.FieldType;
 
-                    if (CouldHold(optimizerType, fieldType)) { optimizers.Add(field); continue; }
-                    if (CouldHold(modelType, fieldType)) { models.Add(field); continue; }
+                    bool canHoldOptimizer = CouldHold(optimizerType, fieldType);
+                    bool canHoldModel = CouldHold(modelType, fieldType);
+                    if (canHoldOptimizer) optimizers.Add(field);
+                    if (canHoldModel) models.Add(field);
+                    if (canHoldOptimizer || canHoldModel) continue;
 
                     // Only a sequence whose DECLARED element type could hold one of the two is
                     // followed. Walking every IEnumerable field would enumerate datasets, caches and
@@ -12013,14 +12016,14 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                     if (element is null) continue;
 
                     if (CouldHold(optimizerType, element)) optimizerSequences.Add(field);
-                    else if (CouldHold(modelType, element)) modelSequences.Add(field);
+                    if (CouldHold(modelType, element)) modelSequences.Add(field);
                 }
             }
 
-            // Discovery is a four-way classification with an early exit per field, so it stays a loop
-            // rather than becoming four Where passes over the same reflected field set: the LINQ form
-            // would call GetFields once per category and re-run every assignability test three more
-            // times, for no gain in either clarity or cost.
+            // Discovery tests both direct ownership candidates before moving on to sequence element
+            // types, so it stays a loop rather than becoming four Where passes over the same reflected
+            // field set: the LINQ form would call GetFields once per category and re-run every
+            // assignability test three more times, for no gain in either clarity or cost.
 
             return new OwnedOptimizerPlan
             {

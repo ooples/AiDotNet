@@ -3341,7 +3341,23 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
             && stftNet.DefaultLossFunction is AiDotNet.LossFunctions.MultiResolutionStftLoss<T> stft)
         {
             var lossTensor = stft.ComputeTapeLoss(output, target);
-            return lossTensor.Length > 0 ? ConvertToDouble(lossTensor[0]) : double.NaN;
+            if (lossTensor.Length != 1)
+            {
+                throw new InvalidOperationException(
+                    $"{stft.GetType().Name}.ComputeTapeLoss returned {lossTensor.Length} elements " +
+                    $"(shape [{string.Join(",", lossTensor.Shape)}]) for {network.GetType().Name}; " +
+                    "the training invariants require exactly one scalar loss.");
+            }
+
+            double value = ConvertToDouble(lossTensor[0]);
+            if (!IsFinite(value))
+            {
+                throw new InvalidOperationException(
+                    $"{stft.GetType().Name}.ComputeTapeLoss returned non-finite loss {value} for " +
+                    $"{network.GetType().Name}.");
+            }
+
+            return value;
         }
 
         // Same reasoning for SIGMOID cross-entropy. A multi-label head trains on
@@ -3454,10 +3470,11 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
     /// </summary>
     protected Tensor<T> MakeTargetWellPosedForLoss(INeuralNetworkModel<T> network, Tensor<T> target, Random rng)
     {
-        // Applies to EVERY softmax-CE head, not just segmentation. The original guard was scoped to
-        // ISegmentationModel on the assumption that "other CrossEntropyWithLogitsLoss families
-        // (LMs/classifiers) already receive appropriate targets via their own paths" — measurement
-        // disproved that. Token-head models were being handed a DENSE UNIFORM-RANDOM target, which
+        // Applies to every softmax-CE head whose PUBLIC target is categorical, not just segmentation.
+        // The original guard was scoped to ISegmentationModel on the assumption that "other
+        // CrossEntropyWithLogitsLoss families (LMs/classifiers) already receive appropriate targets
+        // via their own paths" — measurement disproved that. Token-head models were being handed a
+        // DENSE UNIFORM-RANDOM target, which
         // pins the loss at 0.5*V*ln(V) instead of ~ln(V): SeACo measured 37,935 against a predicted
         // 0.5*8404*ln(8404) = 37,970, and RecurrentGemma 17,033 against 0.5*4096*ln(4096) = 17,035.
         // At that scale, with gradient clipping at global norm 1.0, a 25M-parameter model can move
@@ -3469,6 +3486,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         // random tensor, so a per-position one-hot is both well-posed and paper-faithful.
         if (target.Length > 0
             && network is AiDotNet.NeuralNetworks.NeuralNetworkBase<T> nn
+            && UsesExternalCategoricalTargets(nn)
             && nn.DefaultLossFunction is AiDotNet.LossFunctions.CrossEntropyWithLogitsLoss<T>)
         {
             var shape = target.Shape;
@@ -3555,6 +3573,16 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         }
         return target;
     }
+
+    /// <summary>
+    /// Whether the fixture's public target is itself categorical. A regression/forecasting model may
+    /// quantize its continuous target internally and then use cross-entropy (Chronos is the canonical
+    /// case); projecting that EXTERNAL target to one-hot because of the INTERNAL loss changes its API
+    /// domain and can collapse distinct forecast trajectories onto the same quantized supervision.
+    /// </summary>
+    private static bool UsesExternalCategoricalTargets(AiDotNet.NeuralNetworks.NeuralNetworkBase<T> network)
+        => network.Architecture.TaskType != AiDotNet.Enums.NeuralNetworkTaskType.Regression
+           && network.Architecture.TaskType != AiDotNet.Enums.NeuralNetworkTaskType.TimeSeriesForecasting;
 
     /// <summary>
     /// Streams every parameter tensor via <c>GetParameterChunks()</c> and
@@ -4748,13 +4776,10 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
     /// </summary>
     /// <remarks>
     /// <para>
-    /// It observes the PARAMETER DELTA rather than any gradient accessor, and that choice is load
-    /// bearing. An earlier draft read <see cref="INeuralNetworkModel{T}.GetParameterGradients"/> after a
-    /// step and reported all-zero gradients for about thirty families that in fact train correctly:
-    /// training runs through TrainWithTape/ComputeTapeLoss, so gradients live in the GradientTape and
-    /// are applied straight to the parameters, leaving the per-layer buffers that accessor reads
-    /// untouched from the removed Backpropagate() era. The delta is what actually determines whether
-    /// learning can happen, and it is implementation-agnostic.
+    /// It observes the PARAMETER DELTA first because that is the implementation-agnostic, end-to-end
+    /// evidence of what training actually did. The published pre-optimizer gradient is used only as a
+    /// fallback when an adaptive optimizer maps distinct gradients onto the same update. Some training
+    /// implementations explicitly do not expose that gradient, so the delta remains the primary surface.
     /// (<see cref="ParameterGradientAccessor_IsPopulatedOrExplicitlyUnsupported"/> tracks that
     /// accessor's own contract separately, so the two worklists do not contaminate each other.)
     /// </para>
@@ -4769,8 +4794,9 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
     /// The statistic is the update's DIRECTION, not its size, and that correction came out of the data:
     /// the magnitude version reported INCONCLUSIVE for 72 of the first 103 families because adaptive
     /// optimizers normalize the step to roughly the learning rate, so max|delta| measures the learning
-    /// rate rather than the target. Normalization rescales the update vector without rotating it, so the
-    /// angle survives it. See the comment at the comparison itself for the measured numbers.
+    /// rate rather than the target. The angle usually retains more signal, but coordinate-wise Adam
+    /// normalization can collapse distinct gradients to the same sign vector. The raw-gradient fallback
+    /// below handles exactly that case. See the comment at the comparison itself for measured examples.
     /// </para>
     /// <para>
     /// The comparison is a RATIO of cosine deficits against the control, not a fixed cosine gap — see
@@ -4957,22 +4983,6 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
                 return;
             }
 
-            // The mirrored scalar target is the ONE case where equal loss does not mean indistinguishable,
-            // so this guard must not fire on it. Mirroring flips the residual from +r to -r, and a
-            // SYMMETRIC loss such as squared error scores those identically while their gradients point in
-            // exactly OPPOSITE directions. Skipping here would discard the most informative comparison the
-            // invariant can make — measured on RecurrentNeuralNetwork, which the guard rejected at an
-            // identical loss of 3.351173E-002 while its gradients were the thing under test.
-            if (lossA == lossB && !usedMirroredScalarTarget)
-            {
-                ReportGradientFinding(GradientReportFile, model,
-                    $"SKIPPED: both targets give the IDENTICAL loss ({lossA:E6}) at the same parameters, so "
-                    + "this loss cannot distinguish them and an unchanged update is correct. The targets "
-                    + "differ as tensors but not as supervision — a family-specific target generator is "
-                    + "needed to measure this model.");
-                return;
-            }
-
             targetLossSeparation = Math.Abs(lossA - lossB);
         }
         catch (Exception ex)
@@ -5116,9 +5126,10 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         // optimizer's step size while carrying almost no information about the target. No margin on that
         // statistic can work.
         //
-        // The update DIRECTION does not have that problem: normalization rescales the vector but does
-        // not rotate it. So the comparison is how well the update direction reproduces under the SAME
-        // target versus how much it changes under a DIFFERENT one.
+        // The update DIRECTION usually retains far more target signal than its magnitude. It is still
+        // not infallible: Adam normalizes each coordinate independently, so different gradient magnitudes
+        // with the same sign pattern can map to identical update directions. That case is resolved below
+        // against the published pre-optimizer gradients rather than misreported as target blindness.
         double selfSimilarity = VectorCosine(meanDeltaA, meanDeltaA2);
         double crossSimilarity = VectorCosine(meanDeltaA, meanDeltaB);
 
@@ -5200,69 +5211,80 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
                     }
                 }
             }
-            catch (Exception)
+            catch
             {
-                // Escalation is an extra chance, never a new failure mode: fall through and assert
-                // on the measurement that was already taken.
+                parameterProbe.Restore();
+                throw;
             }
         }
 
-        // LAST GUARD, and it runs only on the failing path so no passing family changes outcome.
-        // Everything above compares the two targets with MeasureLoss, which scores the model's declared
-        // objective on the target AS SUPPLIED. A model that TRANSFORMS the target before supervising on
-        // it can still collapse both onto the same supervision, and then an identical update is the
-        // correct answer rather than a defect.
-        //
-        // Chronos is the case that forced this: it quantises the horizon to token ids
-        // (QuantizeUsingCapturedScale) and supervises vocabulary logits with cross-entropy, so two
-        // distinct float targets can land in the SAME bucket. MeasureLoss compares the raw floats and
-        // reports a separation of 3.844E+002 for targets the model cannot tell apart at all.
-        //
-        // So ask the model instead of the harness: train on each target from the same restored start and
-        // compare the loss IT reports. Identical to the bit means the supervision collapsed, which is a
-        // fixture limitation for that family, not a broken backward. Anything else still asserts.
-        // NOT on the mirrored-scalar path. targetB there is targetA reflected about the prediction, so
-        // the residual is exactly negated: under a symmetric objective the two losses are EQUAL BY
-        // CONSTRUCTION while the correct gradients are anti-parallel. Equal reported losses are
-        // therefore the expected reading, not evidence of collapsed supervision, and skipping on them
-        // would let a target-blind update through unasserted on the one construction built to catch it.
-        // The sibling guard above already excludes this case for the same reason.
-        //
-        // The probe also needs BOTH runs to have genuinely reported a loss. GetLastLoss returns zero
-        // when nothing was recorded, so a Train override that never sets it yields 0.0 == 0.0 -- finite
-        // and equal -- and every such family would skip this invariant while looking like it had
-        // measured something. HasRecordedLoss separates "reported zero" from "reported nothing".
-        var lossReporter = network as AiDotNet.NeuralNetworks.NeuralNetworkBase<T>;
-        if (!usedMirroredScalarTarget && lossReporter is not null)
+        // The first random pair can collapse after a model transforms its target (quantisation,
+        // bucketing, label projection), even though the tensors differ. Do not infer that from equal
+        // scalar losses: equal loss values can have different gradients. Instead make one final,
+        // domain-valid CONTRAST target and replay the actual update from the same parameter state.
+        // A changed update is direct evidence that the training path reads its target; an unchanged
+        // update remains a failure. This stays generic and requires no per-model opt-out or override.
+        if (!usedMirroredScalarTarget)
         {
-            try
+            var contrastTarget = CreateContrastTarget(network, targetA, input);
+            if (MaxAbsTensorDelta(targetA, contrastTarget) > 0.0)
             {
-            parameterProbe.Restore();
-            network.Train(input, targetA);
-            double ownLossA = ConvertToDouble(network.GetLastLoss());
-            bool reportedA = lossReporter.HasRecordedLoss;
-            parameterProbe.Restore();
-            network.Train(input, targetB);
-            double ownLossB = ConvertToDouble(network.GetLastLoss());
-            bool reportedB = lossReporter.HasRecordedLoss;
-            parameterProbe.Restore();
+                var contrastDelta = MeanUpdateDirection(parameterProbe, network, input, contrastTarget);
+                parameterProbe.Restore();
 
-            if (reportedA && reportedB && IsFinite(ownLossA) && IsFinite(ownLossB) && ownLossA == ownLossB)
-            {
-                ReportGradientFinding(GradientReportFile, model,
-                    $"SKIPPED: the model's OWN training objective scores both targets identically "
-                    + $"({ownLossA:E8}), so the supervision it derives from them is the same and an "
-                    + "unchanged update is correct. The targets differ as tensors but not after whatever "
-                    + "transform this family applies before supervising (quantisation, bucketing, "
-                    + "label projection). A family-specific target generator is needed to measure it.");
-                return;
+                double contrastSimilarity = VectorCosine(meanDeltaA, contrastDelta);
+                if (!double.IsNaN(contrastSimilarity))
+                {
+                    double contrastDeficit = 1.0 - contrastSimilarity;
+                    if (contrastDeficit > Math.Max(
+                            selfDeficit * TargetDependenceDeficitRatio, IdenticalDirectionEpsilon))
+                    {
+                        return;
+                    }
+
+                    targetB = contrastTarget;
+                    crossSimilarity = contrastSimilarity;
+                    crossDeficit = contrastDeficit;
+                    var contrastProbe = network.Predict(input);
+                    targetLossSeparation = Math.Abs(
+                        MeasureLoss(network, contrastProbe, targetA)
+                        - MeasureLoss(network, contrastProbe, contrastTarget));
+                }
             }
         }
-            catch (Exception ex)
+
+        // Adam's first update is approximately sign(gradient), and even several steps can retain the
+        // same sign pattern for two genuinely different gradients. An identical optimizer delta is then
+        // not evidence of an identical backward. The base training path publishes the exact gradient it
+        // handed to the optimizer, so compare that PRE-OPTIMIZER signal from the same restored start.
+        // This is a generic framework surface: no model-specific target hook or override is involved.
+        //
+        // Keep the test fail-closed. A model that explicitly cannot expose gradients simply does not get
+        // this extra proof and remains subject to the end-to-end update assertion below. An unexpected
+        // accessor/training exception is allowed to escape rather than converting a broken probe to green.
+        string gradientEvidence = "The published pre-optimizer gradient was unavailable.";
+        if (TryMeanPublishedGradient(parameterProbe, network, input, targetA, out var gradientA, out double ownLossA)
+            && TryMeanPublishedGradient(parameterProbe, network, input, targetA, out var gradientA2, out double ownLossA2)
+            && TryMeanPublishedGradient(parameterProbe, network, input, targetB, out var gradientB, out double ownLossB))
+        {
+            double gradientSelfSimilarity = VectorCosine(gradientA, gradientA2);
+            double gradientCrossSimilarity = VectorCosine(gradientA, gradientB);
+            if (!double.IsNaN(gradientSelfSimilarity) && !double.IsNaN(gradientCrossSimilarity))
             {
-                // A model that cannot report its own loss simply does not get this reprieve.
-                ReportGradientFinding(GradientReportFile, model,
-                    $"own-objective probe threw {ex.GetType().Name}; asserting on the harness measurement.");
+                double gradientSelfDeficit = 1.0 - gradientSelfSimilarity;
+                double gradientCrossDeficit = 1.0 - gradientCrossSimilarity;
+                gradientEvidence = $"The published pre-optimizer gradient gave cosine "
+                    + $"{gradientCrossSimilarity:F6} against a same-target control of "
+                    + $"{gradientSelfSimilarity:F6} (deficits {gradientCrossDeficit:E3} / "
+                    + $"{gradientSelfDeficit:E3}, max element delta {MaxAbsParamDelta(gradientA, gradientB):E3}); "
+                    + $"the model-reported losses were {ownLossA:E8}, {ownLossA2:E8}, and {ownLossB:E8}.";
+
+                if (gradientSelfSimilarity >= TargetDependenceSelfSimilarityFloor
+                    && gradientCrossDeficit > Math.Max(
+                        gradientSelfDeficit * TargetDependenceDeficitRatio, IdenticalDirectionEpsilon))
+                {
+                    return; // the target changes the true gradient; Adam masked it in the update
+                }
             }
         }
 
@@ -5285,9 +5307,125 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
             + $"over {Math.Max(1, TargetDependenceStepCount)} steps (a tiny value means the trajectory never "
             + $"left its starting point, so grad(prediction) never diverged and the comparison is "
             + $"under-powered); output length = {EffectiveOutputLength()} (1 means a scalar output, whose "
-            + "gradient is target-independent in direction by construction)]";
+            + $"gradient is target-independent in direction by construction); parameter count = "
+            + $"{network.ParameterCount}. {gradientEvidence}]";
         ReportGradientFinding(GradientReportFile, model, message);
         Assert.True(!GradientCorrectnessInvariantBlocking, message);
+    }
+
+    /// <summary>
+    /// Builds a deterministic target in the same public target domain as <paramref name="source"/>
+    /// but deliberately far from it. This is the generic fallback for models that quantise or project
+    /// two random targets onto the same internal supervision.
+    /// </summary>
+    private Tensor<T> CreateContrastTarget(
+        INeuralNetworkModel<T> network, Tensor<T> source, Tensor<T> input)
+    {
+        var shape = source.Shape.ToArray();
+        var contrast = new Tensor<T>(shape);
+
+        if (source.Length == 0) return contrast;
+
+        if (network is AiDotNet.NeuralNetworks.NeuralNetworkBase<T> transformedTargetNetwork
+            && !UsesExternalCategoricalTargets(transformedTargetNetwork)
+            && transformedTargetNetwork.DefaultLossFunction
+                is AiDotNet.LossFunctions.CrossEntropyWithLogitsLoss<T>)
+        {
+            // A forecasting/regression API with an internal categorical objective quantizes its
+            // CONTINUOUS public target before CE. Fixture targets in [0,1] can all land in one bin
+            // when the context is on a wider scale, so reflection within [0,1] is still degenerate.
+            // Build the contrast from the observed input scale: +/-max|context| are valid continuous
+            // forecasts and necessarily span the context's range without knowing private bin edges.
+            double scale = 1.0;
+            for (int i = 0; i < input.Length; i++)
+                scale = Math.Max(scale, Math.Abs(ConvertToDouble(input[i])));
+
+            for (int i = 0; i < source.Length; i++)
+                contrast[i] = NumOps.FromDouble(ConvertToDouble(source[i]) >= 0.0 ? -scale : scale);
+            return contrast;
+        }
+
+        if (network is AiDotNet.NeuralNetworks.NeuralNetworkBase<T> nn
+            && UsesExternalCategoricalTargets(nn)
+            && nn.DefaultLossFunction is AiDotNet.LossFunctions.CrossEntropyWithLogitsLoss<T>)
+        {
+            int classAxis = -1;
+            int numClasses = 0;
+            if (network is AiDotNet.Interfaces.ISegmentationModel<T> segmentation)
+            {
+                numClasses = segmentation.NumClasses;
+                if (numClasses > 1)
+                {
+                    if (shape.Length >= 2 && shape[1] == numClasses) classAxis = 1;
+                    else if (shape.Length >= 1 && shape[0] == numClasses) classAxis = 0;
+                    else
+                        for (int i = 0; i < shape.Length; i++)
+                            if (shape[i] == numClasses) { classAxis = i; break; }
+                }
+            }
+            else if (shape.Length > 0)
+            {
+                classAxis = shape.Length - 1;
+                numClasses = shape[classAxis];
+                if (numClasses <= 1) classAxis = -1;
+            }
+
+            if (classAxis < 0)
+            {
+                int active = 0;
+                double largest = double.NegativeInfinity;
+                for (int i = 0; i < source.Length; i++)
+                {
+                    double value = ConvertToDouble(source[i]);
+                    if (value > largest) { largest = value; active = i; }
+                }
+                contrast[(active + 1) % source.Length] = NumOps.One;
+                return contrast;
+            }
+
+            int rank = shape.Length;
+            var strides = new int[rank];
+            strides[rank - 1] = 1;
+            for (int i = rank - 2; i >= 0; i--) strides[i] = strides[i + 1] * shape[i + 1];
+            int classStride = strides[classAxis];
+            var coord = new int[rank];
+            while (true)
+            {
+                int baseOffset = 0;
+                for (int i = 0; i < rank; i++) baseOffset += coord[i] * strides[i];
+
+                int activeClass = 0;
+                double largest = double.NegativeInfinity;
+                for (int cls = 0; cls < numClasses; cls++)
+                {
+                    double value = ConvertToDouble(source[baseOffset + cls * classStride]);
+                    if (value > largest) { largest = value; activeClass = cls; }
+                }
+                contrast[baseOffset + ((activeClass + 1) % numClasses) * classStride] = NumOps.One;
+
+                int axis = rank - 1;
+                while (axis >= 0)
+                {
+                    if (axis == classAxis) { axis--; continue; }
+                    if (++coord[axis] < shape[axis]) break;
+                    coord[axis] = 0;
+                    axis--;
+                }
+                if (axis < 0) break;
+            }
+            return contrast;
+        }
+
+        // The fixture's ordinary regression/BCE targets are generated in [0,1]. Reflection about
+        // 0.5 stays in that domain, while moving every non-midpoint value as far as possible from its
+        // source. It also crosses quantisation buckets without knowing a model's private thresholds.
+        for (int i = 0; i < source.Length; i++)
+            contrast[i] = NumOps.FromDouble(1.0 - ConvertToDouble(source[i]));
+
+        if (MaxAbsTensorDelta(source, contrast) == 0.0)
+            contrast[0] = NumOps.FromDouble(ConvertToDouble(source[0]) <= 0.5 ? 1.0 : 0.0);
+
+        return contrast;
     }
 
     /// <summary>
@@ -5320,7 +5458,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         // REPEATS ARE THE RIGHT AXIS TO CUT, and this must not be swapped for steps. Repeats only
         // average seed noise out of the update-direction cosine. The STEPS carry the signal: a single
         // Adam step is sign(g), so two targets differing only in magnitude produce identical first steps
-        // and the probe would report a FALSE PASS. Cutting the axis that costs the same but proves less
+        // and the probe would report a FALSE FAILURE. Cutting the axis that costs the same but proves less
         // is the whole point.
         var budget = System.Diagnostics.Stopwatch.StartNew();
         int spent = 0;
@@ -5351,6 +5489,80 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         for (int i = 0; i < start.Length; i++) mean[i] = NumOps.FromDouble(accumulator[i] / spent);
         return mean;
     }
+
+    /// <summary>
+    /// Averages the actual pre-optimizer parameter gradient published by otherwise ordinary training.
+    /// Returns false only when that optional surface is explicitly unavailable or cannot be represented
+    /// within the flat-gradient memory ceiling; all unexpected failures propagate to the caller.
+    /// </summary>
+    private bool TryMeanPublishedGradient(
+        ParameterProbe probe, INeuralNetworkModel<T> network, Tensor<T> input, Tensor<T> target,
+        out Vector<T> mean, out double meanLoss)
+    {
+        mean = new Vector<T>(0);
+        meanLoss = double.NaN;
+        if (network.ParameterCount > TargetDependenceGradientFallbackMaxParameters) return false;
+
+        int repeats = Math.Max(1, TargetDependenceRepeatCount);
+        double[]? accumulator = null;
+        double lossAccumulator = 0.0;
+        int spent = 0;
+        var budget = System.Diagnostics.Stopwatch.StartNew();
+
+        try
+        {
+            for (int r = 0; r < repeats; r++)
+            {
+                if (r > 0 && budget.Elapsed.TotalSeconds >= TargetDependenceRepeatBudgetSeconds) break;
+
+                probe.Restore();
+                if (network is AiDotNet.NeuralNetworks.NeuralNetworkBase<T> neuralNetwork)
+                    neuralNetwork.ResetBaseTrainOptimizerState();
+
+                network.Train(input, target);
+
+                Vector<T> gradients;
+                try
+                {
+                    gradients = network.GetParameterGradients();
+                }
+                catch (NotSupportedException)
+                {
+                    return false;
+                }
+
+                if (gradients is null || gradients.Length == 0 || CountNonFiniteParams(gradients) > 0)
+                    return false;
+
+                accumulator ??= new double[gradients.Length];
+                if (gradients.Length != accumulator.Length) return false;
+
+                for (int i = 0; i < gradients.Length; i++)
+                    accumulator[i] += ConvertToDouble(gradients[i]);
+                lossAccumulator += ConvertToDouble(network.GetLastLoss());
+                spent++;
+            }
+        }
+        finally
+        {
+            probe.Restore();
+        }
+
+        if (accumulator is null || spent == 0) return false;
+
+        mean = new Vector<T>(accumulator.Length);
+        for (int i = 0; i < accumulator.Length; i++)
+            mean[i] = NumOps.FromDouble(accumulator[i] / spent);
+        meanLoss = lossAccumulator / spent;
+        return true;
+    }
+
+    /// <summary>
+    /// Maximum parameter count for the on-demand published-gradient fallback. It runs only after the
+    /// bounded update probe could not distinguish two targets, and 10 million doubles is an 80 MB flat
+    /// vector rather than the multi-gigabyte allocation the chunked path exists to avoid.
+    /// </summary>
+    protected virtual long TargetDependenceGradientFallbackMaxParameters => 10_000_000;
 
     /// <summary>
     /// Finiteness check written out because <c>double.IsFinite</c> does not exist on net471, which this
