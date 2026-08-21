@@ -262,14 +262,22 @@ public partial class PATEGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
             var layers = new List<FullyConnectedLayer<T>>();
             var dims = _options.TeacherDimensions;
 
+            // PASS THE INPUT WIDTH. layerInput and lastDim were already being computed here and then
+            // thrown away, so every teacher layer took the (outputSize, activation) overload and was
+            // left with an input of -1 for lazy inference. A lazily-bound layer takes the width of
+            // whatever tensor reaches it FIRST and keeps it: the teacher head bound to _dataWidth
+            // (13) and then received the 64-wide hidden activation, which is the
+            // "Matrix dimensions incompatible: [1,64] x [13,1]" out of TeacherForward.
+            //
+            // The dimensions are known at construction, so declare them instead of inferring them.
             for (int i = 0; i < dims.Length; i++)
             {
                 int layerInput = i == 0 ? _dataWidth : dims[i - 1];
-                layers.Add(new FullyConnectedLayer<T>(dims[i], identity));
+                layers.Add(new FullyConnectedLayer<T>(layerInput, dims[i], identity));
             }
 
             int lastDim = dims.Length > 0 ? dims[^1] : _dataWidth;
-            var output = new FullyConnectedLayer<T>(1, identity);
+            var output = new FullyConnectedLayer<T>(lastDim, 1, identity);
 
             _teacherLayers.Add(layers);
             _teacherOutputs.Add(output);
@@ -284,15 +292,17 @@ public partial class PATEGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
         var identity = new IdentityActivation<T>() as IActivationFunction<T>;
         var dims = _options.StudentDimensions;
 
+        // Same discarded-dimension bug as BuildTeachers above: declare the widths rather than
+        // leaving every student layer to bind lazily to the first tensor that reaches it.
         for (int i = 0; i < dims.Length; i++)
         {
             int layerInput = i == 0 ? _dataWidth : dims[i - 1];
-            _studentLayers.Add(new FullyConnectedLayer<T>(dims[i], identity));
+            _studentLayers.Add(new FullyConnectedLayer<T>(layerInput, dims[i], identity));
             _studentDropoutLayers.Add(new DropoutLayer<T>(_options.StudentDropout));
         }
 
         int lastDim = dims.Length > 0 ? dims[^1] : _dataWidth;
-        _studentLayers.Add(new FullyConnectedLayer<T>(1, identity));
+        _studentLayers.Add(new FullyConnectedLayer<T>(lastDim, 1, identity));
     }
 
     #endregion
