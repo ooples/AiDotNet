@@ -747,7 +747,7 @@ public partial class RBMLayer<T> : LayerBase<T>, IShapeContract
     /// <param name="input">A rank-one sample or a batched tensor of visible activations.</param>
     /// <param name="learningRate">Contrastive-divergence learning rate.</param>
     /// <param name="kSteps">Number of Gibbs sampling steps.</param>
-    public void TrainWithContrastiveDivergence(Tensor<T> input, T learningRate, int kSteps = 1)
+    internal void TrainWithContrastiveDivergence(Tensor<T> input, T learningRate, int kSteps = 1)
     {
         // Lazy-ctor guard: ContrastiveDivergence training reads _visibleUnits
         // and the weight matrices, so they need to be resolved+materialized.

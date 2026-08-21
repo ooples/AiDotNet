@@ -25,6 +25,27 @@ namespace AiDotNet.Tests.IntegrationTests.Training;
 /// </remarks>
 public class ConfiguredLossFunctionTests
 {
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void MeasureLoss_RejectsNonFiniteScalarFromLogitsObjectives(bool useCategoricalLoss)
+    {
+        using var model = new AiDotNet.NeuralNetworks.NeuralNetwork<double>();
+        ILossFunction<double> loss = useCategoricalLoss
+            ? new CrossEntropyWithLogitsLoss<double>()
+            : new BinaryCrossEntropyWithLogitsLoss<double>();
+        ((ISupportsLossFunction<double>)model).SetLossFunction(loss);
+
+        var predicted = new Tensor<double>(new[] { double.NaN, 0.0 }, new[] { 2 });
+        var target = new Tensor<double>(new[] { 1.0, 0.0 }, new[] { 2 });
+        var probe = new MeasureLossProbe();
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            probe.Evaluate(model, predicted, target));
+        Assert.Contains("non-finite loss", exception.Message);
+        Assert.Contains(loss.GetType().Name, exception.Message);
+    }
+
     [Fact(Timeout = 60000)]
     public async Task PointForecaster_AdoptsConfiguredLoss()
     {
@@ -156,6 +177,19 @@ public class ConfiguredLossFunctionTests
     private sealed class NBeatsProbe : NBEATSModel<double>
     {
         public NBeatsProbe(NBEATSModelOptions<double> options) : base(options) { }
+    }
+
+    /// <summary>Exposes the model-family loss measurement contract without becoming a test fixture.</summary>
+    private sealed class MeasureLossProbe : AiDotNet.Tests.ModelFamilyTests.Base.NeuralNetworkModelTestBase<double>
+    {
+        internal double Evaluate(
+            INeuralNetworkModel<double> network,
+            Tensor<double> output,
+            Tensor<double> target)
+            => MeasureLoss(network, output, target);
+
+        protected override INeuralNetworkModel<double> CreateNetwork()
+            => throw new NotSupportedException("This probe only exposes MeasureLoss.");
     }
 
     /// <summary>

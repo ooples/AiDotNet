@@ -16,8 +16,11 @@ try {
   <Results>
     <UnitTestResult testId="1" testName="Case(1)" outcome="Failed"><Output><ErrorInfo><Message>Assert.Equal() Failure</Message></ErrorInfo></Output></UnitTestResult>
     <UnitTestResult testId="1" testName="Case(2)" outcome="Failed"><Output><ErrorInfo><Message>Loss was NaN</Message></ErrorInfo></Output></UnitTestResult>
+    <UnitTestResult testId="1" testName="Case(3)" outcome="Error"><Output><ErrorInfo><Message>Shape mismatch</Message></ErrorInfo></Output></UnitTestResult>
+    <UnitTestResult testId="1" testName="Case(4)" outcome="Timeout"><Output><ErrorInfo><Message>Test timed out</Message></ErrorInfo></Output></UnitTestResult>
+    <UnitTestResult testId="1" testName="Case(5)" outcome="Aborted"><Output><ErrorInfo><Message>Out of memory</Message></ErrorInfo></Output></UnitTestResult>
   </Results>
-  <ResultSummary><Counters total="3" executed="3" passed="1" failed="2" notExecuted="0" /></ResultSummary>
+  <ResultSummary><Counters total="6" executed="6" passed="1" failed="5" notExecuted="0" /></ResultSummary>
 </TestRun>
 '@ | Set-Content -LiteralPath (Join-Path $artifact 'test-results.trx') -Encoding utf8
 
@@ -51,18 +54,28 @@ try {
     -CommitSha 'current'
 
   $report = Get-Content -LiteralPath (Join-Path $output 'ci-test-analysis.json') -Raw | ConvertFrom-Json
-  if ($report.summary.totalTests -ne 3) { throw 'Expected three discovered tests.' }
-  if ($report.summary.uniqueFailedTests -ne 2) { throw 'Expected two unique failing test cases.' }
+  if ($report.summary.totalTests -ne 6) { throw 'Expected six discovered tests.' }
+  if ($report.summary.failedResultRecords -ne 5) { throw 'Expected all five terminal failure records.' }
+  if ($report.summary.uniqueFailedTests -ne 5) { throw 'Expected five unique failing test cases.' }
   if ($report.summary.uniqueFailedMethods -ne 1) { throw 'Expected one unique failing test method.' }
   if ($report.summary.failedShards -ne 1) { throw 'Expected one failing shard.' }
   if ($report.regression.status -ne 'regressed') { throw 'Expected a regressed comparison.' }
-  if (@($report.regression.newFailedTests).Count -ne 1) { throw 'Expected one new failure.' }
+  if (@($report.regression.newFailedTests).Count -ne 4) { throw 'Expected four new failures.' }
   if (@($report.regression.persistentFailedTests).Count -ne 1) { throw 'Expected one persistent failure.' }
   if ($report.categories.failedTests.'Numerical stability' -ne 1) { throw 'Expected numerical categorization.' }
   if ($report.categories.failedTests.'Assertion mismatch' -ne 1) { throw 'Expected assertion categorization.' }
+  if ($report.categories.failedTests.'Shape or tensor contract' -ne 1) { throw 'Expected error categorization.' }
+  if ($report.categories.failedTests.'Timeout or cancellation' -ne 1) { throw 'Expected timeout categorization.' }
+  if ($report.categories.failedTests.'Memory or resource exhaustion' -ne 1) { throw 'Expected aborted categorization.' }
+  $outcomes = @($report.failures.outcome | Sort-Object -Unique)
+  $missingOutcomes = @('Failed', 'Error', 'Timeout', 'Aborted') |
+    Where-Object { $_ -notin $outcomes }
+  if (@($outcomes).Count -ne 4 -or @($missingOutcomes).Count -ne 0) {
+    throw "Failure report omitted a terminal outcome: $($outcomes -join ', ')."
+  }
 
   $markdown = Get-Content -LiteralPath (Join-Path $output 'ci-test-analysis.md') -Raw
-  if ($markdown -notmatch 'New failures \(1\)') { throw 'Markdown omitted the new-failure section.' }
+  if ($markdown -notmatch 'New failures \(4\)') { throw 'Markdown omitted the new-failure section.' }
   Write-Host 'analyze-test-results.ps1 self-test passed.'
 }
 finally {

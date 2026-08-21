@@ -17,6 +17,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+$terminalFailureOutcomes = @('Failed', 'Error', 'Timeout', 'Aborted')
 
 function Get-IntegerAttribute {
   param($Node, [string]$Name)
@@ -161,7 +162,11 @@ foreach ($trx in $trxFiles) {
     }
   }
 
-  foreach ($result in @($document.SelectNodes('//*[local-name()="UnitTestResult" and @outcome="Failed"]'))) {
+  $terminalFailures = @(
+    $document.SelectNodes('//*[local-name()="UnitTestResult"]') |
+      Where-Object { [string]$_.outcome -in $terminalFailureOutcomes }
+  )
+  foreach ($result in $terminalFailures) {
     $definition = $definitions[[string]$result.testId]
     $className = if ($null -ne $definition) { $definition.className } else { '' }
     $methodName = if ($null -ne $definition) { $definition.methodName } else { [string]$result.testName }
@@ -179,6 +184,7 @@ foreach ($trx in $trxFiles) {
       className = $className
       methodName = $methodName
       displayName = $displayName
+      outcome = [string]$result.outcome
       shard = $shardName
       shardCategory = Get-ShardCategory $shardName
       failureCategory = Get-FailureCategory $message $stack
@@ -196,6 +202,7 @@ foreach ($group in @($failureRecords | Group-Object identity | Sort-Object Name)
     identity = $first.identity
     methodIdentity = $first.methodIdentity
     displayName = $first.displayName
+    outcome = $first.outcome
     className = $first.className
     methodName = $first.methodName
     shards = @($group.Group.shard | Sort-Object -Unique)

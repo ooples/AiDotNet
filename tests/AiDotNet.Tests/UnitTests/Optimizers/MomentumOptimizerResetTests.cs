@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Threading.Tasks;
 using AiDotNet.Helpers;
 using AiDotNet.Models.Options;
 using AiDotNet.Optimizers;
@@ -6,6 +7,9 @@ using AiDotNet.Tensors;
 using AiDotNet.Tensors.Engines.Autodiff;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
+#if !NET462
+using AiDotNet.Tensors.Engines.DirectGpu;
+#endif
 
 namespace AiDotNet.Tests.UnitTests.Optimizers;
 
@@ -53,6 +57,44 @@ public class MomentumOptimizerResetTests
 
         Assert.Equal(0.9, parameter[0], 12);
     }
+
+#if !NET462
+    /// <summary>
+    /// Reset must dispose device velocity so the first GPU update after a restart cannot inherit
+    /// momentum from the previous run, even when the caller reuses the same parameter buffer.
+    /// </summary>
+    [SkippableFact(Timeout = 60000)]
+    [Trait("Category", "GPU")]
+    public async Task Reset_ClearsGpuVelocityForReusedParameterBuffer()
+    {
+        await Task.Yield();
+        using var engine = new DirectGpuEngine();
+        var backend = engine.Backend;
+        if (!engine.IsAvailable || backend is null)
+        {
+            Skip.If(true, "DirectGpu backend is unavailable on this runner.");
+            return;
+        }
+
+        var optimizer = CreateOptimizer();
+        using var parameter = backend.AllocateBuffer(new[] { 1.0f });
+        using var gradient = backend.AllocateBuffer(new[] { 1.0f });
+        using var initialParameter = backend.AllocateBuffer(new[] { 1.0f });
+
+        optimizer.UpdateParametersGpu(parameter, gradient, 1, backend);
+        optimizer.UpdateParametersGpu(parameter, gradient, 1, backend);
+        backend.Synchronize();
+        Assert.InRange(backend.DownloadBuffer(parameter)[0], 0.7099f, 0.7101f);
+
+        backend.Copy(initialParameter, parameter, 1);
+        optimizer.Reset();
+        optimizer.UpdateParametersGpu(parameter, gradient, 1, backend);
+        backend.Synchronize();
+
+        Assert.InRange(backend.DownloadBuffer(parameter)[0], 0.8999f, 0.9001f);
+        optimizer.DisposeGpuState();
+    }
+#endif
 
     private static MomentumOptimizer<double, Tensor<double>, Tensor<double>> CreateOptimizer()
     {

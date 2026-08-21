@@ -7,6 +7,19 @@ namespace AiDotNet.Tests.UnitTests.LossFunctions;
 
 public class CompositeLossWithLogitsTests
 {
+    [Theory]
+    [InlineData(double.NaN)]
+    [InlineData(double.PositiveInfinity)]
+    [InlineData(double.NegativeInfinity)]
+    public void NonFiniteTermWeight_IsRejectedBeforeNumericConversion(double weight)
+    {
+        var exception = Assert.Throws<ArgumentException>(() =>
+            new CompositeLossWithLogits<double>((new DiceLoss<double>(), weight)));
+
+        Assert.Contains("term 0", exception.Message);
+        Assert.Equal("terms", exception.ParamName);
+    }
+
     [Fact]
     public void ExtremeLogits_ProduceFiniteNonNegativeLoss_InBothPublicPaths()
     {
@@ -24,6 +37,22 @@ public class CompositeLossWithLogitsTests
         Assert.Single(tapeLoss.ToArray());
         Assert.True(!double.IsNaN(tapeLoss[0]) && !double.IsInfinity(tapeLoss[0]) && tapeLoss[0] >= 0.0,
             $"Tape path returned invalid logits loss {tapeLoss[0]:G17}.");
+    }
+
+    [Fact]
+    public void VectorAndTapePaths_AgreeForModerateLogits()
+    {
+        var loss = new CompositeLossWithLogits<double>();
+        var logits = new Vector<double>([-2.0, -0.25, 0.5, 1.75]);
+        var target = new Vector<double>([0.0, 1.0, 0.0, 1.0]);
+
+        double vectorLoss = loss.CalculateLoss(logits, target);
+        var tapeLoss = loss.ComputeTapeLoss(
+            new Tensor<double>([4], logits),
+            new Tensor<double>([4], target));
+
+        Assert.Single(tapeLoss.ToArray());
+        Assert.Equal(vectorLoss, tapeLoss[0], 12);
     }
 
     [Fact]

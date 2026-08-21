@@ -15,6 +15,8 @@ namespace AiDotNet.Tests.ModelFamilyTests.Base;
 /// </summary>
 public abstract class NERModelTestBase<T> : NeuralNetworkModelTestBase<T>
 {
+    private const int FallbackLabelCount = 9;
+
     protected override ExternalTargetEncodingKind ExternalTargetEncoding
         => ExternalTargetEncodingKind.SparseClassIndices;
 
@@ -22,7 +24,9 @@ public abstract class NERModelTestBase<T> : NeuralNetworkModelTestBase<T>
         INeuralNetworkModel<T> network, Tensor<T> target)
     {
         var outputShape = ShapeCheckedOutputShape;
-        return outputShape.Length >= 2 && outputShape[^1] > 1 ? outputShape[^1] : 9;
+        return outputShape.Length >= 2 && outputShape[^1] > 1
+            ? outputShape[^1]
+            : FallbackLabelCount;
     }
 
     /// <summary>
@@ -46,8 +50,8 @@ public abstract class NERModelTestBase<T> : NeuralNetworkModelTestBase<T>
         // [seq] integer indices. Otherwise emit [shape[0]] integers as a
         // best-effort default.
         int seqLen = shape[0];
-        int numLabels = shape.Length >= 2 ? shape[shape.Length - 1] : 9;
-        if (numLabels < 2) numLabels = 9;  // sanity fallback
+        int numLabels = shape.Length >= 2 ? shape[shape.Length - 1] : FallbackLabelCount;
+        if (numLabels < 2) numLabels = FallbackLabelCount;  // sanity fallback
 
         var tensor = new Tensor<T>([seqLen]);
         for (int i = 0; i < seqLen; i++)
@@ -85,8 +89,11 @@ public abstract class NERModelTestBase<T> : NeuralNetworkModelTestBase<T>
         for (int i = 0; i < contrast.Length; i++)
         {
             double label = NumOps.ToDouble(contrast[i]);
-            Assert.True(label == Math.Truncate(label) && label >= 0.0 && label < numClasses);
-            Assert.NotEqual(NumOps.ToDouble(prepared[i]), label);
+            Assert.True(label == Math.Truncate(label) && label >= 0.0 && label < numClasses,
+                $"Contrast label[{i}] is {label}; expected an integer in [0, {numClasses - 1}].");
+            double preparedLabel = NumOps.ToDouble(prepared[i]);
+            Assert.True(preparedLabel != label,
+                $"Contrast label[{i}] did not change from the prepared label {preparedLabel}.");
         }
     }
 

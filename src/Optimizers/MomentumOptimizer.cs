@@ -405,7 +405,7 @@ public class MomentumOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
     }
 
     /// <summary>
-    /// Resets both the legacy vector velocity and the per-parameter tape velocity.
+    /// Resets the legacy vector, per-parameter tape, and device-resident velocity state.
     /// </summary>
     /// <remarks>
     /// The base reset restores shared optimizer state, but momentum history belongs to this optimizer.
@@ -416,6 +416,7 @@ public class MomentumOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
         base.Reset();
         _velocity = null;
         _tapeVelocity.Clear();
+        DisposeGpuState();
         InitializeAdaptiveParameters();
     }
 

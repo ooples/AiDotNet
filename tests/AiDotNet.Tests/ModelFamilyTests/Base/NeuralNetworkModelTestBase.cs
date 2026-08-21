@@ -3357,6 +3357,37 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
     private static bool IsExpectedLossDomainRejection(Exception ex) =>
         ex is ArgumentException or NotSupportedException or RankException;
 
+    /// <summary>
+    /// Requires a configured objective to produce the one finite scalar that trajectory comparisons
+    /// need. Reading element zero from a vector or allowing NaN to reach a caller's guard would turn a
+    /// broken objective into a silently skipped training assertion.
+    /// </summary>
+    private double RequireScalarFiniteLoss(
+        AiDotNet.Interfaces.ILossFunction<T> loss,
+        INeuralNetworkModel<T> network,
+        Tensor<T> lossTensor)
+    {
+        if (lossTensor.Length != 1)
+        {
+            throw new InvalidOperationException(
+                $"{loss.GetType().Name}.ComputeTapeLoss returned {lossTensor.Length} elements " +
+                $"(shape [{string.Join(",", lossTensor.Shape)}]) for {network.GetType().Name}; the " +
+                "training invariants need a single scalar to compare across steps. Reading element " +
+                "zero would measure one component of a vector-valued result as if it were the loss.");
+        }
+
+        double value = ConvertToDouble(lossTensor[0]);
+        if (!IsFinite(value))
+        {
+            throw new InvalidOperationException(
+                $"{loss.GetType().Name}.ComputeTapeLoss returned non-finite loss {value} for " +
+                $"{network.GetType().Name}. A non-finite loss is a numerical defect in the model or " +
+                "the loss; it must not be masked or allowed to skip a training assertion.");
+        }
+
+        return value;
+    }
+
     protected double MeasureLoss(INeuralNetworkModel<T> network, Tensor<T> output, Tensor<T> target)
     {
         // FAIL, do not return NaN. Every branch below used to answer an empty output or target with
@@ -3392,7 +3423,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
             if (!outShape.SequenceEqual(tgtShape) && output.Length == target.Length)
                 predicted = output.Reshape(tgtShape);
             var lossTensor = ce.ComputeTapeLoss(predicted, target);
-            return ConvertToDouble(lossTensor[0]);
+            return RequireScalarFiniteLoss(ce, network, lossTensor);
         }
 
         // Same reasoning for the multi-resolution STFT objective. A waveform model such as FiNS
@@ -3407,23 +3438,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
             && stftNet.DefaultLossFunction is AiDotNet.LossFunctions.MultiResolutionStftLoss<T> stft)
         {
             var lossTensor = stft.ComputeTapeLoss(output, target);
-            if (lossTensor.Length != 1)
-            {
-                throw new InvalidOperationException(
-                    $"{stft.GetType().Name}.ComputeTapeLoss returned {lossTensor.Length} elements " +
-                    $"(shape [{string.Join(",", lossTensor.Shape)}]) for {network.GetType().Name}; " +
-                    "the training invariants require exactly one scalar loss.");
-            }
-
-            double value = ConvertToDouble(lossTensor[0]);
-            if (!IsFinite(value))
-            {
-                throw new InvalidOperationException(
-                    $"{stft.GetType().Name}.ComputeTapeLoss returned non-finite loss {value} for " +
-                    $"{network.GetType().Name}.");
-            }
-
-            return value;
+            return RequireScalarFiniteLoss(stft, network, lossTensor);
         }
 
         // Same reasoning for SIGMOID cross-entropy. A multi-label head trains on
@@ -3442,7 +3457,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
             if (!outShape.SequenceEqual(tgtShape) && output.Length == target.Length)
                 predicted = output.Reshape(tgtShape);
             var lossTensor = bce.ComputeTapeLoss(predicted, target);
-            return ConvertToDouble(lossTensor[0]);
+            return RequireScalarFiniteLoss(bce, network, lossTensor);
         }
 
         // GENERAL CASE: measure the objective the model actually descends. The three branches above
@@ -3488,37 +3503,87 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
                 return ComputeMSE(output, target);
             }
 
-            // A scalar objective, or nothing. Accepting "Length > 0" and reading element zero measured
-            // ONE COMPONENT of a vector-valued result and reported it as the whole loss, so a loss that
-            // never reduced could still look like it did. There is no correct way to compare partial
-            // objectives across two training steps, so this is a defect rather than a fallback.
-            if (lossTensor.Length != 1)
-            {
-                throw new InvalidOperationException(
-                    $"{configured.GetType().Name}.ComputeTapeLoss returned {lossTensor.Length} elements " +
-                    $"(shape [{string.Join(",", lossTensor.Shape)}]) for {network.GetType().Name}; the " +
-                    "training invariants need a single scalar to compare across steps. Reading element " +
-                    "zero would measure one component of a vector-valued result as if it were the loss.");
-            }
-
-            double value = ConvertToDouble(lossTensor[0]);
-
-            // Non-finite propagates too. Falling back to MSE here reported a FINITE number for a model
-            // whose real objective had overflowed, so "training reduced the loss" was measured against
-            // an objective the optimizer was not descending -- the precise substitution this method
-            // exists to remove.
-            if (!IsFinite(value))
-            {
-                throw new InvalidOperationException(
-                    $"{configured.GetType().Name}.ComputeTapeLoss returned {value} for " +
-                    $"{network.GetType().Name}. A non-finite loss is a numerical defect in the model or " +
-                    "the loss; it must not be masked by silently measuring MSE instead.");
-            }
-
-            return value;
+            return RequireScalarFiniteLoss(configured, network, lossTensor);
         }
 
         return ComputeMSE(output, target);
+    }
+
+    /// <summary>
+    /// Resolves the class axis once for both categorical target construction routes.
+    /// Segmentation uses its declared class count and NCHW/CHW conventions; token and classifier
+    /// heads use the final axis.
+    /// </summary>
+    private static int ResolveCategoricalClassAxis(
+        INeuralNetworkModel<T> network, int[] shape, out int numClasses)
+    {
+        int classAxis = -1;
+        numClasses = 0;
+
+        if (network is AiDotNet.Interfaces.ISegmentationModel<T> segmentation)
+        {
+            numClasses = segmentation.NumClasses;
+            if (numClasses > 1)
+            {
+                if (shape.Length >= 2 && shape[1] == numClasses) classAxis = 1;
+                else if (shape.Length >= 1 && shape[0] == numClasses) classAxis = 0;
+                else
+                    for (int i = 0; i < shape.Length; i++)
+                        if (shape[i] == numClasses) { classAxis = i; break; }
+            }
+        }
+        else if (shape.Length > 0)
+        {
+            classAxis = shape.Length - 1;
+            numClasses = shape[classAxis];
+            if (numClasses <= 1) classAxis = -1;
+        }
+
+        return classAxis;
+    }
+
+    /// <summary>
+    /// Walks every non-class coordinate in row-major order and supplies the flat base offset and
+    /// class stride. Both target preparation and contrast construction therefore supervise exactly
+    /// the same categorical positions.
+    /// </summary>
+    private static int ForEachCategoricalPosition(
+        int[] shape, int classAxis, Action<int, int> visit)
+    {
+        int rank = shape.Length;
+        if (classAxis < 0 || classAxis >= rank)
+            throw new ArgumentOutOfRangeException(nameof(classAxis));
+
+        var strides = new int[rank];
+        strides[rank - 1] = 1;
+        for (int i = rank - 2; i >= 0; i--)
+            strides[i] = strides[i + 1] * shape[i + 1];
+
+        int classStride = strides[classAxis];
+        var coord = new int[rank];
+        int positionsVisited = 0;
+        while (true)
+        {
+            int baseOffset = 0;
+            for (int i = 0; i < rank; i++)
+                baseOffset += coord[i] * strides[i];
+
+            visit(baseOffset, classStride);
+            positionsVisited++;
+
+            int axis = rank - 1;
+            while (axis >= 0)
+            {
+                if (axis == classAxis) { axis--; continue; }
+                if (++coord[axis] < shape[axis]) break;
+                coord[axis] = 0;
+                axis--;
+            }
+
+            if (axis < 0) break;
+        }
+
+        return positionsVisited;
     }
 
     /// <summary>
@@ -3577,69 +3642,23 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
             && UsesExternalCategoricalTargets(nn)
             && nn.DefaultLossFunction is AiDotNet.LossFunctions.CrossEntropyWithLogitsLoss<T>)
         {
-            var shape = target.Shape;
-            int numClasses;
-            int classAxis = -1;
+            var shape = target.Shape.ToArray();
+            int classAxis = ResolveCategoricalClassAxis(network, shape, out int numClasses);
 
-            if (network is AiDotNet.Interfaces.ISegmentationModel<T> seg)
-            {
-                // Dense segmentation logits are NCHW/CHW, so the class axis is dim 1 (batched) or
-                // dim 0 (unbatched); fall back to the first axis whose size matches NumClasses. If
-                // none matches we cannot form a per-pixel distribution, so drop back to a single
-                // whole-tensor one-hot (still a valid, descendable target).
-                numClasses = seg.NumClasses;
-                if (numClasses > 1)
-                {
-                    if (shape.Length >= 2 && shape[1] == numClasses) classAxis = 1;
-                    else if (shape.Length >= 1 && shape[0] == numClasses) classAxis = 0;
-                    else for (int i = 0; i < shape.Length; i++) if (shape[i] == numClasses) { classAxis = i; break; }
-                }
-            }
-            else
-            {
-                // Token / classifier heads emit the class (vocabulary) dimension LAST — [B, S, V],
-                // [S, V] or [V] — and the loss takes an independent softmax at each position along
-                // that axis, so each position needs its own one-hot row.
-                classAxis = shape.Length - 1;
-                numClasses = shape[classAxis];
-                if (numClasses <= 1) classAxis = -1;
-            }
-
-            var oneHot = new Tensor<T>(shape.ToArray());
+            var oneHot = new Tensor<T>(shape);
             if (classAxis < 0)
             {
                 oneHot.Data.Span[rng.Next(target.Length)] = NumOps.One;
                 return oneHot;
             }
 
-            // Row-major strides so we can address (pixel, class) positions directly.
-            int rank = shape.Length;
-            var strides = new int[rank];
-            strides[rank - 1] = 1;
-            for (int i = rank - 2; i >= 0; i--) strides[i] = strides[i + 1] * shape[i + 1];
-            int classStride = strides[classAxis];
-
             // Odometer over every non-class coordinate (i.e. every pixel); set one random class = 1.
-            var coord = new int[rank];
             var span = oneHot.Data.Span;
-            int pixelsWritten = 0;
-            while (true)
-            {
-                int baseOffset = 0;
-                for (int i = 0; i < rank; i++) baseOffset += coord[i] * strides[i];
-                span[baseOffset + rng.Next(numClasses) * classStride] = NumOps.One;
-                pixelsWritten++;
-
-                int axis = rank - 1;
-                while (axis >= 0)
-                {
-                    if (axis == classAxis) { axis--; continue; }
-                    if (++coord[axis] < shape[axis]) break;
-                    coord[axis] = 0;
-                    axis--;
-                }
-                if (axis < 0) break;
-            }
+            int pixelsWritten = ForEachCategoricalPosition(
+                shape,
+                classAxis,
+                (baseOffset, classStride) =>
+                    oneHot[baseOffset + rng.Next(numClasses) * classStride] = NumOps.One);
 
             // COUNTED DURING CONSTRUCTION, NOT RE-WALKED. This used to run a second odometer over
             // every pixel and call Assert.Equal once per position: for a dense segmentation target
@@ -5462,26 +5481,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
             && UsesExternalCategoricalTargets(nn)
             && nn.DefaultLossFunction is AiDotNet.LossFunctions.CrossEntropyWithLogitsLoss<T>)
         {
-            int classAxis = -1;
-            int numClasses = 0;
-            if (network is AiDotNet.Interfaces.ISegmentationModel<T> segmentation)
-            {
-                numClasses = segmentation.NumClasses;
-                if (numClasses > 1)
-                {
-                    if (shape.Length >= 2 && shape[1] == numClasses) classAxis = 1;
-                    else if (shape.Length >= 1 && shape[0] == numClasses) classAxis = 0;
-                    else
-                        for (int i = 0; i < shape.Length; i++)
-                            if (shape[i] == numClasses) { classAxis = i; break; }
-                }
-            }
-            else if (shape.Length > 0)
-            {
-                classAxis = shape.Length - 1;
-                numClasses = shape[classAxis];
-                if (numClasses <= 1) classAxis = -1;
-            }
+            int classAxis = ResolveCategoricalClassAxis(network, shape, out int numClasses);
 
             if (classAxis < 0)
             {
@@ -5496,17 +5496,8 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
                 return contrast;
             }
 
-            int rank = shape.Length;
-            var strides = new int[rank];
-            strides[rank - 1] = 1;
-            for (int i = rank - 2; i >= 0; i--) strides[i] = strides[i + 1] * shape[i + 1];
-            int classStride = strides[classAxis];
-            var coord = new int[rank];
-            while (true)
+            ForEachCategoricalPosition(shape, classAxis, (baseOffset, classStride) =>
             {
-                int baseOffset = 0;
-                for (int i = 0; i < rank; i++) baseOffset += coord[i] * strides[i];
-
                 int activeClass = 0;
                 double largest = double.NegativeInfinity;
                 for (int cls = 0; cls < numClasses; cls++)
@@ -5514,18 +5505,9 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
                     double value = ConvertToDouble(source[baseOffset + cls * classStride]);
                     if (value > largest) { largest = value; activeClass = cls; }
                 }
-                contrast[baseOffset + ((activeClass + 1) % numClasses) * classStride] = NumOps.One;
 
-                int axis = rank - 1;
-                while (axis >= 0)
-                {
-                    if (axis == classAxis) { axis--; continue; }
-                    if (++coord[axis] < shape[axis]) break;
-                    coord[axis] = 0;
-                    axis--;
-                }
-                if (axis < 0) break;
-            }
+                contrast[baseOffset + ((activeClass + 1) % numClasses) * classStride] = NumOps.One;
+            });
             return contrast;
         }
 
