@@ -811,7 +811,7 @@ public class DiffusionModelContractTests : DiffusionUnitTestBase
             new AiDotNet.Tensors.LinearAlgebra.Tensor<float>([1, 4, 2, 2]),
             timestep: 0,
             new AiDotNet.Tensors.LinearAlgebra.Tensor<float>([1, 3, 2, 2]));
-        Assert.Equal(new[] { 1, 4, 2, 2 }, output.Shape);
+        Assert.Equal(new[] { 1, 4, 2, 2 }, output.Shape.ToArray());
     }
 
     #endregion
