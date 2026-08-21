@@ -241,6 +241,19 @@ public partial class QuantumLayer<T> : LayerBase<T>, IShapeContract
 
         var imagState = new Tensor<T>(realState._shape);
 
+        // Prescale each row by its largest magnitude before squaring. This scale cancels out of
+        // the final normalization, but keeps finite values near T.MaxValue from overflowing the
+        // sum of squares and collapsing the entire state to zero.
+        var maxMagnitude = Engine.ReduceMax(
+            Engine.TensorAbs(realState), [1], keepDims: true, out _);
+        var positiveMagnitude = Engine.TensorGreaterThan(maxMagnitude, NumOps.Zero);
+        var unitMagnitude = new Tensor<T>(maxMagnitude.Shape.ToArray());
+        unitMagnitude.Fill(NumOps.One);
+        var safeMaxMagnitude = Engine.TensorWhere(positiveMagnitude, maxMagnitude, unitMagnitude);
+        var maxMagnitudeExpanded = Engine.TensorRepeatElements(safeMaxMagnitude, dimension, axis: 1);
+        var scaledRealState = Engine.TensorDivide(realState, maxMagnitudeExpanded);
+        var scaledImagState = Engine.TensorDivide(imagState, maxMagnitudeExpanded);
+
         // Normalize each batch item: divide by sqrt(sum(|state|^2) + eps)
         //
         // The Sqrt was missing. ReduceSum gives sum(|state|^2) — the SQUARED L2 norm — and dividing
@@ -256,14 +269,14 @@ public partial class QuantumLayer<T> : LayerBase<T>, IShapeContract
         //
         // The epsilon stays INSIDE the Sqrt so the denominator is still strictly positive for a
         // zero state, which is what keeps this total rather than trading a scale bug for a NaN.
-        var magnitudeSquared = Engine.ComplexMagnitudeSquared(realState, imagState);
+        var magnitudeSquared = Engine.ComplexMagnitudeSquared(scaledRealState, scaledImagState);
         var normPerBatch = Engine.ReduceSum(magnitudeSquared, [1], keepDims: true);
         var epsilonTensor = new Tensor<T>(normPerBatch._shape);
         epsilonTensor.Fill(NumOps.FromDouble(1e-10));
         var safeDenom = Engine.TensorSqrt(Engine.TensorAdd(normPerBatch, epsilonTensor));
         var denomExpanded = Engine.TensorRepeatElements(safeDenom, dimension, axis: 1);
-        var normalizedReal = Engine.TensorDivide(realState, denomExpanded);
-        var normalizedImag = Engine.TensorDivide(imagState, denomExpanded);
+        var normalizedReal = Engine.TensorDivide(scaledRealState, denomExpanded);
+        var normalizedImag = Engine.TensorDivide(scaledImagState, denomExpanded);
 
         // Reshape to [dimension, batch] for complex matmul
         var normalizedRealT = Engine.TensorTranspose(normalizedReal);
@@ -364,6 +377,24 @@ public partial class QuantumLayer<T> : LayerBase<T>, IShapeContract
             // Copy input data with padding using strided copy
             int copyWidth = Math.Min(inputDim, dimension);
             backend.Copy2DStrided(input.Buffer, stateReal, batchSize, copyWidth, dimension, 0);
+
+            // Prescale by the per-row maximum before squaring, matching ForwardTraced. The wrapper
+            // borrows stateReal, so disposing it does not dispose the buffer owned by this scope.
+            using var stateTensor = GpuTensorHelper.UploadToGpu<T>(
+                backend, stateReal, [batchSize, dimension], GpuTensorRole.Intermediate, ownsBuffer: false);
+            using var absoluteState = Engine.TensorAbs(stateTensor);
+            using var maxMagnitude = gpuEngine.MaxAxisGpu(absoluteState, 1);
+            using var safeMaxMagnitude = backend.AllocateBuffer(batchSize);
+            backend.Clamp(
+                maxMagnitude.Buffer,
+                safeMaxMagnitude,
+                1.0f / float.MaxValue,
+                float.MaxValue,
+                batchSize);
+            using var inverseMaxMagnitude = backend.AllocateBuffer(batchSize);
+            backend.Reciprocal(safeMaxMagnitude, inverseMaxMagnitude, batchSize);
+            backend.BroadcastMultiplyFirstAxis(
+                stateReal, inverseMaxMagnitude, stateReal, batchSize, dimension);
 
             // L2 normalize each batch element on GPU
             // Step 1: Square the values

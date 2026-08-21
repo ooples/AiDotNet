@@ -895,6 +895,10 @@ public abstract class LayerTestBase<T>
             double originalValue = ToD(originalOutput[i]);
             double replayValue = ToD(originalReplay[i]);
 
+            Assert.False(double.IsNaN(originalValue) || double.IsNaN(replayValue),
+                $"Serializing the layer produced NaN at [{i}]: " +
+                $"before={originalValue:G17}, after={replayValue:G17}");
+
             // EXACT EQUALITY FIRST, TOLERANCE ONLY FOR FINITE VALUES. A difference-based tolerance
             // cannot compare non-finite values: for two IDENTICAL infinities the subtraction is
             // -inf - -inf = NaN, Math.Abs(NaN) is NaN, and NaN < 1e-12 is false, so the assertion
@@ -924,6 +928,12 @@ public abstract class LayerTestBase<T>
         Assert.Equal(originalOutput.Length, deserializedOutput.Length);
         for (int i = 0; i < originalOutput.Length; i++)
         {
+            double originalValue = ToD(originalOutput[i]);
+            double deserializedValue = ToD(deserializedOutput[i]);
+            Assert.False(double.IsNaN(originalValue) || double.IsNaN(deserializedValue),
+                $"Serialization roundtrip produced NaN at [{i}]: " +
+                $"original={originalValue:G17}, deserialized={deserializedValue:G17}");
+
             // Direct equality check covers ±Infinity (where Math.Abs(inf - inf) = NaN
             // would make the tolerance check spuriously fail for layers like ALiBi that
             // legitimately emit -∞ at masked positions). For ordinary finite outputs the
@@ -934,8 +944,6 @@ public abstract class LayerTestBase<T>
             {
                 continue;
             }
-            double originalValue = ToD(originalOutput[i]);
-            double deserializedValue = ToD(deserializedOutput[i]);
             Assert.True(Math.Abs(originalValue - deserializedValue) < Tolerance,
                 $"Output[{i}] differs after serialization roundtrip: " +
                 $"original={originalValue:G17}, deserialized={deserializedValue:G17}");

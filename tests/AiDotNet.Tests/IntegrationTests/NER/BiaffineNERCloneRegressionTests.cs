@@ -17,7 +17,7 @@ public class BiaffineNERCloneRegressionTests
             taskType: NeuralNetworkTaskType.MultiClassClassification,
             inputSize: 32,
             outputSize: 9);
-        var options = new SpanBasedNEROptions
+        var options = new BiaffineNEROptions
         {
             HiddenDimension = 32,
             NumAttentionHeads = 4,
@@ -29,6 +29,10 @@ public class BiaffineNERCloneRegressionTests
             SpanEmbeddingDimension = 32,
             DropoutRate = 0.0,
             LearningRate = 1e-3,
+            BiLstmHiddenSize = 7,
+            BiLstmLayers = 1,
+            BiLstmDropout = 0.0,
+            EmbeddingsDropout = 0.0,
         };
         using var model = new BiaffineNER<double>(architecture, options);
         model.SetTrainingMode(false);

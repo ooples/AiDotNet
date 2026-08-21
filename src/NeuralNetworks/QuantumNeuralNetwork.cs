@@ -389,7 +389,8 @@ public class QuantumNeuralNetwork<T> : VectorModelLayoutBase<T>
             ? processedInput.Reshape([processedInput.Length])
             : processedInput;
 
-        var quantumState = new Tensor<Complex<T>>([flatInput.Length]);
+        if (flatInput.Length == 0)
+            throw new ArgumentException("Quantum state input must contain at least one value.", nameof(input));
 
         // AMPLITUDE ENCODING, NORMALIZED. This previously took Sqrt of the raw feature value, which
         // is only defined when every feature is non-negative AND already sums to one. Neither holds
@@ -410,7 +411,15 @@ public class QuantumNeuralNetwork<T> : VectorModelLayoutBase<T>
         var maxMagnitude = NumOps.Zero;
         for (int i = 0; i < flatInput.Length; i++)
         {
-            var magnitude = NumOps.Abs(flatInput[i]);
+            var value = flatInput[i];
+            if (NumOps.IsNaN(value) || NumOps.IsInfinity(value))
+            {
+                throw new ArgumentException(
+                    $"Quantum state input contains a non-finite value at index {i}.",
+                    nameof(input));
+            }
+
+            var magnitude = NumOps.Abs(value);
             if (NumOps.GreaterThan(magnitude, maxMagnitude)) maxMagnitude = magnitude;
         }
 
@@ -418,15 +427,7 @@ public class QuantumNeuralNetwork<T> : VectorModelLayoutBase<T>
         // the uniform superposition, which is normalised and finite; dividing by the zero norm would
         // reintroduce the NaN this method exists to avoid.
         if (!NumOps.GreaterThan(maxMagnitude, NumOps.Zero))
-        {
-            var uniform = NumOps.Divide(NumOps.One, NumOps.Sqrt(NumOps.FromDouble(flatInput.Length)));
-            for (int i = 0; i < flatInput.Length; i++)
-            {
-                quantumState[i] = new Complex<T>(uniform, NumOps.Zero);
-            }
-
-            return quantumState;
-        }
+            return CreateUniformQuantumState(flatInput.Length);
 
         var scaledSumOfSquares = NumOps.Zero;
         for (int i = 0; i < flatInput.Length; i++)
@@ -436,16 +437,7 @@ public class QuantumNeuralNetwork<T> : VectorModelLayoutBase<T>
         }
 
         var scaledNorm = NumOps.Sqrt(scaledSumOfSquares);
-        if (!NumOps.GreaterThan(scaledNorm, NumOps.Zero))
-        {
-            var uniform = NumOps.Divide(NumOps.One, NumOps.Sqrt(NumOps.FromDouble(flatInput.Length)));
-            for (int i = 0; i < flatInput.Length; i++)
-            {
-                quantumState[i] = new Complex<T>(uniform, NumOps.Zero);
-            }
-
-            return quantumState;
-        }
+        var quantumState = new Tensor<Complex<T>>([flatInput.Length]);
 
         for (int i = 0; i < flatInput.Length; i++)
         {
@@ -454,6 +446,15 @@ public class QuantumNeuralNetwork<T> : VectorModelLayoutBase<T>
             quantumState[i] = new Complex<T>(amplitude, NumOps.Zero);
         }
 
+        return quantumState;
+    }
+
+    private Tensor<Complex<T>> CreateUniformQuantumState(int length)
+    {
+        var quantumState = new Tensor<Complex<T>>([length]);
+        var uniform = NumOps.Divide(NumOps.One, NumOps.Sqrt(NumOps.FromDouble(length)));
+        for (int i = 0; i < length; i++)
+            quantumState[i] = new Complex<T>(uniform, NumOps.Zero);
         return quantumState;
     }
 

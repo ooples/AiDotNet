@@ -141,7 +141,6 @@ public partial class GatedDeltaProductLayer<T> : LayerBase<T>, IShapeContract
     private Tensor<T>? _lastBeta;
     private Tensor<T>? _lastAlpha;
     private Tensor<T>? _lastHouseholderVecs;
-    private Tensor<T>? _lastStates;
     private Tensor<T>? _lastRecurrenceOutput;
     private Tensor<T>? _lastOutputGate;
     private Tensor<T>? _lastOutputGateRaw;
@@ -374,7 +373,9 @@ public partial class GatedDeltaProductLayer<T> : LayerBase<T>, IShapeContract
                 Engine.TensorSlice(_householderWeights,
                     new[] { mi, 0, 0 }, new[] { 1, _modelDimension, _headDimension }),
                 new[] { _modelDimension, _headDimension });
-            var projected = Engine.TensorMatMul(inputFlat, weights); // [B*T,D]
+            // [B*T, headDim]. The weights have no head axis, so the tile below deliberately
+            // shares one projected reflection vector across all heads.
+            var projected = Engine.TensorMatMul(inputFlat, weights);
             projections.Add(Engine.Reshape(
                 Engine.TensorTile(Engine.Reshape(projected,
                     new[] { total, 1, 1, _headDimension }),
@@ -382,58 +383,6 @@ public partial class GatedDeltaProductLayer<T> : LayerBase<T>, IShapeContract
                 new[] { total, 1, _numHeads, _headDimension }));
         }
         return Engine.TensorConcatenate(projections.ToArray(), axis: 1);
-    }
-
-    /// <summary>
-    /// Applies the product of M Householder reflections to the state, then scales by alpha.
-    /// S <- alpha * H * S  where H = H_M * ... * H_1.
-    /// </summary>
-    private void ApplyGatedHouseholderProduct(
-        Tensor<T> state, Tensor<T> hVecs, T alphaVal,
-        int bi, int hi, int posFlat)
-    {
-        // First apply Householder reflections: S <- H * S
-        for (int mi = 0; mi < _numHouseholders; mi++)
-        {
-            T normSq = NumOps.Zero;
-            for (int d = 0; d < _headDimension; d++)
-            {
-                T u = hVecs[new[] { posFlat, mi, hi, d }];
-                normSq = NumOps.Add(normSq, NumOps.Multiply(u, u));
-            }
-            T eps = NumOps.FromDouble(1e-8);
-            normSq = NumOps.Add(normSq, eps);
-            T twoOverNormSq = NumOps.Divide(NumOps.FromDouble(2.0), normSq);
-
-            for (int j = 0; j < _headDimension; j++)
-            {
-                T dot = NumOps.Zero;
-                for (int d = 0; d < _headDimension; d++)
-                {
-                    T u = hVecs[new[] { posFlat, mi, hi, d }];
-                    dot = NumOps.Add(dot, NumOps.Multiply(u, state[new[] { bi, hi, d, j }]));
-                }
-                T factor = NumOps.Multiply(twoOverNormSq, dot);
-
-                for (int d = 0; d < _headDimension; d++)
-                {
-                    T u = hVecs[new[] { posFlat, mi, hi, d }];
-                    state[new[] { bi, hi, d, j }] = NumOps.Subtract(
-                        state[new[] { bi, hi, d, j }],
-                        NumOps.Multiply(factor, u));
-                }
-            }
-        }
-
-        // Then scale by alpha: S <- alpha * S
-        for (int di = 0; di < _headDimension; di++)
-        {
-            for (int ki = 0; ki < _headDimension; ki++)
-            {
-                state[new[] { bi, hi, di, ki }] = NumOps.Multiply(
-                    alphaVal, state[new[] { bi, hi, di, ki }]);
-            }
-        }
     }
 
     /// <summary>
@@ -466,28 +415,30 @@ public partial class GatedDeltaProductLayer<T> : LayerBase<T>, IShapeContract
             // complete recurrence, including its dependence on every projected vector.
             for (int mi = 0; mi < _numHouseholders; mi++)
             {
-                var u = Engine.TensorSlice(hVecs,
-                    new[] { t, mi, 0, 0 }, new[] { 1, 1, _numHeads, _headDimension });
-                if (batchSize > 1)
+                // hVecs axis 0 is flattened as bi * seqLen + t, so derive every slice from
+                // that mapping. This also avoids recording and then discarding a dead slice.
+                var perBatch = new List<Tensor<T>>(batchSize);
+                for (int bi = 0; bi < batchSize; bi++)
                 {
-                    var perBatch = new List<Tensor<T>>(batchSize);
-                    for (int bi = 0; bi < batchSize; bi++)
-                    {
-                        int pos = bi * seqLen + t;
-                        perBatch.Add(Engine.TensorSlice(hVecs,
-                            new[] { pos, mi, 0, 0 }, new[] { 1, 1, _numHeads, _headDimension }));
-                    }
-                    u = Engine.TensorConcatenate(perBatch.ToArray(), 0);
+                    perBatch.Add(Engine.TensorSlice(hVecs,
+                        new[] { bi * seqLen + t, mi, 0, 0 },
+                        new[] { 1, 1, _numHeads, _headDimension }));
                 }
+                var u = batchSize == 1
+                    ? perBatch[0]
+                    : Engine.TensorConcatenate(perBatch.ToArray(), 0);
                 var uCol = Engine.Reshape(u, new[] { headBatch, _headDimension, 1 });
                 var uRow = Engine.TensorPermute(uCol, new[] { 0, 2, 1 });
                 var normSq = Engine.BatchMatMul(uRow, uCol);
                 var denominator = Engine.TensorAddScalar(normSq, NumOps.FromDouble(1e-8));
-                var reflection = Engine.TensorBroadcastMultiply(
-                    Engine.BatchMatMul(uCol, uRow),
+                // H S = S - u ((2 / ||u||^2) (u^T S)). This vector form is O(headDim^2)
+                // and avoids materializing and multiplying a full reflection matrix.
+                var projectedState = Engine.BatchMatMul(uRow, state);
+                var scaledProjection = Engine.TensorBroadcastMultiply(
+                    projectedState,
                     Engine.TensorDivide(Tensor<T>.CreateDefault(
                         new[] { headBatch, 1, 1 }, two), denominator));
-                state = Engine.TensorSubtract(state, Engine.BatchMatMul(reflection, state));
+                state = Engine.TensorSubtract(state, Engine.BatchMatMul(uCol, scaledProjection));
             }
 
             var alphaT = Engine.Reshape(Engine.TensorSliceAxis(alphaHeads, 1, t),
@@ -508,7 +459,6 @@ public partial class GatedDeltaProductLayer<T> : LayerBase<T>, IShapeContract
                 new[] { headBatch, 1, _headDimension }));
         }
 
-        _lastStates = state;
         return FromHeadMajor(Engine.TensorConcatenate(outputs.ToArray(), 1), batchSize, seqLen);
     }
 
@@ -523,84 +473,6 @@ public partial class GatedDeltaProductLayer<T> : LayerBase<T>, IShapeContract
             Engine.Reshape(value, new[] { batchSize, _numHeads, seqLen, _headDimension }),
             new[] { 0, 2, 1, 3 }),
             new[] { batchSize, seqLen, _modelDimension });
-
-    /// <summary>
-    /// Accumulates Householder weight gradients from per-position gradients.
-    /// </summary>
-    private void AccumulateHouseholderWeightGradients(
-        Tensor<T> dHVecs, Tensor<T> inputFlat, int batchSize, int seqLen)
-    {
-        int total = batchSize * seqLen;
-        var gradient = _householderWeightsGradient ?? throw new InvalidOperationException("Gradients not initialized.");
-
-        for (int mi = 0; mi < _numHouseholders; mi++)
-        {
-            for (int pos = 0; pos < total; pos++)
-            {
-                for (int hi = 0; hi < _numHeads; hi++)
-                {
-                    for (int d = 0; d < _headDimension; d++)
-                    {
-                        T dH = dHVecs[new[] { pos, mi, hi, d }];
-                        for (int j = 0; j < _modelDimension; j++)
-                        {
-                            gradient[new[] { mi, j, d }] = NumOps.Add(
-                                gradient[new[] { mi, j, d }],
-                                NumOps.Multiply(dH, inputFlat[new[] { pos, j }]));
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    /// <summary>
-    /// Computes input gradient contribution from Householder vectors.
-    /// </summary>
-    private Tensor<T> ComputeHouseholderInputGradient(
-        Tensor<T> dHVecs, int batchSize, int seqLen)
-    {
-        int total = batchSize * seqLen;
-        var dInput = TensorAllocator.Rent<T>(new[] { total, _modelDimension });
-
-        for (int mi = 0; mi < _numHouseholders; mi++)
-        {
-            for (int pos = 0; pos < total; pos++)
-            {
-                for (int hi = 0; hi < _numHeads; hi++)
-                {
-                    for (int d = 0; d < _headDimension; d++)
-                    {
-                        T dH = dHVecs[new[] { pos, mi, hi, d }];
-                        for (int j = 0; j < _modelDimension; j++)
-                        {
-                            dInput[new[] { pos, j }] = NumOps.Add(
-                                dInput[new[] { pos, j }],
-                                NumOps.Multiply(dH, _householderWeights[new[] { mi, j, d }]));
-                        }
-                    }
-                }
-            }
-        }
-
-        return dInput;
-    }
-
-    private Tensor<T> ComputeSiLUDerivative(Tensor<T> x)
-    {
-        var sig = Engine.Sigmoid(x);
-        var oneMinusSig = Engine.ScalarMinusTensor(NumOps.One, sig);
-        var xTimesOneMinusSig = Engine.TensorMultiply(x, oneMinusSig);
-        var onePlusXSig = Engine.TensorAddScalar(xTimesOneMinusSig, NumOps.One);
-        return Engine.TensorMultiply(sig, onePlusXSig);
-    }
-
-    private Tensor<T> CreateOnesLike(Tensor<T> template)
-    {
-        var ones = new Tensor<T>(template._shape);
-        ones.Fill(NumOps.One);
-        return ones;
-    }
 
     #region Parameter Management
 
@@ -696,7 +568,6 @@ public partial class GatedDeltaProductLayer<T> : LayerBase<T>, IShapeContract
         _lastBeta = null;
         _lastAlpha = null;
         _lastHouseholderVecs = null;
-        _lastStates = null;
         _lastRecurrenceOutput = null;
         _lastOutputGate = null;
         _lastOutputGateRaw = null;

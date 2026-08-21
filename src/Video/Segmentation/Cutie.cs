@@ -674,8 +674,7 @@ public class Cutie<T> : NeuralNetworkBase<T>
             foreach (var (key, _) in _memoryBank)
             {
                 // score[b,1,h,w] = sum_c query*key  (reduce over the channel axis, keep it for broadcast).
-                var score = Engine.TensorMultiplyScalar(
-                    Engine.ReduceSum(Engine.TensorMultiply(query, key), new[] { 1 }, keepDims: true), scale);
+                var score = ComputeFiniteMemoryAttentionScore(query, key, scale);
                 scaledScores.Add(score);
                 maxScore = maxScore is null ? score : Engine.TensorMax(maxScore, score);
             }
@@ -713,6 +712,28 @@ public class Cutie<T> : NeuralNetworkBase<T>
         }
 
         return attended;
+    }
+
+    /// <summary>
+    /// Computes one scaled memory-attention score and rejects non-finite results before they can
+    /// enter max-subtracted softmax. Max subtraction stabilizes exponentiation, but it cannot repair
+    /// an overflowed dot product: Infinity - Infinity is NaN.
+    /// </summary>
+    internal Tensor<T> ComputeFiniteMemoryAttentionScore(Tensor<T> query, Tensor<T> key, T scale)
+    {
+        var score = Engine.TensorMultiplyScalar(
+            Engine.ReduceSum(Engine.TensorMultiply(query, key), new[] { 1 }, keepDims: true), scale);
+
+        for (int i = 0; i < score.Length; i++)
+        {
+            if (NumOps.IsNaN(score[i]) || NumOps.IsInfinity(score[i]))
+            {
+                throw new ArithmeticException(
+                    $"Memory attention score[{i}] is non-finite; query/key magnitudes overflowed the dot product.");
+            }
+        }
+
+        return score;
     }
 
     private Tensor<T> DecodeMask(Tensor<T> features)

@@ -841,6 +841,8 @@ public class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
                 nameof(appliedGradients));
         }
 
+        var configuredMask = GetValidatedWeightDecayMask(updatedParameters.Length);
+
         if (_previousM == null || _previousV == null || _previousM.Length != updatedParameters.Length || _previousT == 0)
         {
             return base.ReverseUpdate(updatedParameters, appliedGradients);
@@ -885,6 +887,8 @@ public class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
         // This is an approximation using the updated params
         var weightDecayVec = Vector<T>.CreateDefault(updatedParameters.Length, NumOps.FromDouble(_options.WeightDecay));
         var weightDecayTerm = (Vector<T>)Engine.Multiply(updatedParameters, weightDecayVec);
+        if (configuredMask is { } reverseMask)
+            weightDecayTerm = Engine.Multiply(weightDecayTerm, reverseMask);
         var scaledWeightDecay = (Vector<T>)Engine.Multiply(weightDecayTerm, currentLrVec);
 
         var afterAdamReverse = (Vector<T>)Engine.Add(updatedParameters, scaledAdamUpdate);
@@ -1044,7 +1048,7 @@ public class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
     /// <summary>
     /// Gets whether this optimizer supports GPU-accelerated parameter updates.
     /// </summary>
-    public override bool SupportsGpuUpdate => true;
+    public override bool SupportsGpuUpdate => _options.WeightDecayMask is null;
 
     /// <summary>
     /// Initializes AdamW optimizer state on the GPU.
@@ -1067,6 +1071,13 @@ public class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
     /// </summary>
     public override void UpdateParametersGpu(IGpuBuffer parameters, IGpuBuffer gradients, int parameterCount, IDirectGpuBackend backend)
     {
+        if (GetValidatedWeightDecayMask(parameterCount) is not null)
+        {
+            throw new NotSupportedException(
+                "The scalar GPU AdamW kernel cannot apply an elementwise weight-decay mask. " +
+                "Use the eager optimizer update path for masked decay.");
+        }
+
         if (!_gpuStateInitialized || _gpuM == null || _gpuV == null)
         {
             InitializeGpuState(parameterCount, backend);

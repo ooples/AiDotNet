@@ -145,47 +145,4 @@ public class QuantumNeuralNetworkTests : NeuralNetworkModelTestBase<float>
         }
     }
 
-    [Fact]
-    public void BornRuleTargets_AreProjectedOntoTheProbabilitySimplex()
-    {
-        using var network = CreateNetwork();
-        var target = new Tensor<float>([3]);
-        target[0] = -2.0f;
-        target[1] = 1.0f;
-        target[2] = -1.0f;
-
-        var projected = MakeTargetWellPosedForLoss(network, target, new Random(1));
-
-        Assert.Equal(0.5f, projected[0], 6);
-        Assert.Equal(0.25f, projected[1], 6);
-        Assert.Equal(0.25f, projected[2], 6);
-        Assert.Equal(1.0f, projected.ToArray().Sum(), 6);
-    }
-
-    [Fact]
-    public void ZeroBornRuleTarget_UsesAUniformDistribution()
-    {
-        using var network = CreateNetwork();
-        var target = new Tensor<float>([4]);
-
-        var projected = MakeTargetWellPosedForLoss(network, target, new Random(1));
-
-        Assert.All(projected.ToArray(), value => Assert.Equal(0.25f, value, 6));
-    }
-
-    [Fact]
-    public void MaximumMagnitudeBornRuleTargets_RemainAProbabilityDistribution()
-    {
-        using var network = CreateNetwork();
-        var target = new Tensor<float>([3]);
-        target[0] = float.MaxValue;
-        target[1] = -float.MaxValue;
-
-        var projected = MakeTargetWellPosedForLoss(network, target, new Random(1));
-
-        Assert.Equal(0.5f, projected[0], 6);
-        Assert.Equal(0.5f, projected[1], 6);
-        Assert.Equal(0.0f, projected[2], 6);
-        Assert.Equal(1.0f, projected.ToArray().Sum(), 6);
-    }
 }

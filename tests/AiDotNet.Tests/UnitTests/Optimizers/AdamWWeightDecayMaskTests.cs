@@ -103,6 +103,7 @@ public class AdamWWeightDecayMaskTests
             RandomSeed = 8675309,
             MaxIterations = 37,
             MaxGradientValue = 0.125,
+            InitialLearningRate = 0.012345,
             ShuffleData = false,
             WeightDecay = 0.42,
             WeightDecayMask = sourceMask,
@@ -113,6 +114,7 @@ public class AdamWWeightDecayMaskTests
         Assert.Equal(source.RandomSeed, copy.RandomSeed);
         Assert.Equal(source.MaxIterations, copy.MaxIterations);
         Assert.Equal(source.MaxGradientValue, copy.MaxGradientValue);
+        Assert.Equal(source.InitialLearningRate, copy.InitialLearningRate);
         Assert.Equal(source.ShuffleData, copy.ShuffleData);
         Assert.Equal(source.WeightDecay, copy.WeightDecay);
         Assert.NotNull(copy.WeightDecayMask);
@@ -160,6 +162,51 @@ public class AdamWWeightDecayMaskTests
             new Vector<double>(new[] { 0.0, 0.0, 0.0 })));
 
         Assert.Contains("mask length", error.Message, StringComparison.OrdinalIgnoreCase);
+
+        // A rejected shape must not advance the bias-correction step or allocate moments. Once the
+        // mask is corrected, this must behave exactly like the optimizer's first accepted update.
+        options.WeightDecayMask = new Vector<double>(new[] { 1.0, 0.0, 1.0 });
+        var updated = optimizer.UpdateParameters(
+            new Vector<double>(new[] { 1.0, 1.0, 1.0 }),
+            new Vector<double>(new[] { 0.0, 0.0, 0.0 }));
+        Assert.Equal(1.0 - options.InitialLearningRate * options.WeightDecay, updated[0], 12);
+        Assert.Equal(1.0, updated[1], 12);
+        Assert.Equal(1.0 - options.InitialLearningRate * options.WeightDecay, updated[2], 12);
+    }
+
+    [Fact]
+    public void MaskedOptimizer_DeclinesScalarGpuUpdate()
+    {
+        var options = new AdamWOptimizerOptions<double, Matrix<double>, Vector<double>>
+        {
+            WeightDecayMask = new Vector<double>(new[] { 0.0, 1.0 }),
+        };
+        var optimizer = new AdamWOptimizer<double, Matrix<double>, Vector<double>>(null, options);
+
+        Assert.False(optimizer.SupportsGpuUpdate);
+    }
+
+    [Fact]
+    public void ReverseUpdate_DoesNotRestoreDecayForExemptParameters()
+    {
+        var options = new AdamWOptimizerOptions<double, Matrix<double>, Vector<double>>
+        {
+            InitialLearningRate = 0.1,
+            WeightDecay = 0.5,
+            EnableGradientClipping = false,
+            WeightDecayMask = new Vector<double>(new[] { 0.0, 1.0 }),
+        };
+        var optimizer = new AdamWOptimizer<double, Matrix<double>, Vector<double>>(null, options);
+        var original = new Vector<double>(new[] { 2.0, 2.0 });
+        var gradient = new Vector<double>(new[] { 0.0, 0.0 });
+
+        var updated = optimizer.UpdateParameters(original, gradient);
+        var recovered = optimizer.ReverseUpdate(updated, gradient);
+
+        Assert.Equal(2.0, updated[0], 12);
+        Assert.Equal(2.0, recovered[0], 12);
+        Assert.True(recovered[1] < 2.0,
+            "AdamW reverse decay is approximate for decayed parameters and should use the updated value.");
     }
 
     [Fact]

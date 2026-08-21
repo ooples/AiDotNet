@@ -2,6 +2,7 @@ using AiDotNet.TimeSeries.AnomalyDetection;
 using Xunit;
 using System.Threading.Tasks;
 using System.Reflection;
+using System.Collections.Generic;
 
 namespace AiDotNet.Tests.UnitTests.TimeSeries;
 
@@ -105,11 +106,23 @@ public class LSTMVAETests
         // gradient must use the same bounded variance instead of evaluating exp(1000).
         var encoderField = typeof(LSTMVAE<double>).GetField("_encoder", BindingFlags.Instance | BindingFlags.NonPublic);
         Assert.NotNull(encoderField);
-        object encoder = Assert.IsAssignableFrom<object>(encoderField!.GetValue(model));
+        object? encoderValue = encoderField!.GetValue(model);
+        Assert.NotNull(encoderValue);
+        object encoder = encoderValue!;
         FieldInfo? logVarBiasField = encoder.GetType().GetField("_logVarBias", BindingFlags.Instance | BindingFlags.NonPublic);
         Assert.NotNull(logVarBiasField);
         var logVarBias = Assert.IsType<Tensor<double>>(logVarBiasField!.GetValue(encoder));
         logVarBias[0] = 1000.0;
+
+        string[] parameterFields = ["_weights", "_bias", "_meanWeights", "_meanBias", "_logVarWeights", "_logVarBias"];
+        var parametersBefore = new Dictionary<string, double[]>();
+        foreach (string fieldName in parameterFields)
+        {
+            FieldInfo? parameterField = encoder.GetType().GetField(fieldName, BindingFlags.Instance | BindingFlags.NonPublic);
+            Assert.NotNull(parameterField);
+            var parameter = Assert.IsType<Tensor<double>>(parameterField!.GetValue(encoder));
+            parametersBefore[fieldName] = parameter.ToArray();
+        }
 
         var inputs = new Matrix<double>(2, 2);
         inputs[0, 0] = 0.25;
@@ -118,7 +131,7 @@ public class LSTMVAETests
         inputs[1, 1] = 0.75;
         model.Train(inputs, new Vector<double>(new[] { 0.0, 0.0 }));
 
-        string[] parameterFields = ["_weights", "_bias", "_meanWeights", "_meanBias", "_logVarWeights", "_logVarBias"];
+        bool anyParameterMoved = false;
         foreach (string fieldName in parameterFields)
         {
             FieldInfo? parameterField = encoder.GetType().GetField(fieldName, BindingFlags.Instance | BindingFlags.NonPublic);
@@ -128,7 +141,36 @@ public class LSTMVAETests
             {
                 Assert.True(!double.IsNaN(parameter[i]) && !double.IsInfinity(parameter[i]),
                     $"Encoder parameter {fieldName}[{i}] became non-finite after the bounded-log-variance step: {parameter[i]}.");
+                anyParameterMoved |= parameter[i] != parametersBefore[fieldName][i];
             }
+        }
+
+        Assert.True(anyParameterMoved,
+            "The extreme-log-variance training step stayed finite but did not update any encoder parameter.");
+    }
+
+    [Theory]
+    [InlineData(1)]
+    [InlineData(3)]
+    public void DecoderBackward_MirrorsForwardLatentPaddingAndTruncation(int latentLength)
+    {
+        using var decoder = new LSTMDecoderTensor<double>(latentDim: 2, outputSize: 2, hiddenSize: 2);
+        using var latent = new Tensor<double>([latentLength]);
+        for (int i = 0; i < latent.Length; i++) latent[i] = 0.25 * (i + 1);
+
+        var (output, hidden) = decoder.DecodeWithCache(latent);
+        using (output)
+        using (hidden)
+        using (var dOutput = new Tensor<double>([2]))
+        {
+            dOutput[0] = 0.5;
+            dOutput[1] = -0.25;
+            using var dLatent = decoder.AccumulateGradients(latent, hidden, dOutput);
+
+            Assert.Equal(2, dLatent.Length);
+            Assert.All(dLatent.ToArray(), value =>
+                Assert.True(!double.IsNaN(value) && !double.IsInfinity(value),
+                    $"Decoder latent gradient was non-finite: {value}."));
         }
     }
 

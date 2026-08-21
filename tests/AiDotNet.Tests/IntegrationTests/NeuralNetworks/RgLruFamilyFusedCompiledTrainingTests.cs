@@ -85,8 +85,8 @@ public sealed class RgLruFamilyFusedCompiledTrainingTests
             Assert.True(
                 parametersBefore.Where((value, index) => value != parametersAfter[index]).Any(),
                 "The fused plan did not update any live parameter; a rejected non-finite step must not count as success.");
-            Assert.True(float.IsFinite(model.GetLastLoss()), "The fused training loss was not finite.");
-            Assert.All(parametersAfter, value => Assert.True(float.IsFinite(value), "A fused parameter update was not finite."));
+            Assert.True(IsFinite(model.GetLastLoss()), "The fused training loss was not finite.");
+            Assert.All(parametersAfter, value => Assert.True(IsFinite(value), "A fused parameter update was not finite."));
         }
         finally
         {
@@ -94,6 +94,9 @@ public sealed class RgLruFamilyFusedCompiledTrainingTests
             TensorCodecOptions.SetCurrent(originalOptions);
         }
     }
+
+    private static bool IsFinite(float value)
+        => !float.IsNaN(value) && !float.IsInfinity(value);
 
     private interface IFusedTrainingProbe : AiDotNet.Interfaces.INeuralNetworkModel<float>, IDisposable
     {

@@ -42,8 +42,8 @@ public class GatedDeltaProductTapeRegressionTests
         Assert.NotNull(analytical);
 
         const double step = 1e-5;
-        int strongestIndex = -1;
-        double strongestNumerical = 0.0;
+        double strongestMagnitude = 0.0;
+        var mismatches = new List<string>();
         for (int i = 0; i < weights.Length; i++)
         {
             double original = weights[i];
@@ -54,20 +54,48 @@ public class GatedDeltaProductTapeRegressionTests
             weights[i] = original;
 
             double numerical = (plus - minus) / (2.0 * step);
-            if (Math.Abs(numerical) > Math.Abs(strongestNumerical))
-            {
-                strongestNumerical = numerical;
-                strongestIndex = i;
-            }
+            strongestMagnitude = Math.Max(strongestMagnitude, Math.Abs(numerical));
+
+            double scale = Math.Max(1.0, Math.Max(Math.Abs(numerical), Math.Abs(analytical![i])));
+            double relativeError = Math.Abs(numerical - analytical[i]) / scale;
+            if (relativeError >= 1e-3)
+                mismatches.Add(
+                    $"[{i}] numerical={numerical:G17}, analytical={analytical[i]:G17}, rel={relativeError:G6}");
         }
 
-        Assert.True(strongestIndex >= 0 && Math.Abs(strongestNumerical) > 1e-7,
+        Assert.True(strongestMagnitude > 1e-7,
             "The test input did not exercise a Householder-weight derivative.");
-        double scale = Math.Max(1.0, Math.Max(Math.Abs(strongestNumerical), Math.Abs(analytical![strongestIndex])));
-        double relativeError = Math.Abs(strongestNumerical - analytical[strongestIndex]) / scale;
-        Assert.True(relativeError < 1e-3,
-            $"Householder gradient mismatch at {strongestIndex}: numerical={strongestNumerical:G17}, " +
-            $"analytical={analytical[strongestIndex]:G17}, relative error={relativeError:G6}.");
+        Assert.True(mismatches.Count == 0,
+            "Householder gradient mismatch:" + Environment.NewLine + string.Join(Environment.NewLine, mismatches));
+    }
+
+    [Fact]
+    public void BatchedHouseholderVectors_MatchIndependentSequenceForwards()
+    {
+        using var layer = new GatedDeltaProductLayer<double>(
+            sequenceLength: 2, modelDimension: 4, numHeads: 2, numHouseholders: 2);
+        layer.SetTrainingMode(false);
+        using var input = new Tensor<double>([2, 2, 4]);
+        for (int i = 0; i < input.Length; i++)
+            input[i] = Math.Sin((i + 1) * 0.37);
+
+        using var batchedOutput = layer.Forward(input);
+        for (int batch = 0; batch < 2; batch++)
+        {
+            layer.ResetState();
+            using var sequence = new Tensor<double>([2, 4]);
+            for (int i = 0; i < sequence.Length; i++)
+                sequence[i] = input[(batch * sequence.Length) + i];
+
+            using var independentOutput = layer.Forward(sequence);
+            for (int i = 0; i < independentOutput.Length; i++)
+            {
+                Assert.Equal(
+                    independentOutput[i],
+                    batchedOutput[(batch * independentOutput.Length) + i],
+                    10);
+            }
+        }
     }
 
     private static double ProjectionLoss(

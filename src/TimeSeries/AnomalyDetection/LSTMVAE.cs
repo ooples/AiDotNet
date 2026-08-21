@@ -962,8 +962,11 @@ internal partial class LSTMDecoderTensor<T> : NeuralNetworks.Layers.LayerBase<T>
         var tanhDerivative = Engine.TensorSubtract(ones, Engine.TensorMultiply(hidden, hidden));
         var dPre = Engine.TensorMultiply(dHidden, tanhDerivative);                     // [H]
 
-        // Latent projection.
-        var latentRow = latent.Reshape(new[] { 1, _latentDim });                       // [1,L]
+        // Latent projection. DecodeWithCache pads short latent vectors and truncates long ones;
+        // backward must use the exact same effective input instead of requiring latent.Length == L.
+        var latentRow = new Tensor<T>(new[] { 1, _latentDim });                        // [1,L]
+        int effectiveLatent = Math.Min(latent.Length, _latentDim);
+        latent.Data.Span[..effectiveLatent].CopyTo(latentRow.Data.Span);
         var dPreCol = dPre.Reshape(new[] { _hiddenSize, 1 });                          // [H,1]
         _weightsGrad = Engine.TensorAdd(_weightsGrad, Engine.TensorMatMul(dPreCol, latentRow));
         _biasGrad = Engine.TensorAdd(_biasGrad, dPre);
