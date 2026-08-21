@@ -52,6 +52,16 @@ public class BuilderJitValueStabilityTests
         }
 
         public bool SawJitDisabled => Messages.Exists(m => m.Contains("JIT disabled"));
+
+        /// <summary>
+        /// Everything Trace emitted, for the assertion messages. A bare "the check did not fire"
+        /// cannot distinguish "the plan was judged stable" from "compilation threw and the OTHER
+        /// fallback warning was traced" from "the builder never built a compiled function at all",
+        /// and those have three different fixes.
+        /// </summary>
+        public string Transcript => Messages.Count == 0
+            ? "(Trace emitted nothing)"
+            : string.Join(" | ", Messages.ConvertAll(m => m.Trim()));
     }
 
     private static double MaxPairwise(Func<Tensor<float>, Tensor<float>> predict, int count = 12)
@@ -105,7 +115,7 @@ public class BuilderJitValueStabilityTests
         return (features, labels);
     }
 
-    private static async Task<(double JitMax, double EagerMax, bool SawJitDisabled)> BuildAndMeasure(
+    private static async Task<(double JitMax, double EagerMax, bool SawJitDisabled, string Transcript)> BuildAndMeasure(
         IFullModel<float, Tensor<float>, Tensor<float>> model,
         Func<Tensor<float>, Tensor<float>> eagerPredict,
         int outputSize)
@@ -128,7 +138,8 @@ public class BuilderJitValueStabilityTests
 
             var result = await builder.BuildAsync();
 
-            return (MaxPairwise(result.Predict), MaxPairwise(eagerPredict), collector.SawJitDisabled);
+            return (MaxPairwise(result.Predict), MaxPairwise(eagerPredict), collector.SawJitDisabled,
+                collector.Transcript);
         }
         finally
         {
@@ -162,13 +173,13 @@ public class BuilderJitValueStabilityTests
                 new AdamOptimizerOptions<float, Tensor<float>, Tensor<float>>
                 { InitialLearningRate = 0.0003 }));
 
-        var (jitMax, eagerMax, sawJitDisabled) =
+        var (jitMax, eagerMax, sawJitDisabled, transcript) =
             await BuildAndMeasure(model, model.Predict, Vocab);
 
         // The check must fire on this model...
         Assert.True(sawJitDisabled,
             "the builder should have detected that the Transformer's plan is not value-stable " +
-            "and traced the fallback");
+            $"and traced the fallback. Trace said: {transcript}");
 
         // ...and the answers must be right regardless, which is the point of falling back.
         Assert.True(jitMax > 1e-4,
@@ -192,12 +203,12 @@ public class BuilderJitValueStabilityTests
 
         var model = new FeedForwardNeuralNetwork<float>(architecture);
 
-        var (jitMax, eagerMax, sawJitDisabled) =
+        var (jitMax, eagerMax, sawJitDisabled, transcript) =
             await BuildAndMeasure(model, model.Predict, 4);
 
         Assert.False(sawJitDisabled,
             "a dense network's trace is value-stable, so the builder should keep using the " +
-            "compiled plan rather than falling back -- otherwise ConfigureJitCompilation is inert");
+            $"compiled plan rather than falling back -- otherwise ConfigureJitCompilation is inert. Trace said: {transcript}");
 
         Assert.True(jitMax > 1e-6,
             $"the compiled plan ignores its input: max pairwise L2 = {jitMax:E3}");
