@@ -331,18 +331,8 @@ public partial class QuantumLayer<T> : LayerBase<T>, IShapeContract
 
         int dimension = 1 << _numQubits; // State dimension = 2^numQubits
 
-        // Track all allocated buffers for exception safety
-        IGpuBuffer? circuitRealBuffer = null;
-        IGpuBuffer? circuitImagBuffer = null;
-        IGpuBuffer? stateRealBuffer = null;
-        IGpuBuffer? stateImagBuffer = null;
-        IGpuBuffer? squaredBuffer = null;
-        IGpuBuffer? normSqBuffer = null;
-        IGpuBuffer? normSqRegularizedBuffer = null;
-        IGpuBuffer? normBuffer = null;
-        IGpuBuffer? invNormBuffer = null;
-        IGpuBuffer? resultRealBuffer = null;
-        IGpuBuffer? resultImagBuffer = null;
+        // The output buffer transfers ownership to the returned tensor on success. Every other
+        // temporary is a lexical using below, so exceptions cannot leak GPU allocations.
         IGpuBuffer? probabilitiesBuffer = null;
 
         try
@@ -359,17 +349,13 @@ public partial class QuantumLayer<T> : LayerBase<T>, IShapeContract
                     circuitImagFlat[idx] = NumOps.ToFloat(_quantumCircuit[i, j].Imaginary);
                 }
             }
-            var circuitReal = backend.AllocateBuffer(circuitRealFlat);
-            circuitRealBuffer = circuitReal;
-            var circuitImag = backend.AllocateBuffer(circuitImagFlat);
-            circuitImagBuffer = circuitImag;
+            using var circuitReal = backend.AllocateBuffer(circuitRealFlat);
+            using var circuitImag = backend.AllocateBuffer(circuitImagFlat);
 
             // GPU-only state initialization: pad input and L2 normalize per batch
             // Allocate state buffers on GPU
-            var stateReal = backend.AllocateBuffer(batchSize * dimension);
-            stateRealBuffer = stateReal;
-            var stateImag = backend.AllocateBuffer(batchSize * dimension);
-            stateImagBuffer = stateImag;
+            using var stateReal = backend.AllocateBuffer(batchSize * dimension);
+            using var stateImag = backend.AllocateBuffer(batchSize * dimension);
 
             // Zero the buffers (padding with zeros)
             backend.Fill(stateReal, 0.0f, batchSize * dimension);
@@ -381,38 +367,31 @@ public partial class QuantumLayer<T> : LayerBase<T>, IShapeContract
 
             // L2 normalize each batch element on GPU
             // Step 1: Square the values
-            var squared = backend.AllocateBuffer(batchSize * dimension);
-            squaredBuffer = squared;
+            using var squared = backend.AllocateBuffer(batchSize * dimension);
             backend.Multiply(stateReal, stateReal, squared, batchSize * dimension);
 
             // Step 2: Sum per batch to get sum of squares
-            var normSq = backend.AllocateBuffer(batchSize);
-            normSqBuffer = normSq;
+            using var normSq = backend.AllocateBuffer(batchSize);
             backend.SumAxis(squared, normSq, batchSize, dimension);
 
             // Step 3: Add epsilon before the square root, matching ForwardTraced exactly.
-            var normSqRegularized = backend.AllocateBuffer(batchSize);
-            normSqRegularizedBuffer = normSqRegularized;
+            using var normSqRegularized = backend.AllocateBuffer(batchSize);
             backend.AddScalar(normSq, normSqRegularized, 1e-10f, batchSize);
 
             // Step 4: Sqrt to get L2 norm
-            var norm = backend.AllocateBuffer(batchSize);
-            normBuffer = norm;
+            using var norm = backend.AllocateBuffer(batchSize);
             backend.Sqrt(normSqRegularized, norm, batchSize);
 
             // Step 5: Reciprocal to get 1/norm
-            var invNorm = backend.AllocateBuffer(batchSize);
-            invNormBuffer = invNorm;
+            using var invNorm = backend.AllocateBuffer(batchSize);
             backend.Reciprocal(norm, invNorm, batchSize);
 
             // Step 6: Broadcast multiply to normalize each row
             backend.BroadcastMultiplyFirstAxis(stateReal, invNorm, stateReal, batchSize, dimension);
 
             // Allocate output state buffers
-            var resultReal = backend.AllocateBuffer(batchSize * dimension);
-            resultRealBuffer = resultReal;
-            var resultImag = backend.AllocateBuffer(batchSize * dimension);
-            resultImagBuffer = resultImag;
+            using var resultReal = backend.AllocateBuffer(batchSize * dimension);
+            using var resultImag = backend.AllocateBuffer(batchSize * dimension);
 
             // Apply quantum circuit: complex matrix multiplication
             backend.ComplexMatVec(
@@ -455,18 +434,6 @@ public partial class QuantumLayer<T> : LayerBase<T>, IShapeContract
         }
         finally
         {
-            // Dispose all intermediate buffers (not the output which was transferred)
-            circuitRealBuffer?.Dispose();
-            circuitImagBuffer?.Dispose();
-            stateRealBuffer?.Dispose();
-            stateImagBuffer?.Dispose();
-            squaredBuffer?.Dispose();
-            normSqBuffer?.Dispose();
-            normSqRegularizedBuffer?.Dispose();
-            normBuffer?.Dispose();
-            invNormBuffer?.Dispose();
-            resultRealBuffer?.Dispose();
-            resultImagBuffer?.Dispose();
             probabilitiesBuffer?.Dispose(); // Only disposed on exception (null on success)
         }
     }

@@ -121,12 +121,12 @@ public partial class LSTMVAE<T> : TimeSeriesModelBase<T>
                     // the per-element ops bypass the deferred-materializer
                     // monitor (the same lock contention that profiling on
                     // PR #1184 showed dominated this method's wall-clock).
-                    var z = new Tensor<T>(mean._shape);
+                    using var z = new Tensor<T>(mean._shape);
                     // epsilon and sigma are kept because the reparameterization gradient needs them:
                     // z = mu + sigma * eps means dz/dlogVar = 0.5 * sigma * eps. Regenerating eps
                     // after the forward would differentiate a DIFFERENT sample than the one decoded.
-                    var epsilon = new Tensor<T>(mean._shape);
-                    var sigma = new Tensor<T>(mean._shape);
+                    using var epsilon = new Tensor<T>(mean._shape);
+                    using var sigma = new Tensor<T>(mean._shape);
                     var clampedActive = new bool[mean.Length];
                     {
                         var meanSpan = mean.Data.Span;
@@ -193,7 +193,7 @@ public partial class LSTMVAE<T> : TimeSeriesModelBase<T>
                     T reconScale = _numOps.FromDouble(reconLength > 0 ? 2.0 / reconLength : 0.0);
 
                     // dL/dx_hat = 2 (x_hat - x) / n
-                    var dOutput = new Tensor<T>(reconstruction._shape);
+                    using var dOutput = new Tensor<T>(reconstruction._shape);
                     {
                         var dOutSpan = dOutput.Data.Span;
                         var reconSpan = reconstruction.Data.Span;
@@ -203,17 +203,16 @@ public partial class LSTMVAE<T> : TimeSeriesModelBase<T>
                         }
                     }
 
-                    var dLatent = _decoder.AccumulateGradients(z, decoderHidden, dOutput);
+                    using var dLatent = _decoder.AccumulateGradients(z, decoderHidden, dOutput);
 
                     // Reparameterization + KL, per latent coordinate.
-                    var dMean = new Tensor<T>(mean._shape);
-                    var dLogVar = new Tensor<T>(logVar._shape);
+                    using var dMean = new Tensor<T>(mean._shape);
+                    using var dLogVar = new Tensor<T>(logVar._shape);
                     {
                         var dLatentSpan = dLatent.Data.Span;
                         var dMeanSpan = dMean.Data.Span;
                         var dLogVarSpan = dLogVar.Data.Span;
                         var meanSpan = mean.Data.Span;
-                        var lvSpan = logVar.Data.Span;
                         var sigmaSpan = sigma.Data.Span;
                         var epsSpan = epsilon.Data.Span;
                         T half = _numOps.FromDouble(0.5);
@@ -227,16 +226,21 @@ public partial class LSTMVAE<T> : TimeSeriesModelBase<T>
                                 dz, _numOps.Multiply(half, _numOps.Multiply(sigmaSpan[j], epsSpan[j])));
 
                             // d/dmu KL = mu ; d/dlogVar KL = 0.5 * (exp(logVar) - 1).
+                            // sigma was computed from the clamped log-variance, so sigma^2 is the
+                            // same bounded exp(clampedLogVar) used by the forward distribution. Using
+                            // exp(raw logVar) here defeated the forward clamp and overflowed the
+                            // gradient when an encoder coordinate had already diverged.
                             T dMeanFromKL = _numOps.Multiply(beta, meanSpan[j]);
+                            T boundedVariance = _numOps.Multiply(sigmaSpan[j], sigmaSpan[j]);
                             T dLogVarFromKL = _numOps.Multiply(
                                 beta,
-                                _numOps.Multiply(half, _numOps.Subtract(_numOps.Exp(lvSpan[j]), _numOps.One)));
+                                _numOps.Multiply(half, _numOps.Subtract(boundedVariance, _numOps.One)));
 
                             dMeanSpan[j] = _numOps.Add(dz, dMeanFromKL);
 
                             // A saturated clamp has zero local derivative, so the reconstruction path
-                            // contributes nothing there. The KL term still applies: it is a function of
-                            // the RAW logVar and is what pulls a diverged coordinate back into range.
+                            // contributes nothing there. Keep a bounded KL restoring gradient so a
+                            // diverged coordinate can return to range without exp(raw logVar) overflowing.
                             dLogVarSpan[j] = clampedActive[j]
                                 ? dLogVarFromKL
                                 : _numOps.Add(dLogVarFromRecon, dLogVarFromKL);
@@ -678,13 +682,13 @@ internal partial class LSTMEncoderTensor<T> : NeuralNetworks.Layers.LayerBase<T>
             Engine.TensorMatMul(Engine.TensorTranspose(_meanWeights), dMeanCol).Reshape(new[] { _hiddenSize }),
             Engine.TensorMatMul(Engine.TensorTranspose(_logVarWeights), dLogVarCol).Reshape(new[] { _hiddenSize }));
 
-        var ones = new Tensor<T>(new[] { _hiddenSize });
+        using var ones = new Tensor<T>(new[] { _hiddenSize });
         ones.Fill(NumOps.One);
         var tanhDerivative = Engine.TensorSubtract(ones, Engine.TensorMultiply(hidden, hidden));
         var dPre = Engine.TensorMultiply(dHidden, tanhDerivative);                     // [H]
 
         // Input projection. The forward pads or truncates x to _inputSize, so mirror that here.
-        var inputRow = new Tensor<T>(new[] { 1, _inputSize });
+        using var inputRow = new Tensor<T>(new[] { 1, _inputSize });
         {
             var span = inputRow.Data.Span;
             int effective = Math.Min(input.Length, _inputSize);
@@ -953,7 +957,7 @@ internal partial class LSTMDecoderTensor<T> : NeuralNetworks.Layers.LayerBase<T>
         // Into the hidden activation, then through tanh: d/dx tanh(x) = 1 - tanh(x)^2.
         var dHidden = Engine.TensorMatMul(Engine.TensorTranspose(_outputWeights), dOutCol)
             .Reshape(new[] { _hiddenSize });                                           // [H]
-        var ones = new Tensor<T>(new[] { _hiddenSize });
+        using var ones = new Tensor<T>(new[] { _hiddenSize });
         ones.Fill(NumOps.One);
         var tanhDerivative = Engine.TensorSubtract(ones, Engine.TensorMultiply(hidden, hidden));
         var dPre = Engine.TensorMultiply(dHidden, tanhDerivative);                     // [H]

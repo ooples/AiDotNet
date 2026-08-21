@@ -886,6 +886,42 @@ public partial class LSTMLayer<T> : LayerBase<T>, IShapeContract
         _isInitialized = false;
     }
 
+    /// <inheritdoc />
+    public override LayerBase<T> Clone()
+    {
+        // LayerBase.Clone uses MemberwiseClone. That is unsafe for a lazy LSTM because the clone and
+        // source then share LayerBase's mutable parameter registry and generated manifest objects.
+        // BidirectionalLayer clones its inner LSTM before either direction is materialized; when the
+        // directions later initialize, one registration pass overwrites the other's manifest and a
+        // subsequent model clone copies fresh-random gate weights. Reconstructing the layer gives each
+        // direction independent lazy state, exactly like two separately-created recurrent modules.
+        var copy = _useVectorActivation
+            ? new LSTMLayer<T>(_hiddenSize, _tanhVectorActivation!, _sigmoidVectorActivation)
+            : new LSTMLayer<T>(_hiddenSize, _tanhActivation, _sigmoidActivation);
+
+        copy.RandomSeed = RandomSeed;
+        copy.DeterministicForward = DeterministicForward;
+        copy.UseStreamingAllocator = UseStreamingAllocator;
+
+        if (_isInitialized)
+        {
+            copy._inputSize = _inputSize;
+            copy.InputShape = (int[])InputShape.Clone();
+            copy.OutputShape = (int[])OutputShape.Clone();
+
+            var sourceParameters = GetTrainableParameters();
+            var copiedParameters = new Tensor<T>[sourceParameters.Count];
+            for (int i = 0; i < sourceParameters.Count; i++)
+                copiedParameters[i] = (Tensor<T>)sourceParameters[i].Clone();
+
+            copy.SetTrainableParameters(copiedParameters);
+            copy._isInitialized = true;
+        }
+
+        copy.SetTrainingMode(IsTrainingMode);
+        return copy;
+    }
+
     /// <summary>
     /// Resolves <see cref="_inputSize"/> from <c>input.Shape[^1]</c> and propagates the
     /// full input shape into the layer's resolved input/output shapes (output preserves

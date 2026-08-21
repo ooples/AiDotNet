@@ -7,7 +7,7 @@ using Xunit;
 namespace AiDotNet.Tests.UnitTests.MetaLearning;
 
 /// <summary>
-/// Regression tests for the two MbPA defects behind the MbPAMechanismTests failures.
+/// Regression tests for the MbPA nearest-neighbour ordering defect.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -16,12 +16,6 @@ namespace AiDotNet.Tests.UnitTests.MetaLearning;
 /// copied straight into the result, so a method contracted to return "the k nearest" returned them
 /// worst-first: the nearest key was not at index 0, and the kernel weight belonging to the nearest
 /// entry was reported against the farthest one.
-/// </para>
-/// <para>
-/// <b>Defect 2 — batched multi-component output was refused.</b> <c>AssembleOutput</c> threw for
-/// <c>OutputDimension &gt; 1</c> with more than one row, so such a model could not predict a batch at
-/// all. The throw was an over-correction to a real earlier bug (silent truncation to component 0);
-/// the values fit a flat vector losslessly when written row-major.
 /// </para>
 /// <para>
 /// The kernel itself is Sprechmann et al. (arXiv:1802.10542) Memory-based Parameter Adaptation:

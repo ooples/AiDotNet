@@ -80,6 +80,14 @@ namespace AiDotNet.NER.SpanBased;
 public class BiaffineNER<T> : SpanBasedNERBase<T>
 {
     /// <summary>
+    /// The biaffine scorer uses sliced category tensors and broadcasted span grids whose compiled
+    /// replay currently does not preserve the eager tape's parameter aliases. A fused step can
+    /// therefore update stale buffers and drive the live scorer parameters non-finite. Keep this
+    /// architecture on the eager tape until those operators have alias-safe compiled kernels.
+    /// </summary>
+    protected override bool SupportsFusedCompiledTraining => false;
+
+    /// <summary>
     /// Creates a Biaffine-NER model in ONNX inference mode.
     /// </summary>
     public BiaffineNER(
@@ -133,7 +141,10 @@ public class BiaffineNER<T> : SpanBasedNERBase<T>
     /// <inheritdoc />
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
-        var optionsCopy = new SpanBasedNEROptions(NEROptions);
+        // Preserve the Biaffine-specific BiLSTM widths/dropouts as well as the shared span options.
+        // Down-casting to SpanBasedNEROptions here rebuilt clones with the paper defaults, so a
+        // conformance-sized model and its clone had different topology and decoded different labels.
+        var optionsCopy = new BiaffineNEROptions(NEROptions);
         if (!UseNativeMode && optionsCopy.ModelPath is { } p && !string.IsNullOrEmpty(p))
             return new BiaffineNER<T>(Architecture, p, optionsCopy);
         return new BiaffineNER<T>(Architecture, optionsCopy);

@@ -53,18 +53,15 @@ public class AdamWOptimizerOptions<T, TInput, TOutput> : GradientBasedOptimizerO
     {
         if (other is null) throw new ArgumentNullException(nameof(other));
 
-        // Base / inherited gradient-clipping options.
-        EnableGradientClipping = other.EnableGradientClipping;
-        MaxGradientNorm = other.MaxGradientNorm;
-        GradientClippingMethod = other.GradientClippingMethod;
+        CopyInheritedPropertiesFrom(other);
 
         // AdamW-specific options
         BatchSize = other.BatchSize;
-        InitialLearningRate = other.InitialLearningRate;
         Beta1 = other.Beta1;
         Beta2 = other.Beta2;
         Epsilon = other.Epsilon;
         WeightDecay = other.WeightDecay;
+        WeightDecayMask = other.WeightDecayMask?.Clone();
         UseAMSGrad = other.UseAMSGrad;
         UseAdaptiveBetas = other.UseAdaptiveBetas;
         MinBeta1 = other.MinBeta1;
@@ -169,7 +166,31 @@ public class AdamWOptimizerOptions<T, TInput, TOutput> : GradientBasedOptimizerO
     /// parameters whose value carries meaning rather than magnitude -- a recurrence's decay rate, for
     /// instance.</para>
     /// </remarks>
-    public Vector<T>? WeightDecayMask { get; set; }
+    public Vector<T>? WeightDecayMask
+    {
+        get => _weightDecayMask;
+        set
+        {
+            if (value is not null)
+            {
+                var numOps = MathHelper.GetNumericOperations<T>();
+                for (int i = 0; i < value.Length; i++)
+                {
+                    double multiplier = numOps.ToDouble(value[i]);
+                    if (double.IsNaN(multiplier) || double.IsInfinity(multiplier) || multiplier < 0.0 || multiplier > 1.0)
+                    {
+                        throw new ArgumentOutOfRangeException(
+                            nameof(value),
+                            $"Weight-decay mask entry {i} must be finite and in [0, 1]; got {multiplier}.");
+                    }
+                }
+            }
+
+            _weightDecayMask = value;
+        }
+    }
+
+    private Vector<T>? _weightDecayMask;
 
     /// <summary>
     /// Gets or sets whether to apply AMSGrad variant for improved convergence guarantees.

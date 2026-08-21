@@ -1,5 +1,8 @@
 using AiDotNet.Models.Options;
 using AiDotNet.Optimizers;
+using AiDotNet.Helpers;
+using AiDotNet.Tensors.Engines.Autodiff;
+using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
 
 namespace AiDotNet.Tests.UnitTests.Optimizers;
@@ -89,5 +92,102 @@ public class AdamWWeightDecayMaskTests
             "a masked optimizer must not report a fused config");
         Assert.True(withoutMask.TryGetFusedOptimizerConfig(out _),
             "an unmasked optimizer should still fuse exactly as before");
+    }
+
+    [Fact]
+    public void CopyConstructor_PreservesInheritedOptions_AndDeepCopiesMask()
+    {
+        var sourceMask = new Vector<double>(new[] { 0.0, 0.5, 1.0 });
+        var source = new AdamWOptimizerOptions<double, Matrix<double>, Vector<double>>
+        {
+            RandomSeed = 8675309,
+            MaxIterations = 37,
+            MaxGradientValue = 0.125,
+            ShuffleData = false,
+            WeightDecay = 0.42,
+            WeightDecayMask = sourceMask,
+        };
+
+        var copy = new AdamWOptimizerOptions<double, Matrix<double>, Vector<double>>(source);
+
+        Assert.Equal(source.RandomSeed, copy.RandomSeed);
+        Assert.Equal(source.MaxIterations, copy.MaxIterations);
+        Assert.Equal(source.MaxGradientValue, copy.MaxGradientValue);
+        Assert.Equal(source.ShuffleData, copy.ShuffleData);
+        Assert.Equal(source.WeightDecay, copy.WeightDecay);
+        Assert.NotNull(copy.WeightDecayMask);
+        Assert.NotSame(sourceMask, copy.WeightDecayMask);
+        Assert.Equal(sourceMask.ToArray(), copy.WeightDecayMask!.ToArray());
+
+        sourceMask[1] = 0.0;
+        Assert.Equal(0.5, copy.WeightDecayMask[1], 12);
+    }
+
+    [Fact]
+    public void InvalidMaskEntries_AreRejected_AtAssignmentAndUse()
+    {
+        var options = new AdamWOptimizerOptions<double, Matrix<double>, Vector<double>>();
+
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            options.WeightDecayMask = new Vector<double>(new[] { -0.01 }));
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            options.WeightDecayMask = new Vector<double>(new[] { 1.01 }));
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            options.WeightDecayMask = new Vector<double>(new[] { double.NaN }));
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            options.WeightDecayMask = new Vector<double>(new[] { double.PositiveInfinity }));
+
+        // Vector is mutable, so validate again at the update boundary rather than trusting the setter.
+        var mutableMask = new Vector<double>(new[] { 1.0 });
+        options.WeightDecayMask = mutableMask;
+        mutableMask[0] = double.NaN;
+        var optimizer = new AdamWOptimizer<double, Matrix<double>, Vector<double>>(null, options);
+        Assert.Throws<ArgumentOutOfRangeException>(() => optimizer.UpdateParameters(
+            new Vector<double>(new[] { 1.0 }), new Vector<double>(new[] { 0.0 })));
+    }
+
+    [Fact]
+    public void WrongLengthMask_IsRejectedBeforeOptimizerStateAdvances()
+    {
+        var options = new AdamWOptimizerOptions<double, Matrix<double>, Vector<double>>
+        {
+            WeightDecayMask = new Vector<double>(new[] { 1.0, 0.0 }),
+        };
+        var optimizer = new AdamWOptimizer<double, Matrix<double>, Vector<double>>(null, options);
+
+        var error = Assert.Throws<ArgumentException>(() => optimizer.UpdateParameters(
+            new Vector<double>(new[] { 1.0, 2.0, 3.0 }),
+            new Vector<double>(new[] { 0.0, 0.0, 0.0 })));
+
+        Assert.Contains("mask length", error.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void TapeStep_AppliesFlatMaskAcrossTensorBoundaries()
+    {
+        var options = new AdamWOptimizerOptions<double, Tensor<double>, Tensor<double>>
+        {
+            InitialLearningRate = 0.1,
+            WeightDecay = 0.5,
+            EnableGradientClipping = false,
+            WeightDecayMask = new Vector<double>(new[] { 0.0, 1.0, 0.5, 1.0 }),
+        };
+        var optimizer = new AdamWOptimizer<double, Tensor<double>, Tensor<double>>(null, options);
+        using var first = new Tensor<double>(new[] { 2 }, new Vector<double>(new[] { 1.0, 1.0 }));
+        using var second = new Tensor<double>(new[] { 2 }, new Vector<double>(new[] { 1.0, 1.0 }));
+        using var firstGradient = new Tensor<double>(new[] { 2 });
+        using var secondGradient = new Tensor<double>(new[] { 2 });
+        var gradients = new Dictionary<Tensor<double>, Tensor<double>>(TensorReferenceComparer<Tensor<double>>.Instance)
+        {
+            [first] = firstGradient,
+            [second] = secondGradient,
+        };
+
+        optimizer.Step(new TapeStepContext<double>(new[] { first, second }, gradients, loss: 0.0));
+
+        Assert.Equal(1.0, first[0], 12);
+        Assert.Equal(0.95, first[1], 12);
+        Assert.Equal(0.975, second[0], 12);
+        Assert.Equal(0.95, second[1], 12);
     }
 }
