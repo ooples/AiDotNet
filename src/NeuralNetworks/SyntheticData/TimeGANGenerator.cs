@@ -1059,6 +1059,41 @@ public partial class TimeGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
         return VectorToTensor(recOut);
     }
 
+    /// <summary>
+    /// Reports the three stages of the synthesis path: generator, supervisor and recovery.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// THE BASE STRATEGIES BOTH COME BACK EMPTY HERE, and not because the stacks are unobservable.
+    /// <see cref="PredictCore"/> opens with <c>if (!IsFitted) return input;</c>, so on a freshly
+    /// constructed generator no layer is invoked at all: the observer fallback records nothing, and
+    /// the sequential fold has nothing to fold because the embedder, recovery and supervisor stacks
+    /// live in their own lists rather than in <see cref="Layers"/>. The base then returned an empty
+    /// dictionary, which it documents as a failure to answer rather than an answer of "no
+    /// activations".
+    /// </para>
+    /// <para>
+    /// InitializeLayers constructs and initialises every stack, so the pipeline is well defined
+    /// before fitting -- structural introspection should not depend on fit state. This runs the same
+    /// generator -> supervisor -> recovery chain PredictCore runs after fitting, so the reported
+    /// activations are the model's real computation rather than a reconstruction of it.
+    /// </para>
+    /// </remarks>
+    public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input)
+    {
+        var noise = TensorToVector(input, input.Length);
+        var generated = GeneratorForward(noise, isTraining: false);
+        var supervised = SupervisorForward(generated, isTraining: false);
+        var recovered = RecoveryForward(supervised, isTraining: false);
+
+        return new Dictionary<string, Tensor<T>>
+        {
+            ["Generator"] = VectorToTensor(generated),
+            ["Supervisor"] = VectorToTensor(supervised),
+            ["Recovery"] = VectorToTensor(recovered),
+        };
+    }
+
     /// <inheritdoc />
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
