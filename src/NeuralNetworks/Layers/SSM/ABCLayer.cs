@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -101,7 +101,11 @@ public partial class ABCLayer<T> : LayerBase<T>, IShapeContract
 
     private Tensor<T> _valueWeights;
 
-    // Slot key embeddings: [numHeads, numSlots, headDim]
+    // Slot key embeddings: [numHeads, numSlots, headDim]. Trainable like its q/k/v siblings:
+    // the slot-competition scan reads it directly, and without the attribute it was neither
+    // trained nor serialized even though _slotKeysGradient was already declared for it.
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _slotKeys;
 
     // Forget gate projection: [modelDim, numHeads]
