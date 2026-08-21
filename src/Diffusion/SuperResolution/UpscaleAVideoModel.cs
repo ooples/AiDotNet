@@ -284,6 +284,13 @@ public partial class UpscaleAVideoModel<T> : VideoDiffusionModelBase<T>
         }
     }
 
+    /// <summary>
+    /// StableVideoSR delegates its public gradient surface to this component. Retain the eager tape
+    /// gradients when bounded; the paper-scale graph still uses the base size guard and reports the
+    /// surface as unavailable rather than allocating a second model-sized flat buffer.
+    /// </summary>
+    protected override bool RetainsLastTrainingGradients => true;
+
     #endregion
 
     #region Constructor

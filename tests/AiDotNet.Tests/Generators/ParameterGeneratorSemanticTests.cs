@@ -561,6 +561,24 @@ public partial class ConditionalLayer<T> : AiDotNet.NeuralNetworks.Layers.LayerB
     }
 
     [Fact]
+    public async Task LayerGenerator_RoleOnlyParameter_EmitsShapeIndependentRestoreSlots()
+    {
+        await Task.Yield();
+        const string source = @"
+using AiDotNet.Attributes;
+public partial class RoleOnlyLayer<T> : AiDotNet.NeuralNetworks.Layers.LayerBase<T>
+{
+    [TrainableParameter(Role = 1)]
+    private AiDotNet.Tensors.LinearAlgebra.Tensor<T> _weight = new();
+}";
+
+        string generated = Run(new AiDotNet.Generators.TrainableParameterGenerator(), source);
+        Assert.Contains("DeclaredParameterTensors()", generated, StringComparison.Ordinal);
+        Assert.Contains("__declared.Add((_weight,", generated, StringComparison.Ordinal);
+        Assert.DoesNotContain("HasActiveDeclaredParameterShapes", generated, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task LayerGenerator_LowPrecisionBackingFlowsThroughLogicalParameterSurfaces()
     {
         await Task.Yield();

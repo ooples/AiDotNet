@@ -3975,6 +3975,7 @@ Console.WriteLine(""  - MultiFidelity: successive halving"");
                     Difficulty = "Beginner",
                     Tags = ["loss", "mse", "regression"],
                     Code = @"// Mean Squared Error Loss Function
+using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
 using AiDotNet.Tensors.LinearAlgebra;
 
@@ -4008,6 +4009,7 @@ Console.WriteLine(""MSE penalizes larger errors more due to squaring"");
                     Difficulty = "Intermediate",
                     Tags = ["loss", "cross-entropy", "classification"],
                     Code = @"// Cross Entropy Loss for Classification
+using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
 using AiDotNet.Tensors.LinearAlgebra;
 

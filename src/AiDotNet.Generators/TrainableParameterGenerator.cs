@@ -738,8 +738,8 @@ public class TrainableParameterGenerator : IIncrementalGenerator
         // role; only its DIMENSIONS are unstated. Emitting this alongside the shape declaration
         // would have covered exactly the layers that least need it and skipped the ones that do:
         // SubpixelConvolutionalLayer and SVTRThinPlateSplineLayer declare a role and no shape, so
-        // TryAdoptRestoredParameters saw an empty declaration, returned false, and fell through to
-        // fresh initialization -- silently discarding a restore that was holding trained weights.
+        // TryAdoptRestoredParameters needs this shape-independent slot list to distinguish a complete
+        // external rebind from an empty or partial restore.
         // That is the "Output[0] differs after serialization roundtrip: original=0" failure, and
         // the 1,984 scalars SVTR loses across a round trip.
         var tensorFields = useRuntimeParameterRegistry

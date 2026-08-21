@@ -145,6 +145,12 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
     /// </summary>
     protected virtual bool SupportsFusedDenoising => false;
 
+    /// <summary>
+    /// Opts a component into retaining a bounded flat copy of its most recent eager tape gradients.
+    /// Disabled by default so ordinary diffusion training keeps its existing allocation profile.
+    /// </summary>
+    protected virtual bool RetainsLastTrainingGradients => false;
+
     private static void RestoreShadow(Tensor<T> param, Vector<T> shadow)
     {
         var span = param.Data.Span;
@@ -194,6 +200,15 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
     // mirroring PyTorch's optimizer.state separation. A clone starts from a fresh optimizer because
     // this field is not copied.
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _trainingOptimizer;
+
+    // Retain the last eager tape gradient surface only when it is small enough to be useful without
+    // turning a paper-scale diffusion training step into a second model-sized allocation. Neural
+    // wrappers that delegate training to a diffusion component use this to honor their public
+    // GetParameterGradients contract. Larger models report that the surface is unavailable instead
+    // of returning a misleading empty/all-zero vector.
+    private const int MaxRetainedTrainingGradientScalars = 10_000_000;
+    private Vector<T>? _lastTrainingGradients;
+    private bool _lastTrainingGradientSurfaceUnavailable;
 
     /// <summary>
     /// Cached result of the reflection walk that discovers trainable parameter tensors.
@@ -1216,6 +1231,9 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
 
     public virtual void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
+        _lastTrainingGradients = null;
+        _lastTrainingGradientSurfaceUnavailable = false;
+
         // Copy-on-write: if this model shares weight tensors with a clone/parent, give it a private
         // copy before we mutate weights in place below, so the other model isn't corrupted.
         EnsureOwnWeights();
@@ -1430,6 +1448,15 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
         // Backward pass via graph-based autodiff.
         var grads = tape.ComputeGradients(loss, paramTensors);
 
+        if (RetainsLastTrainingGradients)
+        {
+            long gradientScalarCount = paramTensors.Sum(parameter => (long)parameter.Length);
+            if (gradientScalarCount <= MaxRetainedTrainingGradientScalars)
+                _lastTrainingGradients = FlattenGradients(paramTensors, grads);
+            else
+                _lastTrainingGradientSurfaceUnavailable = true;
+        }
+
         // Global gradient-norm clipping (canonical diffusion training: HuggingFace
         // diffusers and the SVD / Video-Diffusion reference recipes call
         // torch.nn.utils.clip_grad_norm_(params, max_norm=1.0) after every backward).
@@ -1527,6 +1554,25 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
             noisySampleTensor, noiseTensor,
             RecomputeForward, RecomputeLoss);
         _trainingOptimizer.Step(stepContext);
+    }
+
+    /// <summary>
+    /// Returns the gradients computed by the most recent eager training step in trainable-tensor
+    /// order. Large-model training deliberately does not retain a second flat copy.
+    /// </summary>
+    internal Vector<T> GetLastTrainingGradients()
+    {
+        if (!RetainsLastTrainingGradients)
+            throw new NotSupportedException("This diffusion model does not retain training gradients.");
+
+        if (_lastTrainingGradientSurfaceUnavailable)
+        {
+            throw new NotSupportedException(
+                $"Retaining more than {MaxRetainedTrainingGradientScalars:N0} diffusion gradient " +
+                "scalars would duplicate a model-sized training buffer.");
+        }
+
+        return _lastTrainingGradients ?? Vector<T>.Empty();
     }
 
     /// <inheritdoc />

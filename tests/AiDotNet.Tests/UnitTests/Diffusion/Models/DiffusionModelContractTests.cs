@@ -784,6 +784,36 @@ public class DiffusionModelContractTests : DiffusionUnitTestBase
         Assert.True(model.LatentChannels > 0);
     }
 
+    [Fact]
+    public void VideoUNet_ConcatenatedConditioning_PreservesDeclaredParameterShape()
+    {
+        var predictor = new VideoUNetPredictor<float>(
+            inputChannels: 4,
+            outputChannels: 4,
+            baseChannels: 8,
+            channelMultipliers: [1],
+            numResBlocks: 1,
+            attentionResolutions: [],
+            contextDim: 0,
+            numHeads: 1,
+            inputHeight: 2,
+            inputWidth: 2,
+            numFrames: 1,
+            imageConditionChannels: 3,
+            concatenateImageCondition: true,
+            seed: 42);
+
+        long declared = predictor.ParameterCount;
+        var parameters = predictor.GetParameters();
+        Assert.Equal(declared, parameters.Length);
+
+        var output = predictor.PredictNoiseWithImageCondition(
+            new AiDotNet.Tensors.LinearAlgebra.Tensor<float>([1, 4, 2, 2]),
+            timestep: 0,
+            new AiDotNet.Tensors.LinearAlgebra.Tensor<float>([1, 3, 2, 2]));
+        Assert.Equal(new[] { 1, 4, 2, 2 }, output.Shape);
+    }
+
     #endregion
 
     #region Video Models (Tasks #75-#86)

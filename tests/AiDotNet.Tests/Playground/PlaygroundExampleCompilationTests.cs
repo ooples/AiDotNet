@@ -100,6 +100,28 @@ public class PlaygroundExampleCompilationTests
     }
 
     /// <summary>
+    /// Keeps the loss examples on the same extension-method surface as compiled client code.
+    /// </summary>
+    [Theory]
+    [InlineData("mse-loss")]
+    [InlineData("cross-entropy-loss")]
+    [Trait("Category", "Playground")]
+    public void LossExample_ShouldCompileComputeGradient(string exampleId)
+    {
+        var exampleServicePath = FindExampleServicePath();
+        Assert.False(string.IsNullOrEmpty(exampleServicePath), "Could not find ExampleService.cs.");
+
+        var example = Assert.Single(
+            ExtractCodeExamples(File.ReadAllText(exampleServicePath!)),
+            candidate => candidate.Id == exampleId);
+
+        var errors = CompileCode(example.Id, example.Code);
+        Assert.True(errors.Count == 0,
+            $"Playground example '{exampleId}' failed to compile:{Environment.NewLine}" +
+            string.Join(Environment.NewLine, errors));
+    }
+
+    /// <summary>
     /// Extracts code examples from the ExampleService.cs content.
     /// </summary>
     private static List<(string Id, string Code)> ExtractCodeExamples(string content)
