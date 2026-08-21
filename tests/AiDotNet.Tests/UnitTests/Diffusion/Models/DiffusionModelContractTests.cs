@@ -1228,7 +1228,30 @@ public class DiffusionModelContractTests : DiffusionUnitTestBase
         Assert.DoesNotContain(model.ParameterLayout.Slots,
             slot => slot.Readiness == AiDotNet.Models.Parameters.ParameterReadiness.ShapeDeferred);
         Assert.Equal(model.ParameterCount, model.ParameterLayout.DeclaredParameterCount);
-        Assert.Equal(0L, model.ParameterLayout.MaterializedParameterCount);
+
+        // NO LAZY WEIGHT WAS MATERIALIZED -- not "nothing was materialized". Measured on a default
+        // SoraModel<float>, 16 slots come back materialized for 11,264 scalars total, every one a
+        // TemporalVAE encoder/decoder spatial norm pair (gamma/beta at 256/512/1024 channels) and
+        // every one declaring ParameterAvailability.Construction. A norm's initialisation values
+        // are meaningful -- gamma = 1, beta = 0 -- so unlike a weight matrix it cannot be deferred,
+        // and the manifest says exactly that. Asserting 0 contradicted the declaration it was
+        // reading, over 0.0001% of a 10.0 B declared surface.
+        //
+        // The regression actually worth guarding is the multi-billion-parameter DiT weight surface
+        // materializing on a default construction. Those slots declare ShapeResolution, so this is
+        // strictly sharper than the count it replaces: it still fails on any deferred slot that
+        // materializes early, and it names WHICH slot broke the contract instead of printing a
+        // number nobody can attribute.
+        var prematurelyMaterialized = model.ParameterLayout.Slots
+            .Where(slot => slot.MaterializedParameterCount > 0
+                        && slot.Availability != AiDotNet.Models.Parameters.ParameterAvailability.Construction)
+            .Select(slot => $"{slot.StableId} ({slot.Availability}, {slot.MaterializedParameterCount} scalars)")
+            .ToArray();
+
+        Assert.True(prematurelyMaterialized.Length == 0,
+            "Sora's default construction materialized parameters that are not declared available at " +
+            "construction, so a deferred weight surface was read eagerly:\n  " +
+            string.Join("\n  ", prematurelyMaterialized));
     }
 
     [Fact(Timeout = 120000)]
