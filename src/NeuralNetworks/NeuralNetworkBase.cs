@@ -11905,9 +11905,10 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // Same gap one level down: a model that delegates training to sub-networks owns their
         // optimizer state transitively, and "every optimizer this instance already holds" has to mean
         // that or the promise is empty for exactly the composite families.
-        foreach (var field in plan.Models)
-            if (field.GetValue(this) is NeuralNetworkBase<T> nested)
-                nested.ResetOwnedOptimizerState(resetOptimizers, visitedModels);
+        foreach (var nested in plan.Models
+                     .Select(field => field.GetValue(this))
+                     .OfType<NeuralNetworkBase<T>>())
+            nested.ResetOwnedOptimizerState(resetOptimizers, visitedModels);
 
         foreach (var field in plan.ModelSequences)
             foreach (var nested in EnumerateOwned(field.GetValue(this)).OfType<NeuralNetworkBase<T>>())
@@ -11924,12 +11925,20 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// candidate by its declared value type and then walked to nothing. Going through
     /// <c>IDictionary.Values</c> keeps the declared-type classification and the runtime walk agreeing.
     /// </remarks>
-    private static System.Collections.IEnumerable EnumerateOwned(object? value) => value switch
+    private static System.Collections.IEnumerable EnumerateOwned(object? value)
     {
-        System.Collections.IDictionary dictionary => dictionary.Values,
-        System.Collections.IEnumerable sequence => sequence,
-        _ => System.Array.Empty<object>(),
-    };
+        if (value is System.Collections.IDictionary dictionary) return dictionary.Values;
+        if (value is not System.Collections.IEnumerable sequence) return System.Array.Empty<object>();
+
+        // Immutable and custom read-only dictionaries need not implement the legacy IDictionary.
+        // Their generic IEnumerable contract still exposes KeyValuePair<TKey, TValue>, so unwrap the
+        // boxed pairs here just as GetEnumerableElementType unwraps their declared element type below.
+        var pairType = GetGenericEnumerableElementTypes(value.GetType()).FirstOrDefault(IsKeyValuePair);
+        if (pairType is null) return sequence;
+
+        var valueProperty = pairType.GetProperty(nameof(KeyValuePair<object, object>.Value))!;
+        return sequence.Cast<object>().Select(pair => valueProperty.GetValue(pair));
+    }
 
     private static void ResetIfOptimizer(object? value, HashSet<object> resetOptimizers)
     {
@@ -12057,23 +12066,31 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         if (candidate == typeof(string)) return null;
         if (candidate.IsArray) return Unwrap(candidate.GetElementType());
 
-        if (candidate.IsGenericType && candidate.GetGenericTypeDefinition() == typeof(IEnumerable<>))
-            return Unwrap(candidate.GetGenericArguments()[0]);
-
-        foreach (var contract in candidate.GetInterfaces())
-            if (contract.IsGenericType && contract.GetGenericTypeDefinition() == typeof(IEnumerable<>))
-                return Unwrap(contract.GetGenericArguments()[0]);
-
-        return null;
+        return GetGenericEnumerableElementTypes(candidate).Select(Unwrap).FirstOrDefault();
 
         static Type? Unwrap(Type? element)
         {
             if (element is null) return null;
-            if (element.IsGenericType && element.GetGenericTypeDefinition() == typeof(KeyValuePair<,>))
+            if (IsKeyValuePair(element))
                 return element.GetGenericArguments()[1];
             return element;
         }
     }
+
+    private static IEnumerable<Type> GetGenericEnumerableElementTypes(Type candidate)
+    {
+        if (IsGenericEnumerable(candidate))
+            yield return candidate.GetGenericArguments()[0];
+
+        foreach (var contract in candidate.GetInterfaces().Where(IsGenericEnumerable))
+            yield return contract.GetGenericArguments()[0];
+
+        static bool IsGenericEnumerable(Type contract) =>
+            contract.IsGenericType && contract.GetGenericTypeDefinition() == typeof(IEnumerable<>);
+    }
+
+    private static bool IsKeyValuePair(Type candidate) =>
+        candidate.IsGenericType && candidate.GetGenericTypeDefinition() == typeof(KeyValuePair<,>);
 
     /// <summary>
     /// Per-concrete-type cache behind <see cref="GetOwnedOptimizerPlan"/>. Static on the closed
@@ -15745,4 +15762,3 @@ internal static class WeightStreamingAutoDetectGate
 {
     internal static readonly object Sync = new();
 }
-

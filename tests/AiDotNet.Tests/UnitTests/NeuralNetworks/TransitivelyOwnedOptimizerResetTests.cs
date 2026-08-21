@@ -136,6 +136,48 @@ public class TransitivelyOwnedOptimizerResetTests
             new() { ["x"] = new DirectFieldModel(), ["y"] = new DirectFieldModel() };
     }
 
+    /// <summary>
+    /// A read-only dictionary that deliberately implements only the generic contracts. This proves
+    /// ownership traversal does not depend on the legacy non-generic IDictionary interface.
+    /// </summary>
+    private sealed class GenericReadOnlyDictionary<TKey, TValue> : IReadOnlyDictionary<TKey, TValue>
+        where TKey : notnull
+    {
+        private readonly IReadOnlyDictionary<TKey, TValue> _items;
+
+        internal GenericReadOnlyDictionary(IReadOnlyDictionary<TKey, TValue> items) => _items = items;
+
+        public TValue this[TKey key] => _items[key];
+        public IEnumerable<TKey> Keys => _items.Keys;
+        public IEnumerable<TValue> Values => _items.Values;
+        public int Count => _items.Count;
+        public bool ContainsKey(TKey key) => _items.ContainsKey(key);
+        public bool TryGetValue(TKey key, out TValue value) => _items.TryGetValue(key, out value!);
+        public IEnumerator<KeyValuePair<TKey, TValue>> GetEnumerator() => _items.GetEnumerator();
+        System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
+    }
+
+    private sealed class ReadOnlyOptimizerDictionaryModel : ProbeModel
+    {
+        internal readonly GenericReadOnlyDictionary<string,
+            IGradientBasedOptimizer<double, Tensor<double>, Tensor<double>>> Owned = new(
+                new Dictionary<string, IGradientBasedOptimizer<double, Tensor<double>, Tensor<double>>>
+                {
+                    ["a"] = new ResetCountingAdam(),
+                    ["b"] = new ResetCountingAdam(),
+                });
+    }
+
+    private sealed class ReadOnlyModelDictionaryModel : ProbeModel
+    {
+        internal readonly GenericReadOnlyDictionary<string, DirectFieldModel> Children = new(
+            new Dictionary<string, DirectFieldModel>
+            {
+                ["x"] = new DirectFieldModel(),
+                ["y"] = new DirectFieldModel(),
+            });
+    }
+
     [Fact]
     public void DirectlyTypedField_IsReset()
     {
@@ -208,6 +250,24 @@ public class TransitivelyOwnedOptimizerResetTests
     public void OptimizerOwnedByModelsHeldAsDictionaryValues_IsReset()
     {
         var model = new ModelDictionaryModel();
+        model.ResetBaseTrainOptimizerState();
+        foreach (var child in model.Children.Values)
+            Assert.Equal(1, child.Owned.ResetCount);
+    }
+
+    [Fact]
+    public void OptimizerHeldAsAReadOnlyDictionaryValue_IsReset()
+    {
+        var model = new ReadOnlyOptimizerDictionaryModel();
+        model.ResetBaseTrainOptimizerState();
+        foreach (var optimizer in model.Owned.Values)
+            Assert.Equal(1, ((ResetCountingAdam)optimizer).ResetCount);
+    }
+
+    [Fact]
+    public void OptimizerOwnedByModelsHeldAsReadOnlyDictionaryValues_IsReset()
+    {
+        var model = new ReadOnlyModelDictionaryModel();
         model.ResetBaseTrainOptimizerState();
         foreach (var child in model.Children.Values)
             Assert.Equal(1, child.Owned.ResetCount);
