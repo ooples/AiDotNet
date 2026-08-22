@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -397,12 +397,12 @@ public class MAEReconstructionLoss<T> : ContrastiveLossBase<T>
             var mean = Engine.TensorDivideScalar(
                 Engine.ReduceSum(target, new[] { lastAxis }, keepDims: true),
                 NumOps.FromDouble(patchDim));
-            var centered = Engine.TensorBroadcastSubtract(target, mean);
+            var centered = Engine.TensorSubtract(target, mean);
             var variance = Engine.TensorDivideScalar(
                 Engine.ReduceSum(Engine.TensorMultiply(centered, centered), new[] { lastAxis }, keepDims: true),
                 NumOps.FromDouble(patchDim));
             var std = Engine.TensorSqrt(Engine.TensorAddScalar(variance, NumOps.FromDouble(1e-6)));
-            target = Engine.TensorBroadcastDivide(centered, std);
+            target = Engine.TensorDivide(centered, std);
         }
 
         var diff = Engine.TensorSubtract(view1, target);

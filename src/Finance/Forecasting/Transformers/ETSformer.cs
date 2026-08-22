@@ -1,4 +1,4 @@
-﻿using System.IO;
+using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Finance.Interfaces;
@@ -808,8 +808,8 @@ public partial class ETSformer<T> : ForecastingModelBase<T>
         // broadcast across the time axis. Training routes through Forecast, which
         // calls this; the manual per-element copy detached the graph before the
         // loss and zeroed all gradients. Stats are constants (paper-faithful).
-        var scaled = Engine.TensorBroadcastMultiply(output, _instanceStd);
-        return Engine.TensorBroadcastAdd(scaled, _instanceMean);
+        var scaled = Engine.TensorMultiply(output, _instanceStd);
+        return Engine.TensorAdd(scaled, _instanceMean);
     }
 
     /// <summary>

@@ -314,15 +314,15 @@ public partial class MesaNetLayer<T> : LayerBase<T>, IShapeContract
         // Step 2: Q, K, V projections
         var normFlat = Engine.Reshape(normalized, new[] { batchSize * seqLen, _modelDimension });
 
-        var q = Engine.Reshape(Engine.TensorBroadcastAdd(
+        var q = Engine.Reshape(Engine.TensorAdd(
             Engine.TensorMatMul(normFlat, _queryWeights),
             Engine.Reshape(_queryBias, new[] { 1, _modelDimension })), new[] { batchSize, seqLen, _modelDimension });
 
-        var k = Engine.Reshape(Engine.TensorBroadcastAdd(
+        var k = Engine.Reshape(Engine.TensorAdd(
             Engine.TensorMatMul(normFlat, _keyWeights),
             Engine.Reshape(_keyBias, new[] { 1, _modelDimension })), new[] { batchSize, seqLen, _modelDimension });
 
-        var v = Engine.Reshape(Engine.TensorBroadcastAdd(
+        var v = Engine.Reshape(Engine.TensorAdd(
             Engine.TensorMatMul(normFlat, _valueWeights),
             Engine.Reshape(_valueBias, new[] { 1, _modelDimension })), new[] { batchSize, seqLen, _modelDimension });
 
@@ -331,7 +331,7 @@ public partial class MesaNetLayer<T> : LayerBase<T>, IShapeContract
         _lastValue = v;
 
         // Step 3: Output gate (SiLU activation)
-        var gateRaw = Engine.Reshape(Engine.TensorBroadcastAdd(
+        var gateRaw = Engine.Reshape(Engine.TensorAdd(
             Engine.TensorMatMul(normFlat, _outputGateWeights),
             Engine.Reshape(_outputGateBias, new[] { 1, _modelDimension })), new[] { batchSize, seqLen, _modelDimension });
         var gate = Engine.Swish(gateRaw);
@@ -347,7 +347,7 @@ public partial class MesaNetLayer<T> : LayerBase<T>, IShapeContract
 
         // Step 6: Output projection
         var gatedFlat = Engine.Reshape(gatedOutput, new[] { batchSize * seqLen, _modelDimension });
-        var outputFlat = Engine.TensorBroadcastAdd(
+        var outputFlat = Engine.TensorAdd(
             Engine.TensorMatMul(gatedFlat, _outputProjectionWeights),
             Engine.Reshape(_outputProjectionBias, new[] { 1, _modelDimension }));
         var output3D = Engine.Reshape(outputFlat, new[] { batchSize, seqLen, _modelDimension });

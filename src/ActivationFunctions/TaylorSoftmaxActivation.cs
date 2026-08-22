@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Enums;
 
@@ -126,7 +126,7 @@ public class TaylorSoftmaxActivation<T> : ActivationFunctionBase<T>
 
         // Normalize along the last axis so outputs sum to 1.
         var sum = Engine.ReduceSum(result, new[] { lastAxis }, keepDims: true);
-        return Engine.TensorBroadcastDivide(result, sum);
+        return Engine.TensorDivide(result, sum);
     }
 
     /// <summary>

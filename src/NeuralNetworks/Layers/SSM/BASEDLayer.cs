@@ -346,7 +346,7 @@ public partial class BASEDLayer<T> : LayerBase<T>, IShapeContract
         _lastWindowValue = winV;
 
         // Step 2: Compute mixing gate alpha
-        var alphaRaw = Engine.Reshape(Engine.TensorBroadcastAdd(
+        var alphaRaw = Engine.Reshape(Engine.TensorAdd(
             Engine.TensorMatMul(inputFlat, _mixingGateWeights),
             Engine.Reshape(_mixingGateBias, new[] { 1, _numHeads })), new[] { batchSize, seqLen, _numHeads });
         var alpha = Engine.Sigmoid(alphaRaw);
@@ -404,7 +404,7 @@ public partial class BASEDLayer<T> : LayerBase<T>, IShapeContract
         var combinedFlat = Engine.Reshape(combined, new[] { batchSize * seqLen, _modelDimension });
         var outputFlat = Engine.TensorMatMul(combinedFlat, _outputProjectionWeights);
         var outBias = Engine.Reshape(_outputProjectionBias, new[] { 1, _modelDimension });
-        outputFlat = Engine.TensorBroadcastAdd(outputFlat, outBias);
+        outputFlat = Engine.TensorAdd(outputFlat, outBias);
         var output3D = Engine.Reshape(outputFlat, new[] { batchSize, seqLen, _modelDimension });
 
         var result = ApplyActivation(output3D);

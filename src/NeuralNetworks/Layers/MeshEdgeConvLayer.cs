@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
@@ -456,7 +456,7 @@ public partial class MeshEdgeConvLayer<T> : LayerBase<T>, IShapeContract
     {
         int numEdges = convOutput.Shape[0];
         var biasExpanded = Engine.Reshape(_biases, new[] { 1, OutputChannels });
-        return Engine.TensorBroadcastAdd(convOutput, biasExpanded);
+        return Engine.TensorAdd(convOutput, biasExpanded);
     }
 
     /// <summary>

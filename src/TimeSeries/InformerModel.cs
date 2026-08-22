@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Enums;
 using AiDotNet.Tensors;
@@ -636,7 +636,7 @@ public partial class InformerModel<T> : TimeSeriesModelBase<T>, ISupportsLossFun
     }
 
     private Tensor<T> AddRowBias(Tensor<T> x, Tensor<T> bias)
-        => Engine.TensorBroadcastAdd(x, Engine.Reshape(bias, new[] { 1, bias.Shape[0] }));
+        => Engine.TensorAdd(x, Engine.Reshape(bias, new[] { 1, bias.Shape[0] }));
 
     // Position-wise feed-forward on [rows, d]: ReLU(x·W1^T + b1)·W2^T + b2.
     private Tensor<T> FeedForwardFlat(Tensor<T> xFlat, Tensor<T> w1, Tensor<T> b1, Tensor<T> w2, Tensor<T> b2)
@@ -703,10 +703,10 @@ public partial class InformerModel<T> : TimeSeriesModelBase<T>, ISupportsLossFun
         var w2 = Engine.Reshape(Engine.TensorNarrow(w, 1, 2, 1), new[] { 1, 1, embDim });
         var conv = Engine.TensorAdd(
             Engine.TensorAdd(
-                Engine.TensorBroadcastMultiply(xLeft, w0),
-                Engine.TensorBroadcastMultiply(x, w1)),
-            Engine.TensorBroadcastMultiply(xRight, w2));
-        conv = Engine.ELU(Engine.TensorBroadcastAdd(conv, Engine.Reshape(bias, new[] { 1, 1, embDim })));
+                Engine.TensorMultiply(xLeft, w0),
+                Engine.TensorMultiply(x, w1)),
+            Engine.TensorMultiply(xRight, w2));
+        conv = Engine.ELU(Engine.TensorAdd(conv, Engine.Reshape(bias, new[] { 1, 1, embDim })));
 
         int outLen = (seq + factor - 1) / factor;
         int padded = outLen * factor;
@@ -762,8 +762,8 @@ public partial class InformerModel<T> : TimeSeriesModelBase<T>, ISupportsLossFun
                 decPosData[t * d + j] = peHost[(_options.LookbackWindow + t) * d + j];
         var decPos = new Tensor<T>(new[] { 1, horizon, d }, decPosData);
         var start3 = Engine.Reshape(_decoderStartToken, new[] { 1, 1, d });
-        var dec3 = Engine.TensorBroadcastAdd(
-            Engine.TensorBroadcastAdd(decPos, start3), embMean); // [batch, horizon, d]
+        var dec3 = Engine.TensorAdd(
+            Engine.TensorAdd(decPos, start3), embMean); // [batch, horizon, d]
         var decFlat = Engine.Reshape(dec3, new[] { batch * horizon, d });
 
         for (int i = 0; i < _decoderLayers.Count; i++)
@@ -773,8 +773,8 @@ public partial class InformerModel<T> : TimeSeriesModelBase<T>, ISupportsLossFun
         var decOut3 = Engine.Reshape(decFlat, new[] { batch, horizon, d });
         var op3 = Engine.Reshape(_outputProjection, new[] { 1, horizon, d });
         var summed = Engine.ReduceSum(
-            Engine.TensorBroadcastMultiply(decOut3, op3), new[] { 2 }, keepDims: false); // [batch, horizon]
-        return Engine.TensorBroadcastAdd(summed, Engine.Reshape(_outputBias, new[] { 1, horizon }));
+            Engine.TensorMultiply(decOut3, op3), new[] { 2 }, keepDims: false); // [batch, horizon]
+        return Engine.TensorAdd(summed, Engine.Reshape(_outputBias, new[] { 1, horizon }));
     }
 
     // Inference forward for a single lookback window. Uses the SAME batched Engine ops as

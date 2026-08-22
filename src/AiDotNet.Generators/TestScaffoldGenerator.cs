@@ -648,6 +648,12 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // Only the memorization probe is affected; its other probes already pass.
             { "MusicTaggingTransformer", new WarmupIterationOverride(memorization: 12) },
 
+            // VMamba includes dropout by default. Its first/final training-mode loss samples can
+            // therefore reverse under an unlucky mask even while the fixed example is learning.
+            // Measure the same fixed example in evaluation mode at both endpoints; the strict
+            // decrease assertion and iteration count remain unchanged.
+            { "VMamba", new WarmupIterationOverride(deterministicMemorizationLoss: true) },
+
             // NaturalSpeech: the same shape, over a LONGER warm-up, and on every repeated-training
             // probe rather than just one. Measured evaluation loss on a fixed pair, from untrained:
             //   0.253 | 0.267, 0.292, 0.294, 0.281, 0.294, 0.301, 0.279, 0.249, 0.207, 0.175, 0.173
@@ -11272,7 +11278,10 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // measure 57 s, 57 s and 58 s against 120/120/180 s gates - real work at only ~2.1x, which
         // will not survive sixteen-wide execution. It stays in the PR gate (no HeavyTimeout) because
         // it passes comfortably given dedicated cores.
-        if (model.ClassName is "ISTFTNet" or "PartitionMCMCAlgorithm" or "VFIMamba" or "Mask2Former")
+        // DemucsNoise's finite-difference check completes in ~3-5 s on dedicated cores but twice
+        // exhausted its 120 s gate in the parallel D-F shard. Keep all gradient samples and the
+        // original timeout; serialization removes the machine-contention variable instead.
+        if (model.ClassName is "ISTFTNet" or "PartitionMCMCAlgorithm" or "VFIMamba" or "Mask2Former" or "DemucsNoise")
             sb.AppendLine("[Xunit.Collection(\"FoundationScaleSerial\")]");
         if (heavyTimeout)
             sb.AppendLine("[Xunit.Trait(\"Category\", \"HeavyTimeout\")]");

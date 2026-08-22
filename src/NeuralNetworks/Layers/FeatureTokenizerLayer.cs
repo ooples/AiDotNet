@@ -193,8 +193,8 @@ public partial class FeatureTokenizerLayer<T> : LayerBase<T>, IShapeContract
         var wB = Engine.Reshape(_weights, new[] { 1, _numFeatures, _embeddingDim });
         var bB = Engine.Reshape(_biases, new[] { 1, _numFeatures, _embeddingDim });
 
-        var scaled = Engine.TensorBroadcastMultiply(expanded, wB);
-        return Engine.TensorBroadcastAdd(scaled, bB);
+        var scaled = Engine.TensorMultiply(expanded, wB);
+        return Engine.TensorAdd(scaled, bB);
     }
 
     /// <inheritdoc/>

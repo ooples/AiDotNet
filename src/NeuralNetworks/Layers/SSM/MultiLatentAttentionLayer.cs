@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -262,7 +262,7 @@ public partial class MultiLatentAttentionLayer<T> : LayerBase<T>, IShapeContract
         var inputFlat = Engine.Reshape(input3D, new[] { batchSize * seqLen, _modelDimension });
 
         // Step 1: Compress input to latent c_t = W_c * x_t + b_c
-        var latentFlat = Engine.TensorBroadcastAdd(
+        var latentFlat = Engine.TensorAdd(
             Engine.TensorMatMul(inputFlat, _compressWeights),
             Engine.Reshape(_compressBias, new[] { 1, _latentDimension }));
         var latent = Engine.Reshape(latentFlat, new[] { batchSize, seqLen, _latentDimension });
@@ -281,7 +281,7 @@ public partial class MultiLatentAttentionLayer<T> : LayerBase<T>, IShapeContract
         _lastQuery = q;
 
         // Step 4: Output gate
-        var gateRaw = Engine.Reshape(Engine.TensorBroadcastAdd(
+        var gateRaw = Engine.Reshape(Engine.TensorAdd(
             Engine.TensorMatMul(inputFlat, _outputGateWeights),
             Engine.Reshape(_outputGateBias, new[] { 1, _modelDimension })), new[] { batchSize, seqLen, _modelDimension });
         var gate = Engine.Swish(gateRaw);
@@ -299,7 +299,7 @@ public partial class MultiLatentAttentionLayer<T> : LayerBase<T>, IShapeContract
         var gatedFlat = Engine.Reshape(gatedOutput, new[] { batchSize * seqLen, _modelDimension });
         var outputFlat = Engine.TensorMatMul(gatedFlat, _outputProjectionWeights);
         var outBias = Engine.Reshape(_outputProjectionBias, new[] { 1, _modelDimension });
-        outputFlat = Engine.TensorBroadcastAdd(outputFlat, outBias);
+        outputFlat = Engine.TensorAdd(outputFlat, outBias);
         var output3D = Engine.Reshape(outputFlat, new[] { batchSize, seqLen, _modelDimension });
 
         var result = ApplyActivation(output3D);
@@ -323,68 +323,72 @@ public partial class MultiLatentAttentionLayer<T> : LayerBase<T>, IShapeContract
         Tensor<T> q, Tensor<T> k, Tensor<T> v,
         int batchSize, int seqLen)
     {
-        var output = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
-        var allAttnWeights = new Tensor<T>(new[] { batchSize, _numHeads, seqLen, seqLen });
-        T scale = NumOps.FromDouble(1.0 / Math.Sqrt(_headDimension));
+        // ENGINE OPS, NOT A SCALAR LOOP NEST. This computed the whole scaled-dot-product attention
+        // with NumOps.Multiply/Exp over element indices, which produces tensors the autodiff tape
+        // has never seen -- DifferentiableOps is internal to AiDotNet.Tensors, so calling an Engine
+        // op is the ONLY way a layer's math reaches the tape.
+        //
+        // The consequence was measured, not inferred: running the layer under a tape and asking for
+        // gradients on every cached tensor, _lastQuery, _lastKey, _lastValue, _lastLatent and
+        // _lastAttnWeights all came back ABSENT, and with them the FIVE trainable weight tensors
+        // upstream -- _compressWeights, _compressBias, _keyUpWeights, _valueUpWeights, _queryWeights.
+        // Only the output gate and projection, which join the graph AFTER this call, still trained.
+        // So the compression and Q/K/V projections that define Multi-head Latent Attention received
+        // no gradient at all through the tape path.
+        //
+        // Engine.ScaledDotProductAttention is what the attention layers that already pass their
+        // gradcheck use (AttentionLayer, CrossAttentionLayer, GroupedQueryAttentionLayer). It is
+        // recorded, and it allocates through TensorAllocator.Rent internally exactly as the hand
+        // written version did, so nothing is given up on the allocation path.
+        //
+        // Semantics preserved: per-head scaling by 1/sqrt(headDim) and strict causality (a query at
+        // position i attends to keys j <= i), matching DeepSeek-V2's MLA, which differs from vanilla
+        // MHA only in reconstructing K/V from the compressed latent -- that reconstruction already
+        // happens in ForwardTraced above and is unchanged here.
+        var qh = SplitHeads(q, batchSize, seqLen);
+        var kh = SplitHeads(k, batchSize, seqLen);
+        var vh = SplitHeads(v, batchSize, seqLen);
 
-        for (int bi = 0; bi < batchSize; bi++)
-        {
-            for (int hi = 0; hi < _numHeads; hi++)
+        var attended = Engine.ScaledDotProductAttention(
+            qh, kh, vh,
+            BuildCausalMask(batchSize, _numHeads, seqLen),
+            scale: 1.0 / Math.Sqrt(_headDimension),
+            out var attentionWeights);
+
+        _lastAttnWeights = attentionWeights;
+        return MergeHeads(attended, batchSize, seqLen);
+    }
+
+    /// <summary>[B, S, H*hd] -> [B, H, S, hd], the layout ScaledDotProductAttention expects.</summary>
+    private Tensor<T> SplitHeads(Tensor<T> x, int batchSize, int seqLen)
+    {
+        var byHead = Engine.Reshape(x, new[] { batchSize, seqLen, _numHeads, _headDimension });
+        return Engine.TensorPermute(byHead, new[] { 0, 2, 1, 3 });
+    }
+
+    /// <summary>[B, H, S, hd] -> [B, S, H*hd], the inverse of <see cref="SplitHeads"/>.</summary>
+    private Tensor<T> MergeHeads(Tensor<T> x, int batchSize, int seqLen)
+    {
+        var bySeq = Engine.TensorPermute(x, new[] { 0, 2, 1, 3 });
+        return Engine.Reshape(bySeq, new[] { batchSize, seqLen, _modelDimension });
+    }
+
+    /// <summary>
+    /// Causal mask: query i may attend to keys j &lt;= i. Built with plain loops deliberately -- a
+    /// bool mask carries no gradient, so it is not part of the differentiable graph.
+    /// </summary>
+    private static Tensor<bool> BuildCausalMask(int batchSize, int heads, int seqLen)
+    {
+        var data = new bool[batchSize * heads * seqLen * seqLen];
+        for (int b = 0; b < batchSize; b++)
+            for (int h = 0; h < heads; h++)
             {
-                int dimStart = hi * _headDimension;
-
-                for (int tq = 0; tq < seqLen; tq++)
-                {
-                    // Compute attention scores for this query position (causal: s <= tq)
-                    var scores = new T[tq + 1];
-                    T maxScore = NumOps.MinValue;
-
-                    for (int tk = 0; tk <= tq; tk++)
-                    {
-                        T dot = NumOps.Zero;
-                        for (int d = 0; d < _headDimension; d++)
-                        {
-                            int flatD = dimStart + d;
-                            dot = NumOps.Add(dot,
-                                NumOps.Multiply(q[new[] { bi, tq, flatD }],
-                                    k[new[] { bi, tk, flatD }]));
-                        }
-                        scores[tk] = NumOps.Multiply(dot, scale);
-                        if (NumOps.GreaterThan(scores[tk], maxScore))
-                            maxScore = scores[tk];
-                    }
-
-                    // Softmax
-                    T sumExp = NumOps.Zero;
-                    var expScores = new T[tq + 1];
-                    for (int tk = 0; tk <= tq; tk++)
-                    {
-                        expScores[tk] = NumOps.Exp(NumOps.Subtract(scores[tk], maxScore));
-                        sumExp = NumOps.Add(sumExp, expScores[tk]);
-                    }
-                    T sumExpInv = NumOps.Divide(NumOps.One,
-                        NumOps.Add(sumExp, NumOps.FromDouble(1e-10)));
-
-                    // Weighted sum of values
-                    for (int d = 0; d < _headDimension; d++)
-                    {
-                        int flatD = dimStart + d;
-                        T oVal = NumOps.Zero;
-                        for (int tk = 0; tk <= tq; tk++)
-                        {
-                            T attnW = NumOps.Multiply(expScores[tk], sumExpInv);
-                            allAttnWeights[new[] { bi, hi, tq, tk }] = attnW;
-                            oVal = NumOps.Add(oVal,
-                                NumOps.Multiply(attnW, v[new[] { bi, tk, flatD }]));
-                        }
-                        output[new[] { bi, tq, flatD }] = oVal;
-                    }
-                }
+                int planeBase = ((b * heads) + h) * seqLen * seqLen;
+                for (int i = 0; i < seqLen; i++)
+                    for (int j = 0; j <= i; j++)
+                        data[planeBase + (i * seqLen) + j] = true;
             }
-        }
-
-        _lastAttnWeights = allAttnWeights;
-        return output;
+        return new Tensor<bool>(data, new[] { batchSize, heads, seqLen, seqLen });
     }
 
     private Tensor<T> ComputeSiLUDerivative(Tensor<T> x)

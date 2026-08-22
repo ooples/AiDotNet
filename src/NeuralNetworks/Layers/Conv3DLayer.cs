@@ -1,4 +1,4 @@
-﻿#pragma warning disable CS0649, CS0414, CS0169
+#pragma warning disable CS0649, CS0414, CS0169
 using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
@@ -610,7 +610,7 @@ public partial class Conv3DLayer<T> : LayerBase<T>, IShapeContract
     /// The computation flow is:
     /// 1. Reshape input to 5D if needed (add batch dimension)
     /// 2. Perform 3D convolution using Engine.Conv3D
-    /// 3. Add biases using Engine.TensorBroadcastAdd
+    /// 3. Add biases using Engine.TensorAdd
     /// 4. Apply activation function
     /// </para>
     /// </remarks>
@@ -819,7 +819,7 @@ public partial class Conv3DLayer<T> : LayerBase<T>, IShapeContract
         int width = convOutput.Shape[4];
 
         var biasExpanded = Engine.Reshape(_biases, new[] { 1, channels, 1, 1, 1 });
-        return Engine.TensorBroadcastAdd(convOutput, biasExpanded);
+        return Engine.TensorAdd(convOutput, biasExpanded);
     }
 
     #endregion

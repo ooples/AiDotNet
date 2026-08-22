@@ -230,6 +230,8 @@ internal sealed partial class QuantizedAttentionLayer : LayerBase<float>, IShape
 
         // Reshape: [batch, numHeads, seq, headDim] -> [batch*seq, numHeads*headDim]
         var contextFlat = new Tensor<float>(new[] { batchSize * seqLen, _headCount * _headDimension });
+        var contextSource = context.AsSpan();
+        var contextDestination = contextFlat.AsWritableSpan();
         for (int b = 0; b < batchSize; b++)
         {
             for (int s = 0; s < seqLen; s++)
@@ -237,10 +239,10 @@ internal sealed partial class QuantizedAttentionLayer : LayerBase<float>, IShape
                 int rowIdx = b * seqLen + s;
                 for (int h = 0; h < _headCount; h++)
                 {
-                    for (int d = 0; d < _headDimension; d++)
-                    {
-                        contextFlat[rowIdx, h * _headDimension + d] = context[new[] { b, h, s, d }];
-                    }
+                    int sourceOffset = ((b * _headCount + h) * seqLen + s) * _headDimension;
+                    int destinationOffset = (rowIdx * _headCount + h) * _headDimension;
+                    contextSource.Slice(sourceOffset, _headDimension)
+                        .CopyTo(contextDestination.Slice(destinationOffset, _headDimension));
                 }
             }
         }
@@ -251,15 +253,14 @@ internal sealed partial class QuantizedAttentionLayer : LayerBase<float>, IShape
 
         // Add bias
         var output = new Tensor<float>(new[] { batchSize, seqLen, _embeddingDimension });
-        for (int b = 0; b < batchSize; b++)
+        var projected = outputFlat.AsSpan();
+        var outputDestination = output.AsWritableSpan();
+        for (int rowIdx = 0; rowIdx < batchSize * seqLen; rowIdx++)
         {
-            for (int s = 0; s < seqLen; s++)
+            int rowOffset = rowIdx * _embeddingDimension;
+            for (int e = 0; e < _embeddingDimension; e++)
             {
-                int rowIdx = b * seqLen + s;
-                for (int e = 0; e < _embeddingDimension; e++)
-                {
-                    output[new[] { b, s, e }] = outputFlat[rowIdx, e] + _outputBias[e];
-                }
+                outputDestination[rowOffset + e] = projected[rowOffset + e] + _outputBias[e];
             }
         }
 
@@ -332,6 +333,8 @@ internal sealed partial class QuantizedAttentionLayer : LayerBase<float>, IShape
     private static Tensor<float> ReshapeToHeads(Tensor<float> flat, int batchSize, int seqLen, int numHeads, int headDim)
     {
         var result = new Tensor<float>(new[] { batchSize, numHeads, seqLen, headDim });
+        var source = flat.AsSpan();
+        var destination = result.AsWritableSpan();
         for (int b = 0; b < batchSize; b++)
         {
             for (int s = 0; s < seqLen; s++)
@@ -339,10 +342,10 @@ internal sealed partial class QuantizedAttentionLayer : LayerBase<float>, IShape
                 int rowIdx = b * seqLen + s;
                 for (int h = 0; h < numHeads; h++)
                 {
-                    for (int d = 0; d < headDim; d++)
-                    {
-                        result[new[] { b, h, s, d }] = flat[rowIdx, h * headDim + d];
-                    }
+                    int sourceOffset = (rowIdx * numHeads + h) * headDim;
+                    int destinationOffset = ((b * numHeads + h) * seqLen + s) * headDim;
+                    source.Slice(sourceOffset, headDim)
+                        .CopyTo(destination.Slice(destinationOffset, headDim));
                 }
             }
         }
@@ -355,6 +358,8 @@ internal sealed partial class QuantizedAttentionLayer : LayerBase<float>, IShape
     {
         var expanded = new Tensor<float>(new[] { batchSize, totalHeads, seqLen, kv.Shape[3] });
         int headDim = kv.Shape[3];
+        var source = kv.AsSpan();
+        var destination = expanded.AsWritableSpan();
 
         for (int b = 0; b < batchSize; b++)
         {
@@ -365,10 +370,10 @@ internal sealed partial class QuantizedAttentionLayer : LayerBase<float>, IShape
                     int qh = kvh * headsPerGroup + g;
                     for (int s = 0; s < seqLen; s++)
                     {
-                        for (int d = 0; d < headDim; d++)
-                        {
-                            expanded[new[] { b, qh, s, d }] = kv[new[] { b, kvh, s, d }];
-                        }
+                        int sourceOffset = ((b * numKVHeads + kvh) * seqLen + s) * headDim;
+                        int destinationOffset = ((b * totalHeads + qh) * seqLen + s) * headDim;
+                        source.Slice(sourceOffset, headDim)
+                            .CopyTo(destination.Slice(destinationOffset, headDim));
                     }
                 }
             }
@@ -386,6 +391,11 @@ internal sealed partial class QuantizedAttentionLayer : LayerBase<float>, IShape
 
         float scale = 1f / MathF.Sqrt(headDim);
         var output = new Tensor<float>(new[] { batchSize, numHeads, seqLenQ, headDim });
+        var querySpan = queries.AsSpan();
+        var keySpan = keys.AsSpan();
+        var valueSpan = values.AsSpan();
+        var outputSpan = output.AsWritableSpan();
+        var scores = new float[seqLenKV];
 
         for (int b = 0; b < batchSize; b++)
         {
@@ -393,36 +403,38 @@ internal sealed partial class QuantizedAttentionLayer : LayerBase<float>, IShape
             {
                 for (int i = 0; i < seqLenQ; i++)
                 {
-                    var scores = new float[seqLenKV];
                     float maxScore = float.NegativeInfinity;
+                    int queryOffset = ((b * numHeads + h) * seqLenQ + i) * headDim;
 
                     for (int j = 0; j < seqLenKV; j++)
                     {
                         float dot = 0f;
+                        int keyOffset = ((b * numHeads + h) * seqLenKV + j) * headDim;
                         for (int d = 0; d < headDim; d++)
                         {
-                            dot += queries[new[] { b, h, i, d }] * keys[new[] { b, h, j, d }];
+                            dot += querySpan[queryOffset + d] * keySpan[keyOffset + d];
                         }
                         scores[j] = dot * scale;
                         if (scores[j] > maxScore) maxScore = scores[j];
                     }
 
                     float sumExp = 0f;
-                    var weights = new float[seqLenKV];
                     for (int j = 0; j < seqLenKV; j++)
                     {
-                        weights[j] = MathF.Exp(scores[j] - maxScore);
-                        sumExp += weights[j];
+                        scores[j] = MathF.Exp(scores[j] - maxScore);
+                        sumExp += scores[j];
                     }
 
+                    int outputOffset = ((b * numHeads + h) * seqLenQ + i) * headDim;
                     for (int d = 0; d < headDim; d++)
                     {
                         float sum = 0f;
                         for (int j = 0; j < seqLenKV; j++)
                         {
-                            sum += (weights[j] / sumExp) * values[new[] { b, h, j, d }];
+                            int valueOffset = ((b * numHeads + h) * seqLenKV + j) * headDim;
+                            sum += (scores[j] / sumExp) * valueSpan[valueOffset + d];
                         }
-                        output[new[] { b, h, i, d }] = sum;
+                        outputSpan[outputOffset + d] = sum;
                     }
                 }
             }

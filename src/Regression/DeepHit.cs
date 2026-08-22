@@ -736,7 +736,7 @@ public class DeepHit<T> : AsyncDecisionTreeRegressionBase<T>
         {
             // SIMD: output = input @ weights + biases via Engine.TensorMatMul
             var inputTensor = Tensor<T>.FromVector(input[i]).Reshape(1, input[i].Length);
-            var result = Engine.TensorBroadcastAdd(
+            var result = Engine.TensorAdd(
                 Engine.TensorMatMul(inputTensor, weightTensor), biasTensor);
 
             if (applyActivation)

@@ -184,5 +184,25 @@ public class GeneratedFloatScaffoldSmokeTests
         }
     }
 
+    [Fact]
+    public void GeneratedScaffolds_EmitTargetedRegressionGuards()
+    {
+        var scaffolds = GeneratedScaffolds();
+
+        var vmamba = Assert.Single(scaffolds, type => type.Name == "VMambaTests");
+        var deterministicLoss = vmamba.GetProperty(
+            "MemorizationTaskUsesDeterministicEvalLoss",
+            System.Reflection.BindingFlags.Instance |
+            System.Reflection.BindingFlags.NonPublic |
+            System.Reflection.BindingFlags.DeclaredOnly);
+        Assert.NotNull(deterministicLoss);
+        Assert.True(Assert.IsType<bool>(deterministicLoss.GetValue(Activator.CreateInstance(vmamba))));
+
+        var demucs = Assert.Single(scaffolds, type => type.Name == "DemucsNoiseTests");
+        var collection = Assert.Single(demucs.CustomAttributes,
+            attribute => attribute.AttributeType == typeof(CollectionAttribute));
+        Assert.Equal("FoundationScaleSerial", Assert.Single(collection.ConstructorArguments).Value);
+    }
+
 
 }

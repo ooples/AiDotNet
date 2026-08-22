@@ -288,9 +288,9 @@ public partial class HybridBlockScheduler<T> : LayerBase<T>, IShapeContract
         var rms = Engine.TensorSqrt(Engine.TensorAddScalar(meanSq, eps));
         var invRms = Engine.TensorReciprocal(rms);
 
-        var normalised = Engine.TensorBroadcastMultiply(input, invRms);
-        var scaled = Engine.TensorBroadcastMultiply(normalised, gamma);
-        return Engine.TensorBroadcastAdd(scaled, beta);
+        var normalised = Engine.TensorMultiply(input, invRms);
+        var scaled = Engine.TensorMultiply(normalised, gamma);
+        return Engine.TensorAdd(scaled, beta);
     }
 
     private Tensor<T> BackwardRMSNorm(Tensor<T> dOutput, Tensor<T> input, Tensor<T> gamma,

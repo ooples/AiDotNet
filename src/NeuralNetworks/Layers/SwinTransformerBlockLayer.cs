@@ -447,12 +447,12 @@ public partial class SwinTransformerBlockLayer<T> : LayerBase<T>, IShapeContract
         relativeBias = Engine.Reshape(relativeBias, [windowArea, windowArea, _numHeads]);
         relativeBias = Engine.TensorPermute(relativeBias, [2, 0, 1]);
         relativeBias = Engine.Reshape(relativeBias, [1, _numHeads, windowArea, windowArea]);
-        scores = Engine.TensorBroadcastAdd(scores, relativeBias);
+        scores = Engine.TensorAdd(scores, relativeBias);
 
         var mask = CreateAttentionMask(
             batch, h, w, numWindowsH, numWindowsW, effectiveShift);
         if (mask is not null)
-            scores = Engine.TensorBroadcastAdd(scores, mask);
+            scores = Engine.TensorAdd(scores, mask);
 
         var probabilities = Engine.Softmax(scores, axis: -1);
         var context = Engine.BatchMatMul(probabilities, v);

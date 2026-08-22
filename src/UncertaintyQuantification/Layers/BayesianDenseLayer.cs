@@ -1,4 +1,4 @@
-﻿// File-level, deliberately: two Tensors namespaces in the project's global usings also define a
+// File-level, deliberately: two Tensors namespaces in the project's global usings also define a
 // TensorLayout, so [TensorLayout(...)] only binds when this import shadows them from a nearer scope.
 using AiDotNet.Attributes;
 using AiDotNet.Extensions;
@@ -418,7 +418,7 @@ public partial class BayesianDenseLayer<T> : LayerBase<T>, IBayesianLayer<T>, IS
         // operation remains connected to the tape.
         var weightTranspose = Engine.TensorTranspose(effectiveWeights);
         var preActivation = Engine.TensorMatMul(flatInput, weightTranspose);
-        preActivation = Engine.TensorBroadcastAdd(
+        preActivation = Engine.TensorAdd(
             preActivation,
             Engine.Reshape(effectiveBias, [1, _outputSize]));
         var activated = ApplyActivation(preActivation);

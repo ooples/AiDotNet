@@ -57,7 +57,7 @@ public partial class SparseLinearLayer<T> : LayerBase<T>, IShapeContract
     /// <remarks>
     /// <para>
     /// From <c>ForwardTraced</c>: the chain ends at
-    /// <c>TensorBroadcastAdd(outBO, Reshape(_biases, [1, OutputFeatures]))</c>, giving
+    /// <c>TensorAdd(outBO, Reshape(_biases, [1, OutputFeatures]))</c>, giving
     /// <c>[batch, OutputFeatures]</c>, and a rank-1 input is reshaped back to <c>[OutputFeatures]</c>
     /// on the way out. <c>OutputFeatures</c> is the constructor argument that sizes the weight matrix's
     /// row count, so <c>Fixed</c> is reading the layer's own parameter, not an observed number.
@@ -286,7 +286,7 @@ public partial class SparseLinearLayer<T> : LayerBase<T>, IShapeContract
         var inputT = Engine.TensorTranspose(input2d);                        // [In, batch]
         var outT = _engine.SparseMatMul(_weights, inputT);                   // [Out, batch]
         var outBO = Engine.TensorTranspose(outT);                            // [batch, Out]
-        var biased = Engine.TensorBroadcastAdd(
+        var biased = Engine.TensorAdd(
             outBO, Engine.Reshape(_biases, new[] { 1, OutputFeatures }));    // [batch, Out]
         var activated = ApplyActivation(biased);
 

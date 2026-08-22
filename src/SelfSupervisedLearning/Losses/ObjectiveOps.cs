@@ -37,7 +37,7 @@ internal static class ObjectiveOps
         var safe = engine.TensorAddScalar(sumSq, MathHelper.GetNumericOperations<T>().FromDouble(epsilon));
         var norm = engine.TensorSqrt(safe);
         // norm is [rows, 1] against x's [rows, cols]; this engine does not broadcast implicitly.
-        return engine.TensorBroadcastDivide(x, norm);
+        return engine.TensorDivide(x, norm);
     }
 
     /// <summary>
@@ -52,9 +52,9 @@ internal static class ObjectiveOps
     {
         var engine = AiDotNetEngine.Current;
         var max = engine.ReduceMax(logits, new[] { axis }, keepDims: true);
-        var shifted = engine.TensorBroadcastSubtract(logits, max);
+        var shifted = engine.TensorSubtract(logits, max);
         var sumExp = engine.ReduceSum(engine.TensorExp(shifted), new[] { axis }, keepDims: true);
-        return engine.TensorBroadcastSubtract(shifted, engine.TensorLog(sumExp));
+        return engine.TensorSubtract(shifted, engine.TensorLog(sumExp));
     }
 
     /// <summary>
