@@ -85,19 +85,55 @@ public class ModelMetadataValidationGenerator : IIncrementalGenerator
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
         // Syntax-first filter: find all non-abstract class declarations with base types
-        var classDeclarations = context.SyntaxProvider.CreateSyntaxProvider(
+        // The pipeline used to cache INamedTypeSymbol. A symbol in cached pipeline state is not
+        // value-equatable and roots the entire Compilation, so the cache pinned compilations in
+        // memory. It now carries only each candidate's metadata name; the symbol is re-resolved
+        // from the compilation at the point of validation.
+        //
+        // SCOPE LIMIT, deliberate. The validators report diagnostics directly against
+        // SourceProductionContext. Turning them into value-typed pending diagnostics would make the
+        // pipeline properly cacheable, but the generated-output diff used to verify this series
+        // does NOT cover diagnostics -- they are not files -- so such a rewrite would be
+        // unverifiable by the harness that has caught every regression so far. The validation logic
+        // is therefore left exactly as it was, and only the retention is fixed. Diagnostic counts
+        // (AIDN011/AIDN012) are compared across the build instead.
+        var classNames = context.SyntaxProvider.CreateSyntaxProvider(
             predicate: static (node, _) => IsCandidate(node),
-            transform: static (ctx, _) => GetModelClassOrNull(ctx))
-            .Where(static s => s is not null);
+            transform: static (ctx, _) => GetModelClassOrNull(ctx) is INamedTypeSymbol symbol
+                ? MetadataNameOf(symbol)
+                : null)
+            .Where(static n => n is not null)
+            .Select(static (n, _) => n ?? string.Empty);
 
         // Collect and combine with compilation
-        var collected = classDeclarations.Collect().Combine(context.CompilationProvider);
+        var collected = classNames.Collect().Combine(context.CompilationProvider);
 
         context.RegisterSourceOutput(collected, static (spc, source) =>
         {
             var (candidates, compilation) = source;
             Execute(spc, candidates, compilation);
         });
+    }
+
+    /// <summary>
+    /// Builds the metadata name GetTypeByMetadataName expects, including the arity suffix for
+    /// generics and '+' separators for nested types.
+    /// </summary>
+    private static string MetadataNameOf(INamedTypeSymbol symbol)
+    {
+        var name = symbol.MetadataName;
+        for (var containing = symbol.ContainingType; containing is not null; containing = containing.ContainingType)
+        {
+            name = containing.MetadataName + "+" + name;
+        }
+
+        var ns = symbol.ContainingNamespace;
+        if (ns is not null && !ns.IsGlobalNamespace)
+        {
+            name = ns.ToDisplayString() + "." + name;
+        }
+
+        return name;
     }
 
     /// <summary>
@@ -156,7 +192,7 @@ public class ModelMetadataValidationGenerator : IIncrementalGenerator
 
     private static void Execute(
         SourceProductionContext context,
-        ImmutableArray<INamedTypeSymbol?> candidates,
+        ImmutableArray<string> candidates,
         Compilation compilation)
     {
         // Scope the model-metadata contract to the shipping AiDotNet library assembly ONLY.
@@ -206,13 +242,17 @@ public class ModelMetadataValidationGenerator : IIncrementalGenerator
             return;
         }
 
-        var seen = new System.Collections.Generic.HashSet<INamedTypeSymbol>(SymbolEqualityComparer.Default);
-        foreach (var modelClass in candidates)
+        // Dedupe by metadata name; partial classes contribute one entry per declaration.
+        var seen = new System.Collections.Generic.HashSet<string>(System.StringComparer.Ordinal);
+        foreach (var metadataName in candidates)
         {
-            if (modelClass is null)
+            if (metadataName.Length == 0)
                 continue;
 
-            if (!seen.Add(modelClass))
+            if (!seen.Add(metadataName))
+                continue;
+
+            if (compilation.GetTypeByMetadataName(metadataName) is not INamedTypeSymbol modelClass)
                 continue;
 
             // Skip classes marked with [ModelMetadataExempt]
