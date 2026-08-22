@@ -5746,6 +5746,23 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     /// </summary>
     internal IReadOnlyList<TrainableParameterValueSlot> GetOwnTrainableParameterValueSlots()
     {
+        // Materialize first. A lazily-initialized layer registers its tensors inside
+        // EnsureInitialized, so before that runs GetOrderedParameterComponents reports NO trainable
+        // components even though the layer's declared count is non-zero -- and this method silently
+        // returned an empty slot list for a layer that owns real weights.
+        //
+        // That made a model's flat GetParameters SHORTER than its own ParameterCount whenever a
+        // sub-layer had not been exercised. DiffusionAttention owns both a FlashAttentionLayer and a
+        // MultiHeadAttentionLayer and runs only one per forward depending on sequence length, so the
+        // unused one never initialized: a small U-Net reported ParameterCount 10,390 while
+        // GetParameters returned 9,598, and the 792 difference is exactly 3 x 264 -- one attention
+        // implementation in each of its three attention blocks. A GetParameters/SetParameters round
+        // trip through that vector dropped those weights entirely.
+        //
+        // The layer's OWN GetParameters already materializes before reading its surface; this is the
+        // same guarantee for the per-layer walk that model-level surfaces use.
+        EnsureMaterializedForParameterSurface();
+
         var components = GetOrderedParameterComponents();
         var slots = new List<TrainableParameterValueSlot>();
         for (int i = 0; i < components.Length; i++)
