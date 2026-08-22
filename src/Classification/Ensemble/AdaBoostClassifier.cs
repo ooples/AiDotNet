@@ -387,60 +387,6 @@ public partial class AdaBoostClassifier<T> : EnsembleClassifierBase<T>
     }
 
     /// <inheritdoc/>
-    public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
-    {
-        var clone = new AdaBoostClassifier<T>(new AdaBoostClassifierOptions<T>
-        {
-            NEstimators = Options.NEstimators,
-            LearningRate = Options.LearningRate,
-            Algorithm = Options.Algorithm,
-            Seed = Options.Seed
-        });
-
-        clone.NumFeatures = NumFeatures;
-        clone.NumClasses = NumClasses;
-        clone.TaskType = TaskType;
-
-        if (ClassLabels is not null)
-        {
-            clone.ClassLabels = new Vector<T>(ClassLabels.Length);
-            for (int i = 0; i < ClassLabels.Length; i++)
-            {
-                clone.ClassLabels[i] = ClassLabels[i];
-            }
-        }
-
-        if (_estimatorWeights is not null)
-        {
-            clone._estimatorWeights = new Vector<T>(_estimatorWeights.Length);
-            for (int i = 0; i < _estimatorWeights.Length; i++)
-            {
-                clone._estimatorWeights[i] = _estimatorWeights[i];
-            }
-        }
-
-        if (FeatureImportances is not null)
-        {
-            clone.FeatureImportances = new Vector<T>(FeatureImportances.Length);
-            for (int i = 0; i < FeatureImportances.Length; i++)
-            {
-                clone.FeatureImportances[i] = FeatureImportances[i];
-            }
-        }
-
-        // Clone all estimators
-        foreach (var estimator in Estimators)
-        {
-            if (estimator is IFullModel<T, Matrix<T>, Vector<T>> fullModel)
-            {
-                clone.Estimators.Add((IClassifier<T>)fullModel.Clone());
-            }
-        }
-
-        return clone;
-    }
-
-    /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()
     {
         var metadata = base.GetModelMetadata();

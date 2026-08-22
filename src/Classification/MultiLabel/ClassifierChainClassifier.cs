@@ -572,38 +572,6 @@ public partial class ClassifierChainClassifier<T> : MultiLabelClassifierBase<T>
         }
     }
 
-    /// <summary>
-    /// Creates a deep copy of this classifier.
-    /// </summary>
-    /// <returns>A new instance with the same parameters and state.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Cloning creates an independent copy of the classifier,
-    /// including all its chain classifiers and the chain order.
-    /// </para>
-    /// </remarks>
-    public override IFullModel<T, Matrix<T>, Matrix<T>> Clone()
-    {
-        var clone = new ClassifierChainClassifier<T>(
-            _classifierFactory, _specifiedOrder, _useRandomOrder, _random.Next(), Options, Regularization);
-        clone.NumLabels = NumLabels;
-        clone.NumFeatures = NumFeatures;
-        clone.NumClasses = NumClasses;
-        clone.TaskType = TaskType;
-        clone._chainOrder = _chainOrder?.ToArray();
-
-        if (_chainClassifiers is not null)
-        {
-            clone._chainClassifiers = new IClassifier<T>[_chainClassifiers.Length];
-            for (int i = 0; i < _chainClassifiers.Length; i++)
-            {
-                clone._chainClassifiers[i] = (IClassifier<T>)_chainClassifiers[i].Clone();
-            }
-        }
-
-        return clone;
-    }
-
     #endregion
 
     #region Properties

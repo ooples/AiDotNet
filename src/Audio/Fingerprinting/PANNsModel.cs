@@ -604,16 +604,6 @@ public partial class PANNsModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprin
     }
 
     /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() =>
-        _useNativeMode
-            ? new PANNsModel<T>(Architecture, new PANNsModelOptions(_options), lossFunction: LossFunction)
-            // ONNX-backed instance: reuse the loaded model path so the
-            // clone preserves its execution mode. Without this, Clone() of
-            // an ONNX-mode PANNs silently downgrades to native and
-            // changes inference behaviour.
-            : new PANNsModel<T>(Architecture, _modelPath!, new PANNsModelOptions(_options));
-
-    /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata() =>
         new ModelMetadata<T>
         {

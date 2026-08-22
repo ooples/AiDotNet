@@ -374,10 +374,6 @@ public partial class MedCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVision
         }
     }
 
-    /// <inheritdoc />
-    protected override IEnumerable<LayerBase<T>?> GetExtraTrainableLayers() =>
-        EnumerateMedClipExtraLayers();
-
     private IEnumerable<LayerBase<T>?> EnumerateMedClipExtraLayers()
     {
         foreach (var layer in EnumerateTextEncoderTrainableLayers()) yield return layer;

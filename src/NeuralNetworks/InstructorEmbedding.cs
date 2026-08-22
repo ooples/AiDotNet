@@ -184,27 +184,6 @@ namespace AiDotNet.NeuralNetworks
             return EmbedWithInstruction(text);
         }
 
-        /// <inheritdoc/>
-        protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-        {
-            var instance = new InstructorEmbedding<T>(
-                Architecture,
-                null,
-                null,
-                _vocabSize,
-                EmbeddingDimension,
-                MaxTokens,
-                _numLayers,
-                _numHeads,
-                _feedForwardDim,
-                _poolingStrategy,
-                LossFunction,
-                Convert.ToDouble(MaxGradNorm));
-
-            instance.SetDefaultInstruction(_defaultInstruction);
-            return instance;
-        }
-
         /// <summary>
         /// Retrieves metadata about the Instructor model, including its default instruction.
         /// </summary>

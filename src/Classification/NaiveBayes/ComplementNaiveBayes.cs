@@ -229,57 +229,6 @@ public partial class ComplementNaiveBayes<T> : NaiveBayesBase<T>
     }
 
     /// <inheritdoc/>
-    public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
-    {
-        var clone = new ComplementNaiveBayes<T>(new NaiveBayesOptions<T>
-        {
-            Alpha = Options.Alpha,
-            FitPriors = Options.FitPriors
-        }, null, _normalize);
-
-        clone.NumFeatures = NumFeatures;
-        clone.NumClasses = NumClasses;
-        clone.TaskType = TaskType;
-
-        if (ClassLabels is not null)
-        {
-            clone.ClassLabels = new Vector<T>(ClassLabels.Length);
-            for (int i = 0; i < ClassLabels.Length; i++)
-            {
-                clone.ClassLabels[i] = ClassLabels[i];
-            }
-        }
-
-        if (LogPriors is not null)
-        {
-            clone.LogPriors = new Vector<T>(LogPriors.Length);
-            for (int i = 0; i < LogPriors.Length; i++)
-            {
-                clone.LogPriors[i] = LogPriors[i];
-            }
-        }
-
-        if (_complementLogProbs is not null)
-        {
-            clone._complementLogProbs = new Matrix<T>(_complementLogProbs.Rows, _complementLogProbs.Columns);
-            for (int i = 0; i < _complementLogProbs.Rows; i++)
-            {
-                for (int j = 0; j < _complementLogProbs.Columns; j++)
-                {
-                    clone._complementLogProbs[i, j] = _complementLogProbs[i, j];
-                }
-            }
-        }
-
-        if (_featureMinShift is not null)
-        {
-            clone._featureMinShift = _featureMinShift.ToArray();
-        }
-
-        return clone;
-    }
-
-    /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()
     {
         var metadata = base.GetModelMetadata();

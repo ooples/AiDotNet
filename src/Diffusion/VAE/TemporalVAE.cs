@@ -855,40 +855,6 @@ public partial class TemporalVAE<T> : VAEModelBase<T>
 
     #region ICloneable Implementation
 
-    /// <inheritdoc />
-    public override IVAEModel<T> Clone()
-    {
-        var clone = new TemporalVAE<T>(
-            _inputChannels,
-            _latentChannels,
-            _baseChannels,
-            _channelMultipliers,
-            _numTemporalLayers,
-            _temporalKernelSize,
-            _causalMode,
-            _latentScaleFactor,
-            LossFunction);
-
-        if (_preserveMaterializedParameters)
-        {
-            // The encoder/decoder conv stacks are lazy — they only ALLOCATE their weight tensors on
-            // the first Encode/Decode, not at construction. A fresh clone has the layer STRUCTURE but
-            // unallocated weights, so SetParameters(GetParameters()) onto it copies into nothing and the
-            // clone re-initializes with a fresh RNG on its first real forward → divergent Predict and a
-            // parameter-count mismatch. Resolve both sides' lazy shapes (one tiny encode+decode) before
-            // the parameter round-trip so the vectors line up and the trained values land. Mirrors
-            // StandardVAE.Clone.
-            TriggerLazyShapeResolution();
-            clone.TriggerLazyShapeResolution();
-            if (!clone.TryShareParametersFrom(this)) clone.SetParameterChunks(GetParameterChunks());
-        }
-        else
-        {
-            CopyMaterializedParametersTo(clone);
-        }
-        return clone;
-    }
-
     /// <summary>
     /// Materializes every lazy encoder/decoder weight tensor by running one tiny encode+decode probe,
     /// so <see cref="GetParameters"/>/<see cref="SetParameters"/>/parameter-count agree before any real

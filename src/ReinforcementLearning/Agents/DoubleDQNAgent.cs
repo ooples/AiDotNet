@@ -296,52 +296,6 @@ public partial class DoubleDQNAgent<T> : DeepReinforcementLearningAgentBase<T>, 
         };
     }
 
-    /// <inheritdoc/>
-    public override byte[] Serialize()
-    {
-        using var ms = new MemoryStream();
-        using var writer = new BinaryWriter(ms);
-
-        writer.Write(_options.StateSize);
-        writer.Write(_options.ActionSize);
-        writer.Write(NumOps.ToDouble(LearningRate));
-        writer.Write(NumOps.ToDouble(DiscountFactor));
-        writer.Write(_epsilon);
-        writer.Write(_steps);
-
-        var qNetworkBytes = _qNetwork.Serialize();
-        writer.Write(qNetworkBytes.Length);
-        writer.Write(qNetworkBytes);
-
-        var targetNetworkBytes = _targetNetwork.Serialize();
-        writer.Write(targetNetworkBytes.Length);
-        writer.Write(targetNetworkBytes);
-
-        return ms.ToArray();
-    }
-
-    /// <inheritdoc/>
-    public override void Deserialize(byte[] data)
-    {
-        using var ms = new MemoryStream(data);
-        using var reader = new BinaryReader(ms);
-
-        reader.ReadInt32(); // stateSize
-        reader.ReadInt32(); // actionSize
-        reader.ReadDouble(); // learningRate
-        reader.ReadDouble(); // discountFactor
-        _epsilon = reader.ReadDouble();
-        _steps = reader.ReadInt32();
-
-        var qNetworkLength = reader.ReadInt32();
-        var qNetworkBytes = reader.ReadBytes(qNetworkLength);
-        _qNetwork.Deserialize(qNetworkBytes);
-
-        var targetNetworkLength = reader.ReadInt32();
-        var targetNetworkBytes = reader.ReadBytes(targetNetworkLength);
-        _targetNetwork.Deserialize(targetNetworkBytes);
-    }
-
     /// <summary>
     /// Computes gradients of the loss with respect to this agent's parameters, without updating them.
     /// </summary>

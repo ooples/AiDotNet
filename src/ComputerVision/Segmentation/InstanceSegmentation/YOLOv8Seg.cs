@@ -306,23 +306,6 @@ public partial class YOLOv8Seg<T> : Common.InstanceSegmentationBase<T>
         ModelData = SerializeForMetadata()
     };
 
-    /// <summary>
-    /// Writes configuration to a binary stream.
-    /// </summary>
-
-
-    /// <summary>
-    /// Reads configuration from a binary stream.
-    /// </summary>
-
-
-    /// <summary>
-    /// Creates a new instance with the same configuration.
-    /// </summary>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() => _useNativeMode
-        ? new YOLOv8Seg<T>(Architecture, Optimizer, LossFunction, _numClasses, _modelSize, _dropRate, _options)
-        : new YOLOv8Seg<T>(Architecture, _onnxModelPath ?? throw new InvalidOperationException("ONNX model path not initialized."), _numClasses, _modelSize, _options);
-
     // Dispose is inherited from SegmentationModelBase, which already disposes the ONNX session.
     // YOLOv8Seg owns no further unmanaged resources.
 

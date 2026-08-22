@@ -1005,17 +1005,6 @@ namespace AiDotNet.PhysicsInformed.ScientificML
         }
 
         /// <inheritdoc/>
-        public override IFullModel<T, Matrix<T>, Vector<T>> DeepCopy()
-        {
-            var clone = new SymbolicPhysicsLearner<T>();
-            if (_discoveredEquation is not null)
-            {
-                clone._discoveredEquation = _discoveredEquation.Clone();
-            }
-            return clone;
-        }
-
-        /// <inheritdoc/>
         public override IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
         {
             var clone = DeepCopy();

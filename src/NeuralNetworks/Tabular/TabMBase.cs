@@ -98,7 +98,7 @@ public abstract class TabMBase<T>
     /// all, so it cannot inherit that one.
     /// </remarks>
     protected virtual IEnumerable<ILayer<T>> GetExtraTrainableLayers()
-        => System.Linq.Enumerable.Empty<ILayer<T>>();
+        => AiDotNet.Models.Parameters.GeneratedParameterDiscovery.EnumerateDerivedLayers<T>(this, typeof(TabMBase<T>));
 
     /// <summary>
     /// Gets the total number of trainable parameters in the base model.

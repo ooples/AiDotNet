@@ -604,45 +604,4 @@ public partial class ExpertLayer<T> : LayerBase<T>, IShapeContract
         }
     }
 
-    /// <summary>
-    /// Creates a deep copy of this expert, including all contained layers.
-    /// </summary>
-    /// <returns>A new Expert instance with the same configuration and parameters.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method creates a complete copy of the expert, including all layers and their parameters.
-    /// The clone is independent of the original - changes to one won't affect the other.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method creates an identical copy of the expert.
-    ///
-    /// Cloning is useful when you want to:
-    /// - Experiment with different training approaches on the same starting point
-    /// - Create an ensemble of similar but independent experts
-    /// - Save a checkpoint while continuing to train
-    /// - Implement certain training algorithms that need multiple copies
-    ///
-    /// The clone has:
-    /// - The same layer structure
-    /// - The same parameter values
-    /// - But is completely independent (changes to one don't affect the other)
-    ///
-    /// It's like photocopying a document - you get an identical copy that you can
-    /// modify without changing the original.
-    /// </para>
-    /// </remarks>
-    public override LayerBase<T> Clone()
-    {
-        // Clone all layers
-        var clonedLayers = _layers.Select(l =>
-        {
-            if (l is LayerBase<T> layerBase)
-            {
-                return (ILayer<T>)layerBase.Clone();
-            }
-            return l; // If not cloneable, use the same reference (not ideal but safe for most cases)
-        }).ToList();
-
-        return new ExpertLayer<T>(clonedLayers, InputShape, OutputShape, ScalarActivation);
-    }
-
 }

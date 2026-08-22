@@ -811,48 +811,6 @@ public partial class HistGradientBoostingClassifier<T> : ClassifierBase<T>
         CountFeatureUsage(node.RightChild, importance);
     }
 
-    /// <inheritdoc/>
-    public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
-    {
-        var clone = new HistGradientBoostingClassifier<T>(_maxBins, _maxDepth, _nEstimators,
-            _learningRate, _minSamplesLeaf, _l2Regularization);
-
-        clone.NumFeatures = NumFeatures;
-        clone.NumClasses = NumClasses;
-        clone.TaskType = TaskType;
-        clone.FeatureNames = FeatureNames is not null ? (string[])FeatureNames.Clone() : null;
-
-        if (ClassLabels is not null)
-        {
-            clone.ClassLabels = new Vector<T>(ClassLabels.Length);
-            for (int i = 0; i < ClassLabels.Length; i++)
-                clone.ClassLabels[i] = ClassLabels[i];
-        }
-
-        if (_binBoundaries is not null)
-        {
-            clone._binBoundaries = new double[_binBoundaries.Length][];
-            for (int i = 0; i < _binBoundaries.Length; i++)
-            {
-                clone._binBoundaries[i] = new double[_binBoundaries[i].Length];
-                Array.Copy(_binBoundaries[i], clone._binBoundaries[i], _binBoundaries[i].Length);
-            }
-        }
-
-        if (_initialPrediction is not null)
-        {
-            clone._initialPrediction = new double[_initialPrediction.Length];
-            Array.Copy(_initialPrediction, clone._initialPrediction, _initialPrediction.Length);
-        }
-
-        foreach (var tree in _trees)
-        {
-            clone._trees.Add(CloneHistTree(tree));
-        }
-
-        return clone;
-    }
-
     private static HistTree CloneHistTree(HistTree node)
     {
         var cloned = new HistTree

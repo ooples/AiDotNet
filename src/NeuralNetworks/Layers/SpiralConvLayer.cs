@@ -1043,37 +1043,6 @@ public partial class SpiralConvLayer<T> : LayerBase<T>, IShapeContract
         return meta;
     }
 
-    /// <summary>
-    /// Creates a deep copy of this layer.
-    /// </summary>
-    /// <returns>A new SpiralConvLayer with identical configuration and parameters.</returns>
-    public override LayerBase<T> Clone()
-    {
-        SpiralConvLayer<T> copy;
-
-        if (UsingVectorActivation)
-        {
-            var vAct = VectorActivation ?? throw new InvalidOperationException(
-                "UsingVectorActivation is true but VectorActivation is null.");
-            copy = new SpiralConvLayer<T>(
-                OutputChannels, SpiralLength, vAct);
-        }
-        else
-        {
-            copy = new SpiralConvLayer<T>(
-                OutputChannels, SpiralLength, ScalarActivation);
-        }
-
-        copy.SetParameters(GetParameters());
-
-        if (_spiralIndices != null)
-        {
-            copy.SetSpiralIndices(_spiralIndices);
-        }
-
-        return copy;
-    }
-
     #endregion
 
     #region State Management

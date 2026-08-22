@@ -289,48 +289,6 @@ public partial class DiffCutSegmentation<T> : Common.SemanticSegmentationBase<T>
         ModelData = SerializeForMetadata()
     };
 
-    /// <summary>
-    /// Writes configuration to a binary stream.
-    /// </summary>
-    /// <param name="writer">The binary writer.</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Saves model configuration for later reconstruction.
-    /// </para>
-    /// </remarks>
-
-
-    /// <summary>
-    /// Reads configuration from a binary stream.
-    /// </summary>
-    /// <param name="reader">The binary reader.</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Loads model configuration when restoring a saved model.
-    /// </para>
-    /// </remarks>
-
-
-    /// <summary>
-    /// Creates a new instance with the same configuration but fresh weights.
-    /// </summary>
-    /// <returns>A new model instance.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Creates a copy for cross-validation or ensemble training.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        var clonedOptions = new DiffCutSegmentationOptions(_options);
-        return _useNativeMode
-            ? new DiffCutSegmentation<T>(Architecture, optimizer: null, lossFunction: LossFunction,
-                numClasses: _numClasses, dropRate: _dropRate, options: clonedOptions)
-            : new DiffCutSegmentation<T>(Architecture,
-                _onnxModelPath ?? throw new InvalidOperationException("ONNX model path not initialized."),
-                _numClasses, clonedOptions);
-    }
-
     // Dispose of the ONNX session and the _disposed latch are handled by SegmentationModelBase.
     // NumClasses / InputHeight / InputWidth / IsOnnxMode / Segment / GetClassMap / GetProbabilityMap
     // all arrive from SemanticSegmentationBase with identical bodies.

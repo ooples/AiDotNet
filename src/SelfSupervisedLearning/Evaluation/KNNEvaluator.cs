@@ -390,9 +390,5 @@ public partial class KNNEvaluator<T> : ModelBase<T, Tensor<T>, Tensor<T>>
         return copy;
     }
 
-    /// <inheritdoc />
-    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
-        => (KNNEvaluator<T>)MemberwiseClone();
-
     #endregion
 }

@@ -1152,24 +1152,4 @@ public partial class NBEATSModel<T> : TimeSeriesModelBase<T>, ISupportsLossFunct
         return weights;
     }
 
-    public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
-    {
-        var clone = new NBEATSModel<T>(_options);
-        // Copy trained blocks (read-only after training -- safe to share by reference)
-        clone._blocks.Clear();
-        clone._blocks.AddRange(_blocks);
-        // Copy training series
-        if (_trainingSeries.Length > 0)
-            clone._trainingSeries = new Vector<T>(_trainingSeries);
-        // Copy model parameters
-        if (ModelParameters is not null && ModelParameters.Length > 0)
-            clone.ModelParameters = new Vector<T>(ModelParameters);
-        // Copy normalization parameters
-        clone._normMean = _normMean;
-        clone._normStd = _normStd;
-        return clone;
-
-
-}
-
 }

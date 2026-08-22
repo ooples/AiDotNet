@@ -5,6 +5,8 @@ using AiDotNet.LinearAlgebra;
 using AiDotNet.Models;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Validation;
+using System.Globalization;
+using System.Reflection;
 
 
 namespace AiDotNet.DistributedTraining;
@@ -470,10 +472,171 @@ public abstract partial class ShardedModelBase<T, TInput, TOutput> :
     public abstract IFullModel<T, TInput, TOutput> WithParameters(Vector<T> parameters);
 
     /// <inheritdoc/>
-    public abstract byte[] Serialize();
+    /// <remarks>
+    /// Every sharding strategy persists the same two things: compatibility metadata for the
+    /// process topology and the wrapped model payload. Strategy-specific fitted state is appended
+    /// through the generated state registry, so concrete wrappers never own a serializer.
+    /// </remarks>
+    public virtual byte[] Serialize()
+    {
+        EnsureShardingInitialized();
+        using var stream = new MemoryStream();
+        using (var writer = new BinaryWriter(stream, System.Text.Encoding.UTF8, leaveOpen: true))
+        {
+            writer.Write(WorldSize);
+            writer.Write(Rank);
+            writer.Write(Config.AutoSyncGradients);
+            writer.Write(Config.MinimumParameterGroupSize);
+            writer.Write(Config.EnableGradientCompression);
+
+            var compatibilityValues = GetStrategyCompatibilityValues();
+            writer.Write(compatibilityValues.Count);
+            foreach (var value in compatibilityValues)
+            {
+                writer.Write(value.Name);
+                writer.Write(value.Value);
+            }
+
+            var modelData = WrappedModel.Serialize();
+            writer.Write(modelData.Length);
+            writer.Write(modelData);
+        }
+
+        return AiDotNet.Models.ModelStateEnvelope.Append(DeclaredState, stream.ToArray());
+    }
 
     /// <inheritdoc/>
-    public abstract void Deserialize(byte[] data);
+    public virtual void Deserialize(byte[] data)
+    {
+        Guard.NotNull(data);
+        EnsureShardingInitialized();
+        // Snapshot the destination configuration before generated state is restored. Some
+        // strategies derive their topology fields during base construction, and the state envelope
+        // legitimately carries those fields; comparing afterwards would compare saved state to
+        // itself and silently accept an incompatible destination.
+        var currentCompatibility = GetStrategyCompatibilityValues()
+            .ToDictionary(item => item.Name, item => item.Value, StringComparer.Ordinal);
+        var payload = AiDotNet.Models.ModelStateEnvelope.Extract(DeclaredState, data);
+
+        using var stream = new MemoryStream(payload);
+        using var reader = new BinaryReader(stream);
+        int savedWorldSize = reader.ReadInt32();
+        int savedRank = reader.ReadInt32();
+        bool savedAutoSync = reader.ReadBoolean();
+        int savedMinimumGroupSize = reader.ReadInt32();
+        bool savedCompression = reader.ReadBoolean();
+
+        if (savedWorldSize != WorldSize)
+            throw new InvalidOperationException(
+                $"World size mismatch: saved={savedWorldSize}, current={WorldSize}.");
+        if (savedRank != Rank)
+            throw new InvalidOperationException($"Rank mismatch: saved={savedRank}, current={Rank}.");
+        if (savedAutoSync != Config.AutoSyncGradients)
+            throw new InvalidOperationException(
+                $"AutoSyncGradients mismatch: saved={savedAutoSync}, current={Config.AutoSyncGradients}.");
+        if (savedMinimumGroupSize != Config.MinimumParameterGroupSize)
+            throw new InvalidOperationException(
+                $"MinimumParameterGroupSize mismatch: saved={savedMinimumGroupSize}, current={Config.MinimumParameterGroupSize}.");
+        if (savedCompression != Config.EnableGradientCompression)
+            throw new InvalidOperationException(
+                $"EnableGradientCompression mismatch: saved={savedCompression}, current={Config.EnableGradientCompression}.");
+
+        int savedCompatibilityCount = reader.ReadInt32();
+        if (savedCompatibilityCount < 0 || savedCompatibilityCount > 1024)
+            throw new InvalidDataException(
+                $"Invalid sharding compatibility value count {savedCompatibilityCount}.");
+
+        for (int i = 0; i < savedCompatibilityCount; i++)
+        {
+            string name = reader.ReadString();
+            string savedValue = reader.ReadString();
+            if (!currentCompatibility.TryGetValue(name, out string? currentValue))
+                throw new InvalidOperationException(
+                    $"Sharding strategy setting '{name}' is not present on the current {GetType().Name} instance.");
+            if (!string.Equals(savedValue, currentValue, StringComparison.Ordinal))
+                throw new InvalidOperationException(
+                    $"Sharding strategy setting '{name}' mismatch: saved={savedValue}, current={currentValue}.");
+        }
+
+        if (savedCompatibilityCount != currentCompatibility.Count)
+            throw new InvalidOperationException(
+                $"Sharding strategy setting count mismatch: saved={savedCompatibilityCount}, current={currentCompatibility.Count}.");
+
+        int modelDataLength = reader.ReadInt32();
+        if (modelDataLength < 0 || modelDataLength > stream.Length - stream.Position)
+            throw new InvalidDataException(
+                $"Invalid wrapped-model payload length {modelDataLength} for {stream.Length - stream.Position} remaining bytes.");
+
+        WrappedModel.Deserialize(reader.ReadBytes(modelDataLength));
+
+        // A restored wrapped model invalidates the local shard and every derived partition cache.
+        // Re-enter through the common initialization hook so pipeline and hybrid strategies rebuild
+        // their topology before slicing the restored parameter surface.
+        _isShardingInitialized = false;
+        CachedFullParameters = null;
+        EnsureShardingInitialized();
+    }
+
+    /// <summary>
+    /// Discovers scalar strategy settings backed by constructor parameters. This preserves
+    /// topology compatibility checks for every wrapper without asking concrete strategies to
+    /// maintain matching serialization methods.
+    /// </summary>
+    private IReadOnlyList<(string Name, string Value)> GetStrategyCompatibilityValues()
+    {
+        var concreteType = GetType();
+        var constructorParameters = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var constructor in concreteType.GetConstructors(
+                     BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic))
+        {
+            foreach (var parameter in constructor.GetParameters())
+            {
+                if (!string.IsNullOrEmpty(parameter.Name))
+                    constructorParameters.Add(parameter.Name!);
+            }
+        }
+
+        var values = new List<(string Name, string Value)>();
+        for (Type? type = concreteType;
+             type is not null && type != typeof(ShardedModelBase<T, TInput, TOutput>);
+             type = type.BaseType)
+        {
+            foreach (var field in type.GetFields(
+                         BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic |
+                         BindingFlags.DeclaredOnly))
+            {
+                string logicalName = field.Name.TrimStart('_');
+                if (!constructorParameters.Contains(logicalName) ||
+                    !TryFormatCompatibilityValue(field.FieldType, field.GetValue(this), out string value))
+                {
+                    continue;
+                }
+
+                values.Add(($"{type.FullName}.{field.Name}", value));
+            }
+        }
+
+        values.Sort((left, right) => StringComparer.Ordinal.Compare(left.Name, right.Name));
+        return values;
+    }
+
+    private static bool TryFormatCompatibilityValue(Type type, object? value, out string formatted)
+    {
+        Type valueType = Nullable.GetUnderlyingType(type) ?? type;
+        if (!(valueType.IsEnum || valueType.IsPrimitive || valueType == typeof(decimal) ||
+              valueType == typeof(string)))
+        {
+            formatted = string.Empty;
+            return false;
+        }
+
+        formatted = value is null
+            ? "<null>"
+            : value is IFormattable formattable
+                ? formattable.ToString(null, CultureInfo.InvariantCulture) ?? string.Empty
+                : value.ToString() ?? string.Empty;
+        return true;
+    }
 
     /// <inheritdoc/>
     public virtual int[] GetInputShape()

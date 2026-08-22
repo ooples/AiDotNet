@@ -193,16 +193,4 @@ public partial class PReLULayer<T> : LayerBase<T>
     {
         _lastInput = null;
     }
-
-    /// <inheritdoc/>
-    public override LayerBase<T> Clone()
-    {
-        var copy = new PReLULayer<T>(_numParameters, _channelAxis,
-            Convert.ToDouble(_alpha.Data.Span[0]));
-        // Copy current α values so Clone preserves trained state, not just init state.
-        var dst = copy._alpha.Data.Span;
-        var src = _alpha.Data.Span;
-        for (int i = 0; i < _alpha.Length; i++) dst[i] = src[i];
-        return copy;
-    }
 }

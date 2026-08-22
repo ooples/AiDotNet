@@ -779,68 +779,6 @@ public partial class CalibratedClassifier<T> : ProbabilisticClassifierBase<T>,
             NumOps.Multiply(_isotonicMapping[high].calibrated, t));
     }
 
-    /// <summary>
-    /// Gets the model type.
-    /// </summary>
-
-    /// <inheritdoc/>
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        IProbabilisticClassifier<T> clonedBase;
-        if (_baseClassifier is IFullModel<T, Matrix<T>, Vector<T>> fullModel)
-        {
-            clonedBase = (IProbabilisticClassifier<T>)fullModel.Clone();
-        }
-        else
-        {
-            clonedBase = _baseClassifier;
-        }
-
-        return new CalibratedClassifier<T>(clonedBase, new CalibratedClassifierOptions<T>
-        {
-            CalibrationMethod = _options.CalibrationMethod,
-            CrossValidationFolds = _options.CrossValidationFolds,
-            CalibrationSetFraction = _options.CalibrationSetFraction,
-            Seed = _options.Seed
-        });
-    }
-
-    /// <inheritdoc/>
-    public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
-    {
-        var clone = (CalibratedClassifier<T>)CreateNewInstance();
-
-        clone.NumFeatures = NumFeatures;
-        clone.NumClasses = NumClasses;
-        clone.TaskType = TaskType;
-        clone._isTrained = _isTrained;
-
-        // Copy calibration parameters
-        clone._plattA = _plattA;
-        clone._plattB = _plattB;
-        clone._betaA = _betaA;
-        clone._betaB = _betaB;
-        clone._betaC = _betaC;
-        clone._temperature = _temperature;
-
-        if (_isotonicMapping != null)
-        {
-            clone._isotonicMapping = new (T, T)[_isotonicMapping.Length];
-            Array.Copy(_isotonicMapping, clone._isotonicMapping, _isotonicMapping.Length);
-        }
-
-        if (ClassLabels != null)
-        {
-            clone.ClassLabels = new Vector<T>(ClassLabels.Length);
-            for (int i = 0; i < ClassLabels.Length; i++)
-            {
-                clone.ClassLabels[i] = ClassLabels[i];
-            }
-        }
-
-        return clone;
-    }
-
     /// <inheritdoc/>
     private Vector<T> PackParameters()
     {

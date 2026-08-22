@@ -1216,22 +1216,6 @@ public partial class LLaVANeuralNetwork<T> : MultimodalModelLayoutBase<T>, ILLaV
         return activations;
     }
 
-    /// <summary>
-    /// Surfaces the CLS token and vision positional embeddings as trainable tensors that live OUTSIDE
-    /// <c>Layers</c>, so the base tape training path watches and updates them alongside the layer weights.
-    /// They are used directly (uncopied) in <see cref="PrependClsToken"/> / <see cref="AddPositionalEmbeddings"/>,
-    /// so the gradient reaches these exact instances and the optimizer step moves them.
-    /// </summary>
-    protected override IEnumerable<Tensor<T>> GetExtraTrainableTensors()
-    {
-        if (_visionClsToken is not null) yield return _visionClsToken;
-        if (_visionPositionalEmbeddings is not null) yield return _visionPositionalEmbeddings;
-        // The text positional table too. It was a Matrix<T>, which no automatic parameter
-        // path can see, so the count included its 512 values and the vector did not --
-        // measured 24,772 against 24,260, a gap that WAS exactly this field.
-        if (_textPositionalEmbeddings is not null) yield return _textPositionalEmbeddings;
-    }
-
     /// <inheritdoc/>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {

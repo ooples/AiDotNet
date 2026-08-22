@@ -138,12 +138,4 @@ public partial class MCDropoutLayer<T> : LayerBase<T>, IShapeContract
         _lastInput.Value = null;
         _dropoutMask.Value = null;
     }
-
-    /// <inheritdoc/>
-    public override LayerBase<T> Clone()
-    {
-        var copy = new MCDropoutLayer<T>(_dropoutRate, _mcMode, _initialSeed);
-        copy.SetTrainingMode(IsTrainingMode);
-        return copy;
-    }
 }

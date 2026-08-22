@@ -476,47 +476,6 @@ public partial class LabelPowerset<T> : MultiLabelClassifierBase<T>
         (_classifier as IGradientComputable<T, Matrix<T>, Vector<T>>)?.ApplyGradients(gradients, learningRate);
     }
 
-    /// <summary>
-    /// Creates a deep copy of this classifier.
-    /// </summary>
-    /// <returns>A new instance with the same parameters and state.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Cloning creates an independent copy of the classifier,
-    /// including its label mappings and underlying classifier.
-    /// </para>
-    /// </remarks>
-    public override IFullModel<T, Matrix<T>, Matrix<T>> Clone()
-    {
-        var clone = new LabelPowerset<T>(_classifierFactory, Options, Regularization);
-        clone.NumLabels = NumLabels;
-        clone.NumFeatures = NumFeatures;
-        clone.NumClasses = NumClasses;
-        clone.TaskType = TaskType;
-        clone._numCombinations = _numCombinations;
-
-        if (_classToLabels is not null)
-        {
-            clone._classToLabels = new Dictionary<int, bool[]>();
-            foreach (var kvp in _classToLabels)
-            {
-                clone._classToLabels[kvp.Key] = kvp.Value.ToArray();
-            }
-        }
-
-        if (_labelsToClass is not null)
-        {
-            clone._labelsToClass = new Dictionary<string, int>(_labelsToClass);
-        }
-
-        if (_classifier is not null)
-        {
-            clone._classifier = (IClassifier<T>)_classifier.Clone();
-        }
-
-        return clone;
-    }
-
     #endregion
 
     #region Properties

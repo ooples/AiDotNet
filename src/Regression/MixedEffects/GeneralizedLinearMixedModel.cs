@@ -981,47 +981,4 @@ public partial class GeneralizedLinearMixedModel<T> : RegressionBase<T>
         return (x - 0.5) * Math.Log(x) - x + 0.5 * Math.Log(2 * Math.PI) +
                1.0 / (12.0 * x) - 1.0 / (360.0 * x * x * x);
     }
-
-    /// <summary>
-    /// Gets the model type.
-    /// </summary>
-
-    /// <summary>
-    /// Creates a new instance of the model with the same configuration.
-    /// </summary>
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        var newModel = new GeneralizedLinearMixedModel<T>(_options, Regularization);
-
-        // Copy random effect specifications
-        foreach (var re in _randomEffects)
-        {
-            if (re.RandomSlopeColumns != null)
-            {
-                newModel.AddRandomSlope(re.Name, re.GroupColumnIndex, re.RandomSlopeColumns, re.IsRandomIntercept);
-            }
-            else if (re.IsRandomIntercept)
-            {
-                newModel.AddRandomIntercept(re.Name, re.GroupColumnIndex);
-            }
-        }
-
-        return newModel;
-    }
-
-    public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
-    {
-        if (_useOLS)
-        {
-            var clone = new GeneralizedLinearMixedModel<T>(_options, Regularization);
-            clone._useOLS = true;
-            clone.Coefficients = new Vector<T>(Coefficients);
-            clone.Intercept = Intercept;
-            clone.TrainingFeatureCount = TrainingFeatureCount;
-            foreach (var re in _randomEffects)
-                clone.AddRandomIntercept(re.Name, re.GroupColumnIndex);
-            return clone;
-        }
-        return base.Clone();
-    }
 }

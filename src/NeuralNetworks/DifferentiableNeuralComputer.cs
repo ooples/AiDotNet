@@ -218,6 +218,7 @@ public partial class DifferentiableNeuralComputer<T> : SequenceModelLayoutBase<T
     /// complex information over long periods, unlike regular neural networks.
     /// </para>
     /// </remarks>
+    [Scratch]
     private Matrix<T> _memory;
 
     /// <summary>
@@ -240,7 +241,7 @@ public partial class DifferentiableNeuralComputer<T> : SequenceModelLayoutBase<T
     /// valuable information it might need later.
     /// </para>
     /// </remarks>
-    [AiDotNet.Attributes.TrainableParameter]
+    [Scratch]
     private Vector<T> _usageFree;
 
     /// <summary>
@@ -264,7 +265,7 @@ public partial class DifferentiableNeuralComputer<T> : SequenceModelLayoutBase<T
     /// This focused writing allows the system to organize information in a way it can find later.
     /// </para>
     /// </remarks>
-    [AiDotNet.Attributes.TrainableParameter]
+    [Scratch]
     private Vector<T> _writeWeighting;
 
     /// <summary>
@@ -288,6 +289,7 @@ public partial class DifferentiableNeuralComputer<T> : SequenceModelLayoutBase<T
     /// This allows the system to retrieve relevant information it previously stored.
     /// </para>
     /// </remarks>
+    [Scratch]
     private List<Vector<T>> _readWeightings;
 
     /// <summary>
@@ -312,6 +314,7 @@ public partial class DifferentiableNeuralComputer<T> : SequenceModelLayoutBase<T
     /// following the sequence in which information was stored.
     /// </para>
     /// </remarks>
+    [Scratch]
     private Vector<T> _precedenceWeighting;
 
     /// <summary>
@@ -370,6 +373,7 @@ public partial class DifferentiableNeuralComputer<T> : SequenceModelLayoutBase<T
     /// to produce its final output for a given input.
     /// </para>
     /// </remarks>
+    [Scratch]
     private List<Vector<T>> _readVectors;
 
     /// <summary>
@@ -1705,27 +1709,6 @@ public partial class DifferentiableNeuralComputer<T> : SequenceModelLayoutBase<T
         }
 
         return outputs;
-    }
-    /// <summary>
-    /// Declares the output projection, which live outside <see cref="NeuralNetworkBase{T}.Layers"/>.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// These were in NEITHER surface. The base walks Layers, these are not in Layers, and
-    /// nothing declared them -- so they were never counted, never handed out, never restored,
-    /// and never trained through a flat-vector optimizer. Declaring them adds to the parameter
-    /// count, deliberately: the old number was not a smaller-but-correct total, it omitted real
-    /// weights.
-    /// </para>
-    /// <para>
-    /// A hook rather than a [TrainableParameter] attribute because TrainableParameterGenerator
-    /// only processes LayerBase subclasses (see its ExtendsLayerBase guard) -- the attribute
-    /// does nothing on a model. For a model, declaring through this hook IS the mechanism.
-    /// </para>
-    /// </remarks>
-    protected override IEnumerable<Tensor<T>> GetExtraTrainableTensors()
-    {
-        yield return _outputWeights;
     }
 
 }

@@ -854,45 +854,6 @@ public partial class VectorModel<T> : ModelBase<T, Matrix<T>, Vector<T>>, IInter
         }
     }
 
-    /// <summary>
-    /// Creates a deep copy of this model.
-    /// </summary>
-    /// <returns>A new instance with the same coefficients.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method creates a deep copy of the model by creating a new VectorModel with a new coefficients vector that has 
-    /// the same values as the original. This ensures that modifications to the copy do not affect the original model. This 
-    /// method is useful when you need to create a duplicate of a model for experimentation or as part of genetic algorithm 
-    /// operations.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method creates an exact duplicate of the model.
-    /// 
-    /// The DeepCopy method:
-    /// - Creates a new model with the same coefficients as this one
-    /// - Ensures the new model is completely independent of the original
-    /// - Creates a "deep copy" where all data is duplicated, not just references
-    /// 
-    /// This method is useful when:
-    /// - You need to create a duplicate of a model for experimentation
-    /// - You want to ensure changes to one model don't affect another
-    /// - You're implementing algorithms that require model copies
-    /// 
-    /// For example, you might copy a model before mutating it to preserve the original.
-    /// </para>
-    /// </remarks>
-    public override IFullModel<T, Matrix<T>, Vector<T>> DeepCopy()
-    {
-        // Create a new coefficients vector with the same values
-        Vector<T> clonedCoefficients = new Vector<T>(Coefficients.Length);
-        for (int i = 0; i < Coefficients.Length; i++)
-        {
-            clonedCoefficients[i] = Coefficients[i];
-        }
-
-        // Create a new model with the cloned coefficients
-        return new VectorModel<T>(clonedCoefficients);
-    }
-
     public override void SetActiveFeatureIndices(IEnumerable<int> featureIndices)
     {
         if (featureIndices == null)

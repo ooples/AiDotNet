@@ -906,31 +906,6 @@ public partial class CausalForest<T> : CausalModelBase<T>
         return newModel;
     }
 
-    /// <inheritdoc/>
-    /// <remarks>
-    /// A fitted causal forest's predictive state is its tree ensemble, not
-    /// merely the propensity-coefficient vector returned by
-    /// <see cref="GetParameters"/>. Copy that state explicitly so a clone
-    /// cannot be marked fitted while containing no trees.
-    /// </remarks>
-    public override IFullModel<T, Matrix<T>, Vector<T>> DeepCopy()
-    {
-        var copy = new CausalForest<T>(
-            _numTrees, _maxDepth, _minSamplesLeaf, _maxFeatures, _honest, _honestFraction)
-        {
-            NumFeatures = NumFeatures,
-            IsFitted = IsFitted,
-            FeatureNames = FeatureNames is null ? null : (string[])FeatureNames.Clone(),
-            _propensityCoefficients = CopyVector(_propensityCoefficients),
-            _cachedTreatment = CopyVector(_cachedTreatment),
-            _cachedOutcome = CopyVector(_cachedOutcome),
-            _cachedFeatures = CopyMatrix(_cachedFeatures),
-            _trees = _trees?.Select(CloneTree).ToList()
-        };
-
-        return copy;
-    }
-
     private static CausalTree CloneTree(CausalTree source) =>
         new()
         {

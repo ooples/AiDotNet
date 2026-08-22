@@ -477,46 +477,6 @@ public partial class OneFormer<T> : Common.PanopticSegmentationBase<T>
         };
     }
 
-    /// <summary>
-    /// Serializes OneFormer configuration.
-    /// </summary>
-    /// <param name="writer">Binary writer.</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Saves configuration for later restoration.
-    /// </para>
-    /// </remarks>
-
-
-    /// <summary>
-    /// Deserializes OneFormer configuration.
-    /// </summary>
-    /// <param name="reader">Binary reader.</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Reads saved configuration in write order.
-    /// </para>
-    /// </remarks>
-
-
-    /// <summary>
-    /// Creates a new OneFormer with same config but fresh weights.
-    /// </summary>
-    /// <returns>New model instance.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Used for cross-validation or ensemble training.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return _useNativeMode
-            ? new OneFormer<T>(Architecture, optimizer: null, lossFunction: LossFunction,
-                numClasses: _numClasses, numQueries: _numQueries, modelSize: _modelSize,
-                dropRate: _dropRate, options: new OneFormerOptions(_options))
-            : new OneFormer<T>(Architecture, _onnxModelPath ?? throw new InvalidOperationException("ONNX model path not initialized."), _numClasses, _numQueries, _modelSize, new OneFormerOptions(_options));
-    }
-
     // Dispose is inherited: SegmentationModelBase already disposes _onnxSession and sets _disposed,
     // and OneFormer owns no further unmanaged resources.
 

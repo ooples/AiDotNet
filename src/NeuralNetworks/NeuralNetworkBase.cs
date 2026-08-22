@@ -3130,6 +3130,30 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         source.Data.Span.CopyTo(destination.Data.Span);
     }
 
+    /// <summary>Creates an independent generated trainable vector for an in-memory clone.</summary>
+    protected static Vector<T>? CloneGeneratedTrainableVector(Vector<T>? source)
+        => source is null ? null : new Vector<T>(source.ToArray());
+
+    /// <summary>Creates an independent required generated trainable vector.</summary>
+    protected static Vector<T> CloneRequiredGeneratedTrainableVector(Vector<T> source)
+        => new(source.ToArray());
+
+    /// <summary>Copies a readonly generated trainable vector into constructor-created storage.</summary>
+    protected static void CopyGeneratedTrainableVectorValues(
+        Vector<T>? source,
+        Vector<T>? destination,
+        string memberName)
+    {
+        if (source is null && destination is null) return;
+        if (source is null || destination is null || source.Length != destination.Length)
+        {
+            throw new InvalidOperationException(
+                $"Generated trainable vector '{memberName}' has incompatible source/clone storage.");
+        }
+
+        for (int i = 0; i < source.Length; i++) destination[i] = source[i];
+    }
+
     /// <summary>Returns the replacement for one generated canonical-layer alias.</summary>
     protected static TLayer? RebindLayerAlias<TLayer>(
         TLayer? alias,

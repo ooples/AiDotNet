@@ -412,11 +412,13 @@ public partial class EchoStateNetwork<T> : SequenceModelLayoutBase<T>
     /// <summary>
     /// Collected states during training for regression.
     /// </summary>
+    [Scratch]
     private List<Vector<T>> _collectedStates;
 
     /// <summary>
     /// Collected targets during training for regression.
     /// </summary>
+    [Scratch]
     private List<Vector<T>> _collectedTargets;
 
     /// <summary>
@@ -1100,36 +1102,6 @@ public partial class EchoStateNetwork<T> : SequenceModelLayoutBase<T>
     /// </remarks>
     /// <inheritdoc/>
     public override bool SupportsTraining => true;
-
-    /// <summary>
-    /// Declares the readout -- the ESN's only trainable parameters.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// An Echo State Network trains ONLY its output layer. The input and reservoir weights are drawn
-    /// once and left fixed; that is the defining property of reservoir computing (Jaeger 2001), not
-    /// an omission, so <c>_inputWeights</c> and <c>_reservoirWeights</c> are deliberately absent
-    /// here and stay <c>Matrix&lt;T&gt;</c>. Declared weights-then-bias, the order the deleted
-    /// GetParameters produced.
-    /// </para>
-    /// <para>
-    /// This replaces four members that each restated that layout: a ParameterCount formula, a
-    /// GetParameters copying the readout out element by element, a SetParameters copying it back,
-    /// and a GetParameterChunks that built a SEPARATE pair of tensors and copied into those. That
-    /// last one is why <c>_outputWeights</c> is now a <c>Tensor&lt;T&gt;</c>: the base restores by
-    /// writing THROUGH the declared tensors, so a chunk that is a copy would be written and then
-    /// discarded, leaving the model on its old readout while reporting the new one.
-    /// </para>
-    /// <para>
-    /// The bias stays a <c>Vector&lt;T&gt;</c> -- a tensor built over a vector shares its storage,
-    /// so writes through this view land in the field itself.
-    /// </para>
-    /// </remarks>
-    protected override IEnumerable<Tensor<T>> GetExtraTrainableTensors()
-    {
-        yield return _outputWeights;
-        yield return new Tensor<T>([_outputBias.Length], _outputBias);
-    }
 
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {

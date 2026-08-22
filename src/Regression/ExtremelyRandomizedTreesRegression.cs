@@ -373,13 +373,6 @@ public partial class ExtremelyRandomizedTreesRegression<T> : AsyncDecisionTreeRe
         return metadata;
     }
 
-    public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
-    {
-        var clone = new ExtremelyRandomizedTreesRegression<T>(_options, Regularization);
-        clone.Deserialize(Serialize());
-        return clone;
-    }
-
     /// <summary>
     /// Returns all features up to the number of features used during training.
     /// </summary>

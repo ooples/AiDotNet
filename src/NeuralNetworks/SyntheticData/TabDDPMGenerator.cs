@@ -999,28 +999,6 @@ public partial class TabDDPMGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
 
     #region Backward Pass
 
-    /// <summary>
-    /// Exposes the numerical/categorical output-head parameters to the tape-based
-    /// optimizer step. The heads are intentionally kept OUT of <see cref="NeuralNetworkBase{T}.Layers"/>
-    /// (they are parallel readout branches, not a sequential continuation of the
-    /// denoiser MLP — Predict/ForwardForTraining iterate Layers), so they are
-    /// surfaced here instead so <see cref="NeuralNetworkBase{T}.BackwardAndStepOnPrecomputedLoss"/>
-    /// includes them in the gradient-and-step set.
-    /// </summary>
-    protected override IEnumerable<Tensor<T>> GetExtraTrainableTensors()
-    {
-        var heads = new List<ILayer<T>>();
-        if (_numericalOutputHead is not null) heads.Add(_numericalOutputHead);
-        if (_categoricalOutputHead is not null) heads.Add(_categoricalOutputHead);
-        // _timestepProjection is applied off the main Layers walk (on the timestep
-        // conditioning path), so surface it here too — it is now trained via the
-        // tape-connected CreateTimestepEmbeddingTensor in TrainBatch.
-        if (_timestepProjection is not null) heads.Add(_timestepProjection);
-        return heads.Count == 0
-            ? System.Array.Empty<Tensor<T>>()
-            : Training.TapeTrainingStep<T>.CollectParameters(heads);
-    }
-
     #endregion
 
     #region Sampling Helpers

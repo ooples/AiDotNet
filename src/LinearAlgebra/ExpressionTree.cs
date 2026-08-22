@@ -877,22 +877,6 @@ public partial class ExpressionTree<T, TInput, TOutput> : ModelBase<T, TInput, T
     }
 
     /// <summary>
-    /// Creates a deep copy of this expression tree.
-    /// </summary>
-    /// <returns>A new, identical expression tree.</returns>
-    /// <remarks>
-    /// <b>For Beginners:</b> This creates an exact duplicate of the entire formula tree.
-    /// Unlike the Copy method which returns a general IFullModel, this method returns 
-    /// a specific ExpressionTree. This is useful when you need to make changes to a
-    /// copy without affecting the original formula.
-    /// </remarks>
-    public override IFullModel<T, TInput, TOutput> DeepCopy()
-    {
-        // Reuse existing Copy method which already creates a deep copy
-        return Copy();
-    }
-
-    /// <summary>
     /// The tree's parameters are the values of its Constant nodes, in traversal order.
     /// </summary>
     /// <remarks>

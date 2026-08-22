@@ -431,16 +431,6 @@ public partial class ASTModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinte
     }
 
     /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() =>
-        _useNativeMode
-            ? new ASTModel<T>(Architecture, _options)
-            // ONNX-backed instance: preserve the loaded model path so the
-            // clone keeps its execution mode. Without this, Clone() of an
-            // ONNX-mode AST silently downgrades to native (no weights,
-            // empty Layers) and changes inference behaviour.
-            : new ASTModel<T>(Architecture, _modelPath!, _options);
-
-    /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata() =>
         new ModelMetadata<T>
         {

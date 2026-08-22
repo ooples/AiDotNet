@@ -161,16 +161,6 @@ public partial class RadialBasisFunctionRegression<T> : NonLinearRegressionBase<
         return Enumerable.Range(0, numFeatures);
     }
 
-    /// <summary>
-    /// Deep copy via serialization to preserve private _centers and _weights.
-    /// </summary>
-    public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
-    {
-        var clone = new RadialBasisFunctionRegression<T>(_options, Regularization);
-        clone.Deserialize(Serialize());
-        return clone;
-    }
-
     protected override void OptimizeModel(Matrix<T> x, Vector<T> y)
     {
         // Auto-scale gamma if using the default value of 1.0

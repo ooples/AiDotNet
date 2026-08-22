@@ -123,47 +123,6 @@ public partial class DBSCAN<T> : ClusteringBase<T>
     public bool[]? CorePointMask => _corePointMask;
 
     /// <inheritdoc />
-
-    /// <inheritdoc />
-    public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
-    {
-        var clone = (DBSCAN<T>)CreateNewInstance();
-        clone._corePointMask = _corePointMask?.ToArray();
-        clone._featureMeans = _featureMeans is not null ? new Vector<T>(_featureMeans) : null;
-        clone._featureStds = _featureStds is not null ? new Vector<T>(_featureStds) : null;
-
-        if (Labels is not null)
-        {
-            clone.Labels = new Vector<T>(Labels.Length);
-            for (int i = 0; i < Labels.Length; i++)
-                clone.Labels[i] = Labels[i];
-        }
-
-        if (ClusterCenters is not null)
-        {
-            clone.ClusterCenters = new Matrix<T>(ClusterCenters.Rows, ClusterCenters.Columns);
-            for (int i = 0; i < ClusterCenters.Rows; i++)
-                for (int j = 0; j < ClusterCenters.Columns; j++)
-                    clone.ClusterCenters[i, j] = ClusterCenters[i, j];
-        }
-
-        if (_normalizedClusterCenters is not null)
-        {
-            clone._normalizedClusterCenters = new Matrix<T>(_normalizedClusterCenters.Rows, _normalizedClusterCenters.Columns);
-            for (int i = 0; i < _normalizedClusterCenters.Rows; i++)
-                for (int j = 0; j < _normalizedClusterCenters.Columns; j++)
-                    clone._normalizedClusterCenters[i, j] = _normalizedClusterCenters[i, j];
-        }
-
-        clone.NumClusters = NumClusters;
-        clone.NumFeatures = NumFeatures;
-        clone.IsTrained = IsTrained;
-        clone._fittedEpsilon = _fittedEpsilon;
-
-        return clone;
-    }
-
-    /// <inheritdoc />
     public override IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
     {
         var newInstance = (DBSCAN<T>)CreateNewInstance();

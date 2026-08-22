@@ -491,39 +491,4 @@ public partial class MeshCNN<T> : GraphModelLayoutBase<T>
             ModelData = SerializeForMetadata()
         };
     }
-
-    /// <summary>
-    /// Serializes network-specific data.
-    /// </summary>
-    /// <param name="writer">Binary writer.</param>
-    /// <inheritdoc />
-
-
-    /// <summary>
-    /// Deserializes network-specific data.
-    /// </summary>
-    /// <param name="reader">Binary reader.</param>
-    /// <inheritdoc />
-
-
-    /// <inheritdoc />
-    /// <remarks>
-    /// MeshCNN's per-mesh edge adjacency is intentionally NOT serialized as model
-    /// state (see <see cref="SerializeNetworkSpecificData"/>) because real workloads
-    /// supply a fresh adjacency per mesh sample via <see cref="SetEdgeAdjacency"/>.
-    /// However, <see cref="Clone"/> consumers expect to call <c>Predict</c> on the
-    /// clone with the same input the original was using, so we propagate the live
-    /// adjacency to the clone alongside the serialized weights. This preserves
-    /// "clone reproduces original on the same input" without changing the on-disk
-    /// model format.
-    /// </remarks>
-    public override IFullModel<T, Tensor<T>, Tensor<T>> Clone()
-    {
-        var clone = base.Clone();
-        if (clone is MeshCNN<T> meshClone && _currentEdgeAdjacency is not null)
-        {
-            meshClone.SetEdgeAdjacency(_currentEdgeAdjacency);
-        }
-        return clone;
-    }
 }

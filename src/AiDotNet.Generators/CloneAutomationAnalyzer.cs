@@ -80,9 +80,30 @@ public class CloneAutomationAnalyzer : DiagnosticAnalyzer
         DiagnosticSeverity.Error,
         isEnabledByDefault: true);
 
+    /// <summary>A concrete model has taken ownership of framework lifecycle plumbing.</summary>
+    /// <remarks>
+    /// A method can be non-redundant only because the shared generator/base path still has a gap.
+    /// Keeping the method makes that gap permanent and lets the next model copy it. Concrete models
+    /// therefore declare state and construction inputs; only abstract family bases may implement a
+    /// lifecycle policy. The rule is intentionally independent of body shape and plan availability.
+    /// </remarks>
+    private static readonly DiagnosticDescriptor ConcreteLifecycleOverride = new(
+        "ADN0063",
+        "Concrete model lifecycle must be generated",
+        "'{0}.{1}' is model-owned lifecycle plumbing. Delete the override and express its construction, "
+            + "clone, serialization, or parameter ownership through generated declarations and shared "
+            + "base infrastructure",
+        "AiDotNet.Serialization",
+        DiagnosticSeverity.Info,
+        isEnabledByDefault: true);
+
     /// <inheritdoc/>
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics
-        => ImmutableArray.Create(RedundantOverride, Unreproducible, HandWrittenSerialization);
+        => ImmutableArray.Create(
+            RedundantOverride,
+            Unreproducible,
+            HandWrittenSerialization,
+            ConcreteLifecycleOverride);
 
     /// <inheritdoc/>
     public override void Initialize(AnalysisContext context)
@@ -109,6 +130,26 @@ public class CloneAutomationAnalyzer : DiagnosticAnalyzer
         if (!method.Modifiers.Any(m => m.ValueText == "override")) return;
 
         var name = method.Identifier.ValueText;
+
+        // The acceptance boundary is architectural, not syntactic. A complicated override is not
+        // evidence that model-owned lifecycle code is necessary; it is evidence that the common
+        // path still needs to learn that state shape. Abstract family bases remain the right home
+        // for genuinely shared policy, while concrete models only declare their unique state.
+        bool isParameterOwnershipHook = name is "GetExtraTrainableLayers" or "GetExtraTrainableTensors";
+        if ((name is "Clone" or "DeepCopy" or "CreateNewInstance"
+                or "Serialize" or "Deserialize"
+                or "SerializeNetworkSpecificData" or "DeserializeNetworkSpecificData"
+                || isParameterOwnershipHook)
+            && context.ContainingSymbol is IMethodSymbol { ContainingType: { IsAbstract: false } lifecycleOwner }
+            && (IsModel(lifecycleOwner) || IsLayer(lifecycleOwner) || isParameterOwnershipHook))
+        {
+            context.ReportDiagnostic(Diagnostic.Create(
+                ConcreteLifecycleOverride,
+                method.Identifier.GetLocation(),
+                lifecycleOwner.Name,
+                name));
+            return;
+        }
 
         // Serialization is reported wherever it is hand-written, without asking whether the base
         // "already reproduces" it. That question is the wrong one: the state a layer persists by
@@ -441,7 +482,28 @@ public class CloneAutomationAnalyzer : DiagnosticAnalyzer
     /// Determines whether the library treats this type as a model.
     /// </summary>
     /// <param name="type">The type to classify.</param>
-    /// <returns><see langword="true"/> when it declares the full model surface.</returns>
+    /// <returns><see langword="true"/> when it declares a model persistence surface.</returns>
     private static bool IsModel(INamedTypeSymbol type)
-        => type.AllInterfaces.Any(i => i.Name == "IFullModel");
+    {
+        // Optimizers also expose serializer + shape contracts, but their lifecycle belongs to the
+        // optimizer hierarchy. Treating that structural overlap as a model made ADN0063 demand
+        // deletion of distributed optimizer checkpoint payloads that this generator does not own.
+        if (type.AllInterfaces.Any(i => i.Name == "IOptimizer")) return false;
+
+        bool isFullModel = type.AllInterfaces.Any(i => i.Name == "IFullModel");
+        bool isSerializableShapedModel = type.AllInterfaces.Any(i => i.Name == "IModelSerializer")
+            && type.AllInterfaces.Any(i => i.Name == "IModelShape");
+        return isFullModel || isSerializableShapedModel;
+    }
+
+    /// <summary>Determines whether a type belongs to the generated layer lifecycle.</summary>
+    private static bool IsLayer(INamedTypeSymbol type)
+    {
+        for (var current = type; current is not null; current = current.BaseType)
+        {
+            if (current.Name == "LayerBase") return true;
+        }
+
+        return false;
+    }
 }

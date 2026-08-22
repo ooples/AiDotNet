@@ -46,15 +46,6 @@ internal sealed class ServingHeuristicCodeModel : CodeModelBase<double>
         };
     }
 
-
-
-
-
-    protected override IFullModel<double, Tensor<double>, Tensor<double>> CreateNewInstance()
-    {
-        return new ServingHeuristicCodeModel(_architecture);
-    }
-
     public static ServingHeuristicCodeModel CreateDefault(ProgramLanguage targetLanguage = ProgramLanguage.Generic)
     {
         var architecture = new CodeSynthesisArchitecture<double>(

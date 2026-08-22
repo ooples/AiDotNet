@@ -70,14 +70,6 @@ public class TabPFNClassifier<T> : TabPFNBase<T>
     public int NumClasses => _numClasses;
 
     /// <summary>
-    /// Gets the total number of trainable parameters.
-    /// </summary>
-    /// <inheritdoc />
-    /// <remarks>The head, folded after the shared backbone by the base's single traversal.</remarks>
-    protected override IEnumerable<ILayer<T>> GetExtraTrainableLayers()
-        => new ILayer<T>[] { _classificationHead };
-
-    /// <summary>
     /// Initializes a new instance of the TabPFNClassifier class.
     /// </summary>
     public TabPFNClassifier(

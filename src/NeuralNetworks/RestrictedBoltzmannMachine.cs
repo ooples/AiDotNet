@@ -576,39 +576,6 @@ public partial class RestrictedBoltzmannMachine<T> : VectorModelLayoutBase<T>
     }
 
     /// <summary>
-    /// Declares the RBM's three parameter tensors, which live outside
-    /// <see cref="NeuralNetworkBase{T}.Layers"/>.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// An RBM has no layer stack -- it is one weight matrix between the visible and hidden units
-    /// plus a bias per unit on each side. Declared in the order the old GetParameters concatenated
-    /// them (weights row-major over [HiddenSize, VisibleSize], then visible biases, then hidden
-    /// biases), so checkpoints written before this change still restore correctly.
-    /// </para>
-    /// <para>
-    /// This replaces FIVE hand-written members: ParameterCount as the formula
-    /// <c>(HiddenSize * VisibleSize) + VisibleSize + HiddenSize</c>, a GetParameters that copied
-    /// the three stores into a flat buffer element by element, a SetParameters that forwarded to
-    /// UpdateParameters, the UpdateParameters that unpacked them again, and a GetParameterChunks
-    /// that built a third copy. Five places that had to agree about one layout; now there is one.
-    /// </para>
-    /// <para>
-    /// <c>_weights</c> became a <c>Tensor&lt;T&gt;</c> for this: the base restores by writing
-    /// THROUGH the declared tensors, and <c>Tensor&lt;T&gt;.FromMatrix</c> hands back a copy, so a
-    /// declared matrix would have been restored into a temporary and discarded. The biases stay
-    /// <c>Vector&lt;T&gt;</c> -- a tensor built over a vector shares its storage, so writing through
-    /// these views lands in the fields themselves.
-    /// </para>
-    /// </remarks>
-    protected override IEnumerable<Tensor<T>> GetExtraTrainableTensors()
-    {
-        yield return _weights;
-        yield return new Tensor<T>([_visibleBiases.Length], _visibleBiases);
-        yield return new Tensor<T>([_hiddenBiases.Length], _hiddenBiases);
-    }
-
-    /// <summary>
     /// Makes predictions using the RBM by computing hidden layer activations.
     /// </summary>
     /// <param name="input">The input tensor to process.</param>

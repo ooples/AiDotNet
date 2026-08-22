@@ -304,16 +304,5 @@ public partial class DiffSeg<T> : Common.SemanticSegmentationBase<T>
         };
     }
 
-
-
-
-
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return _useNativeMode
-            ? new DiffSeg<T>(Architecture, _optimizer, LossFunction, _numClasses, _dropRate, _options)
-            : new DiffSeg<T>(Architecture, _onnxModelPath ?? throw new InvalidOperationException("ONNX model path not initialized."), _numClasses, _options);
-    }
-
     #endregion
 }

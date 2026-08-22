@@ -353,56 +353,6 @@ public partial class KNeighborsClassifier<T> : ProbabilisticClassifierBase<T>
     }
 
     /// <inheritdoc/>
-    public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
-    {
-        var clone = new KNeighborsClassifier<T>(new KNeighborsOptions<T>
-        {
-            NNeighbors = Options.NNeighbors,
-            Metric = Options.Metric,
-            Weights = Options.Weights,
-            P = Options.P,
-            Algorithm = Options.Algorithm,
-            LeafSize = Options.LeafSize
-        });
-
-        clone.NumFeatures = NumFeatures;
-        clone.NumClasses = NumClasses;
-        clone.TaskType = TaskType;
-
-        if (ClassLabels != null)
-        {
-            clone.ClassLabels = new Vector<T>(ClassLabels.Length);
-            for (int i = 0; i < ClassLabels.Length; i++)
-            {
-                clone.ClassLabels[i] = ClassLabels[i];
-            }
-        }
-
-        if (_xTrain != null)
-        {
-            clone._xTrain = new Matrix<T>(_xTrain.Rows, _xTrain.Columns);
-            for (int i = 0; i < _xTrain.Rows; i++)
-            {
-                for (int j = 0; j < _xTrain.Columns; j++)
-                {
-                    clone._xTrain[i, j] = _xTrain[i, j];
-                }
-            }
-        }
-
-        if (_yTrain != null)
-        {
-            clone._yTrain = new Vector<T>(_yTrain.Length);
-            for (int i = 0; i < _yTrain.Length; i++)
-            {
-                clone._yTrain[i] = _yTrain[i];
-            }
-        }
-
-        return clone;
-    }
-
-    /// <inheritdoc/>
     public override IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
     {
         var newModel = (KNeighborsClassifier<T>)Clone();

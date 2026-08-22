@@ -290,59 +290,6 @@ public partial class ValueIterationAgent<T> : ReinforcementLearningAgentBase<T>
 
     public override int FeatureCount => _options.StateSize;
 
-    public override byte[] Serialize()
-    {
-        var state = new
-        {
-            ValueTable = _valueTable,
-            Model = _model,
-            Options = _options
-        };
-        string json = JsonConvert.SerializeObject(state);
-        return System.Text.Encoding.UTF8.GetBytes(json);
-    }
-
-    public override void Deserialize(byte[] data)
-    {
-        if (data is null || data.Length == 0)
-        {
-            throw new ArgumentException("Serialized data cannot be null or empty", nameof(data));
-        }
-
-        string json = System.Text.Encoding.UTF8.GetString(data);
-        var state = JsonConvert.DeserializeObject<dynamic>(json);
-        if (state is null)
-        {
-            throw new InvalidOperationException("Deserialization returned null");
-        }
-
-        _valueTable = JsonConvert.DeserializeObject<Dictionary<string, T>>(state.ValueTable.ToString()) ?? new Dictionary<string, T>();
-        _model = JsonConvert.DeserializeObject<Dictionary<string, Dictionary<int, List<(string, T, T)>>>>(state.Model.ToString()) ?? new Dictionary<string, Dictionary<int, List<(string, T, T)>>>();
-    }
-
-    public override IFullModel<T, Vector<T>, Vector<T>> Clone()
-    {
-        var clone = new ValueIterationAgent<T>(_options);
-
-        // Deep copy value table
-        foreach (var kvp in _valueTable)
-        {
-            clone._valueTable[kvp.Key] = kvp.Value;
-        }
-
-        // Deep copy model
-        foreach (var stateKvp in _model)
-        {
-            clone._model[stateKvp.Key] = new Dictionary<int, List<(string, T, T)>>();
-            foreach (var actionKvp in stateKvp.Value)
-            {
-                clone._model[stateKvp.Key][actionKvp.Key] = new List<(string, T, T)>(actionKvp.Value);
-            }
-        }
-
-        return clone;
-    }
-
     public override void SaveModel(string filepath)
     {
         if (string.IsNullOrWhiteSpace(filepath))

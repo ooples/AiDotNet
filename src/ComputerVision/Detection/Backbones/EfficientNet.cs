@@ -38,28 +38,6 @@ namespace AiDotNet.ComputerVision.Detection.Backbones;
 public partial class EfficientNet<T> : NeuralNetworkBase<T>, IDetectionBackbone<T>
 {
 
-
-    /// <inheritdoc />
-    /// <remarks>
-    /// The stem convolution and every layer inside every MBConv block.
-    /// <para>
-    /// These live outside <c>Layers</c>, held in plain block objects, which is why this backbone
-    /// used to THROW from GetParameters rather than expose a flat vector -- the base walk would
-    /// have found nothing. Refusing was never right: PyTorch has no module that declines to
-    /// enumerate its parameters, and the refusal cost this model checkpointing, flat-vector
-    /// optimizers and every count-based diagnostic. Declaring the layers here gets all of it back,
-    /// and count, vector, restore and chunks fold this one declaration.
-    /// </para>
-    /// </remarks>
-    protected override IEnumerable<LayerBase<T>?> GetExtraTrainableLayers()
-    {
-        yield return _stem;
-        foreach (var block in _blocks)
-        {
-            foreach (var layer in block.EnumerateLayers()) yield return layer;
-        }
-    }
-
     private readonly ConvolutionalLayer<T> _stem;
     private readonly List<MBConvBlock<T>> _blocks;
     private readonly EfficientNetVariant _variant;
@@ -242,9 +220,6 @@ public partial class EfficientNet<T> : NeuralNetworkBase<T>, IDetectionBackbone<
 
     protected override void InitializeLayers() { }
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer) => WriteParameters(writer);
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader) => ReadParameters(reader);
-
     public override ModelMetadata<T> GetModelMetadata() => new ModelMetadata<T>
     {
         Name = Name,
@@ -266,28 +241,6 @@ public partial class EfficientNet<T> : NeuralNetworkBase<T>, IDetectionBackbone<
     public override IFullModel<T, Tensor<T>, Tensor<T>> WithParameters(Vector<T> parameters) =>
         throw new NotSupportedException(
             $"{GetType().Name}: WithParameters(Vector<T>) is unsupported on backbones.");
-
-    /// <inheritdoc />
-    /// <remarks>
-    /// Round-trips the parameter binary stream through a fresh
-    /// <see cref="CreateNewInstance"/> so internal Conv / BN / SE blocks and
-    /// their tensor buffers are independent copies — see ResNet.DeepCopy.
-    /// </remarks>
-    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
-    {
-        var copy = (EfficientNet<T>)CreateNewInstance();
-        using var ms = new MemoryStream();
-        using (var writer = new BinaryWriter(ms, System.Text.Encoding.UTF8, leaveOpen: true))
-        {
-            WriteParameters(writer);
-        }
-        ms.Position = 0;
-        using (var reader = new BinaryReader(ms, System.Text.Encoding.UTF8, leaveOpen: true))
-        {
-            copy.ReadParameters(reader);
-        }
-        return copy;
-    }
 
     // ApplySwish moved to BackboneOps<T>.ApplySwish — was duplicated 3 times in this file.
 }

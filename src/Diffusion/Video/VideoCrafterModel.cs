@@ -674,13 +674,5 @@ public partial class VideoCrafterModel<T> : VideoDiffusionModelBase<T>
 
     #region ICloneable Implementation
 
-    /// <summary>
-    /// Creates a deep copy.
-    /// </summary>
-    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
-    {
-        return (IFullModel<T, Tensor<T>, Tensor<T>>)Clone();
-    }
-
     #endregion
 }

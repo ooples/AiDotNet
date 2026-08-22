@@ -388,45 +388,5 @@ public partial class InternImage<T> : Common.SemanticSegmentationBase<T>
         };
     }
 
-    /// <summary>
-    /// Serializes InternImage-specific configuration to a binary stream.
-    /// </summary>
-    /// <param name="writer">Binary writer for persistence.</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Saves the model's configuration so it can be restored later.
-    /// The order must match <see cref="DeserializeNetworkSpecificData"/>.
-    /// </para>
-    /// </remarks>
-
-
-    /// <summary>
-    /// Deserializes InternImage-specific configuration from a binary stream.
-    /// </summary>
-    /// <param name="reader">Binary reader for loading.</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Reads back the saved configuration in the same order it was written.
-    /// </para>
-    /// </remarks>
-
-
-    /// <summary>
-    /// Creates a new InternImage with the same config but fresh weights.
-    /// </summary>
-    /// <returns>A new model instance with reinitialized weights.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Used for cross-validation or ensemble training where multiple
-    /// independent copies of the same architecture are needed.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return _useNativeMode
-            ? new InternImage<T>(Architecture, null, LossFunction, _numClasses, _modelSize, _dropRate, _options)
-            : new InternImage<T>(Architecture, _onnxModelPath ?? throw new InvalidOperationException("ONNX model path not initialized."), _numClasses, _modelSize, _options);
-    }
-
     #endregion
 }

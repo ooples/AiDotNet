@@ -76,7 +76,7 @@ public abstract class SAINTBase<T> : IParameterSource<T>
     /// Extra trainable layers a subclass contributes, folded after the shared backbone.
     /// </summary>
     protected virtual IEnumerable<IParameterSource<T>> GetExtraTrainableLayers()
-        => System.Linq.Enumerable.Empty<IParameterSource<T>>();
+        => GeneratedParameterDiscovery.EnumerateDerivedSources<T>(this, typeof(SAINTBase<T>));
 
     /// <summary>The single ordered traversal of this model's parameter-bearing components.</summary>
     private ParameterComponentRegistry<T> ParameterRegistry

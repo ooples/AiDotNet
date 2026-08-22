@@ -259,40 +259,6 @@ public partial class FinancialSACAgent<T> : TradingAgentBase<T>, IGradientComput
 
     #region Serialization
 
-    /// <summary>
-    /// Executes Serialize for the FinancialSACAgent.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the FinancialSACAgent model, Serialize saves or restores model-specific settings. This lets the FinancialSACAgent architecture be reused later.
-    /// </para>
-    /// </remarks>
-    public override byte[] Serialize()
-    {
-        using var ms = new MemoryStream();
-        using var writer = new BinaryWriter(ms);
-        var actorData = _actor.Serialize();
-        writer.Write(actorData.Length);
-        writer.Write(actorData);
-        return ms.ToArray();
-    }
-
-    /// <summary>
-    /// Executes Deserialize for the FinancialSACAgent.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the FinancialSACAgent model, Deserialize saves or restores model-specific settings. This lets the FinancialSACAgent architecture be reused later.
-    /// </para>
-    /// </remarks>
-    public override void Deserialize(byte[] data)
-    {
-        using var ms = new MemoryStream(data);
-        using var reader = new BinaryReader(ms);
-        int actorLen = reader.ReadInt32();
-        _actor.Deserialize(reader.ReadBytes(actorLen));
-    }
-
     #endregion
 
     #region Model Metadata

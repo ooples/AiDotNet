@@ -544,50 +544,6 @@ public partial class DecisionTreeClassifier<T> : ProbabilisticClassifierBase<T>,
         return 1 + CountNodes(node.Left) + CountNodes(node.Right);
     }
 
-    /// <inheritdoc/>
-    public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
-    {
-        var clone = new DecisionTreeClassifier<T>(new DecisionTreeClassifierOptions<T>
-        {
-            MaxDepth = Options.MaxDepth,
-            MinSamplesSplit = Options.MinSamplesSplit,
-            MinSamplesLeaf = Options.MinSamplesLeaf,
-            MaxFeatures = Options.MaxFeatures,
-            Criterion = Options.Criterion,
-            Seed = Options.Seed,
-            MinImpurityDecrease = Options.MinImpurityDecrease
-        });
-
-        clone.NumFeatures = NumFeatures;
-        clone.NumClasses = NumClasses;
-        clone.TaskType = TaskType;
-
-        if (ClassLabels != null)
-        {
-            clone.ClassLabels = new Vector<T>(ClassLabels.Length);
-            for (int i = 0; i < ClassLabels.Length; i++)
-            {
-                clone.ClassLabels[i] = ClassLabels[i];
-            }
-        }
-
-        if (FeatureImportances != null)
-        {
-            clone.FeatureImportances = new Vector<T>(FeatureImportances.Length);
-            for (int i = 0; i < FeatureImportances.Length; i++)
-            {
-                clone.FeatureImportances[i] = FeatureImportances[i];
-            }
-        }
-
-        if (_root != null)
-        {
-            clone._root = CloneNode(_root);
-        }
-
-        return clone;
-    }
-
     /// <summary>
     /// Deep clones a decision tree node.
     /// </summary>

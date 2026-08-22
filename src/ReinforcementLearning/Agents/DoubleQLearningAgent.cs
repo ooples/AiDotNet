@@ -277,46 +277,6 @@ public partial class DoubleQLearningAgent<T> : ReinforcementLearningAgentBase<T>
     }
     public override int FeatureCount => _options.StateSize;
 
-    public override byte[] Serialize()
-    {
-        var state = new
-        {
-            QTable1 = _qTable1,
-            QTable2 = _qTable2,
-            Epsilon = _epsilon,
-            Options = _options
-        };
-        string json = JsonConvert.SerializeObject(state);
-        return System.Text.Encoding.UTF8.GetBytes(json);
-    }
-
-    public override void Deserialize(byte[] data)
-    {
-        if (data is null || data.Length == 0)
-        {
-            throw new ArgumentException("Serialized data cannot be null or empty", nameof(data));
-        }
-
-        string json = System.Text.Encoding.UTF8.GetString(data);
-        var state = JsonConvert.DeserializeObject<dynamic>(json);
-        if (state is null)
-        {
-            throw new InvalidOperationException("Deserialization returned null");
-        }
-
-        _qTable1 = JsonConvert.DeserializeObject<Dictionary<string, Dictionary<int, T>>>(state.QTable1.ToString()) ?? new Dictionary<string, Dictionary<int, T>>();
-        _qTable2 = JsonConvert.DeserializeObject<Dictionary<string, Dictionary<int, T>>>(state.QTable2.ToString()) ?? new Dictionary<string, Dictionary<int, T>>();
-        _epsilon = state.Epsilon;
-
-        // The two tables are validated together, HERE, before anything reads them. GetParameters
-        // sizes its vector from _qTable1.Count but then fills from both tables, indexing
-        // stateQValues[action] for every action in 0..ActionSize-1. Persisted data with a state
-        // missing from one table overruns that vector; a state missing an ACTION throws
-        // KeyNotFoundException from inside the flatten. Neither failure says anything about the file
-        // that caused it.
-        ValidatePairedQTables();
-    }
-
     /// <summary>
     /// Requires the two Q-tables to describe the same states and each state to hold exactly the
     /// actions <c>0 .. ActionSize - 1</c>.
@@ -358,25 +318,6 @@ public partial class DoubleQLearningAgent<T> : ReinforcementLearningAgentBase<T>
                     + $"{_options.ActionSize - 1}.");
             }
         }
-    }
-    public override IFullModel<T, Vector<T>, Vector<T>> Clone()
-    {
-        var clone = new DoubleQLearningAgent<T>(_options);
-
-        // Deep copy Q-table 1 to avoid shared state
-        foreach (var kvp in _qTable1)
-        {
-            clone._qTable1[kvp.Key] = new Dictionary<int, T>(kvp.Value);
-        }
-
-        // Deep copy Q-table 2 to avoid shared state
-        foreach (var kvp in _qTable2)
-        {
-            clone._qTable2[kvp.Key] = new Dictionary<int, T>(kvp.Value);
-        }
-
-        clone._epsilon = _epsilon;
-        return clone;
     }
 
     public Vector<T> ComputeGradients(Vector<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)

@@ -645,56 +645,6 @@ public partial class SACAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
     }
 
     /// <inheritdoc/>
-    public override byte[] Serialize()
-    {
-        using var ms = new MemoryStream();
-        using var writer = new BinaryWriter(ms);
-
-        writer.Write(_sacOptions.StateSize);
-        writer.Write(_sacOptions.ActionSize);
-        writer.Write(NumOps.ToDouble(_logAlpha));
-
-        void WriteNetwork(INeuralNetwork<T> net)
-        {
-            var bytes = net.Serialize();
-            writer.Write(bytes.Length);
-            writer.Write(bytes);
-        }
-
-        WriteNetwork(_policyNetwork);
-        WriteNetwork(_q1Network);
-        WriteNetwork(_q2Network);
-        WriteNetwork(_q1TargetNetwork);
-        WriteNetwork(_q2TargetNetwork);
-
-        return ms.ToArray();
-    }
-
-    /// <inheritdoc/>
-    public override void Deserialize(byte[] data)
-    {
-        using var ms = new MemoryStream(data);
-        using var reader = new BinaryReader(ms);
-
-        reader.ReadInt32(); // stateSize
-        reader.ReadInt32(); // actionSize
-        _logAlpha = NumOps.FromDouble(reader.ReadDouble());
-
-        void ReadNetwork(INeuralNetwork<T> net)
-        {
-            var len = reader.ReadInt32();
-            var bytes = reader.ReadBytes(len);
-            net.Deserialize(bytes);
-        }
-
-        ReadNetwork(_policyNetwork);
-        ReadNetwork(_q1Network);
-        ReadNetwork(_q2Network);
-        ReadNetwork(_q1TargetNetwork);
-        ReadNetwork(_q2TargetNetwork);
-    }
-
-    /// <inheritdoc/>
     public Vector<T> ComputeGradients(
         Vector<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
     {

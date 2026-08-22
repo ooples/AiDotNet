@@ -702,31 +702,6 @@ public partial class MeshEdgeConvLayer<T> : LayerBase<T>, IShapeContract
     /// <returns>The bias tensor.</returns>
     public override Tensor<T> GetBiases() => _biases;
 
-    /// <summary>
-    /// Creates a deep copy of the layer.
-    /// </summary>
-    /// <returns>A new instance with identical configuration and parameters.</returns>
-    public override LayerBase<T> Clone()
-    {
-        MeshEdgeConvLayer<T> copy;
-
-        if (UsingVectorActivation)
-        {
-            copy = new MeshEdgeConvLayer<T>(InputChannels, OutputChannels, NumNeighbors, VectorActivation);
-        }
-        else
-        {
-            copy = new MeshEdgeConvLayer<T>(InputChannels, OutputChannels, NumNeighbors, ScalarActivation);
-        }
-
-        copy.SetParameters(GetParameters());
-        if (_lastEdgeAdjacency != null)
-        {
-            copy.SetEdgeAdjacency(_lastEdgeAdjacency);
-        }
-        return copy;
-    }
-
     #endregion
 
     #region State Management

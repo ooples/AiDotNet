@@ -92,44 +92,6 @@ public partial class SelfOrganizingMap<T> : ClusteringBase<T>
     public int[]? NeuronLabels => _neuronLabels;
 
     /// <inheritdoc />
-
-    /// <inheritdoc />
-    public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
-    {
-        var clone = (SelfOrganizingMap<T>)CreateNewInstance();
-        if (_weights is not null)
-        {
-            int h = _weights.GetLength(0);
-            int w = _weights.GetLength(1);
-            clone._weights = new T[h, w][];
-            for (int r = 0; r < h; r++)
-                for (int c = 0; c < w; c++)
-                    clone._weights[r, c] = (T[])_weights[r, c].Clone();
-        }
-        clone._neuronLabels = _neuronLabels?.ToArray();
-        clone.NumClusters = NumClusters;
-        clone.NumFeatures = NumFeatures;
-        clone.IsTrained = IsTrained;
-
-        if (Labels is not null)
-        {
-            clone.Labels = new Vector<T>(Labels.Length);
-            for (int i = 0; i < Labels.Length; i++)
-                clone.Labels[i] = Labels[i];
-        }
-
-        if (ClusterCenters is not null)
-        {
-            clone.ClusterCenters = new Matrix<T>(ClusterCenters.Rows, ClusterCenters.Columns);
-            for (int i = 0; i < ClusterCenters.Rows; i++)
-                for (int j = 0; j < ClusterCenters.Columns; j++)
-                    clone.ClusterCenters[i, j] = ClusterCenters[i, j];
-        }
-
-        return clone;
-    }
-
-    /// <inheritdoc />
     public override IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
     {
         var newInstance = (SelfOrganizingMap<T>)CreateNewInstance();

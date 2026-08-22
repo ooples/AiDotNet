@@ -257,39 +257,6 @@ public partial class DynaQAgent<T> : ReinforcementLearningAgentBase<T>
                 () => _qTable));
     }
     public override int FeatureCount => _options.StateSize;
-    public override byte[] Serialize()
-    {
-        var state = new
-        {
-            QTable = _qTable,
-            Model = _model,
-            VisitedStateActions = _visitedStateActions,
-            Epsilon = _epsilon,
-            Options = _options
-        };
-        string json = JsonConvert.SerializeObject(state);
-        return System.Text.Encoding.UTF8.GetBytes(json);
-    }
-
-    public override void Deserialize(byte[] data)
-    {
-        if (data is null || data.Length == 0)
-        {
-            throw new ArgumentException("Serialized data cannot be null or empty", nameof(data));
-        }
-
-        string json = System.Text.Encoding.UTF8.GetString(data);
-        var state = JsonConvert.DeserializeObject<dynamic>(json);
-        if (state is null)
-        {
-            throw new InvalidOperationException("Deserialization returned null");
-        }
-
-        _qTable = JsonConvert.DeserializeObject<Dictionary<string, Dictionary<int, T>>>(state.QTable.ToString()) ?? new Dictionary<string, Dictionary<int, T>>();
-        _model = JsonConvert.DeserializeObject<Dictionary<string, Dictionary<int, (string, T)>>>(state.Model.ToString()) ?? new Dictionary<string, Dictionary<int, (string, T)>>();
-        _visitedStateActions = JsonConvert.DeserializeObject<List<(string, int)>>(state.VisitedStateActions.ToString()) ?? new List<(string, int)>();
-        _epsilon = state.Epsilon;
-    }
 
     /// <summary>
     /// The Q-table's <c>(state, action)</c> entries in a fixed order.
@@ -319,42 +286,6 @@ public partial class DynaQAgent<T> : ReinforcementLearningAgentBase<T>
         }
 
         return entries;
-    }
-
-    public override IFullModel<T, Vector<T>, Vector<T>> Clone()
-    {
-        var clone = new DynaQAgent<T>(_options);
-
-        // Deep copy Q-table
-        foreach (var stateEntry in _qTable)
-        {
-            clone._qTable[stateEntry.Key] = new Dictionary<int, T>();
-            foreach (var actionEntry in stateEntry.Value)
-            {
-                clone._qTable[stateEntry.Key][actionEntry.Key] = actionEntry.Value;
-            }
-        }
-
-        // Deep copy model
-        foreach (var stateEntry in _model)
-        {
-            clone._model[stateEntry.Key] = new Dictionary<int, (string, T)>();
-            foreach (var actionEntry in stateEntry.Value)
-            {
-                clone._model[stateEntry.Key][actionEntry.Key] = actionEntry.Value;
-            }
-        }
-
-        // Deep copy visited state-actions
-        foreach (var stateAction in _visitedStateActions)
-        {
-            clone._visitedStateActions.Add(stateAction);
-        }
-
-        // Copy epsilon value
-        clone._epsilon = _epsilon;
-
-        return clone;
     }
 
     public override void SaveModel(string filepath)

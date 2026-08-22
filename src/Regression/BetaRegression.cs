@@ -808,11 +808,4 @@ public partial class BetaRegression<T> : AsyncDecisionTreeRegressionBase<T>
         for (int i = 0; i < len; i++) v[i] = NumOps.FromDouble(r.ReadDouble());
         return v;
     }
-
-    public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
-    {
-        var clone = new BetaRegression<T>(_options, Regularization);
-        clone.Deserialize(Serialize());
-        return clone;
-    }
 }

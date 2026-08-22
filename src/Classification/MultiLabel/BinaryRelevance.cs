@@ -346,35 +346,5 @@ public class BinaryRelevance<T> : MultiLabelClassifierBase<T>
         }
     }
 
-    /// <summary>
-    /// Creates a deep copy of this classifier.
-    /// </summary>
-    /// <returns>A new instance with the same parameters and state.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Cloning creates an independent copy of the classifier,
-    /// including all its internal label classifiers.
-    /// </para>
-    /// </remarks>
-    public override IFullModel<T, Matrix<T>, Matrix<T>> Clone()
-    {
-        var clone = new BinaryRelevance<T>(_classifierFactory, Options, Regularization);
-        clone.NumLabels = NumLabels;
-        clone.NumFeatures = NumFeatures;
-        clone.NumClasses = NumClasses;
-        clone.TaskType = TaskType;
-
-        if (_labelClassifiers is not null)
-        {
-            clone._labelClassifiers = new IClassifier<T>[_labelClassifiers.Length];
-            for (int i = 0; i < _labelClassifiers.Length; i++)
-            {
-                clone._labelClassifiers[i] = (IClassifier<T>)_labelClassifiers[i].Clone();
-            }
-        }
-
-        return clone;
-    }
-
     #endregion
 }

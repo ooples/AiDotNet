@@ -357,44 +357,6 @@ public partial class EoMT<T> : Common.PanopticSegmentationBase<T>
     }
 
     /// <summary>
-    /// Writes EoMT configuration to a binary stream.
-    /// </summary>
-    /// <param name="writer">The binary writer.</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Saves model configuration for later reconstruction.
-    /// </para>
-    /// </remarks>
-
-
-    /// <summary>
-    /// Reads EoMT configuration from a binary stream.
-    /// </summary>
-    /// <param name="reader">The binary reader.</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Loads model configuration when restoring a saved model.
-    /// </para>
-    /// </remarks>
-
-
-    /// <summary>
-    /// Creates a new EoMT instance with the same configuration but fresh weights.
-    /// </summary>
-    /// <returns>A new <see cref="EoMT{T}"/> model.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Creates a copy for cross-validation or ensemble training.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return _useNativeMode
-            ? new EoMT<T>(Architecture, _optimizer, LossFunction, _numClasses, _numQueries, _modelSize, _dropRate, _options)
-            : new EoMT<T>(Architecture, _onnxModelPath ?? throw new InvalidOperationException("ONNX model path not initialized."), _numClasses, _numQueries, _modelSize, _options);
-    }
-
-    /// <summary>
     // Dispose of the ONNX session and the _disposed latch are handled by SegmentationModelBase.
 
     #endregion

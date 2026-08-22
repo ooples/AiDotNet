@@ -298,20 +298,6 @@ public partial class GOGGLEGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
     }
 
     /// <summary>
-    /// Expose the learned adjacency matrix so the tape-based trainer
-    /// (BackwardAndStepOnPrecomputedLoss) collects it alongside the
-    /// encoder/decoder layer parameters. Without this the sparsity / DAG
-    /// regularizers compute on A but the optimizer never updates A.
-    /// </summary>
-    protected override IEnumerable<Tensor<T>> GetExtraTrainableTensors()
-    {
-        if (_adjacency is not null && _adjacency.Length > 0)
-        {
-            yield return _adjacency;
-        }
-    }
-
-    /// <summary>
     /// GOGGLE's <see cref="LayerBase{T}"/> chain is the VAE decoder —
     /// Layer[0] takes the latent z (size LatentDimension), NOT the raw
     /// data row (size Architecture.InputWidth). Suppress the base class's

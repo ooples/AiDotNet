@@ -113,7 +113,7 @@ public abstract class TabPFNBase<T> : IParameterSource<T>
     /// </para>
     /// </remarks>
     protected virtual IEnumerable<ILayer<T>> GetExtraTrainableLayers()
-        => System.Linq.Enumerable.Empty<ILayer<T>>();
+        => AiDotNet.Models.Parameters.GeneratedParameterDiscovery.EnumerateDerivedLayers<T>(this, typeof(TabPFNBase<T>));
 
     /// <summary>
     /// The single ordered traversal of this model's parameter-bearing components.

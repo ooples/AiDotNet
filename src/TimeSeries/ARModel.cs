@@ -660,57 +660,6 @@ public partial class ARModel<T> : TimeSeriesModelBase<T>
     }
 
     /// <summary>
-    /// Creates a deep copy of the current model.
-    /// </summary>
-    /// <returns>A new instance of the AR model with the same state and parameters.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method creates a complete copy of the model, including its configuration and trained coefficients.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method creates an exact duplicate of your trained model.
-    /// 
-    /// Unlike CreateInstance(), which creates a blank model with the same settings,
-    /// Clone() creates a complete copy including:
-    /// - The model configuration (AR order, etc.)
-    /// - All trained coefficients and internal state
-    /// 
-    /// This is useful for:
-    /// - Creating a backup before experimenting with a model
-    /// - Using the same trained model in multiple scenarios
-    /// - Creating ensemble models that use variations of the same base model
-    /// 
-    /// Think of it like photocopying a completed notebook - you get all the written content
-    /// as well as the structure of the notebook itself.
-    /// </para>
-    /// </remarks>
-    public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
-    {
-        var clone = new ARModel<T>((ARModelOptions<T>)Options);
-
-        // Copy trained coefficients
-        if (_arCoefficients.Length > 0)
-        {
-            clone._arCoefficients = new Vector<T>(_arCoefficients.Length);
-            for (int i = 0; i < _arCoefficients.Length; i++)
-            {
-                clone._arCoefficients[i] = _arCoefficients[i];
-            }
-        }
-
-        // Copy stored training series
-        if (_trainedSeries.Length > 0)
-        {
-            clone._trainedSeries = new Vector<T>(_trainedSeries.Length);
-            for (int i = 0; i < _trainedSeries.Length; i++)
-            {
-                clone._trainedSeries[i] = _trainedSeries[i];
-            }
-        }
-
-        return clone;
-    }
-
-    /// <summary>
     /// Implements the core training algorithm for the AR model.
     /// </summary>
     /// <param name="x">Feature matrix (typically just time indices for AR models).</param>

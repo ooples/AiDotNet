@@ -477,66 +477,6 @@ public partial class DDPGAgent<T> : DeepReinforcementLearningAgentBase<T>, IGrad
         };
     }
 
-    /// <inheritdoc/>
-    public override byte[] Serialize()
-    {
-        using var ms = new MemoryStream();
-        using var writer = new BinaryWriter(ms);
-
-        writer.Write(_options.StateSize);
-        writer.Write(_options.ActionSize);
-
-        void WriteNetwork(INeuralNetwork<T> net)
-        {
-            var bytes = net.Serialize();
-            writer.Write(bytes.Length);
-            writer.Write(bytes);
-        }
-
-        WriteNetwork(_actorNetwork);
-        WriteNetwork(_actorTargetNetwork);
-        WriteNetwork(_criticNetwork);
-        WriteNetwork(_criticTargetNetwork);
-
-        return ms.ToArray();
-    }
-
-    /// <inheritdoc/>
-    public override void Deserialize(byte[] data)
-    {
-        using var ms = new MemoryStream(data);
-        using var reader = new BinaryReader(ms);
-
-        reader.ReadInt32(); // stateSize
-        reader.ReadInt32(); // actionSize
-
-        void ReadNetwork(INeuralNetwork<T> net)
-        {
-            var len = reader.ReadInt32();
-            var bytes = reader.ReadBytes(len);
-            net.Deserialize(bytes);
-        }
-
-        ReadNetwork(_actorNetwork);
-        ReadNetwork(_actorTargetNetwork);
-        ReadNetwork(_criticNetwork);
-        ReadNetwork(_criticTargetNetwork);
-    }
-
-    /// <inheritdoc/>
-    public override IFullModel<T, Vector<T>, Vector<T>> Clone()
-    {
-        // Actor/critic Dense layers are shape-lazy. Without a warm-up, GetParameters() is empty
-        // when Clone is called before the first inference and the two policies initialize
-        // independently. Materialize every registered and derived network on both sides before the
-        // parameter snapshot/restore so Clone preserves an untrained policy as well as a trained one.
-        MaterializeNetworks();
-        var clone = new DDPGAgent<T>(_options);
-        clone.MaterializeNetworks();
-        clone.SetParameters(GetParameters());
-        return clone;
-    }
-
     private void MaterializeNetworks()
     {
         var state = new Tensor<T>([_options.StateSize]);

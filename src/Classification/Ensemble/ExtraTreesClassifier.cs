@@ -277,59 +277,6 @@ public class ExtraTreesClassifier<T> : EnsembleClassifierBase<T>, ITreeBasedClas
     }
 
     /// <inheritdoc/>
-    public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
-    {
-        var clone = new ExtraTreesClassifier<T>(new ExtraTreesClassifierOptions<T>
-        {
-            NEstimators = Options.NEstimators,
-            MaxDepth = Options.MaxDepth,
-            MinSamplesSplit = Options.MinSamplesSplit,
-            MinSamplesLeaf = Options.MinSamplesLeaf,
-            MaxFeatures = Options.MaxFeatures,
-            // MaxFeatureCount takes PRECEDENCE over MaxFeatures when set, so omitting it here
-            // silently retrained the clone by the rule instead of the caller's explicit count.
-            MaxFeatureCount = Options.MaxFeatureCount,
-            Criterion = Options.Criterion,
-            Bootstrap = Options.Bootstrap,
-            Seed = Options.Seed,
-            MinImpurityDecrease = Options.MinImpurityDecrease
-        });
-
-        clone.NumFeatures = NumFeatures;
-        clone.NumClasses = NumClasses;
-        clone.TaskType = TaskType;
-
-        if (ClassLabels is not null)
-        {
-            clone.ClassLabels = new Vector<T>(ClassLabels.Length);
-            for (int i = 0; i < ClassLabels.Length; i++)
-            {
-                clone.ClassLabels[i] = ClassLabels[i];
-            }
-        }
-
-        if (FeatureImportances is not null)
-        {
-            clone.FeatureImportances = new Vector<T>(FeatureImportances.Length);
-            for (int i = 0; i < FeatureImportances.Length; i++)
-            {
-                clone.FeatureImportances[i] = FeatureImportances[i];
-            }
-        }
-
-        // Clone all estimators
-        foreach (var estimator in Estimators)
-        {
-            if (estimator is IFullModel<T, Matrix<T>, Vector<T>> fullModel)
-            {
-                clone.Estimators.Add((IClassifier<T>)fullModel.Clone());
-            }
-        }
-
-        return clone;
-    }
-
-    /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()
     {
         var metadata = base.GetModelMetadata();

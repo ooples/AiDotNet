@@ -202,63 +202,6 @@ public partial class CategoricalNaiveBayes<T> : NaiveBayesBase<T>
     }
 
     /// <inheritdoc/>
-    public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
-    {
-        var clone = new CategoricalNaiveBayes<T>(new NaiveBayesOptions<T>
-        {
-            Alpha = Options.Alpha,
-            FitPriors = Options.FitPriors
-        });
-
-        clone.NumFeatures = NumFeatures;
-        clone.NumClasses = NumClasses;
-        clone.TaskType = TaskType;
-
-        if (ClassLabels is not null)
-        {
-            clone.ClassLabels = new Vector<T>(ClassLabels.Length);
-            for (int i = 0; i < ClassLabels.Length; i++)
-            {
-                clone.ClassLabels[i] = ClassLabels[i];
-            }
-        }
-
-        if (LogPriors is not null)
-        {
-            clone.LogPriors = new Vector<T>(LogPriors.Length);
-            for (int i = 0; i < LogPriors.Length; i++)
-            {
-                clone.LogPriors[i] = LogPriors[i];
-            }
-        }
-
-        if (_numCategories is not null)
-        {
-            clone._numCategories = new int[_numCategories.Length];
-            Array.Copy(_numCategories, clone._numCategories, _numCategories.Length);
-        }
-
-        if (_categoryLogProbs is not null)
-        {
-            clone._categoryLogProbs = new Matrix<T>[_categoryLogProbs.Length];
-            for (int c = 0; c < _categoryLogProbs.Length; c++)
-            {
-                var src = _categoryLogProbs[c];
-                clone._categoryLogProbs[c] = new Matrix<T>(src.Rows, src.Columns);
-                for (int i = 0; i < src.Rows; i++)
-                {
-                    for (int j = 0; j < src.Columns; j++)
-                    {
-                        clone._categoryLogProbs[c][i, j] = src[i, j];
-                    }
-                }
-            }
-        }
-
-        return clone;
-    }
-
-    /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()
     {
         var metadata = base.GetModelMetadata();

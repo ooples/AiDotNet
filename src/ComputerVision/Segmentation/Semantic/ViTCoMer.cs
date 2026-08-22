@@ -375,43 +375,5 @@ public partial class ViTCoMer<T> : Common.SemanticSegmentationBase<T>
         };
     }
 
-    /// <summary>
-    /// Serializes configuration for persistence.
-    /// </summary>
-    /// <param name="writer">Binary writer.</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Saves config so the model can be restored later.
-    /// </para>
-    /// </remarks>
-
-
-    /// <summary>
-    /// Deserializes configuration.
-    /// </summary>
-    /// <param name="reader">Binary reader.</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Reads saved configuration matching the write order.
-    /// </para>
-    /// </remarks>
-
-
-    /// <summary>
-    /// Creates a new ViT-CoMer with same config but fresh weights.
-    /// </summary>
-    /// <returns>New model instance.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Used for cross-validation or ensemble training.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return _useNativeMode
-            ? new ViTCoMer<T>(Architecture, optimizer: null, LossFunction, _numClasses, _modelSize, _dropRate, new ViTCoMerOptions(_options))
-            : new ViTCoMer<T>(Architecture, _onnxModelPath ?? throw new InvalidOperationException("ONNX model path not initialized."), _numClasses, _modelSize, new ViTCoMerOptions(_options));
-    }
-
     #endregion
 }

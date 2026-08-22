@@ -322,29 +322,6 @@ public partial class OnlinePassiveAggressiveClassifier<T> : OnlineLearningModelB
         return newModel;
     }
 
-    /// <inheritdoc/>
-    public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
-    {
-        var clone = new OnlinePassiveAggressiveClassifier<T>(_c, _paType, _fitIntercept);
-        clone.NumFeatures = NumFeatures;
-        clone.IsInitialized = IsInitialized;
-        if (_weights is not null)
-        {
-            clone._weights = new Vector<T>(_weights.Length);
-            for (int i = 0; i < _weights.Length; i++)
-                clone._weights[i] = _weights[i];
-        }
-        clone._bias = _bias;
-        // Copy training state via parameters if available
-        if (IsInitialized && _weights is not null)
-        {
-            var params2 = GetParameters();
-            if (params2.Length > 0)
-                clone.SetParameters(params2);
-        }
-        return clone;
-    }
-
     /// <summary>
     /// Gets the feature importance scores (absolute weights).
     /// </summary>

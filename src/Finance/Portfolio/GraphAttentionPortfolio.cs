@@ -252,40 +252,4 @@ public partial class GraphAttentionPortfolio<T> : PortfolioOptimizerBase<T>
 
         return Objective.Loss(Objective.PortfolioReturns(weights, assetReturns));
     }
-
-    // UpdateParameters restated the base verbatim; ModelBase routes it to SetParameters.
-    /// <inheritdoc />
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        var copy = new GraphAttentionPortfolioOptions<T>
-        {
-            NumAssets = _options.NumAssets,
-            VolatilityLookback = _options.VolatilityLookback,
-            CorrelationWindow = _options.CorrelationWindow,
-            AttentionFeatureDimension = _options.AttentionFeatureDimension,
-            NumHeads = _options.NumHeads,
-            LeakyReLUSlope = _options.LeakyReLUSlope,
-            DropoutRate = _options.DropoutRate,
-            L1Regularization = _options.L1Regularization,
-            LearningRate = _options.LearningRate,
-            BatchSize = _options.BatchSize,
-            MaxEpochs = _options.MaxEpochs,
-        };
-
-        // LossFunction always carries across; calling the single-argument constructor took the
-        // implicit default and a model built with a custom loss cloned into a different one.
-        //
-        // Architecture carries across ONLY when it holds no layers. InitializeLayers adds
-        // Architecture.Layers into Layers BY REFERENCE when that collection is non-empty, and
-        // ILayer<T> has no Clone, so handing a layer-carrying architecture to the clone would give
-        // both models the SAME layer objects -- training or UpdateParameters on either would mutate
-        // both. A clone that silently shares state is a worse defect than one that rebuilds default
-        // layers, so the layer-carrying case falls back to the default build until layers can be
-        // deep-copied.
-        bool architectureCarriesLayers = Architecture.Layers is not null && Architecture.Layers.Count > 0;
-
-        return architectureCarriesLayers
-            ? new GraphAttentionPortfolio<T>(copy, null, LossFunction)
-            : new GraphAttentionPortfolio<T>(copy, Architecture, LossFunction);
-    }
 }

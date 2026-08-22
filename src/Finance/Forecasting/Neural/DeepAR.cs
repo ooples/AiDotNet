@@ -517,48 +517,6 @@ public partial class DeepAR<T> : ForecastingModelBase<T>
     }
 
     /// <summary>
-    /// Creates a new instance of this model with the same configuration.
-    /// </summary>
-    /// <returns>A new DeepAR model instance.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> This creates a fresh copy of the model with the same settings
-    /// but new (randomly initialized) weights. Useful for ensemble training or cross-validation.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        var options = new DeepAROptions<T>
-        {
-            LookbackWindow = SequenceLength,
-            ForecastHorizon = PredictionHorizon,
-            HiddenSize = _hiddenSize,
-            NumLayers = _numLstmLayers,
-            EmbeddingDimension = _embeddingDim,
-            DropoutRate = _dropout,
-            LikelihoodType = _distributionType,
-            NumSamples = _numSamples
-        };
-
-        if (UseNativeMode)
-        {
-            return new DeepAR<T>(Architecture, options, _optimizer, LossFunction);
-        }
-        else
-        {
-            // Use null-coalescing throw to satisfy null analysis across all framework targets
-            string onnxPath = OnnxModelPath ?? throw new InvalidOperationException(
-                "Cannot create new instance from ONNX mode when OnnxModelPath is not available.");
-            if (onnxPath.Length == 0)
-            {
-                throw new InvalidOperationException(
-                    "Cannot create new instance from ONNX mode when OnnxModelPath is empty.");
-            }
-            return new DeepAR<T>(Architecture, onnxPath, options, _optimizer, LossFunction);
-        }
-    }
-
-    /// <summary>
     /// Writes DeepAR-specific configuration during serialization.
     /// </summary>
     /// <param name="writer">Binary writer for output.</param>

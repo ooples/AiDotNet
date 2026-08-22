@@ -350,44 +350,6 @@ public partial class UNINEXT<T> : Common.PanopticSegmentationBase<T>
         };
     }
 
-    /// <summary>
-    /// Writes UNINEXT configuration to a binary stream.
-    /// </summary>
-    /// <param name="writer">The binary writer.</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Saves model configuration for later reconstruction.
-    /// </para>
-    /// </remarks>
-
-
-    /// <summary>
-    /// Reads UNINEXT configuration from a binary stream.
-    /// </summary>
-    /// <param name="reader">The binary reader.</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Loads model configuration when restoring a saved model.
-    /// </para>
-    /// </remarks>
-
-
-    /// <summary>
-    /// Creates a new UNINEXT instance with the same configuration but fresh weights.
-    /// </summary>
-    /// <returns>A new <see cref="UNINEXT{T}"/> model.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Creates a copy for cross-validation or ensemble training.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return _useNativeMode
-            ? new UNINEXT<T>(Architecture, Optimizer, LossFunction, _numClasses, _numQueries, _modelSize, _dropRate, _options)
-            : new UNINEXT<T>(Architecture, _onnxModelPath ?? throw new InvalidOperationException("ONNX model path not initialized."), _numClasses, _numQueries, _modelSize, _options);
-    }
-
     // Dispose is inherited: SegmentationModelBase already disposes _onnxSession and sets _disposed,
     // and UNINEXT owns no further unmanaged resources.
 

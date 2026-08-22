@@ -401,31 +401,6 @@ public partial class HopfieldNetwork<T> : VectorModelLayoutBase<T>
         };
     }
 
-    /// <summary>
-    /// Declares the single recurrent weight matrix, which the base cannot otherwise find.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// The base walks <c>Layers</c>, and a Hopfield network has none -- it is one symmetric weight
-    /// matrix, not a stack. Declaring it here is the whole parameter surface: count, vector,
-    /// restore and chunks all fold this one enumeration, so they cannot describe different tensors.
-    /// </para>
-    /// <para>
-    /// This replaces four hand-written members -- <c>ParameterCount</c> as the formula
-    /// <c>_size * _size</c>, a <c>GetParameters</c> flattening the matrix, a <c>SetParameters</c>
-    /// filling it back element by element, and a <c>GetParameterChunks</c> that yielded
-    /// <c>Tensor&lt;T&gt;.FromMatrix(_weights)</c>. That last one is why <c>_weights</c> is now a
-    /// <c>Tensor&lt;T&gt;</c> rather than a <c>Matrix&lt;T&gt;</c>: <c>FromMatrix</c> COPIES, so a
-    /// restore driven through the declared tensor would have written into a temporary and been
-    /// discarded, leaving the model on its old weights while reporting the new ones. Yielding the
-    /// field itself is what makes the automatic restore actually land.
-    /// </para>
-    /// </remarks>
-    protected override IEnumerable<Tensor<T>> GetExtraTrainableTensors()
-    {
-        yield return _weights;
-    }
-
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         // GPU-resident optimization: use TryForwardGpuOptimized for speedup

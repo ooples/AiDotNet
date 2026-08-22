@@ -243,9 +243,6 @@ public partial class CSPDarknet<T> : NeuralNetworkBase<T>, IDetectionBackbone<T>
         Layers.AddRange(_stages);
     }
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer) => WriteParameters(writer);
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader) => ReadParameters(reader);
-
     public override ModelMetadata<T> GetModelMetadata() => new ModelMetadata<T>
     {
         Name = Name,
@@ -267,28 +264,6 @@ public partial class CSPDarknet<T> : NeuralNetworkBase<T>, IDetectionBackbone<T>
     public override IFullModel<T, Tensor<T>, Tensor<T>> WithParameters(Vector<T> parameters) =>
         throw new NotSupportedException(
             $"{GetType().Name}: WithParameters(Vector<T>) is unsupported on backbones.");
-
-    /// <inheritdoc />
-    /// <remarks>
-    /// Round-trips the parameter binary stream through a fresh
-    /// <see cref="CreateNewInstance"/> so internal Conv / BN layers and their
-    /// tensor buffers are independent copies — see ResNet.DeepCopy.
-    /// </remarks>
-    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
-    {
-        var copy = (CSPDarknet<T>)CreateNewInstance();
-        using var ms = new MemoryStream();
-        using (var writer = new BinaryWriter(ms, System.Text.Encoding.UTF8, leaveOpen: true))
-        {
-            WriteParameters(writer);
-        }
-        ms.Position = 0;
-        using (var reader = new BinaryReader(ms, System.Text.Encoding.UTF8, leaveOpen: true))
-        {
-            copy.ReadParameters(reader);
-        }
-        return copy;
-    }
 
     // SiLU activation moved to BackboneOps<T>.ApplySiLU — was duplicated 3 times in this file.
 }

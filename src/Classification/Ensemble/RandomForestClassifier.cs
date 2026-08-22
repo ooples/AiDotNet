@@ -386,63 +386,6 @@ public partial class RandomForestClassifier<T> : EnsembleClassifierBase<T>, ITre
     }
 
     /// <inheritdoc/>
-    public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
-    {
-        var clone = new RandomForestClassifier<T>(new RandomForestClassifierOptions<T>
-        {
-            NEstimators = Options.NEstimators,
-            MaxDepth = Options.MaxDepth,
-            MinSamplesSplit = Options.MinSamplesSplit,
-            MinSamplesLeaf = Options.MinSamplesLeaf,
-            MaxFeatures = Options.MaxFeatures,
-            // MaxFeatureCount takes PRECEDENCE over MaxFeatures when set, so omitting it here
-            // silently retrained the clone by the rule instead of the caller's explicit count.
-            MaxFeatureCount = Options.MaxFeatureCount,
-            Criterion = Options.Criterion,
-            Bootstrap = Options.Bootstrap,
-            OobScore = Options.OobScore,
-            NJobs = Options.NJobs,
-            Seed = Options.Seed,
-            MinImpurityDecrease = Options.MinImpurityDecrease
-        });
-
-        clone.NumFeatures = NumFeatures;
-        clone.NumClasses = NumClasses;
-        clone.TaskType = TaskType;
-        clone.OobScore_ = OobScore_;
-
-        if (ClassLabels != null)
-        {
-            clone.ClassLabels = new Vector<T>(ClassLabels.Length);
-            for (int i = 0; i < ClassLabels.Length; i++)
-            {
-                clone.ClassLabels[i] = ClassLabels[i];
-            }
-        }
-
-        if (FeatureImportances != null)
-        {
-            clone.FeatureImportances = new Vector<T>(FeatureImportances.Length);
-            for (int i = 0; i < FeatureImportances.Length; i++)
-            {
-                clone.FeatureImportances[i] = FeatureImportances[i];
-            }
-        }
-
-        // Clone all estimators
-        foreach (var estimator in Estimators)
-        {
-            // No type test: IClassifier<T> derives from IFullModel<T, Matrix<T>, Vector<T>>, so the
-            // check was always true and its else-branch unreachable. Testing it suggested some
-            // estimator might not be cloneable and be skipped -- which would drop trees from the
-            // forest silently. Every estimator is cloned.
-            clone.Estimators.Add((IClassifier<T>)estimator.Clone());
-        }
-
-        return clone;
-    }
-
-    /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()
     {
         var metadata = base.GetModelMetadata();

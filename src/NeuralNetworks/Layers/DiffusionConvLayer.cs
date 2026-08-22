@@ -1710,40 +1710,6 @@ public partial class DiffusionConvLayer<T> : LayerBase<T>, IShapeContract
     /// </summary>
     public override Tensor<T> GetBiases() => _biases;
 
-    /// <summary>
-    /// Creates a deep copy of this layer.
-    /// </summary>
-    public override LayerBase<T> Clone()
-    {
-        DiffusionConvLayer<T> copy;
-
-        if (UsingVectorActivation)
-        {
-            var vAct = VectorActivation ?? throw new InvalidOperationException(
-                "UsingVectorActivation is true but VectorActivation is null.");
-            copy = new DiffusionConvLayer<T>(
-                OutputChannels, NumTimeScales, _numEigenvectors, vAct, _preferSpectralDiffusion);
-        }
-        else
-        {
-            copy = new DiffusionConvLayer<T>(
-                OutputChannels, NumTimeScales, _numEigenvectors, ScalarActivation, _preferSpectralDiffusion);
-        }
-
-        copy.SetParameters(GetParameters());
-
-        if (_eigenvalues != null && _eigenvectors != null)
-        {
-            copy.SetEigenbasis(_eigenvalues, _eigenvectors, _massMatrix);
-        }
-        else if (_laplacian != null)
-        {
-            copy.SetLaplacian(_laplacian, _massMatrix);
-        }
-
-        return copy;
-    }
-
     #endregion
 
     #region State Management

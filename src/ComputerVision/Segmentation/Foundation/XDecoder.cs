@@ -389,44 +389,6 @@ public partial class XDecoder<T> : Common.PanopticSegmentationBase<T>
     }
 
     /// <summary>
-    /// Writes X-Decoder configuration to a binary stream.
-    /// </summary>
-    /// <param name="writer">The binary writer.</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Saves model configuration for later reconstruction.
-    /// </para>
-    /// </remarks>
-
-
-    /// <summary>
-    /// Reads X-Decoder configuration from a binary stream.
-    /// </summary>
-    /// <param name="reader">The binary reader.</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Loads model configuration when restoring a saved model.
-    /// </para>
-    /// </remarks>
-
-
-    /// <summary>
-    /// Creates a new X-Decoder instance with the same configuration but fresh weights.
-    /// </summary>
-    /// <returns>A new <see cref="XDecoder{T}"/> model.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Creates a copy for cross-validation or ensemble training.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return _useNativeMode
-            ? new XDecoder<T>(Architecture, _optimizer, LossFunction, _numClasses, _numQueries, _modelSize, _dropRate, _options)
-            : new XDecoder<T>(Architecture, _onnxModelPath ?? throw new InvalidOperationException("ONNX model path not initialized."), _numClasses, _numQueries, _modelSize, _options);
-    }
-
-    /// <summary>
     /// Releases managed resources including the ONNX inference session.
     /// </summary>
     /// <param name="disposing">True when called from Dispose().</param>

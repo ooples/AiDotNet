@@ -911,47 +911,6 @@ public partial class DeepBoltzmannMachine<T> : VectorModelLayoutBase<T>
     }
 
     /// <summary>
-    /// Declares the contrastive-divergence weight and bias tensors, which live outside
-    /// <see cref="NeuralNetworkBase{T}.Layers"/>.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// A DBM carries its parameters in one of two places. Trained supervised, it builds
-    /// <c>Layers</c> and the base walk finds everything. Trained by contrastive divergence it has no
-    /// layers at all and holds <c>_layerWeights</c> and <c>_layerBiases</c> directly, which is what
-    /// this declares -- interleaved weight-then-bias per level, the order the old GetParameters
-    /// concatenated and therefore the order existing checkpoints are written in.
-    /// </para>
-    /// <para>
-    /// The guard is what stops the two modes double-counting: with layers present those same
-    /// weights are already reachable through them.
-    /// </para>
-    /// <para>
-    /// This replaces three overrides that disagreed with each other about which store was
-    /// authoritative. ParameterCount and GetParameters branched on <c>Layers.Count</c>;
-    /// UpdateParameters did NOT -- it always wrote the CD store, so in supervised mode it wrote
-    /// weights nothing would read. And there was no SetParameters override at all, so the path
-    /// serialization actually calls walked only <c>Layers</c>: in CD mode that is empty, and a
-    /// restore silently discarded the entire model while the count and the vector both reported
-    /// the full size. Declaring the tensors once makes count, vector and restore read the same
-    /// store in the same order, in both modes.
-    /// </para>
-    /// </remarks>
-    protected override IEnumerable<Tensor<T>> GetExtraTrainableTensors()
-    {
-        if (Layers.Count > 0)
-        {
-            yield break;
-        }
-
-        for (int i = 0; i < _layerWeights.Count; i++)
-        {
-            yield return _layerWeights[i];
-            yield return _layerBiases[i];
-        }
-    }
-
-    /// <summary>
     /// Gets metadata about the Deep Boltzmann Machine model.
     /// </summary>
     /// <returns>A ModelMetaData object containing information about the model.</returns>

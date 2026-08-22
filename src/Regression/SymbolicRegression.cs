@@ -385,23 +385,6 @@ public partial class SymbolicRegression<T> : NonLinearRegressionBase<T>
         base.ExtractModelParameters();
     }
 
-    public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
-    {
-        if (_useOLS && _olsCoefficients is not null)
-        {
-            var clone = new SymbolicRegression<T>(null, Regularization);
-            // Manually copy OLS state since base Serialize doesn't include it
-            clone._useOLS = true;
-            clone._olsCoefficients = new Vector<T>(_olsCoefficients);
-            clone._olsIntercept = _olsIntercept;
-            clone.SupportVectors = SupportVectors;
-            clone.Alphas = new Vector<T>(Alphas.Length);
-            clone.B = B;
-            return clone;
-        }
-        return base.Clone();
-    }
-
     public override IEnumerable<int> GetActiveFeatureIndices()
     {
         if (_useOLS && _olsCoefficients is not null)

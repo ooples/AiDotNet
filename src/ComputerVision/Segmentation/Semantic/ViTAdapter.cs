@@ -337,43 +337,5 @@ public partial class ViTAdapter<T> : Common.SemanticSegmentationBase<T>
         };
     }
 
-    /// <summary>
-    /// Serializes ViT-Adapter configuration for persistence.
-    /// </summary>
-    /// <param name="writer">Binary writer.</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Saves configuration so the model can be restored later.
-    /// </para>
-    /// </remarks>
-
-
-    /// <summary>
-    /// Deserializes ViT-Adapter configuration.
-    /// </summary>
-    /// <param name="reader">Binary reader.</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Reads saved configuration matching the write order.
-    /// </para>
-    /// </remarks>
-
-
-    /// <summary>
-    /// Creates a new ViT-Adapter with same config but fresh weights.
-    /// </summary>
-    /// <returns>New model instance.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Used for cross-validation or ensemble training.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return _useNativeMode
-            ? new ViTAdapter<T>(Architecture, _optimizer, LossFunction, _numClasses, _modelSize, _dropRate, _options)
-            : new ViTAdapter<T>(Architecture, _onnxModelPath ?? throw new InvalidOperationException("ONNX model path not initialized."), _numClasses, _modelSize, _options);
-    }
-
     #endregion
 }

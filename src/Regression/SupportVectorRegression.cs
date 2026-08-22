@@ -624,35 +624,6 @@ public partial class SupportVectorRegression<T> : NonLinearRegressionBase<T>
     }
 
     /// <summary>
-    /// Serializes the support vector regression model to a byte array for storage or transmission.
-    /// </summary>
-    /// <returns>A byte array containing the serialized model data.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method converts the model, including its coefficients, support vectors, and configuration options, into a 
-    /// byte array. This enables the model to be saved to a file, stored in a database, or transmitted over a network.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method saves the model to computer memory so you can use it later.
-    /// 
-    /// Think of it like taking a snapshot of the model:
-    /// - It captures all the important values, settings, and support vectors
-    /// - It converts them into a format that can be easily stored
-    /// - The resulting byte array can be saved to a file or database
-    /// 
-    /// This is useful when you want to:
-    /// - Train the model once and use it many times
-    /// - Share the model with others
-    /// - Use the model in a different application
-    /// </para>
-    /// </remarks>
-    public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
-    {
-        var clone = new SupportVectorRegression<T>(_options, Regularization);
-        clone.Deserialize(Serialize());
-        return clone;
-    }
-
-    /// <summary>
     /// Creates a new instance of the Support Vector Regression model with the same configuration.
     /// </summary>
     /// <returns>A new instance of the Support Vector Regression model.</returns>

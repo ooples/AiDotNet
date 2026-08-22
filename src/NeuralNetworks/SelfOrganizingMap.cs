@@ -362,29 +362,6 @@ public partial class SelfOrganizingMap<T> : VectorModelLayoutBase<T>
     /// <inheritdoc/>
     public override bool SupportsTraining => true;
 
-    /// <summary>
-    /// Declares the SOM codebook, which lives outside the layer chain.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// A SOM has no trainable layers by design -- Kohonen 1982 §3 describes a single competitive
-    /// layer holding one codebook, not a stack -- so the base walk over <c>Layers</c> finds nothing
-    /// unless the codebook is declared. Declaring it here gives the count, the vector, the restore
-    /// and the chunks all one source, laid out [mapWidth * mapHeight, inputDimension] row-major,
-    /// the same order the deleted GetParameters produced.
-    /// </para>
-    /// <para>
-    /// This replaces a ParameterCount formula (<c>_mapWidth * _mapHeight * _inputDimension</c>), a
-    /// GetParameters that copied the codebook out element by element, an UpdateParameters that
-    /// copied it back, and a GetParameterChunks that already yielded <c>_weights</c> -- four members
-    /// describing one tensor, any of which could have been changed without the others.
-    /// </para>
-    /// </remarks>
-    protected override IEnumerable<Tensor<T>> GetExtraTrainableTensors()
-    {
-        yield return _weights;
-    }
-
     /// <inheritdoc/>
     public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input)
     {

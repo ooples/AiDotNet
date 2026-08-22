@@ -140,6 +140,22 @@ public abstract partial class ContentClassifierBase<T> : IContentClassifier<T>, 
     /// <inheritdoc/>
     public abstract bool IsReady();
 
+    /// <summary>
+    /// Serializes a concrete classifier entirely from its generated state declarations.
+    /// Concrete classifiers receive their public override from <c>ModelStateGenerator</c>.
+    /// </summary>
+    protected byte[] SerializeGeneratedModelState()
+        => AiDotNet.Models.ModelStateEnvelope.Append(DeclaredState, Array.Empty<byte>());
+
+    /// <summary>
+    /// Restores a concrete classifier entirely from its generated state declarations.
+    /// </summary>
+    protected void DeserializeGeneratedModelState(byte[] data)
+    {
+        if (data is null) throw new ArgumentNullException(nameof(data));
+        _ = AiDotNet.Models.ModelStateEnvelope.Extract(DeclaredState, data);
+    }
+
     /// <inheritdoc/>
     public abstract byte[] Serialize();
 

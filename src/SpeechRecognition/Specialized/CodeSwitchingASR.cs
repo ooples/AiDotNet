@@ -597,15 +597,6 @@ public partial class CodeSwitchingASR<T> : AudioNeuralNetworkBase<T>, ISpeechRec
         AdditionalInfo = BaseAudioMetadataInfo()
     };
 
-
-
-
-
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-        => !_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp)
-            ? new CodeSwitchingASR<T>(Architecture, mp, _options)
-            : new CodeSwitchingASR<T>(Architecture, _options);
-
     #endregion
 
     #region Decoding helpers

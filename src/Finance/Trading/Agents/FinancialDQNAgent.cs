@@ -332,29 +332,6 @@ public partial class FinancialDQNAgent<T> : TradingAgentBase<T>, IGradientComput
 
     #region Serialization
 
-    /// <inheritdoc/>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the FinancialDQNAgent model, Serialize saves or restores model-specific settings. This lets the FinancialDQNAgent architecture be reused later.
-    /// </para>
-    /// </remarks>
-    public override byte[] Serialize() => _qNetwork.Serialize();
-
-    /// <inheritdoc/>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the FinancialDQNAgent model, Deserialize saves or restores model-specific settings. This lets the FinancialDQNAgent architecture be reused later.
-    /// </para>
-    /// </remarks>
-    public override void Deserialize(byte[] data)
-    {
-        _qNetwork.Deserialize(data);
-        // Restore the same serialized topology into the target. A flat parameter vector cannot
-        // communicate lazy layer shapes, so copying it into the constructor-time target can reject
-        // a valid source whose graph resolved differently after its first forward.
-        _targetNetwork.Deserialize(data);
-    }
-
     #endregion
 
     #region Model Metadata

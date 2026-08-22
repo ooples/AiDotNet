@@ -474,44 +474,6 @@ public partial class A2CAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
     }
 
     /// <inheritdoc/>
-    public override byte[] Serialize()
-    {
-        using var ms = new MemoryStream();
-        using var writer = new BinaryWriter(ms);
-
-        writer.Write(_a2cOptions.StateSize);
-        writer.Write(_a2cOptions.ActionSize);
-
-        var policyBytes = _policyNetwork.Serialize();
-        writer.Write(policyBytes.Length);
-        writer.Write(policyBytes);
-
-        var valueBytes = _valueNetwork.Serialize();
-        writer.Write(valueBytes.Length);
-        writer.Write(valueBytes);
-
-        return ms.ToArray();
-    }
-
-    /// <inheritdoc/>
-    public override void Deserialize(byte[] data)
-    {
-        using var ms = new MemoryStream(data);
-        using var reader = new BinaryReader(ms);
-
-        reader.ReadInt32(); // stateSize
-        reader.ReadInt32(); // actionSize
-
-        var policyLength = reader.ReadInt32();
-        var policyBytes = reader.ReadBytes(policyLength);
-        _policyNetwork.Deserialize(policyBytes);
-
-        var valueLength = reader.ReadInt32();
-        var valueBytes = reader.ReadBytes(valueLength);
-        _valueNetwork.Deserialize(valueBytes);
-    }
-
-    /// <inheritdoc/>
     public Vector<T> ComputeGradients(
         Vector<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
     {

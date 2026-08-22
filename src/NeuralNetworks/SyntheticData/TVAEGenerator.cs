@@ -831,28 +831,6 @@ public partial class TVAEGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>, 
     }
 
     /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        var copy = new TVAEGenerator<T>(
-            Architecture,
-            new TVAEOptions<T>(_options),
-            optimizer: null,
-            lossFunction: _lossFunction);
-
-        // Predict/Train can adapt an unfitted TVAE from the constructor's nominal width to the
-        // caller's actual tabular width. Build the clone at that same resolved width before the
-        // base clone path transfers layer tensors; otherwise its fresh decoder still targets the
-        // parameterless 10-column shape while the source emits the adapted width.
-        if (_dataWidth > 0)
-        {
-            copy._dataWidth = _dataWidth;
-            copy.RebuildLayersWithActualDimensions(_dataWidth);
-        }
-
-        return copy;
-    }
-
-    /// <inheritdoc/>
     public override Dictionary<string, T> GetFeatureImportance()
     {
         var importance = new Dictionary<string, T>();

@@ -219,47 +219,6 @@ public partial class FinRLAgent<T> : TradingAgentBase<T>
 
     #region Serialization
 
-    /// <inheritdoc/>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the FinRLAgent model, Serialize saves or restores model-specific settings. This lets the FinRLAgent architecture be reused later.
-    /// </para>
-    /// </remarks>
-    public override byte[] Serialize()
-    {
-        using var ms = new MemoryStream();
-        using var writer = new BinaryWriter(ms);
-
-        writer.Write((int)_algorithm);
-        var innerData = _innerAgent.Serialize();
-        writer.Write(innerData.Length);
-        writer.Write(innerData);
-
-        return ms.ToArray();
-    }
-
-    /// <inheritdoc/>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the FinRLAgent model, Deserialize saves or restores model-specific settings. This lets the FinRLAgent architecture be reused later.
-    /// </para>
-    /// </remarks>
-    public override void Deserialize(byte[] data)
-    {
-        using var ms = new MemoryStream(data);
-        using var reader = new BinaryReader(ms);
-
-        var algorithm = (FinRLAlgorithm)reader.ReadInt32();
-        if (algorithm != _algorithm)
-        {
-            throw new InvalidOperationException($"Cannot deserialize {algorithm} data into {_algorithm} agent.");
-        }
-
-        int innerLength = reader.ReadInt32();
-        var innerData = reader.ReadBytes(innerLength);
-        _innerAgent.Deserialize(innerData);
-    }
-
     #endregion
 
     #region Model Metadata

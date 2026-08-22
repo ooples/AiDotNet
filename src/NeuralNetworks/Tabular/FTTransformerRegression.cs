@@ -48,11 +48,6 @@ namespace AiDotNet.NeuralNetworks.Tabular;
     Authors = "Gorishniy, Y., Rubachev, I., Khrulkov, V., & Babenko, A.")]
 public class FTTransformerRegression<T> : FTTransformerBase<T>
 {
-
-    /// <inheritdoc />
-    /// <remarks>The regression head, folded after the shared backbone by the base.</remarks>
-    protected override IEnumerable<ILayer<T>> GetExtraTrainableLayers()
-        => new ILayer<T>[] { _regressionHead };
     private readonly int _outputDimension;
     private readonly FullyConnectedLayer<T> _regressionHead;
 

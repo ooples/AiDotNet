@@ -1012,48 +1012,6 @@ public partial class ConvTasNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T
 
     #region Abstract Method Implementations
 
-    /// <summary>
-    /// Declares every weight Conv-TasNet owns: the encoder, the separation mask, the decoder, the
-    /// layer-norm affine pair, and each temporal-convolution block's seven tensors.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// Conv-TasNet implements its signal path with model-owned tensors rather than
-    /// <see cref="NeuralNetworkBase{T}.Layers"/>, so the base walk finds nothing unless they are
-    /// declared. Declared in the order the deleted GetParameters concatenated them -- encoder
-    /// weight and bias, decoder weight, mask weight and bias, norm gamma and beta, then each TCN
-    /// block -- so existing checkpoints still restore.
-    /// </para>
-    /// <para>
-    /// This replaces ParameterCount, GetParameters, GetParameterChunks and SetParameters here, four
-    /// more on TcnBlock, and the four Copy/Read helpers that moved values one element at a time.
-    /// </para>
-    /// <para>
-    /// The weights are <c>Tensor&lt;T&gt;</c> now rather than raw <c>T[]</c>, which is what the rest
-    /// of the library uses and what the trainable-parameter walk can see. A bare array cannot be
-    /// declared: a <c>Vector&lt;T&gt;</c> built over one COPIES it, so a restore driven through such
-    /// a view would have written into a temporary and been discarded.
-    /// </para>
-    /// </remarks>
-    protected override IEnumerable<Tensor<T>> GetExtraTrainableTensors()
-    {
-        yield return _encoderWeight;
-        yield return _encoderBias;
-        yield return _decoderWeight;
-        yield return _maskWeight;
-        yield return _maskBias;
-        yield return _normGamma;
-        yield return _normBeta;
-
-        foreach (var block in _tcnBlocks)
-        {
-            foreach (var tensor in block.EnumerateTensors())
-            {
-                yield return tensor;
-            }
-        }
-    }
-
     // UpdateParameters is NOT overridden. It used to throw NotSupportedException; the base
     // implementation is virtual now and distributes a flat vector over the same enumeration
     // GetParameters folds, which this model already exposes correctly. The throw existed

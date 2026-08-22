@@ -580,56 +580,6 @@ public partial class CQLAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
     }
 
     /// <inheritdoc/>
-    public override byte[] Serialize()
-    {
-        using var ms = new MemoryStream();
-        using var writer = new BinaryWriter(ms);
-
-        writer.Write(_options.StateSize);
-        writer.Write(_options.ActionSize);
-        writer.Write(_updateCount);
-        writer.Write(Convert.ToDouble(_alpha));
-
-        var policyBytes = _policyNetwork.Serialize();
-        writer.Write(policyBytes.Length);
-        writer.Write(policyBytes);
-
-        var q1Bytes = _q1Network.Serialize();
-        writer.Write(q1Bytes.Length);
-        writer.Write(q1Bytes);
-
-        var q2Bytes = _q2Network.Serialize();
-        writer.Write(q2Bytes.Length);
-        writer.Write(q2Bytes);
-
-        return ms.ToArray();
-    }
-
-    /// <inheritdoc/>
-    public override void Deserialize(byte[] data)
-    {
-        using var ms = new MemoryStream(data);
-        using var reader = new BinaryReader(ms);
-
-        reader.ReadInt32(); // stateSize
-        reader.ReadInt32(); // actionSize
-        _updateCount = reader.ReadInt32();
-        _alpha = _numOps.FromDouble(reader.ReadDouble());
-
-        var policyLength = reader.ReadInt32();
-        var policyBytes = reader.ReadBytes(policyLength);
-        _policyNetwork.Deserialize(policyBytes);
-
-        var q1Length = reader.ReadInt32();
-        var q1Bytes = reader.ReadBytes(q1Length);
-        _q1Network.Deserialize(q1Bytes);
-
-        var q2Length = reader.ReadInt32();
-        var q2Bytes = reader.ReadBytes(q2Length);
-        _q2Network.Deserialize(q2Bytes);
-    }
-
-    /// <inheritdoc/>
     public override void SaveModel(string filepath)
     {
         var data = Serialize();

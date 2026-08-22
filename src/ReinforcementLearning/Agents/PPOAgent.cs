@@ -612,46 +612,6 @@ public partial class PPOAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
     }
 
     /// <inheritdoc/>
-    public override byte[] Serialize()
-    {
-        using var ms = new MemoryStream();
-        using var writer = new BinaryWriter(ms);
-
-        writer.Write(_ppoOptions.StateSize);
-        writer.Write(_ppoOptions.ActionSize);
-        writer.Write(_ppoOptions.IsContinuous);
-
-        var policyBytes = _policyNetwork.Serialize();
-        writer.Write(policyBytes.Length);
-        writer.Write(policyBytes);
-
-        var valueBytes = _valueNetwork.Serialize();
-        writer.Write(valueBytes.Length);
-        writer.Write(valueBytes);
-
-        return ms.ToArray();
-    }
-
-    /// <inheritdoc/>
-    public override void Deserialize(byte[] data)
-    {
-        using var ms = new MemoryStream(data);
-        using var reader = new BinaryReader(ms);
-
-        var stateSize = reader.ReadInt32();
-        var actionSize = reader.ReadInt32();
-        var isContinuous = reader.ReadBoolean();
-
-        var policyLength = reader.ReadInt32();
-        var policyBytes = reader.ReadBytes(policyLength);
-        _policyNetwork.Deserialize(policyBytes);
-
-        var valueLength = reader.ReadInt32();
-        var valueBytes = reader.ReadBytes(valueLength);
-        _valueNetwork.Deserialize(valueBytes);
-    }
-
-    /// <inheritdoc/>
     public Vector<T> ComputeGradients(
         Vector<T> input,
         Vector<T> target,

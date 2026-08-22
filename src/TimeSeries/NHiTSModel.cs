@@ -821,22 +821,6 @@ public partial class NHiTSModel<T> : TimeSeriesModelBase<T>, ISupportsLossFuncti
     {
         return new NHiTSModel<T>(new NHiTSOptions<T>(_options));
     }
-
-    // ParameterCount restated a fold the base now derives from generated component registration.
-    // Removed under AIDN082.
-    public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
-    {
-        var clone = new NHiTSModel<T>(_options);
-        clone._stacks.Clear();
-        clone._stacks.AddRange(_stacks);
-        if (_trainingSeries.Length > 0)
-            clone._trainingSeries = new Vector<T>(_trainingSeries);
-        if (ModelParameters is not null && ModelParameters.Length > 0)
-            clone.ModelParameters = new Vector<T>(ModelParameters);
-        clone._normMean = _normMean;
-        clone._normStd = _normStd;
-        return clone;
-    }
 }
 
 /// <summary>

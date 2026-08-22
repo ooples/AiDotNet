@@ -1014,34 +1014,4 @@ public partial class MixedEffectsModel<T> : NonLinearRegressionBase<T>
         var groupIndices = Enumerable.Range(0, x.Rows).Select(i => i % Math.Max(1, x.Rows / 10)).ToArray();
         Train(x, y, groupIndices);
     }
-
-    public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
-    {
-        var clone = new MixedEffectsModel<T>(_options, Regularization);
-        if (SupportVectors.Rows > 0)
-            clone.SupportVectors = SupportVectors.Clone();
-        if (Alphas.Length > 0)
-            clone.Alphas = new Vector<T>(Alphas);
-        clone.B = B;
-        if (_fixedEffects is not null)
-            clone._fixedEffects = new Vector<T>(_fixedEffects);
-        if (_featureMeans is not null)
-            clone._featureMeans = new Vector<T>(_featureMeans);
-        clone._numFeatures = _numFeatures;
-        clone._numRandomEffects = _numRandomEffects;
-        clone._residualVariance = _residualVariance;
-        if (_randomEffectVariance is not null)
-            clone._randomEffectVariance = _randomEffectVariance.Clone();
-        if (_fixedEffectStdErrors is not null)
-            clone._fixedEffectStdErrors = new Vector<T>(_fixedEffectStdErrors);
-        if (_groupIndices is not null)
-            clone._groupIndices = (int[])_groupIndices.Clone();
-        if (_randomEffects is not null)
-        {
-            clone._randomEffects = new Dictionary<int, Vector<T>>();
-            foreach (var kvp in _randomEffects)
-                clone._randomEffects[kvp.Key] = new Vector<T>(kvp.Value);
-        }
-        return clone;
-    }
 }

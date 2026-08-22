@@ -837,7 +837,7 @@ public class ModelParameterGenerator : IIncrementalGenerator
         return $"CopyLayerAliasCollection({member.Name}, __destination.{member.Name}, Layers, __destination.Layers, nameof({member.Name}));";
     }
 
-    /// <summary>Emits clone transfer for one explicitly-declared model-owned tensor.</summary>
+    /// <summary>Emits clone transfer for one explicitly-declared model-owned tensor or vector.</summary>
     private static string? TrainableTensorCopierFor(
         ISymbol member,
         string elem,
@@ -845,7 +845,9 @@ public class ModelParameterGenerator : IIncrementalGenerator
     {
         if (kind != ParameterMemberSemanticModel.Kind.Trainable) return null;
         var type = MemberType(member);
-        if (type is null || NumericFamilyFor(type, elem) != "Tensor") return null;
+        if (type is null) return null;
+        string? family = NumericFamilyFor(type, elem);
+        if (family is not ("Tensor" or "Vector")) return null;
 
         bool writable = member switch
         {
@@ -854,6 +856,15 @@ public class ModelParameterGenerator : IIncrementalGenerator
             _ => false,
         };
         bool nullable = ParameterMemberSemanticModel.IsNullable(member);
+        if (family == "Vector")
+        {
+            return writable
+                ? nullable
+                    ? $"__destination.{member.Name} = CloneGeneratedTrainableVector({member.Name});"
+                    : $"__destination.{member.Name} = CloneRequiredGeneratedTrainableVector({member.Name});"
+                : $"CopyGeneratedTrainableVectorValues({member.Name}, __destination.{member.Name}, nameof({member.Name}));";
+        }
+
         return writable
             ? nullable
                 ? $"__destination.{member.Name} = CloneGeneratedTrainableTensor({member.Name});"
@@ -1146,6 +1157,13 @@ public class ModelParameterGenerator : IIncrementalGenerator
     {
         if (NumericFamilyFor(type, elem) == "Tensor")
             return $"new Tensor<{elem}>?[] {{ {name} }}";
+
+        // NeuralNetworkBase's extension hook is tensor-shaped, but a model-owned Vector is valid
+        // trainable storage too. Tensor's vector constructor is a write-through view, so generated
+        // discovery can expose it without a concrete parameter-ownership override.
+        if (NumericFamilyFor(type, elem) == "Vector")
+            return $"{name} is null ? global::System.Array.Empty<Tensor<{elem}>?>() : "
+                + $"new Tensor<{elem}>?[] {{ new Tensor<{elem}>([{name}.Length], {name}) }}";
 
         var element = CollectionElementType(type);
         if (element is not null && NumericFamilyFor(element, elem) == "Tensor")

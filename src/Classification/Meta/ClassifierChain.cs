@@ -449,65 +449,6 @@ public partial class ClassifierChain<T> : MetaClassifierBase<T>
 
         return logProbs;
     }
-
-    /// <inheritdoc/>
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        if (EstimatorFactory is null)
-        {
-            throw new InvalidOperationException("Estimator factory is not set.");
-        }
-
-        return new ClassifierChain<T>(EstimatorFactory, new ClassifierChainOptions<T>
-        {
-            Order = Options.Order,
-            RandomOrder = Options.RandomOrder,
-            Seed = Options.Seed
-        });
-    }
-
-    /// <inheritdoc/>
-    public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
-    {
-        var clone = (ClassifierChain<T>)CreateNewInstance();
-
-        clone.NumFeatures = NumFeatures;
-        clone.NumClasses = NumClasses;
-        clone.TaskType = TaskType;
-
-        if (ClassLabels is not null)
-        {
-            clone.ClassLabels = new Vector<T>(ClassLabels.Length);
-            for (int i = 0; i < ClassLabels.Length; i++)
-            {
-                clone.ClassLabels[i] = ClassLabels[i];
-            }
-        }
-
-        if (_order is not null)
-        {
-            clone._order = new int[_order.Length];
-            Array.Copy(_order, clone._order, _order.Length);
-        }
-
-        if (_classifiers is not null)
-        {
-            clone._classifiers = new IClassifier<T>[_classifiers.Length];
-            for (int c = 0; c < _classifiers.Length; c++)
-            {
-                if (_classifiers[c] is IFullModel<T, Matrix<T>, Vector<T>> fullModel)
-                {
-                    clone._classifiers[c] = (IClassifier<T>)fullModel.Clone();
-                }
-                else
-                {
-                    clone._classifiers[c] = _classifiers[c];
-                }
-            }
-        }
-
-        return clone;
-    }
 }
 
 /// <summary>

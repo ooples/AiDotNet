@@ -210,53 +210,6 @@ public partial class ThompsonSamplingAgent<T> : ReinforcementLearningAgentBase<T
     public Task TrainAsync() { Train(); return Task.CompletedTask; }
     public override ModelMetadata<T> GetModelMetadata() => new ModelMetadata<T> { FeatureCount = this.FeatureCount, Complexity = ParameterCount };
     public override int FeatureCount => 1;
-    public override byte[] Serialize()
-    {
-        using var ms = new MemoryStream();
-        using var writer = new BinaryWriter(ms);
-
-        // Write options
-        writer.Write(_options.NumArms);
-
-        // Write state
-        for (int i = 0; i < _options.NumArms; i++)
-        {
-            writer.Write(_successCounts[i]);
-            writer.Write(_failureCounts[i]);
-        }
-
-        return ms.ToArray();
-    }
-
-    public override void Deserialize(byte[] data)
-    {
-        using var ms = new MemoryStream(data);
-        using var reader = new BinaryReader(ms);
-
-        // Read and validate options
-        var numArms = reader.ReadInt32();
-
-        if (numArms != _options.NumArms)
-            throw new InvalidOperationException($"Serialized NumArms ({numArms}) doesn't match current options ({_options.NumArms})");
-
-        // Read state
-        for (int i = 0; i < _options.NumArms; i++)
-        {
-            _successCounts[i] = reader.ReadInt32();
-            _failureCounts[i] = reader.ReadInt32();
-        }
-    }
-    public override IFullModel<T, Vector<T>, Vector<T>> Clone()
-    {
-        var clone = new ThompsonSamplingAgent<T>(_options);
-        // Copy learned arm statistics to preserve trained state
-        for (int i = 0; i < _options.NumArms; i++)
-        {
-            clone._successCounts[i] = _successCounts[i];
-            clone._failureCounts[i] = _failureCounts[i];
-        }
-        return clone;
-    }
     public override void SaveModel(string filepath) { var data = Serialize(); System.IO.File.WriteAllBytes(filepath, data); }
     public override void LoadModel(string filepath) { var data = System.IO.File.ReadAllBytes(filepath); Deserialize(data); }
 }

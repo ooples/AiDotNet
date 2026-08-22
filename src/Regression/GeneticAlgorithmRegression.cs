@@ -323,18 +323,4 @@ public partial class GeneticAlgorithmRegression<T> : RegressionBase<T>
             Intercept = NumOps.Zero;
         }
     }
-
-    public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
-    {
-        if (Coefficients.Length > 0 && _bestModel == null)
-        {
-            // OLS path — manual clone
-            var clone = new GeneticAlgorithmRegression<T>(regularization: Regularization);
-            clone.Coefficients = new Vector<T>(Coefficients);
-            clone.Intercept = Intercept;
-            clone.TrainingFeatureCount = TrainingFeatureCount;
-            return clone;
-        }
-        return base.Clone();
-    }
 }

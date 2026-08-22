@@ -860,24 +860,6 @@ public partial class DCCRN<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
     }
 
     /// <summary>
-    /// Applies complex mask to STFT.
-    /// </summary>
-    /// <summary>
-    /// Surfaces the complex-conv real/imaginary kernels as the model's raw trainable tensors so the base
-    /// gradient tape watches and updates them and GetParameters / serialization round-trip them (the same
-    /// mechanism ViT cls/pos tokens use). They are created lazily on first forward once input channel
-    /// counts are known, so this yields nothing until then; the base runs a warm-up forward before
-    /// collecting parameters, so they exist by collection time.
-    /// </summary>
-    protected override System.Collections.Generic.IEnumerable<Tensor<T>> GetExtraTrainableTensors()
-    {
-        foreach (var w in _encWr) if (w is not null) yield return w;
-        foreach (var w in _encWi) if (w is not null) yield return w;
-        foreach (var w in _decWr) if (w is not null) yield return w;
-        foreach (var w in _decWi) if (w is not null) yield return w;
-    }
-
-    /// <summary>
     /// True complex convolution (Hu 2020): for complex input carried as [B, 2*Cin, F, T] (real channels
     /// first, imaginary second) and complex kernels Wr, Wi, computes
     ///   Re(out) = conv(Xr, Wr) - conv(Xi, Wi),   Im(out) = conv(Xr, Wi) + conv(Xi, Wr)

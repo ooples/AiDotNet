@@ -112,45 +112,6 @@ public partial class OPTICS<T> : ClusteringBase<T>
         return newInstance;
     }
 
-    /// <inheritdoc />
-    public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
-    {
-        var clone = (OPTICS<T>)CreateNewInstance();
-        clone._reachabilityDistances = _reachabilityDistances.Length > 0 ? Vector<T>.Wrap(_reachabilityDistances.ToArray()) : new Vector<T>(0);
-        clone._coreDistances = _coreDistances.Length > 0 ? Vector<T>.Wrap(_coreDistances.ToArray()) : new Vector<T>(0);
-        clone._ordering = _ordering?.ToArray() ?? Array.Empty<int>();
-        clone._predecessor = _predecessor?.ToArray() ?? Array.Empty<int>();
-        clone._featureMeans = _featureMeans is not null ? new Vector<T>(_featureMeans) : null;
-        clone._featureStds = _featureStds is not null ? new Vector<T>(_featureStds) : null;
-        if (_normalizedClusterCenters is not null)
-        {
-            clone._normalizedClusterCenters = new Matrix<T>(_normalizedClusterCenters.Rows, _normalizedClusterCenters.Columns);
-            for (int i = 0; i < _normalizedClusterCenters.Rows; i++)
-                for (int j = 0; j < _normalizedClusterCenters.Columns; j++)
-                    clone._normalizedClusterCenters[i, j] = _normalizedClusterCenters[i, j];
-        }
-        clone.NumClusters = NumClusters;
-        clone.NumFeatures = NumFeatures;
-        clone.IsTrained = IsTrained;
-
-        if (Labels is not null)
-        {
-            clone.Labels = new Vector<T>(Labels.Length);
-            for (int i = 0; i < Labels.Length; i++)
-                clone.Labels[i] = Labels[i];
-        }
-
-        if (ClusterCenters is not null)
-        {
-            clone.ClusterCenters = new Matrix<T>(ClusterCenters.Rows, ClusterCenters.Columns);
-            for (int i = 0; i < ClusterCenters.Rows; i++)
-                for (int j = 0; j < ClusterCenters.Columns; j++)
-                    clone.ClusterCenters[i, j] = ClusterCenters[i, j];
-        }
-
-        return clone;
-    }
-
     public override void Train(Matrix<T> x, Vector<T> y)
     {
         int n = x.Rows;

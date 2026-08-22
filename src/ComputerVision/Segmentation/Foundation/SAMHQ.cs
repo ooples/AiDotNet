@@ -366,45 +366,6 @@ public partial class SAMHQ<T> : Common.PromptableSegmentationBase<T>
         };
     }
 
-    /// <summary>
-    /// Writes SAM-HQ configuration to a binary stream.
-    /// </summary>
-    /// <param name="writer">The binary writer.</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Saves model configuration for later reconstruction.
-    /// </para>
-    /// </remarks>
-
-
-    /// <summary>
-    /// Reads SAM-HQ configuration from a binary stream.
-    /// </summary>
-    /// <param name="reader">The binary reader.</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Loads model configuration when restoring a saved model.
-    /// </para>
-    /// </remarks>
-
-
-    /// <summary>
-    /// Creates a new SAM-HQ instance with the same configuration but fresh weights.
-    /// </summary>
-    /// <returns>A new <see cref="SAMHQ{T}"/> model with reinitialized weights.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Creates a copy of the model's configuration with fresh random weights.
-    /// Used for cross-validation and ensemble training.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return _useNativeMode
-            ? new SAMHQ<T>(Architecture, Optimizer, LossFunction, _numClasses, _modelSize, _dropRate, _options)
-            : new SAMHQ<T>(Architecture, _onnxModelPath ?? throw new InvalidOperationException("ONNX model path not initialized."), _numClasses, _modelSize, _options);
-    }
-
     // Dispose is inherited: SegmentationModelBase already disposes _onnxSession and sets _disposed,
     // and SAM-HQ owns no further unmanaged resources.
 

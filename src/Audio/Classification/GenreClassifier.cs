@@ -610,33 +610,6 @@ public partial class GenreClassifier<T> : AudioClassifierBase<T>, IGenreClassifi
         return metadata;
     }
 
-    /// <summary>
-    /// Serializes network-specific data.
-    /// </summary>
-
-
-    /// <summary>
-    /// Deserializes network-specific data.
-    /// </summary>
-
-
-    /// <summary>
-    /// Creates a new instance of this model for cloning.
-    /// </summary>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        if (!_useNativeMode)
-        {
-            throw new NotSupportedException(
-                "CreateNewInstance is not supported for ONNX models. " +
-                "Create a new GenreClassifier with the model path instead.");
-        }
-
-        return new GenreClassifier<T>(
-            Architecture,
-            _options);
-    }
-
     #endregion
 
     #region Private Methods - Feature Extraction

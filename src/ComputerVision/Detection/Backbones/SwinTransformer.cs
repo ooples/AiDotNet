@@ -39,28 +39,6 @@ namespace AiDotNet.ComputerVision.Detection.Backbones;
 public partial class SwinTransformer<T> : NeuralNetworkBase<T>, IDetectionBackbone<T>
 {
 
-
-    /// <inheritdoc />
-    /// <remarks>
-    /// The patch embedding and every layer inside every Swin stage. The layer norms are excluded because SwinLayerNorm is not a LayerBase and holds no trainable tensors of its own -- widening it is a separate change, not one to make silently here.
-    /// <para>
-    /// These live outside <c>Layers</c>, held in plain block objects, which is why this backbone
-    /// used to THROW from GetParameters rather than expose a flat vector -- the base walk would
-    /// have found nothing. Refusing was never right: PyTorch has no module that declines to
-    /// enumerate its parameters, and the refusal cost this model checkpointing, flat-vector
-    /// optimizers and every count-based diagnostic. Declaring the layers here gets all of it back,
-    /// and count, vector, restore and chunks fold this one declaration.
-    /// </para>
-    /// </remarks>
-    protected override IEnumerable<LayerBase<T>?> GetExtraTrainableLayers()
-    {
-        foreach (var layer in _patchEmbed.EnumerateLayers()) yield return layer;
-        foreach (var stage in _stages)
-        {
-            foreach (var layer in stage.EnumerateLayers()) yield return layer;
-        }
-    }
-
     private readonly PatchEmbeddingBlock<T> _patchEmbed;
     private readonly List<SwinStage<T>> _stages;
     private readonly SwinVariant _variant;
@@ -297,9 +275,6 @@ public partial class SwinTransformer<T> : NeuralNetworkBase<T>, IDetectionBackbo
 
     protected override void InitializeLayers() { }
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer) => WriteParameters(writer);
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader) => ReadParameters(reader);
-
     public override ModelMetadata<T> GetModelMetadata() => new ModelMetadata<T>
     {
         Name = Name,
@@ -321,29 +296,6 @@ public partial class SwinTransformer<T> : NeuralNetworkBase<T>, IDetectionBackbo
     public override IFullModel<T, Tensor<T>, Tensor<T>> WithParameters(Vector<T> parameters) =>
         throw new NotSupportedException(
             $"{GetType().Name}: WithParameters(Vector<T>) is unsupported on backbones.");
-
-    /// <inheritdoc />
-    /// <remarks>
-    /// Round-trips the parameter binary stream through a fresh
-    /// <see cref="CreateNewInstance"/> so internal patch-embedding /
-    /// transformer / patch-merging blocks and their tensor buffers are
-    /// independent copies — see ResNet.DeepCopy.
-    /// </remarks>
-    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
-    {
-        var copy = (SwinTransformer<T>)CreateNewInstance();
-        using var ms = new MemoryStream();
-        using (var writer = new BinaryWriter(ms, System.Text.Encoding.UTF8, leaveOpen: true))
-        {
-            WriteParameters(writer);
-        }
-        ms.Position = 0;
-        using (var reader = new BinaryReader(ms, System.Text.Encoding.UTF8, leaveOpen: true))
-        {
-            copy.ReadParameters(reader);
-        }
-        return copy;
-    }
 }
 
 /// <summary>

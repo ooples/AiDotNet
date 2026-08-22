@@ -921,10 +921,6 @@ public partial class ExperienceReplayBuffer<T, TInput, TOutput> : ModelBase<T, T
         return copy;
     }
 
-    /// <inheritdoc />
-    public override IFullModel<T, TInput, TOutput> DeepCopy()
-        => (ExperienceReplayBuffer<T, TInput, TOutput>)MemberwiseClone();
-
     #endregion
 }
 

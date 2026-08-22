@@ -296,46 +296,6 @@ public partial class SEEM<T> : Common.PromptableSegmentationBase<T>
         ModelData = SerializeForMetadata()
     };
 
-    /// <summary>
-    /// Writes configuration to a binary stream.
-    /// </summary>
-    /// <param name="writer">The binary writer.</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Saves model configuration for later reconstruction.
-    /// </para>
-    /// </remarks>
-
-
-    /// <summary>
-    /// Reads configuration from a binary stream.
-    /// </summary>
-    /// <param name="reader">The binary reader.</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Loads model configuration when restoring a saved model.
-    /// </para>
-    /// </remarks>
-
-
-    /// <summary>
-    /// Creates a new instance with the same configuration but fresh weights.
-    /// </summary>
-    /// <returns>A new model instance.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Creates a copy for cross-validation or ensemble training.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        var options = new SEEMOptions(_options);
-        return _useNativeMode
-            ? new SEEM<T>(Architecture, optimizer: null, lossFunction: LossFunction,
-                numClasses: _numClasses, modelSize: _modelSize, dropRate: _dropRate, options: options)
-            : new SEEM<T>(Architecture, _onnxModelPath ?? throw new InvalidOperationException("ONNX model path not initialized."), _numClasses, _modelSize, options);
-    }
-
     // Dispose is inherited from SegmentationModelBase, which already disposes the ONNX session.
     // SEEM owns no further unmanaged resources.
     #endregion

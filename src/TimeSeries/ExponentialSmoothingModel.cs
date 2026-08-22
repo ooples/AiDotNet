@@ -690,24 +690,6 @@ public partial class ExponentialSmoothingModel<T> : TimeSeriesModelBase<T>
     }
 
     /// <summary>
-    /// Creates a deep copy of the current exponential smoothing model, including all trained state.
-    /// </summary>
-    /// <returns>A new instance with the same trained state.</returns>
-    public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
-    {
-        var clone = (ExponentialSmoothingModel<T>)base.Clone();
-        clone._alpha = _alpha;
-        clone._beta = _beta;
-        clone._gamma = _gamma;
-        clone._initialValues = _initialValues.Length > 0 ? _initialValues.Clone() : Vector<T>.Empty();
-        clone._trainedLevel = _trainedLevel;
-        clone._trainedTrend = _trainedTrend;
-        clone._trainedSeasonalFactors = _trainedSeasonalFactors.Length > 0 ? _trainedSeasonalFactors.Clone() : Vector<T>.Empty();
-        clone._trainingLength = _trainingLength;
-        return clone;
-    }
-
-    /// <summary>
     /// Creates a new instance of the exponential smoothing model with the same options.
     /// </summary>
     /// <returns>A new instance of the exponential smoothing model.</returns>

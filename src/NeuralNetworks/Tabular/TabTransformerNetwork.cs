@@ -415,29 +415,6 @@ public partial class TabTransformerNetwork<T> : TabularNeuralNetworkBase<T>
         };
     }
 
-    /// <inheritdoc/>
-
-
-    /// <inheritdoc/>
-
-
-    /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        // Optimizers carry step counters and moment tensors keyed to the source model's
-        // parameters. Sharing one across a clone leaks training state and can also leave the
-        // optimizer bound to the source model. Recreate the same optimizer type from its
-        // configuration, then bind that fresh instance to the clone.
-        var freshOptimizer = CreateFreshOptimizer();
-        var clone = new TabTransformerNetwork<T>(
-            Architecture,
-            _options,
-            freshOptimizer,
-            _lossFunction);
-        freshOptimizer.SetModel(clone);
-        return clone;
-    }
-
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreateFreshOptimizer()
     {
         var optimizerType = _optimizer.GetType();

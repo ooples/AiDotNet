@@ -335,60 +335,6 @@ public partial class VotingClassifier<T> : MetaClassifierBase<T>
     }
 
     /// <inheritdoc/>
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        var newEstimators = new List<IClassifier<T>>();
-
-        if (_estimators is not null)
-        {
-            foreach (var est in _estimators)
-            {
-                if (est is IFullModel<T, Matrix<T>, Vector<T>> fullModel)
-                {
-                    newEstimators.Add((IClassifier<T>)fullModel.Clone());
-                }
-                else
-                {
-                    newEstimators.Add(est);
-                }
-            }
-        }
-
-        return new VotingClassifier<T>(newEstimators, new VotingClassifierOptions<T>
-        {
-            Voting = Options.Voting,
-            Weights = Options.Weights
-        });
-    }
-
-    /// <inheritdoc/>
-    public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
-    {
-        var clone = (VotingClassifier<T>)CreateNewInstance();
-
-        clone.NumFeatures = NumFeatures;
-        clone.NumClasses = NumClasses;
-        clone.TaskType = TaskType;
-
-        if (ClassLabels is not null)
-        {
-            clone.ClassLabels = new Vector<T>(ClassLabels.Length);
-            for (int i = 0; i < ClassLabels.Length; i++)
-            {
-                clone.ClassLabels[i] = ClassLabels[i];
-            }
-        }
-
-        if (_weights is not null)
-        {
-            clone._weights = new double[_weights.Length];
-            Array.Copy(_weights, clone._weights, _weights.Length);
-        }
-
-        return clone;
-    }
-
-    /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()
     {
         var metadata = base.GetModelMetadata();

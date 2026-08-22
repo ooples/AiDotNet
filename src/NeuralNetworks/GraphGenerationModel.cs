@@ -75,14 +75,6 @@ namespace AiDotNet.NeuralNetworks;
 [ResearchPaper("Variational Graph Auto-Encoders", "https://arxiv.org/abs/1611.07308")]
 public partial class GraphGenerationModel<T> : GraphModelLayoutBase<T>
 {
-
-    /// <inheritdoc />
-    /// <remarks>The variational head: the mean and log-variance projections that turn the
-    /// encoder output into a latent distribution. They live outside Layers, and the
-    /// hand-written surfaces appended them in this order after the layer walk -- which is
-    /// exactly where the base fold puts extra tensors.</remarks>
-    protected override IEnumerable<Tensor<T>> GetExtraTrainableTensors()
-        => new[] { _meanWeights, _logVarWeights };
     private readonly GraphGenerationModelOptions _options;
 
     /// <inheritdoc/>

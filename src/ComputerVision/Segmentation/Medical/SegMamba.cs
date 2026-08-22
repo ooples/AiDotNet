@@ -673,14 +673,6 @@ public partial class SegMamba<T> : Common.MedicalSegmentationBase<T>
         ModelData = SerializeForMetadata()
     };
 
-
-
-
-
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() => _useNativeMode
-        ? new SegMamba<T>(Architecture, _optimizer, LossFunction, _numClasses, _dropRate, _options)
-        : new SegMamba<T>(Architecture, _onnxModelPath ?? throw new InvalidOperationException("ONNX model path not initialized."), _numClasses, _options);
-
     // Dispose is inherited: SegmentationModelBase already disposes _onnxSession and flips _disposed,
     // and SegMamba owns no other unmanaged resource.
     #endregion

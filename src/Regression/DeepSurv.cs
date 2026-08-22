@@ -649,11 +649,4 @@ public partial class DeepSurv<T> : AsyncDecisionTreeRegressionBase<T>
             }
         };
     }
-
-    public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
-    {
-        var clone = new DeepSurv<T>(_options, Regularization);
-        clone.Deserialize(Serialize());
-        return clone;
-    }
 }

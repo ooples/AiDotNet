@@ -163,12 +163,5 @@ public partial class RelationModule<T> : ModelBase<T, Tensor<T>, Tensor<T>>
         return copy;
     }
 
-    /// <inheritdoc />
-    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
-    {
-        var cloned = Clone();
-        return cloned;
-    }
-
     #endregion
 }

@@ -628,12 +628,6 @@ public partial class LayoutGraph<T> : DocumentNeuralNetworkBase<T>, ILayoutDetec
     private const int NodeTypeCount = 64;
     private const int NodeTypeDim = 256;
 
-    /// <inheritdoc/>
-    protected override IEnumerable<LayerBase<T>?> GetExtraTrainableLayers()
-    {
-        yield return _nodeTypeEmbedding;
-    }
-
     /// <summary>
     /// Runs the graph stack, adding a learned per-node TYPE vector when the caller supplies type ids
     /// through the auxiliary input.

@@ -789,46 +789,6 @@ public partial class A3CAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
     }
 
     /// <inheritdoc/>
-    public override byte[] Serialize()
-    {
-        using var ms = new MemoryStream();
-        using var writer = new BinaryWriter(ms);
-
-        writer.Write(_options.StateSize);
-        writer.Write(_options.ActionSize);
-        writer.Write(_globalSteps);
-
-        var policyBytes = _globalPolicyNetwork.Serialize();
-        writer.Write(policyBytes.Length);
-        writer.Write(policyBytes);
-
-        var valueBytes = _globalValueNetwork.Serialize();
-        writer.Write(valueBytes.Length);
-        writer.Write(valueBytes);
-
-        return ms.ToArray();
-    }
-
-    /// <inheritdoc/>
-    public override void Deserialize(byte[] data)
-    {
-        using var ms = new MemoryStream(data);
-        using var reader = new BinaryReader(ms);
-
-        reader.ReadInt32(); // stateSize
-        reader.ReadInt32(); // actionSize
-        _globalSteps = reader.ReadInt32();
-
-        var policyLength = reader.ReadInt32();
-        var policyBytes = reader.ReadBytes(policyLength);
-        _globalPolicyNetwork.Deserialize(policyBytes);
-
-        var valueLength = reader.ReadInt32();
-        var valueBytes = reader.ReadBytes(valueLength);
-        _globalValueNetwork.Deserialize(valueBytes);
-    }
-
-    /// <inheritdoc/>
     public override void SaveModel(string filepath)
     {
         var data = Serialize();

@@ -20,12 +20,10 @@ namespace AiDotNet.Tests.IntegrationTests.Cloning;
 /// green build says nothing about whether a clone carries what it was built with.
 /// </para>
 /// <para>
-/// DeepCopy rebuilds a model by calling its hand-written <c>CreateNewInstance</c> for the shape and
-/// then copying parameters in, so <c>CreateNewInstance</c> is the model's factory and every one of
-/// the 144 overrides is a hand-maintained argument list. A hyperparameter it forgets to pass is
-/// silently defaulted in the copy — the same defect this work removes for options and layers. What
-/// this measures is how many models survive that round trip with their parameter count and
-/// architecture intact, and stay independent of the original afterwards.
+/// DeepCopy now rebuilds a model from its generated construction plan and generated state payload.
+/// Concrete models have no factory, clone, or serialization override to keep synchronized with
+/// their constructors. What this measures is how many models survive that shared round trip with
+/// their parameter count and architecture intact, and stay independent of the original afterwards.
 /// </para>
 /// <para>
 /// Models that cannot be constructed from a standard architecture are reported separately from

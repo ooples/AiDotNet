@@ -620,39 +620,5 @@ public partial class NodeClassificationModel<T> : GraphModelLayoutBase<T>, AiDot
         };
     }
 
-    /// <summary>
-    /// Serializes network-specific data to a binary writer.
-    /// </summary>
-
-
-    /// <summary>
-    /// Deserializes network-specific data from a binary reader.
-    /// </summary>
-
-
-    /// <summary>
-    /// Creates a new instance of this network type for cloning or deserialization.
-    /// </summary>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        var clone = new NodeClassificationModel<T>(
-            architecture: Architecture,
-            hiddenDim: HiddenDim,
-            numLayers: NumLayers,
-            dropoutRate: DropoutRate);
-        // Graph STATE is model state in this stateful-adjacency design, so a clone of a configured
-        // model must stay usable: carry the implicit-identity opt-in and any explicit adjacency.
-        if (_implicitIdentityWhenUnset)
-        {
-            clone.EnableImplicitIdentityAdjacency();
-        }
-        else if (_cachedAdjacencyMatrix is not null)
-        {
-            clone.SetAdjacencyMatrix(_cachedAdjacencyMatrix);
-        }
-
-        return clone;
-    }
-
     #endregion
 }

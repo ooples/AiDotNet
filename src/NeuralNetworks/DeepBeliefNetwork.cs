@@ -686,42 +686,4 @@ public partial class DeepBeliefNetwork<T> : VectorModelLayoutBase<T>
             ModelData = SerializeForMetadata()
         };
     }
-
-
-
-
-
-    /// <summary>
-    /// Creates a new instance of the deep belief network model.
-    /// </summary>
-    /// <returns>A new instance of the deep belief network model with the same configuration.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method creates a new instance of the deep belief network model with the same configuration as the current instance.
-    /// It is used internally during serialization/deserialization processes to create a fresh instance that can be populated
-    /// with the serialized data. The new instance will have the same architecture, learning rate, epochs, batch size,
-    /// and loss function as the original.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method creates a copy of the network structure without copying the learned data.
-    /// 
-    /// Think of it like making a blueprint copy of the tower:
-    /// - It copies the same overall design (architecture)
-    /// - It preserves settings like learning rate and batch size
-    /// - It maintains the same RBM layer structure
-    /// - But it doesn't copy any of the learned patterns and weights
-    /// 
-    /// This is primarily used when saving or loading models, creating an empty framework that the saved parameters
-    /// can be loaded into later.
-    /// </para>
-    /// </remarks>
-    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
-    {
-        var copy = (NeuralNetworkBase<T>)CreateNewInstance();
-        var originalParams = GetParameters();
-        if (originalParams.Length > 0 && originalParams.Length == copy.GetParameters().Length)
-        {
-            copy.UpdateParameters(originalParams);
-        }
-        return copy;
-    }
 }

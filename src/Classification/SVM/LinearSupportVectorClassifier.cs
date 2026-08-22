@@ -348,54 +348,6 @@ public partial class LinearSupportVectorClassifier<T> : SVMBase<T>
     }
 
     /// <inheritdoc/>
-    public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
-    {
-        var clone = new LinearSupportVectorClassifier<T>(new SVMOptions<T>
-        {
-            C = Options.C,
-            Kernel = KernelType.Linear,
-            Tolerance = Options.Tolerance,
-            MaxIterations = Options.MaxIterations,
-            Seed = Options.Seed
-        });
-
-        clone.NumFeatures = NumFeatures;
-        clone.NumClasses = NumClasses;
-        clone.TaskType = TaskType;
-
-        if (ClassLabels is not null)
-        {
-            clone.ClassLabels = new Vector<T>(ClassLabels.Length);
-            for (int i = 0; i < ClassLabels.Length; i++)
-            {
-                clone.ClassLabels[i] = ClassLabels[i];
-            }
-        }
-
-        if (_weights is not null)
-        {
-            clone._weights = new Vector<T>(_weights.Length);
-            for (int i = 0; i < _weights.Length; i++)
-            {
-                clone._weights[i] = _weights[i];
-            }
-        }
-
-        clone._bias = _bias;
-
-        if (_intercept is not null)
-        {
-            clone._intercept = new Vector<T>(_intercept.Length);
-            for (int i = 0; i < _intercept.Length; i++)
-            {
-                clone._intercept[i] = _intercept[i];
-            }
-        }
-
-        return clone;
-    }
-
-    /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()
     {
         var metadata = base.GetModelMetadata();

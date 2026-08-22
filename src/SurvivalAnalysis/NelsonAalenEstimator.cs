@@ -266,10 +266,4 @@ public partial class NelsonAalenEstimator<T> : SurvivalModelBase<T>
         return copy;
     }
 
-    /// <inheritdoc />
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        return new NelsonAalenEstimator<T>();
-    }
-
 }

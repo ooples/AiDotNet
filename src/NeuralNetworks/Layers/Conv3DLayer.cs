@@ -906,43 +906,6 @@ public partial class Conv3DLayer<T> : LayerBase<T>, IShapeContract
     /// <returns>The kernel tensor.</returns>
     public Tensor<T> GetFilters() => _kernels;
 
-    /// <summary>
-    /// Creates a deep copy of the layer with the same configuration and parameters.
-    /// </summary>
-    /// <returns>A new instance of the <see cref="Conv3DLayer{T}"/> with identical configuration and parameters.</returns>
-    /// <remarks>
-    /// <para>
-    /// The clone is completely independent from the original layer. Changes to one
-    /// will not affect the other.
-    /// </para>
-    /// </remarks>
-    public override LayerBase<T> Clone()
-    {
-        Conv3DLayer<T> copy;
-
-        if (UsingVectorActivation)
-        {
-            copy = new Conv3DLayer<T>(
-                OutputChannels,
-                KernelSize,
-                Stride,
-                Padding,
-                VectorActivation!);
-        }
-        else
-        {
-            copy = new Conv3DLayer<T>(
-                OutputChannels,
-                KernelSize,
-                Stride,
-                Padding,
-                ScalarActivation);
-        }
-
-        copy.SetParameters(GetParameters());
-        return copy;
-    }
-
     #endregion
 
     #region State Management

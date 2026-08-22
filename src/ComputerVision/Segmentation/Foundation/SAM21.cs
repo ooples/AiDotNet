@@ -342,23 +342,6 @@ public partial class SAM21<T> : Common.PromptableSegmentationBase<T>
     };
 
     /// <summary>
-    /// Writes configuration to a binary stream.
-    /// </summary>
-
-
-    /// <summary>
-    /// Reads configuration from a binary stream.
-    /// </summary>
-
-
-    /// <summary>
-    /// Creates a new instance with the same configuration.
-    /// </summary>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() => _useNativeMode
-        ? new SAM21<T>(Architecture, Optimizer, LossFunction, _numClasses, _modelSize, _dropRate, _options)
-        : new SAM21<T>(Architecture, _onnxModelPath ?? throw new InvalidOperationException("ONNX model path not initialized."), _numClasses, _modelSize, _options);
-
-    /// <summary>
     /// Releases managed resources.
     /// </summary>
     // Dispose is inherited: SegmentationModelBase already disposes _onnxSession and sets _disposed,

@@ -1873,48 +1873,6 @@ public partial class GRULayer<T> : LayerBase<T>, IShapeContract
     }
 
     /// <summary>
-    /// Creates a deep copy of this GRU layer with independent weights and reset state.
-    /// </summary>
-    /// <returns>A new GRULayer with the same weights but independent of the original.</returns>
-    public override LayerBase<T> Clone()
-    {
-        var clone = (GRULayer<T>)base.Clone();
-
-        // Deep copy all weight tensors
-        clone._Wz = _Wz.Clone();
-        clone._Wr = _Wr.Clone();
-        clone._Wh = _Wh.Clone();
-        clone._Uz = _Uz.Clone();
-        clone._Ur = _Ur.Clone();
-        clone._Uh = _Uh.Clone();
-        clone._bz = _bz.Clone();
-        clone._br = _br.Clone();
-        clone._bh = _bh.Clone();
-
-        // Reset internal state (don't share state between original and clone)
-        clone._lastInput = null;
-        clone._lastHiddenState = null;
-        clone._lastZ = null;
-        clone._lastR = null;
-        clone._lastH = null;
-        clone._allHiddenStates = null;
-        clone._originalInputShape = null;
-
-        // Reset gradients
-        clone._dWz = null;
-        clone._dWr = null;
-        clone._dWh = null;
-        clone._dUz = null;
-        clone._dUr = null;
-        clone._dUh = null;
-        clone._dbz = null;
-        clone._dbr = null;
-        clone._dbh = null;
-
-        return clone;
-    }
-
-    /// <summary>
     /// Clears the GPU training cache to release GPU memory.
     /// </summary>
     private void ClearGpuTrainingCache()

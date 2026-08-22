@@ -99,20 +99,6 @@ public partial class MAModel<T> : TimeSeriesModelBase<T>
     private T _noiseVariance;
 
     /// <summary>
-    /// Flag indicating whether the model has been trained.
-    /// </summary>
-    // IsTrained is inherited from TimeSeriesModelBase
-
-    public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
-    {
-        // Use serialize/deserialize for deep copy to preserve all MA-specific state
-        byte[] serialized = this.Serialize();
-        var clone = new MAModel<T>(new MAModelOptions<T> { MAOrder = _maOptions.MAOrder });
-        clone.Deserialize(serialized);
-        return clone;
-    }
-
-    /// <summary>
     /// Maximum number of iterations for optimization algorithms.
     /// </summary>
     private readonly int _maxIterations = 100;

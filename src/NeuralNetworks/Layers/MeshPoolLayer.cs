@@ -607,21 +607,6 @@ public partial class MeshPoolLayer<T> : LayerBase<T>, IShapeContract
     /// <returns>Null as this layer has no biases.</returns>
     public override Tensor<T> GetBiases() => new Tensor<T>([0]);
 
-    /// <summary>
-    /// Creates a deep copy of the layer.
-    /// </summary>
-    /// <returns>A new instance with identical configuration and parameters.</returns>
-    public override LayerBase<T> Clone()
-    {
-        var copy = new MeshPoolLayer<T>(InputChannels, TargetEdges, _numNeighbors);
-        copy.SetParameters(GetParameters());
-        if (_lastEdgeAdjacency != null)
-        {
-            copy.SetEdgeAdjacency(_lastEdgeAdjacency);
-        }
-        return copy;
-    }
-
     #endregion
 
     #region State Management

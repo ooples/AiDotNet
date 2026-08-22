@@ -343,14 +343,4 @@ public partial class RandomForestRegression<T> : AsyncDecisionTreeRegressionBase
         FeatureImportances = new Vector<T>(importances);
     }
 
-    /// <summary>
-    /// Deep copy via serialization to preserve the private _trees list.
-    /// </summary>
-    public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
-    {
-        var clone = new RandomForestRegression<T>(_options, Regularization);
-        clone.Deserialize(Serialize());
-        return clone;
-    }
-
 }

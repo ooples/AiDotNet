@@ -255,69 +255,6 @@ public partial class EveryVisitMonteCarloAgent<T> : ReinforcementLearningAgentBa
 
     public override int FeatureCount => _options.StateSize;
 
-    public override byte[] Serialize()
-    {
-        var state = new
-        {
-            QTable = _qTable,
-            Returns = _returns,
-            Epsilon = _epsilon,
-            Options = _options
-        };
-        string json = JsonConvert.SerializeObject(state);
-        return System.Text.Encoding.UTF8.GetBytes(json);
-    }
-
-    public override void Deserialize(byte[] data)
-    {
-        if (data is null || data.Length == 0)
-        {
-            throw new ArgumentException("Serialized data cannot be null or empty", nameof(data));
-        }
-
-        string json = System.Text.Encoding.UTF8.GetString(data);
-        var state = JsonConvert.DeserializeObject<dynamic>(json);
-        if (state is null)
-        {
-            throw new InvalidOperationException("Deserialization returned null");
-        }
-
-        _qTable = JsonConvert.DeserializeObject<Dictionary<string, Dictionary<int, T>>>(state.QTable.ToString()) ?? new Dictionary<string, Dictionary<int, T>>();
-        _returns = JsonConvert.DeserializeObject<Dictionary<string, Dictionary<int, List<T>>>>(state.Returns.ToString()) ?? new Dictionary<string, Dictionary<int, List<T>>>();
-        _epsilon = state.Epsilon;
-    }
-
-    /// <summary>
-    /// Creates a deep copy of the agent, including all Q-table entries.
-    /// </summary>
-    public override IFullModel<T, Vector<T>, Vector<T>> Clone()
-    {
-        var clone = new EveryVisitMonteCarloAgent<T>(_options);
-
-        // Deep copy Q-table
-        foreach (var stateEntry in _qTable)
-        {
-            clone._qTable[stateEntry.Key] = new Dictionary<int, T>();
-            foreach (var actionEntry in stateEntry.Value)
-            {
-                clone._qTable[stateEntry.Key][actionEntry.Key] = actionEntry.Value;
-            }
-        }
-
-        // Deep copy returns
-        foreach (var kvp in _returns)
-        {
-            clone._returns[kvp.Key] = new Dictionary<int, List<T>>();
-            foreach (var returnKvp in kvp.Value)
-            {
-                clone._returns[kvp.Key][returnKvp.Key] = new List<T>(returnKvp.Value);
-            }
-        }
-
-        clone._epsilon = _epsilon;
-        return clone;
-    }
-
     public Vector<T> ComputeGradients(Vector<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
     {
         return GetParameters();

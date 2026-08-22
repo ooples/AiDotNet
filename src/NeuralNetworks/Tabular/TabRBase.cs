@@ -125,7 +125,7 @@ public abstract class TabRBase<T> : IParameterSource<T>
     /// all, so it cannot inherit that one.
     /// </remarks>
     protected virtual IEnumerable<ILayer<T>> GetExtraTrainableLayers()
-        => System.Linq.Enumerable.Empty<ILayer<T>>();
+        => GeneratedParameterDiscovery.EnumerateDerivedLayers<T>(this, typeof(TabRBase<T>));
 
     /// <summary>
     /// Gets the total number of trainable parameters.

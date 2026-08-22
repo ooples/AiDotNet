@@ -91,46 +91,6 @@ public partial class OnlineKMeans<T> : ClusteringBase<T>
     public double CurrentLearningRate { get; private set; }
 
     /// <inheritdoc />
-
-    /// <inheritdoc />
-    public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
-    {
-        var clone = (OnlineKMeans<T>)CreateNewInstance();
-        if (_centers is not null)
-        {
-            int k = _centers.Rows;
-            int d = _centers.Columns;
-            clone._centers = new Matrix<T>(k, d);
-            for (int i = 0; i < k; i++)
-                for (int j = 0; j < d; j++)
-                    clone._centers[i, j] = _centers[i, j];
-        }
-        clone._clusterCounts = _clusterCounts?.ToArray() ?? Array.Empty<int>();
-        clone._totalPointsSeen = _totalPointsSeen;
-        clone.CurrentLearningRate = CurrentLearningRate;
-        clone.NumClusters = NumClusters;
-        clone.NumFeatures = NumFeatures;
-        clone.IsTrained = IsTrained;
-
-        if (Labels is not null)
-        {
-            clone.Labels = new Vector<T>(Labels.Length);
-            for (int i = 0; i < Labels.Length; i++)
-                clone.Labels[i] = Labels[i];
-        }
-
-        if (ClusterCenters is not null)
-        {
-            clone.ClusterCenters = new Matrix<T>(ClusterCenters.Rows, ClusterCenters.Columns);
-            for (int i = 0; i < ClusterCenters.Rows; i++)
-                for (int j = 0; j < ClusterCenters.Columns; j++)
-                    clone.ClusterCenters[i, j] = ClusterCenters[i, j];
-        }
-
-        return clone;
-    }
-
-    /// <inheritdoc />
     public override IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
     {
         var newInstance = (OnlineKMeans<T>)CreateNewInstance();

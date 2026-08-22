@@ -760,14 +760,5 @@ public partial class StableVideoDiffusion<T> : VideoDiffusionModelBase<T>
 
     #region ICloneable Implementation
 
-    /// <summary>
-    /// Creates a deep copy of this model.
-    /// </summary>
-    /// <returns>A new instance with copied parameters.</returns>
-    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
-    {
-        return (IFullModel<T, Tensor<T>, Tensor<T>>)Clone();
-    }
-
     #endregion
 }

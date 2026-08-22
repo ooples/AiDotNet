@@ -1214,17 +1214,5 @@ public partial class UnifiedMultimodalNetwork<T> : MultimodalModelLayoutBase<T>,
         };
     }
 
-    /// <inheritdoc/>
-
-
-    /// <inheritdoc/>
-
-
-    /// <inheritdoc/>
-    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
-    {
-        return base.DeepCopy();
-    }
-
     #endregion
 }

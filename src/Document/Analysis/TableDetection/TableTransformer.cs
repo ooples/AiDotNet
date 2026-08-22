@@ -1040,52 +1040,6 @@ public partial class TableTransformer<T> : DocumentNeuralNetworkBase<T>, ITableE
         };
     }
 
-    /// <inheritdoc/>
-
-
-    /// <inheritdoc/>
-
-
-    /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        if (_useNativeMode)
-        {
-            return new TableTransformer<T>(
-                Architecture,
-                ImageSize,
-                _hiddenDim,
-                _numEncoderLayers,
-                _numDecoderLayers,
-                _numHeads,
-                _numQueries);
-        }
-
-        if (string.IsNullOrWhiteSpace(_onnxDetectionModelPath) || string.IsNullOrWhiteSpace(_onnxStructureModelPath))
-        {
-            throw new InvalidOperationException(
-                "Missing ONNX model paths required to clone TableTransformer.");
-        }
-
-        var detectionModelPath = _onnxDetectionModelPath
-            ?? throw new InvalidOperationException(
-                "Missing ONNX detection model path required to clone TableTransformer.");
-        var structureModelPath = _onnxStructureModelPath
-            ?? throw new InvalidOperationException(
-                "Missing ONNX structure model path required to clone TableTransformer.");
-
-        return new TableTransformer<T>(
-            Architecture,
-            detectionModelPath,
-            structureModelPath,
-            ImageSize,
-            _hiddenDim,
-            _numEncoderLayers,
-            _numDecoderLayers,
-            _numHeads,
-            _numQueries);
-    }
-
     #endregion
 
     #region NeuralNetworkBase Implementation

@@ -327,54 +327,6 @@ public partial class OffPolicyMonteCarloAgent<T> : ReinforcementLearningAgentBas
 
     public override int FeatureCount => _options.ActionSize;
 
-    public override byte[] Serialize()
-    {
-        var state = new
-        {
-            QTable = _qTable,
-            CTable = _cTable,
-            Options = _options
-        };
-        string json = JsonConvert.SerializeObject(state);
-        return System.Text.Encoding.UTF8.GetBytes(json);
-    }
-
-    public override void Deserialize(byte[] data)
-    {
-        if (data is null || data.Length == 0)
-        {
-            throw new ArgumentException("Serialized data cannot be null or empty", nameof(data));
-        }
-
-        string json = System.Text.Encoding.UTF8.GetString(data);
-        var state = JsonConvert.DeserializeObject<dynamic>(json);
-        if (state is null)
-        {
-            throw new InvalidOperationException("Deserialization returned null");
-        }
-
-        _qTable = JsonConvert.DeserializeObject<Dictionary<string, Dictionary<int, T>>>(state.QTable.ToString()) ?? new Dictionary<string, Dictionary<int, T>>();
-        _cTable = JsonConvert.DeserializeObject<Dictionary<string, Dictionary<int, T>>>(state.CTable.ToString()) ?? new Dictionary<string, Dictionary<int, T>>();
-    }
-
-    public override IFullModel<T, Vector<T>, Vector<T>> Clone()
-    {
-        var clone = new OffPolicyMonteCarloAgent<T>(_options);
-
-        // Deep copy Q-table and C-table to avoid shared state
-        foreach (var kvp in _qTable)
-        {
-            clone._qTable[kvp.Key] = new Dictionary<int, T>(kvp.Value);
-        }
-
-        foreach (var kvp in _cTable)
-        {
-            clone._cTable[kvp.Key] = new Dictionary<int, T>(kvp.Value);
-        }
-
-        return clone;
-    }
-
     public override void SaveModel(string filepath)
     {
         if (string.IsNullOrWhiteSpace(filepath))

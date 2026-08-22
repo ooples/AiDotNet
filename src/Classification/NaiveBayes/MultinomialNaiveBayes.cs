@@ -220,68 +220,6 @@ public partial class MultinomialNaiveBayes<T> : NaiveBayesBase<T>
         return logLikelihood;
     }
 
-    /// <summary>
-    /// Creates a deep clone of this model.
-    /// </summary>
-    /// <returns>A cloned MultinomialNaiveBayes instance.</returns>
-    public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
-    {
-        var clone = new MultinomialNaiveBayes<T>(new NaiveBayesOptions<T>
-        {
-            Alpha = Options.Alpha,
-            FitPriors = Options.FitPriors,
-            ClassPriors = Options.ClassPriors?.ToArray(),
-            MinVariance = Options.MinVariance
-        });
-
-        // Copy trained state
-        clone.NumFeatures = NumFeatures;
-        clone.NumClasses = NumClasses;
-        clone.TaskType = TaskType;
-
-        if (ClassLabels != null)
-        {
-            clone.ClassLabels = new Vector<T>(ClassLabels.Length);
-            for (int i = 0; i < ClassLabels.Length; i++)
-            {
-                clone.ClassLabels[i] = ClassLabels[i];
-            }
-        }
-
-        if (LogPriors != null)
-        {
-            clone.LogPriors = new Vector<T>(LogPriors.Length);
-            for (int i = 0; i < LogPriors.Length; i++)
-            {
-                clone.LogPriors[i] = LogPriors[i];
-            }
-        }
-
-        if (ClassCounts != null)
-        {
-            clone.ClassCounts = ClassCounts.ToArray();
-        }
-
-        if (_logFeatureProbs != null)
-        {
-            clone._logFeatureProbs = new Matrix<T>(_logFeatureProbs.Rows, _logFeatureProbs.Columns);
-            for (int i = 0; i < _logFeatureProbs.Rows; i++)
-            {
-                for (int j = 0; j < _logFeatureProbs.Columns; j++)
-                {
-                    clone._logFeatureProbs[i, j] = _logFeatureProbs[i, j];
-                }
-            }
-        }
-
-        if (_featureMinShift is not null)
-        {
-            clone._featureMinShift = _featureMinShift.ToArray();
-        }
-
-        return clone;
-    }
-
     /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()
     {

@@ -1734,56 +1734,6 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IShap
     }
 
     /// <summary>
-    /// Creates a deep copy of the layer with the same configuration and parameters.
-    /// </summary>
-    /// <returns>A new instance of the <see cref="DenseLayer{T}"/> class with the same configuration and parameters.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method creates a deep copy of the dense layer, including its configuration and parameters.
-    /// This is useful when you need multiple instances of the same layer, such as in ensemble methods or
-    /// when implementing layer factories.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method creates an exact duplicate of the layer.
-    /// 
-    /// The copy:
-    /// - Has the same input and output dimensions
-    /// - Has the same weights and biases
-    /// - Is completely independent from the original
-    /// 
-    /// This is useful for:
-    /// - Creating multiple similar layers
-    /// - Experimenting with variations of a layer
-    /// - Implementing certain advanced techniques
-    /// 
-    /// Think of it like making a perfect clone that starts exactly where the original is.
-    /// </para>
-    /// </remarks>
-    public override LayerBase<T> Clone()
-    {
-        DenseLayer<T> copy;
-
-        if (UsingVectorActivation && VectorActivation is not null)
-        {
-            copy = new DenseLayer<T>(OutputShape[0], VectorActivation);
-        }
-        else
-        {
-            copy = new DenseLayer<T>(OutputShape[0], ScalarActivation);
-        }
-
-        // The public constructor is intentionally lazy, but a clone of a resolved layer must
-        // preserve its resolved geometry before the parameter vector is restored. Otherwise
-        // SetParameters has no input width from which to allocate [input, output] weights, leaves
-        // the clone at InputShape [-1], and the clone's first Forward randomizes over the values
-        // it was supposed to copy.
-        if (IsShapeResolved && InputShape.Length > 0 && InputShape.All(d => d > 0))
-            copy.ResolveShapesOnly(InputShape);
-
-        copy.SetParameters(GetParameters());
-        return copy;
-    }
-
-    /// <summary>
     /// Releases resources used by this layer, including GPU tensor handles.
     /// </summary>
     /// <param name="disposing">True if called from Dispose(), false if called from finalizer.</param>

@@ -683,9 +683,5 @@ public partial class SceneTextReader<T> : ModelBase<T, Tensor<T>, Tensor<T>>
         return copy;
     }
 
-    /// <inheritdoc />
-    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
-        => (SceneTextReader<T>)MemberwiseClone();
-
     #endregion
 }

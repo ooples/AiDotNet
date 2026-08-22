@@ -108,36 +108,6 @@ public partial class GaussianMixtureModel<T> : ClusteringBase<T>
     public T LowerBound => _lowerBound;
 
     /// <inheritdoc />
-
-    /// <inheritdoc />
-    public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
-    {
-        var clone = (GaussianMixtureModel<T>)CreateNewInstance();
-        clone.NumFeatures = NumFeatures;
-        clone.NumClusters = NumClusters;
-        clone.IsTrained = IsTrained;
-        clone.Labels = Labels is not null ? new Vector<T>(Labels) : null;
-        clone.Inertia = Inertia;
-
-        if (ClusterCenters is not null)
-        {
-            clone.ClusterCenters = new Matrix<T>(ClusterCenters.Rows, ClusterCenters.Columns);
-            for (int i = 0; i < ClusterCenters.Rows; i++)
-                for (int j = 0; j < ClusterCenters.Columns; j++)
-                    clone.ClusterCenters[i, j] = ClusterCenters[i, j];
-        }
-
-        if (_weights is not null)
-            clone._weights = _weights.Clone();
-        if (_means is not null)
-            clone._means = _means.Clone();
-        if (_covariances is not null)
-            clone._covariances = _covariances.Clone();
-
-        return clone;
-    }
-
-    /// <inheritdoc />
     public override IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
     {
         var newInstance = (GaussianMixtureModel<T>)CreateNewInstance();

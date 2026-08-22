@@ -66,18 +66,6 @@ public class NODEClassifier<T> : NODEBase<T>
     public int NumClasses => _numClasses;
 
     /// <summary>
-    /// Gets the total number of trainable parameters.
-    /// </summary>
-    /// <summary>The final projection this variant adds to the shared backbone.</summary>
-    /// <remarks>
-    /// Was an override that added the head to the COUNT only. The base had no read or
-    /// restore path at all, so the head was counted and never checkpointed; declaring it
-    /// here puts it in all three surfaces at once.
-    /// </remarks>
-    protected override IEnumerable<IParameterSource<T>> GetExtraTrainableLayers()
-        => new IParameterSource<T>[] { _classificationHead };
-
-    /// <summary>
     /// Initializes a new instance of the NODEClassifier class.
     /// </summary>
     /// <param name="numFeatures">Number of input features.</param>

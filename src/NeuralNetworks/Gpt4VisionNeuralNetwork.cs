@@ -1444,51 +1444,6 @@ For each category, indicate if it's flagged (YES/NO) and confidence level (HIGH/
 
     #region NeuralNetworkBase Overrides
 
-    /// <summary>
-    /// Declares the CLS token and the two positional embedding tables, which live outside
-    /// <see cref="NeuralNetworkBase{T}.Layers"/>.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// Declared in the order the deleted ParameterCount added them: vision CLS token, vision
-    /// positional embeddings, text positional embeddings.
-    /// </para>
-    /// <para>
-    /// They are <c>Tensor&lt;T&gt;</c> now rather than <c>Matrix&lt;T&gt;</c> because a matrix is
-    /// invisible to the trainable-parameter walk -- which is the whole reason ParameterCount had to
-    /// be written by hand in the first place, and the reason the two surfaces disagreed. The count
-    /// added these three tables; <c>GetParameters</c> was NOT overridden, so it walked only
-    /// <c>Layers</c> and never saw them. The tables were therefore counted but never handed out,
-    /// never restored, and never trained through a flat-vector optimizer.
-    /// </para>
-    /// <para>
-    /// The override also opened with <c>if (!_useNativeMode) return 0;</c> while the inherited
-    /// GetParameters kept returning the real layer vector, so in architecture mode the count said
-    /// zero and the vector did not. Deleting it removes that split too: both surfaces now walk
-    /// <c>Layers</c> plus these tensors, in both modes. The per-modality lists
-    /// (<c>_visionEncoderLayers</c> and friends) need no declaration -- they are filled FROM
-    /// <c>Layers</c> (<c>_visionEncoderLayers.Add(Layers[idx++])</c>), so they are typed views of
-    /// layers the base walk already reaches, and declaring them would double-count.
-    /// </para>
-    /// </remarks>
-    protected override IEnumerable<Tensor<T>> GetExtraTrainableTensors()
-    {
-        if (_visionClsToken is not null)
-        {
-            yield return _visionClsToken;
-        }
-
-        if (_visionPositionalEmbeddings is not null)
-        {
-            yield return _visionPositionalEmbeddings;
-        }
-
-        if (_textPositionalEmbeddings is not null)
-        {
-            yield return _textPositionalEmbeddings;
-        }
-    }
-
     /// <inheritdoc/>
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
@@ -1616,58 +1571,6 @@ For each category, indicate if it's flagged (YES/NO) and confidence level (HIGH/
                 ["use_native_mode"] = _useNativeMode
             }
         };
-    }
-
-    /// <inheritdoc/>
-
-
-    /// <inheritdoc/>
-
-
-    /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        if (!_useNativeMode)
-        {
-            // For ONNX mode, we need valid paths - extract to local variables for null safety
-            string visionPath = _visionEncoderPath ?? string.Empty;
-            string languagePath = _languageModelPath ?? string.Empty;
-
-            if (visionPath.Length == 0 || languagePath.Length == 0)
-            {
-                throw new InvalidOperationException(
-                    "Cannot create new instance in ONNX mode: model paths are not available. " +
-                    "ONNX model paths are not serialized. Use native mode for serialization.");
-            }
-
-            return new Gpt4VisionNeuralNetwork<T>(
-                Architecture,
-                visionPath,
-                languagePath,
-                _tokenizer,
-                _embeddingDimension,
-                _visionEmbeddingDim,
-                _maxSequenceLength,
-                _contextWindowSize,
-                _imageSize,
-                _maxImagesPerRequest);
-        }
-
-        return new Gpt4VisionNeuralNetwork<T>(
-            Architecture,
-            _tokenizer,
-            _embeddingDimension,
-            _visionEmbeddingDim,
-            _maxSequenceLength,
-            _contextWindowSize,
-            _imageSize,
-            _hiddenDim,
-            _numVisionLayers,
-            _numLanguageLayers,
-            _numHeads,
-            _patchSize,
-            _vocabularySize,
-            _maxImagesPerRequest);
     }
 
     /// <inheritdoc/>

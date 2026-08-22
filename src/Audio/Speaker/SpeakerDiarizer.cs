@@ -1067,36 +1067,6 @@ public partial class SpeakerDiarizer<T> : SpeakerRecognitionBase<T>, ISpeakerDia
         return metadata;
     }
 
-    /// <summary>
-    /// Serializes network-specific data.
-    /// </summary>
-    /// <param name="writer">Binary writer.</param>
-
-
-    /// <summary>
-    /// Deserializes network-specific data.
-    /// </summary>
-    /// <param name="reader">Binary reader.</param>
-
-
-    /// <summary>
-    /// Creates a new instance of this model for cloning.
-    /// </summary>
-    /// <returns>New model instance.</returns>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        if (!_useNativeMode)
-        {
-            throw new NotSupportedException(
-                "CreateNewInstance is not supported for ONNX models. " +
-                "Create a new SpeakerDiarizer with the model path instead.");
-        }
-
-        return new SpeakerDiarizer<T>(
-            Architecture,
-            _options);
-    }
-
     #endregion
 
     #region IDisposable

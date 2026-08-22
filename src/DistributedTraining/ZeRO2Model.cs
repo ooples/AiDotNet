@@ -326,52 +326,6 @@ public partial class ZeRO2Model<T, TInput, TOutput> : ShardedModelBase<T, TInput
     }
 
     /// <inheritdoc/>
-    public override byte[] Serialize()
-    {
-        using var ms = new MemoryStream();
-        using var writer = new BinaryWriter(ms);
-        writer.Write(WorldSize);
-        writer.Write(Rank);
-        writer.Write(Config.AutoSyncGradients);
-        writer.Write(Config.MinimumParameterGroupSize);
-        writer.Write(Config.EnableGradientCompression);
-        var modelData = WrappedModel.Serialize();
-        writer.Write(modelData.Length);
-        writer.Write(modelData);
-        return ms.ToArray();
-    }
-
-    /// <inheritdoc/>
-    public override void Deserialize(byte[] data)
-    {
-        using var ms = new MemoryStream(data);
-        using var reader = new BinaryReader(ms);
-        int savedWorldSize = reader.ReadInt32();
-        int savedRank = reader.ReadInt32();
-        bool savedAutoSyncGradients = reader.ReadBoolean();
-        int savedMinimumParameterGroupSize = reader.ReadInt32();
-        bool savedEnableGradientCompression = reader.ReadBoolean();
-
-        if (savedWorldSize != WorldSize)
-            throw new InvalidOperationException($"World size mismatch: {savedWorldSize} vs {WorldSize}");
-        if (savedRank != Rank)
-            throw new InvalidOperationException($"Rank mismatch: {savedRank} vs {Rank}");
-
-        // Validate configuration compatibility
-        if (savedAutoSyncGradients != Config.AutoSyncGradients)
-            throw new InvalidOperationException($"AutoSyncGradients mismatch: saved={savedAutoSyncGradients}, current={Config.AutoSyncGradients}");
-        if (savedMinimumParameterGroupSize != Config.MinimumParameterGroupSize)
-            throw new InvalidOperationException($"MinimumParameterGroupSize mismatch: saved={savedMinimumParameterGroupSize}, current={Config.MinimumParameterGroupSize}");
-        if (savedEnableGradientCompression != Config.EnableGradientCompression)
-            throw new InvalidOperationException($"EnableGradientCompression mismatch: saved={savedEnableGradientCompression}, current={Config.EnableGradientCompression}");
-
-        int modelDataLength = reader.ReadInt32();
-        byte[] modelData = reader.ReadBytes(modelDataLength);
-        WrappedModel.Deserialize(modelData);
-        InitializeSharding();
-    }
-
-    /// <inheritdoc/>
     public override void SaveModel(string filePath)
     {
         Config.CommunicationBackend.Barrier();

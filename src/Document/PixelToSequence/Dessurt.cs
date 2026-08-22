@@ -530,25 +530,6 @@ public partial class Dessurt<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
             : SafeSerialize();
     }
 
-    /// <inheritdoc/>
-
-
-    /// <inheritdoc/>
-
-
-    /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        var model = new Dessurt<T>(Architecture, ImageSize, MaxSequenceLength, _encoderDim, _decoderDim,
-            _encoderLayers, _decoderLayers, _numHeads, _vocabSize);
-        if (_nativeLayersInitialized)
-        {
-            model.EnsureNativeInitialized();
-        }
-
-        return model;
-    }
-
     #endregion
 
     #region NeuralNetworkBase Implementation

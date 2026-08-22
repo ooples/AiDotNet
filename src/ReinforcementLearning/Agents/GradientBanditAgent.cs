@@ -238,60 +238,6 @@ public partial class GradientBanditAgent<T> : ReinforcementLearningAgentBase<T>
     public Task TrainAsync() { Train(); return Task.CompletedTask; }
     public override ModelMetadata<T> GetModelMetadata() => new ModelMetadata<T> { FeatureCount = this.FeatureCount, Complexity = ParameterCount };
     public override int FeatureCount => 1;
-    public override byte[] Serialize()
-    {
-        using var ms = new MemoryStream();
-        using var writer = new BinaryWriter(ms);
-
-        // Write options
-        writer.Write(_options.NumArms);
-        writer.Write(_options.Alpha);
-        writer.Write(_options.UseBaseline);
-
-        // Write state
-        writer.Write(_totalSteps);
-        writer.Write(NumOps.ToDouble(_averageReward));
-        for (int i = 0; i < _options.NumArms; i++)
-        {
-            writer.Write(NumOps.ToDouble(_preferences[i]));
-        }
-
-        return ms.ToArray();
-    }
-
-    public override void Deserialize(byte[] data)
-    {
-        using var ms = new MemoryStream(data);
-        using var reader = new BinaryReader(ms);
-
-        // Read and validate options
-        var numArms = reader.ReadInt32();
-        var alpha = reader.ReadDouble();
-        var useBaseline = reader.ReadBoolean();
-
-        if (numArms != _options.NumArms)
-            throw new InvalidOperationException($"Serialized NumArms ({numArms}) doesn't match current options ({_options.NumArms})");
-
-        // Read state
-        _totalSteps = reader.ReadInt32();
-        _averageReward = NumOps.FromDouble(reader.ReadDouble());
-        for (int i = 0; i < _options.NumArms; i++)
-        {
-            _preferences[i] = NumOps.FromDouble(reader.ReadDouble());
-        }
-    }
-    public override IFullModel<T, Vector<T>, Vector<T>> Clone()
-    {
-        var clone = new GradientBanditAgent<T>(_options);
-        // Copy preferences and baseline to preserve learned state
-        for (int i = 0; i < _options.NumArms; i++)
-        {
-            clone._preferences[i] = _preferences[i];
-        }
-        clone._averageReward = _averageReward;
-        clone._totalSteps = _totalSteps;
-        return clone;
-    }
     public override void SaveModel(string filepath) { var data = Serialize(); System.IO.File.WriteAllBytes(filepath, data); }
     public override void LoadModel(string filepath) { var data = System.IO.File.ReadAllBytes(filepath); Deserialize(data); }
 }

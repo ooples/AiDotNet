@@ -690,25 +690,6 @@ public partial class MATCHA<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>, I
             : SafeSerialize();
     }
 
-    /// <inheritdoc/>
-
-
-    /// <inheritdoc/>
-
-
-    /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        var model = new MATCHA<T>(Architecture, ImageSize, MaxSequenceLength, _encoderDim, _decoderDim,
-            _encoderLayers, _decoderLayers, _numHeads, _vocabSize, _maxPatchesPerImage);
-        if (_nativeLayersInitialized)
-        {
-            model.EnsureNativeInitialized();
-        }
-
-        return model;
-    }
-
     #endregion
 
     #region NeuralNetworkBase Implementation

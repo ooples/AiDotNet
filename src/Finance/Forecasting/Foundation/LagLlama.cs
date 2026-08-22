@@ -611,43 +611,6 @@ public partial class LagLlama<T> : ForecastingModelBase<T>
     }
 
     /// <summary>
-    /// Creates a new instance of this model with the same configuration.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Creates a fresh copy of the Lag-Llama architecture.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        var options = new LagLlamaOptions<T>
-        {
-            ContextLength = _contextLength,
-            ForecastHorizon = _forecastHorizon,
-            HiddenDimension = _hiddenDimension,
-            NumLayers = _numLayers,
-            NumHeads = _numHeads,
-            IntermediateSize = _intermediateSize,
-            LagIndices = (int[])_lagIndices.Clone(),
-            DropoutRate = _dropout,
-            DistributionOutput = _distributionOutput,
-            UseRoPE = _useRoPE
-        };
-
-        // ONNX mode cloning is not supported - throw explicitly rather than silently
-        // changing behavior by returning a native-mode clone
-        if (!_useNativeMode && OnnxSession is not null)
-        {
-            throw new NotSupportedException(
-                "CreateNewInstance is not supported for ONNX-backed LagLlama models. " +
-                "ONNX sessions cannot be cloned. To create a new instance, load the model " +
-                "from the original ONNX file using the ONNX constructor.");
-        }
-
-        return new LagLlama<T>(Architecture, options);
-    }
-
-    /// <summary>
     /// Writes Lag-Llama-specific configuration during serialization.
     /// </summary>
     /// <remarks>

@@ -46,28 +46,6 @@ namespace AiDotNet.ComputerVision.Detection.Backbones;
     Direction = TensorLayoutDirection.Output, BatchOptional = true)]
 public partial class ResNet<T> : NeuralNetworkBase<T>, IDetectionBackbone<T>
 {
-
-    /// <inheritdoc />
-    /// <remarks>
-    /// The stem convolution and every layer inside every stage. These live outside <c>Layers</c>,
-    /// held in plain block objects, which is why this backbone used to THROW from GetParameters
-    /// rather than expose a flat vector -- the base walk would have found nothing.
-    /// <para>
-    /// Refusing was never right. PyTorch has no module that declines to enumerate its parameters;
-    /// parameters_to_vector over a ResNet works. The refusal was unfinished plumbing wearing the
-    /// shape of a design decision, and it cost the model checkpointing, flat-vector optimizers and
-    /// every count-based diagnostic. Declaring the layers here gets all of that back, and the count,
-    /// the vector, the restore and the chunk walk all fold this one declaration.
-    /// </para>
-    /// </remarks>
-    protected override IEnumerable<LayerBase<T>?> GetExtraTrainableLayers()
-    {
-        yield return _conv1;
-        foreach (var stage in _stages)
-        {
-            foreach (var layer in stage.EnumerateLayers()) yield return layer;
-        }
-    }
     // UpdateParameters delegated straight to SetParameters. The base does that now.
     private readonly ConvolutionalLayer<T> _conv1;
     private readonly List<ResNetStage<T>> _stages;
@@ -254,9 +232,6 @@ public partial class ResNet<T> : NeuralNetworkBase<T>, IDetectionBackbone<T>
         // Backbones own their per-stage layers directly; the inherited Layers list stays empty.
     }
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer) => WriteParameters(writer);
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader) => ReadParameters(reader);
-
     public override ModelMetadata<T> GetModelMetadata() => new ModelMetadata<T>
     {
         Name = Name,
@@ -281,30 +256,6 @@ public partial class ResNet<T> : NeuralNetworkBase<T>, IDetectionBackbone<T>
         throw new NotSupportedException(
             $"{GetType().Name}: WithParameters(Vector<T>) is unsupported on backbones. " +
             "Use ReadParameters(BinaryReader) on a fresh instance.");
-
-    /// <inheritdoc />
-    /// <remarks>
-    /// Round-trips the parameter binary stream through a fresh
-    /// <see cref="CreateNewInstance"/> so internal Conv / BN layers and their
-    /// tensor buffers are independent copies — <c>MemberwiseClone()</c> would
-    /// alias every reference type and a subsequent train step on the copy
-    /// would mutate the original's weights.
-    /// </remarks>
-    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
-    {
-        var copy = (ResNet<T>)CreateNewInstance();
-        using var ms = new MemoryStream();
-        using (var writer = new BinaryWriter(ms, System.Text.Encoding.UTF8, leaveOpen: true))
-        {
-            WriteParameters(writer);
-        }
-        ms.Position = 0;
-        using (var reader = new BinaryReader(ms, System.Text.Encoding.UTF8, leaveOpen: true))
-        {
-            copy.ReadParameters(reader);
-        }
-        return copy;
-    }
 }
 
 /// <summary>

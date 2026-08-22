@@ -358,44 +358,6 @@ public partial class MixedQueryTransformer<T> : Common.PanopticSegmentationBase<
         };
     }
 
-    /// <summary>
-    /// Writes MixedQueryTransformer configuration to a binary stream.
-    /// </summary>
-    /// <param name="writer">The binary writer.</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Saves model configuration for later reconstruction.
-    /// </para>
-    /// </remarks>
-
-
-    /// <summary>
-    /// Reads MixedQueryTransformer configuration from a binary stream.
-    /// </summary>
-    /// <param name="reader">The binary reader.</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Loads model configuration when restoring a saved model.
-    /// </para>
-    /// </remarks>
-
-
-    /// <summary>
-    /// Creates a new MixedQueryTransformer instance with the same configuration but fresh weights.
-    /// </summary>
-    /// <returns>A new <see cref="MixedQueryTransformer{T}"/> model.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Creates a copy for cross-validation or ensemble training.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return _useNativeMode
-            ? new MixedQueryTransformer<T>(Architecture, Optimizer, LossFunction, _numClasses, _numQueries, _modelSize, _dropRate, _options)
-            : new MixedQueryTransformer<T>(Architecture, _onnxModelPath ?? throw new InvalidOperationException("ONNX model path not initialized."), _numClasses, _numQueries, _modelSize, _options);
-    }
-
     // Dispose is inherited: SegmentationModelBase already disposes _onnxSession and sets _disposed,
     // and MixedQueryTransformer owns no further unmanaged resources.
 

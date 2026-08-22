@@ -131,7 +131,7 @@ public abstract class FTTransformerBase<T> : IParameterSource<T>
     /// </para>
     /// </remarks>
     protected virtual IEnumerable<ILayer<T>> GetExtraTrainableLayers()
-        => System.Linq.Enumerable.Empty<ILayer<T>>();
+        => AiDotNet.Models.Parameters.GeneratedParameterDiscovery.EnumerateDerivedLayers<T>(this, typeof(FTTransformerBase<T>));
 
     /// <inheritdoc cref="GetParameters"/>
     public virtual long ParameterCount

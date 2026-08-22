@@ -791,24 +791,6 @@ public partial class DeepARModel<T> : TimeSeriesModelBase<T>
         return new DeepARModel<T>(new DeepAROptions<T>(_options));
     }
 
-    public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
-    {
-        var clone = new DeepARModel<T>(new DeepAROptions<T>(_options));
-        // Trained layers are read-only after training — safe to share by reference.
-        clone._lstmLayers.Clear();
-        clone._lstmLayers.AddRange(_lstmLayers);
-        clone._head = _head;
-        if (_trainingSeries.Length > 0)
-            clone._trainingSeries = new Vector<T>(_trainingSeries);
-        if (ModelParameters is not null && ModelParameters.Length > 0)
-            clone.ModelParameters = new Vector<T>(ModelParameters);
-        clone._normMean = _normMean;
-        clone._normStd = _normStd;
-        clone._covMean = (T[])_covMean.Clone();
-        clone._covStd = (T[])_covStd.Clone();
-        return clone;
-    }
-
     // ParameterCount restated a fold the base now derives from generated component registration.
     // Removed under AIDN082.
     /// <summary>

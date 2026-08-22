@@ -274,52 +274,6 @@ public partial class TLoRAModel<T> : LatentDiffusionModelBase<T>
         }
     }
 
-
-
-    public override IDiffusionModel<T> Clone()
-    {
-        // Clone the ACTUAL predictor/VAE (see InstaFlowModel/MultiDiffusionModel): passing only
-        // conditioner/seed rebuilt InitializeLayers' DEFAULT-sized, lazily-unresolved sub-models, so once
-        // the source resolved its lazy layers via a forward pass the trainable-layer shapes no longer
-        // lined up 1:1 and Clone diverged. Cloning the resolved predictor/VAE (+ same architecture/
-        // options/scheduler) makes the clone structurally identical.
-        var clone = new TLoRAModel<T>(
-            architecture: Architecture,
-            options: Options as DiffusionModelOptions<T>,
-            scheduler: Scheduler,
-            predictor: (UNetNoisePredictor<T>)_predictor.Clone(),
-            vae: (StandardVAE<T>)_vae.Clone(),
-            conditioner: _conditioner,
-            seed: null,
-            // Carry the rank across, or the clone would silently fall back to the default and end up
-            // with a different adapter shape than the source — which SetParameters would then reject.
-            adapterRank: _adapterRank);
-        if (!clone.TryShareParametersFrom(this)) clone.SetParameterChunks(GetParameterChunks());
-
-        // Adapter state is deliberately NOT part of any layer's parameter vector (see
-        // TLoRAAttentionAdapter.GetAdapterState), so it is copied here explicitly. Without this the
-        // clone would keep its own freshly-initialized adapters: identical in shape, different in
-        // value, and — because Clone passes seed: null — drawn from a different RNG, so the clone would
-        // produce different output despite holding identical base weights.
-        if (clone._adapters.Count != _adapters.Count)
-        {
-            throw new InvalidOperationException(
-                $"The clone has {clone._adapters.Count} T-LoRA adapters but the source has " +
-                $"{_adapters.Count}. Injection is meant to be deterministic given the same predictor " +
-                "shape, so a difference here means decoration ran against a different block set.");
-        }
-
-        for (int i = 0; i < _adapters.Count; i++)
-        {
-            // FULL state, including the frozen initialization triplet. Copying only A/B/S leaves the
-            // clone subtracting its own independently-drawn A_init/B_init/S_init, so its adapter applies
-            // the difference between two unrelated initializations rather than the identity.
-            clone._adapters[i].Adapter.CopyStateFrom(_adapters[i].Adapter);
-        }
-
-        return clone;
-    }
-
     public override ModelMetadata<T> GetModelMetadata()
     {
         var m = new ModelMetadata<T> { Name = "T-LoRA", Version = "1.0",

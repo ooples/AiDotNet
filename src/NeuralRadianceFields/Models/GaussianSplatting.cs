@@ -2502,38 +2502,6 @@ public partial class GaussianSplatting<T> : AiDotNet.NeuralNetworks.VectorModelL
         return activations;
     }
 
-    /// <summary>
-    /// Declares every Gaussian's trainable attributes. This is an explicit representation -- the
-    /// scene is a list of Gaussians, not a stack of layers -- so <c>Layers</c> is empty by design
-    /// and the base walk would otherwise find nothing.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// Per Gaussian, in the order the deleted GetParameters flattened them: position (3), rotation
-    /// (4), scale (3), opacity (1), colour (3, or 3 x the SH basis count). Same layout, same order,
-    /// so a checkpoint written before this change still restores.
-    /// </para>
-    /// <para>
-    /// This replaces ParameterCount, GetParameters, GetParameterChunks, SetParameters and
-    /// UpdateParameters -- five members each re-deriving <c>perGaussian = 3 + 4 + 3 + 1 +
-    /// colorDim</c> and walking the list in lockstep. A tensor built over a <c>Vector&lt;T&gt;</c>
-    /// shares its storage, so these views are the fields themselves and the base's restore writes
-    /// straight into the scene; the old GetParameterChunks yielded a COPY, which any restore driven
-    /// through it would have written to and thrown away.
-    /// </para>
-    /// </remarks>
-    protected override IEnumerable<Tensor<T>> GetExtraTrainableTensors()
-    {
-        foreach (var gaussian in _gaussians)
-        {
-            yield return new Tensor<T>([gaussian.Position.Length], gaussian.Position);
-            yield return new Tensor<T>([gaussian.Rotation.Length], gaussian.Rotation);
-            yield return new Tensor<T>([gaussian.Scale.Length], gaussian.Scale);
-            yield return new Tensor<T>([gaussian.OpacityStorage.Length], gaussian.OpacityStorage);
-            yield return new Tensor<T>([gaussian.Color.Length], gaussian.Color);
-        }
-    }
-
     /// <inheritdoc />
     /// <remarks>
     /// A Gaussian's covariance is DERIVED from its rotation and scale, and the spatial index is
@@ -2587,62 +2555,6 @@ public partial class GaussianSplatting<T> : AiDotNet.NeuralNetworks.VectorModelL
             // same rationale. Fixes #1826.
             ModelData = SerializeForMetadata()
         };
-    }
-
-
-
-
-
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        // Pass a placeholder point cloud sized to the ORIGINAL model's
-        // Gaussian count so the clone starts with the right capacity.
-        // Without this, the constructor would auto-seed 8 default Gaussians
-        // and any subsequent UpdateParameters(originalState) would throw
-        // because the parameter vector length wouldn't match perGaussian *
-        // _gaussians.Count. Cloning a 32-Gaussian model would error; cloning
-        // a model trained past 8 Gaussians via densification would error;
-        // deserialization would error. The placeholder coordinates are all
-        // zeros — the caller's UpdateParameters overwrites every field, so
-        // only the count needs to be preserved here.
-        Matrix<T>? clonePointCloud = null;
-        if (_gaussians.Count > 0)
-        {
-            clonePointCloud = new Matrix<T>(_gaussians.Count, 3);
-            // Default-constructed Matrix<T> is all zeros; UpdateParameters
-            // restores positions during the snapshot replay.
-        }
-
-        return new GaussianSplatting<T>(
-            new GaussianSplattingOptions
-            {
-                UseSphericalHarmonics = _useSphericalHarmonics,
-                ShDegree = _shDegree,
-                EnableDensification = EnableDensification,
-                DensificationInterval = DensificationInterval,
-                PruneOpacityThreshold = PruneOpacityThreshold,
-                SplitGradientThreshold = SplitGradientThreshold,
-                SplitPositionJitter = SplitPositionJitter,
-                SplitScaleFactor = SplitScaleFactor,
-                SplitOpacityFactor = SplitOpacityFactor,
-                SplitOpacityMax = SplitOpacityMax,
-                MaxGaussians = MaxGaussians,
-                PositionLearningRate = PositionLearningRate,
-                ColorLearningRate = ColorLearningRate,
-                OpacityLearningRate = OpacityLearningRate,
-                ScaleLearningRate = ScaleLearningRate,
-                RotationLearningRate = RotationLearningRate,
-                TileSize = TileSize,
-                EnableSpatialIndex = EnableSpatialIndex,
-                SpatialIndexRadius = SpatialIndexRadius,
-                InitialNeighborSearchScale = InitialNeighborSearchScale,
-                InitialScaleMultiplier = InitialScaleMultiplier,
-                DefaultPointSpacing = DefaultPointSpacing,
-                MinScale = MinScale
-            },
-            initialPointCloud: clonePointCloud,
-            initialColors: null,
-            lossFunction: LossFunction);
     }
 
     private void ParseCameraInput(

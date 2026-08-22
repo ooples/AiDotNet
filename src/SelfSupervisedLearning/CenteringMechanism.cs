@@ -303,13 +303,5 @@ public partial class CenteringMechanism<T> : ModelBase<T, Tensor<T>, Tensor<T>>
         return copy;
     }
 
-    /// <inheritdoc />
-    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
-    {
-        var clone = (CenteringMechanism<T>)MemberwiseClone();
-        clone._center = (T[])_center.Clone();
-        return clone;
-    }
-
     #endregion
 }

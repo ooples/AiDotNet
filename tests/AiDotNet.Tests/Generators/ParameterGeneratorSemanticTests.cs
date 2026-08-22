@@ -85,6 +85,10 @@ namespace AiDotNet.NeuralNetworks
         protected static Tensor<T> CloneRequiredGeneratedTrainableTensor(Tensor<T> source) => source;
         protected static void CopyGeneratedTrainableTensorValues(
             Tensor<T>? source, Tensor<T>? destination, string memberName) { }
+        protected static Vector<T>? CloneGeneratedTrainableVector(Vector<T>? source) => source;
+        protected static Vector<T> CloneRequiredGeneratedTrainableVector(Vector<T> source) => source;
+        protected static void CopyGeneratedTrainableVectorValues(
+            Vector<T>? source, Vector<T>? destination, string memberName) { }
         protected static TLayer? RebindLayerAlias<TLayer>(
             TLayer? alias,
             IReadOnlyList<ILayer<T>> previousLayers,
@@ -237,6 +241,25 @@ public partial class GeneratedCoverageModel<T> : AiDotNet.Models.ModelBase<T, ob
     }
 
     [Fact]
+    public void ModelGenerator_SurfacesTrainableVectorWithoutConcreteOverride()
+    {
+        const string source = @"
+using AiDotNet.Attributes;
+public partial class VectorBackedNetwork<T> : AiDotNet.NeuralNetworks.NeuralNetworkBase<T>
+{
+    [TrainableParameter]
+    private AiDotNet.Tensors.LinearAlgebra.Vector<T> _bias = new();
+}";
+
+        string generated = Run(new AiDotNet.Generators.ModelParameterGenerator(), source);
+        Assert.Contains("new Tensor<T>([_bias.Length], _bias)", generated, StringComparison.Ordinal);
+        Assert.Contains(
+            "__destination._bias = CloneRequiredGeneratedTrainableVector(_bias);",
+            generated,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void ClonePlanGenerator_MarksItsGeneratedRegistryAsGeneratedCode()
     {
         const string source = @"
@@ -322,6 +345,38 @@ public class SecondGeneratedCoverageClone<T> : AiDotNet.NeuralNetworks.Layers.La
 
         Assert.Contains("new[] { \"ImageSize\" }", generated, StringComparison.Ordinal);
         Assert.DoesNotContain("new[] { \"=default\" }", generated, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ClonePlanGenerator_DoesNotUseScratchGraphAsOptionalConfiguration()
+    {
+        const string source = """
+            namespace AiDotNet.Interfaces
+            {
+                public interface IFullModel<TInput, TOutput> { }
+            }
+
+            namespace Example
+            {
+                public sealed class LazyGraphModel : AiDotNet.Interfaces.IFullModel<int, int>
+                {
+                    [AiDotNet.Attributes.Scratch]
+                    private System.Collections.Generic.List<int> _layers = new();
+
+                    public LazyGraphModel(System.Collections.Generic.List<int>? layers = null)
+                    {
+                        _layers = layers is null
+                            ? new System.Collections.Generic.List<int>()
+                            : new System.Collections.Generic.List<int>(layers);
+                    }
+                }
+            }
+            """;
+
+        string generated = Run(new AiDotNet.Generators.ClonePlanGenerator(), source);
+
+        Assert.Contains("new[] { \"=default\" }", generated, StringComparison.Ordinal);
+        Assert.DoesNotContain("new[] { \"_layers\" }", generated, StringComparison.Ordinal);
     }
 
     [Fact]

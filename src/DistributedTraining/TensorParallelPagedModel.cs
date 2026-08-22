@@ -621,13 +621,4 @@ internal sealed partial class TensorParallelPagedModel<T> : TokenLanguageModelLa
             ["VocabSize"] = _vocabSize
         }
     };
-
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-        => throw new NotSupportedException("TensorParallelPagedModel is a live serving model and is not serialized.");
-
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-        => throw new NotSupportedException("TensorParallelPagedModel is a live serving model and is not deserialized.");
-
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-        => throw new NotSupportedException("TensorParallelPagedModel cannot be cloned.");
 }

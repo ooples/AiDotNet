@@ -487,21 +487,6 @@ public partial class Autoformer<T> : ForecastingModelBase<T>
     /// <inheritdoc/>
     /// <remarks>
     /// <para>
-    /// <b>For Beginners:</b> In the Autoformer model, CreateNewInstance builds and wires up model components. This sets up the Autoformer architecture before use.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        var options = new AutoformerOptions<T>(_options);
-
-        return _useNativeMode
-            ? new Autoformer<T>(Architecture, options, optimizer: null, lossFunction: _lossFunction)
-            : new Autoformer<T>(Architecture, OnnxModelPath!, options, optimizer: null, lossFunction: _lossFunction);
-    }
-
-    /// <inheritdoc/>
-    /// <remarks>
-    /// <para>
     /// <b>For Beginners:</b> In the Autoformer model, SerializeNetworkSpecificData saves or restores model-specific settings. This lets the Autoformer architecture be reused later.
     /// </para>
     /// </remarks>

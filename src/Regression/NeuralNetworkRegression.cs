@@ -714,13 +714,6 @@ public partial class NeuralNetworkRegression<T> : NonLinearRegressionBase<T>
         Train(x, y);
     }
 
-    public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
-    {
-        var clone = new NeuralNetworkRegression<T>(_options, Regularization);
-        clone.Deserialize(Serialize());
-        return clone;
-    }
-
     /// <summary>
     /// Creates a new instance of the Neural Network Regression model with the same configuration.
     /// </summary>

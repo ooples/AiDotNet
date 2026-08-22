@@ -1575,58 +1575,6 @@ public partial class VideoCLIPNeuralNetwork<T> : MultimodalModelLayoutBase<T>, I
         }
     }
 
-    /// <summary>
-    /// Declares the CLS token and the three positional embedding tables, which live outside
-    /// <see cref="NeuralNetworkBase{T}.Layers"/>.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// Declared in the order the deleted GetParameters concatenated them: vision CLS token, vision
-    /// positional embeddings, temporal positional embeddings, text positional embeddings.
-    /// </para>
-    /// <para>
-    /// This replaces 220 lines: ParameterCount, GetParameters, SetParameters, UpdateParameters and
-    /// SIX private helpers built only to serve them -- AppendLayerListParameters,
-    /// AppendSingleLayerParameters, AppendMatrixParameters and their Update counterparts. Every one
-    /// of those walked the same towers and tables the base already walks, each maintaining its own
-    /// running offset, and any of them could have been edited without the others.
-    /// </para>
-    /// <para>
-    /// The towers need no declaration and must not get one: <c>_frameEncoderLayers</c>,
-    /// <c>_temporalEncoderLayers</c>, <c>_textEncoderLayers</c> and the five projections are all
-    /// filled FROM <c>Layers</c> (<c>Layers[idx++]</c>), so they are typed views of layers the base
-    /// walk already reaches, and declaring them would double-count.
-    /// </para>
-    /// <para>
-    /// The tables became <c>Tensor&lt;T&gt;</c> because a <c>Matrix&lt;T&gt;</c> is invisible to the
-    /// trainable-parameter walk -- the reason these surfaces had to be hand-written at all. The
-    /// forward path, the initializer and the serializer took matrices only to serve these four
-    /// fields and now take tensors; nothing else called them.
-    /// </para>
-    /// </remarks>
-    protected override IEnumerable<Tensor<T>> GetExtraTrainableTensors()
-    {
-        if (_visionClsToken is not null)
-        {
-            yield return _visionClsToken;
-        }
-
-        if (_visionPositionalEmbeddings is not null)
-        {
-            yield return _visionPositionalEmbeddings;
-        }
-
-        if (_temporalPositionalEmbeddings is not null)
-        {
-            yield return _temporalPositionalEmbeddings;
-        }
-
-        if (_textPositionalEmbeddings is not null)
-        {
-            yield return _textPositionalEmbeddings;
-        }
-    }
-
     /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()
     {

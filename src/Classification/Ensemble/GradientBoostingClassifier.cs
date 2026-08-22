@@ -459,66 +459,6 @@ public partial class GradientBoostingClassifier<T> : EnsembleClassifierBase<T>, 
     }
 
     /// <inheritdoc/>
-    public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
-    {
-        var clone = new GradientBoostingClassifier<T>(new GradientBoostingClassifierOptions<T>
-        {
-            NEstimators = Options.NEstimators,
-            LearningRate = Options.LearningRate,
-            MaxDepth = Options.MaxDepth,
-            MinSamplesSplit = Options.MinSamplesSplit,
-            MinSamplesLeaf = Options.MinSamplesLeaf,
-            Subsample = Options.Subsample,
-            MaxFeatures = Options.MaxFeatures,
-            Loss = Options.Loss,
-            Seed = Options.Seed,
-            MinImpurityDecrease = Options.MinImpurityDecrease
-        });
-
-        clone.NumFeatures = NumFeatures;
-        clone.NumClasses = NumClasses;
-        clone.TaskType = TaskType;
-        clone._initPrediction = _initPrediction;
-
-        if (ClassLabels is not null)
-        {
-            clone.ClassLabels = new Vector<T>(ClassLabels.Length);
-            for (int i = 0; i < ClassLabels.Length; i++)
-            {
-                clone.ClassLabels[i] = ClassLabels[i];
-            }
-        }
-
-        if (FeatureImportances is not null)
-        {
-            clone.FeatureImportances = new Vector<T>(FeatureImportances.Length);
-            for (int i = 0; i < FeatureImportances.Length; i++)
-            {
-                clone.FeatureImportances[i] = FeatureImportances[i];
-            }
-        }
-
-        // Clone leaf residual means
-        foreach (var means in _leafResidualMeans)
-        {
-            var clonedMeans = new T[means.Length];
-            Array.Copy(means, clonedMeans, means.Length);
-            clone._leafResidualMeans.Add(clonedMeans);
-        }
-
-        // Clone all estimators
-        foreach (var estimator in Estimators)
-        {
-            if (estimator is IFullModel<T, Matrix<T>, Vector<T>> fullModel)
-            {
-                clone.Estimators.Add((IClassifier<T>)fullModel.Clone());
-            }
-        }
-
-        return clone;
-    }
-
-    /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()
     {
         var metadata = base.GetModelMetadata();

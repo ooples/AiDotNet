@@ -561,47 +561,6 @@ public partial class DeepState<T> : ForecastingModelBase<T>
     }
 
     /// <summary>
-    /// Creates a new instance of this model with the same configuration.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Creates a fresh copy of the model architecture.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        var options = new DeepStateOptions<T>
-        {
-            LookbackWindow = _lookbackWindow,
-            ForecastHorizon = _forecastHorizon,
-            StateDimension = _stateDimension,
-            HiddenDimension = _hiddenDimension,
-            NumRnnLayers = _numRnnLayers,
-            SeasonalPeriods = _seasonalPeriods,
-            UseTrend = _useTrend,
-            UseSeasonality = _useSeasonality,
-            DropoutRate = _dropout
-        };
-
-        if (_useNativeMode)
-        {
-            return new DeepState<T>(Architecture, options);
-        }
-        else
-        {
-            // Use null-coalescing throw to satisfy null analysis across all framework targets
-            string onnxPath = OnnxModelPath ?? throw new InvalidOperationException(
-                "Cannot create new instance from ONNX mode when OnnxModelPath is not available.");
-            if (onnxPath.Length == 0)
-            {
-                throw new InvalidOperationException(
-                    "Cannot create new instance from ONNX mode when OnnxModelPath is empty.");
-            }
-            return new DeepState<T>(Architecture, onnxPath, options);
-        }
-    }
-
-    /// <summary>
     /// Writes DeepState-specific configuration during serialization.
     /// </summary>
     /// <remarks>

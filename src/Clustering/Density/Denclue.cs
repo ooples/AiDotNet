@@ -442,36 +442,6 @@ public partial class Denclue<T> : ClusteringBase<T>
     }
 
     /// <inheritdoc />
-    public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
-    {
-        var clone = (Denclue<T>)CreateNewInstance();
-        clone._attractors = _attractors?.Select(a => (T[])a.Clone()).ToArray();
-        clone._attractorDensities = _attractorDensities?.ToArray();
-        clone._featureMeans = _featureMeans is not null ? new Vector<T>(_featureMeans) : null;
-        clone._featureStds = _featureStds is not null ? new Vector<T>(_featureStds) : null;
-        clone.NumClusters = NumClusters;
-        clone.NumFeatures = NumFeatures;
-        clone.IsTrained = IsTrained;
-
-        if (Labels is not null)
-        {
-            clone.Labels = new Vector<T>(Labels.Length);
-            for (int i = 0; i < Labels.Length; i++)
-                clone.Labels[i] = Labels[i];
-        }
-
-        if (ClusterCenters is not null)
-        {
-            clone.ClusterCenters = new Matrix<T>(ClusterCenters.Rows, ClusterCenters.Columns);
-            for (int i = 0; i < ClusterCenters.Rows; i++)
-                for (int j = 0; j < ClusterCenters.Columns; j++)
-                    clone.ClusterCenters[i, j] = ClusterCenters[i, j];
-        }
-
-        return clone;
-    }
-
-    /// <inheritdoc />
     public override Vector<T> FitPredict(Matrix<T> x)
     {
         Train(x);

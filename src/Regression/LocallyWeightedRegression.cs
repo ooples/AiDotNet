@@ -216,16 +216,6 @@ public partial class LocallyWeightedRegression<T> : NonLinearRegressionBase<T>
         return Enumerable.Range(0, _xTrain.Columns > 0 ? _xTrain.Columns : 0);
     }
 
-    /// <summary>
-    /// Deep copy via serialization.
-    /// </summary>
-    public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
-    {
-        var clone = new LocallyWeightedRegression<T>(null, Regularization);
-        clone.Deserialize(Serialize());
-        return clone;
-    }
-
     protected override void OptimizeModel(Matrix<T> x, Vector<T> y)
     {
         // In LWR, we don't pre-compute a global model. Instead, we store the training data.

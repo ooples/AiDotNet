@@ -547,9 +547,11 @@ public class ClonePlanGenerator : IIncrementalGenerator
                     {
                         IPropertySymbol { IsStatic: false, IsIndexer: false } property
                             when property.GetMethod is not null
+                                 && IsCloneConstructionSource(property)
                                  && IsCarriedAs(property.Type, parameter.Type) => true,
                         IFieldSymbol { IsStatic: false, IsConst: false } field
-                            when IsCarriedAs(field.Type, parameter.Type) => true,
+                            when IsCloneConstructionSource(field)
+                                 && IsCarriedAs(field.Type, parameter.Type) => true,
                         _ => false,
                     });
                 }
@@ -609,11 +611,13 @@ public class ClonePlanGenerator : IIncrementalGenerator
                     {
                         case IPropertySymbol { IsStatic: false, IsIndexer: false } property
                             when property.GetMethod is not null
+                                 && IsCloneConstructionSource(property)
                                  && IsCarriedAs(property.Type, parameter.Type):
                             return property.Name;
 
                         case IFieldSymbol { IsStatic: false, IsConst: false } field
-                            when IsCarriedAs(field.Type, parameter.Type):
+                            when IsCloneConstructionSource(field)
+                                 && IsCarriedAs(field.Type, parameter.Type):
                             return field.Name;
                     }
                 }
@@ -659,9 +663,11 @@ public class ClonePlanGenerator : IIncrementalGenerator
                 var name = member switch
                 {
                     IPropertySymbol { IsStatic: false, IsIndexer: false } p
-                        when p.GetMethod is not null && IsCarriedAs(p.Type, parameter.Type) => p.Name,
+                        when p.GetMethod is not null && IsCloneConstructionSource(p)
+                             && IsCarriedAs(p.Type, parameter.Type) => p.Name,
                     IFieldSymbol { IsStatic: false, IsConst: false } f
-                        when IsCarriedAs(f.Type, parameter.Type) => f.Name,
+                        when IsCloneConstructionSource(f)
+                             && IsCarriedAs(f.Type, parameter.Type) => f.Name,
                     _ => null,
                 };
 
@@ -764,9 +770,11 @@ public class ClonePlanGenerator : IIncrementalGenerator
                 string? name = member switch
                 {
                     IPropertySymbol { IsStatic: false, IsIndexer: false } p
-                        when p.GetMethod is not null && IsSameType(p.Type, parameter.Type) => p.Name,
+                        when p.GetMethod is not null && IsCloneConstructionSource(p)
+                             && IsSameType(p.Type, parameter.Type) => p.Name,
                     IFieldSymbol { IsStatic: false, IsConst: false } f
-                        when IsSameType(f.Type, parameter.Type) => f.Name,
+                        when IsCloneConstructionSource(f)
+                             && IsSameType(f.Type, parameter.Type) => f.Name,
                     _ => null,
                 };
 
@@ -792,6 +800,11 @@ public class ClonePlanGenerator : IIncrementalGenerator
 
         return fields.Count == 1 ? fields[0] : properties[0];
     }
+
+    /// <summary>Scratch storage is derived runtime state, never constructor configuration.</summary>
+    private static bool IsCloneConstructionSource(ISymbol member)
+        => ParameterMemberSemanticModel.Classify(member).Kind
+            != ParameterMemberSemanticModel.Kind.Scratch;
 
     /// <summary>
     /// Compares two types ignoring nullable annotation.

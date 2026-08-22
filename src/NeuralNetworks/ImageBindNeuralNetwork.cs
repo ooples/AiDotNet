@@ -1489,62 +1489,6 @@ public partial class ImageBindNeuralNetwork<T> : MultimodalModelLayoutBase<T>, I
 
     #region NeuralNetworkBase Implementation
 
-    /// <summary>
-    /// Declares the CLS tokens and positional embedding tables for all six modalities, which live
-    /// outside <see cref="NeuralNetworkBase{T}.Layers"/>.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// Declared in the order the deleted GetParameters concatenated them, so existing checkpoints
-    /// still restore: image CLS, image positional, text, audio, thermal CLS, thermal positional,
-    /// depth CLS, depth positional, IMU, video-temporal.
-    /// </para>
-    /// <para>
-    /// This replaces 350 lines -- ParameterCount, GetParameters, SetParameters, UpdateParameters
-    /// and six private helpers (AppendLayerListParameters, AppendSingleLayerParameters,
-    /// AppendMatrixParameters and their Update counterparts) -- each walking the same seven encoder
-    /// towers, thirteen projections and ten tables with its own running offset. Ten modalities'
-    /// worth of layout repeated four times, where a single missed line in any one of them silently
-    /// misaligns a checkpoint.
-    /// </para>
-    /// <para>
-    /// The towers need no declaration and must not get one: every per-modality list is filled FROM
-    /// <c>Layers</c> (<c>Layers[idx++]</c>), so they are typed views of layers the base walk already
-    /// reaches and declaring them would double-count. The tables became <c>Tensor&lt;T&gt;</c>
-    /// because a <c>Matrix&lt;T&gt;</c> is invisible to the trainable-parameter walk, which is the
-    /// reason these surfaces had to exist at all.
-    /// </para>
-    /// </remarks>
-    protected override IEnumerable<Tensor<T>> GetExtraTrainableTensors()
-    {
-        if (!_useNativeMode)
-        {
-            yield break;
-        }
-
-        Tensor<T>?[] tables =
-        [
-            _imageClsToken,
-            _imagePositionalEmbeddings,
-            _textPositionalEmbeddings,
-            _audioPositionalEmbeddings,
-            _thermalClsToken,
-            _thermalPositionalEmbeddings,
-            _depthClsToken,
-            _depthPositionalEmbeddings,
-            _imuPositionalEmbeddings,
-            _videoTemporalPositionalEmbeddings,
-        ];
-
-        foreach (var table in tables)
-        {
-            if (table is not null)
-            {
-                yield return table;
-            }
-        }
-    }
-
     // ---- behavioural overrides, restored ----
     // These four were deleted as collateral when this file's parameter surfaces were removed:
     // the deletion took a LINE RANGE that happened to contain them, rather than the members it

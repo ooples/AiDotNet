@@ -67,14 +67,6 @@ public class TabPFNRegression<T> : TabPFNBase<T>
     public int OutputDimension => _outputDimension;
 
     /// <summary>
-    /// Gets the total number of trainable parameters.
-    /// </summary>
-    /// <inheritdoc />
-    /// <remarks>The head, folded after the shared backbone by the base's single traversal.</remarks>
-    protected override IEnumerable<ILayer<T>> GetExtraTrainableLayers()
-        => new ILayer<T>[] { _regressionHead };
-
-    /// <summary>
     /// Initializes a new instance of the TabPFNRegression class.
     /// </summary>
     public TabPFNRegression(

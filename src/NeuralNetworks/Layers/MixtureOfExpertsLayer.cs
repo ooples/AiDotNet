@@ -939,62 +939,6 @@ public partial class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLaye
         }
     }
 
-    /// <summary>
-    /// Creates a deep copy of this MoE layer.
-    /// </summary>
-    /// <returns>A new MixtureOfExpertsLayer with the same configuration and parameters.</returns>
-    /// <remarks>
-    /// <para>
-    /// Creates an independent copy of this layer, including the router and all experts.
-    /// Changes to the clone won't affect the original.
-    /// </para>
-    /// <para><b>For Beginners:</b> Makes an identical copy of the entire MoE layer.
-    ///
-    /// The clone includes:
-    /// - A copy of the router
-    /// - Copies of all experts
-    /// - Same configuration (TopK, shapes, etc.)
-    /// - Same learned parameters
-    ///
-    /// Useful for:
-    /// - Creating an ensemble of similar models
-    /// - Experimenting with different training approaches
-    /// - Saving checkpoints during training
-    /// - Implementing certain meta-learning algorithms
-    ///
-    /// The clone is completely independent - training one won't affect the other.
-    /// </para>
-    /// </remarks>
-    public override LayerBase<T> Clone()
-    {
-        // Clone router
-        ILayer<T> clonedRouter = _router;
-        if (_router is LayerBase<T> routerBase)
-        {
-            clonedRouter = (ILayer<T>)routerBase.Clone();
-        }
-
-        // Clone experts
-        var clonedExperts = _experts.Select(e =>
-        {
-            if (e is LayerBase<T> expertBase)
-            {
-                return (ILayer<T>)expertBase.Clone();
-            }
-            return e;
-        }).ToList();
-
-        return new MixtureOfExpertsLayer<T>(
-            clonedExperts,
-            clonedRouter,
-            InputShape,
-            OutputShape,
-            _topK,
-            ScalarActivation,
-            _useAuxiliaryLoss,
-            _auxiliaryLossWeight);
-    }
-
     #region IAuxiliaryLossLayer Implementation
 
     /// <summary>

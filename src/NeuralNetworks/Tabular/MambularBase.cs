@@ -80,7 +80,7 @@ public abstract class MambularBase<T> : IParameterSource<T>
     /// the registry decides where it goes, so count, vector and restore cannot disagree about it.
     /// </remarks>
     protected virtual IEnumerable<IParameterSource<T>> GetExtraTrainableLayers()
-        => System.Linq.Enumerable.Empty<IParameterSource<T>>();
+        => GeneratedParameterDiscovery.EnumerateDerivedSources<T>(this, typeof(MambularBase<T>));
 
     /// <summary>
     /// The single ordered traversal of this model's parameter-bearing components.

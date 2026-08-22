@@ -326,26 +326,6 @@ public partial class MarketMakingAgent<T> : TradingAgentBase<T>, IGradientComput
 
     #region Serialization
 
-    /// <summary>
-    /// Executes Serialize for the MarketMakingAgent.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the MarketMakingAgent model, Serialize saves or restores model-specific settings. This lets the MarketMakingAgent architecture be reused later.
-    /// </para>
-    /// </remarks>
-    public override byte[] Serialize() => _policyNetwork.Serialize();
-
-    /// <summary>
-    /// Executes Deserialize for the MarketMakingAgent.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the MarketMakingAgent model, Deserialize saves or restores model-specific settings. This lets the MarketMakingAgent architecture be reused later.
-    /// </para>
-    /// </remarks>
-    public override void Deserialize(byte[] data) => _policyNetwork.Deserialize(data);
-
     #endregion
 
     #region Model Metadata

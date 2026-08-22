@@ -200,56 +200,6 @@ public partial class WatkinsQLambdaAgent<T> : ReinforcementLearningAgentBase<T>
                 () => _qTable));
     }
     public override int FeatureCount => _options.StateSize;
-    public override byte[] Serialize()
-    {
-        var state = new
-        {
-            QTable = _qTable,
-            EligibilityTraces = _eligibilityTraces,
-            Epsilon = _epsilon,
-            Options = _options
-        };
-        string json = JsonConvert.SerializeObject(state);
-        return System.Text.Encoding.UTF8.GetBytes(json);
-    }
-
-    public override void Deserialize(byte[] data)
-    {
-        if (data is null || data.Length == 0)
-        {
-            throw new ArgumentException("Serialized data cannot be null or empty", nameof(data));
-        }
-
-        string json = System.Text.Encoding.UTF8.GetString(data);
-        var state = JsonConvert.DeserializeObject<dynamic>(json);
-        if (state is null)
-        {
-            throw new InvalidOperationException("Deserialization returned null");
-        }
-
-        _qTable = JsonConvert.DeserializeObject<Dictionary<string, Dictionary<int, T>>>(state.QTable.ToString()) ?? new Dictionary<string, Dictionary<int, T>>();
-        _eligibilityTraces = JsonConvert.DeserializeObject<Dictionary<string, Dictionary<int, T>>>(state.EligibilityTraces.ToString()) ?? new Dictionary<string, Dictionary<int, T>>();
-        _epsilon = state.Epsilon;
-    }
-    public override IFullModel<T, Vector<T>, Vector<T>> Clone()
-    {
-        var clone = new WatkinsQLambdaAgent<T>(_options);
-
-        // Deep copy Q-table to preserve learned state
-        foreach (var kvp in _qTable)
-        {
-            clone._qTable[kvp.Key] = new Dictionary<int, T>(kvp.Value);
-        }
-
-        // Deep copy eligibility traces
-        foreach (var kvp in _eligibilityTraces)
-        {
-            clone._eligibilityTraces[kvp.Key] = new Dictionary<int, T>(kvp.Value);
-        }
-
-        clone._epsilon = _epsilon;
-        return clone;
-    }
     public override void SaveModel(string filepath) { var data = Serialize(); System.IO.File.WriteAllBytes(filepath, data); }
     public override void LoadModel(string filepath) { var data = System.IO.File.ReadAllBytes(filepath); Deserialize(data); }
 }

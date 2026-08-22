@@ -830,63 +830,6 @@ public partial class ARIMAXModel<T> : TimeSeriesModelBase<T>, IExogenousForecast
     }
 
     /// <summary>
-    /// Creates a deep copy of the current model.
-    /// </summary>
-    /// <returns>A new instance of the ARIMAX model with the same state and parameters.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method creates a complete copy of the model, including its configuration and trained parameters.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method creates an exact duplicate of your trained model.
-    /// 
-    /// Unlike CreateInstance(), which creates a blank model with the same settings,
-    /// Clone() creates a complete copy including:
-    /// - The model configuration (AR order, MA order, etc.)
-    /// - All trained coefficients (AR, MA, exogenous)
-    /// - Differencing information and intercept value
-    /// 
-    /// This is useful for:
-    /// - Creating a backup before experimenting with a model
-    /// - Using the same trained model in multiple scenarios
-    /// - Creating ensemble models that use variations of the same base model
-    /// </para>
-    /// </remarks>
-    public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
-    {
-        var clone = (ARIMAXModel<T>)CreateInstance();
-
-        // Copy AR coefficients
-        for (int i = 0; i < _arCoefficients.Length; i++)
-        {
-            clone._arCoefficients[i] = _arCoefficients[i];
-        }
-
-        // Copy MA coefficients
-        for (int i = 0; i < _maCoefficients.Length; i++)
-        {
-            clone._maCoefficients[i] = _maCoefficients[i];
-        }
-
-        // Copy exogenous coefficients
-        for (int i = 0; i < _exogenousCoefficients.Length; i++)
-        {
-            clone._exogenousCoefficients[i] = _exogenousCoefficients[i];
-        }
-
-        // Copy differenced values
-        clone._differenced = new Vector<T>(_differenced.Length);
-        for (int i = 0; i < _differenced.Length; i++)
-        {
-            clone._differenced[i] = _differenced[i];
-        }
-
-        // Copy intercept
-        clone._intercept = _intercept;
-
-        return clone;
-    }
-
-    /// <summary>
     /// Resets the model to its untrained state.
     /// </summary>
     /// <remarks>

@@ -90,41 +90,6 @@ public partial class CURE<T> : ClusteringBase<T>
     public override bool SupportsParameterInitialization => false;
 
     /// <inheritdoc />
-    public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
-    {
-        var clone = (CURE<T>)CreateNewInstance();
-        clone.NumFeatures = NumFeatures;
-        clone.NumClusters = NumClusters;
-        clone.IsTrained = IsTrained;
-        clone.Labels = Labels is not null ? new Vector<T>(Labels) : null;
-        clone.Inertia = Inertia;
-
-        if (ClusterCenters is not null)
-        {
-            clone.ClusterCenters = new Matrix<T>(ClusterCenters.Rows, ClusterCenters.Columns);
-            for (int i = 0; i < ClusterCenters.Rows; i++)
-                for (int j = 0; j < ClusterCenters.Columns; j++)
-                    clone.ClusterCenters[i, j] = ClusterCenters[i, j];
-        }
-
-        if (_clusters is not null)
-        {
-            clone._clusters = new List<CureCluster>();
-            foreach (var cluster in _clusters)
-            {
-                clone._clusters.Add(new CureCluster
-                {
-                    Points = new List<int>(cluster.Points),
-                    Center = (T[])cluster.Center.Clone(),
-                    Representatives = cluster.Representatives.Select(r => (T[])r.Clone()).ToList()
-                });
-            }
-        }
-
-        return clone;
-    }
-
-    /// <inheritdoc />
     public override IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
     {
         var newInstance = (CURE<T>)CreateNewInstance();

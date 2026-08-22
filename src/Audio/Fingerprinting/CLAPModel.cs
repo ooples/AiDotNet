@@ -68,17 +68,6 @@ namespace AiDotNet.Audio.Fingerprinting;
 public partial class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
 {
 
-    // TextEncoderLayers is yielded by AudioNeuralNetworkBase.GetExtraTrainableLayers for every audio
-    // model that owns a text tower, so this override restated the base. Removed under AIDN082.
-
-    /// <inheritdoc />
-    /// <remarks>The learned logit scale (CLIP's temperature), a single value the contrastive
-    /// loss trains alongside the towers. The hand-written count added it as a bare "+ 1" and
-    /// the vector appended _logTemperature[0]; it is a one-element tensor, so the base fold
-    /// contributes the same single scalar in the same position.</remarks>
-    protected override IEnumerable<Tensor<T>> GetExtraTrainableTensors()
-        => new[] { _logTemperature };
-
     /// <inheritdoc />
     /// <remarks>
     /// Measured: <c>PredictCore</c> delegates to <c>EncodeAudio</c>, which folds the AUDIO stack
@@ -757,12 +746,6 @@ public partial class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprint
                 $"Persisted CLAPModelOptions.{name} = {persisted} does not match constructor option {current}. " +
                 "Reconstruct CLAPModel with matching CLAPModelOptions before loading this checkpoint.");
     }
-
-    /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() =>
-        _useNativeMode
-            ? new CLAPModel<T>(Architecture, new CLAPModelOptions(_options))
-            : new CLAPModel<T>(Architecture, _audioEncoderPath!, _textEncoderPath, new CLAPModelOptions(_options));
 
     /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()

@@ -418,30 +418,6 @@ public partial class SAM<T> : Common.PromptableSegmentationBase<T>
         ModelData = SerializeForMetadata()
     };
 
-    /// <summary>
-    /// Writes configuration to a binary stream.
-    /// </summary>
-
-
-    /// <summary>
-    /// Reads configuration from a binary stream.
-    /// </summary>
-
-
-    /// <summary>
-    /// Creates a new instance with the same configuration but fresh weights.
-    /// </summary>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() => _useNativeMode
-        ? new SAM<T>(
-            Architecture,
-            optimizer: null,
-            lossFunction: LossFunction,
-            numClasses: _numClasses,
-            modelSize: _modelSize,
-            dropRate: _dropRate,
-            options: new SAMOptions(_options))
-        : new SAM<T>(Architecture, _onnxModelPath ?? throw new InvalidOperationException("ONNX model path not initialized."), _numClasses, _modelSize, new SAMOptions(_options));
-
     // Dispose is inherited: SegmentationModelBase already disposes _onnxSession and sets _disposed,
     // and SAM owns no further unmanaged resources.
 

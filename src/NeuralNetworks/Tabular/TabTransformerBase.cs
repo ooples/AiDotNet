@@ -119,7 +119,7 @@ public abstract class TabTransformerBase<T> : IParameterSource<T>
 
     /// <summary>Extra trainable layers a subclass contributes after the shared backbone.</summary>
     protected virtual IEnumerable<IParameterSource<T>> GetExtraTrainableLayers()
-        => System.Linq.Enumerable.Empty<IParameterSource<T>>();
+        => GeneratedParameterDiscovery.EnumerateDerivedSources<T>(this, typeof(TabTransformerBase<T>));
 
     /// <summary>The single ordered traversal of this model's parameter-bearing components.</summary>
     private ParameterComponentRegistry<T> ParameterRegistry

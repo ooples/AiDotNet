@@ -948,24 +948,6 @@ public partial class LiLT<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>,
         };
     }
 
-    /// <inheritdoc/>
-
-
-    /// <inheritdoc/>
-
-
-    /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        if (!_useNativeMode)
-        {
-            throw new NotSupportedException(
-                "Deep copy is not supported for ONNX LiLT instances. Create a new instance with model paths instead.");
-        }
-        return new LiLT<T>(Architecture, _tokenizer, _numClasses, MaxSequenceLength,
-            _hiddenDim, _numLayers, _numHeads, _vocabSize, _textBackbone, _optimizer, LossFunction);
-    }
-
     #endregion
 
     #region NeuralNetworkBase Implementation
