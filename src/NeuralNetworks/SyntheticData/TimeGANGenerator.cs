@@ -227,11 +227,17 @@ public partial class TimeGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
         // Rebuild generator (Layers) if not using custom
         if (!_usingCustomLayers)
         {
+            // DECLARE THE INPUT WIDTH. Every layerInput below was already being computed and then
+            // discarded, so each layer took the (outputSize, activation) overload and was left with
+            // an input of -1 for lazy inference -- binding permanently to whatever tensor reached it
+            // first rather than to the width it was designed for. That is the same defect this PR
+            // fixes in PATEGAN, TabSyn and TabDDPM, and it is what makes the generator's expected
+            // latent width unenforceable: a mismatched caller silently rebinds the stack instead of
+            // failing. The widths are known here, so they are stated.
             Layers.Clear();
             for (int i = 0; i < _options.NumLayers; i++)
             {
-                int layerInput = i == 0 ? hiddenDim : hiddenDim;
-                Layers.Add(new FullyConnectedLayer<T>(hiddenDim, identity));
+                Layers.Add(new FullyConnectedLayer<T>(hiddenDim, hiddenDim, identity));
             }
         }
 
@@ -243,25 +249,27 @@ public partial class TimeGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
         for (int i = 0; i < _options.NumLayers; i++)
         {
             int layerInput = i == 0 ? _dataWidth : hiddenDim;
-            _embedderLayers.Add(new FullyConnectedLayer<T>(hiddenDim, identity));
+            _embedderLayers.Add(new FullyConnectedLayer<T>(layerInput, hiddenDim, identity));
         }
-        _embedderOutput = new FullyConnectedLayer<T>(hiddenDim, identity);
+        _embedderOutput = new FullyConnectedLayer<T>(hiddenDim, hiddenDim, identity);
 
-        // Recovery
+        // Recovery: latent -> latent hidden stack, then a projection back out to the data width.
         _recoveryLayers.Clear();
         for (int i = 0; i < _options.NumLayers; i++)
         {
-            _recoveryLayers.Add(new FullyConnectedLayer<T>(hiddenDim, identity));
+            _recoveryLayers.Add(new FullyConnectedLayer<T>(hiddenDim, hiddenDim, identity));
         }
-        _recoveryOutput = new FullyConnectedLayer<T>(_dataWidth, identity);
+        _recoveryOutput = new FullyConnectedLayer<T>(hiddenDim, _dataWidth, identity);
 
-        // Supervisor
+        // Supervisor: NOTE the loop bound is NumLayers - 1, so at NumLayers == 1 the hidden list is
+        // empty while _supervisorOutput still exists and performs a real projection. That is why
+        // GetNamedLayerActivations gates on the OUTPUT HEAD rather than on this list being non-empty.
         _supervisorLayers.Clear();
         for (int i = 0; i < _options.NumLayers - 1; i++)
         {
-            _supervisorLayers.Add(new FullyConnectedLayer<T>(hiddenDim, identity));
+            _supervisorLayers.Add(new FullyConnectedLayer<T>(hiddenDim, hiddenDim, identity));
         }
-        _supervisorOutput = new FullyConnectedLayer<T>(hiddenDim, identity);
+        _supervisorOutput = new FullyConnectedLayer<T>(hiddenDim, hiddenDim, identity);
 
         // Discriminator
         _discriminatorLayers.Clear();
@@ -1096,13 +1104,19 @@ public partial class TimeGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
         //
         // Reporting only the initialised stacks keeps every entry a real computation. The generator
         // always exists after InitializeLayers, so the result is never empty.
-        if (_supervisorLayers.Count > 0)
+        // GATE ON THE OUTPUT HEAD, NOT THE HIDDEN LAYER LIST. SupervisorForward and RecoveryForward
+        // apply _supervisorOutput / _recoveryOutput independently of their loops, so a stack with an
+        // empty layer list but a constructed head still performs a real projection -- which is
+        // exactly the shape NumLayers == 1 produces for the supervisor. Gating on Count > 0 would
+        // have dropped a stage that does genuine work; the head is what RebuildAllNetworks creates
+        // last, so its presence is the honest signal that the stage exists.
+        if (_supervisorOutput is not null)
         {
             current = SupervisorForward(current, isTraining: false);
             activations["Supervisor"] = VectorToTensor(current);
         }
 
-        if (_recoveryLayers.Count > 0)
+        if (_recoveryOutput is not null)
         {
             current = RecoveryForward(current, isTraining: false);
             activations["Recovery"] = VectorToTensor(current);

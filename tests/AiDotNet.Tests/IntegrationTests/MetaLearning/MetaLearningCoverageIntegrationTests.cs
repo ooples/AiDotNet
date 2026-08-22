@@ -284,6 +284,17 @@ public class MetaLearningCoverageIntegrationTests
             expected,
             new AiDotNet.LossFunctions.MeanAbsoluteErrorLoss<double>());
 
+        // VALIDATE THE ALTERNATE-LOSS VECTOR BEFORE COMPARING IT. A difference predicate alone is
+        // satisfied by a NaN, an infinity, or a longer vector as soon as any one element differs, so
+        // the comparison below would "pass" on a result that is itself invalid.
+        Assert.Equal(gradients.Length, gradientsWithOtherLoss.Length);
+        Assert.All(
+            Enumerable.Range(0, gradientsWithOtherLoss.Length),
+            i => Assert.True(
+                double.IsFinite(gradientsWithOtherLoss[i]),
+                $"Alternate-loss gradient[{i}] is {gradientsWithOtherLoss[i]}; a different loss must " +
+                "still produce a finite gradient."));
+
         Assert.Contains(
             Enumerable.Range(0, gradients.Length),
             i => Math.Abs(gradients[i] - gradientsWithOtherLoss[i]) > 1e-9);
