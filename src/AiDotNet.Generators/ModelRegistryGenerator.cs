@@ -279,25 +279,28 @@ public class ModelRegistryGenerator : IIncrementalGenerator
             else if (paperAttrSymbol is not null &&
                      SymbolEqualityComparer.Default.Equals(attr.AttributeClass, paperAttrSymbol))
             {
-                var paper = new PaperData();
+                string paperTitle = string.Empty;
+                string paperUrl = string.Empty;
+                int paperYear = 0;
+                string paperAuthors = string.Empty;
                 if (attr.ConstructorArguments.Length >= 2)
                 {
-                    paper.Title = attr.ConstructorArguments[0].Value as string ?? string.Empty;
-                    paper.Url = attr.ConstructorArguments[1].Value as string ?? string.Empty;
+                    paperTitle = attr.ConstructorArguments[0].Value as string ?? string.Empty;
+                    paperUrl = attr.ConstructorArguments[1].Value as string ?? string.Empty;
                 }
                 // Check named arguments for Year and Authors
                 foreach (var named in attr.NamedArguments)
                 {
                     if (named.Key == "Year" && named.Value.Value is int year)
                     {
-                        paper.Year = year;
+                        paperYear = year;
                     }
                     else if (named.Key == "Authors" && named.Value.Value is string authors)
                     {
-                        paper.Authors = authors;
+                        paperAuthors = authors;
                     }
                 }
-                papers.Add(paper);
+                papers.Add(new PaperData(paperTitle, paperUrl, paperYear, paperAuthors));
             }
         }
 
@@ -945,12 +948,27 @@ public class ModelRegistryGenerator : IIncrementalGenerator
         }
     }
 
+    /// <remarks>
+    /// CONSTRUCTOR-INITIALISED AND GET-ONLY ON PURPOSE. This type is an ELEMENT of an
+    /// ImmutableArray held by a cached pipeline entry, and ImmutableArray freezes the SEQUENCE, not
+    /// the elements. While these had settable properties, an element could still be mutated after
+    /// Roslyn had compared the entry, which makes the entry's Equals and GetHashCode unstable for
+    /// exactly the cached state this refactor is trying to make comparable.
+    /// </remarks>
     private sealed class PaperData : System.IEquatable<PaperData>
     {
-        public string Title { get; set; } = string.Empty;
-        public string Url { get; set; } = string.Empty;
-        public int Year { get; set; }
-        public string Authors { get; set; } = string.Empty;
+        public PaperData(string title, string url, int year, string authors)
+        {
+            Title = title;
+            Url = url;
+            Year = year;
+            Authors = authors;
+        }
+
+        public string Title { get; }
+        public string Url { get; }
+        public int Year { get; }
+        public string Authors { get; }
 
         public bool Equals(PaperData? other)
             => other is not null

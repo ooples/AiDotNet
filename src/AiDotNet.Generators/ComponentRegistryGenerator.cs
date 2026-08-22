@@ -185,7 +185,9 @@ public class ComponentRegistryGenerator : IIncrementalGenerator
             else if (componentDependencyAttrSymbol is not null &&
                      SymbolEqualityComparer.Default.Equals(attr.AttributeClass, componentDependencyAttrSymbol))
             {
-                var dep = new DependencyData();
+                string depTypeName = string.Empty;
+                string depDescription = string.Empty;
+                bool depRequired = true;
 
                 // First constructor argument is typeof(DependencyType)
                 if (attr.ConstructorArguments.Length >= 1)
@@ -193,14 +195,14 @@ public class ComponentRegistryGenerator : IIncrementalGenerator
                     var typeArg = attr.ConstructorArguments[0].Value as INamedTypeSymbol;
                     if (typeArg is not null)
                     {
-                        dep.DependencyTypeName = typeArg.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+                        depTypeName = typeArg.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
                     }
                 }
 
                 // Second constructor argument (if present) is description string
                 if (attr.ConstructorArguments.Length >= 2)
                 {
-                    dep.Description = attr.ConstructorArguments[1].Value as string ?? string.Empty;
+                    depDescription = attr.ConstructorArguments[1].Value as string ?? string.Empty;
                 }
 
                 // Check named arguments for Description and Required
@@ -208,38 +210,41 @@ public class ComponentRegistryGenerator : IIncrementalGenerator
                 {
                     if (named.Key == "Description" && named.Value.Value is string desc)
                     {
-                        dep.Description = desc;
+                        depDescription = desc;
                     }
                     else if (named.Key == "Required" && named.Value.Value is bool required)
                     {
-                        dep.Required = required;
+                        depRequired = required;
                     }
                 }
 
-                dependencies.Add(dep);
+                dependencies.Add(new DependencyData(depTypeName, depDescription, depRequired));
             }
             else if (researchPaperAttrSymbol is not null &&
                      SymbolEqualityComparer.Default.Equals(attr.AttributeClass, researchPaperAttrSymbol))
             {
-                var paper = new PaperData();
+                string paperTitle = string.Empty;
+                string paperUrl = string.Empty;
+                int paperYear = 0;
+                string paperAuthors = string.Empty;
                 if (attr.ConstructorArguments.Length >= 2)
                 {
-                    paper.Title = attr.ConstructorArguments[0].Value as string ?? string.Empty;
-                    paper.Url = attr.ConstructorArguments[1].Value as string ?? string.Empty;
+                    paperTitle = attr.ConstructorArguments[0].Value as string ?? string.Empty;
+                    paperUrl = attr.ConstructorArguments[1].Value as string ?? string.Empty;
                 }
                 // Check named arguments for Year and Authors
                 foreach (var named in attr.NamedArguments)
                 {
                     if (named.Key == "Year" && named.Value.Value is int year)
                     {
-                        paper.Year = year;
+                        paperYear = year;
                     }
                     else if (named.Key == "Authors" && named.Value.Value is string authors)
                     {
-                        paper.Authors = authors;
+                        paperAuthors = authors;
                     }
                 }
-                papers.Add(paper);
+                papers.Add(new PaperData(paperTitle, paperUrl, paperYear, paperAuthors));
             }
         }
 
@@ -763,11 +768,25 @@ public class ComponentRegistryGenerator : IIncrementalGenerator
         }
     }
 
+    /// <remarks>
+    /// CONSTRUCTOR-INITIALISED AND GET-ONLY ON PURPOSE. This type is an ELEMENT of an
+    /// ImmutableArray held by a cached pipeline entry, and ImmutableArray freezes the SEQUENCE, not
+    /// the elements. While these had settable properties, an element could still be mutated after
+    /// Roslyn had compared the entry, which makes the entry's Equals and GetHashCode unstable for
+    /// exactly the cached state this refactor is trying to make comparable.
+    /// </remarks>
     private sealed class DependencyData : System.IEquatable<DependencyData>
     {
-        public string DependencyTypeName { get; set; } = string.Empty;
-        public string Description { get; set; } = string.Empty;
-        public bool Required { get; set; } = true;
+        public DependencyData(string dependencyTypeName, string description, bool required)
+        {
+            DependencyTypeName = dependencyTypeName;
+            Description = description;
+            Required = required;
+        }
+
+        public string DependencyTypeName { get; }
+        public string Description { get; }
+        public bool Required { get; }
 
         public bool Equals(DependencyData? other)
             => other is not null
@@ -790,12 +809,27 @@ public class ComponentRegistryGenerator : IIncrementalGenerator
         }
     }
 
+    /// <remarks>
+    /// CONSTRUCTOR-INITIALISED AND GET-ONLY ON PURPOSE. This type is an ELEMENT of an
+    /// ImmutableArray held by a cached pipeline entry, and ImmutableArray freezes the SEQUENCE, not
+    /// the elements. While these had settable properties, an element could still be mutated after
+    /// Roslyn had compared the entry, which makes the entry's Equals and GetHashCode unstable for
+    /// exactly the cached state this refactor is trying to make comparable.
+    /// </remarks>
     private sealed class PaperData : System.IEquatable<PaperData>
     {
-        public string Title { get; set; } = string.Empty;
-        public string Url { get; set; } = string.Empty;
-        public int Year { get; set; }
-        public string Authors { get; set; } = string.Empty;
+        public PaperData(string title, string url, int year, string authors)
+        {
+            Title = title;
+            Url = url;
+            Year = year;
+            Authors = authors;
+        }
+
+        public string Title { get; }
+        public string Url { get; }
+        public int Year { get; }
+        public string Authors { get; }
 
         public bool Equals(PaperData? other)
             => other is not null

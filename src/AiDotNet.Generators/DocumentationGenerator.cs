@@ -197,7 +197,7 @@ public class DocumentationGenerator : IIncrementalGenerator
                         if (named.Key == "Year" && named.Value.Value is int y) year = y;
                         else if (named.Key == "Authors" && named.Value.Value is string a) authors = a;
                     }
-                    papers.Add(new PaperInfo { Title = title, Url = url, Year = year, Authors = authors });
+                    papers.Add(new PaperInfo(title, url, year, authors));
                 }
             }
             else if (inputAttrSymbol is not null &&
@@ -725,12 +725,27 @@ public class DocumentationGenerator : IIncrementalGenerator
         }
     }
 
+    /// <remarks>
+    /// CONSTRUCTOR-INITIALISED AND GET-ONLY ON PURPOSE. This type is an ELEMENT of an
+    /// ImmutableArray held by a cached pipeline entry, and ImmutableArray freezes the SEQUENCE, not
+    /// the elements. While these had settable properties, an element could still be mutated after
+    /// Roslyn had compared the entry, which makes the entry's Equals and GetHashCode unstable for
+    /// exactly the cached state this refactor is trying to make comparable.
+    /// </remarks>
     private sealed class PaperInfo : System.IEquatable<PaperInfo>
     {
-        public string Title { get; set; } = string.Empty;
-        public string Url { get; set; } = string.Empty;
-        public int Year { get; set; }
-        public string Authors { get; set; } = string.Empty;
+        public PaperInfo(string title, string url, int year, string authors)
+        {
+            Title = title;
+            Url = url;
+            Year = year;
+            Authors = authors;
+        }
+
+        public string Title { get; }
+        public string Url { get; }
+        public int Year { get; }
+        public string Authors { get; }
 
         public bool Equals(PaperInfo? other)
             => other is not null
