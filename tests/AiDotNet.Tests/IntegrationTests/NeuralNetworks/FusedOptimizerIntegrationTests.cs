@@ -105,12 +105,12 @@ public class FusedOptimizerIntegrationTests
             for (int i = 0; i < afterFirst.Length; i++)
             {
                 if (before[i] != afterFirst[i]) anyParameterChanged = true;
-                if (!float.IsFinite(afterFirst[i])) nonFiniteParameters++;
+                if (float.IsNaN(afterFirst[i]) || float.IsInfinity(afterFirst[i])) nonFiniteParameters++;
             }
             for (int i = 0; i < gradients.Length; i++)
-                if (!float.IsFinite(gradients[i])) nonFiniteGradients++;
+                if (float.IsNaN(gradients[i]) || float.IsInfinity(gradients[i])) nonFiniteGradients++;
 
-            Assert.True(float.IsFinite(model.GetLastLoss()),
+            Assert.True(!float.IsNaN(model.GetLastLoss()) && !float.IsInfinity(model.GetLastLoss()),
                 $"The automatically selected eager step must have a finite loss; got {model.GetLastLoss()}.");
             Assert.True(anyParameterChanged, "The automatically selected eager step did not update any parameter.");
             Assert.Equal(0, nonFiniteParameters);
@@ -118,7 +118,7 @@ public class FusedOptimizerIntegrationTests
             Assert.Equal(0, CompiledTapeTrainingStep<float>.GetFusedStepCount());
 
             model.Train(input, target);
-            Assert.True(float.IsFinite(model.GetLastLoss()));
+            Assert.True(!float.IsNaN(model.GetLastLoss()) && !float.IsInfinity(model.GetLastLoss()));
             Assert.Equal(0, CompiledTapeTrainingStep<float>.GetFusedStepCount());
         }
         finally
