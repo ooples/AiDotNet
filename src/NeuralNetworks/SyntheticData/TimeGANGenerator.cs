@@ -173,6 +173,7 @@ public partial class TimeGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
         : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), maxGradNorm)
     {
         _options = options ?? new TimeGANOptions<T>();
+        ValidateOptions();
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);
         AdamOptimizer<T, Tensor<T>, Tensor<T>> MakeAdam() =>
             new(this, new Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
@@ -192,6 +193,17 @@ public partial class TimeGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
             : RandomHelper.CreateSecureRandom();
 
         InitializeLayers();
+    }
+
+    private void ValidateOptions()
+    {
+        if (_options.NumLayers < 1)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(TimeGANOptions<T>.NumLayers),
+                _options.NumLayers,
+                "TimeGAN requires at least one layer.");
+        }
     }
 
     #region Layer Initialization (GANDALF Pattern)
@@ -289,6 +301,10 @@ public partial class TimeGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
     /// <inheritdoc />
     public void Fit(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns, int epochs)
     {
+        // Options remain publicly accessible after construction, so validate again before using
+        // them to rebuild the component networks.
+        ValidateOptions();
+
         // Reject configurations that would silently no-op training. With
         // epochs <= 0 every phase loop runs zero iterations and IsFitted
         // would still flip true at the bottom (untrained model marked
@@ -1055,12 +1071,28 @@ public partial class TimeGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
 
     #region NeuralNetworkBase Overrides
 
+    private Vector<T> GetGeneratorNoise(Tensor<T> input)
+    {
+        if (input is null)
+            throw new ArgumentNullException(nameof(input));
+
+        if (IsFitted && input.Length != _options.HiddenDimension)
+        {
+            throw new ArgumentException(
+                $"A fitted TimeGAN generator requires latent input with exactly "
+                + $"{_options.HiddenDimension} values (HiddenDimension), but received {input.Length}.",
+                nameof(input));
+        }
+
+        return TensorToVector(input, input.Length);
+    }
+
     /// <inheritdoc />
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         if (!IsFitted) return input;
 
-        var noise = TensorToVector(input, input.Length);
+        var noise = GetGeneratorNoise(input);
         var genOut = GeneratorForward(noise, isTraining: false);
         var supOut = SupervisorForward(genOut, isTraining: false);
         var recOut = RecoveryForward(supOut, isTraining: false);
@@ -1091,7 +1123,7 @@ public partial class TimeGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
     {
         var activations = new Dictionary<string, Tensor<T>>();
 
-        var noise = TensorToVector(input, input.Length);
+        var noise = GetGeneratorNoise(input);
         var current = GeneratorForward(noise, isTraining: false);
         activations["Generator"] = VectorToTensor(current);
 

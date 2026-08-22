@@ -973,17 +973,66 @@ public class SyntheticTabularGeneratorIntegrationTests
         {
             Seed = Seed,
             HiddenDimension = 32,
+            NumLayers = 1,
             SequenceLength = 5,
             BatchSize = 10
         };
 
         var generator = new TimeGANGenerator<double>(arch, options);
+
+        // Before fitting, model-family introspection supplies the architecture width rather than
+        // the latent width. That remains valid and reports only the generator stage because the
+        // auxiliary networks do not exist yet.
+        var architectureWidthInput = new Tensor<double>(new[] { TotalCols });
+        var preFitActivations = generator.GetNamedLayerActivations(architectureWidthInput);
+        var preFitGenerator = Assert.Single(preFitActivations);
+        Assert.Equal("Generator", preFitGenerator.Key);
+        Assert.Equal(options.HiddenDimension, preFitGenerator.Value.Length);
+
         generator.Fit(data, columns, FewEpochs);
 
         Assert.True(generator.IsFitted);
 
+        // Once fitted, the synthesis path consumes latent noise of HiddenDimension width. Exercise
+        // both public entry points with that exact width and verify all real stages are exposed.
+        // NumLayers == 1 is deliberate: the supervisor hidden list is empty in this configuration,
+        // so this also proves activation reporting is gated on its output head rather than the list.
+        var latentInput = new Tensor<double>(new[] { options.HiddenDimension });
+        var postFitActivations = generator.GetNamedLayerActivations(latentInput);
+        Assert.Equal(options.HiddenDimension, postFitActivations["Generator"].Length);
+        Assert.Equal(options.HiddenDimension, postFitActivations["Supervisor"].Length);
+        Assert.Equal(TotalCols, postFitActivations["Recovery"].Length);
+
+        var prediction = generator.Predict(latentInput);
+        Assert.Equal(TotalCols, prediction.Length);
+
+        var activationError = Assert.Throws<ArgumentException>(
+            () => generator.GetNamedLayerActivations(architectureWidthInput));
+        Assert.Equal("input", activationError.ParamName);
+        Assert.Contains("HiddenDimension", activationError.Message, StringComparison.Ordinal);
+
+        var predictionError = Assert.Throws<ArgumentException>(
+            () => generator.Predict(architectureWidthInput));
+        Assert.Equal("input", predictionError.ParamName);
+        Assert.Contains("HiddenDimension", predictionError.Message, StringComparison.Ordinal);
+
         var generated = generator.Generate(GenSamples);
         ValidateGeneratedData(generated, GenSamples, TotalCols, "TimeGAN");
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    public void TimeGANGenerator_RejectsNumLayersBelowOne(int numLayers)
+    {
+        var arch = CreateArchitecture(TotalCols, TotalCols);
+        var options = new TimeGANOptions<double> { NumLayers = numLayers };
+
+        var error = Assert.Throws<ArgumentOutOfRangeException>(
+            () => new TimeGANGenerator<double>(arch, options));
+
+        Assert.Equal(nameof(TimeGANOptions<double>.NumLayers), error.ParamName);
+        Assert.Equal(numLayers, error.ActualValue);
     }
 
     #endregion
