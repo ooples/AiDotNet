@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
@@ -549,12 +549,12 @@ public partial class GatedLinearUnitLayer<T> : LayerBase<T>, IShapeContract
         // Linear path: linear = input @ weights^T + bias
         var linearWeightsT = Engine.TensorPermute(_linearWeights, [1, 0]);
         var linearOutput = input.MatrixMultiply(linearWeightsT);
-        linearOutput = Engine.TensorBroadcastAdd(linearOutput, _linearBias); // Broadcasting
+        linearOutput = Engine.TensorAdd(linearOutput, _linearBias); // Broadcasting
 
         // Gate path: gate = sigmoid(input @ weights^T + bias)
         var gateWeightsT = Engine.TensorPermute(_gateWeights, [1, 0]);
         var gateOutput = input.MatrixMultiply(gateWeightsT);
-        gateOutput = Engine.TensorBroadcastAdd(gateOutput, _gateBias); // Broadcasting
+        gateOutput = Engine.TensorAdd(gateOutput, _gateBias); // Broadcasting
 
         // #1668: cache the linear/gate activations for backward only; forward uses locals.
         var linOut = linearOutput;

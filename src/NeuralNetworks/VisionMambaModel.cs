@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -293,12 +293,12 @@ public partial class VisionMambaModel<T> : ImageClassifierModelLayoutBase<T>
         // bias/positional-embedding weights or of a tape-tracked intermediate severs the gradient path
         // (the param never learns / the upstream projection is disconnected from the loss).
         var bias2D = Engine.Reshape(_patchProjectionBias, new[] { 1, _modelDimension });
-        embeddedFlat = Engine.TensorBroadcastAdd(embeddedFlat, bias2D);
+        embeddedFlat = Engine.TensorAdd(embeddedFlat, bias2D);
         var embedded = Engine.Reshape(embeddedFlat, new[] { batchSize, _numPatches, _modelDimension });
 
         // Add positional embedding
         var posEmb3D = Engine.Reshape(_positionalEmbedding, new[] { 1, _numPatches, _modelDimension });
-        embedded = Engine.TensorBroadcastAdd(embedded, posEmb3D);
+        embedded = Engine.TensorAdd(embedded, posEmb3D);
 
         // Step 3: Apply scan pattern
         Tensor<T> scannedInput;
@@ -339,7 +339,7 @@ public partial class VisionMambaModel<T> : ImageClassifierModelLayoutBase<T>
         // Step 7: Classification head
         var logits = Engine.TensorMatMul(normedPooled, _classifierWeights);
         var clsBias = Engine.Reshape(_classifierBias, new[] { 1, _numClasses });
-        logits = Engine.TensorBroadcastAdd(logits, clsBias);
+        logits = Engine.TensorAdd(logits, clsBias);
 
         if (rank == 3)
             return Engine.Reshape(logits, new[] { _numClasses });

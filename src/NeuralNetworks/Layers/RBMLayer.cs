@@ -878,7 +878,7 @@ public partial class RBMLayer<T> : LayerBase<T>, IShapeContract
         var weightsT = Engine.TensorTranspose(_weights);
         var weighted = Engine.TensorMatMul(visible2D, weightsT);
         var biasExpanded = _hiddenBiases.Reshape([1, _hiddenUnits]);
-        var activations = Engine.TensorBroadcastAdd(weighted, biasExpanded);
+        var activations = Engine.TensorAdd(weighted, biasExpanded);
         var probs = Engine.Sigmoid(activations);
 
         return squeeze ? probs.Reshape([_hiddenUnits]) : probs;
@@ -907,7 +907,7 @@ public partial class RBMLayer<T> : LayerBase<T>, IShapeContract
 
         var weighted = Engine.TensorMatMul(hidden2D, _weights);
         var biasExpanded = _visibleBiases.Reshape([1, _visibleUnits]);
-        var activations = Engine.TensorBroadcastAdd(weighted, biasExpanded);
+        var activations = Engine.TensorAdd(weighted, biasExpanded);
         var probs = Engine.Sigmoid(activations);
 
         return squeeze ? probs.Reshape([_visibleUnits]) : probs;

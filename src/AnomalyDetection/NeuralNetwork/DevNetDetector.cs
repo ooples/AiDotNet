@@ -397,21 +397,21 @@ public partial class DevNetDetector<T> : AnomalyDetectorBase<T>
 
         // Layer 1: h1 = ReLU(x @ W1 + b1)  (SIMD via Engine)
         var xTensor = Tensor<T>.FromVector(x).Reshape(1, _inputDim);
-        var h1Pre = Engine.TensorBroadcastAdd(
+        var h1Pre = Engine.TensorAdd(
             Engine.TensorMatMul(xTensor, Tensor<T>.FromMatrix(w1)),
             Tensor<T>.FromVector(b1).Reshape(1, _hiddenDim));
         var h1 = Engine.ReLU(h1Pre.Reshape(_hiddenDim).ToVector());
 
         // Layer 2: h2 = ReLU(h1 @ W2 + b2)  (SIMD via Engine)
         var h1Tensor = Tensor<T>.FromVector(h1).Reshape(1, _hiddenDim);
-        var h2Pre = Engine.TensorBroadcastAdd(
+        var h2Pre = Engine.TensorAdd(
             Engine.TensorMatMul(h1Tensor, Tensor<T>.FromMatrix(w2)),
             Tensor<T>.FromVector(b2).Reshape(1, _hiddenDim));
         var h2 = Engine.ReLU(h2Pre.Reshape(_hiddenDim).ToVector());
 
         // Output layer (linear, SIMD)
         var h2T = Tensor<T>.FromVector(h2).Reshape(1, _hiddenDim);
-        var scorePre = Engine.TensorBroadcastAdd(
+        var scorePre = Engine.TensorAdd(
             Engine.TensorMatMul(h2T, Tensor<T>.FromMatrix(w3)),
             Tensor<T>.FromVector(b3).Reshape(1, 1));
         return scorePre[0];
@@ -434,21 +434,21 @@ public partial class DevNetDetector<T> : AnomalyDetectorBase<T>
 
         // Layer 1: h1 = ReLU(x @ W1 + b1)  (SIMD)
         var xT = Tensor<T>.FromVector(x).Reshape(1, _inputDim);
-        var h1Pre = Engine.TensorBroadcastAdd(
+        var h1Pre = Engine.TensorAdd(
             Engine.TensorMatMul(xT, Tensor<T>.FromMatrix(w1)),
             Tensor<T>.FromVector(b1).Reshape(1, _hiddenDim));
         var h1 = Engine.ReLU(h1Pre.Reshape(_hiddenDim).ToVector());
 
         // Layer 2: h2 = ReLU(h1 @ W2 + b2)  (SIMD)
         var h1T = Tensor<T>.FromVector(h1).Reshape(1, _hiddenDim);
-        var h2Pre = Engine.TensorBroadcastAdd(
+        var h2Pre = Engine.TensorAdd(
             Engine.TensorMatMul(h1T, Tensor<T>.FromMatrix(w2)),
             Tensor<T>.FromVector(b2).Reshape(1, _hiddenDim));
         var h2 = Engine.ReLU(h2Pre.Reshape(_hiddenDim).ToVector());
 
         // Output layer (scalar): score = h2 @ w3[:,0] + b3[0]
         var h2T = Tensor<T>.FromVector(h2).Reshape(1, _hiddenDim);
-        var scorePre = Engine.TensorBroadcastAdd(
+        var scorePre = Engine.TensorAdd(
             Engine.TensorMatMul(h2T, Tensor<T>.FromMatrix(w3)),
             Tensor<T>.FromVector(b3).Reshape(1, 1));
         T score = scorePre[0];

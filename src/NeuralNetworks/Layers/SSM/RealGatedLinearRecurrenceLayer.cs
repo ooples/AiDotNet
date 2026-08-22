@@ -325,7 +325,7 @@ public partial class RealGatedLinearRecurrenceLayer<T> : LayerBase<T>, IShapeCon
         var input2D = Engine.Reshape(input3D, new[] { batchSize * seqLen, modelDim });
         var projected = Engine.TensorMatMul(input2D, _inputProjectionWeights);
         var projBias = Engine.Reshape(_inputProjectionBias, new[] { 1, _recurrenceDimension });
-        projected = Engine.TensorBroadcastAdd(projected, projBias);
+        projected = Engine.TensorAdd(projected, projBias);
         var projected3D = Engine.Reshape(projected, new[] { batchSize, seqLen, _recurrenceDimension });
         _lastProjectedInput = projected3D;
 
@@ -333,12 +333,12 @@ public partial class RealGatedLinearRecurrenceLayer<T> : LayerBase<T>, IShapeCon
         // previous timestep loop emitted O(sequence length) slices, matmuls,
         // reshapes, and tape nodes even though these projections are independent.
         var recGate3D = Engine.Reshape(
-            Engine.Sigmoid(Engine.TensorBroadcastAdd(
+            Engine.Sigmoid(Engine.TensorAdd(
                 Engine.TensorMatMul(projected, _recurrenceGateWeights),
                 Engine.Reshape(_recurrenceGateBias, new[] { 1, _recurrenceDimension }))),
             new[] { batchSize, seqLen, _recurrenceDimension });
         var inpGate3D = Engine.Reshape(
-            Engine.Sigmoid(Engine.TensorBroadcastAdd(
+            Engine.Sigmoid(Engine.TensorAdd(
                 Engine.TensorMatMul(projected, _inputGateWeights),
                 Engine.Reshape(_inputGateBias, new[] { 1, _recurrenceDimension }))),
             new[] { batchSize, seqLen, _recurrenceDimension });
@@ -354,7 +354,7 @@ public partial class RealGatedLinearRecurrenceLayer<T> : LayerBase<T>, IShapeCon
         var outFlat = Engine.Reshape(output, new[] { batchSize * seqLen, _recurrenceDimension });
         var outputFlat = Engine.TensorMatMul(outFlat, _outputProjectionWeights);
         var outBias = Engine.Reshape(_outputProjectionBias, new[] { 1, _modelDimension });
-        outputFlat = Engine.TensorBroadcastAdd(outputFlat, outBias);
+        outputFlat = Engine.TensorAdd(outputFlat, outBias);
         var output3D = Engine.Reshape(outputFlat, new[] { batchSize, seqLen, _modelDimension });
 
         // Residual skip. The gated linear recurrence above is computed with in-place state
@@ -400,7 +400,7 @@ public partial class RealGatedLinearRecurrenceLayer<T> : LayerBase<T>, IShapeCon
         // Griffin Appendix A, Eq. 6: a_t = exp(-8*softplus(Lambda)*r_t).
         var negativeC = Tensor<T>.CreateDefault(
             new[] { _recurrenceDimension }, NumOps.FromDouble(-8.0));
-        var logTransition = Engine.TensorBroadcastMultiply(
+        var logTransition = Engine.TensorMultiply(
             recGate,
             Engine.TensorMultiply(Engine.Softplus(_decayParam), negativeC));
         var transition = Engine.TensorExp(logTransition);

@@ -506,8 +506,8 @@ public partial class RIFE<T> : FrameInterpolationBase<T>
         var inverseMask = Engine.TensorAddScalar(
             Engine.TensorNegate(_cachedFusionMask), NumOps.One);
         var blended = Engine.TensorAdd(
-            Engine.TensorBroadcastMultiply(_cachedFrame1Warped, _cachedFusionMask),
-            Engine.TensorBroadcastMultiply(_cachedFrame2Warped, inverseMask));
+            Engine.TensorMultiply(_cachedFrame1Warped, _cachedFusionMask),
+            Engine.TensorMultiply(_cachedFrame2Warped, inverseMask));
         var rifeOutput = Engine.TensorClamp(
             Engine.TensorAdd(blended, residual), NumOps.Zero, NumOps.One);
         return addedBatch

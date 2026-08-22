@@ -407,7 +407,7 @@ public partial class AnomalyTransformerDetector<T> : AnomalyDetectorBase<T>
         var ffPre = Engine.TensorMatMul(attnTensor, w1Tensor);
         // Add bias: broadcast [1, ffDim] across [seqLen, ffDim]
         var b1Broadcast = Tensor<T>.FromVector(b1).Reshape(1, ffDim);
-        ffPre = Engine.TensorBroadcastAdd(ffPre, b1Broadcast);
+        ffPre = Engine.TensorAdd(ffPre, b1Broadcast);
         // ReLU
         var ffHiddenTensor = Engine.ReLU(ffPre);
         ffHidden = ffHiddenTensor.ToMatrix();
@@ -416,7 +416,7 @@ public partial class AnomalyTransformerDetector<T> : AnomalyDetectorBase<T>
         var w2Tensor = Tensor<T>.FromMatrix(W2);
         var ffOut = Engine.TensorMatMul(ffHiddenTensor, w2Tensor);
         var b2Broadcast = Tensor<T>.FromVector(b2).Reshape(1, _modelDim);
-        ffOut = Engine.TensorBroadcastAdd(ffOut, b2Broadcast);
+        ffOut = Engine.TensorAdd(ffOut, b2Broadcast);
         var output = Engine.TensorAdd(ffOut, attnTensor).ToMatrix();
 
         // Compute prior association and discrepancy
@@ -1067,13 +1067,13 @@ public partial class AnomalyTransformerDetector<T> : AnomalyDetectorBase<T>
             var xTensor = Tensor<T>.FromVector(xRow).Reshape(1, _modelDim);
 
             // Layer 1: h = ReLU(x @ W1 + b1)  (SIMD via Engine)
-            var h1Pre = Engine.TensorBroadcastAdd(
+            var h1Pre = Engine.TensorAdd(
                 Engine.TensorMatMul(xTensor, w1Tensor), b1Tensor);
             var hVec = Engine.ReLU(h1Pre.Reshape(ffDim).ToVector());
 
             // Layer 2: out = h @ W2 + b2  (SIMD via Engine)
             var hTensor = Tensor<T>.FromVector(hVec).Reshape(1, ffDim);
-            var l2Out = Engine.TensorBroadcastAdd(
+            var l2Out = Engine.TensorAdd(
                 Engine.TensorMatMul(hTensor, w2Tensor), b2Tensor).Reshape(_modelDim).ToVector();
 
             // Residual connection

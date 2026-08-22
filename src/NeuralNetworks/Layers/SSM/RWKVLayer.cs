@@ -415,9 +415,9 @@ public partial class RWKVLayer<T> : LayerBase<T>, IShapeContract
             ? Engine.TensorConcatenate(new[] { xPrev0, Engine.TensorNarrow(x3, 1, 0, seqLen - 1) }, axis: 1)
             : xPrev0;
 
-        var rInAll = Engine.TensorAdd(Engine.TensorBroadcastMultiply(x3, mixR3), Engine.TensorBroadcastMultiply(xShifted, invR3));
-        var kInAll = Engine.TensorAdd(Engine.TensorBroadcastMultiply(x3, mixK3), Engine.TensorBroadcastMultiply(xShifted, invK3));
-        var vInAll = Engine.TensorAdd(Engine.TensorBroadcastMultiply(x3, mixV3), Engine.TensorBroadcastMultiply(xShifted, invV3));
+        var rInAll = Engine.TensorAdd(Engine.TensorMultiply(x3, mixR3), Engine.TensorMultiply(xShifted, invR3));
+        var kInAll = Engine.TensorAdd(Engine.TensorMultiply(x3, mixK3), Engine.TensorMultiply(xShifted, invK3));
+        var vInAll = Engine.TensorAdd(Engine.TensorMultiply(x3, mixV3), Engine.TensorMultiply(xShifted, invV3));
 
         var Rall = Engine.Reshape(Engine.TensorMatMul(Engine.Reshape(rInAll, new[] { bsl, _modelDimension }), _receptanceWeights), new[] { batchSize, seqLen, _modelDimension });
         var Kall = Engine.Reshape(Engine.TensorMatMul(Engine.Reshape(kInAll, new[] { bsl, _modelDimension }), _keyWeights), new[] { batchSize, seqLen, _modelDimension });
@@ -459,7 +459,7 @@ public partial class RWKVLayer<T> : LayerBase<T>, IShapeContract
             var r_t = Engine.Reshape(Engine.TensorNarrow(Rall, 1, t, 1), new[] { batchSize, _modelDimension });
 
             // Output for this token (current key boosted by the time_first bonus u).
-            var ww = Engine.TensorBroadcastAdd(k_t, u);
+            var ww = Engine.TensorAdd(k_t, u);
             var q = Engine.TensorMax(pp, ww);
             var e1 = Engine.TensorExp(Engine.TensorSubtract(pp, q));
             var e2 = Engine.TensorExp(Engine.TensorSubtract(ww, q));
@@ -469,7 +469,7 @@ public partial class RWKVLayer<T> : LayerBase<T>, IShapeContract
             outputSlices.Add(Engine.Reshape(Engine.TensorMultiply(Engine.Sigmoid(r_t), wkv), new[] { batchSize, 1, _modelDimension }));
 
             // State update with the static time-decay w (no bonus on the carried state).
-            var ww2 = Engine.TensorBroadcastAdd(pp, w);
+            var ww2 = Engine.TensorAdd(pp, w);
             var q2 = Engine.TensorMax(ww2, k_t);
             var e1b = Engine.TensorExp(Engine.TensorSubtract(ww2, q2));
             var e2b = Engine.TensorExp(Engine.TensorSubtract(k_t, q2));
@@ -516,10 +516,10 @@ public partial class RWKVLayer<T> : LayerBase<T>, IShapeContract
             ? Engine.TensorConcatenate(new[] { xPrev0, Engine.TensorNarrow(x3, 1, 0, seqLen - 1) }, axis: 1)
             : xPrev0;
         var rIn = Engine.Reshape(
-            Engine.TensorAdd(Engine.TensorBroadcastMultiply(x3, mixR3), Engine.TensorBroadcastMultiply(xShifted, invR3)),
+            Engine.TensorAdd(Engine.TensorMultiply(x3, mixR3), Engine.TensorMultiply(xShifted, invR3)),
             new[] { bsl, _modelDimension });
         var kIn = Engine.Reshape(
-            Engine.TensorAdd(Engine.TensorBroadcastMultiply(x3, mixK3), Engine.TensorBroadcastMultiply(xShifted, invK3)),
+            Engine.TensorAdd(Engine.TensorMultiply(x3, mixK3), Engine.TensorMultiply(xShifted, invK3)),
             new[] { bsl, _modelDimension });
 
         // r = sigmoid(W_r · rIn); k = W_k · kIn; squared-ReLU = ReLU(k)^2; v = W_v · kSq; out = sigmoid(r)·v.

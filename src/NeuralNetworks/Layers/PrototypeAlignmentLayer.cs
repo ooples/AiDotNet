@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 
 namespace AiDotNet.NeuralNetworks.Layers;
@@ -168,8 +168,8 @@ public partial class PrototypeAlignmentLayer<T> : LayerBase<T>
         var protoNormRow = Engine.TensorTranspose(protoNormCol);                       // [1, K]
 
         // Cosine sims = dotProducts / (inputNorm * protoNormRow), with both broadcasts.
-        var denom = Engine.TensorBroadcastMultiply(inputNorm, protoNormRow);           // [N, K]
-        var sims = Engine.TensorBroadcastDivide(dotProducts, denom);                   // [N, K]
+        var denom = Engine.TensorMultiply(inputNorm, protoNormRow);           // [N, K]
+        var sims = Engine.TensorDivide(dotProducts, denom);                   // [N, K]
 
         // Softmax over the prototype axis so each row is a distribution over K.
         var weights = Engine.TensorSoftmax(sims, axis: 1);                             // [N, K]
