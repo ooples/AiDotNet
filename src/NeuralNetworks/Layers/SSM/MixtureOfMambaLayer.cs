@@ -293,7 +293,7 @@ public partial class MixtureOfMambaLayer<T> : LayerBase<T>, IShapeContract
 
         // Step 1: Router - compute expert selection per token
         var inputFlat = Engine.Reshape(input3D, new[] { batchSize * seqLen, _modelDimension });
-        var routerLogits = Engine.TensorBroadcastAdd(
+        var routerLogits = Engine.TensorAdd(
             Engine.TensorMatMul(inputFlat, _routerWeights),
             Engine.Reshape(_routerBias, new[] { 1, _numExperts }));
         _lastRouterLogits = routerLogits;
@@ -312,9 +312,9 @@ public partial class MixtureOfMambaLayer<T> : LayerBase<T>, IShapeContract
                 topKIndices[token, selected] = expert;
                 activeMaskFlat[token, expert] = NumOps.One;
             }
-        var maskedWeights = Engine.TensorBroadcastMultiply(routerProbabilities, activeMaskFlat);
+        var maskedWeights = Engine.TensorMultiply(routerProbabilities, activeMaskFlat);
         var weightSums = Engine.ReduceSum(maskedWeights, new[] { 1 }, keepDims: true);
-        var routerWeightsResult = Engine.TensorBroadcastDivide(
+        var routerWeightsResult = Engine.TensorDivide(
             maskedWeights, Engine.TensorAddScalar(weightSums, NumOps.FromDouble(1e-10)));
         _lastRouterWeightsResult = routerWeightsResult;
         _lastTopKIndices = topKIndices;
@@ -330,12 +330,12 @@ public partial class MixtureOfMambaLayer<T> : LayerBase<T>, IShapeContract
         // Step 3: Combine expert outputs weighted by router scores
         var routing4D = Engine.Reshape(
             routerWeightsResult, new[] { batchSize, seqLen, _numExperts, 1 });
-        var weightedExperts = Engine.TensorBroadcastMultiply(expertOutputs, routing4D);
+        var weightedExperts = Engine.TensorMultiply(expertOutputs, routing4D);
         var moeOutput = Engine.ReduceSum(weightedExperts, new[] { 2 }, keepDims: false);
         _lastMoEOutput = moeOutput;
 
         // Step 4: Output gate
-        var gateRaw = Engine.Reshape(Engine.TensorBroadcastAdd(
+        var gateRaw = Engine.Reshape(Engine.TensorAdd(
             Engine.TensorMatMul(inputFlat, _outputGateWeights),
             Engine.Reshape(_outputGateBias, new[] { 1, _modelDimension })), new[] { batchSize, seqLen, _modelDimension });
         var gate = Engine.Swish(gateRaw);
@@ -349,7 +349,7 @@ public partial class MixtureOfMambaLayer<T> : LayerBase<T>, IShapeContract
         var gatedFlat = Engine.Reshape(gatedOutput, new[] { batchSize * seqLen, _modelDimension });
         var outputFlat = Engine.TensorMatMul(gatedFlat, _outputProjectionWeights);
         var outBias = Engine.Reshape(_outputProjectionBias, new[] { 1, _modelDimension });
-        outputFlat = Engine.TensorBroadcastAdd(outputFlat, outBias);
+        outputFlat = Engine.TensorAdd(outputFlat, outBias);
         var output3D = Engine.Reshape(outputFlat, new[] { batchSize, seqLen, _modelDimension });
 
         var result = ApplyActivation(output3D);

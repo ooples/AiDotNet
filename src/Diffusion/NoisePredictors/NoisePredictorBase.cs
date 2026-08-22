@@ -1,4 +1,4 @@
-using System.Linq;
+﻿using System.Linq;
 using AiDotNet.Autodiff;
 using AiDotNet.Engines;
 using AiDotNet.Extensions;
@@ -623,10 +623,57 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape,
     /// </summary>
     private IEnumerable<LayerBase<T>.TrainableParameterValueSlot> EnumerateParameterValueSlots()
     {
+        bool streamingEngaged = false;
+
         foreach (var layer in ReflectInstanceLayers(this))
         {
             if (layer is not LayerBase<T> lb) continue;
-            foreach (var slot in lb.GetOwnTrainableParameterValueSlots())
+
+            // This is a VALUE boundary -- every caller below is about to read or write real
+            // scalars -- and a component whose weights are still lazy reports ScalarCount 0 and is
+            // then skipped, silently shrinking the surface this method describes. GetParameterChunks
+            // materializes per layer and so has no such gap: on a cloned UNetNoisePredictor it
+            // counted 954,084 scalars while this enumeration yielded 904,740, and Clone() handed the
+            // larger stream to a SetParameters sized by the smaller one -- "Expected 904740
+            // parameters, got 954084", the whole of failure class P1.
+            //
+            // Only the layers the DECLARATION reports as not yet materialized are prepared. That
+            // set is exactly the one whose slots would come up short, it is computed from the
+            // generated manifest without allocating a value, and it is the same set the chunk path
+            // would have materialized anyway. Preparing every layer unconditionally instead also
+            // fixes P1, but recurses through each sub-layer tree on every enumeration and lifts
+            // peak memory enough to abort the run: the diffusion family died on a host crash after
+            // 65 of 206 tests where the unmodified base completed all 206.
+            if (lb.DeclaredSurfaceNeedsMaterialization())
+            {
+                // Engage streaming before the first materialization, exactly as GetParameterChunks
+                // does and for the reason recorded there: materializing lazy weights routes through
+                // TensorAllocator.RentPinned and accumulates the whole weight set in the pinned heap,
+                // which OOMs a billion-parameter predictor. Streaming flags the layers so
+                // AllocateLazyWeight routes to WeightRegistry.AllocateStreaming and the resident set
+                // stays bounded. Deferred to here so a fully-resident predictor -- the common case --
+                // never pays for the ParameterCount walk the threshold test needs.
+                if (!streamingEngaged)
+                {
+                    MaybeEngageWeightStreaming();
+                    streamingEngaged = true;
+                }
+
+                ((AiDotNet.Models.Parameters.IParameterSurfaceLifecycle)lb)
+                    .PrepareParameterSurface(AiDotNet.Models.Parameters.ParameterSurfaceIntent.Read);
+            }
+
+            // STATE slots, not trainable-only: this enumeration backs the flat vector and the chunk
+            // stream, and both must carry everything a restore has to reproduce. ParameterCount
+            // answers from the declaration, which counts persistent buffers, so enumerating only
+            // the trainable ones made the two surfaces disagree on width -- and
+            // SetParameters(GetParameters()) then failed on this predictor's own output. A
+            // checkpoint that silently drops a BatchNorm's running statistics does not restore the
+            // model it claims to either.
+            //
+            // The trainable-only view is still correct for gradients and copy-on-write, which are
+            // about what TRAINS rather than what must be RESTORED, and those paths keep using it.
+            foreach (var slot in lb.GetOwnParameterStateValueSlots())
             {
                 if (slot.ScalarCount == 0) continue;
                 yield return slot;
@@ -1696,6 +1743,21 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape,
         foreach (var slot in slots)
         {
             expected += slot.ScalarCount;
+        }
+
+        // Hold the VALUE surface to the generated declaration, exactly as GetParameterChunks holds
+        // the chunk stream to it. The declaration is the single source of truth for how wide this
+        // predictor is, and it can prove that width before a single value is allocated.
+        //
+        // Without this check the failure was silent and arrived far away: a value enumeration that
+        // came up short simply reported a smaller `expected`, and the caller learned about it as an
+        // opaque "Expected 904740 parameters, got 954084" from whatever happened to hand it a
+        // full-width vector. Comparing against the declaration names the real fault -- this
+        // predictor's value surface is incomplete -- at the point where it is incomplete.
+        if (TryGetDeclaredParameterCount(out long declaredCount, out _) && expected != declaredCount)
+        {
+            throw new AiDotNet.Models.Parameters.ParameterContractViolationException(
+                "restore values", GetType().Name, declaredCount, expected);
         }
 
         if (parameters.Length != expected)

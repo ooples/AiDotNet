@@ -123,7 +123,7 @@ internal class GatedResidualNetwork<T>
         int outSize = weight.Shape[0];
         var result = Engine.TensorMatMul(x, Engine.TensorTranspose(weight));
         if (bias != null)
-            result = Engine.TensorBroadcastAdd(result, Engine.Reshape(bias, [1, outSize]));
+            result = Engine.TensorAdd(result, Engine.Reshape(bias, [1, outSize]));
         return result;
     }
 

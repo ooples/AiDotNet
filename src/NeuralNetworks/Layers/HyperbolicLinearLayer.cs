@@ -319,7 +319,7 @@ public partial class HyperbolicLinearLayer<T> : LayerBase<T>, IShapeContract
         var sqrtCraw = Engine.TensorMultiplyScalar(rawNorm, sqrtC);              // √c·||v||/√d
         var tanhFactor0 = Engine.TensorTanh(sqrtCraw);                          // tanh(√c·||v||)
         var projScale0 = Engine.TensorDivide(tanhFactor0, Engine.TensorAddScalar(sqrtCraw, eps)); // tanh(√c·||v||)/(√c·||v||)
-        var ballInput = Engine.TensorBroadcastMultiply(projScale0, scaledInput); // exp_0(v/√d), inside ball, relative scale preserved
+        var ballInput = Engine.TensorMultiply(projScale0, scaledInput); // exp_0(v/√d), inside ball, relative scale preserved
 
         // Step 1: Linear projection Mx = x_ball @ W^T
         // Always derive the transpose inside the current engine graph. A cached
@@ -357,13 +357,13 @@ public partial class HyperbolicLinearLayer<T> : LayerBase<T>, IShapeContract
 
         // Step 6: Result in Poincaré ball = scale * Mx  [batch, outputFeatures]
         // Broadcast scale [batch,1] across mx [batch, outputFeatures] via Engine
-        var resultInBall = Engine.TensorBroadcastMultiply(scale, mx);
+        var resultInBall = Engine.TensorMultiply(scale, mx);
 
         // Step 7: Add scalar bias per output — _biases is [outputFeatures]
         // Per Ganea et al. 2018, the Möbius matmul output is a point in the Poincaré ball.
         // Output the ball coordinates directly (not distance-from-origin, which would be scalar).
         var bias2D = Engine.Reshape(_biases, [1, OutputFeatures]);
-        var output = Engine.TensorBroadcastAdd(resultInBall, bias2D); // [batch, outputFeatures]
+        var output = Engine.TensorAdd(resultInBall, bias2D); // [batch, outputFeatures]
 
         // Project back into Poincaré ball: if ||x|| >= maxNorm, scale x to maxNorm * x/||x||
         // Per-coordinate clamp is insufficient — must enforce the L2 norm constraint.
@@ -374,7 +374,7 @@ public partial class HyperbolicLinearLayer<T> : LayerBase<T>, IShapeContract
         var maxNormTensor = Tensor<T>.CreateDefault([batchSize, 1], NumOps.FromDouble(maxNorm));
         var projScale = Engine.TensorDivide(maxNormTensor, Engine.TensorAddScalar(norm, NumOps.FromDouble(1e-8)));
         projScale = Engine.TensorClamp(projScale, NumOps.Zero, NumOps.One); // clamp to [0, 1]
-        output = Engine.TensorBroadcastMultiply(projScale, output); // [batch, outputFeatures]
+        output = Engine.TensorMultiply(projScale, output); // [batch, outputFeatures]
 
         _lastOutput = output;
 

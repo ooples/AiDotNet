@@ -86,15 +86,26 @@ public partial class StableVideoSR<T> : VideoSuperResolutionBase<T>
     }
 
     /// <summary>Creates a StableVideoSR model in native training mode.</summary>
+    /// <param name="architecture">The wrapper input/output architecture.</param>
+    /// <param name="options">StableVideoSR inference and training options.</param>
+    /// <param name="optimizer">Optional optimizer for wrapper-owned layers.</param>
+    /// <param name="conditioner">Optional text conditioner used by the default diffusion core.</param>
+    /// <param name="diffusionCore">
+    /// Optional architecture-compatible Upscale-A-Video core. When omitted, the released
+    /// paper-scale core is created. This injection point supports constrained deployments and
+    /// integration tests without changing any production defaults.
+    /// </param>
     public StableVideoSR(NeuralNetworkArchitecture<T> architecture, StableVideoSROptions? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        IConditioningModule<T>? conditioner = null)
+        IConditioningModule<T>? conditioner = null,
+        UpscaleAVideoModel<T>? diffusionCore = null)
         : base(architecture)
     {
         _options = options is null ? new StableVideoSROptions() : new StableVideoSROptions(options);
         _options.ValidateNativePaperContract();
         _useNativeMode = true;
         _conditioner = conditioner;
+        _diffusionCore = diffusionCore;
         _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         ScaleFactor = _options.ScaleFactor;
         InitializeLayers();
@@ -213,7 +224,7 @@ public partial class StableVideoSR<T> : VideoSuperResolutionBase<T>
         {
             Layers.AddRange(Architecture.Layers);
         }
-        else
+        else if (_diffusionCore is null)
         {
             _diffusionCore = new UpscaleAVideoModel<T>(
                 conditioner: _conditioner, seed: Architecture.RandomSeed);
@@ -256,6 +267,14 @@ public partial class StableVideoSR<T> : VideoSuperResolutionBase<T>
         {
             SetTrainingMode(false);
         }
+    }
+
+    /// <inheritdoc />
+    public override Vector<T> GetParameterGradients()
+    {
+        if (_diffusionCore is not null)
+            return _diffusionCore.GetLastTrainingGradients();
+        return base.GetParameterGradients();
     }
 
     protected override Tensor<T> PreprocessFrames(Tensor<T> rawFrames) => NormalizeFrames(rawFrames);
@@ -378,6 +397,27 @@ public partial class StableVideoSR<T> : VideoSuperResolutionBase<T>
         if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
             return new StableVideoSR<T>(Architecture, p, new StableVideoSROptions(_options));
         return new StableVideoSR<T>(Architecture, new StableVideoSROptions(_options), conditioner: _conditioner);
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// The native diffusion core is registered as the model's trainable component but is not part
+    /// of the outer wrapper's layer list. The base serializer therefore cannot see its size before
+    /// allocating one contiguous payload, which exceeds the CLR array limit for the released graph.
+    /// Clone the component through its own architecture-preserving clone contract instead.
+    /// </remarks>
+    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
+    {
+        ThrowIfDisposed();
+        if (!_useNativeMode || _diffusionCore is null)
+            return base.DeepCopy();
+
+        var coreCopy = (UpscaleAVideoModel<T>)_diffusionCore.Clone();
+        return new StableVideoSR<T>(
+            Architecture,
+            new StableVideoSROptions(_options),
+            conditioner: _conditioner,
+            diffusionCore: coreCopy);
     }
 
     #endregion

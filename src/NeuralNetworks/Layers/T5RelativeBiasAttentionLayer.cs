@@ -360,12 +360,12 @@ public partial class T5RelativeBiasAttentionLayer<T> : LayerBase<T>, IShapeContr
         //     application); a raw TensorMultiplyScalar is not.
         var scaleTensor = new Tensor<T>(new[] { 1 });
         scaleTensor[0] = NumOps.FromDouble(1.0 / Math.Sqrt(_headDim));
-        var scoresScaled = Engine.TensorBroadcastMultiply(scoresUnscaled, scaleTensor);
+        var scoresScaled = Engine.TensorMultiply(scoresUnscaled, scaleTensor);
 
         // 3c. Add T5 relative-position bias (Raffel 2020 §2.1) before softmax.
         //     biasForAttn shape [H, S, S] broadcasts against [B, H, S, S]
         //     via BroadcastAdd (TensorAdd requires exact shape match).
-        var scoresWithBias = Engine.TensorBroadcastAdd(scoresScaled, biasForAttn);
+        var scoresWithBias = Engine.TensorAdd(scoresScaled, biasForAttn);
 
         // 3d. Row-softmax over keys (last axis). Tape-tracked.
         var attnProbs = Engine.TensorSoftmax(scoresWithBias, axis: 3);

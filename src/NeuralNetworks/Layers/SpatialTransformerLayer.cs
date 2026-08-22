@@ -728,14 +728,14 @@ public partial class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLa
         // First layer: localization1 = flattenedInput @ _localizationWeights1 + _localizationBias1
         var localization1 = Engine.TensorMatMul(flattenedInput, _localizationWeights1);
         var bias1Expanded = Engine.Reshape(_localizationBias1, [1, _localizationBias1.Shape[0]]);
-        localization1 = Engine.TensorBroadcastAdd(localization1, bias1Expanded);
+        localization1 = Engine.TensorAdd(localization1, bias1Expanded);
         localization1 = ApplyActivation(localization1);
         _lastLocalization1 = localization1;
 
         // Second layer: transformationParams = localization1 @ _localizationWeights2 + _localizationBias2
         var transformationParams = Engine.TensorMatMul(localization1, _localizationWeights2);
         var bias2Expanded = Engine.Reshape(_localizationBias2, [1, _localizationBias2.Shape[0]]);
-        transformationParams = Engine.TensorBroadcastAdd(transformationParams, bias2Expanded);
+        transformationParams = Engine.TensorAdd(transformationParams, bias2Expanded);
 
         _lastTransformationMatrix = ConvertToTransformationMatrix(transformationParams);
 
@@ -837,7 +837,7 @@ public partial class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLa
         var diagBias = new Tensor<T>([1, 6]);
         diagBias[0, 0] = NumOps.One;
         diagBias[0, 4] = NumOps.One;
-        var biased = Engine.TensorBroadcastAdd(activated, diagBias);
+        var biased = Engine.TensorAdd(activated, diagBias);
 
         return Engine.Reshape(biased, [batchSize, 2, 3]);
     }

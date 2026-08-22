@@ -326,7 +326,7 @@ public partial class RodimusLayer<T> : LayerBase<T>, IShapeContract
         _lastValue = v;
 
         // Step 2: Data-dependent temperature via softplus
-        var tempRaw = Engine.Reshape(Engine.TensorBroadcastAdd(
+        var tempRaw = Engine.Reshape(Engine.TensorAdd(
             Engine.TensorMatMul(inputFlat, _temperatureWeights),
             Engine.Reshape(_temperatureBias, new[] { 1, _numHeads })), new[] { batchSize, seqLen, _numHeads });
         _lastTemperatureRaw = tempRaw;
@@ -337,14 +337,14 @@ public partial class RodimusLayer<T> : LayerBase<T>, IShapeContract
         _lastTemperature = temperature;
 
         // Step 3: Forget gate
-        var forgetRaw = Engine.Reshape(Engine.TensorBroadcastAdd(
+        var forgetRaw = Engine.Reshape(Engine.TensorAdd(
             Engine.TensorMatMul(inputFlat, _forgetGateWeights),
             Engine.Reshape(_forgetGateBias, new[] { 1, _numHeads })), new[] { batchSize, seqLen, _numHeads });
         var forgetGate = Engine.Sigmoid(forgetRaw);
         _lastForgetGate = forgetGate;
 
         // Step 4: Output gate
-        var gateRaw = Engine.Reshape(Engine.TensorBroadcastAdd(
+        var gateRaw = Engine.Reshape(Engine.TensorAdd(
             Engine.TensorMatMul(inputFlat, _outputGateWeights),
             Engine.Reshape(_outputGateBias, new[] { 1, _modelDimension })), new[] { batchSize, seqLen, _modelDimension });
         var outputGate = Engine.Swish(gateRaw);
@@ -362,7 +362,7 @@ public partial class RodimusLayer<T> : LayerBase<T>, IShapeContract
         var gatedFlat = Engine.Reshape(gatedOutput, new[] { batchSize * seqLen, _modelDimension });
         var outputFlat = Engine.TensorMatMul(gatedFlat, _outputProjectionWeights);
         var outBias = Engine.Reshape(_outputProjectionBias, new[] { 1, _modelDimension });
-        outputFlat = Engine.TensorBroadcastAdd(outputFlat, outBias);
+        outputFlat = Engine.TensorAdd(outputFlat, outBias);
         var output3D = Engine.Reshape(outputFlat, new[] { batchSize, seqLen, _modelDimension });
 
         var result = ApplyActivation(output3D);

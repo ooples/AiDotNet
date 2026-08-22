@@ -284,6 +284,13 @@ public partial class UpscaleAVideoModel<T> : VideoDiffusionModelBase<T>
         }
     }
 
+    /// <summary>
+    /// StableVideoSR delegates its public gradient surface to this component. Retain the eager tape
+    /// gradients when bounded; the paper-scale graph still uses the base size guard and reports the
+    /// surface as unavailable rather than allocating a second model-sized flat buffer.
+    /// </summary>
+    protected override bool RetainsLastTrainingGradients => true;
+
     #endregion
 
     #region Constructor
@@ -951,7 +958,7 @@ public partial class UpscaleAVideoModel<T> : VideoDiffusionModelBase<T>
         var scale = new Tensor<T>([1, 1, 1, 2]);
         scale[0, 0, 0, 0] = NumOps.FromDouble(width <= 1 ? 0.0 : 2.0 / (width - 1));
         scale[0, 0, 0, 1] = NumOps.FromDouble(height <= 1 ? 0.0 : 2.0 / (height - 1));
-        var normalizedFlow = Engine.TensorBroadcastMultiply(
+        var normalizedFlow = Engine.TensorMultiply(
             Engine.TensorPermute(flow, [0, 2, 3, 1]), scale);
         var grid = Engine.TensorAdd(baseGrid, normalizedFlow);
         return Engine.GridSample(

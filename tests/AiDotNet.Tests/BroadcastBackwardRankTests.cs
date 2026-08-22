@@ -45,8 +45,8 @@ public class BroadcastBackwardRankTests
         var mean = T([batch, 1], -0.25);
 
         using var tape = new GradientTape<double>();
-        var scaled = engine.TensorBroadcastMultiply(work, std);
-        var shifted = engine.TensorBroadcastAdd(scaled, mean);
+        var scaled = engine.TensorMultiply(work, std);
+        var shifted = engine.TensorAdd(scaled, mean);
 
         var axes = new int[shifted.Shape.Length];
         for (int i = 0; i < axes.Length; i++) axes[i] = i;

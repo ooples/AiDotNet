@@ -1,9 +1,10 @@
+using System.IO;
+using System.Threading.Tasks;
 using AiDotNet.Enums;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
-using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.UnitTests.NeuralNetworks.Layers;
 
@@ -302,6 +303,55 @@ public class GroupedQueryAttentionLayerTests
 
         // K: [embDim, numKVHeads * headDim] = [64, 16]
         Assert.Equal(new[] { embDim, numKVHeads * headDim }, kWeights.Shape.ToArray());
+    }
+
+    [Theory]
+    [InlineData(false, 5)]
+    [InlineData(true, 8)]
+    public void SerializeDeserialize_ProjectionBiasPresence_RoundTripsExactly(
+        bool useProjectionBias,
+        int expectedTensorCount)
+    {
+        const int sequenceLength = 4;
+        const int embeddingDimension = 8;
+        var input = CreateRandomTensor([1, sequenceLength, embeddingDimension]);
+        var source = new GroupedQueryAttentionLayer<float>(
+            sequenceLength,
+            embeddingDimension,
+            numHeads: 2,
+            numKVHeads: 1,
+            useProjectionBias: useProjectionBias);
+        source.SetTrainingMode(false);
+
+        Assert.Equal(expectedTensorCount, source.GetTrainableParameters().Count);
+        var expectedParameters = source.GetParameters();
+        var expectedOutput = source.Forward(input).Clone();
+
+        using var stream = new MemoryStream();
+        using (var writer = new BinaryWriter(stream, System.Text.Encoding.UTF8, leaveOpen: true))
+            source.Serialize(writer);
+
+        var restored = new GroupedQueryAttentionLayer<float>(
+            sequenceLength,
+            embeddingDimension,
+            numHeads: 2,
+            numKVHeads: 1,
+            useProjectionBias: useProjectionBias);
+        stream.Position = 0;
+        using (var reader = new BinaryReader(stream, System.Text.Encoding.UTF8, leaveOpen: true))
+            restored.Deserialize(reader);
+
+        restored.SetTrainingMode(false);
+        Assert.Equal(expectedTensorCount, restored.GetTrainableParameters().Count);
+        Assert.Equal(expectedParameters.ToArray(), restored.GetParameters().ToArray());
+
+        var actualOutput = restored.Forward(input);
+        Assert.Equal(expectedOutput.Shape.ToArray(), actualOutput.Shape.ToArray());
+        for (int i = 0; i < expectedOutput.Length; i++)
+        {
+            Assert.True(MathF.Abs(expectedOutput[i] - actualOutput[i]) <= 1e-6f,
+                $"Output mismatch at {i}: expected={expectedOutput[i]:R}, actual={actualOutput[i]:R}.");
+        }
     }
 
     #region Helpers
