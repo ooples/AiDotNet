@@ -78,24 +78,44 @@ public class ShapeContractGenerator : IIncrementalGenerator
     /// <inheritdoc />
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
+        // Symbols must not live in cached pipeline state: an ISymbol roots the entire Compilation,
+        // so every cached entry pins a compilation in memory. That is the leak this whole series
+        // targets, and this generator had it despite never touching CompilationProvider -- which is
+        // exactly why scoping the original work by "uses CompilationProvider" missed it.
+        //
+        // The pipeline now carries metadata names and the symbol is re-resolved at the point of use.
+        // Introducing CompilationProvider here costs nothing in caching terms: this generator could
+        // never cache anyway, because a symbol is not value-equatable. Retention is fixed;
+        // re-execution is not. Making it genuinely cacheable means lifting all of the symbol
+        // reading below into the transform behind a value model, which is a larger and riskier
+        // change than the retention fix warrants on its own.
         var candidates = context.SyntaxProvider
             .CreateSyntaxProvider(
                 predicate: static (node, _) =>
                     node is Microsoft.CodeAnalysis.CSharp.Syntax.TypeDeclarationSyntax { AttributeLists.Count: > 0 },
-                transform: static (ctx, _) => ctx.SemanticModel.GetDeclaredSymbol(ctx.Node) as INamedTypeSymbol)
-            .Where(static s => s is not null)
-            .Collect();
+                transform: static (ctx, _) =>
+                    ctx.SemanticModel.GetDeclaredSymbol(ctx.Node) is INamedTypeSymbol symbol
+                        ? MetadataNameOf(symbol)
+                        : null)
+            .Where(static n => n is not null)
+            .Select(static (n, _) => n ?? string.Empty)
+            .Collect()
+            .Combine(context.CompilationProvider);
 
-        context.RegisterSourceOutput(candidates, static (spc, symbols) => Emit(spc, symbols));
+        context.RegisterSourceOutput(candidates, static (spc, source) => Emit(spc, source.Left, source.Right));
     }
 
-    private static void Emit(SourceProductionContext spc, ImmutableArray<INamedTypeSymbol?> symbols)
+    private static void Emit(SourceProductionContext spc, ImmutableArray<string> metadataNames, Compilation compilation)
     {
         var seen = new HashSet<string>();
+        var resolved = new HashSet<string>(System.StringComparer.Ordinal);
 
-        foreach (var type in symbols)
+        foreach (var metadataName in metadataNames)
         {
-            if (type is null) continue;
+            if (metadataName.Length == 0) continue;
+            if (!resolved.Add(metadataName)) continue;
+
+            if (compilation.GetTypeByMetadataName(metadataName) is not INamedTypeSymbol type) continue;
             if (!seen.Add(type.ToDisplayString())) continue;
 
             var elementWise = type.GetAttributes()
@@ -350,4 +370,25 @@ public class ShapeContractGenerator : IIncrementalGenerator
     /// </remarks>
     private static string AxisName(int value) =>
         (Enum.IsDefined(typeof(Axis), value) ? (Axis)value : Axis.Other).ToString();
+
+    /// <summary>
+    /// Builds the metadata name GetTypeByMetadataName expects, including the arity suffix for
+    /// generics and '+' separators for nested types.
+    /// </summary>
+    private static string MetadataNameOf(INamedTypeSymbol symbol)
+    {
+        var name = symbol.MetadataName;
+        for (var containing = symbol.ContainingType; containing is not null; containing = containing.ContainingType)
+        {
+            name = containing.MetadataName + "+" + name;
+        }
+
+        var ns = symbol.ContainingNamespace;
+        if (ns is not null && !ns.IsGlobalNamespace)
+        {
+            name = ns.ToDisplayString() + "." + name;
+        }
+
+        return name;
+    }
 }

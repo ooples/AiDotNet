@@ -39,13 +39,30 @@ public class AgentToolSchemaGenerator : IIncrementalGenerator
     /// <inheritdoc/>
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
+        // Symbols must not live in cached pipeline state: an IMethodSymbol roots its containing
+        // type and therefore the entire Compilation, so every cached entry pinned a compilation in
+        // memory. This generator never touched CompilationProvider, which is precisely why scoping
+        // the original sweep by "uses CompilationProvider" missed it.
+        //
+        // The pipeline now carries (containing type metadata name, method name) and the symbols are
+        // re-resolved at the point of use. Introducing CompilationProvider costs nothing in caching
+        // terms -- a symbol is not value-equatable, so this pipeline could never cache anyway.
+        // Retention is fixed; re-execution is not.
         var methods = context.SyntaxProvider.CreateSyntaxProvider(
                 predicate: static (node, _) => node is MethodDeclarationSyntax m && m.AttributeLists.Count > 0,
-                transform: static (ctx, _) => ctx.SemanticModel.GetDeclaredSymbol(ctx.Node) as IMethodSymbol)
-            .Where(static m => m is not null && HasToolAttribute(m))
-            .Collect();
+                transform: static (ctx, _) =>
+                {
+                    if (ctx.SemanticModel.GetDeclaredSymbol(ctx.Node) is not IMethodSymbol method) return null;
+                    if (!HasToolAttribute(method)) return null;
+                    if (method.ContainingType is null) return null;
+                    return MetadataNameOf(method.ContainingType) + "|" + method.Name;
+                })
+            .Where(static m => m is not null)
+            .Select(static (m, _) => m ?? string.Empty)
+            .Collect()
+            .Combine(context.CompilationProvider);
 
-        context.RegisterSourceOutput(methods, static (spc, ms) => Execute(spc, ms));
+        context.RegisterSourceOutput(methods, static (spc, source) => Execute(spc, source.Left, source.Right));
     }
 
     private static bool HasToolAttribute(IMethodSymbol method) =>
@@ -53,8 +70,30 @@ public class AgentToolSchemaGenerator : IIncrementalGenerator
             a.AttributeClass?.Name == ToolAttribute &&
             a.AttributeClass.ContainingNamespace?.ToDisplayString() == ToolsNamespace);
 
-    private static void Execute(SourceProductionContext context, ImmutableArray<IMethodSymbol?> methods)
+    private static void Execute(SourceProductionContext context, ImmutableArray<string> methodKeys, Compilation compilation)
     {
+        if (methodKeys.IsDefaultOrEmpty) return;
+
+        // Re-resolve. The [AgentTool] filter already ran in the transform; re-applying it here keeps
+        // the admission rule identical even if a name collides across overloads.
+        var resolved = new List<IMethodSymbol?>();
+        var seenKeys = new HashSet<string>(System.StringComparer.Ordinal);
+        foreach (var key in methodKeys)
+        {
+            if (key.Length == 0 || !seenKeys.Add(key)) continue;
+            int bar = key.LastIndexOf('|');
+            if (bar <= 0) continue;
+
+            var owner = compilation.GetTypeByMetadataName(key.Substring(0, bar));
+            if (owner is null) continue;
+
+            foreach (var member in owner.GetMembers(key.Substring(bar + 1)))
+            {
+                if (member is IMethodSymbol m && HasToolAttribute(m)) resolved.Add(m);
+            }
+        }
+
+        var methods = resolved.ToImmutableArray();
         if (methods.IsDefaultOrEmpty) return;
 
         // Group accessible, non-generic [AgentTool] methods by their containing type.
@@ -553,5 +592,26 @@ public class AgentToolSchemaGenerator : IIncrementalGenerator
 
         sb.Append("\"");
         return sb.ToString();
+    }
+
+    /// <summary>
+    /// Builds the metadata name GetTypeByMetadataName expects, including the arity suffix for
+    /// generics and '+' separators for nested types.
+    /// </summary>
+    private static string MetadataNameOf(INamedTypeSymbol symbol)
+    {
+        var name = symbol.MetadataName;
+        for (var containing = symbol.ContainingType; containing is not null; containing = containing.ContainingType)
+        {
+            name = containing.MetadataName + "+" + name;
+        }
+
+        var ns = symbol.ContainingNamespace;
+        if (ns is not null && !ns.IsGlobalNamespace)
+        {
+            name = ns.ToDisplayString() + "." + name;
+        }
+
+        return name;
     }
 }
