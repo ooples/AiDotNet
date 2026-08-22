@@ -103,7 +103,7 @@ public class MambaLanguageModelTests
             CreateArch(vocabSize),
             vocabSize, modelDim, numLayers: 2, stateDimension: 8, maxSeqLength: seqLen);
 
-        var input = CreateOneHotInput(batchSize, seqLen, vocabSize);
+        var input = CreateTokenInput(batchSize, seqLen, vocabSize);
         var output = model.Predict(input);
 
         Assert.Equal(new[] { batchSize, seqLen, vocabSize }, output.Shape.ToArray());
@@ -123,10 +123,11 @@ public class MambaLanguageModelTests
             CreateArch(vocabSize),
             vocabSize, modelDim, numLayers: 2, stateDimension: 8, maxSeqLength: seqLen);
 
-        var input = CreateOneHotInput(1, seqLen, vocabSize).Reshape(seqLen, vocabSize);
+        // One unbatched sequence of IDs. [1, seq] in, [1, seq, vocab] logits out.
+        var input = CreateTokenInput(1, seqLen, vocabSize);
         var output = model.Predict(input);
 
-        Assert.Equal(new[] { seqLen, vocabSize }, output.Shape.ToArray());
+        Assert.Equal(new[] { 1, seqLen, vocabSize }, output.Shape.ToArray());
         Assert.False(ContainsNaN(output));
     }
 
@@ -145,8 +146,10 @@ public class MambaLanguageModelTests
             CreateArch(vocabSize),
             vocabSize, modelDim, numLayers: 2, stateDimension: 4, maxSeqLength: seqLen);
 
-        var input = CreateOneHotInput(1, seqLen, vocabSize);
-        var expected = CreateOneHotInput(1, seqLen, vocabSize, seed: 99);
+        var input = CreateTokenInput(1, seqLen, vocabSize);
+
+        // The TARGET is logits-shaped, so one-hot is right here even though the input is IDs.
+        var expected = CreateOneHotTarget(1, seqLen, vocabSize, seed: 99);
 
         model.Train(input, expected);
 
@@ -208,7 +211,7 @@ public class MambaLanguageModelTests
 
         model2.SetParameters(model1.GetParameters());
 
-        var input = CreateOneHotInput(1, seqLen, vocabSize);
+        var input = CreateTokenInput(1, seqLen, vocabSize);
         var output1 = model1.Predict(input);
         var output2 = model2.Predict(input);
 
@@ -228,7 +231,7 @@ public class MambaLanguageModelTests
 
         var model = new MambaLanguageModel<float>(
             CreateArch(30), 30, 16, 2, 4, maxSeqLength: 4);
-        var input = CreateOneHotInput(1, 4, 30);
+        var input = CreateTokenInput(1, 4, 30);
 
         model.Predict(input);
         model.ResetState();
@@ -279,7 +282,7 @@ public class MambaLanguageModelTests
             CreateDoubleArch(vocabSize),
             vocabSize, 16, numLayers: 2, stateDimension: 4, maxSeqLength: seqLen);
 
-        var input = CreateOneHotDoubleInput(1, seqLen, vocabSize);
+        var input = CreateTokenDoubleInput(1, seqLen, vocabSize);
         var output = model.Predict(input);
 
         Assert.Equal(new[] { 1, seqLen, vocabSize }, output.Shape.ToArray());
@@ -299,7 +302,7 @@ public class MambaLanguageModelTests
             CreateArch(vocabSize),
             vocabSize, modelDim, numLayers: 4, stateDimension: 4, maxSeqLength: seqLen);
 
-        var input = CreateOneHotInput(1, seqLen, vocabSize);
+        var input = CreateTokenInput(1, seqLen, vocabSize);
         var output = model.Predict(input);
 
         // Output should not be all zeros or all same value
@@ -333,7 +336,7 @@ public class MambaLanguageModelTests
             CreateDoubleArch(vocabSize),
             vocabSize, modelDim, numLayers: 2, stateDimension: 8, maxSeqLength: seqLen);
 
-        var input = CreateOneHotDoubleInput(1, seqLen, vocabSize, seed: 7);
+        var input = CreateTokenDoubleInput(1, seqLen, vocabSize, seed: 7);
 
         // Full-sequence (parallel selective scan) reference.
         model.ResetState();
@@ -343,7 +346,7 @@ public class MambaLanguageModelTests
         var state = model.CreateStepState(batchSize: 1);
         for (int t = 0; t < seqLen; t++)
         {
-            var token = SliceTimeStep(input, t, vocabSize); // [1, 1, vocab]
+            var token = SliceTimeStep(input, t);           // [1, 1] token id
             var stepLogits = model.Step(token, state);      // [1, 1, vocab]
 
             for (int v = 0; v < vocabSize; v++)
@@ -370,7 +373,7 @@ public class MambaLanguageModelTests
             CreateDoubleArch(vocabSize),
             vocabSize, modelDim, numLayers: 4, stateDimension: 4, maxSeqLength: seqLen);
 
-        var input = CreateOneHotDoubleInput(1, seqLen, vocabSize, seed: 13);
+        var input = CreateTokenDoubleInput(1, seqLen, vocabSize, seed: 13);
 
         model.ResetState();
         var full = model.Predict(input);
@@ -378,7 +381,7 @@ public class MambaLanguageModelTests
         var state = model.CreateStepState(batchSize: 1);
         for (int t = 0; t < seqLen; t++)
         {
-            var stepLogits = model.Step(SliceTimeStep(input, t, vocabSize), state);
+            var stepLogits = model.Step(SliceTimeStep(input, t), state);
             for (int v = 0; v < vocabSize; v++)
             {
                 double expected = full[new[] { 0, t, v }];
@@ -408,8 +411,10 @@ public class MambaLanguageModelTests
             var model = new MambaLanguageModel<double>(
                 CreateDoubleArch(vocabSize), vocabSize, modelDim, numLayers: 2, stateDimension: 4, maxSeqLength: seqLen);
 
-            var input = CreateOneHotDoubleInput(1, seqLen, vocabSize, seed: 5);
-            var target = CreateOneHotDoubleInput(1, seqLen, vocabSize, seed: 6);
+            var input = CreateTokenDoubleInput(1, seqLen, vocabSize, seed: 5);
+
+            // Target is logits-shaped [batch, seq, vocab]; only the INPUT is token ids.
+            var target = CreateOneHotDoubleTarget(1, seqLen, vocabSize, seed: 6);
 
             model.Predict(input); // warmup: materialize lazy params before snapshotting
             var before = model.GetParameters().ToArray();
@@ -445,17 +450,28 @@ public class MambaLanguageModelTests
 
     #region Helpers
 
-    private static Tensor<double> SliceTimeStep(Tensor<double> input, int t, int vocabSize)
+    /// <summary>The single token ID at position <paramref name="t"/>, shaped [1, 1].</summary>
+    /// <remarks>
+    /// One ID, not a one-hot row: Step consumes the same token representation Predict does. Slicing
+    /// a one-hot row gave [1, 1, vocab], which the embedding then read as a length-vocab sequence
+    /// and the model rejected with "Cannot reshape tensor with 192 elements to shape [1, 16]".
+    /// </remarks>
+    private static Tensor<double> SliceTimeStep(Tensor<double> input, int t)
     {
-        var token = new Tensor<double>(new[] { 1, 1, vocabSize });
-        for (int v = 0; v < vocabSize; v++)
-        {
-            token[new[] { 0, 0, v }] = input[new[] { 0, t, v }];
-        }
+        var token = new Tensor<double>(new[] { 1, 1 });
+        token[new[] { 0, 0 }] = input[new[] { 0, t }];
+
         return token;
     }
 
-    private static Tensor<float> CreateOneHotInput(int batchSize, int seqLen, int vocabSize, int seed = 42)
+    /// <summary>
+    /// A one-hot [batch, seq, vocab] tensor, the shape of the model's OUTPUT logits.
+    /// </summary>
+    /// <remarks>
+    /// Correct as a training TARGET — which is the only thing it is used for now. It used to be
+    /// used as the input too, which is what broke every shape assertion in this file.
+    /// </remarks>
+    private static Tensor<float> CreateOneHotTarget(int batchSize, int seqLen, int vocabSize, int seed = 42)
     {
         var tensor = new Tensor<float>(new[] { batchSize, seqLen, vocabSize });
         var random = new Random(seed);
@@ -464,14 +480,44 @@ public class MambaLanguageModelTests
         {
             for (int s = 0; s < seqLen; s++)
             {
-                int tokenIdx = random.Next(vocabSize);
-                tensor[new[] { b, s, tokenIdx }] = 1.0f;
+                tensor[new[] { b, s, random.Next(vocabSize) }] = 1.0f;
             }
         }
+
         return tensor;
     }
 
-    private static Tensor<double> CreateOneHotDoubleInput(int batchSize, int seqLen, int vocabSize, int seed = 42)
+    /// <summary>
+    /// Builds a [batch, seq] tensor of TOKEN IDS, which is what this model consumes.
+    /// </summary>
+    /// <remarks>
+    /// These tests previously built a one-hot [batch, seq, vocab] tensor. That is the wrong
+    /// contract: MambaLanguageModel derives from TokenLanguageModelLayoutBase and its first layer
+    /// is EmbeddingLayer(vocabSize, modelDimension), an ID lookup — the class's own example passes
+    /// `Tensor&lt;float&gt;.Random(new[] { 1, 128 })`.
+    ///
+    /// Feeding one-hot made the embedding treat the vocab axis as a sequence of IDs and append a
+    /// model dimension, so every shape assertion failed with one extra trailing axis:
+    /// [2, 4, 50] came back as [2, 4, 50, 50]. The model was right and the tests were wrong.
+    /// </remarks>
+    private static Tensor<float> CreateTokenInput(int batchSize, int seqLen, int vocabSize, int seed = 42)
+    {
+        var tensor = new Tensor<float>(new[] { batchSize, seqLen });
+        var random = new Random(seed);
+
+        for (int b = 0; b < batchSize; b++)
+        {
+            for (int s = 0; s < seqLen; s++)
+            {
+                tensor[new[] { b, s }] = random.Next(vocabSize);
+            }
+        }
+
+        return tensor;
+    }
+
+    /// <summary>A one-hot [batch, seq, vocab] double tensor, for use as a training target.</summary>
+    private static Tensor<double> CreateOneHotDoubleTarget(int batchSize, int seqLen, int vocabSize, int seed = 42)
     {
         var tensor = new Tensor<double>(new[] { batchSize, seqLen, vocabSize });
         var random = new Random(seed);
@@ -480,10 +526,27 @@ public class MambaLanguageModelTests
         {
             for (int s = 0; s < seqLen; s++)
             {
-                int tokenIdx = random.Next(vocabSize);
-                tensor[new[] { b, s, tokenIdx }] = 1.0;
+                tensor[new[] { b, s, random.Next(vocabSize) }] = 1.0;
             }
         }
+
+        return tensor;
+    }
+
+    /// <summary>The double-typed counterpart of <see cref="CreateTokenInput"/>.</summary>
+    private static Tensor<double> CreateTokenDoubleInput(int batchSize, int seqLen, int vocabSize, int seed = 42)
+    {
+        var tensor = new Tensor<double>(new[] { batchSize, seqLen });
+        var random = new Random(seed);
+
+        for (int b = 0; b < batchSize; b++)
+        {
+            for (int s = 0; s < seqLen; s++)
+            {
+                tensor[new[] { b, s }] = random.Next(vocabSize);
+            }
+        }
+
         return tensor;
     }
 

@@ -92,11 +92,17 @@ internal static class ModelParameterMap
         foreach (var layer in model.Layers)
         {
             var length = checked((int)layer.ParameterCount);
-            if (length == 0)
-            {
-                continue;
-            }
 
+            // Zero-length layers are NOT skipped. A layer can report zero because it is genuinely
+            // parameter-free, or because its shape has not resolved yet -- MambaLanguageModel's
+            // LayerNormalizationLayer() is the latter, and it has real weights the moment a forward
+            // pass materializes it. Skipping on count alone made the map depend on whether the model
+            // had been run: a freshly constructed Mamba stack produced
+            // ["token_embd.0", "blk.0", "blk.1", "output.0"] with "norm.0" missing, so importing
+            // external weights into a fresh model silently dropped the norm tensor.
+            //
+            // Emitting the segment at its current length keeps the map architecture-derived, and the
+            // tiling contract still holds exactly: a zero-length segment consumes nothing.
             var baseName = BaseName(layer.GetType().Name);
             var index = counters.TryGetValue(baseName, out var current) ? current : 0;
             counters[baseName] = index + 1;

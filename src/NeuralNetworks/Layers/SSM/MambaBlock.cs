@@ -164,6 +164,25 @@ public partial class MambaBlock<T> : LayerBase<T>, IShapeContract
     public override bool SupportsTraining => true;
 
     /// <summary>
+    /// Every weight in this block is sized from constructor arguments, so the parameter surface is
+    /// fully known before the first forward pass.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <c>modelDimension</c>, <c>stateDimension</c>, <c>expandFactor</c>, <c>convKernelSize</c> and
+    /// <c>dtRank</c> all arrive in the constructor, and <c>GetParameters()</c> returns the full
+    /// count immediately — 8,544 values for <c>MambaBlock&lt;float&gt;(4, 32, 8)</c>.
+    /// </para>
+    /// <para>
+    /// Without this, <c>IsShapeResolved</c> stays false until a first input arrives and
+    /// <see cref="LayerBase{T}.SetParameters"/> treats the block as shape-DEFERRED: a wrong-length
+    /// vector is parked as a pending restore instead of being rejected. Loading mismatched weights
+    /// then fails silently at construction and surfaces much later, somewhere unrelated.
+    /// </para>
+    /// </remarks>
+    protected override bool ParametersAreConstructionSized => true;
+
+    /// <summary>
     /// Gets the model dimension (d_model) of this Mamba block.
     /// </summary>
     public int ModelDimension => _modelDimension;

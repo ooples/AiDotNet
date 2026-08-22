@@ -81,7 +81,11 @@ public sealed class NeuralNetworkCausalLanguageModel<T> : ICausalLanguageModel<T
         var start = _maxContextTokens == int.MaxValue ? 0 : Math.Max(0, tokenIds.Count - _maxContextTokens);
         var sequenceLength = tokenIds.Count - start;
 
-        var input = new Tensor<T>(new[] { 1, sequenceLength, VocabularySize });
+        // Token IDS, shape [1, seq]. The networks this adapts -- MambaLanguageModel,
+        // GLALanguageModel, a Transformer LM head -- all begin with an embedding LOOKUP, so a
+        // one-hot [1, seq, vocab] tensor was read as a length-vocab sequence and the model returned
+        // rank-4 logits, which ExtractLastPositionLogits then rejected outright.
+        var input = new Tensor<T>(new[] { 1, sequenceLength });
         for (var position = 0; position < sequenceLength; position++)
         {
             var id = tokenIds[start + position];
@@ -91,7 +95,7 @@ public sealed class NeuralNetworkCausalLanguageModel<T> : ICausalLanguageModel<T
                     nameof(tokenIds), id, $"Token id is outside the vocabulary [0, {VocabularySize}).");
             }
 
-            input[new[] { 0, position, id }] = One;
+            input[new[] { 0, position }] = (T)Convert.ChangeType((double)id, typeof(T));
         }
 
         Tensor<T> output;
