@@ -1541,11 +1541,14 @@ jobs:
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
+          SHARD_NAME: ${{ matrix.shard.name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          REPOSITORY: ${{ github.repository }}
         run: |
-          $slug = "${{ matrix.shard.name }}" -replace '[\\/:*?"<>|\s-]+', '_'
+          $slug = $env:SHARD_NAME -replace '[\\/:*?"<>|\s-]+', '_'
           ./.github/scripts/find-test-baseline.ps1 `
-            -BaseSha '${{ github.event.pull_request.base.sha }}' `
-            -Repository '${{ github.repository }}' `
+            -BaseSha $env:BASE_SHA `
+            -Repository $env:REPOSITORY `
             -ShardSlug $slug
 
       - name: Download compact retry baseline ledger
@@ -1577,12 +1580,14 @@ jobs:
           (steps.retry-baseline.outputs.baseline_mode == 'trx' && steps.retry-trx-download.outcome == 'success'))
         id: retry-candidates
         shell: pwsh
+        env:
+          BASELINE_MODE: ${{ steps.retry-baseline.outputs.baseline_mode }}
         run: |
           $arguments = @{
             CurrentResultsPath = 'TestResults'
             OutputFile = 'TestResults/rerun-candidates.json'
           }
-          if ('${{ steps.retry-baseline.outputs.baseline_mode }}' -eq 'ledger') {
+          if ($env:BASELINE_MODE -eq 'ledger') {
             $ledger = Get-ChildItem retry-baseline-ledger -Recurse -Filter ledger.json | Select-Object -First 1
             if (-not $ledger) { throw 'Downloaded retry baseline contains no ledger.json.' }
             $arguments.BaselineLedgerPath = $ledger.FullName
@@ -1596,16 +1601,21 @@ jobs:
         id: retry-new-failures
         continue-on-error: true
         shell: pwsh
+        env:
+          SHARD_NAME: ${{ matrix.shard.name }}
+          SHARD_PROJECT: ${{ matrix.shard.project }}
+          SHARD_FRAMEWORK: ${{ matrix.shard.framework }}
+          RETRY_FILTER: ${{ steps.retry-candidates.outputs.filter }}
         run: |
-          $slug = "${{ matrix.shard.name }}" -replace '[\\/:*?"<>|\s-]+', '_'
+          $slug = $env:SHARD_NAME -replace '[\\/:*?"<>|\s-]+', '_'
           $results = "TestResults/$slug/retry"
           New-Item -Path $results -ItemType Directory -Force | Out-Null
           $retryArgs = @(
-            'test', '${{ matrix.shard.project }}',
+            'test', $env:SHARD_PROJECT,
             '--no-build', '--no-restore',
             '--configuration', 'Release',
-            '--framework', '${{ matrix.shard.framework }}',
-            '--filter', '${{ steps.retry-candidates.outputs.filter }}',
+            '--framework', $env:SHARD_FRAMEWORK,
+            '--filter', $env:RETRY_FILTER,
             '--results-directory', $results,
             '--logger', 'trx;LogFileName=rerun-new-failures.trx',
             '--', 'xunit.parallelizeAssembly=false', 'xunit.parallelizeTestCollections=false'
@@ -2037,13 +2047,31 @@ jobs:
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
-        run: >-
-          ./.github/scripts/find-test-baseline.ps1
-          -BaseSha '${{ steps.comparison.outputs.base_sha }}'
-          -Repository '${{ github.repository }}'
+          BASE_SHA: ${{ steps.comparison.outputs.base_sha }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          "baseline_available=true" | Add-Content -LiteralPath $env:GITHUB_OUTPUT
+          try {
+            & ./.github/scripts/find-test-baseline.ps1 `
+              -BaseSha $env:BASE_SHA `
+              -Repository $env:REPOSITORY
+          }
+          catch {
+            $message = $_.Exception.Message
+            "baseline_available=false" | Add-Content -LiteralPath $env:GITHUB_OUTPUT
+            Write-Warning "Exact baseline is temporarily unavailable: $message"
+            @"
+          ## Regression baseline unavailable
+
+          The exact baseline for ``$($env:BASE_SHA)`` could not be resolved. This run still emits
+          a current test inventory, but the comparison policy is not enforced: $message
+          "@ | Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY
+          }
 
       - name: Download compact baseline ledger
-        if: steps.baseline.outputs.baseline_mode == 'ledger'
+        if: steps.baseline.outputs.baseline_available == 'true' && steps.baseline.outputs.baseline_mode == 'ledger'
+        id: baseline-ledger-download
+        continue-on-error: true
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v4
         with:
           name: test-outcome-ledger-${{ steps.baseline.outputs.baseline_sha }}
@@ -2053,7 +2081,9 @@ jobs:
           github-token: ${{ github.token }}
 
       - name: Download legacy baseline TRX artifacts
-        if: steps.baseline.outputs.baseline_mode == 'trx'
+        if: steps.baseline.outputs.baseline_available == 'true' && steps.baseline.outputs.baseline_mode == 'trx'
+        id: baseline-trx-download
+        continue-on-error: true
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v4
         with:
           pattern: coverage-${{ steps.baseline.outputs.baseline_sha }}-*
@@ -2066,23 +2096,39 @@ jobs:
       - name: Build final test report and enforce regression policy
         id: analyze
         shell: pwsh
+        env:
+          CURRENT_SHA: ${{ github.sha }}
+          COMPARE: ${{ steps.comparison.outputs.compare }}
+          BASE_SHA: ${{ steps.comparison.outputs.base_sha }}
+          BASELINE_AVAILABLE: ${{ steps.baseline.outputs.baseline_available }}
+          BASELINE_MODE: ${{ steps.baseline.outputs.baseline_mode }}
+          LEDGER_DOWNLOAD_OUTCOME: ${{ steps.baseline-ledger-download.outcome }}
+          TRX_DOWNLOAD_OUTCOME: ${{ steps.baseline-trx-download.outcome }}
         run: |
           $arguments = @{
             CurrentResultsPath = 'current-test-results'
             OutputDirectory = 'test-regression-analysis'
-            CurrentSha = '${{ github.sha }}'
+            CurrentSha = $env:CURRENT_SHA
             RepositoryPath = '.'
           }
-          if ('${{ steps.comparison.outputs.compare }}' -eq 'true') {
-            $arguments.BaselineSha = '${{ steps.comparison.outputs.base_sha }}'
+          $baselineReady = $env:COMPARE -eq 'true' -and $env:BASELINE_AVAILABLE -eq 'true' -and (
+            ($env:BASELINE_MODE -eq 'ledger' -and $env:LEDGER_DOWNLOAD_OUTCOME -eq 'success') -or
+            ($env:BASELINE_MODE -eq 'trx' -and $env:TRX_DOWNLOAD_OUTCOME -eq 'success'))
+          if ($baselineReady) {
+            $arguments.BaselineSha = $env:BASE_SHA
             $arguments.FailOnPolicy = $true
-            if ('${{ steps.baseline.outputs.baseline_mode }}' -eq 'ledger') {
+            if ($env:BASELINE_MODE -eq 'ledger') {
               $ledger = Get-ChildItem baseline-ledger -Recurse -Filter ledger.json | Select-Object -First 1
               if (-not $ledger) { throw 'Downloaded baseline artifact contains no ledger.json.' }
               $arguments.BaselineLedgerPath = $ledger.FullName
             } else {
               $arguments.BaselineResultsPath = 'baseline-test-results'
             }
+          } elseif ($env:COMPARE -eq 'true') {
+            $message = "Exact baseline comparison is unavailable (mode '$($env:BASELINE_MODE)', ledger download '$($env:LEDGER_DOWNLOAD_OUTCOME)', TRX download '$($env:TRX_DOWNLOAD_OUTCOME)')."
+            Write-Warning $message
+            "`n> [!WARNING]`n> $message The current inventory is still published, but no regression verdict is claimed.`n" |
+              Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY
           }
           ./.github/scripts/test-regression-analysis.ps1 @arguments
 
@@ -2324,6 +2370,7 @@ jobs:
           TESTS_RESULT: ${{ needs.test-net10-sharded.result }}
           ANALYSIS_RESULT: ${{ needs.test-regression-analysis.result }}
           SONAR_RESULT: ${{ needs.sonarcloud.result }}
+          EVENT_NAME: ${{ github.event_name }}
         run: |
           set -euo pipefail
 
@@ -2337,10 +2384,14 @@ jobs:
           echo "| sonarcloud | $SONAR_RESULT |" >> "$GITHUB_STEP_SUMMARY"
 
           failed=0
-          # Raw shard failure is informational because master has a known red baseline. The TRX
-          # analyzer is the policy gate: it fails on non-shrinking failures, new incompletes,
-          # previously-green shard regressions, or touched-surface regressions.
-          for pair in "build:$BUILD_RESULT" "test-regression-analysis:$ANALYSIS_RESULT" "sonarcloud:$SONAR_RESULT"; do
+          # Pull requests use the exact-baseline analyzer as the test verdict, so known master
+          # failures remain informational there. A master push creates the next baseline and has no
+          # comparison run; its raw shard result therefore remains a separate required gate.
+          required_pairs=("build:$BUILD_RESULT" "test-regression-analysis:$ANALYSIS_RESULT" "sonarcloud:$SONAR_RESULT")
+          if [ "$EVENT_NAME" = "push" ]; then
+            required_pairs+=("test-net10-sharded:$TESTS_RESULT")
+          fi
+          for pair in "${required_pairs[@]}"; do
             job="${pair%%:*}"
             result="${pair#*:}"
             # 'skipped' is deliberately NOT accepted: it is exactly how this gate used to fail

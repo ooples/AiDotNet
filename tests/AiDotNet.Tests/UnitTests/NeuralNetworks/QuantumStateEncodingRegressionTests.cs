@@ -1,6 +1,7 @@
 using System;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
 
@@ -134,6 +135,70 @@ public class QuantumStateEncodingRegressionTests
 
         AssertAllFinite(output, "quantum-layer output");
         Assert.Equal(1.0f, output.ToArray().Sum(), 4);
+    }
+
+    [Fact]
+    public void QuantumLayer_GpuPrescaling_MatchesCpuForZeroAndSmallestSubnormalRows()
+    {
+        DirectGpuTensorEngine gpu;
+        try
+        {
+            gpu = new DirectGpuTensorEngine();
+            if (!gpu.IsGpuAvailable)
+            {
+                gpu.Dispose();
+                return;
+            }
+        }
+        catch
+        {
+            return;
+        }
+
+        var savedEngine = AiDotNetEngine.Current;
+        float[] cpuValues;
+        float[] gpuValues;
+        try
+        {
+            AiDotNetEngine.Current = new CpuEngine();
+            using var cpuLayer = new QuantumLayer<float>(inputSize: 4, outputSize: 4, numQubits: 2);
+            using var cpuInput = CreateZeroAndSubnormalRows();
+            using var cpuOutput = cpuLayer.Forward(cpuInput);
+            var parameters = cpuLayer.GetParameters();
+            cpuValues = cpuOutput.ToArray();
+
+            AiDotNetEngine.Current = gpu;
+            using var gpuLayer = new QuantumLayer<float>(inputSize: 4, outputSize: 4, numQubits: 2);
+            gpuLayer.SetParameters(parameters);
+            using var gpuInput = CreateZeroAndSubnormalRows();
+            using var gpuOutput = gpuLayer.Forward(gpuInput);
+            gpuValues = gpuOutput.ToArray();
+        }
+        finally
+        {
+            AiDotNetEngine.Current = savedEngine;
+            gpu.Dispose();
+        }
+
+        Assert.Equal(cpuValues.Length, gpuValues.Length);
+        for (int i = 0; i < cpuValues.Length; i++)
+        {
+            Assert.True(!float.IsNaN(gpuValues[i]) && !float.IsInfinity(gpuValues[i]),
+                $"GPU output[{i}] is non-finite: {gpuValues[i]}.");
+            Assert.True(Math.Abs(cpuValues[i] - gpuValues[i]) <= 1e-4f,
+                $"CPU/GPU output mismatch at {i}: CPU={cpuValues[i]:G9}, GPU={gpuValues[i]:G9}.");
+        }
+
+        Assert.Equal(0.0f, gpuValues.Take(4).Sum());
+        Assert.Equal(1.0f, gpuValues.Skip(4).Take(4).Sum(), 4);
+    }
+
+    private static Tensor<float> CreateZeroAndSubnormalRows()
+    {
+        var input = new Tensor<float>([2, 4]);
+        for (int i = 4; i < input.Length; i++)
+            input[i] = (i & 1) == 0 ? float.Epsilon : -float.Epsilon;
+        return input;
     }
 
     [Fact]

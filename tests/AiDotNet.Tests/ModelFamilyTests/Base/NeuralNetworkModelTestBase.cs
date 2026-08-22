@@ -3554,9 +3554,20 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         INeuralNetworkModel<T> network, int[] shape, Random rng)
     {
         var target = MakeTargetWellPosedForLoss(network, CreateRandomTargetTensor(shape, rng), rng);
+        ValidateLossCompatibleTarget(network, target);
+        return target;
+    }
+
+    /// <summary>
+    /// Verifies that a projected or fixture-supplied target satisfies the active loss domain.
+    /// Shared by ordinary training fixtures and finite differences so neither path can silently
+    /// evaluate an unreachable or mathematically invalid objective.
+    /// </summary>
+    protected void ValidateLossCompatibleTarget(INeuralNetworkModel<T> network, Tensor<T> target)
+    {
 
         if (network is not AiDotNet.NeuralNetworks.NeuralNetworkBase<T> nn)
-            return target;
+            return;
 
         bool binaryCrossEntropy =
             nn.DefaultLossFunction is AiDotNet.LossFunctions.BinaryCrossEntropyWithLogitsLoss<T>
@@ -3587,7 +3598,6 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
                 $"Born-rule target must sum to one; got {totalMass:G17}.");
         }
 
-        return target;
     }
 
     /// <summary>
@@ -3826,6 +3836,8 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
 
         var rng = ModelTestHelpers.CreateSeededRandom();
         var (input, target) = CreateGradientCheckExample(rng);
+        target = MakeTargetWellPosedForLoss(network, target, rng);
+        ValidateLossCompatibleTarget(network, target);
         input = BoundGradientInputForSpatiallyPolymorphicTopology(nn, input, rng);
 
         // Deterministic forward: eval mode turns Dropout into an identity, so the loss is a

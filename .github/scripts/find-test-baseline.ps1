@@ -62,7 +62,8 @@ $encodedWorkflow = [Uri]::EscapeDataString($Workflow)
 $runs = Invoke-GhJson "repos/$Repository/actions/workflows/$encodedWorkflow/runs?head_sha=$BaseSha&event=push&per_page=100"
 $run = @($runs.workflow_runs |
     Where-Object { $_.head_sha -eq $BaseSha -and $_.status -eq 'completed' } |
-    Sort-Object run_attempt, created_at -Descending | Select-Object -First 1)
+    Sort-Object -Property @{ Expression = 'created_at'; Descending = $true },
+        @{ Expression = 'run_attempt'; Descending = $true } | Select-Object -First 1)
 if ($run.Count -eq 0) {
     throw "No completed '$Workflow' push run exists for exact baseline SHA $BaseSha."
 }

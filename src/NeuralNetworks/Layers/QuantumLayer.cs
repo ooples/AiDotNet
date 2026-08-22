@@ -388,13 +388,21 @@ public partial class QuantumLayer<T> : LayerBase<T>, IShapeContract
             backend.Clamp(
                 maxMagnitude.Buffer,
                 safeMaxMagnitude,
-                1.0f / float.MaxValue,
+                float.Epsilon,
                 float.MaxValue,
                 batchSize);
-            using var inverseMaxMagnitude = backend.AllocateBuffer(batchSize);
-            backend.Reciprocal(safeMaxMagnitude, inverseMaxMagnitude, batchSize);
+
+            // Reciprocal(float.Epsilon) overflows even though the input row is finite. Factor
+            // 1/max into two finite 1/sqrt(max) multiplies: zero rows remain exactly zero, the
+            // smallest subnormal row scales to unit magnitude, and no intermediate becomes Inf.
+            using var sqrtSafeMaxMagnitude = backend.AllocateBuffer(batchSize);
+            backend.Sqrt(safeMaxMagnitude, sqrtSafeMaxMagnitude, batchSize);
+            using var inverseSqrtMaxMagnitude = backend.AllocateBuffer(batchSize);
+            backend.Reciprocal(sqrtSafeMaxMagnitude, inverseSqrtMaxMagnitude, batchSize);
             backend.BroadcastMultiplyFirstAxis(
-                stateReal, inverseMaxMagnitude, stateReal, batchSize, dimension);
+                stateReal, inverseSqrtMaxMagnitude, stateReal, batchSize, dimension);
+            backend.BroadcastMultiplyFirstAxis(
+                stateReal, inverseSqrtMaxMagnitude, stateReal, batchSize, dimension);
 
             // L2 normalize each batch element on GPU
             // Step 1: Square the values

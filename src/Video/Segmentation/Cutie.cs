@@ -724,13 +724,23 @@ public class Cutie<T> : NeuralNetworkBase<T>
         var score = Engine.TensorMultiplyScalar(
             Engine.ReduceSum(Engine.TensorMultiply(query, key), new[] { 1 }, keepDims: true), scale);
 
-        for (int i = 0; i < score.Length; i++)
+        using var finiteMask = Engine.TensorIsFinite(score);
+        if (Engine.TensorMinValue(finiteMask) == AiDotNet.Tensors.Bit.False)
         {
-            if (NumOps.IsNaN(score[i]) || NumOps.IsInfinity(score[i]))
+            // The tensor reduction keeps the common finite path on-device. Locate the offending
+            // element only after failure so the established exception type and indexed diagnostic
+            // remain unchanged without downloading every healthy score in GPU execution.
+            for (int i = 0; i < score.Length; i++)
             {
-                throw new ArithmeticException(
-                    $"Memory attention score[{i}] is non-finite; query/key magnitudes overflowed the dot product.");
+                if (NumOps.IsNaN(score[i]) || NumOps.IsInfinity(score[i]))
+                {
+                    throw new ArithmeticException(
+                        $"Memory attention score[{i}] is non-finite; query/key magnitudes overflowed the dot product.");
+                }
             }
+
+            throw new ArithmeticException(
+                "Memory attention score is non-finite; query/key magnitudes overflowed the dot product.");
         }
 
         return score;

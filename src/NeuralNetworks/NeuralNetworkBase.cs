@@ -10483,6 +10483,14 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             return _layersSupportFusedCompiledTraining.Value;
 
         bool supported = LayersSupportFusedCompiledTrainingRecursive(Layers);
+        if (supported)
+        {
+            // Extra trainable layers participate in the same optimizer graph as Layers, so their
+            // execution capability must participate in the routing decision too. OfType also
+            // drops the nullable hook's documented null entries without special-casing callers.
+            supported = LayersSupportFusedCompiledTrainingRecursive(
+                GetExtraTrainableLayers().OfType<ILayer<T>>());
+        }
         _layersSupportFusedCompiledTraining = supported;
         return supported;
     }

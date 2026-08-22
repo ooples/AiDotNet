@@ -80,6 +80,12 @@ public class GatedDeltaProductTapeRegressionTests
             input[i] = Math.Sin((i + 1) * 0.37);
 
         using var batchedOutput = layer.Forward(input);
+        double strongestOutputMagnitude = 0.0;
+        for (int i = 0; i < batchedOutput.Length; i++)
+            strongestOutputMagnitude = Math.Max(strongestOutputMagnitude, Math.Abs(batchedOutput[i]));
+        Assert.True(strongestOutputMagnitude > 1e-8,
+            $"The batched recurrence produced only degenerate near-zero outputs (max |y|={strongestOutputMagnitude:G6}).");
+
         for (int batch = 0; batch < 2; batch++)
         {
             layer.ResetState();
