@@ -49,31 +49,56 @@ public class YamlConfigSourceGenerator : IIncrementalGenerator
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
         // Find class declarations named "AiModelBuilder" as a fast syntax filter.
-        var builderDeclarations = context.SyntaxProvider.CreateSyntaxProvider(
+        // This generator is the one legitimate CompilationProvider user in this set: it walks the
+        // whole compilation with SymbolVisitors to find every implementation of a configurable
+        // interface, which cannot be reduced to per-syntax-node values. That global walk runs inside
+        // the source-output callback, so it retains nothing across compilations.
+        //
+        // What WAS leaking is the collected syntax pipeline: it cached an INamedTypeSymbol for the
+        // builder, and a symbol in cached pipeline state roots the entire Compilation. The pipeline
+        // now carries only the builder's metadata name (a string); the symbol is re-resolved from
+        // the compilation at the point of use.
+        var builderNames = context.SyntaxProvider.CreateSyntaxProvider(
             predicate: static (node, _) => node is ClassDeclarationSyntax cds
                 && cds.Identifier.Text == "AiModelBuilder",
-            transform: static (ctx, _) => ctx.SemanticModel.GetDeclaredSymbol(ctx.Node) as INamedTypeSymbol)
-            .Where(static s => s is not null)
+            transform: static (ctx, _) =>
+            {
+                if (ctx.SemanticModel.GetDeclaredSymbol(ctx.Node) is not INamedTypeSymbol symbol)
+                    return null;
+                if (symbol.ContainingNamespace.ToDisplayString() != "AiDotNet")
+                    return null;
+                // MetadataName keeps the arity suffix (AiModelBuilder`3) that
+                // GetTypeByMetadataName needs in order to resolve a generic type.
+                return symbol.ContainingNamespace.ToDisplayString() + "." + symbol.MetadataName;
+            })
+            .Where(static n => n is not null)
+            .Select(static (n, _) => n ?? string.Empty)
             .Collect();
 
         // Combine with compilation so we can resolve types globally.
-        var combined = builderDeclarations.Combine(context.CompilationProvider);
+        var combined = builderNames.Combine(context.CompilationProvider);
 
         context.RegisterSourceOutput(combined, static (spc, source) =>
         {
-            var (builders, compilation) = source;
-            Execute(spc, builders, compilation);
+            var (names, compilation) = source;
+            Execute(spc, names, compilation);
         });
     }
 
     private static void Execute(
         SourceProductionContext context,
-        ImmutableArray<INamedTypeSymbol?> builders,
+        ImmutableArray<string> builderMetadataNames,
         Compilation compilation)
     {
-        // Find the AiModelBuilder type (there should be exactly one).
-        var builderType = builders.FirstOrDefault(b => b is not null
-            && b.ContainingNamespace.ToDisplayString() == "AiDotNet");
+        // Re-resolve the builder from the compilation. The namespace filter already ran in the
+        // transform, so the first name that resolves is the AiModelBuilder we want.
+        INamedTypeSymbol? builderType = null;
+        foreach (var name in builderMetadataNames)
+        {
+            if (name.Length == 0) continue;
+            builderType = compilation.GetTypeByMetadataName(name);
+            if (builderType is not null) break;
+        }
 
         if (builderType is null) return;
 
