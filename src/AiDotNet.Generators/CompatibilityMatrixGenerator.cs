@@ -125,18 +125,27 @@ public class CompatibilityMatrixGenerator : IIncrementalGenerator
 
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
-        // Values, not symbols -- see DiscoveryApiGenerator. Note this generator also carried a
-        // Roslyn Location in its model, which is just as bad as a symbol: a Location holds its
-        // SyntaxTree, which roots the whole Compilation. It becomes a value-type SourceSpan here,
-        // the same trick LayerStateGenerator already uses, and is rehydrated into a Location only
-        // at the point a diagnostic is actually reported.
+        // Values, not symbols -- see DiscoveryApiGenerator. This generator also carried a Roslyn
+        // Location in its model, which is just as bad as a symbol: a Location holds its SyntaxTree,
+        // which roots the whole Compilation. The entry now carries the type's metadata name.
         var compatEntries = context.SyntaxProvider.CreateSyntaxProvider(
             predicate: static (node, _) => IsCandidate(node),
             transform: static (ctx, _) => Analyze(ctx))
             .Where(static e => e is not null)
             .Select(static (e, _) => e ?? CompatEntry.Empty);
 
-        context.RegisterSourceOutput(compatEntries.Collect(), static (spc, collected) => Emit(spc, collected));
+        // CompilationProvider is back, and ONLY for diagnostics. A Location cannot live in cached
+        // pipeline state -- it holds its SyntaxTree, which roots the Compilation -- but a Location
+        // REBUILT from a file path via Location.Create(string, ...) is an EXTERNAL location, and
+        // Roslyn cannot apply source-level suppression to those: #pragma warning disable AIDN030
+        // and [SuppressMessage] simply stop working. Emitting external locations would have taken
+        // suppression away from anyone relying on it, silently.
+        //
+        // So the pipeline carries the metadata name, and the genuine syntax-tree-backed Location is
+        // recovered from the re-resolved symbol at the point the diagnostic is reported.
+        context.RegisterSourceOutput(
+            compatEntries.Collect().Combine(context.CompilationProvider),
+            static (spc, source) => Emit(spc, source.Left, source.Right));
     }
 
     /// <summary>
@@ -185,7 +194,7 @@ public class CompatibilityMatrixGenerator : IIncrementalGenerator
             modelClass.TypeParameters.Length,
             categories.ToImmutableArray(),
             names.ToImmutableArray(),
-            modelClass.Locations.Length > 0 ? new SourceSpan(modelClass.Locations[0]) : SourceSpan.None);
+            MetadataNameOf(modelClass));
     }
 
     private static bool IsCandidate(SyntaxNode node)
@@ -218,7 +227,7 @@ public class CompatibilityMatrixGenerator : IIncrementalGenerator
         return null;
     }
 
-    private static void Emit(SourceProductionContext context, ImmutableArray<CompatEntry> candidates)
+    private static void Emit(SourceProductionContext context, ImmutableArray<CompatEntry> candidates, Compilation compilation)
     {
         if (candidates.IsDefaultOrEmpty)
         {
@@ -247,14 +256,25 @@ public class CompatibilityMatrixGenerator : IIncrementalGenerator
         foreach (var entry in entries)
         {
             var (_, _, _, warnings) = GetCompatibilityRules(entry.Categories);
-            if (warnings.Count > 0 && !entry.Span.IsNone)
+            if (warnings.Count == 0)
+                continue;
+
+            // Recover the REAL, syntax-tree-backed location. When the type cannot be resolved we
+            // report nothing, exactly as the previous no-location path did -- never an external
+            // location that suppression cannot reach.
+            var declaration = entry.MetadataName.Length > 0
+                ? compilation.GetTypeByMetadataName(entry.MetadataName)
+                : null;
+            var location = declaration?.Locations.FirstOrDefault(l => l.SourceTree is not null);
+
+            if (location is not null)
             {
                 var categoryNames = string.Join(", ", entry.CategoryNames);
                 bool isImpossible = warnings.Any(w => w.StartsWith("IMPOSSIBLE:", System.StringComparison.Ordinal));
 
                 context.ReportDiagnostic(Diagnostic.Create(
                     isImpossible ? ImpossibleOptimizerCombination : SuspiciousOptimizer,
-                    entry.Span.ToLocation(),
+                    location,
                     entry.ClassName,
                     categoryNames));
             }
@@ -785,14 +805,15 @@ public class CompatibilityMatrixGenerator : IIncrementalGenerator
     }
 
     /// <summary>
-    /// One categorised model, as plain values. The declaration site is a SourceSpan rather than a
-    /// Roslyn Location: a Location holds its SyntaxTree and would root the whole Compilation.
+    /// One categorised model, as plain values. The declaration site is carried as a metadata name
+    /// rather than a Roslyn Location: a Location holds its SyntaxTree and would root the whole
+    /// Compilation. The real Location is re-resolved when a diagnostic is reported.
     /// </summary>
     private sealed class CompatEntry : System.IEquatable<CompatEntry>
     {
         public static readonly CompatEntry Empty = new(
             string.Empty, string.Empty, 0,
-            ImmutableArray<int>.Empty, ImmutableArray<string>.Empty, SourceSpan.None);
+            ImmutableArray<int>.Empty, ImmutableArray<string>.Empty, string.Empty);
 
         public CompatEntry(
             string className,
@@ -800,14 +821,14 @@ public class CompatibilityMatrixGenerator : IIncrementalGenerator
             int typeParameterCount,
             ImmutableArray<int> categories,
             ImmutableArray<string> categoryNames,
-            SourceSpan span)
+            string metadataName)
         {
             ClassName = className;
             FullyQualifiedName = fullyQualifiedName;
             TypeParameterCount = typeParameterCount;
             Categories = categories.IsDefault ? ImmutableArray<int>.Empty : categories;
             CategoryNames = categoryNames.IsDefault ? ImmutableArray<string>.Empty : categoryNames;
-            Span = span;
+            MetadataName = metadataName;
         }
 
         public string ClassName { get; }
@@ -815,7 +836,7 @@ public class CompatibilityMatrixGenerator : IIncrementalGenerator
         public int TypeParameterCount { get; }
         public ImmutableArray<int> Categories { get; }
         public ImmutableArray<string> CategoryNames { get; }
-        public SourceSpan Span { get; }
+        public string MetadataName { get; }
 
         public bool Equals(CompatEntry? other)
         {
@@ -825,7 +846,7 @@ public class CompatibilityMatrixGenerator : IIncrementalGenerator
             if (!string.Equals(ClassName, other.ClassName, System.StringComparison.Ordinal)) return false;
             if (!string.Equals(FullyQualifiedName, other.FullyQualifiedName, System.StringComparison.Ordinal)) return false;
             if (TypeParameterCount != other.TypeParameterCount) return false;
-            if (!Span.Equals(other.Span)) return false;
+            if (!string.Equals(MetadataName, other.MetadataName, System.StringComparison.Ordinal)) return false;
             if (Categories.Length != other.Categories.Length) return false;
             for (int i = 0; i < Categories.Length; i++)
             {
@@ -851,69 +872,31 @@ public class CompatibilityMatrixGenerator : IIncrementalGenerator
                 hash = (hash * 31) + TypeParameterCount;
                 hash = (hash * 31) + Categories.Length;
                 hash = (hash * 31) + CategoryNames.Length;
-                hash = (hash * 31) + Span.GetHashCode();
+                hash = (hash * 31) + MetadataName.GetHashCode();
                 return hash;
             }
         }
     }
 
+
     /// <summary>
-    /// A declaration site reduced to plain values, so it can live in the incremental pipeline
-    /// without rooting a Compilation. Mirrors LayerStateGenerator.SourceSpan.
+    /// Builds the metadata name GetTypeByMetadataName expects, including the arity suffix for
+    /// generics and '+' separators for nested types.
     /// </summary>
-    private readonly struct SourceSpan : System.IEquatable<SourceSpan>
+    private static string MetadataNameOf(INamedTypeSymbol symbol)
     {
-        public static readonly SourceSpan None = default;
-
-        public SourceSpan(Location location)
+        var name = symbol.MetadataName;
+        for (var containing = symbol.ContainingType; containing is not null; containing = containing.ContainingType)
         {
-            var lineSpan = location.GetLineSpan();
-            FilePath = lineSpan.Path ?? string.Empty;
-            Start = location.SourceSpan.Start;
-            Length = location.SourceSpan.Length;
-            StartLine = lineSpan.StartLinePosition.Line;
-            StartChar = lineSpan.StartLinePosition.Character;
-            EndLine = lineSpan.EndLinePosition.Line;
-            EndChar = lineSpan.EndLinePosition.Character;
+            name = containing.MetadataName + "+" + name;
         }
 
-        public string FilePath { get; }
-        public int Start { get; }
-        public int Length { get; }
-        public int StartLine { get; }
-        public int StartChar { get; }
-        public int EndLine { get; }
-        public int EndChar { get; }
-
-        public bool IsNone => string.IsNullOrEmpty(FilePath);
-
-        public Location ToLocation()
-            => string.IsNullOrEmpty(FilePath)
-                ? Location.None
-                : Location.Create(
-                    FilePath,
-                    new Microsoft.CodeAnalysis.Text.TextSpan(Start, Length),
-                    new Microsoft.CodeAnalysis.Text.LinePositionSpan(
-                        new Microsoft.CodeAnalysis.Text.LinePosition(StartLine, StartChar),
-                        new Microsoft.CodeAnalysis.Text.LinePosition(EndLine, EndChar)));
-
-        public bool Equals(SourceSpan other)
-            => FilePath == other.FilePath && Start == other.Start && Length == other.Length
-               && StartLine == other.StartLine && StartChar == other.StartChar
-               && EndLine == other.EndLine && EndChar == other.EndChar;
-
-        public override bool Equals(object? obj) => obj is SourceSpan sp && Equals(sp);
-
-        public override int GetHashCode()
+        var ns = symbol.ContainingNamespace;
+        if (ns is not null && !ns.IsGlobalNamespace)
         {
-            unchecked
-            {
-                int hash = 17;
-                hash = (hash * 31) + (FilePath?.GetHashCode() ?? 0);
-                hash = (hash * 31) + Start;
-                hash = (hash * 31) + Length;
-                return hash;
-            }
+            name = ns.ToDisplayString() + "." + name;
         }
+
+        return name;
     }
 }
