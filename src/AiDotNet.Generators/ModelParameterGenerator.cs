@@ -58,30 +58,72 @@ public class ModelParameterGenerator : IIncrementalGenerator
 
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
-        var classDeclarations = context.SyntaxProvider
+        // The pipeline used to cache ClassDeclarationSyntax. A syntax node is the same class of
+        // leak as a symbol: it holds its SyntaxTree, which roots the entire Compilation, so every
+        // cached entry pinned a compilation in memory.
+        //
+        // It now carries only each candidate's metadata name (a string), and the symbol is
+        // re-resolved from the compilation at the point of use.
+        //
+        // DELIBERATE SCOPE LIMIT: this fixes the retention, not the re-execution. The per-class
+        // analysis below is ~1000 lines of symbol walking that would have to move into the
+        // transform to make the pipeline genuinely cacheable, and restructuring it carries far more
+        // risk than the incremental win is worth. CompilationProvider therefore stays, and the
+        // generator still re-runs on every compilation -- but it no longer holds compilations alive.
+        var classNames = context.SyntaxProvider
             .CreateSyntaxProvider(
                 predicate: static (node, _) => node is ClassDeclarationSyntax cds &&
                     cds.Modifiers.Any(m => m.Text == "partial"),
-                transform: static (ctx, _) => (ClassDeclarationSyntax)ctx.Node)
-            .Where(static c => c is not null);
+                transform: static (ctx, _) =>
+                    ctx.SemanticModel.GetDeclaredSymbol(ctx.Node) is INamedTypeSymbol symbol
+                        ? MetadataNameOf(symbol)
+                        : null)
+            .Where(static n => n is not null)
+            .Select(static (n, _) => n ?? string.Empty);
 
-        var compilationAndClasses = context.CompilationProvider.Combine(classDeclarations.Collect());
+        var compilationAndClasses = context.CompilationProvider.Combine(classNames.Collect());
         context.RegisterSourceOutput(compilationAndClasses,
             static (spc, source) => Execute(source.Left, source.Right, spc));
     }
 
+    /// <summary>
+    /// Builds the metadata name GetTypeByMetadataName expects, including the arity suffix for
+    /// generics and the '+' separators for nested types.
+    /// </summary>
+    private static string MetadataNameOf(INamedTypeSymbol symbol)
+    {
+        var name = symbol.MetadataName;
+        for (var containing = symbol.ContainingType; containing is not null; containing = containing.ContainingType)
+        {
+            name = containing.MetadataName + "+" + name;
+        }
+
+        var ns = symbol.ContainingNamespace;
+        if (ns is not null && !ns.IsGlobalNamespace)
+        {
+            name = ns.ToDisplayString() + "." + name;
+        }
+
+        return name;
+    }
+
     private static void Execute(Compilation compilation,
-                                ImmutableArray<ClassDeclarationSyntax> classes,
+                                ImmutableArray<string> classMetadataNames,
                                 SourceProductionContext context)
     {
-        if (classes.IsDefaultOrEmpty) return;
+        if (classMetadataNames.IsDefaultOrEmpty) return;
 
         var processed = new HashSet<string>();
+        var resolved = new HashSet<string>();
 
-        foreach (var classDecl in classes)
+        foreach (var metadataName in classMetadataNames)
         {
-            var model = compilation.GetSemanticModel(classDecl.SyntaxTree);
-            if (model.GetDeclaredSymbol(classDecl) is not INamedTypeSymbol classSymbol) continue;
+            if (metadataName.Length == 0) continue;
+
+            // Partial classes contribute one name per declaration; resolve each distinct name once.
+            if (!resolved.Add(metadataName)) continue;
+
+            if (compilation.GetTypeByMetadataName(metadataName) is not INamedTypeSymbol classSymbol) continue;
             var elem = ElementTypeParam(classSymbol);
             if (elem is null) continue;
 
