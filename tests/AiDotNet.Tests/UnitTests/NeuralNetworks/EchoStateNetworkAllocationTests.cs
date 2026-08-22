@@ -31,9 +31,17 @@ public sealed class EchoStateNetworkAllocationTests
         // Warm JIT and engine dispatch. The next prediction still executes all 200 settle steps.
         _ = model.Predict(input);
 
+#if NET5_0_OR_GREATER
         long before = GC.GetAllocatedBytesForCurrentThread();
+#else
+        long before = GC.GetTotalMemory(forceFullCollection: false);
+#endif
         var output = model.Predict(input);
+#if NET5_0_OR_GREATER
         long allocatedBytes = GC.GetAllocatedBytesForCurrentThread() - before;
+#else
+        long allocatedBytes = GC.GetTotalMemory(forceFullCollection: false) - before;
+#endif
         GC.KeepAlive(output);
 
         // Re-transposing both 64x64 float matrices for every step creates at least 6,553,600 bytes
