@@ -561,6 +561,27 @@ public abstract class TimeSeriesModelTestBase<T> : System.IDisposable
     public async Task Builder_R2ShouldBePositive()
     {
         await Task.Yield();
+
+        // HONOUR THE NON-FORECASTING OPT-OUT, as the other seven invariants in this file already do.
+        // This one asserted an out-of-sample FORECAST against every fixture, including the ones that
+        // declare IsForecastingModel => false because they do not forecast at all.
+        //
+        // LSTMVAE is the case that exposed it. Base.Forecast is autoregressive: it calls
+        // PredictSingle and appends the returned value back into the history as if it were the next
+        // observation. For a reconstruction-based anomaly detector PredictSingle returns an ERROR
+        // SCORE, not a next-value prediction, so the recursion feeds error magnitudes into the series,
+        // each step drifts further from anything the model was trained on, and the compounding
+        // reconstruction error overflows to Infinity and then NaN. The observed failure -- "Out-of-
+        // sample forecast contains NaN or Infinity" -- was that divergence, and it reproduced with
+        // UNTRAINED weights, which is what ruled out every numerical cause in the model itself.
+        //
+        // That is faithful to the method rather than a limitation of this implementation: Park et al.
+        // (RA-L 2018), the paper LSTMVAE cites, defines LSTM-VAE as a reconstruction-based detector
+        // that scores anomalies; forecasting future values is not part of it. The fixture already
+        // says so ("LSTMVAE is an anomaly detector - returns reconstruction errors, not forecasts");
+        // this invariant simply was not reading the flag.
+        if (!IsForecastingModel) return;
+
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();

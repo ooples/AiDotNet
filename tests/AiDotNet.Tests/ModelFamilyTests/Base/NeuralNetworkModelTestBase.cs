@@ -1117,7 +1117,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         using var network = CreateNetwork();
         if (TrainingInvariantsNotApplicable(network)) return;
         var input = CreateRandomTensor(EffectiveInputShape, rng);
-        var target = MakeTargetWellPosedForLoss(network, CreateRandomTargetTensor(ShapeCheckedOutputShape, rng), rng);
+        var target = CreateLossCompatibleTarget(network, ShapeCheckedOutputShape, rng);
 
         // Measure initial loss (model's objective — MSE for most families, the model's own loss for
         // raw-logit cross-entropy LMs where MSE is meaningless; see MeasureLoss).
@@ -1167,7 +1167,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         using var network = CreateNetwork();
         if (TrainingInvariantsNotApplicable(network)) return;
         var input = CreateRandomTensor(EffectiveInputShape, rng);
-        var target = CreateRandomTargetTensor(ShapeCheckedOutputShape, rng);
+        var target = CreateLossCompatibleTarget(network, ShapeCheckedOutputShape, rng);
 
         // Materialize lazy-initialized parameter tensors via a warmup
         // forward pass BEFORE snapshotting. Lazy layers (LayerNormalization
@@ -1361,7 +1361,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         // scaffold-generated override. Plain CreateRandomTensor here
         // emitted random floats and tripped strict label validation
         // in the CRF NLL path.
-        var trainTarget = CreateRandomTargetTensor(ShapeCheckedOutputShape, rng);
+        var trainTarget = CreateLossCompatibleTarget(network, ShapeCheckedOutputShape, rng);
         int iterations = ResolveConformanceTrainingIterations(network, TrainingIterations);
         for (int i = 0; i < iterations; i++)
             network.Train(trainInput, trainTarget);
@@ -1443,7 +1443,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         using var network = CreateNetwork();
         if (TrainingInvariantsNotApplicable(network)) return;
         var input = CreateRandomTensor(EffectiveInputShape, rng);
-        var target = CreateRandomTargetTensor(ShapeCheckedOutputShape, rng);
+        var target = CreateLossCompatibleTarget(network, ShapeCheckedOutputShape, rng);
 
         int iterations = ResolveConformanceTrainingIterations(network, TrainingIterations);
         for (int i = 0; i < iterations; i++)
@@ -2022,7 +2022,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         // scaffold-generated override. Plain CreateRandomTensor here
         // emitted random floats and tripped strict label validation
         // in the CRF NLL path.
-        var trainTarget = CreateRandomTargetTensor(ShapeCheckedOutputShape, rng);
+        var trainTarget = CreateLossCompatibleTarget(network, ShapeCheckedOutputShape, rng);
         int iterations = ResolveConformanceTrainingIterations(network, TrainingIterations);
         for (int i = 0; i < iterations; i++)
             network.Train(trainInput, trainTarget);
@@ -2099,7 +2099,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         if (!TrainingInvariantsNotApplicable(network))
         {
             var input = CreateRandomTensor(EffectiveInputShape, rng);
-            var target = CreateRandomTargetTensor(ShapeCheckedOutputShape, rng);
+            var target = CreateLossCompatibleTarget(network, ShapeCheckedOutputShape, rng);
             network.Train(input, target);
         }
         var metadata = network.GetModelMetadata();
@@ -2167,7 +2167,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         if (TrainingInvariantsNotApplicable(network1)) return;
 
         var input = CreateRandomTensor(EffectiveInputShape, rng1);
-        var target = MakeTargetWellPosedForLoss(network1, CreateRandomTargetTensor(ShapeCheckedOutputShape, rng1), rng1);
+        var target = CreateLossCompatibleTarget(network1, ShapeCheckedOutputShape, rng1);
         int longIters = ResolveConformanceTrainingIterations(network1, MoreDataLongIterations);
 
         Assert.True(longIters > 0,
@@ -2280,7 +2280,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         if (TrainingInvariantsNotApplicable(network)) return;
         if (!TrainingErrorInvariantApplicable) return;
         var input = CreateRandomTensor(EffectiveInputShape, rng);
-        var target = CreateRandomTargetTensor(ShapeCheckedOutputShape, rng);
+        var target = CreateLossCompatibleTarget(network, ShapeCheckedOutputShape, rng);
 
         int iterations = ResolveConformanceTrainingIterations(network, TrainingErrorIterations);
         for (int i = 0; i < iterations; i++)
@@ -2288,9 +2288,13 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
 
         double trainMSE = MeasureLoss(network, network.Predict(input), target);
         var testInput = CreateRandomTensor(EffectiveInputShape, ModelTestHelpers.CreateSeededRandom(99));
-        // CreateRandomTargetTensor for the same reason the trainTarget
-        // a few lines above uses it — type-constrained families (NER /
-        // CRF) need legal label values.
+        // Use the SAME loss-domain projection as the training target. Calling only
+        // CreateRandomTargetTensor here still gives type-constrained families legal
+        // labels, but bypasses the second half of the shared contract: logits losses
+        // need one-hot distributions, BCE targets must be in [0, 1], and Born-rule
+        // heads need a probability distribution. Comparing a projected train target
+        // with a raw test target measures two different objectives and can even make
+        // cross-entropy negative, which manufactured the 18-model PR #2029 cluster.
         //
         // DIFFERENT SEED from testInput. Both used 99, and because these are two FRESHLY seeded
         // generators filled in the same sequential order, testTarget[i] == testInput[i] across the
@@ -2306,7 +2310,8 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         //
         // The train-side numbers were the honest ones all along: ~0.167 is E[(U-U')^2] for two
         // independent uniforms, which is what an untrained model should score.
-        var testTarget = CreateRandomTargetTensor(ShapeCheckedOutputShape, ModelTestHelpers.CreateSeededRandom(100));
+        var testTarget = CreateLossCompatibleTarget(
+            network, ShapeCheckedOutputShape, ModelTestHelpers.CreateSeededRandom(100));
         double testMSE = MeasureLoss(network, network.Predict(testInput), testTarget);
 
         if (!double.IsNaN(trainMSE) && !double.IsNaN(testMSE))
@@ -2394,10 +2399,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         var coldOutput = network.Predict(input);
         coldForwardTimer.Stop();
         int[] measuredOutputShape = coldOutput.Shape.ToArray();
-        var target = MakeTargetWellPosedForLoss(
-            network,
-            CreateRandomTargetTensor(measuredOutputShape, rng),
-            rng);
+        var target = CreateLossCompatibleTarget(network, measuredOutputShape, rng);
 
         // Each sample represents an independent production request. Rewind scratch between
         // requests after copying the only retained information (the output shape). Without this,
@@ -2457,10 +2459,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
             using (var targetShapeTape = new GradientTape<T>())
             {
                 var trainingOutput = nn.ForwardPreparedForTraining(input);
-                objectiveTarget = MakeTargetWellPosedForLoss(
-                    network,
-                    CreateRandomTargetTensor(trainingOutput.Shape.ToArray(), rng),
-                    rng);
+                objectiveTarget = CreateLossCompatibleTarget(network, trainingOutput.Shape.ToArray(), rng);
             }
             targetPreparationTimer.Stop();
             targetPreparationMs = targetPreparationTimer.Elapsed.TotalMilliseconds;
@@ -2772,7 +2771,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         using var network = CreateNetwork();
         if (TrainingInvariantsNotApplicable(network)) return;
         var input = CreateRandomTensor(EffectiveInputShape, rng);
-        var target = CreateRandomTargetTensor(ShapeCheckedOutputShape, rng);
+        var target = CreateLossCompatibleTarget(network, ShapeCheckedOutputShape, rng);
 
         // Materialize lazy-initialized parameter tensors via a warmup
         // forward pass — see Training_ShouldChangeParameters for the
@@ -2931,7 +2930,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         if (TrainingInvariantsNotApplicable(network)) return;
         if (!OptimizerStepParamL2InvariantApplicable) return;
         var input = CreateRandomTensor(EffectiveInputShape, rng);
-        var target = CreateRandomTargetTensor(ShapeCheckedOutputShape, rng);
+        var target = CreateLossCompatibleTarget(network, ShapeCheckedOutputShape, rng);
 
         // Materialize lazy-initialized parameters via a warmup forward
         // pass BEFORE measuring L2. Some layers (LayerNormalization with
@@ -3109,7 +3108,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         // UNIFORM-RANDOM target whose loss is pinned at 0.5*V*ln(V) with essentially no reachable
         // descent, so this invariant reported "loss did not strictly decrease" for a model that was
         // simply being given an unfittable objective.
-        var target = MakeTargetWellPosedForLoss(network, CreateRandomTargetTensor(ShapeCheckedOutputShape, rng), rng);
+        var target = CreateLossCompatibleTarget(network, ShapeCheckedOutputShape, rng);
 
         // First step establishes the baseline loss. Keep the repeated-training portion inside a
         // common wall-clock envelope so generated fixtures with a large legal receptive field do
@@ -3392,6 +3391,94 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         // identical trajectories. The papers for these models (Paraformer/SeACo arXiv 2206.08317 /
         // 2308.03266, and the LM families) all train cross-entropy over TOKEN targets, never a dense
         // random tensor, so a per-position one-hot is both well-posed and paper-faithful.
+        // BORN-RULE HEADS CANNOT REPRESENT A NEGATIVE TARGET, and handing them one pins the loss at
+        // its floor for a model that is already at its optimum. A Born-rule model measures |psi|^2,
+        // so every component of its output is non-negative BY CONSTRUCTION; a uniform-random target
+        // straddling zero asks for an output the model provably cannot produce.
+        //
+        // MEASURED on QuantumNeuralNetwork: target -0.155572, prediction driven 0.0517 -> 0.0053 over
+        // 100 steps (i.e. the model correctly walking its output toward 0, the closest reachable
+        // point), and the loss pinned at 0.024203 == (-0.155572)^2 -- the exact residual of the
+        // unreachable sign. LossStrictlyDecreasesOnMemorizationTask then read that converged model as
+        // "loss did not strictly decrease" when the truth is that it had already arrived.
+        //
+        // This is the same projection the CrossEntropyWithLogitsLoss branch below performs for the
+        // same reason: make the target something the head's own output space can express, so the
+        // invariant measures the optimizer instead of an impossible objective. It weakens nothing --
+        // the strict-decrease assertion is unchanged, and a Born-rule model that genuinely fails to
+        // learn a REACHABLE target still fails.
+        // A BINARY-CROSS-ENTROPY HEAD NEEDS A TARGET IN [0, 1], AND IS UNBOUNDED BELOW WITHOUT ONE.
+        // BCE-with-logits is max(x,0) - x*y + log(1 + exp(-|x|)). For a legal target that expression
+        // is non-negative, but y only appears in the -x*y term, so an out-of-range y makes the loss
+        // unbounded below and the optimizer simply drives x*y toward +infinity. A uniform-random
+        // target straddling zero is exactly such a y.
+        //
+        // MEASURED on SAMHQ, whose segmentation head defaults to BinaryCrossEntropyWithLogitsLoss:
+        // step 1 loss 0.698 (about ln 2, healthy at init), step 2 -2.11, step 5 -1397, step 20
+        // -3.45e11, step 60 -1.98e19, and at step 70 the parameters overflow -- 8,483,329 of
+        // 8,501,761 non-finite. Nothing about the model is wrong there; a NEGATIVE cross-entropy is
+        // the tell that the objective itself was ill-posed, because no valid one can go below zero.
+        //
+        // PyTorch documents binary_cross_entropy_with_logits targets as probabilities between 0 and
+        // 1, so clamping into that range is what makes the objective the one the loss is defined for.
+        // Same treatment, same reason, as the CrossEntropyWithLogitsLoss branch below.
+        if (target.Length > 0
+            && network is AiDotNet.NeuralNetworks.NeuralNetworkBase<T> binary
+            && (binary.DefaultLossFunction is AiDotNet.LossFunctions.BinaryCrossEntropyWithLogitsLoss<T>
+                || binary.DefaultLossFunction is AiDotNet.LossFunctions.BinaryCrossEntropyLoss<T>))
+        {
+            var projected = new Tensor<T>(target.Shape.ToArray());
+            var zero = NumOps.Zero;
+            var one = NumOps.One;
+            for (int i = 0; i < target.Length; i++)
+            {
+                var value = target[i];
+                if (NumOps.LessThan(value, zero)) value = zero;
+                else if (NumOps.GreaterThan(value, one)) value = one;
+                projected[i] = value;
+            }
+
+            return projected;
+        }
+
+        if (target.Length > 0
+            && network is AiDotNet.NeuralNetworks.NeuralNetworkBase<T> born
+            && born.DefaultLossFunction is AiDotNet.LossFunctions.BornRuleMseLoss<T>)
+        {
+            var projected = new Tensor<T>(target.Shape.ToArray());
+            var maxMagnitude = NumOps.Zero;
+            for (int i = 0; i < target.Length; i++)
+            {
+                var magnitude = NumOps.Abs(target[i]);
+                if (NumOps.GreaterThan(magnitude, maxMagnitude))
+                {
+                    maxMagnitude = magnitude;
+                }
+            }
+
+            if (NumOps.GreaterThan(maxMagnitude, NumOps.Zero))
+            {
+                var scaledTotal = NumOps.Zero;
+                for (int i = 0; i < projected.Length; i++)
+                {
+                    projected[i] = NumOps.Divide(NumOps.Abs(target[i]), maxMagnitude);
+                    scaledTotal = NumOps.Add(scaledTotal, projected[i]);
+                }
+
+                for (int i = 0; i < projected.Length; i++)
+                {
+                    projected[i] = NumOps.Divide(projected[i], scaledTotal);
+                }
+            }
+            else
+            {
+                var uniform = NumOps.Divide(NumOps.One, NumOps.FromDouble(projected.Length));
+                for (int i = 0; i < projected.Length; i++) projected[i] = uniform;
+            }
+
+            return projected;
+        }
+
         if (target.Length > 0
             && network is AiDotNet.NeuralNetworks.NeuralNetworkBase<T> nn
             && nn.DefaultLossFunction is AiDotNet.LossFunctions.CrossEntropyWithLogitsLoss<T>)
@@ -3479,6 +3566,61 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
             return oneHot;
         }
         return target;
+    }
+
+    /// <summary>
+    /// Creates the target used by a generic training invariant and verifies the loss-specific
+    /// domain before the target is allowed to reach <c>Train</c>. Keeping construction and the
+    /// fixture guard together prevents a future call site from silently bypassing projection.
+    /// </summary>
+    protected Tensor<T> CreateLossCompatibleTarget(
+        INeuralNetworkModel<T> network, int[] shape, Random rng)
+    {
+        var target = MakeTargetWellPosedForLoss(network, CreateRandomTargetTensor(shape, rng), rng);
+        ValidateLossCompatibleTarget(network, target);
+        return target;
+    }
+
+    /// <summary>
+    /// Verifies that a projected or fixture-supplied target satisfies the active loss domain.
+    /// Shared by ordinary training fixtures and finite differences so neither path can silently
+    /// evaluate an unreachable or mathematically invalid objective.
+    /// </summary>
+    protected void ValidateLossCompatibleTarget(INeuralNetworkModel<T> network, Tensor<T> target)
+    {
+
+        if (network is not AiDotNet.NeuralNetworks.NeuralNetworkBase<T> nn)
+            return;
+
+        bool binaryCrossEntropy =
+            nn.DefaultLossFunction is AiDotNet.LossFunctions.BinaryCrossEntropyWithLogitsLoss<T>
+            || nn.DefaultLossFunction is AiDotNet.LossFunctions.BinaryCrossEntropyLoss<T>;
+        bool bornRule = nn.DefaultLossFunction is AiDotNet.LossFunctions.BornRuleMseLoss<T>;
+        double totalMass = 0.0;
+
+        for (int i = 0; i < target.Length; i++)
+        {
+            double value = ConvertToDouble(target[i]);
+            Assert.True(IsFinite(value),
+                $"Loss-compatible target[{i}] is non-finite: {value:G17}.");
+            if (binaryCrossEntropy)
+            {
+                Assert.InRange(value, 0.0, 1.0);
+            }
+            else if (bornRule)
+            {
+                Assert.True(value >= 0.0,
+                    $"Born-rule target[{i}] must be non-negative; got {value:G17}.");
+                totalMass += value;
+            }
+        }
+
+        if (bornRule && target.Length > 0)
+        {
+            Assert.True(System.Math.Abs(totalMass - 1.0) <= 1e-6,
+                $"Born-rule target must sum to one; got {totalMass:G17}.");
+        }
+
     }
 
     /// <summary>
@@ -3613,6 +3755,16 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
     protected virtual int GradientCheckSampleCount => 12;
 
     /// <summary>
+    /// Wall-clock ceiling, measured on the gradient check's own clock, past which the exhaustive
+    /// one-coordinate-per-slot LOCALIZATION sweep stops and reports how far it got. Mirrors the
+    /// ceiling its admitting pre-gate already estimates against, but is checked against the REAL
+    /// elapsed time on every coordinate — the pre-gate alone cannot bound a sweep whose per-forward
+    /// price turns out higher than the single cold sample it was quoted from. Leaves head-room under
+    /// the 120 s <c>[Fact(Timeout)]</c> for the remaining coordinate plus teardown.
+    /// </summary>
+    private const double GradCheckLocalizationDeadlineSeconds = 105.0;
+
+    /// <summary>
     /// Exception types that represent a documented, EXPECTED gradcheck skip: lazy parameters not yet
     /// materialized, a custom-forward model whose gradient path is not yet routed through
     /// <c>ComputeGradients</c>, or a model whose flat <c>GetParameters</c>/<c>UpdateParameters</c>
@@ -3707,6 +3859,8 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
 
         var rng = ModelTestHelpers.CreateSeededRandom();
         var (input, target) = CreateGradientCheckExample(rng);
+        target = MakeTargetWellPosedForLoss(network, target, rng);
+        ValidateLossCompatibleTarget(network, target);
         input = BoundGradientInputForSpatiallyPolymorphicTopology(nn, input, rng);
 
         // Deterministic forward: eval mode turns Dropout into an identity, so the loss is a
@@ -4082,6 +4236,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
             }
         }
 
+
         if (checkedCount == 0) return;   // every perturbation produced a NaN loss — inconclusive
 
         if (kinkCoordinates > 0)
@@ -4256,11 +4411,39 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
                     int localizedDetachmentCount = 0;
                     bool exhaustiveLocalizationRan = false;
                     if (gradCheckClock.Elapsed.TotalSeconds +
-                        (32.0 * direction.Count * forwardSeconds) < 105.0)
+                        (32.0 * direction.Count * forwardSeconds) < GradCheckLocalizationDeadlineSeconds)
                     {
                         exhaustiveLocalizationRan = true;
+                        bool localizationBudgetExceeded = false;
                         foreach (var coordinate in direction)
                         {
+                            // THE PRE-GATE ABOVE IS AN ESTIMATE, AND AN ESTIMATE IS NOT A BUDGET.
+                            // It admits this block when 32 forwards per coordinate — priced at the
+                            // forwardSeconds sampled ONCE, cold, before the sample loop — appear to
+                            // fit. Nothing re-checked the real clock afterwards, so when that price
+                            // is optimistic the block still walked every coordinate to completion
+                            // and blew the 120 s [Fact(Timeout)] above.
+                            //
+                            // MEASURED on RecurrentGemma (fp32, instrumented): the test reached the
+                            // end of the sample loop at 7.5 s and never reached the end of the
+                            // method, timing out at 120 s in three consecutive class runs while
+                            // every other test in the class stayed healthy (memorization 38 s,
+                            // training-step 13 s, remainder under 4 s). Isolated, the same test
+                            // finishes in 8 s — the estimate is simply cheaper than the reality it
+                            // is standing in for.
+                            //
+                            // Re-checking the actual elapsed time each coordinate turns the
+                            // all-or-nothing gate into a genuine cap: localization runs for as many
+                            // coordinates as the budget really affords and then falls back to the
+                            // documented NOT-RUN path below, which reports the shortfall instead of
+                            // judging on a partial sweep. A timeout diagnoses nothing; a bounded
+                            // sweep that says how far it got diagnoses something.
+                            if (gradCheckClock.Elapsed.TotalSeconds > GradCheckLocalizationDeadlineSeconds)
+                            {
+                                exhaustiveLocalizationRan = false;
+                                break;
+                            }
+
                             var ownerSlot = trainableSlots.First(slot =>
                                 coordinate.FlatIndex >= slot.Offset &&
                                 coordinate.FlatIndex < slot.Offset + slot.Length);
@@ -4285,6 +4468,18 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
                             var localMinusParameters = new double[localDerivatives.Length];
                             for (int localStepIndex = 0; localStepIndex < localDerivatives.Length; localStepIndex++)
                             {
+                                // Each ladder entry costs a plus/minus loss pair. Check the real
+                                // clock before every pair and reserve its measured cost; checking
+                                // only once per coordinate still allowed a single 16-pair ladder
+                                // to run past the Fact deadline.
+                                if (gradCheckClock.Elapsed.TotalSeconds + (2.0 * forwardSeconds) >=
+                                    GradCheckLocalizationDeadlineSeconds)
+                                {
+                                    exhaustiveLocalizationRan = false;
+                                    localizationBudgetExceeded = true;
+                                    break;
+                                }
+
                                 double localStep = localFinestStep * (1 << localStepIndex);
                                 var (localPlus, localMinus, localPlusParameter, localMinusParameter) = GradientCheckLossPairAt(
                                     nn, loss, input, target, theta, coordinate.FlatIndex, originalValue, localStep);
@@ -4298,6 +4493,8 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
                                     ? double.NaN
                                     : (localPlus - localMinus) / actualSpan;
                             }
+
+                            if (localizationBudgetExceeded) break;
 
                             int localBestPair = -1;
                             double localBestAgreement = double.PositiveInfinity;
@@ -4721,8 +4918,8 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         if (!GradientCorrectnessInvariantApplicable) return;
 
         var input = CreateRandomTensor(EffectiveInputShape, rng);
-        var targetA = MakeTargetWellPosedForLoss(network, CreateRandomTargetTensor(ShapeCheckedOutputShape, rng), rng);
-        var targetB = MakeTargetWellPosedForLoss(network, CreateRandomTargetTensor(ShapeCheckedOutputShape, rng), rng);
+        var targetA = CreateLossCompatibleTarget(network, ShapeCheckedOutputShape, rng);
+        var targetB = CreateLossCompatibleTarget(network, ShapeCheckedOutputShape, rng);
 
         // FIXTURE GUARD, and it is not a formality — without it this invariant manufactures findings.
         // MakeTargetWellPosedForLoss projects a target into the shape its loss can actually use, and for
@@ -5372,7 +5569,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         if (!GradientCorrectnessInvariantApplicable) return;
 
         var input = CreateRandomTensor(EffectiveInputShape, rng);
-        var target = MakeTargetWellPosedForLoss(network, CreateRandomTargetTensor(ShapeCheckedOutputShape, rng), rng);
+        var target = CreateLossCompatibleTarget(network, ShapeCheckedOutputShape, rng);
         network.SetTrainingMode(true);
         try { network.Predict(input); }
         catch (InvalidOperationException) { /* warmed by Train below */ }

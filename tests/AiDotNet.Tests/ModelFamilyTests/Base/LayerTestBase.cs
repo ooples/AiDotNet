@@ -876,11 +876,46 @@ public abstract class LayerTestBase<T>
             }
         }
 
+        // RESET BEFORE REPLAYING, exactly as the deserialized comparison below already does. The
+        // question this loop asks is "did SERIALIZING the layer change its behaviour", so both
+        // forwards have to start from the same state. `originalOutput` was produced by the FIRST
+        // forward of a freshly constructed layer; replaying without a reset runs the second forward
+        // from whatever state that first pass left behind.
+        //
+        // For a stateless layer the two are identical and nothing changes. For a STATEFUL one --
+        // reservoir, spiking, and the SSM recurrences (S4D/S5/Hyena/Megalodon/LinearRecurrentUnit) --
+        // the second forward legitimately differs because the recurrence advanced, so the assertion
+        // fired on correct behaviour and blamed serialization for it. The sibling comparison ten
+        // lines down already calls ResetState() for precisely this reason; this makes the replay
+        // symmetric with it.
+        layer.ResetState();
         var originalReplay = layer.Forward(input).Clone();
         for (int i = 0; i < originalOutput.Length; i++)
         {
             double originalValue = ToD(originalOutput[i]);
             double replayValue = ToD(originalReplay[i]);
+
+            Assert.False(double.IsNaN(originalValue) || double.IsNaN(replayValue),
+                $"Serializing the layer produced NaN at [{i}]: " +
+                $"before={originalValue:G17}, after={replayValue:G17}");
+
+            // EXACT EQUALITY FIRST, TOLERANCE ONLY FOR FINITE VALUES. A difference-based tolerance
+            // cannot compare non-finite values: for two IDENTICAL infinities the subtraction is
+            // -inf - -inf = NaN, Math.Abs(NaN) is NaN, and NaN < 1e-12 is false, so the assertion
+            // fired on values that were bit-for-bit the same. ALiBiPositionalBiasLayer hit exactly
+            // this -- it masks with true -Infinity BY DESIGN (documented on ComputeBias: -inf makes
+            // exp(-inf) = 0 exactly, where a large finite MinValue can leak attention weight) and is
+            // annotated ProducesNonFiniteOutput = true -- and the failure it produced read
+            // "before=-Infinity, after=-Infinity", i.e. the two values it was complaining about were
+            // equal.
+            //
+            // Comparing infinities by equality rather than by subtraction is the standard numeric
+            // convention (NumPy's allclose does the same, matching infinities exactly and gating NaN
+            // behind equal_nan), and it is what the trainable-tensor loop above already does with
+            // EqualityComparer<T>.Default.Equals. This only ADDS the exact-equality escape; any
+            // genuine drift between two finite values still fails on the same 1e-12 tolerance.
+            if (originalValue.Equals(replayValue)) continue;
+
             Assert.True(Math.Abs(originalValue - replayValue) < 1e-12,
                 $"Serializing the layer changed its own output at [{i}]: " +
                 $"before={originalValue:G17}, after={replayValue:G17}");
@@ -893,6 +928,12 @@ public abstract class LayerTestBase<T>
         Assert.Equal(originalOutput.Length, deserializedOutput.Length);
         for (int i = 0; i < originalOutput.Length; i++)
         {
+            double originalValue = ToD(originalOutput[i]);
+            double deserializedValue = ToD(deserializedOutput[i]);
+            Assert.False(double.IsNaN(originalValue) || double.IsNaN(deserializedValue),
+                $"Serialization roundtrip produced NaN at [{i}]: " +
+                $"original={originalValue:G17}, deserialized={deserializedValue:G17}");
+
             // Direct equality check covers ±Infinity (where Math.Abs(inf - inf) = NaN
             // would make the tolerance check spuriously fail for layers like ALiBi that
             // legitimately emit -∞ at masked positions). For ordinary finite outputs the
@@ -903,8 +944,6 @@ public abstract class LayerTestBase<T>
             {
                 continue;
             }
-            double originalValue = ToD(originalOutput[i]);
-            double deserializedValue = ToD(deserializedOutput[i]);
             Assert.True(Math.Abs(originalValue - deserializedValue) < Tolerance,
                 $"Output[{i}] differs after serialization roundtrip: " +
                 $"original={originalValue:G17}, deserialized={deserializedValue:G17}");

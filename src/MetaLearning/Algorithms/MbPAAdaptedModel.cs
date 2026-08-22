@@ -95,6 +95,13 @@ public partial class MbPAAdaptedModel<T, TInput, TOutput> : MetaLearningModelBas
     public override TOutput Predict(TInput input)
     {
         int batchSize = MbPAConversions<T>.GetBatchSize(input);
+        if (batchSize > 1 && typeof(TOutput) == typeof(Vector<T>) && _options.OutputDimension > 1)
+        {
+            throw new NotSupportedException(
+                $"MbPA cannot represent {batchSize} predictions with {_options.OutputDimension} components each " +
+                "as Vector<T>. Use Matrix<T> or Tensor<T> for batched multi-component outputs.");
+        }
+
         var rows = new List<Vector<T>>(batchSize);
 
         for (int i = 0; i < batchSize; i++)
@@ -189,10 +196,14 @@ public partial class MbPAAdaptedModel<T, TInput, TOutput> : MetaLearningModelBas
 
             if (rows.Count == 1) return (TOutput)(object)rows[0];
 
+            // A flat Vector<T> has no row boundary. Although all components could be copied into it,
+            // the meta-learning consumers treat a vector as one prediction: ComputeAccuracy takes one
+            // global argmax and ComputeLossFromOutput passes it directly to the configured loss. Until
+            // those consumers become OutputDimension-aware, returning row-major data here would make a
+            // valid representation locally and give it the wrong meaning everywhere downstream.
             throw new NotSupportedException(
-                $"MbPA cannot pack {rows.Count} predictions of {outputDim} components each into a " +
-                "flat Vector<T> without discarding components. Use Matrix<T> or Tensor<T> as the " +
-                "meta-learning output type for a batched multi-component head.");
+                $"MbPA cannot represent {rows.Count} predictions with {outputDim} components each " +
+                "as Vector<T>. Use Matrix<T> or Tensor<T> for batched multi-component outputs.");
         }
 
         if (typeof(TOutput) == typeof(Matrix<T>))

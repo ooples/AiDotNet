@@ -143,6 +143,18 @@ public sealed class MbPAEpisodicMemory<T>
             }
         }
 
+        // NEAREST FIRST. `kept` is a MAX-heap, so kept[0] is the FARTHEST of the k selected and the
+        // remainder sit in heap order rather than distance order. Copying it out as-is made a method
+        // documented as returning "the k nearest" return a result that was not fully ordered, with
+        // the farthest survivor first. Kernels still matched their entries; only the public ordering
+        // was incorrect.
+        //
+        // The selection above is still the O(n log k) partial scan the comment describes -- ordering
+        // only the k SURVIVORS costs O(k log k) on a set that is already tiny (k << MemorySize), so
+        // the reason the sort was skipped ("LocallyAdapt sums over the neighbours, it never needs
+        // them ordered") holds for that one caller but not for the public contract every other
+        // caller reads.
+        kept.Sort(static (a, b) => a.DistanceSquared.CompareTo(b.DistanceSquared));
         for (int i = 0; i < take; i++) distances[i] = kept[i];
 
         var kernels = new double[take];

@@ -111,14 +111,6 @@ public class GriffinLanguageModel<T> : TokenLanguageModelLayoutBase<T>
     #region NeuralNetworkBase Overrides
 
     /// <summary>
-    /// Griffin's RG-LRU carries a data-dependent hidden state through a timestep
-    /// recurrence. That stateful loop cannot be captured once and safely replayed
-    /// by the static fused-training plan; use the eager tape so every step records
-    /// the current recurrence and AdamW receives the true finite gradients.
-    /// </summary>
-    protected override bool SupportsFusedCompiledTraining => false;
-
-    /// <summary>
     /// Uses the constructor-selected optimizer. Griffin's paper trains with
     /// AdamW; callers can supply any gradient optimizer through the constructor.
     /// </summary>
