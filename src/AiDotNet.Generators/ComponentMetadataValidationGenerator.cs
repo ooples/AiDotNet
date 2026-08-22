@@ -91,6 +91,15 @@ public class ComponentMetadataValidationGenerator : IIncrementalGenerator
 
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
+        // ComponentCandidate was a struct, but it CARRIED an INamedTypeSymbol -- a value type
+        // wrapped around a reference that roots the whole Compilation leaks exactly as badly as the
+        // bare symbol would. It now carries the metadata name instead, and the symbol is
+        // re-resolved at the point of validation.
+        //
+        // Same scope limit as ModelMetadataValidationGenerator: the validators report straight to
+        // SourceProductionContext, and the generated-output diff cannot see diagnostics, so the
+        // validation logic is left untouched and only the retention is fixed. AIDN050/051/052 and
+        // AIDN07x counts are compared across the build instead.
         var classDeclarations = context.SyntaxProvider.CreateSyntaxProvider(
             predicate: static (node, _) => IsCandidate(node),
             transform: static (ctx, _) => GetComponentClassOrNull(ctx))
@@ -127,11 +136,11 @@ public class ComponentMetadataValidationGenerator : IIncrementalGenerator
 
         var kind = ClassifyComponent(symbol);
         if (kind != ComponentKind.None)
-            return new ComponentCandidate(symbol, kind);
+            return new ComponentCandidate(MetadataNameOf(symbol), kind);
 
         // Also include classes that have [ComponentType] or [PipelineStage] for Tier 2 validation
         if (HasComponentTypeOrPipelineStage(symbol))
-            return new ComponentCandidate(symbol, ComponentKind.General);
+            return new ComponentCandidate(MetadataNameOf(symbol), ComponentKind.General);
 
         return null;
     }
@@ -192,15 +201,20 @@ public class ComponentMetadataValidationGenerator : IIncrementalGenerator
         if (candidates.IsDefaultOrEmpty)
             return;
 
-        var seen = new System.Collections.Generic.HashSet<INamedTypeSymbol>(SymbolEqualityComparer.Default);
+        var seen = new System.Collections.Generic.HashSet<string>(System.StringComparer.Ordinal);
 
         foreach (var candidate in candidates)
         {
             if (candidate is null)
                 continue;
 
-            var symbol = candidate.Value.Symbol;
-            if (!seen.Add(symbol))
+            var metadataName = candidate.Value.MetadataName;
+            if (metadataName.Length == 0)
+                continue;
+            if (!seen.Add(metadataName))
+                continue;
+
+            if (compilation.GetTypeByMetadataName(metadataName) is not INamedTypeSymbol symbol)
                 continue;
 
             switch (candidate.Value.Kind)
@@ -362,16 +376,55 @@ public class ComponentMetadataValidationGenerator : IIncrementalGenerator
         return false;
     }
 
-    private readonly struct ComponentCandidate
+    /// <summary>
+    /// A candidate as plain values. Holding the INamedTypeSymbol here rooted the entire Compilation
+    /// from cached pipeline state, which a readonly struct does nothing to prevent.
+    /// </summary>
+    private readonly struct ComponentCandidate : System.IEquatable<ComponentCandidate>
     {
-        public INamedTypeSymbol Symbol { get; }
+        public string MetadataName { get; }
         public ComponentKind Kind { get; }
 
-        public ComponentCandidate(INamedTypeSymbol symbol, ComponentKind kind)
+        public ComponentCandidate(string metadataName, ComponentKind kind)
         {
-            Symbol = symbol;
+            MetadataName = metadataName;
             Kind = kind;
         }
+
+        public bool Equals(ComponentCandidate other)
+            => Kind == other.Kind
+            && string.Equals(MetadataName, other.MetadataName, System.StringComparison.Ordinal);
+
+        public override bool Equals(object? obj) => obj is ComponentCandidate c && Equals(c);
+
+        public override int GetHashCode()
+        {
+            unchecked
+            {
+                return ((MetadataName?.GetHashCode() ?? 0) * 31) + (int)Kind;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Builds the metadata name GetTypeByMetadataName expects, including the arity suffix for
+    /// generics and '+' separators for nested types.
+    /// </summary>
+    private static string MetadataNameOf(INamedTypeSymbol symbol)
+    {
+        var name = symbol.MetadataName;
+        for (var containing = symbol.ContainingType; containing is not null; containing = containing.ContainingType)
+        {
+            name = containing.MetadataName + "+" + name;
+        }
+
+        var ns = symbol.ContainingNamespace;
+        if (ns is not null && !ns.IsGlobalNamespace)
+        {
+            name = ns.ToDisplayString() + "." + name;
+        }
+
+        return name;
     }
 
     private enum ComponentKind
