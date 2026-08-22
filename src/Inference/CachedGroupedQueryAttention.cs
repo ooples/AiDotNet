@@ -154,6 +154,20 @@ public partial class CachedGroupedQueryAttention<T> : LayerBase<T>, IShapeContra
         _outputWeights = new Tensor<T>([embeddingDimension, embeddingDimension]);
         _outputBias = new Tensor<T>([embeddingDimension]);
 
+        // Register the projections. Without this the layer reported ParameterCount 0 despite owning
+        // five weight tensors, so GetParameters returned an empty vector and SetParameters was a
+        // silent no-op -- the weights could be neither trained nor saved.
+        //
+        // InferenceOptimizer rewrites a GroupedQueryAttentionLayer into this class and transfers the
+        // trained weights through exactly that round-trip. Because the transfer did nothing, the
+        // rewritten layer kept its own fresh initialization and produced different outputs from the
+        // model it was supposed to be an optimization of.
+        RegisterTrainableParameter(_queryWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_keyWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_valueWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_outputWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_outputBias, PersistentTensorRole.Biases);
+
         InitializeWeights();
     }
 

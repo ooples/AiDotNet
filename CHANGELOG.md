@@ -21,12 +21,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Changed
+### Breaking Changes
 
-- **Breaking (pre-1.0):** `IAiModelBuilder<T, TInput, TOutput>` now declares
-  `ConfigureSegmentationVisualization`. External implementations of the public interface must add
-  the method; implementations can forward the supplied configuration to their result defaults or
-  return `this` after storing it for their renderer.
+* `QuantileRegressionOptions<T>.LearningRate` was removed because quantile regression now uses an exact linear-program solver rather than gradient descent; there is no learning-rate replacement. `QuantileRegressionOptions<T>.MaxIterations` moved to `SolverOptions.MaxIterations`, alongside the other simplex controls.
+* `NeuralNetworkRegressionOptions<T, TInput, TOutput>.Optimizer` was replaced by `OptimizerFactory`. The factory receives the model it will optimize and creates one optimizer per model, preventing clones from sharing mutable optimizer state.
+* `IAiModelBuilder<T, TInput, TOutput>` now declares `ConfigureSegmentationVisualization`. External implementations of the public interface must add the method; implementations can forward the supplied configuration to their result defaults or return `this` after storing it for their renderer.
 
 ---
 

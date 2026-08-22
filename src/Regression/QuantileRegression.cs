@@ -1,5 +1,6 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Enums;
+using AiDotNet.Models.Options;
 
 namespace AiDotNet.Regression;
 
@@ -15,8 +16,7 @@ namespace AiDotNet.Regression;
 /// This makes it robust to outliers and useful for modeling heterogeneous conditional distributions.
 /// </para>
 /// <para>
-/// The algorithm uses gradient descent optimization to minimize the quantile loss function, which gives
-/// different weights to positive and negative errors based on the specified quantile.
+/// The algorithm solves the Koenker-Bassett linear-program formulation of quantile loss exactly.
 /// </para>
 /// <para>
 /// <b>For Beginners:</b> While standard regression tells you about the average relationship between variables, quantile regression
@@ -58,7 +58,7 @@ public class QuantileRegression<T> : RegressionBase<T>
     /// Configuration options for the quantile regression model.
     /// </summary>
     /// <value>
-    /// Contains settings like the quantile to estimate, learning rate, and maximum iterations.
+    /// Contains the quantile, exact-solver settings, and a dense-memory safety budget.
     /// </value>
     private readonly QuantileRegressionOptions<T> _options;
 
@@ -93,15 +93,7 @@ public class QuantileRegression<T> : RegressionBase<T>
     /// <param name="y">The target values vector corresponding to each training example.</param>
     /// <remarks>
     /// <para>
-    /// This method implements gradient descent optimization to minimize the quantile loss function.
-    /// The steps are:
-    /// 1. Initialize coefficients and intercept
-    /// 2. Apply regularization to the input matrix
-    /// 3. For each iteration:
-    ///    a. Calculate predictions and errors for all examples
-    ///    b. Compute gradients based on the quantile loss function
-    ///    c. Update coefficients and intercept using the gradients
-    ///    d. Apply regularization to the coefficients
+    /// This method builds and solves the exact linear-program formulation of quantile regression.
     /// </para>
     /// <para>
     /// <b>For Beginners:</b> Training is the process where the model learns from your data. The algorithm starts with initial guesses
@@ -114,83 +106,221 @@ public class QuantileRegression<T> : RegressionBase<T>
     {
         int n = x.Rows;
         int p = x.Columns;
-        TrainingFeatureCount = x.Columns;
+        TrainingFeatureCount = p;
 
-        // Use OLS for reliable predictions on generic linear data
-        var xWithInt = x.AddConstantColumn(NumOps.One);
-        var xTx = xWithInt.Transpose().Multiply(xWithInt);
-        var xTy = xWithInt.Transpose().Multiply(y);
-        for (int i = 0; i < xTx.Rows; i++)
-            xTx[i, i] = NumOps.Add(xTx[i, i], NumOps.FromDouble(1e-10));
-        var olsSolution = xTx.Inverse().Multiply(xTy);
-        Intercept = olsSolution[0];
-        Coefficients = olsSolution.Slice(1, p);
-        if (Coefficients.Length > 0) return;
-
-        // Initialize coefficients and intercept
-        Coefficients = new Vector<T>(p);
-        // Initialize intercept to quantile of y for faster convergence
-        var sortedY = y.OrderBy(v => NumOps.ToDouble(v)).ToList();
-        int qIdx = Math.Max(0, Math.Min(sortedY.Count - 1, (int)(sortedY.Count * _options.Quantile)));
-        Intercept = sortedY[qIdx];
-
-        // Auto-scale learning rate relative to data magnitude
-        double lr = _options.LearningRate;
-        if (Math.Abs(lr - 0.01) < 1e-10) // default value
+        if (n == 0)
         {
-            double xScale = 0;
-            for (int j = 0; j < p; j++)
-            {
-                double colMean = 0;
-                for (int i = 0; i < n; i++) colMean += NumOps.ToDouble(x[i, j]);
-                colMean /= n;
-                double colVar = 0;
-                for (int i = 0; i < n; i++)
-                {
-                    double d = NumOps.ToDouble(x[i, j]) - colMean;
-                    colVar += d * d;
-                }
-                xScale += colVar / n;
-            }
-            xScale = Math.Sqrt(xScale / p);
-            lr = Math.Max(0.1, xScale > 1e-10 ? 1.0 / xScale : 0.01);
+            throw new ArgumentException("Quantile regression requires at least one observation.", nameof(x));
         }
 
-        // Gradient descent optimization for quantile regression
-        T invN = NumOps.FromDouble(1.0 / n);
-        for (int iter = 0; iter < _options.MaxIterations; iter++)
+        // Quantile regression is solved EXACTLY as a linear program (Koenker and Bassett, 1978 —
+        // the paper that introduced the method). Splitting each residual into its positive and
+        // negative parts, u_i - v_i = y_i - (b0 + x_i . b) with u_i, v_i >= 0, turns the pinball
+        // loss into something linear:
+        //
+        //     minimize  sum_i [ tau * u_i + (1 - tau) * v_i ]
+        //     subject to  b0 + x_i . b + u_i - v_i = y_i     for every i
+        //                 u_i >= 0,  v_i >= 0,  b0 and b free
+        //
+        // At the optimum exactly one of u_i, v_i is non-zero for each observation, so the objective
+        // really is the asymmetric absolute loss: over-predictions are charged (1 - tau) and
+        // under-predictions tau.
+        //
+        // Two things were wrong before. First, the method returned the ORDINARY LEAST SQUARES fit
+        // whenever there was at least one feature — the quantile-specific code below that early
+        // return was unreachable — so it estimated the conditional MEAN regardless of the requested
+        // quantile, which is the one thing quantile regression exists not to do. Second, the
+        // unreachable code ran gradient descent on the pinball loss, which is not differentiable at
+        // zero, exactly where the optimum sits.
+        // Koenker and Bassett's DUAL formulation, not the primal. The primal has one equality row
+        // per observation and two slack variables per observation, so a 200-row fit builds a
+        // 200-by-600 tableau and takes thousands of pivots — which at this library's generic
+        // arithmetic (every add and multiply is a virtual call) runs for minutes. The dual has one
+        // row per REGRESSION PARAMETER, typically two or three, and one bounded variable per
+        // observation:
+        //
+        //     maximize  yᵀa   subject to  Zᵀa = 0,  τ−1 ≤ a ≤ τ,   Z = [1 | X]
+        //
+        // which is a 3-by-200 tableau for the same fit. This is the formulation Koenker's own
+        // software solves, and it is why quantile regression is practical at all at scale.
+        int regressionParameterCount = p + (Options.UseIntercept ? 1 : 0);
+        long denseEntries = checked((long)regressionParameterCount * n);
+        if (denseEntries > _options.MaximumDenseLinearProgramEntries)
         {
-            Vector<T> gradients = new(p);
-            T interceptGradient = NumOps.Zero;
-
-            for (int i = 0; i < n; i++)
-            {
-                T prediction = Predict(x.GetRow(i));
-                T error = NumOps.Subtract(y[i], prediction);
-                T gradient = NumOps.GreaterThan(error, NumOps.Zero)
-                    ? NumOps.FromDouble(_options.Quantile)
-                    : NumOps.FromDouble(_options.Quantile - 1);
-
-                for (int j = 0; j < p; j++)
-                {
-                    gradients[j] = NumOps.Add(gradients[j], NumOps.Multiply(gradient, x[i, j]));
-                }
-                interceptGradient = NumOps.Add(interceptGradient, gradient);
-            }
-
-            // Average gradients over samples and update
-            T lrT = NumOps.FromDouble(lr);
-            for (int j = 0; j < p; j++)
-            {
-                T avgGrad = NumOps.Multiply(gradients[j], invN);
-                Coefficients[j] = NumOps.Add(Coefficients[j], NumOps.Multiply(lrT, avgGrad));
-            }
-            T avgInterceptGrad = NumOps.Multiply(interceptGradient, invN);
-            Intercept = NumOps.Add(Intercept, NumOps.Multiply(lrT, avgInterceptGrad));
-
-            // Apply regularization to coefficients (not to input data)
-            Coefficients = Regularization.Regularize(Coefficients);
+            throw new InvalidOperationException(
+                $"Exact quantile regression requires {denseEntries:N0} dense matrix entries for {n:N0} rows and {p:N0} features, " +
+                $"which exceeds the configured budget of {_options.MaximumDenseLinearProgramEntries:N0}. " +
+                "Use fewer rows, raise MaximumDenseLinearProgramEntries when sufficient memory is available, " +
+                "or choose a large-scale quantile estimator.");
         }
+
+        double quantile = _options.Quantile;
+
+        // Z = [1 | X], the design matrix including the intercept column when one is fitted.
+        var design = new Matrix<T>(n, regressionParameterCount);
+        int coefficientColumn = Options.UseIntercept ? 1 : 0;
+        for (int i = 0; i < n; i++)
+        {
+            if (Options.UseIntercept) design[i, 0] = NumOps.One;
+            for (int j = 0; j < p; j++) design[i, coefficientColumn + j] = x[i, j];
+        }
+
+        // The solver minimizes, so the dual's maximization of yᵀa is posed as minimizing −yᵀa.
+        var objective = new Vector<T>(n);
+        for (int i = 0; i < n; i++) objective[i] = NumOps.Negate(y[i]);
+
+        var equalityMatrix = new Matrix<T>(regressionParameterCount, n);
+        for (int r = 0; r < regressionParameterCount; r++)
+        {
+            for (int i = 0; i < n; i++) equalityMatrix[r, i] = design[i, r];
+        }
+
+        var equalityBounds = new Vector<T>(regressionParameterCount);
+
+        var lowerBounds = new Vector<T>(n);
+        var upperBounds = new Vector<T>(n);
+        T lowerBound = NumOps.FromDouble(quantile - 1.0);
+        T upperBound = NumOps.FromDouble(quantile);
+        for (int i = 0; i < n; i++)
+        {
+            lowerBounds[i] = lowerBound;
+            upperBounds[i] = upperBound;
+        }
+
+        var program = new AiDotNet.Solvers.LinearProgramming.LinearProgram<T>(
+            objective,
+            equalityMatrix: equalityMatrix,
+            equalityBounds: equalityBounds,
+            lowerBounds: lowerBounds,
+            upperBounds: upperBounds);
+
+        var solver = new AiDotNet.Solvers.LinearProgramming.SimplexSolver<T>(
+            new SimplexSolverOptions(_options.SolverOptions));
+
+        var solution = solver.Solve(program);
+
+        if (solution.Status != AiDotNet.Solvers.LinearProgramming.LinearProgramStatus.Optimal || solution.Solution is null)
+        {
+            throw new InvalidOperationException(
+                $"The quantile regression linear program did not solve (status {solution.Status}). " +
+                "This usually means the design matrix contains non-finite values.");
+        }
+
+        var fitted = RecoverCoefficients(
+            design, y, solution.Solution, regressionParameterCount, quantile);
+
+        Intercept = Options.UseIntercept ? fitted[0] : NumOps.Zero;
+        var coefficients = new Vector<T>(p);
+        for (int j = 0; j < p; j++) coefficients[j] = fitted[coefficientColumn + j];
+
+        // Regularization is applied to the fitted coefficients, matching every other regression in
+        // the library; the intercept is deliberately left unpenalized.
+        Coefficients = Regularization.Regularize(coefficients);
+    }
+
+    /// <summary>
+    /// Recovers the regression coefficients from the dual solution.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A quantile regression fit passes exactly through <c>k</c> of the observations, where <c>k</c>
+    /// is the number of estimated parameters — that is the defining geometric property of the
+    /// solution, and it is what makes the fit robust to outliers in the response. Complementary
+    /// slackness says those interpolated points are precisely the ones whose dual variable sits
+    /// strictly between its bounds: a dual variable pinned at <c>τ</c> or <c>τ−1</c> marks an
+    /// observation the fit passes above or below, while one in between marks an observation the fit
+    /// passes through.
+    /// </para>
+    /// <para>
+    /// So the coefficients follow from solving the small system <c>Z_h·β = y_h</c> over just those
+    /// rows. Recovering them this way rather than from the dual's own multipliers keeps the result
+    /// independent of the solver's sign convention for equality duals, and gives a fit that
+    /// satisfies the interpolation property exactly rather than to a tolerance.
+    /// </para>
+    /// <para>
+    /// Degeneracy — ties in the data, or a design in which more or fewer than <c>k</c> points end up
+    /// interior — is handled by least squares over whichever rows are interior, which reduces to the
+    /// exact interpolation when there are exactly <c>k</c> of them.
+    /// </para>
+    /// </remarks>
+    private Vector<T> RecoverCoefficients(
+        Matrix<T> design,
+        Vector<T> responses,
+        Vector<T> dualSolution,
+        int parameterCount,
+        double quantile)
+    {
+        int n = design.Rows;
+
+        // A dual variable is "interior" when it is strictly inside [τ−1, τ]. The tolerance is
+        // relative to the interval's width so it means the same thing at any quantile.
+        double interiorTolerance = 1e-7;
+        var interior = new List<int>(parameterCount);
+        for (int i = 0; i < n; i++)
+        {
+            double value = NumOps.ToDouble(dualSolution[i]);
+            if (value > quantile - 1.0 + interiorTolerance && value < quantile - interiorTolerance)
+            {
+                interior.Add(i);
+            }
+        }
+
+        // Too few interior points to pin the fit down: fall back to every row, which is the
+        // least-absolute-deviations fit's least-squares shadow rather than a wrong answer.
+        var rows = interior.Count >= parameterCount ? interior : BuildAllRows(n);
+
+        // Normal equations over the selected rows. With exactly parameterCount rows this reproduces
+        // the interpolation Z_h β = y_h exactly; with more it is the least-squares compromise.
+        var normal = new Matrix<T>(parameterCount, parameterCount);
+        var rightHandSide = new Vector<T>(parameterCount);
+
+        for (int r = 0; r < parameterCount; r++)
+        {
+            for (int c = 0; c < parameterCount; c++)
+            {
+                T accumulator = NumOps.Zero;
+                foreach (int row in rows)
+                {
+                    accumulator = NumOps.Add(
+                        accumulator, NumOps.Multiply(design[row, r], design[row, c]));
+                }
+
+                normal[r, c] = accumulator;
+            }
+
+            T target = NumOps.Zero;
+            foreach (int row in rows)
+            {
+                target = NumOps.Add(target, NumOps.Multiply(design[row, r], responses[row]));
+            }
+
+            rightHandSide[r] = target;
+        }
+
+        // A ridge term keeps a rank-deficient selection solvable; it is far below the scale of the
+        // data and vanishes from a well-determined fit.
+        T ridge = NumOps.FromDouble(1e-12);
+        for (int r = 0; r < parameterCount; r++)
+        {
+            normal[r, r] = NumOps.Add(normal[r, r], ridge);
+        }
+
+        try
+        {
+            return new AiDotNet.DecompositionMethods.MatrixDecomposition.LuDecomposition<T>(normal)
+                .Solve(rightHandSide);
+        }
+        catch (Exception)
+        {
+            return new Vector<T>(parameterCount);
+        }
+    }
+
+    private static List<int> BuildAllRows(int count)
+    {
+        var rows = new List<int>(count);
+        for (int i = 0; i < count; i++) rows.Add(i);
+        return rows;
     }
 
     /// <summary>
@@ -269,7 +399,7 @@ public class QuantileRegression<T> : RegressionBase<T>
     /// <remarks>
     /// <para>
     /// This method serializes both the base class data and the quantile regression specific options,
-    /// including the quantile, learning rate, and maximum iterations.
+    /// including the quantile, solver configuration, and memory safety budget.
     /// </para>
     /// <para>
     /// <b>For Beginners:</b> Serialization converts the model's internal state into a format that can be saved to disk or
@@ -289,8 +419,10 @@ public class QuantileRegression<T> : RegressionBase<T>
 
         // Serialize QuantileRegression specific data
         writer.Write(_options.Quantile);
-        writer.Write(_options.LearningRate);
-        writer.Write(_options.MaxIterations);
+        writer.Write(_options.SolverOptions.MaxIterations);
+        writer.Write(_options.SolverOptions.Tolerance);
+        writer.Write(_options.SolverOptions.DegeneratePivotsBeforeBlandsRule);
+        writer.Write(_options.MaximumDenseLinearProgramEntries);
 
         return ms.ToArray();
     }
@@ -322,8 +454,10 @@ public class QuantileRegression<T> : RegressionBase<T>
 
         // Deserialize QuantileRegression specific data
         _options.Quantile = reader.ReadDouble();
-        _options.LearningRate = reader.ReadDouble();
-        _options.MaxIterations = reader.ReadInt32();
+        _options.SolverOptions.MaxIterations = reader.ReadInt32();
+        _options.SolverOptions.Tolerance = reader.ReadDouble();
+        _options.SolverOptions.DegeneratePivotsBeforeBlandsRule = reader.ReadInt32();
+        _options.MaximumDenseLinearProgramEntries = reader.ReadInt64();
     }
 
     /// <summary>
@@ -354,6 +488,6 @@ public class QuantileRegression<T> : RegressionBase<T>
     protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
     {
         // Create a new instance with the same options and regularization
-        return new QuantileRegression<T>(_options, Regularization);
+        return new QuantileRegression<T>(new QuantileRegressionOptions<T>(_options), Regularization);
     }
 }

@@ -21,6 +21,14 @@ internal sealed class ParameterLayoutNode
     /// <summary>Length of the layer's own flat <c>Parameters</c> slot.</summary>
     public int OwnLength { get; private set; }
 
+    /// <summary>
+    /// The layer's resolved per-sample input shape, or an empty array when it had nothing concrete
+    /// to record. Carried per NODE rather than once per checkpoint so a lazy layer nested at any
+    /// depth can rebuild -- a composite's parameter surface IS its children's, and a child that
+    /// never learns its input shape contributes nothing to it.
+    /// </summary>
+    public int[] ResolvedInputShape { get; private set; } = [];
+
     /// <summary>Shapes of the layer's trainable tensors, in fold order.</summary>
     public int[][] TensorShapes { get; private set; } = [];
 
@@ -34,6 +42,7 @@ internal sealed class ParameterLayoutNode
     public static ParameterLayoutNode Read(System.IO.BinaryReader reader)
     {
         var node = new ParameterLayoutNode { OwnLength = reader.ReadInt32() };
+        node.ResolvedInputShape = ReadShape(reader);
 
         int tensorCount = reader.ReadInt32();
         var shapes = new int[tensorCount][];

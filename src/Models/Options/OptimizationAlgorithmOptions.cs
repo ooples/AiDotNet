@@ -18,6 +18,55 @@ namespace AiDotNet.Models.Options;
 /// </remarks>
 public class OptimizationAlgorithmOptions<T, TInput, TOutput> : ModelOptions
 {
+    /// <summary>Creates optimization options with the documented defaults.</summary>
+    public OptimizationAlgorithmOptions()
+    {
+    }
+
+    /// <summary>Copies every shared optimization setting.</summary>
+    /// <param name="other">The options to copy.</param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="other"/> is null.</exception>
+    public OptimizationAlgorithmOptions(OptimizationAlgorithmOptions<T, TInput, TOutput> other)
+    {
+        if (other is null) throw new ArgumentNullException(nameof(other));
+
+        Seed = other.Seed;
+        MaxIterations = other.MaxIterations;
+        UseEarlyStopping = other.UseEarlyStopping;
+        EarlyStoppingPatience = other.EarlyStoppingPatience;
+        BadFitPatience = other.BadFitPatience;
+        MinimumFeatures = other.MinimumFeatures;
+        MaximumFeatures = other.MaximumFeatures;
+        UseExpressionTrees = other.UseExpressionTrees;
+        InitialLearningRate = other.InitialLearningRate;
+        UseAdaptiveLearningRate = other.UseAdaptiveLearningRate;
+        LearningRateDecay = other.LearningRateDecay;
+        MinLearningRate = other.MinLearningRate;
+        MaxLearningRate = other.MaxLearningRate;
+        MaxLearningRateReductionsOnPlateau = other.MaxLearningRateReductionsOnPlateau;
+        PlateauLearningRateReductionFactor = other.PlateauLearningRateReductionFactor;
+        UseAdaptiveMomentum = other.UseAdaptiveMomentum;
+        InitialMomentum = other.InitialMomentum;
+        MomentumIncreaseFactor = other.MomentumIncreaseFactor;
+        MomentumDecreaseFactor = other.MomentumDecreaseFactor;
+        MinMomentum = other.MinMomentum;
+        MaxMomentum = other.MaxMomentum;
+        ExplorationRate = other.ExplorationRate;
+        MinExplorationRate = other.MinExplorationRate;
+        MaxExplorationRate = other.MaxExplorationRate;
+        Tolerance = other.Tolerance;
+        OptimizationMode = other.OptimizationMode;
+        ParameterAdjustmentScale = other.ParameterAdjustmentScale;
+        SignFlipProbability = other.SignFlipProbability;
+        FeatureSelectionProbability = other.FeatureSelectionProbability;
+        ParameterAdjustmentProbability = other.ParameterAdjustmentProbability;
+        PredictionOptions = new PredictionStatsOptions(other.PredictionOptions);
+        ModelStatsOptions = new ModelStatsOptions(other.ModelStatsOptions);
+        FitDetector = other.FitDetector;
+        FitnessCalculator = other.FitnessCalculator;
+        ModelCache = other.ModelCache.CreateEmptyCopy();
+    }
+
     /// <summary>
     /// Gets or sets the maximum number of iterations (epochs) for the optimization algorithm.
     /// </summary>

@@ -27,7 +27,7 @@ namespace AiDotNet.Optimizers;
 /// </remarks>
 [ComponentType(ComponentType.Optimizer)]
 [PipelineStage(PipelineStage.Training)]
-public class TabuSearchOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOutput>
+public class TabuSearchOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOutput>, IDerivativeFreeFunctionOptimizer<T>
 {
     /// <summary>
     /// The options specific to the Tabu Search algorithm.
@@ -420,4 +420,134 @@ public class TabuSearchOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, 
         // Initialize adaptive parameters after deserialization
         InitializeAdaptiveParameters();
     }
+
+    /// <summary>
+    /// Creates a tabu search optimizer for minimizing a plain function, with no model attached.
+    /// </summary>
+    /// <param name="options">The optimizer-specific options. If null, defaults are used.</param>
+    public static TabuSearchOptimizer<T, TInput, TOutput> CreateForFunction(
+        TabuSearchOptions<T, TInput, TOutput>? options = null)
+        => new(options);
+
+    /// <summary>Backs <see cref="CreateForFunction"/>: the same setup with no model.</summary>
+    private TabuSearchOptimizer(TabuSearchOptions<T, TInput, TOutput>? options)
+        : base(null, options ?? new())
+    {
+        _tabuOptions = options ?? new TabuSearchOptions<T, TInput, TOutput>();
+
+        // With no model to clone, the genetic machinery the model-training path uses gets a
+        // trivial factory. Minimize never touches it.
+        _geneticAlgorithm = new StandardGeneticAlgorithm<T, TInput, TOutput>(
+            () => (IFullModel<T, TInput, TOutput>)new SimpleRegression<T>(),
+            new MeanSquaredErrorFitnessCalculator<T, TInput, TOutput>());
+    }
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// Tabu search (Glover, <i>ORSA Journal on Computing</i> 1, 1989). Each step samples a
+    /// neighbourhood around the current point and moves to the best neighbour - even when that is
+    /// WORSE than where it stands, which is what lets it leave a local minimum.
+    /// </para>
+    /// <para>
+    /// What stops it walking straight back is the tabu list: the last few points visited are
+    /// forbidden, so the search is pushed into new territory instead of oscillating. The
+    /// aspiration criterion overrides that when a forbidden move would beat everything seen so
+    /// far, because a rule against revisiting should never veto an actual improvement.
+    /// </para>
+    /// <para>
+    /// <paramref name="tolerance"/> stops the run once the neighbourhood radius falls below it.
+    /// The radius shrinks whenever a step fails to improve on the best, which turns a global
+    /// wanderer into a local refiner as it closes in.
+    /// </para>
+    /// </remarks>
+    public Vector<T> Minimize(
+        Vector<T> initialParameters, Func<Vector<T>, T> objective, int maxIterations, T tolerance)
+    {
+        ValidateMinimizeArguments(initialParameters, objective, maxIterations);
+
+        var search = new DerivativeFreeSearch(objective, NumOps, initialParameters);
+        var random = CreateSearchRandom();
+
+        int n = initialParameters.Length;
+        int neighbours = Math.Max(2, _tabuOptions.NeighborhoodSize);
+        int tabuLength = Math.Max(1, _tabuOptions.TabuListSize);
+
+        double radius = _tabuOptions.PerturbationFactor > 0 ? _tabuOptions.PerturbationFactor : 0.5;
+        double stop = Convert.ToDouble(tolerance);
+
+        var current = initialParameters.Clone();
+        var tabu = new List<Vector<T>>();
+
+        for (int iteration = 0; iteration < maxIterations && radius > stop; iteration++)
+        {
+            Vector<T>? chosen = null;
+            T chosenValue = NumOps.Zero;
+
+            for (int k = 0; k < neighbours; k++)
+            {
+                var candidate = new Vector<T>(n);
+                for (int i = 0; i < n; i++)
+                {
+                    candidate[i] = NumOps.Add(
+                        current[i], NumOps.FromDouble(radius * NextGaussian(random)));
+                }
+
+                T value = search.Evaluate(candidate);
+
+                // The aspiration criterion: a tabu move that beats everything seen is taken
+                // anyway, since a rule about revisiting should not block an improvement.
+                bool forbidden = IsTabu(tabu, candidate, radius)
+                    && !NumOps.LessThan(value, search.BestValue);
+
+                if (forbidden) continue;
+
+                if (chosen is null || NumOps.LessThan(value, chosenValue))
+                {
+                    chosen = candidate;
+                    chosenValue = value;
+                }
+            }
+
+            if (chosen is null)
+            {
+                // Every neighbour was forbidden; widening the neighbourhood is the way out.
+                radius *= 1.5;
+                continue;
+            }
+
+            bool improved = NumOps.LessThanOrEquals(chosenValue, search.BestValue);
+
+            // Moving to a WORSE neighbour is the point of the method, not an accident.
+            current = chosen;
+
+            tabu.Add(chosen.Clone());
+            if (tabu.Count > tabuLength) tabu.RemoveAt(0);
+
+            radius *= improved ? 1.0 : 0.95;
+        }
+
+        return search.BestPoint;
+    }
+
+    /// <summary>Whether a candidate is close enough to a recent point to be forbidden.</summary>
+    private bool IsTabu(List<Vector<T>> tabu, Vector<T> candidate, double radius)
+    {
+        double threshold = 0.1 * radius;
+
+        foreach (var visited in tabu)
+        {
+            double distance = 0.0;
+            for (int i = 0; i < candidate.Length; i++)
+            {
+                double delta = Convert.ToDouble(NumOps.Subtract(candidate[i], visited[i]));
+                distance += delta * delta;
+            }
+
+            if (Math.Sqrt(distance) < threshold) return true;
+        }
+
+        return false;
+    }
+
 }

@@ -67,8 +67,19 @@ public class NOTEARSSobolev<T> : ContinuousOptimizationBase<T>
     private double _rhoMax = DEFAULT_RHO_MAX;
     private int _hiddenSize = DEFAULT_HIDDEN_SIZE;
     private double _sobolevWeight = DEFAULT_SOBOLEV_WEIGHT;
-    private readonly int? _seed;
+    private readonly int _seed;
 
+    /// <summary>
+    /// Seed used when the caller does not supply one, so that a run is reproducible by default.
+    /// </summary>
+    /// <remarks>
+    /// Previously this fell back to an unseeded secure RNG, which made the model nondeterministic
+    /// and its generated model-family tests flaky: the identical test binary produced 13 failures
+    /// in one run and 8 in the next over the same 42 tests, which makes regression detection on
+    /// this path impossible. Callers still override via the options' Seed property. Matches the
+    /// fixed-seed convention already used by DAGMANonlinear in this module.
+    /// </remarks>
+    private const int DefaultRandomSeed = 42;
     // MLP parameters per variable:
     // W1[j] is [d x h], b1[j] is [h], W2[j] is [h], b2[j] is scalar
     private Matrix<T>[] _W1 = [];
@@ -106,7 +117,7 @@ public class NOTEARSSobolev<T> : ContinuousOptimizationBase<T>
                 throw new ArgumentException("HiddenUnits must be at least 1.");
             _hiddenSize = hiddenUnits;
         }
-        _seed = options?.Seed;
+        _seed = options?.Seed ?? DefaultRandomSeed;
         _sobolevWeight = options?.SobolevWeight ?? DEFAULT_SOBOLEV_WEIGHT;
         if (_sobolevWeight < 0 || double.IsNaN(_sobolevWeight) || double.IsInfinity(_sobolevWeight))
             throw new ArgumentException("SobolevWeight must be a non-negative finite number.");
@@ -182,9 +193,7 @@ public class NOTEARSSobolev<T> : ContinuousOptimizationBase<T>
 
     private void InitializeMLPParameters(int d, int h)
     {
-        var rng = _seed.HasValue
-            ? Tensors.Helpers.RandomHelper.CreateSeededRandom(_seed.Value)
-            : Tensors.Helpers.RandomHelper.CreateSecureRandom();
+        var rng = Tensors.Helpers.RandomHelper.CreateSeededRandom(_seed);
         double scale = Math.Sqrt(2.0 / d);
 
         _W1 = new Matrix<T>[d];

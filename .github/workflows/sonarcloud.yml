@@ -317,7 +317,11 @@ jobs:
     name: Tests (net10.0) - ${{ matrix.shard.name }}
     runs-on: ubuntu-latest
     needs: build
-    timeout-minutes: 45
+    # Floats per shard: a shard may declare `timeout: <minutes>` to raise its own ceiling, and
+    # everything that does not keeps the 45-minute default. Serialized heavy shards run on one or
+    # two cores by design, so a shard that had to be split to survive its memory envelope must not
+    # then be killed by a clock tuned for the parallel ones.
+    timeout-minutes: ${{ matrix.shard.timeout || 45 }}
     if: "${{ (github.event.pull_request.draft != true) && !startsWith(github.head_ref, 'release-please--') && !(github.event_name == 'push' && startsWith(github.event.head_commit.message, 'chore(master): release')) }}"
     strategy:
       fail-fast: false
@@ -745,12 +749,30 @@ jobs:
             framework: net10.0
             filter: >-
               FullyQualifiedName~ModelFamilyTests.Generated&FullyQualifiedName~Generated.C
-          - name: ModelFamily - Generated Layers D-F
+          # SPLIT FROM "D-F", which was the largest shard in the suite at 4,443 tests and was
+          # KILLED BY THE RUNNER at ~10 minutes, uploading no TRX. Its own memory telemetry shows
+          # why: MemAvailable fell 3.1 GB -> 150 MB and stayed pinned there for ~45 s before the
+          # host went away. That is the OOM killer, not the 45-minute clock, so a longer timeout
+          # would not have saved it -- the working set had to come down. One letter per shard puts
+          # each at roughly a third of the peak. Gap-free + non-overlapping: union == D-F.
+          - name: ModelFamily - Generated Layers D
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
+            timeout: 60
             filter: >-
-              FullyQualifiedName~ModelFamilyTests.Generated&
-              (FullyQualifiedName~Generated.D|FullyQualifiedName~Generated.E|FullyQualifiedName~Generated.F)
+              FullyQualifiedName~ModelFamilyTests.Generated&FullyQualifiedName~Generated.D
+          - name: ModelFamily - Generated Layers E
+            project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+            framework: net10.0
+            timeout: 60
+            filter: >-
+              FullyQualifiedName~ModelFamilyTests.Generated&FullyQualifiedName~Generated.E
+          - name: ModelFamily - Generated Layers F
+            project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+            framework: net10.0
+            timeout: 60
+            filter: >-
+              FullyQualifiedName~ModelFamilyTests.Generated&FullyQualifiedName~Generated.F
           # G-M was a single serial shard that ran the full 45-min job timeout and got
           # CANCELLED before finishing (dense with heavy segmentation/foundation models,
           # e.g. Mask2Former). Split G-M → G-I + J-M so each serial half finishes under the
@@ -910,13 +932,25 @@ jobs:
               FullyQualifiedName~Generated.SO|FullyQualifiedName~Generated.So|FullyQualifiedName~Generated.SP|FullyQualifiedName~Generated.Sp|
               FullyQualifiedName~Generated.SQ|FullyQualifiedName~Generated.Sq|FullyQualifiedName~Generated.Sil|
               FullyQualifiedName~Generated.Sim)
-          - name: ModelFamily - Generated Layers St-Sy
+          # SPLIT FROM "St-Sy", also killed by the runner (MemAvailable floor 218 MB) at ~18
+          # minutes with no TRX, on BOTH this run and the baseline. Same treatment: halve the
+          # working set rather than extend the clock. The token set is carried over verbatim so
+          # coverage is unchanged; gap-free + non-overlapping: union == St-Sy.
+          - name: ModelFamily - Generated Layers St-Su
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
+            timeout: 60
             filter: >-
               FullyQualifiedName~ModelFamilyTests.Generated&
-              (FullyQualifiedName~Generated.ST|FullyQualifiedName~Generated.St|FullyQualifiedName~Generated.SU|FullyQualifiedName~Generated.Su|
-              FullyQualifiedName~Generated.SV|FullyQualifiedName~Generated.Sw|
+              (FullyQualifiedName~Generated.ST|FullyQualifiedName~Generated.St|
+              FullyQualifiedName~Generated.SU|FullyQualifiedName~Generated.Su)
+          - name: ModelFamily - Generated Layers Sv-Sy
+            project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+            framework: net10.0
+            timeout: 60
+            filter: >-
+              FullyQualifiedName~ModelFamilyTests.Generated&
+              (FullyQualifiedName~Generated.SV|FullyQualifiedName~Generated.Sw|
               FullyQualifiedName~Generated.Sy)
           # The T-Z tail is 201 model classes / 4,378 tests. T is split in two (see below).
           # U-Z contains 2,676 tests across 119 classes and hit the 45-minute job limit
@@ -1017,10 +1051,37 @@ jobs:
           # models — safe to run parallel and fast). The complement filter keeps
           # the two gap-free + non-overlapping (their union == the old C filter)
           # and future-proof: any new C* namespace lands in Core automatically.
-          - name: Integration C - ComputerVision
+          # SPLIT FROM "Integration C - ComputerVision", killed by the runner at ~6.5 minutes
+          # (MemAvailable floor 114 MB) with no TRX on BOTH this run and the baseline -- so the
+          # Detection suite this branch changed had NO signal on either side of the comparison.
+          # 15 classes / ~680 tests of paper-scale detection and segmentation backbones in one
+          # process is the whole problem; three shards of ~230 each fit the envelope. Gap-free and
+          # non-overlapping by class-name prefix: ComputerVision* | the eight named model suites |
+          # Segmentation*, which together are exactly the 15 classes in the namespace.
+          - name: Integration C - ComputerVision Detection
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
-            filter: 'Category!=GPU&Category!=Stress&Category!=Sweep&FullyQualifiedName~AiDotNet.Tests.IntegrationTests.ComputerVision'
+            timeout: 60
+            filter: 'Category!=GPU&Category!=Stress&Category!=Sweep&FullyQualifiedName~IntegrationTests.ComputerVision.ComputerVision'
+          - name: Integration C - ComputerVision Segmentation Models
+            project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+            framework: net10.0
+            timeout: 60
+            filter: >-
+              Category!=GPU&Category!=Stress&Category!=Sweep&
+              (FullyQualifiedName~IntegrationTests.ComputerVision.FoundationSegmentation|
+              FullyQualifiedName~IntegrationTests.ComputerVision.InstanceSegmentation|
+              FullyQualifiedName~IntegrationTests.ComputerVision.OpenVocabInteractiveReferringSegmentation|
+              FullyQualifiedName~IntegrationTests.ComputerVision.PanopticMambaEfficientSegmentation|
+              FullyQualifiedName~IntegrationTests.ComputerVision.PointCloudMedicalSegmentation|
+              FullyQualifiedName~IntegrationTests.ComputerVision.SegFormer|
+              FullyQualifiedName~IntegrationTests.ComputerVision.SemanticSegmentation|
+              FullyQualifiedName~IntegrationTests.ComputerVision.VideoDiffusionSegmentation)
+          - name: Integration C - ComputerVision Segmentation Contracts
+            project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+            framework: net10.0
+            timeout: 60
+            filter: 'Category!=GPU&Category!=Stress&Category!=Sweep&FullyQualifiedName~IntegrationTests.ComputerVision.Segmentation'
           - name: Integration C - Core
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
@@ -1146,6 +1207,12 @@ jobs:
             nuget-${{ runner.os }}-
 
       - name: Download build artifacts
+        # CAPPED. build-output is ~1.5 GB and this step has hung on it: the
+        # Components/Adversarial/EndToEnd shard sat here for the full 45-minute job budget and was
+        # cancelled without running a single test, which reads downstream as an unmeasured shard
+        # rather than as a transfer that stalled. A cap converts that into a fast, clearly
+        # attributed failure that a rerun can fix in minutes.
+        timeout-minutes: 12
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v4
         with:
           name: build-output-${{ github.sha }}
@@ -1221,7 +1288,9 @@ jobs:
             'ModelFamily - Generated Layers A',
             'ModelFamily - Generated Layers B',
             'ModelFamily - Generated Layers C',
-            'ModelFamily - Generated Layers D-F',
+            'ModelFamily - Generated Layers D',
+            'ModelFamily - Generated Layers E',
+            'ModelFamily - Generated Layers F',
             'ModelFamily - Generated Layers G',
             'ModelFamily - Generated Layers H-I',
             'ModelFamily - Generated Layers J-L',
@@ -1236,7 +1305,8 @@ jobs:
             'ModelFamily - Generated Layers SAL-SAM',
             'ModelFamily - Generated Layers SAN-Sig',
             'ModelFamily - Generated Layers Sil-Sq',
-            'ModelFamily - Generated Layers St-Sy',
+            'ModelFamily - Generated Layers St-Su',
+            'ModelFamily - Generated Layers Sv-Sy',
             'ModelFamily - Generated Layers T A-Tac',
             'ModelFamily - Generated Layers T Tem-Tri',
             'ModelFamily - Generated Layers U',
@@ -1288,7 +1358,9 @@ jobs:
             # Finance, ComputerVision, NeuralNetworks, Diffusion, Video, MetaLearning,
             # etc.) — serialize like the ModelFamily shards to stay under the runner
             # memory envelope. The light integration letter-shards run parallel.
-            'Integration C - ComputerVision',
+            'Integration C - ComputerVision Detection',
+            'Integration C - ComputerVision Segmentation Models',
+            'Integration C - ComputerVision Segmentation Contracts',
             'Integration D',
             'Integration E-G',
             'Integration M',
@@ -1302,12 +1374,14 @@ jobs:
             'TopLevel - Audio/Onnx/Tokenization'
           )
           $heavyShard = $heavyShards -contains $shardName
-          # Generated D-F's formerly multi-GB fixtures are now FP32/bounded, and an exact
-          # 4-core/16-GB trace stays near 1 GB while serial execution uses only 1-2 cores and
-          # cannot fit the 45-minute budget. Keep heavy-shard coverage disabled and memory
-          # telemetry enabled, but let this one shard use the repository's four-thread xUnit
-          # default. All other heavy shards retain one-at-a-time model loading.
-          $serializeShard = $heavyShard -and $shardName -ne 'ModelFamily - Generated Layers D-F'
+          # EVERY heavy shard serializes. D-F used to be carved out of this on the grounds that
+          # it needed "the repository's four-thread xUnit default" to fit the 45-minute budget, but
+          # that default no longer exists: tests/AiDotNet.Tests/xunit.runner.json now sets
+          # parallelizeTestCollections=false, so the carve-out bought nothing and only hid the fact
+          # that the shard was running one-at-a-time anyway -- straight into the OOM killer. D-F is
+          # now split into D/E/F, each serialized like every other heavy shard and each given a
+          # 60-minute ceiling to pay for the lost concurrency.
+          $serializeShard = $heavyShard
           $collectCoverage = -not $heavyShard
           Write-Host "Running shard '$shardName' (serialized: $serializeShard; coverage: $collectCoverage)"
 
@@ -1786,6 +1860,12 @@ jobs:
             nuget-${{ runner.os }}-
 
       - name: Download build artifacts
+        # CAPPED. build-output is ~1.5 GB and this step has hung on it: the
+        # Components/Adversarial/EndToEnd shard sat here for the full 45-minute job budget and was
+        # cancelled without running a single test, which reads downstream as an unmeasured shard
+        # rather than as a transfer that stalled. A cap converts that into a fast, clearly
+        # attributed failure that a rerun can fix in minutes.
+        timeout-minutes: 12
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v4
         with:
           name: build-output-${{ github.sha }}

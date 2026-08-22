@@ -4510,34 +4510,56 @@ public static class LayerHelper<T>
         // previous MaxPool3D+GlobalAvgPool variant, which produced NaNs on the
         // gradient-flow invariant.
         //
-        // At the default 32³ input the spatial dimensions flow
+        // At the paper's 32³ input the spatial dimensions flow
         // 32 → 14 (conv1) → 5 (conv2) → 2 (conv3), i.e. every layer keeps a
         // strictly positive volume. Conv3DLayer infers its input-channel count
         // lazily on the first forward pass, so no channel counts are threaded
         // here. numConvBlocks / baseFilters are retained on the signature for
         // API and serialization compatibility; the paper architecture is fixed
         // at three convolutional layers with the filter counts above.
+        //
+        // voxelResolution is what makes those three kernels fit. The kernels
+        // used to be hard-coded at the paper's sizes and the resolution
+        // parameter went unread, so any grid smaller than the paper's ran out
+        // of volume partway down the stack: at 8³, conv1 leaves 2 and conv2's
+        // 5³ kernel does not fit in 2, giving
+        //
+        //     ArgumentException : Invalid output dimensions (0x0x0). Check
+        //     kernel size, stride, padding, and dilation parameters for input
+        //     size 2x2x2.
+        //
+        // A kernel wider than the volume it reads is the defect, so each kernel
+        // is capped at the volume actually arriving. With no padding the output
+        // extent is (in - kernel)/stride + 1, so a kernel of at most `in` keeps
+        // that at 1 or more however aggressive the stride. At 32³ nothing is
+        // capped and the layer sizes are exactly the paper's.
+        int extent = voxelResolution;
 
         // conv1: 48 filters, 6³ kernel, stride 2, no padding.
+        int kernel1 = Math.Min(6, extent);
         yield return new Conv3DLayer<T>(
             outputChannels: 48,
-            kernelSize: 6,
+            kernelSize: kernel1,
             stride: 2,
             padding: 0,
             activationFunction: new ReLUActivation<T>());
+        extent = (extent - kernel1) / 2 + 1;
 
         // conv2: 160 filters, 5³ kernel, stride 2, no padding.
+        int kernel2 = Math.Min(5, extent);
         yield return new Conv3DLayer<T>(
             outputChannels: 160,
-            kernelSize: 5,
+            kernelSize: kernel2,
             stride: 2,
             padding: 0,
             activationFunction: new ReLUActivation<T>());
+        extent = (extent - kernel2) / 2 + 1;
 
         // conv3: 512 filters, 4³ kernel, stride 1, no padding.
+        int kernel3 = Math.Min(4, extent);
         yield return new Conv3DLayer<T>(
             outputChannels: 512,
-            kernelSize: 4,
+            kernelSize: kernel3,
             stride: 1,
             padding: 0,
             activationFunction: new ReLUActivation<T>());
@@ -27084,11 +27106,24 @@ public static class LayerHelper<T>
                     1, 1, 0,
                     relu);
 
-                // Depthwise-style conv for positional encoding
+                // The Mix-FFN's 3x3, and it is DEPTHWISE -- groups: ffnDim, not the default 1.
+                // Xie et al. 2021 ("SegFormer", eq. 4) put a 3x3 depthwise convolution inside the
+                // feed-forward block to supply positional information without an explicit
+                // positional encoding, and depthwise is the whole reason that is affordable: it
+                // costs ffnDim*9 + ffnDim parameters instead of ffnDim^2*9 + ffnDim.
+                //
+                // Built as a dense convolution this was ffnDim times too large, and the effect
+                // compounded across all eight blocks. Measured on B0, whose documented size is
+                // 3.8M parameters: the stage-4 pair reported 9,438,208 each (1024*1024*9 + 1024)
+                // where depthwise is 10,240 (1024*9 + 1024), and the whole model reported
+                // 30,966,117 -- eight times the paper's figure. The over-count is also what pushed
+                // B4 past the 500M weight-streaming threshold, where a quantized inference store
+                // made the first convolution's activation buffer unwritable and Predict threw.
                 yield return new ConvolutionalLayer<T>(
                     ffnDim,
                     3, 1, 1,
-                    relu);
+                    relu,
+                    groups: ffnDim);
 
                 // Project back
                 yield return new ConvolutionalLayer<T>(
@@ -27218,12 +27253,21 @@ public static class LayerHelper<T>
             // MSCAN blocks: multi-scale depth-wise strip convolutions + attention
             for (int block = 0; block < depths[stage]; block++)
             {
-                // Multi-scale depth-wise convolutions (strip convolutions at different scales)
-                // Approximated as 3x3 depth-wise conv for context aggregation
+                // Multi-scale depth-wise convolutions (strip convolutions at different scales),
+                // approximated as a single 3x3 depth-wise conv for context aggregation.
+                //
+                // groups: channels. Guo et al. 2022 ("SegNeXt", section 3.1) build MSCA from
+                // DEPTH-WISE strip convolutions, and depth-wise is what makes multi-scale context
+                // cheap enough to apply at every block: channels*9 + channels weights rather than
+                // channels^2*9 + channels. Written as a dense convolution it was `channels` times
+                // too large. Same defect as the SegFormer Mix-FFN and the EfficientNet MBConv, and
+                // it survived the first sweep for it because that grep spelled the word
+                // "depthwise" while this comment spells it "depth-wise".
                 yield return new ConvolutionalLayer<T>(
                     channels,
                     3, 1, 1,
-                    relu);
+                    relu,
+                    groups: channels);
 
                 // 1x1 attention weight projection
                 yield return new ConvolutionalLayer<T>(

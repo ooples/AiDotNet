@@ -163,6 +163,37 @@ public class RootMeanSquarePropagationOptimizer<T, TInput, TOutput> : GradientBa
     }
 
     /// <summary>
+    /// Creates an RMSProp optimizer for minimizing a plain function, with no model attached.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Use this with <see cref="GradientBasedOptimizerBase{T, TInput, TOutput}.Minimize(Vector{T}, Func{Vector{T}, ValueTuple{T, Vector{T}}}, int, T)"/>
+    /// when you want to minimize a mathematical function directly rather than train a model.
+    /// <see cref="Optimize"/> requires a model and is not available on an instance created
+    /// this way.
+    /// </para>
+    /// <para><b>For Beginners:</b> The constructor above asks for a model because it is set up
+    /// to tune that model against training data. If all you have is a formula you want to make
+    /// as small as possible, there is no model to hand over — use this factory instead.
+    /// </para>
+    /// </remarks>
+    /// <param name="options">The optimizer-specific options. If null, defaults are used.</param>
+    public static RootMeanSquarePropagationOptimizer<T, TInput, TOutput> CreateForFunction(
+        RootMeanSquarePropagationOptimizerOptions<T, TInput, TOutput>? options = null)
+        => new(options);
+
+    /// <summary>
+    /// Backs <see cref="CreateForFunction"/>: the same setup with no model.
+    /// </summary>
+    private RootMeanSquarePropagationOptimizer(RootMeanSquarePropagationOptimizerOptions<T, TInput, TOutput>? options)
+        : base(null, options ?? new())
+    {
+        _t = 0;
+        _squaredGradient = Vector<T>.Empty();
+        _options = options ?? new();
+    }
+
+    /// <summary>
     /// Performs the RMSProp optimization to find the best solution for the given input data.
     /// </summary>
     /// <param name="inputData">The input data to optimize against.</param>

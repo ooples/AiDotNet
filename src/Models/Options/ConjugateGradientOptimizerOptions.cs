@@ -23,6 +23,13 @@ public class ConjugateGradientOptimizerOptions<T, TInput, TOutput> : GradientBas
     public ConjugateGradientOptimizerOptions()
     {
         MaxIterations = 1000;
+
+        // Nonlinear conjugate gradient needs a far stricter curvature condition than a
+        // quasi-Newton method does: the recursion only produces a descent direction when the
+        // line search is accurate, so the permissive 0.9 that suits BFGS starves it.
+        // Nocedal and Wright recommend 0.1 for this family (Numerical Optimization, 2nd ed.,
+        // section 5.2), and it is the difference between converging and exhausting the budget.
+        WolfeCurvatureConstant = 0.1;
     }
 
     /// <summary>

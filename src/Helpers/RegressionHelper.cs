@@ -61,10 +61,28 @@ public static class RegressionHelper<T>
         for (int j = 0; j < x.Columns; j++)
         {
             xStd[j] = StatisticsHelper<T>.CalculateStandardDeviation(x.GetColumn(j));
+            double scale = _numOps.ToDouble(xStd[j]);
+            if (double.IsNaN(scale) || double.IsInfinity(scale))
+            {
+                throw new ArgumentException($"Feature {j} has a non-finite standard deviation.", nameof(x));
+            }
+
+            // A constant feature is already centered to zero. Using unit scale keeps it zero and
+            // lets callers retain harmless constant columns instead of manufacturing NaN values.
+            if (scale == 0.0) xStd[j] = _numOps.One;
         }
 
         // Calculate standard deviation for target values
         T yStd = StatisticsHelper<T>.CalculateStandardDeviation(y);
+        double targetScale = _numOps.ToDouble(yStd);
+        if (double.IsNaN(targetScale) || double.IsInfinity(targetScale))
+        {
+            throw new ArgumentException("The target has a non-finite standard deviation.", nameof(y));
+        }
+
+        // A constant target is a valid regression problem: its standardized response is all zero
+        // and the original mean becomes the fitted intercept.
+        if (targetScale == 0.0) yStd = _numOps.One;
 
         // Standardize feature matrix: (x - mean) / std
         Matrix<T> xScaled = new(x.Rows, x.Columns);

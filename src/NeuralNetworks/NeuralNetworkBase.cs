@@ -2404,10 +2404,11 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             if (layout.DeclaredParameterCount.HasValue)
                 return layout.DeclaredParameterCount.Value;
 
-            // Unknown slots contribute no invented width. KnownParameterCount retains independently
-            // resolved declarations; MaterializedParameterCount retains any real storage already
-            // owned by a partially deferred graph.
-            return Math.Max(layout.KnownParameterCount, layout.MaterializedParameterCount);
+            // Unknown slots contribute no invented width. A partially deferred graph can still own
+            // live values in those unknown slots while different, shape-resolved slots are waiting
+            // to materialize. GetParameters emits BOTH groups, so taking the larger aggregate loses
+            // one disjoint subtotal (ConformerFP lost 384 values; InternImage lost 59,392).
+            return layout.RestorableParameterCount;
         }
     }
 
@@ -3338,6 +3339,43 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             var expectedNoBatch = new int[expectedShape.Length - 1];
             Array.Copy(expectedShape, 1, expectedNoBatch, 0, expectedNoBatch.Length);
             if (ShapesMatchKnownDimensions(expectedNoBatch, actualShape))
+                return true;
+        }
+
+        // The mirror image of the two blocks above, and the case they left out. Those strip a
+        // CONCRETE leading dim off the longer side, and license the strip by requiring the SHORTER
+        // side to lead with a wildcard. But the wildcard can just as easily sit on the longer side:
+        //
+        //   MultiHeadAttentionLayer.GetOutputShape() == [-1, -1, 16]   (rank 3, "any batch, any seq")
+        //   SequenceTokenSliceLayer.GetInputShape()  == [8, 16]        (rank 2, resolved per-sample)
+        //
+        // which is what a chain looks like once a real forward has resolved the downstream layer's
+        // per-sample shape while the upstream layer keeps its batch-agnostic declaration. Neither
+        // block fires -- one needs the longer side's leading dim >= 1, and it is -1 -- so DeepCopy
+        // re-running the validator on an already-forwarded chain rejected a chain it had accepted at
+        // construction time (HarmonicEngine PR #149).
+        //
+        // Stripping a leading dim that is ITSELF a wildcard is the safest form of this strip, not a
+        // looser one: "-1" IS the declaration that any batch is accepted. It cannot bless the
+        // [32, 32] vs [3, 32, 32] pair the comment above rightly worries about, because 3 is
+        // concrete and this branch only strips a dim that is not.
+        if (expectedShape.Length == actualShape.Length + 1
+            && expectedShape.Length > 0
+            && expectedShape[0] <= 0)
+        {
+            var expectedNoWildcardBatch = new int[expectedShape.Length - 1];
+            Array.Copy(expectedShape, 1, expectedNoWildcardBatch, 0, expectedNoWildcardBatch.Length);
+            if (ShapesMatchKnownDimensions(expectedNoWildcardBatch, actualShape))
+                return true;
+        }
+
+        if (actualShape.Length == expectedShape.Length + 1
+            && actualShape.Length > 0
+            && actualShape[0] <= 0)
+        {
+            var actualNoWildcardBatch = new int[actualShape.Length - 1];
+            Array.Copy(actualShape, 1, actualNoWildcardBatch, 0, actualNoWildcardBatch.Length);
+            if (ShapesMatchKnownDimensions(expectedShape, actualNoWildcardBatch))
                 return true;
         }
 

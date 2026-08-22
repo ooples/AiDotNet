@@ -232,6 +232,38 @@ public class ProximalGradientDescentOptimizer<T, TInput, TOutput> : GradientBase
     }
 
     /// <summary>
+    /// Creates a proximal gradient descent optimizer for minimizing a plain function, with no model attached.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Use this with <see cref="GradientBasedOptimizerBase{T, TInput, TOutput}.Minimize(Vector{T}, Func{Vector{T}, ValueTuple{T, Vector{T}}}, int, T)"/>
+    /// when you want to minimize a mathematical function directly rather than train a model.
+    /// <see cref="Optimize"/> requires a model and is not available on an instance created
+    /// this way.
+    /// </para>
+    /// <para><b>For Beginners:</b> The constructor above asks for a model because it is set up
+    /// to tune that model against training data. If all you have is a formula you want to make
+    /// as small as possible, there is no model to hand over — use this factory instead.
+    /// </para>
+    /// </remarks>
+    /// <param name="options">The optimizer-specific options. If null, defaults are used.</param>
+    public static ProximalGradientDescentOptimizer<T, TInput, TOutput> CreateForFunction(
+        ProximalGradientDescentOptimizerOptions<T, TInput, TOutput>? options = null)
+        => new(options);
+
+    /// <summary>
+    /// Backs <see cref="CreateForFunction"/>: the same setup with no model.
+    /// </summary>
+    private ProximalGradientDescentOptimizer(ProximalGradientDescentOptimizerOptions<T, TInput, TOutput>? options)
+        : base(null, options ?? new())
+    {
+        _options = options ?? new ProximalGradientDescentOptimizerOptions<T, TInput, TOutput>();
+        _regularization = BuildProximalOperator(_options);
+
+        InitializeAdaptiveParameters();
+    }
+
+    /// <summary>
     /// Resolves the proximal operator from the options, applying <c>RegularizationStrength</c> when the
     /// caller set one.
     /// </summary>
@@ -839,8 +871,5 @@ public class ProximalGradientDescentOptimizer<T, TInput, TOutput> : GradientBase
                 param[i] = regularized[i];
         }
     }
+
 }
-
-
-
-

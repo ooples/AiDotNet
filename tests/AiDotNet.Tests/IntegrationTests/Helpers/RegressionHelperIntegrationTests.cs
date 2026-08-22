@@ -134,10 +134,20 @@ public class RegressionHelperIntegrationTests
         Assert.Equal(x.Columns, xStd.Length);
     }
 
+    /// <summary>
+    /// A single row makes every column constant, so every standard deviation is zero. The
+    /// standardized values must come out as zero rather than NaN.
+    /// </summary>
+    /// <remarks>
+    /// This test previously asserted NaN, pinning the 0/0 that the helper used to produce. NaN is
+    /// not a defensible answer here: a constant column is already centered on its own mean, so its
+    /// standardized value IS zero, and returning NaN instead silently poisons every downstream
+    /// computation with no error to trace it back to. The helper now scales a zero-variance column
+    /// by one, which is what scikit-learn's StandardScaler does for the same reason.
+    /// </remarks>
     [Fact(Timeout = 120000)]
-    public async Task CenterAndScale_SingleRow_ReturnsNaN()
+    public async Task CenterAndScale_SingleRow_CentersToZeroWithoutProducingNaN()
     {
-        // With a single row, standard deviation is 0, causing division by zero
         var x = new Matrix<double>(new double[,]
         {
             { 5, 10, 15 }
@@ -146,15 +156,24 @@ public class RegressionHelperIntegrationTests
 
         var (xScaled, yScaled, xMean, xStd, yMean, yStd) = RegressionHelper<double>.CenterAndScale(x, y);
 
-        // With single row, mean equals the values
+        // With a single row, the mean of each column is that column's only value.
         Assert.Equal(5.0, xMean[0]);
         Assert.Equal(10.0, xMean[1]);
         Assert.Equal(15.0, xMean[2]);
+        Assert.Equal(100.0, yMean);
 
-        // Single row std is 0, so scaling results in NaN (0/0)
-        Assert.True(double.IsNaN(xScaled[0, 0]));
-        Assert.True(double.IsNaN(xScaled[0, 1]));
-        Assert.True(double.IsNaN(xScaled[0, 2]));
+        // Zero variance is scaled by one rather than by zero, so the centered value survives.
+        Assert.Equal(1.0, xStd[0]);
+        Assert.Equal(1.0, xStd[1]);
+        Assert.Equal(1.0, xStd[2]);
+        Assert.Equal(1.0, yStd);
+
+        Assert.Equal(0.0, xScaled[0, 0]);
+        Assert.Equal(0.0, xScaled[0, 1]);
+        Assert.Equal(0.0, xScaled[0, 2]);
+        Assert.Equal(0.0, yScaled[0]);
+
+        Assert.False(double.IsNaN(xScaled[0, 0]), "standardizing a constant column must not produce NaN");
     }
 
     [Fact(Timeout = 120000)]

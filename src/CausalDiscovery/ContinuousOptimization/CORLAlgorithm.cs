@@ -54,8 +54,19 @@ public class CORLAlgorithm<T> : ContinuousOptimizationBase<T>
     private readonly double _learningRate;
     private readonly int _numEpisodes;
     private readonly int _maxParents;
-    private readonly int? _seed;
+    private readonly int _seed;
 
+    /// <summary>
+    /// Seed used when the caller does not supply one, so that a run is reproducible by default.
+    /// </summary>
+    /// <remarks>
+    /// Previously this fell back to an unseeded secure RNG, which made the model nondeterministic
+    /// and its generated model-family tests flaky: the identical test binary produced 13 failures
+    /// in one run and 8 in the next over the same 42 tests, which makes regression detection on
+    /// this path impossible. Callers still override via the options' Seed property. Matches the
+    /// fixed-seed convention already used by DAGMANonlinear in this module.
+    /// </remarks>
+    private const int DefaultRandomSeed = 42;
     /// <inheritdoc/>
     public override string Name => "CORL";
 
@@ -71,7 +82,7 @@ public class CORLAlgorithm<T> : ContinuousOptimizationBase<T>
         _learningRate = options?.LearningRate ?? 0.01;
         _numEpisodes = options?.MaxIterations ?? 100;
         _maxParents = options?.MaxParents ?? 5;
-        _seed = options?.Seed;
+        _seed = options?.Seed ?? DefaultRandomSeed;
         if (_learningRate <= 0 || double.IsNaN(_learningRate) || double.IsInfinity(_learningRate))
             throw new ArgumentException("LearningRate must be positive and finite.");
         if (_numEpisodes < 1)
@@ -97,9 +108,7 @@ public class CORLAlgorithm<T> : ContinuousOptimizationBase<T>
 
         // Initialize position scores: scores[i,j] = preference for variable i at position j
         var scores = new Matrix<T>(d, d);
-        var rng = _seed.HasValue
-            ? Tensors.Helpers.RandomHelper.CreateSeededRandom(_seed.Value)
-            : Tensors.Helpers.RandomHelper.CreateSecureRandom();
+        var rng = Tensors.Helpers.RandomHelper.CreateSeededRandom(_seed);
 
         int[] bestOrdering = Enumerable.Range(0, d).ToArray();
         double bestReward = double.NegativeInfinity;

@@ -49,14 +49,24 @@ public partial class MambaLanguageModel<T>
     /// <see cref="Predict"/> would produce at that position — but in O(1) work per token rather than
     /// reprocessing the prefix. Mamba blocks advance their recurrent state; position-wise layers run normally.
     /// </summary>
-    /// <param name="tokenInput">The single-token input, shape [batch, 1, vocab] (one-hot or embeddings).</param>
+    /// <param name="tokenInput">
+    /// The single-token input as TOKEN IDS, shape <c>[batch, 1]</c> — the same representation
+    /// <see cref="Predict"/> consumes, one time step wide.
+    /// </param>
     /// <param name="state">The decoding state from <see cref="CreateStepState"/>, advanced in place.</param>
     /// <returns>The next-token logits for this position, shape [batch, 1, vocab].</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="tokenInput"/> or <paramref name="state"/> is <c>null</c>.</exception>
     /// <exception cref="ArgumentException">
-    /// Thrown when <paramref name="tokenInput"/> is not single-token rank-3, or when <paramref name="state"/>
-    /// does not carry one block state per Mamba block (e.g. it came from a different model).
+    /// Thrown when <paramref name="tokenInput"/> is not a single token of shape [batch, 1], or when
+    /// <paramref name="state"/> does not carry one block state per Mamba block (e.g. it came from a
+    /// different model).
     /// </exception>
+    /// <remarks>
+    /// This guard previously demanded <c>[batch, 1, vocab]</c> one-hot, which no other entry point
+    /// on this model accepts: <see cref="Predict"/> takes <c>[batch, seq]</c> ids, and Step feeds
+    /// its input through the very same <c>EmbeddingLayer</c>. The two could therefore never be
+    /// compared, even though producing identical logits is the entire contract of this method.
+    /// </remarks>
     public Tensor<T> Step(Tensor<T> tokenInput, MambaModelState<T> state)
     {
         // Reject contract violations up front: a null/mismatched state or a
@@ -72,10 +82,11 @@ public partial class MambaLanguageModel<T>
             throw new ArgumentNullException(nameof(state));
         }
 
-        if (tokenInput.Shape.Length != 3 || tokenInput.Shape[1] != 1)
+        if (tokenInput.Shape.Length != 2 || tokenInput.Shape[1] != 1)
         {
             throw new ArgumentException(
-                "tokenInput must be a single token of shape [batch, 1, vocab].", nameof(tokenInput));
+                "tokenInput must be a single token of shape [batch, 1], the same token-id " +
+                "representation Predict consumes.", nameof(tokenInput));
         }
 
         var expectedBlockStates = 0;

@@ -304,7 +304,7 @@ public class RWKV7LanguageModelTests
             CreateArch(vocabSize),
             vocabSize, modelDim, numLayers: 2, numHeads: 4, maxSeqLength: seqLen);
 
-        var input = CreateOneHotInput(batchSize, seqLen, vocabSize);
+        var input = CreateTokenInput(batchSize, seqLen, vocabSize);
         var output = model.Predict(input);
 
         Assert.Equal(new[] { batchSize, seqLen, vocabSize }, output.Shape.ToArray());
@@ -322,10 +322,11 @@ public class RWKV7LanguageModelTests
             CreateArch(vocabSize),
             vocabSize, modelDim, numLayers: 2, numHeads: 4, maxSeqLength: seqLen);
 
-        var input = CreateOneHotInput(1, seqLen, vocabSize).Reshape(seqLen, vocabSize);
+        // One unbatched sequence of ids. [1, seq] in, [1, seq, vocab] logits out.
+        var input = CreateTokenInput(1, seqLen, vocabSize);
         var output = model.Predict(input);
 
-        Assert.Equal(new[] { seqLen, vocabSize }, output.Shape.ToArray());
+        Assert.Equal(new[] { 1, seqLen, vocabSize }, output.Shape.ToArray());
         Assert.False(ContainsNaN(output));
     }
 
@@ -339,7 +340,7 @@ public class RWKV7LanguageModelTests
             CreateArch(vocabSize),
             vocabSize, 16, numLayers: 2, numHeads: 2, maxSeqLength: seqLen);
 
-        var input = CreateOneHotInput(1, seqLen, vocabSize);
+        var input = CreateTokenInput(1, seqLen, vocabSize);
         var output = model.Predict(input);
 
         var arr = output.ToArray();
@@ -371,8 +372,8 @@ public class RWKV7LanguageModelTests
             CreateArch(vocabSize),
             vocabSize, 16, numLayers: 2, numHeads: 2, maxSeqLength: seqLen);
 
-        var input = CreateOneHotInput(1, seqLen, vocabSize);
-        var expected = CreateOneHotInput(1, seqLen, vocabSize, seed: 99);
+        var input = CreateTokenInput(1, seqLen, vocabSize);
+        var expected = CreateOneHotTarget(1, seqLen, vocabSize, seed: 99);
 
         model.Train(input, expected);
 
@@ -428,7 +429,7 @@ public class RWKV7LanguageModelTests
 
         model2.SetParameters(model1.GetParameters());
 
-        var input = CreateOneHotInput(1, seqLen, vocabSize);
+        var input = CreateTokenInput(1, seqLen, vocabSize);
         var output1 = model1.Predict(input);
         var output2 = model2.Predict(input);
 
@@ -450,7 +451,7 @@ public class RWKV7LanguageModelTests
     {
         var model = new RWKV7LanguageModel<float>(
             CreateArch(20), 20, 16, 2, 2, maxSeqLength: 4);
-        var input = CreateOneHotInput(1, 4, 20);
+        var input = CreateTokenInput(1, 4, 20);
 
         model.Predict(input);
         model.ResetState();
@@ -498,7 +499,7 @@ public class RWKV7LanguageModelTests
             CreateDoubleArch(vocabSize),
             vocabSize, 16, numLayers: 2, numHeads: 2, maxSeqLength: seqLen);
 
-        var input = CreateOneHotDoubleInput(1, seqLen, vocabSize);
+        var input = CreateTokenDoubleInput(1, seqLen, vocabSize);
         var output = model.Predict(input);
 
         Assert.Equal(new[] { 1, seqLen, vocabSize }, output.Shape.ToArray());
@@ -519,7 +520,7 @@ public class RWKV7LanguageModelTests
             CreateArch(vocabSize),
             vocabSize, 16, numLayers: 4, numHeads: 2, maxSeqLength: seqLen);
 
-        var input = CreateOneHotInput(1, seqLen, vocabSize);
+        var input = CreateTokenInput(1, seqLen, vocabSize);
         var output = model.Predict(input);
 
         var arr = output.ToArray();
@@ -620,26 +621,46 @@ public class RWKV7LanguageModelTests
 
     #region Helpers
 
-    private static Tensor<float> CreateOneHotInput(int batchSize, int seqLen, int vocabSize, int seed = 42)
+    /// <summary>A [batch, seq] tensor of TOKEN IDS — what this model consumes.</summary>
+    /// <remarks>
+    /// RWKV7LanguageModel begins with an EmbeddingLayer(vocab, modelDim) id lookup, so a one-hot
+    /// [batch, seq, vocab] tensor was read as a length-vocab sequence and the model returned logits
+    /// with one extra trailing axis ([2, 4, 50] came back as [2, 4, 50, 50]).
+    /// </remarks>
+    private static Tensor<float> CreateTokenInput(int batchSize, int seqLen, int vocabSize, int seed = 42)
+    {
+        var tensor = new Tensor<float>(new[] { batchSize, seqLen });
+        var random = new Random(seed);
+
+        for (int b = 0; b < batchSize; b++)
+            for (int t = 0; t < seqLen; t++)
+                tensor[new[] { b, t }] = random.Next(vocabSize);
+
+        return tensor;
+    }
+
+    /// <summary>A one-hot [batch, seq, vocab] tensor, the shape of a training TARGET.</summary>
+    private static Tensor<float> CreateOneHotTarget(int batchSize, int seqLen, int vocabSize, int seed = 42)
     {
         var tensor = new Tensor<float>(new[] { batchSize, seqLen, vocabSize });
         var random = new Random(seed);
 
         for (int b = 0; b < batchSize; b++)
-            for (int s = 0; s < seqLen; s++)
-                tensor[new[] { b, s, random.Next(vocabSize) }] = 1.0f;
+            for (int t = 0; t < seqLen; t++)
+                tensor[new[] { b, t, random.Next(vocabSize) }] = 1.0f;
 
         return tensor;
     }
 
-    private static Tensor<double> CreateOneHotDoubleInput(int batchSize, int seqLen, int vocabSize, int seed = 42)
+    /// <summary>The double-typed counterpart of <see cref="CreateTokenInput"/>.</summary>
+    private static Tensor<double> CreateTokenDoubleInput(int batchSize, int seqLen, int vocabSize, int seed = 42)
     {
-        var tensor = new Tensor<double>(new[] { batchSize, seqLen, vocabSize });
+        var tensor = new Tensor<double>(new[] { batchSize, seqLen });
         var random = new Random(seed);
 
         for (int b = 0; b < batchSize; b++)
-            for (int s = 0; s < seqLen; s++)
-                tensor[new[] { b, s, random.Next(vocabSize) }] = 1.0;
+            for (int t = 0; t < seqLen; t++)
+                tensor[new[] { b, t }] = random.Next(vocabSize);
 
         return tensor;
     }

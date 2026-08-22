@@ -37,6 +37,22 @@ namespace AiDotNet.Models;
 /// </remarks>
 public class PredictionStatsOptions
 {
+    /// <summary>Creates prediction-statistics options with the documented defaults.</summary>
+    public PredictionStatsOptions()
+    {
+    }
+
+    /// <summary>Creates an independent copy of another prediction-statistics configuration.</summary>
+    /// <param name="other">The options to copy.</param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="other"/> is null.</exception>
+    public PredictionStatsOptions(PredictionStatsOptions other)
+    {
+        if (other is null) throw new ArgumentNullException(nameof(other));
+
+        ConfidenceLevel = other.ConfidenceLevel;
+        LearningCurveSteps = other.LearningCurveSteps;
+    }
+
     /// <summary>
     /// Gets or sets the confidence level used for generating prediction confidence intervals.
     /// </summary>

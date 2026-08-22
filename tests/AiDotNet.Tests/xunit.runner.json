@@ -1,7 +1,25 @@
 {
   "$schema": "https://xunit.net/schema/current/xunit.runner.schema.json",
+
+  "//": [
+    "parallelizeTestCollections was true, and it made this suite report failures that depended",
+    "on what else happened to be running. Measured on the model-family regression filter:",
+    "32 failed / 1245 passed with it on, 0 failed / 1277 passed with it off, and every one of",
+    "the six failing families passed 22/22 when run on its own. Different runs failed different",
+    "subsets, which is why the suite also looked flaky.",
+    "",
+    "The cause is not in this repository. TensorArena.Create activates an arena per thread, but",
+    "arenas pool their backing arrays into a CROSS-ARENA persistent pool on Dispose, and that",
+    "pool is shared process-wide. Tests holding arenas on different threads therefore hand each",
+    "other arrays. TensorArena lives in the AiDotNet.Tensors package, so the thread-safety fix",
+    "belongs there; until it lands, running these collections concurrently is simply not valid.",
+    "",
+    "The cost is close to zero: the same filter takes 10m0s serially against 9m36s in parallel,",
+    "because these tests are compute-bound and already saturate the machine."
+  ],
+
   "parallelizeAssembly": false,
-  "parallelizeTestCollections": true,
+  "parallelizeTestCollections": false,
   "maxParallelThreads": 0,
   "methodDisplay": "classAndMethod",
   "diagnosticMessages": true,

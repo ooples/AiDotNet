@@ -232,29 +232,16 @@ public partial class LinearMixedModel<T> : RegressionBase<T>
             throw new InvalidOperationException("At least one random effect must be specified. Use AddRandomIntercept() or AddRandomSlope().");
         }
 
-        // Use OLS for reliable predictions
-        _useOLS = true;
+        // This method previously fitted ORDINARY LEAST SQUARES and returned immediately —
+        // `_useOLS = true` was set unconditionally, making the mixed-effects (REML) estimation below
+        // unreachable. A caller asking for a linear mixed model received a fixed-effects-only fit, so the random effects they declared were estimated as nothing at all.
+        // The real estimation now runs.
+        //
+        // `_useOLS` is retained (always false for newly trained models) purely so that models
+        // serialized before this fix still deserialize and predict through their stored
+        // coefficients rather than silently changing behaviour on load.
+        _useOLS = false;
         TrainingFeatureCount = x.Columns;
-        if (Options.UseIntercept)
-        {
-            var xWithInt = x.AddConstantColumn(NumOps.One);
-            var xTx = xWithInt.Transpose().Multiply(xWithInt);
-            var xTy = xWithInt.Transpose().Multiply(y);
-            for (int i = 0; i < xTx.Rows; i++)
-                xTx[i, i] = NumOps.Add(xTx[i, i], NumOps.FromDouble(1e-10));
-            var solution = SolveSystem(xTx, xTy);
-            Intercept = solution[0];
-            Coefficients = solution.Slice(1, x.Columns);
-        }
-        else
-        {
-            var xTx = x.Transpose().Multiply(x);
-            var xTy = x.Transpose().Multiply(y);
-            for (int i = 0; i < xTx.Rows; i++)
-                xTx[i, i] = NumOps.Add(xTx[i, i], NumOps.FromDouble(1e-10));
-            Coefficients = SolveSystem(xTx, xTy);
-        }
-        if (_useOLS) return;
 
         // Validate grouping column indices are within bounds
         foreach (var re in _randomEffects)
@@ -269,7 +256,7 @@ public partial class LinearMixedModel<T> : RegressionBase<T>
         }
 
         _nObservations = x.Rows;
-        _nFixedParams = x.Columns - GetGroupingColumnCount();
+        _nFixedParams = x.Columns - GetGroupingColumnCount() + (_options.UseIntercept ? 1 : 0);
 
         // Extract fixed effects design matrix (exclude grouping columns)
         var fixedX = ExtractFixedEffectsMatrix(x);
@@ -297,9 +284,24 @@ public partial class LinearMixedModel<T> : RegressionBase<T>
             ComputeRSquaredValues(fixedX, x, y);
         }
 
-        // Set base class coefficients for prediction
-        Coefficients = _fixedEffects ?? new Vector<T>(_nFixedParams);
-        Intercept = NumOps.Zero;
+        // Surface the fit through the base class's Intercept/Coefficients contract. The first
+        // fixed effect is the intercept when there is one, so it is reported as the intercept
+        // rather than as a coefficient belonging to a feature that does not exist.
+        var fitted = _fixedEffects ?? new Vector<T>(_nFixedParams);
+
+        if (_options.UseIntercept && fitted.Length > 0)
+        {
+            Intercept = fitted[0];
+
+            var slopes = new Vector<T>(fitted.Length - 1);
+            for (int j = 1; j < fitted.Length; j++) slopes[j - 1] = fitted[j];
+            Coefficients = slopes;
+        }
+        else
+        {
+            Intercept = NumOps.Zero;
+            Coefficients = fitted;
+        }
     }
 
     /// <summary>
@@ -415,10 +417,23 @@ public partial class LinearMixedModel<T> : RegressionBase<T>
             groupCols.Add(re.GroupColumnIndex);
         }
 
-        int nCols = x.Columns - groupCols.Count;
+        // The leading column of ones is the FIXED intercept. Laird and Ware's formulation
+        // y = X b + Z u + e puts it in X and makes the random effects u mean-zero deviations
+        // around it. Without it the overall level of the response has nowhere to live except the
+        // random effects, which are shrunk toward zero and contribute nothing at all for a group
+        // the model has never seen - so predictions for a new group lose the entire baseline.
+        int interceptColumns = _options.UseIntercept ? 1 : 0;
+        int nCols = x.Columns - groupCols.Count + interceptColumns;
         var fixedX = new Matrix<T>(x.Rows, nCols);
 
         int colIdx = 0;
+
+        if (_options.UseIntercept)
+        {
+            for (int i = 0; i < x.Rows; i++) fixedX[i, 0] = NumOps.One;
+            colIdx = 1;
+        }
+
         for (int j = 0; j < x.Columns; j++)
         {
             if (!groupCols.Contains(j))
@@ -852,7 +867,47 @@ public partial class LinearMixedModel<T> : RegressionBase<T>
             }
             return clone;
         }
-        return base.Clone();
+        // base.Clone() copies Coefficients and knows nothing about the mixed-effects state, so a
+        // clone of a REML fit used to predict by throwing "Model must be trained". Everything the
+        // prediction path reads has to come across.
+        var copy = (LinearMixedModel<T>)CreateNewInstance();
+
+        copy._useOLS = false;
+        copy.Coefficients = new Vector<T>(Coefficients);
+        copy.Intercept = Intercept;
+        copy.TrainingFeatureCount = TrainingFeatureCount;
+
+        copy._nObservations = _nObservations;
+        copy._nFixedParams = _nFixedParams;
+        copy._fixedEffects = _fixedEffects is null ? null : new Vector<T>(_fixedEffects);
+        copy._residualVariance = _residualVariance;
+        copy._varianceDecomposition = _varianceDecomposition;
+
+        copy._logLikelihood = _logLikelihood;
+
+        // CreateNewInstance re-declares the random effects but not their FITTED state, so the
+        // per-group coefficients and covariance estimates have to be carried across by hand.
+        for (int i = 0; i < _randomEffects.Count && i < copy._randomEffects.Count; i++)
+        {
+            var source = _randomEffects[i];
+            var target = copy._randomEffects[i];
+
+            target.CovarianceMatrix = source.CovarianceMatrix;
+
+            if (source.GroupCoefficients is null)
+            {
+                target.GroupCoefficients = null;
+                continue;
+            }
+
+            target.GroupCoefficients = new Dictionary<double, Vector<T>>();
+            foreach (var entry in source.GroupCoefficients)
+            {
+                target.GroupCoefficients[entry.Key] = new Vector<T>(entry.Value);
+            }
+        }
+
+        return copy;
     }
 
     public override IFullModel<T, Matrix<T>, Vector<T>> DeepCopy() => Clone();

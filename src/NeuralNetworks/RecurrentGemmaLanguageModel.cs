@@ -104,6 +104,29 @@ public class RecurrentGemmaLanguageModel<T> : TokenLanguageModelLayoutBase<T>
 
     #region NeuralNetworkBase Overrides
 
+    /// <summary>
+    /// RecurrentGemma is Griffin (Botev et al. 2024 builds directly on De et al. 2024), so its stack
+    /// is the same EmbeddingLayer + RealGatedLinearRecurrenceLayer + LayerNormalization + LM head that
+    /// Griffin and Hawk use, and the RG-LRU carries a data-dependent hidden state through a timestep
+    /// recurrence. That stateful loop cannot be captured once and safely replayed by the static
+    /// fused-training plan; use the eager tape so every step records the current recurrence and the
+    /// optimizer receives the true finite gradients.
+    /// </summary>
+    /// <remarks>
+    /// Every other recurrent/SSM model in this namespace already declares this — Griffin, Hawk,
+    /// GatedDeltaNet, GLA, NeuralTuringMachine, DifferentiableNeuralComputer — and RecurrentGemma was
+    /// the one that inherited the <c>true</c> default. The cost was not subtle: training through the
+    /// compiled plan took every one of its 3,417,600 parameters to NaN on the FIRST step, which then
+    /// failed eight of its model-family invariants at once (ForwardPass_ShouldBeFinite_AfterTraining,
+    /// GradientFlow_ShouldBeNonZeroAndFinite, OptimizerStep_ParamL2_DoesNotExplode,
+    /// ParameterGradientAccessor, MoreData_ShouldNotDegrade, Clone_AfterTraining, Gradients_Match-
+    /// FiniteDifference and LossStrictlyDecreasesOnMemorizationTask). The eager forward and the loss
+    /// were finite throughout — only the fused path produced the NaN, which is why the failure looked
+    /// order-dependent: the compiled-plan cache is <c>[ThreadStatic]</c>, so what a shard ran first
+    /// decided whether a stale same-shape plan was waiting (the #1643 root cause).
+    /// </remarks>
+    protected override bool SupportsFusedCompiledTraining => false;
+
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         SetTrainingMode(false);

@@ -13565,6 +13565,23 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 ? "    protected override int[] InputShape => new[] { 8, 32 };"
                 : "    protected override int[] InputShape => new[] { 8, 768 };");
 
+            // XLMRoBERTaNER keeps the paper's 12 layers / 768 hidden / 12 heads (see its
+            // constructorExpr above), so one Train step on [8, 768] costs ~3.4 s and
+            // Training_ShouldReduceLoss runs TrainingIterations * 3 = 30 of them. MEASURED in
+            // isolation on this branch: 101 s against its 120 s gate -- 84% of budget with nothing
+            // else in the process. That margin does not survive a serialized shard, where the
+            // process-wide TensorArena pool carries rentals from every class that ran first, so the
+            // same test aborts at 120 s in CI and shows the "[1 ms]" duration xUnit reports for a
+            // cancelled test. Rung 1 (<float>) was tried FIRST and measured at 103 s -- no help,
+            // because the cost here is arithmetic volume, not footprint. So cap the shared training
+            // count instead, exactly as RecurrentGemmaLanguageModel does: five gives 15 real
+            // optimizer steps, the invariant ("training reduces the loss") is untouched, and the
+            // model keeps every one of its paper defaults.
+            if (model.ClassName == "XLMRoBERTaNER")
+            {
+                sb.AppendLine("    protected override int TrainingIterations => 5;");
+            }
+
             // Override the pre-training "different uniform inputs → different
             // outputs" invariant. LayerNorm + self-attention on a uniform
             // [8, 768] input produces a uniform attention pattern (Q, K, V
