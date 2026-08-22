@@ -737,10 +737,8 @@ public partial class RBMLayer<T> : LayerBase<T>, IShapeContract
     public void TrainWithContrastiveDivergence(Vector<T> input, T learningRate, int kSteps = 1)
     {
         // Delegate to tensor-based implementation
-        TrainWithContrastiveDivergence(
-            new Tensor<T>([input.Length], input),
-            learningRate,
-            kSteps);
+        using var tensorInput = new Tensor<T>([input.Length], input);
+        TrainWithContrastiveDivergence(tensorInput, learningRate, kSteps);
     }
 
     /// <summary>
