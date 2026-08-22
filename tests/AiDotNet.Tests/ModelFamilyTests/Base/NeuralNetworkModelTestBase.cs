@@ -2265,9 +2265,13 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
 
         double trainMSE = MeasureLoss(network, network.Predict(input), target);
         var testInput = CreateRandomTensor(EffectiveInputShape, ModelTestHelpers.CreateSeededRandom(99));
-        // CreateRandomTargetTensor for the same reason the trainTarget
-        // a few lines above uses it — type-constrained families (NER /
-        // CRF) need legal label values.
+        // Use the SAME loss-domain projection as the training target. Calling only
+        // CreateRandomTargetTensor here still gives type-constrained families legal
+        // labels, but bypasses the second half of the shared contract: logits losses
+        // need one-hot distributions, BCE targets must be in [0, 1], and Born-rule
+        // heads need a probability distribution. Comparing a projected train target
+        // with a raw test target measures two different objectives and can even make
+        // cross-entropy negative, which manufactured the 18-model PR #2029 cluster.
         //
         // DIFFERENT SEED from testInput. Both used 99, and because these are two FRESHLY seeded
         // generators filled in the same sequential order, testTarget[i] == testInput[i] across the
@@ -2283,7 +2287,8 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         //
         // The train-side numbers were the honest ones all along: ~0.167 is E[(U-U')^2] for two
         // independent uniforms, which is what an untrained model should score.
-        var testTarget = CreateRandomTargetTensor(ShapeCheckedOutputShape, ModelTestHelpers.CreateSeededRandom(100));
+        var testTarget = CreateLossCompatibleTarget(
+            network, ShapeCheckedOutputShape, ModelTestHelpers.CreateSeededRandom(100));
         double testMSE = MeasureLoss(network, network.Predict(testInput), testTarget);
 
         if (!double.IsNaN(trainMSE) && !double.IsNaN(testMSE))

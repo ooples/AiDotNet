@@ -1,6 +1,10 @@
+using System.Reflection;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
+using AiDotNet.Interfaces;
 using AiDotNet.Models;
 using AiDotNet.NeuralNetworks;
+using AiDotNet.NeuralNetworks.Layers.SSM;
 using AiDotNet.NeuralNetworks.Options;
 using AiDotNet.Tensors.Engines.Optimization;
 using AiDotNet.Tensors.LinearAlgebra;
@@ -10,138 +14,114 @@ using Xunit;
 namespace AiDotNet.Tests.IntegrationTests.NeuralNetworks;
 
 /// <summary>
-/// Guards the Griffin, Hawk, and RecurrentGemma fused compiled training routes. This intentionally
-/// checks more than parameter finiteness: the fused-step counter and a live parameter change prevent
-/// either eager fallback or the compiled plan's non-finite-gradient safety skip from producing a false pass.
+/// Guards the shared RG-LRU training route used by Griffin, Hawk, and RecurrentGemma. RG-LRU has
+/// a data-dependent recurrent graph, so its layer metadata—not three model overrides—must route
+/// every containing network through a freshly-recorded eager tape.
 /// </summary>
 [Collection("FusedOptimizerGlobalState")]
 public sealed class RgLruFamilyFusedCompiledTrainingTests
 {
     [Fact(Timeout = 120000)]
-    public async Task RecurrentGemma_UsesFusedCompiledStepAndAppliesAFiniteUpdate()
+    public async Task RecurrentGemma_LayerCapabilityRoutesFiniteEagerUpdates()
     {
         await Task.Yield();
-        AssertFusedUpdate(
+        AssertAutomaticallyRoutedEagerUpdate(
             "RecurrentGemma",
-            () => new TestableRecurrentGemma(CreateArchitecture()));
+            () => new RecurrentGemmaLanguageModel<double>(
+                CreateArchitecture(), vocabSize: 128, modelDimension: 32,
+                numLayers: 1, maxSeqLength: 32));
     }
 
     [Fact(Timeout = 120000)]
-    public async Task Griffin_UsesFusedCompiledStepAndAppliesAFiniteUpdate()
+    public async Task Griffin_LayerCapabilityRoutesFiniteEagerUpdates()
     {
         await Task.Yield();
-        AssertFusedUpdate(
+        AssertAutomaticallyRoutedEagerUpdate(
             "Griffin",
-            () => new TestableGriffin(CreateArchitecture()));
+            () => new GriffinLanguageModel<double>(
+                CreateArchitecture(), vocabSize: 128, modelDimension: 32,
+                numLayers: 1, maxSeqLength: 32,
+                options: new GriffinOptions { RecurrenceDimension = 40 }));
     }
 
     [Fact(Timeout = 120000)]
-    public async Task Hawk_UsesFusedCompiledStepAndAppliesAFiniteUpdate()
+    public async Task Hawk_LayerCapabilityRoutesFiniteEagerUpdates()
     {
         await Task.Yield();
-        AssertFusedUpdate(
+        AssertAutomaticallyRoutedEagerUpdate(
             "Hawk",
-            () => new TestableHawk(CreateArchitecture()));
+            () => new HawkLanguageModel<double>(
+                CreateArchitecture(), vocabSize: 128, modelDimension: 32,
+                numLayers: 1, maxSeqLength: 32,
+                options: new HawkOptions { RecurrenceDimension = 40 }));
     }
 
-    private static NeuralNetworkArchitecture<float> CreateArchitecture()
+    private static NeuralNetworkArchitecture<double> CreateArchitecture()
         => new(
             InputType.OneDimensional,
             NeuralNetworkTaskType.TextGeneration,
-            inputSize: 16,
-            outputSize: 16);
+            inputSize: 32,
+            outputSize: 128);
 
-    private static void AssertFusedUpdate(string modelName, Func<IFusedTrainingProbe> createModel)
+    private static void AssertAutomaticallyRoutedEagerUpdate(
+        string modelName,
+        Func<INeuralNetworkModel<double>> createModel)
     {
         var originalOptions = TensorCodecOptions.Current;
         try
         {
             TensorCodecOptions.SetCurrent(new TensorCodecOptions { EnableCompilation = true });
-            CompiledTapeTrainingStep<float>.Invalidate();
-            CompiledTapeTrainingStep<float>.ResetFusedStepCount();
+            CompiledTapeTrainingStep<double>.Invalidate();
+            CompiledTapeTrainingStep<double>.ResetFusedStepCount();
 
             using var model = createModel();
-
-            var input = new Tensor<float>([4]);
-            var target = new Tensor<float>([4]);
-            for (int i = 0; i < input.Length; i++)
+            var recurrentLayers = ((ILayeredModel<double>)model).Layers
+                .OfType<RealGatedLinearRecurrenceLayer<double>>()
+                .ToArray();
+            Assert.NotEmpty(recurrentLayers);
+            Assert.All(recurrentLayers, layer =>
             {
-                input[i] = i;
-                target[i] = (i + 1) % 4;
-            }
+                var property = layer.GetType().GetCustomAttribute<LayerPropertyAttribute>(inherit: false);
+                Assert.NotNull(property);
+                Assert.False(property.SupportsFusedCompiledTraining);
+            });
+
+            var input = new Tensor<double>([32]);
+            for (int i = 0; i < input.Length; i++) input[i] = i % 128;
+
+            var prediction = model.Predict(input);
+            var target = new Tensor<double>(prediction.Shape.ToArray());
+            int rows = target.Length / 128;
+            for (int row = 0; row < rows; row++)
+                target[(row * 128) + ((row + 1) % 128)] = 1.0;
 
             var parametersBefore = model.GetParameters().ToArray();
-
             model.Train(input, target);
-
-            Assert.True(
-                CompiledTapeTrainingStep<float>.GetFusedStepCount() > 0,
-                $"{modelName} fell back to eager training instead of executing its fused compiled step.");
-            Assert.False(
-                model.FusedTrainingDisabled,
-                $"{modelName}'s fused step failed and sticky-disabled compilation before eager fallback.");
-
             var parametersAfter = model.GetParameters().ToArray();
+            var gradients = model.GetParameterGradients().ToArray();
+
+            Assert.Equal(0, CompiledTapeTrainingStep<double>.GetFusedStepCount());
             Assert.True(
                 parametersBefore.Where((value, index) => value != parametersAfter[index]).Any(),
-                "The fused plan did not update any live parameter; a rejected non-finite step must not count as success.");
-            Assert.True(IsFinite(model.GetLastLoss()), "The fused training loss was not finite.");
-            Assert.All(parametersAfter, value => Assert.True(IsFinite(value), "A fused parameter update was not finite."));
+                $"{modelName}'s automatically selected eager step did not update a live parameter.");
+            Assert.True(double.IsFinite(model.GetLastLoss()),
+                $"{modelName}'s automatically selected eager loss was not finite.");
+            Assert.All(parametersAfter, value => Assert.True(double.IsFinite(value),
+                $"{modelName} produced a non-finite parameter."));
+            Assert.All(gradients, value => Assert.True(double.IsFinite(value),
+                $"{modelName} published a non-finite gradient."));
+            Assert.Contains(gradients, value => value != 0.0);
+
+            // A second step proves this is stable routing, not a first-step fallback whose
+            // next call silently re-enters the compiled plan with stale recurrent state.
+            model.Train(input, target);
+            Assert.Equal(0, CompiledTapeTrainingStep<double>.GetFusedStepCount());
+            Assert.True(double.IsFinite(model.GetLastLoss()));
         }
         finally
         {
-            CompiledTapeTrainingStep<float>.Invalidate();
+            CompiledTapeTrainingStep<double>.Invalidate();
             TensorCodecOptions.SetCurrent(originalOptions);
         }
-    }
-
-    private static bool IsFinite(float value)
-        => !float.IsNaN(value) && !float.IsInfinity(value);
-
-    private interface IFusedTrainingProbe : AiDotNet.Interfaces.INeuralNetworkModel<float>, IDisposable
-    {
-        bool FusedTrainingDisabled { get; }
-    }
-
-    private sealed class TestableRecurrentGemma : RecurrentGemmaLanguageModel<float>, IFusedTrainingProbe
-    {
-        internal TestableRecurrentGemma(NeuralNetworkArchitecture<float> architecture)
-            : base(architecture, vocabSize: 16, modelDimension: 8, numLayers: 1, maxSeqLength: 4)
-        {
-        }
-
-        public bool FusedTrainingDisabled => _fusedTrainingDisabled;
-    }
-
-    private sealed class TestableGriffin : GriffinLanguageModel<float>, IFusedTrainingProbe
-    {
-        internal TestableGriffin(NeuralNetworkArchitecture<float> architecture)
-            : base(
-                architecture,
-                vocabSize: 16,
-                modelDimension: 8,
-                numLayers: 1,
-                maxSeqLength: 4,
-                options: new GriffinOptions { RecurrenceDimension = 8 })
-        {
-        }
-
-        public bool FusedTrainingDisabled => _fusedTrainingDisabled;
-    }
-
-    private sealed class TestableHawk : HawkLanguageModel<float>, IFusedTrainingProbe
-    {
-        internal TestableHawk(NeuralNetworkArchitecture<float> architecture)
-            : base(
-                architecture,
-                vocabSize: 16,
-                modelDimension: 8,
-                numLayers: 1,
-                maxSeqLength: 4,
-                options: new HawkOptions { RecurrenceDimension = 8 })
-        {
-        }
-
-        public bool FusedTrainingDisabled => _fusedTrainingDisabled;
     }
 }

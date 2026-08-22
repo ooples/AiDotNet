@@ -11,6 +11,39 @@ namespace AiDotNet.Tests.ModelFamilyTests.Base;
 public class LossCompatibleTargetProjectionTests
 {
     [Fact]
+    public void CrossEntropyTargets_AreOneHotAlongTheClassAxis()
+    {
+        var probe = new ProjectionProbe();
+        using var network = probe.CreateNetwork(new CrossEntropyWithLogitsLoss<float>());
+        using var target = new Tensor<float>([2, 3]);
+
+        using var projected = probe.Project(network, target);
+
+        for (int row = 0; row < 2; row++)
+        {
+            var values = Enumerable.Range(0, 3).Select(column => projected[row, column]).ToArray();
+            Assert.Equal(1.0f, values.Sum(), 6);
+            Assert.Single(values, value => value == 1.0f);
+            Assert.All(values, value => Assert.True(value is 0.0f or 1.0f));
+        }
+    }
+
+    [Fact]
+    public void BinaryCrossEntropyTargets_AreClampedToTheProbabilityDomain()
+    {
+        var probe = new ProjectionProbe();
+        using var network = probe.CreateNetwork(new BinaryCrossEntropyWithLogitsLoss<float>());
+        using var target = new Tensor<float>([3]);
+        target[0] = -2.0f;
+        target[1] = 0.25f;
+        target[2] = 2.0f;
+
+        using var projected = probe.Project(network, target);
+
+        Assert.Equal(new[] { 0.0f, 0.25f, 1.0f }, projected.ToArray());
+    }
+
+    [Fact]
     public void BornRuleTargets_AreProjectedOntoTheProbabilitySimplex()
     {
         var probe = new ProjectionProbe();
@@ -63,13 +96,16 @@ public class LossCompatibleTargetProjectionTests
             => CreateBornRuleNetwork();
 
         public INeuralNetworkModel<float> CreateBornRuleNetwork()
+            => CreateNetwork(new BornRuleMseLoss<float>());
+
+        public INeuralNetworkModel<float> CreateNetwork(ILossFunction<float> lossFunction)
         {
             var architecture = new NeuralNetworkArchitecture<float>(
                 inputType: InputType.OneDimensional,
                 taskType: NeuralNetworkTaskType.Regression,
                 inputSize: 3,
                 outputSize: 3);
-            return new NeuralNetwork<float>(architecture, lossFunction: new BornRuleMseLoss<float>());
+            return new NeuralNetwork<float>(architecture, lossFunction: lossFunction);
         }
 
         public Tensor<float> Project(INeuralNetworkModel<float> network, Tensor<float> target)
