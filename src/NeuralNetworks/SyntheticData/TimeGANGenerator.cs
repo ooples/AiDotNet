@@ -101,6 +101,11 @@ public partial class TimeGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
     private int _dataWidth;
     private Random _random;
 
+    // HiddenDimension and NumLayers determine every component's shape. Options remain mutable so a
+    // caller can configure a later Fit, but changing them must not reinterpret materialized weights.
+    private int _materializedHiddenDimension;
+    private int _materializedNumLayers;
+
     // Embedder (auxiliary): data → latent
     private readonly List<FullyConnectedLayer<T>> _embedderLayers = new();
     private FullyConnectedLayer<T>? _embedderOutput;
@@ -136,6 +141,12 @@ public partial class TimeGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
     /// <summary>
     /// Gets the TimeGAN-specific options.
     /// </summary>
+    /// <remarks>
+    /// Changes to <see cref="TimeGANOptions{T}.HiddenDimension"/> or
+    /// <see cref="TimeGANOptions{T}.NumLayers"/> take effect on the next <see cref="Fit"/> call.
+    /// Existing trained layers, inference, cloning, serialization, and metadata retain the topology
+    /// that was materialized by the most recent construction or fit.
+    /// </remarks>
     public TimeGANOptions<T> TimeGanOptions => _options;
 
     /// <inheritdoc />
@@ -213,6 +224,9 @@ public partial class TimeGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
     /// </summary>
     protected override void InitializeLayers()
     {
+        int hiddenDim = _options.HiddenDimension;
+        int numLayers = _options.NumLayers;
+
         if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
         {
             Layers.AddRange(Architecture.Layers);
@@ -220,20 +234,23 @@ public partial class TimeGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
         }
         else
         {
-            int hiddenDim = _options.HiddenDimension;
             var identity = new IdentityActivation<T>() as IActivationFunction<T>;
 
-            for (int i = 0; i < _options.NumLayers; i++)
+            for (int i = 0; i < numLayers; i++)
             {
                 Layers.Add(new FullyConnectedLayer<T>(hiddenDim, identity));
             }
             _usingCustomLayers = false;
         }
+
+        _materializedHiddenDimension = hiddenDim;
+        _materializedNumLayers = numLayers;
     }
 
     private void RebuildAllNetworks()
     {
         int hiddenDim = _options.HiddenDimension;
+        int numLayers = _options.NumLayers;
         var identity = new IdentityActivation<T>() as IActivationFunction<T>;
 
         // Rebuild generator (Layers) if not using custom
@@ -247,7 +264,7 @@ public partial class TimeGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
             // latent width unenforceable: a mismatched caller silently rebinds the stack instead of
             // failing. The widths are known here, so they are stated.
             Layers.Clear();
-            for (int i = 0; i < _options.NumLayers; i++)
+            for (int i = 0; i < numLayers; i++)
             {
                 Layers.Add(new FullyConnectedLayer<T>(hiddenDim, hiddenDim, identity));
             }
@@ -258,7 +275,7 @@ public partial class TimeGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
 
         // Embedder
         _embedderLayers.Clear();
-        for (int i = 0; i < _options.NumLayers; i++)
+        for (int i = 0; i < numLayers; i++)
         {
             int layerInput = i == 0 ? _dataWidth : hiddenDim;
             _embedderLayers.Add(new FullyConnectedLayer<T>(layerInput, hiddenDim, identity));
@@ -267,7 +284,7 @@ public partial class TimeGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
 
         // Recovery: latent -> latent hidden stack, then a projection back out to the data width.
         _recoveryLayers.Clear();
-        for (int i = 0; i < _options.NumLayers; i++)
+        for (int i = 0; i < numLayers; i++)
         {
             _recoveryLayers.Add(new FullyConnectedLayer<T>(hiddenDim, hiddenDim, identity));
         }
@@ -277,7 +294,7 @@ public partial class TimeGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
         // empty while _supervisorOutput still exists and performs a real projection. That is why
         // GetNamedLayerActivations gates on the OUTPUT HEAD rather than on this list being non-empty.
         _supervisorLayers.Clear();
-        for (int i = 0; i < _options.NumLayers - 1; i++)
+        for (int i = 0; i < numLayers - 1; i++)
         {
             _supervisorLayers.Add(new FullyConnectedLayer<T>(hiddenDim, hiddenDim, identity));
         }
@@ -286,12 +303,16 @@ public partial class TimeGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
         // Discriminator
         _discriminatorLayers.Clear();
         _discDropoutLayers.Clear();
-        for (int i = 0; i < _options.NumLayers; i++)
+        for (int i = 0; i < numLayers; i++)
         {
             _discriminatorLayers.Add(new FullyConnectedLayer<T>(hiddenDim, identity));
             _discDropoutLayers.Add(new DropoutLayer<T>(_options.DiscriminatorDropout));
         }
         _discriminatorOutput = new FullyConnectedLayer<T>(1, identity);
+
+        // Commit the snapshot only after every component was rebuilt successfully.
+        _materializedHiddenDimension = hiddenDim;
+        _materializedNumLayers = numLayers;
     }
 
     #endregion
@@ -321,7 +342,6 @@ public partial class TimeGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
 
         _columns = new List<ColumnMetadata>(columns);
         _dataWidth = data.Columns;
-        int hiddenDim = _options.HiddenDimension;
         int seqLen = _options.SequenceLength;
 
         RebuildAllNetworks();
@@ -412,7 +432,7 @@ public partial class TimeGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
         }
 
         int seqLen = _options.SequenceLength;
-        int hiddenDim = _options.HiddenDimension;
+        int hiddenDim = _materializedHiddenDimension;
 
         int numSequences = (int)Math.Ceiling((double)numSamples / seqLen);
         var allRows = new List<Vector<T>>();
@@ -752,7 +772,7 @@ public partial class TimeGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
         var xBatch = BuildFlattenedSequenceBatch(sequences, startIdx, endIdx);
         if (xBatch.Shape[0] == 0) return;
         int batchSize = xBatch.Shape[0];
-        int hiddenDim = _options.HiddenDimension;
+        int hiddenDim = _materializedHiddenDimension;
 
         // Real embedded sequence: x -> embedder. Fake: noise -> generator -> supervisor.
         // Both produced OUTSIDE the critic's tape so the critic only updates its own params.
@@ -810,7 +830,7 @@ public partial class TimeGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
     /// </summary>
     private void TrainGeneratorStepBatched(List<Matrix<T>> sequences, int startIdx, int endIdx)
     {
-        int hiddenDim = _options.HiddenDimension;
+        int hiddenDim = _materializedHiddenDimension;
 
         // Phase 3 joint loss (Yoon et al. 2019 §3.3) =
         //   L_U (unsupervised adversarial, non-saturating)
@@ -1076,11 +1096,12 @@ public partial class TimeGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
         if (input is null)
             throw new ArgumentNullException(nameof(input));
 
-        if (IsFitted && input.Length != _options.HiddenDimension)
+        if (IsFitted && input.Length != _materializedHiddenDimension)
         {
             throw new ArgumentException(
                 $"A fitted TimeGAN generator requires latent input with exactly "
-                + $"{_options.HiddenDimension} values (HiddenDimension), but received {input.Length}.",
+                + $"{_materializedHiddenDimension} values (the HiddenDimension used by the fitted topology), "
+                + $"but received {input.Length}.",
                 nameof(input));
         }
 
@@ -1172,8 +1193,8 @@ public partial class TimeGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
     protected override void SerializeNetworkSpecificData(BinaryWriter writer)
     {
         writer.Write(_options.SequenceLength);
-        writer.Write(_options.HiddenDimension);
-        writer.Write(_options.NumLayers);
+        writer.Write(_materializedHiddenDimension);
+        writer.Write(_materializedNumLayers);
         writer.Write(_dataWidth);
         writer.Write(IsFitted);
     }
@@ -1182,8 +1203,8 @@ public partial class TimeGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
         _ = reader.ReadInt32(); // SequenceLength
-        _ = reader.ReadInt32(); // HiddenDimension
-        _ = reader.ReadInt32(); // NumLayers
+        _materializedHiddenDimension = reader.ReadInt32();
+        _materializedNumLayers = reader.ReadInt32();
         _dataWidth = reader.ReadInt32();
         IsFitted = reader.ReadBoolean();
     }
@@ -1191,7 +1212,23 @@ public partial class TimeGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
     /// <inheritdoc />
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
-        return new TimeGANGenerator<T>(Architecture, _options);
+        var materializedOptions = _options.CreateMaterializedSnapshot(
+            _materializedHiddenDimension,
+            _materializedNumLayers);
+        var copy = new TimeGANGenerator<T>(Architecture, materializedOptions);
+
+        // The generic clone machinery can copy/share every reachable layer, but it cannot invent a
+        // model's unique auxiliary topology. A fresh TimeGAN constructor creates only the generator;
+        // materialize the fitted embedder/recovery/supervisor/discriminator graph before the base
+        // performs its structural preflight and weight transfer.
+        if (IsFitted)
+        {
+            copy._columns = new List<ColumnMetadata>(_columns);
+            copy._dataWidth = _dataWidth;
+            copy.RebuildAllNetworks();
+        }
+
+        return copy;
     }
 
     /// <inheritdoc />
@@ -1214,8 +1251,8 @@ public partial class TimeGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
             {
                 ["GeneratorType"] = "TimeGAN",
                 ["SequenceLength"] = _options.SequenceLength,
-                ["HiddenDimension"] = _options.HiddenDimension,
-                ["NumLayers"] = _options.NumLayers,
+                ["HiddenDimension"] = _materializedHiddenDimension,
+                ["NumLayers"] = _materializedNumLayers,
                 ["DataWidth"] = _dataWidth,
                 ["IsFitted"] = IsFitted
             }

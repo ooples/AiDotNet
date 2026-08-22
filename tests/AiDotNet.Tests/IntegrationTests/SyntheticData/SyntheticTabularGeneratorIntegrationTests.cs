@@ -989,9 +989,13 @@ public class SyntheticTabularGeneratorIntegrationTests
         Assert.Equal("Generator", preFitGenerator.Key);
         Assert.Equal(options.HiddenDimension, preFitGenerator.Value.Length);
 
-        generator.Fit(data, columns, FewEpochs);
+        // TimeGAN divides the caller's budget across embedding, supervised, and joint phases.
+        // Three epochs is the minimum that executes every phase once.
+        const int timeGanTrainingEpochs = 3;
+        generator.Fit(data, columns, timeGanTrainingEpochs);
 
         Assert.True(generator.IsFitted);
+        Assert.Throws<ArgumentNullException>(() => generator.GetNamedLayerActivations(null!));
 
         // Once fitted, the synthesis path consumes latent noise of HiddenDimension width. Exercise
         // both public entry points with that exact width and verify all real stages are exposed.
@@ -1018,6 +1022,30 @@ public class SyntheticTabularGeneratorIntegrationTests
 
         var generated = generator.Generate(GenSamples);
         ValidateGeneratedData(generated, GenSamples, TotalCols, "TimeGAN");
+
+        // Structural options configure the next Fit; they cannot retroactively reinterpret the
+        // shapes of trained weights. Inference and metadata remain tied to the materialized topology
+        // even though the caller still owns this mutable options instance.
+        int fittedHiddenDimension = options.HiddenDimension;
+        int fittedNumLayers = options.NumLayers;
+        options.HiddenDimension += 7;
+        options.NumLayers += 1;
+
+        var generatedAfterOptionMutation = generator.Generate(GenSamples);
+        ValidateGeneratedData(generatedAfterOptionMutation, GenSamples, TotalCols, "TimeGAN_MutatedOptions");
+        Assert.Equal(TotalCols, generator.Predict(latentInput).Length);
+
+        var metadata = generator.GetModelMetadata();
+        Assert.Equal(fittedHiddenDimension, metadata.AdditionalInfo["HiddenDimension"]);
+        Assert.Equal(fittedNumLayers, metadata.AdditionalInfo["NumLayers"]);
+
+        var clone = Assert.IsType<TimeGANGenerator<double>>(generator.Clone());
+        Assert.Equal(TotalCols, clone.Predict(latentInput).Length);
+        Assert.Equal(fittedHiddenDimension, clone.GetModelMetadata().AdditionalInfo["HiddenDimension"]);
+
+        var mutatedWidthInput = new Tensor<double>(new[] { options.HiddenDimension });
+        var mutatedWidthError = Assert.Throws<ArgumentException>(() => generator.Predict(mutatedWidthInput));
+        Assert.Contains(fittedHiddenDimension.ToString(), mutatedWidthError.Message, StringComparison.Ordinal);
     }
 
     [Theory]
