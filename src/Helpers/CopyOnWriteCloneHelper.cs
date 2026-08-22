@@ -117,11 +117,21 @@ internal static class CopyOnWriteCloneHelper
         for (int i = 0; i < srcLayers.Count; i++)
         {
             var sp = GetAuthoritativeSourceValues(srcLayers[i]);
-            if (sp.Count == 0) continue;
-            var shared = new Tensor<T>[sp.Count];
-            for (int p = 0; p < sp.Count; p++)
-                shared[p] = (Tensor<T>)sp[p].CloneShared();
-            dstLayers[i].SetTrainableParameters(shared);
+            if (sp.Count > 0)
+            {
+                var shared = new Tensor<T>[sp.Count];
+                for (int p = 0; p < sp.Count; p++)
+                    shared[p] = (Tensor<T>)sp[p].CloneShared();
+                dstLayers[i].SetTrainableParameters(shared);
+            }
+
+            // A composite can own no tensor itself while owning trainable descendants. Shape-only
+            // graph bring-up still leaves that parent at a pending first-forward boundary; if it is
+            // skipped merely because sp.Count == 0, its real first forward may rebuild the children
+            // after their COW tensors were installed. Commit every graph node, including parameter-
+            // free parents, so the adopted descendant graph is the graph execution keeps.
+            if (dstLayers[i] is AiDotNet.NeuralNetworks.Layers.LayerBase<T> destinationBase)
+                destinationBase.CommitTrainableParameterAdoption();
         }
 
         for (int i = 0; i < srcLayers.Count; i++)
@@ -177,19 +187,16 @@ internal static class CopyOnWriteCloneHelper
         // the stable, PyTorch-style ownership boundary for cloning.
         if (root is NeuralNetworkBase<T> neuralNetwork)
         {
-            // `Layers` IS the registered graph, and it is what NeuralNetworkBase itself passes to this
-            // same walk. This used to call a GetCopyOnWriteLayerRoots() that exists nowhere in the
-            // repository -- a call that survived review because NeuralNetworkBase is an error type
-            // while the #1789 split is mid-flight (its declaration depends on types slice 01 has not
-            // landed yet), and Roslyn suppresses member lookup on an error type to avoid cascading
-            // diagnostics. So the compiler could not report it and a search could not find it; it
-            // would have failed the moment the branch built cleanly.
-            //
-            // structureVersion -1 keeps the caching disabled: a clone walks a graph the version
-            // counter has never seen, so a cached answer would describe the wrong model.
+            // Use the base's explicit module ROOTS, not only its canonical sequential Layers list.
+            // Generated/model-declared auxiliary layers participate in training through
+            // GetExtraTrainableLayers; omitting them here made the COW coverage check compare an
+            // incomplete walk with the complete parameter manifest, reject the candidate, and send
+            // dozens of models through the lossy eager serializer. TapeTrainingStep recursively
+            // walks registered children from both root kinds in the same deterministic order.
+            // structureVersion -1 keeps caching disabled for this one-off clone snapshot.
             return new List<ITrainableLayer<T>>(
                 TapeTrainingStep<T>.CollectTrainableLayers(
-                    neuralNetwork.Layers,
+                    neuralNetwork.GetCopyOnWriteLayerRoots(),
                     structureVersion: -1));
         }
 

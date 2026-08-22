@@ -342,6 +342,11 @@ public readonly struct LayerStateBag
         if (type.IsValueType || source is string) return source;
         if (visited.TryGetValue(source, out object? prior)) return prior;
 
+        // Delegates are immutable invocation descriptors. Their target may be compiler-generated
+        // closure state that cannot be reconstructed safely by setting readonly runtime fields; the
+        // callable itself is construction configuration, not learned mutable tensor state.
+        if (source is Delegate) return source;
+
         if (source is Array array)
         {
             var copy = (Array)array.Clone();
@@ -750,6 +755,10 @@ public readonly struct LayerStateBag
 
     /// <inheritdoc cref="Format(int)"/>
     public static string Format(int[]? value) => value is null ? string.Empty : string.Join(",", value);
+
+    /// <summary>Formats jagged integer state as semicolon-separated rows.</summary>
+    public static string Format(int[][]? value)
+        => value is null ? string.Empty : string.Join(";", value.Select(row => string.Join(",", row)));
 
     /// <summary>Formats an enum array by member name.</summary>
     public static string FormatEnumArray<TEnum>(TEnum[]? value) where TEnum : struct, Enum

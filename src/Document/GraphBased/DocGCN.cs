@@ -243,7 +243,10 @@ public partial class DocGCN<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T
 
     private void InitializeEmbeddings()
     {
-        var random = RandomHelper.CreateSeededRandom(42);
+        // The graph stack is part of the native architecture, even before the caller supplies an
+        // adjacency matrix. Construct it here so the generated layer inventory, clone graph and
+        // optimizer all see one stable topology without a model-specific enumeration override.
+        EnsureGraphPathBuilt();
     }
 
     private void InitializeWithSmallRandomValues(Tensor<T> tensor, Random random, double stdDev)
@@ -588,14 +591,6 @@ public partial class DocGCN<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T
     private EmbeddingLayer<T>? _nodeOrderEmbedding;
 
     private readonly List<GraphConvolutionalLayer<T>> _graphConvolutions = [];
-
-    /// <inheritdoc/>
-    protected override IEnumerable<LayerBase<T>?> GetExtraTrainableLayers()
-    {
-        EnsureGraphPathBuilt();
-        yield return _nodeOrderEmbedding;
-        foreach (var conv in _graphConvolutions) yield return conv;
-    }
 
     /// <summary>Builds the graph path once. Cheap no-op afterwards.</summary>
     private void EnsureGraphPathBuilt()

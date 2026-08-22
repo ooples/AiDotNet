@@ -1204,6 +1204,21 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     /// </remarks>
     internal void MaterializeParameters() => EnsureParametersMaterialized();
 
+    /// <summary>
+    /// Commits tensors installed by a generated/base trainable-parameter setter without recursively
+    /// materializing child modules.
+    /// </summary>
+    /// <remarks>
+    /// Copy-on-write cloning installs each graph node independently. A generated setter deliberately
+    /// leaves a rebound-adoption signal for the common initialization lifecycle; if the clone is
+    /// forwarded before that signal is consumed, a shape-only layer can run its first-forward
+    /// reconciliation and allocate over the shared trained tensors. Calling the public recursive
+    /// materialization boundary here would allocate descendants before their own COW slots are
+    /// installed, defeating the memory guarantee. This own-node boundary consumes the signal and
+    /// completes pending shape-only provenance while leaving every child to its graph-order turn.
+    /// </remarks>
+    internal void CommitTrainableParameterAdoption() => EnsureOwnParametersMaterialized();
+
     /// <inheritdoc />
     void IParameterSurfaceLifecycle.PrepareParameterSurface(ParameterSurfaceIntent intent)
     {

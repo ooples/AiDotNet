@@ -61,24 +61,25 @@ public partial class BFGSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
     /// <summary>
     /// The approximation of the inverse Hessian matrix.
     /// </summary>
-    [AiDotNet.Attributes.TrainableParameter]
+    [AiDotNet.Attributes.Buffer]
     private Matrix<T>? _inverseHessian;
 
     /// <summary>
     /// The gradient from the previous iteration.
     /// </summary>
-    [Scratch]
+    [AiDotNet.Attributes.Buffer]
     private new Vector<T>? _previousGradient;
 
     /// <summary>
     /// The parameters from the previous iteration.
     /// </summary>
-    [AiDotNet.Attributes.TrainableParameter]
+    [AiDotNet.Attributes.Buffer]
     private Vector<T>? _previousParameters;
 
     /// <summary>
     /// The current iteration count.
     /// </summary>
+    [AiDotNet.Attributes.Buffer]
     private int _iteration;
 
     /// <summary>

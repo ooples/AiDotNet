@@ -1202,7 +1202,7 @@ public class ModelStateGenerator : IIncrementalGenerator
         static bool Machinery(string name)
             => name is "IOptimizer" or "IGradientBasedOptimizer" or "ILossFunction"
                 or "ILearningRateScheduler" or "IRegularization" or "IActivationFunction"
-                or "Random";
+                or "IAudioFeatureExtractor" or "Random";
 
         return Machinery(type.Name) || type.AllInterfaces.Any(i => Machinery(i.Name));
     }

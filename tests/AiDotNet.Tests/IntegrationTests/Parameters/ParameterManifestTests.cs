@@ -324,6 +324,38 @@ public class ParameterManifestTests
     }
 
     [Fact]
+    public async Task MatchingRestore_UsesStableIdsForMultipleVariableComponents()
+    {
+        await Task.Yield();
+        double[] first = Array.Empty<double>();
+        double[] second = Array.Empty<double>();
+        var registry = new ParameterComponentRegistry<double>();
+        registry.Register("first", new VariableLengthParameterSource<double>(
+            () => first.Length,
+            () => new Vector<double>(first),
+            values => first = values.ToArray()));
+        registry.Register("second", new VariableLengthParameterSource<double>(
+            () => second.Length,
+            () => new Vector<double>(second),
+            values => second = values.ToArray()));
+        var checkpointLayout = new ParameterLayoutSnapshot(new[]
+        {
+            new ParameterSlotDescriptor(
+                "first", ParameterSlotRole.LearnedState, ParameterReadiness.Materialized,
+                parameterCount: 2, offset: 0, shape: new[] { 2 }),
+            new ParameterSlotDescriptor(
+                "second", ParameterSlotRole.LearnedState, ParameterReadiness.Materialized,
+                parameterCount: 1, offset: 2, shape: new[] { 1 })
+        });
+
+        registry.SetMatchingParameters(
+            new Vector<double>(new[] { 10d, 11d, 20d }), checkpointLayout);
+
+        Assert.Equal(new[] { 10d, 11d }, first);
+        Assert.Equal(new[] { 20d }, second);
+    }
+
+    [Fact]
     public async Task LayoutSnapshot_CannotBeMutatedThroughItsPublicSlotCollection()
     {
         await Task.Yield();
@@ -432,6 +464,32 @@ public class ParameterManifestTests
         });
 
         Assert.NotEqual(unmaterialized.Fingerprint, materialized.Fingerprint);
+        Assert.Equal(unmaterialized.DeclaredLayoutFingerprint,
+            materialized.DeclaredLayoutFingerprint);
+    }
+
+    [Fact]
+    public void DeclaredLayoutFingerprint_StillRejectsSemanticOrShapeChanges()
+    {
+        static ParameterLayoutSnapshot Snapshot(
+            ParameterSlotRole role,
+            int[] shape,
+            ParameterOwnership ownership = ParameterOwnership.Owned) => new(new[]
+        {
+            new ParameterSlotDescriptor(
+                "weight", role, ParameterReadiness.Materialized, 12,
+                shape: shape, elementType: "System.Single", ownership: ownership)
+        });
+
+        var baseline = Snapshot(ParameterSlotRole.Trainable, new[] { 2, 6 });
+
+        Assert.NotEqual(baseline.DeclaredLayoutFingerprint,
+            Snapshot(ParameterSlotRole.Buffer, new[] { 2, 6 }).DeclaredLayoutFingerprint);
+        Assert.NotEqual(baseline.DeclaredLayoutFingerprint,
+            Snapshot(ParameterSlotRole.Trainable, new[] { 3, 4 }).DeclaredLayoutFingerprint);
+        Assert.NotEqual(baseline.DeclaredLayoutFingerprint,
+            Snapshot(ParameterSlotRole.Trainable, new[] { 2, 6 }, ParameterOwnership.Alias)
+                .DeclaredLayoutFingerprint);
     }
 
     [Fact]

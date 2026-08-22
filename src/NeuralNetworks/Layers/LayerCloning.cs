@@ -389,12 +389,7 @@ public static class LayerCloning
             // Shared hands over the ORIGINAL tensors, so both handles are one set of weights and
             // training either trains both.
             //
-            installed[i] = settings.Mode switch
-            {
-                CloneMode.Shared => tensors[i],
-                CloneMode.CopyOnWrite => (Tensor<T>)tensors[i].CloneShared(),
-                _ => tensors[i].Clone(),
-            };
+            installed[i] = CloneTensorForMode(tensors[i], settings.Mode);
         }
 
         clone.SetTrainableParameters(installed);
@@ -449,14 +444,37 @@ public static class LayerCloning
                 continue;
             }
 
-            var installed = settings.Mode switch
-            {
-                CloneMode.Shared => tensor,
-                CloneMode.CopyOnWrite => (Tensor<T>)tensor.CloneShared(),
-                _ => tensor.Clone(),
-            };
+            var installed = CloneTensorForMode(tensor, settings.Mode);
             clone.InstallRestoredBuffer(name, installed);
         }
+    }
+
+    /// <summary>Clones one persistent tensor without densifying sparse state.</summary>
+    private static Tensor<T> CloneTensorForMode<T>(Tensor<T> tensor, CloneMode mode)
+    {
+        if (mode == CloneMode.Shared) return tensor;
+
+        // Tensor.Clone/CloneShared intentionally reject SparseTensor because a dense storage clone
+        // would discard its COO topology. Preserve row/column indices and only duplicate the
+        // non-zero payload. Copy-on-write currently has no sparse storage primitive, so an eager
+        // independent sparse copy is the correct conservative implementation for that mode.
+        if (tensor is SparseTensor<T> sparse)
+        {
+            if (sparse.Shape.Length != 2)
+                throw new InvalidOperationException(
+                    $"Sparse clone requires rank 2, got rank {sparse.Shape.Length}.");
+
+            return new SparseTensor<T>(
+                sparse.Shape[0],
+                sparse.Shape[1],
+                sparse.RowIndices.ToArray(),
+                sparse.ColumnIndices.ToArray(),
+                sparse.DataVector.ToArray());
+        }
+
+        return mode == CloneMode.CopyOnWrite
+            ? (Tensor<T>)tensor.CloneShared()
+            : tensor.Clone();
     }
 
     /// <summary>Copies each registered sub-layer's parameters into the matching sub-layer.</summary>

@@ -1421,7 +1421,12 @@ public abstract partial class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, ICon
                     }
                     else
                     {
-                        _parameterRegistry.SetParameters(parameterSnapshot);
+                        // A modern checkpoint names every slot. Use that identity-preserving path
+                        // even when its aggregate layout already matches construction state: a
+                        // model such as Prophet owns several independently resizable fitted fields,
+                        // which is intentionally ambiguous to the legacy positional API but exact
+                        // in the persisted stable-ID manifest.
+                        _parameterRegistry.SetMatchingParameters(parameterSnapshot, checkpointLayout);
                     }
                 }
             }

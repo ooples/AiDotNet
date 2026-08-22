@@ -799,6 +799,17 @@ public class ModelParameterGenerator : IIncrementalGenerator
         if (type is null) return null;
         var bare = type.WithNullableAnnotation(NullableAnnotation.NotAnnotated);
 
+        // A nested NeuralNetworkBase is a layer-graph view, not an independent serialized copy of
+        // those layers. ModelStateGenerator restores readonly child models in place, which can
+        // replace the child's canonical Layers list after the parent constructor already aliased
+        // that list into its own Layers (SpeakerVerifier is the minimal example). Emit the same
+        // source-driven canonical-index repair used for ordinary layer fields so parent and child
+        // return to one graph before parameters are cloned.
+        if (IsNeuralNetworkBase(bare))
+        {
+            return $"CopyNestedNetworkCanonicalLayerAliases({member.Name}, __destination.{member.Name}, Layers, __destination.Layers, nameof({member.Name}));";
+        }
+
         if (IsLayerOf(bare, elem))
         {
             bool writable = member switch

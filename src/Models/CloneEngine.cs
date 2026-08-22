@@ -476,7 +476,8 @@ public static class CloneEngine
 
         var sourceLayout = sourceProvider.ParameterLayout;
         var cloneLayout = cloneProvider.ParameterLayout;
-        if (string.Equals(sourceLayout.Fingerprint, cloneLayout.Fingerprint,
+        if (string.Equals(sourceLayout.DeclaredLayoutFingerprint,
+                cloneLayout.DeclaredLayoutFingerprint,
                 StringComparison.Ordinal))
             return;
 

@@ -441,7 +441,8 @@ public class ClonePlanGenerator : IIncrementalGenerator
                 // ref/out cannot be reproduced from reading a stored value.
                 if (constructor.Parameters[i].RefKind != RefKind.None) { satisfied = false; break; }
 
-                mapped[i] = FindSource(type, constructor.Parameters[i]);
+                mapped[i] = FindDirectConstructorAssignment(type, constructor, constructor.Parameters[i])
+                    ?? FindSource(type, constructor.Parameters[i]);
             }
 
             var claimed = new HashSet<string>(System.StringComparer.Ordinal);
@@ -498,6 +499,70 @@ public class ClonePlanGenerator : IIncrementalGenerator
         }
 
         return candidates.Count == 0 ? null : candidates;
+    }
+
+    /// <summary>
+    /// Finds a member that the selected constructor directly assigns from a parameter, even when
+    /// their names intentionally differ (for example <c>ImageSize = imageWidth</c>).
+    /// </summary>
+    /// <remarks>
+    /// This is stronger evidence than a naming heuristic: it reads the constructor's actual storage
+    /// operation. Only a direct parameter RHS is accepted. Derived expressions remain unresolved so
+    /// the generator cannot mistake a computed runtime value for the original argument.
+    /// </remarks>
+    private static string? FindDirectConstructorAssignment(
+        INamedTypeSymbol type,
+        IMethodSymbol constructor,
+        IParameterSymbol parameter)
+    {
+        string? found = null;
+        foreach (var syntaxReference in constructor.DeclaringSyntaxReferences)
+        {
+            if (syntaxReference.GetSyntax() is not ConstructorDeclarationSyntax declaration)
+                continue;
+
+            foreach (var assignment in declaration.DescendantNodes().OfType<AssignmentExpressionSyntax>())
+            {
+                if (assignment.Right is not IdentifierNameSyntax right
+                    || !string.Equals(right.Identifier.ValueText, parameter.Name,
+                        System.StringComparison.Ordinal))
+                    continue;
+
+                string? memberName = assignment.Left switch
+                {
+                    IdentifierNameSyntax identifier => identifier.Identifier.ValueText,
+                    MemberAccessExpressionSyntax
+                    {
+                        Expression: ThisExpressionSyntax,
+                        Name: SimpleNameSyntax name
+                    } => name.Identifier.ValueText,
+                    _ => null,
+                };
+                if (memberName is null) continue;
+
+                bool isReadableMember = false;
+                for (var current = type; current is not null && !isReadableMember; current = current.BaseType)
+                {
+                    isReadableMember = current.GetMembers(memberName).Any(member => member switch
+                    {
+                        IPropertySymbol { IsStatic: false, IsIndexer: false } property
+                            when property.GetMethod is not null
+                                 && IsCarriedAs(property.Type, parameter.Type) => true,
+                        IFieldSymbol { IsStatic: false, IsConst: false } field
+                            when IsCarriedAs(field.Type, parameter.Type) => true,
+                        _ => false,
+                    });
+                }
+                if (!isReadableMember) continue;
+
+                if (found is not null
+                    && !string.Equals(found, memberName, System.StringComparison.Ordinal))
+                    return null;
+                found = memberName;
+            }
+        }
+
+        return found;
     }
 
     /// <summary>

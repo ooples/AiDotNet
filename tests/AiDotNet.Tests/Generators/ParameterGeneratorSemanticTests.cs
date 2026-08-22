@@ -296,6 +296,35 @@ public class SecondGeneratedCoverageClone<T> : AiDotNet.NeuralNetworks.Layers.La
     }
 
     [Fact]
+    public void ClonePlanGenerator_UsesDirectConstructorAssignmentWhenMemberNameDiffers()
+    {
+        const string source = """
+            namespace AiDotNet.Interfaces
+            {
+                public interface IFullModel<TInput, TOutput> { }
+            }
+
+            namespace Example
+            {
+                public sealed class WidthModel : AiDotNet.Interfaces.IFullModel<int, int>
+                {
+                    public int ImageSize { get; private set; }
+
+                    public WidthModel(int imageWidth = 128)
+                    {
+                        ImageSize = imageWidth;
+                    }
+                }
+            }
+            """;
+
+        string generated = Run(new AiDotNet.Generators.ClonePlanGenerator(), source);
+
+        Assert.Contains("new[] { \"ImageSize\" }", generated, StringComparison.Ordinal);
+        Assert.DoesNotContain("new[] { \"=default\" }", generated, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task LayerGenerator_AutoParametersDoesNotPromotePlainTensor()
     {
         await Task.Yield();
@@ -517,13 +546,13 @@ public partial class MixedLayer<T>
         Assert.Contains("_declared", generated, StringComparison.Ordinal);
         Assert.Contains("_registered", generated, StringComparison.Ordinal);
         // Fixed generated surfaces use one cached backing array rather than allocating an inline
-        // array on every read. Verify that partial declarations still merge into that stable view
-        // in declaration/registration order.
-        Assert.Contains("__storage[0] = _declared;", generated, StringComparison.Ordinal);
-        Assert.Contains("__storage[1] = _registered;", generated, StringComparison.Ordinal);
+        // array on every read. Runtime registration is the optimizer/tape order, so registrations
+        // discovered in another partial declaration lead declaration-only attributed storage.
+        Assert.Contains("__storage[0] = _registered;", generated, StringComparison.Ordinal);
+        Assert.Contains("__storage[1] = _declared;", generated, StringComparison.Ordinal);
         Assert.True(
-            generated.IndexOf("__storage[0] = _declared;", StringComparison.Ordinal)
-            < generated.IndexOf("__storage[1] = _registered;", StringComparison.Ordinal));
+            generated.IndexOf("__storage[0] = _registered;", StringComparison.Ordinal)
+            < generated.IndexOf("__storage[1] = _declared;", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -612,6 +641,28 @@ public partial class LifecycleModel<T> : AiDotNet.Models.ModelBase<T, object, ob
         string generated = Run(new AiDotNet.Generators.ModelStateGenerator(), source);
         Assert.DoesNotContain("_componentsRegistered", generated, StringComparison.Ordinal);
         Assert.Contains("LifecycleModel._trained", generated, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ModelStateGenerator_DoesNotPersistReconstructibleFeatureServicesAsFittedState()
+    {
+        const string source = @"
+namespace AiDotNet.Interfaces
+{
+    public interface IAudioFeatureExtractor<T> { int FeatureDimension { get; } }
+}
+public sealed class FeatureExtractor<T> : AiDotNet.Interfaces.IAudioFeatureExtractor<T>
+{
+    public int FeatureDimension => 13;
+}
+public partial class AudioModel<T> : AiDotNet.Models.ModelBase<T, object, object>
+{
+    public FeatureExtractor<T>? Extractor { get; protected set; } = new();
+}";
+
+        string generated = Run(new AiDotNet.Generators.ModelStateGenerator(), source);
+
+        Assert.DoesNotContain("AudioModel.Extractor", generated, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -889,15 +940,24 @@ public partial class TreeModel<T> : AiDotNet.Models.ModelBase<T, object, object>
 using System.Collections.Generic;
 public partial class AliasNetwork<T> : AiDotNet.NeuralNetworks.NeuralNetworkBase<T>
 {
+    private sealed class OwnedLayer : AiDotNet.NeuralNetworks.Layers.LayerBase<T>, AiDotNet.Interfaces.ILayer<T> { }
     [AiDotNet.Attributes.TrainableParameter]
     private AiDotNet.Tensors.LinearAlgebra.Tensor<T>? _runtimeWeight;
     private AiDotNet.Interfaces.ILayer<T>? _head;
     private AiDotNet.Interfaces.ILayer<T> _required = null!;
     private readonly List<AiDotNet.Interfaces.ILayer<T>> _encoder = new();
+    private readonly List<OwnedLayer> _owned = new();
     private readonly AiDotNet.Interfaces.ILayer<T>? _readonlyAlias;
 }";
 
         string generated = Run(new AiDotNet.Generators.ModelParameterGenerator(), source);
+        Assert.Contains(
+            "protected override global::System.Collections.Generic.IEnumerable<global::AiDotNet.NeuralNetworks.Layers.LayerBase<T>?> GetExtraTrainableLayers()",
+            generated,
+            StringComparison.Ordinal);
+        Assert.Contains("foreach (var __layer in _owned ??", generated, StringComparison.Ordinal);
+        Assert.Contains("protected override global::System.Collections.Generic.IEnumerable<GeneratedAdditionalLayerGroup> GetGeneratedAdditionalLayerGroups()", generated,
+            StringComparison.Ordinal);
         Assert.Contains("protected override void RebindLayerAliases(", generated, StringComparison.Ordinal);
         Assert.Contains(
             "_head = RebindLayerAlias(_head, previousLayers, replacementLayers, nameof(_head));",

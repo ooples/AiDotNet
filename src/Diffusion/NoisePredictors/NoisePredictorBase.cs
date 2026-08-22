@@ -2031,7 +2031,12 @@ public abstract partial class NoisePredictorBase<T> : INoisePredictor<T>, IModel
 
             var sourceLayout = ParameterLayout;
             var copyLayout = copy.ParameterLayout;
-            if (!string.Equals(sourceLayout.Fingerprint, copyLayout.Fingerprint,
+            // Restoring a clone may allocate storage for a shape-resolved lazy slot. That changes
+            // readiness but not the durable parameter schema. Reject identity, role, shape, type,
+            // ownership, availability, order, or declared-count changes; allow only that lifecycle
+            // transition, using the common manifest contract rather than a predictor override.
+            if (!string.Equals(sourceLayout.DeclaredLayoutFingerprint,
+                    copyLayout.DeclaredLayoutFingerprint,
                     StringComparison.Ordinal))
             {
                 throw new InvalidOperationException(

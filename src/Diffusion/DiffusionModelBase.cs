@@ -1997,7 +1997,11 @@ public abstract partial class DiffusionModelBase<T> : IDiffusionModel<T>, IConfi
     {
         var sourceLayout = source.ParameterLayout;
         var destinationLayout = destination.ParameterLayout;
-        if (string.Equals(sourceLayout.Fingerprint, destinationLayout.Fingerprint,
+        // Clone restoration may materialize a shape-resolved lazy child. Allocation timing is
+        // not part of the durable model schema, so validate the declared layout here while the
+        // exact fingerprint remains available to checkpoint/readiness boundaries.
+        if (string.Equals(sourceLayout.DeclaredLayoutFingerprint,
+                destinationLayout.DeclaredLayoutFingerprint,
                 StringComparison.Ordinal))
             return;
 
@@ -2015,8 +2019,13 @@ public abstract partial class DiffusionModelBase<T> : IDiffusionModel<T>, IConfi
             }
 
             if (sourceSlot.ParameterCount != destinationSlot.ParameterCount
-                || sourceSlot.MaterializedParameterCount != destinationSlot.MaterializedParameterCount
-                || sourceSlot.Readiness != destinationSlot.Readiness
+                || sourceSlot.Role != destinationSlot.Role
+                || sourceSlot.UpdatePolicy != destinationSlot.UpdatePolicy
+                || sourceSlot.Persistence != destinationSlot.Persistence
+                || sourceSlot.Ownership != destinationSlot.Ownership
+                || sourceSlot.Availability != destinationSlot.Availability
+                || !string.Equals(sourceSlot.ElementType, destinationSlot.ElementType,
+                    StringComparison.Ordinal)
                 || !ShapesEqual(sourceSlot.Shape, destinationSlot.Shape))
             {
                 differences.Add(

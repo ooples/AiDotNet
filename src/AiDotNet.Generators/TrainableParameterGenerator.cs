@@ -387,13 +387,33 @@ public class TrainableParameterGenerator : IIncrementalGenerator
                 // exactly these layers, which is how they already worked.
                 if (registeredFields.Count > 0)
                 {
-                    var seen = new HashSet<string>(paramFields.Select(parameter => parameter.Name));
-                    int nextOrder = paramFields.Count == 0
-                        ? 0
-                        : paramFields.Max(parameter => parameter.Order) + 1;
+                    // Registration order is the live optimizer/tape contract. A partially migrated
+                    // layer can annotate most fields and still register all of them imperatively;
+                    // appending only the unannotated discoveries after every attributed field made
+                    // the generated getter/setter use a different order from the runtime registry.
+                    // MambaBlock exposed the consequence: A_log/D were registered before the output
+                    // projection but generated after it, so clone adoption paired equal-sized tensors
+                    // with the wrong semantic slots while all aggregate counts still agreed.
+                    //
+                    // Rebuild the local declaration order from the explicit registration sequence,
+                    // retaining attribute metadata (shape/optional/backing) for matching fields, then
+                    // append genuinely declaration-only parameters. This makes one stable order drive
+                    // optimizer collection, flat persistence, copy-on-write adoption and manifests.
+                    var declaredByName = paramFields.ToDictionary(
+                        parameter => parameter.Name,
+                        System.StringComparer.Ordinal);
+                    var orderedFields = new List<ParameterFieldInfo>(paramFields.Count);
+                    var seen = new HashSet<string>(System.StringComparer.Ordinal);
+                    int nextOrder = 0;
                     foreach (var (fieldName, role) in registeredFields)
                     {
                         if (!seen.Add(fieldName)) continue;
+
+                        if (declaredByName.TryGetValue(fieldName, out var declared))
+                        {
+                            orderedFields.Add(declared with { Order = nextOrder++ });
+                            continue;
+                        }
 
                         // A nullable registered field remains explicit trainable state. Preserve
                         // its conditional presence in the generated manifest; AIDN090 separately
@@ -405,12 +425,20 @@ public class TrainableParameterGenerator : IIncrementalGenerator
                         {
                             bool nullable = matchingField.NullableAnnotation == NullableAnnotation.Annotated
                                 || matchingField.Type.NullableAnnotation == NullableAnnotation.Annotated;
-                            paramFields.Add(new ParameterFieldInfo(
+                            orderedFields.Add(new ParameterFieldInfo(
                                 matchingField.Name, role, nextOrder++, DeclIndex: 0,
                                 TypeName: matchingField.Type.ToDisplayString(),
                                 Optional: nullable, Nullable: nullable));
                         }
                     }
+
+                    foreach (var declared in paramFields)
+                    {
+                        if (seen.Add(declared.Name))
+                            orderedFields.Add(declared with { Order = nextOrder++ });
+                    }
+
+                    paramFields = orderedFields;
                 }
             }
 
@@ -1805,7 +1833,8 @@ public class TrainableParameterGenerator : IIncrementalGenerator
                 };
                 if (callName is "RegisterTrainableParameter"
                     or "RegisterBuffer"
-                    or "RegisterParameterComponent")
+                    or "RegisterParameterComponent"
+                    or "RegisterSubLayer")
                 {
                     return true;
                 }

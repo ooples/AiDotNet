@@ -92,6 +92,7 @@ public partial class LBFGSOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
     /// Think of this as the optimizer's memory of how the solution has changed over recent iterations.
     /// </para>
     /// </remarks>
+    [AiDotNet.Attributes.Buffer]
     private List<Vector<T>> _s;
 
     /// <summary>
@@ -106,28 +107,31 @@ public partial class LBFGSOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
     /// This represents how the direction of steepest descent has changed over recent iterations.
     /// </para>
     /// </remarks>
+    [AiDotNet.Attributes.Buffer]
     private List<Vector<T>> _y;
 
     /// <summary>
     /// The current iteration count of the optimization process.
     /// </summary>
+    [AiDotNet.Attributes.Buffer]
     private int _iteration;
 
     /// <summary>
     /// Stores the previous parameters for computing position differences in UpdateParameters.
     /// </summary>
-    [AiDotNet.Attributes.TrainableParameter]
+    [AiDotNet.Attributes.Buffer]
     private Vector<T>? _lbfgsPreviousParameters;
 
     /// <summary>
     /// Stores the previous gradient for computing gradient differences in UpdateParameters.
     /// </summary>
-    [Scratch]
+    [AiDotNet.Attributes.Buffer]
     private Vector<T>? _lbfgsPreviousGradient;
 
     /// <summary>
     /// Reused scalar coefficients for the two-loop recursion.
     /// </summary>
+    [Scratch]
     private T[] _twoLoopAlphas = Array.Empty<T>();
 
     /// <summary>

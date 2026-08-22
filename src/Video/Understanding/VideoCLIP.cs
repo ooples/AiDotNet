@@ -703,11 +703,11 @@ public partial class VideoCLIP<T> : NeuralNetworkBase<T>
                 features = ApplyGELU(features);
             }
 
-            // VideoCLIP consumes features from a pretrained video backbone and
-            // explicitly stops gradients at that boundary (Xu et al., 2021,
-            // Eq. 1). The temporal aggregation and projection above the frozen
-            // backbone remain trainable.
-            features = Engine.StopGradient(features);
+            // This native implementation constructs its spatial encoder locally and exposes those
+            // weights through the framework parameter surface. It is therefore end-to-end
+            // trainable, not a wrapper around an externally pretrained frozen backbone. Detaching
+            // here made the published convolution weights affect the numeric loss while their tape
+            // gradients stayed exactly zero.
 
             allFrameFeatures.Add(features);
         }
@@ -1163,41 +1163,6 @@ public partial class VideoCLIP<T> : NeuralNetworkBase<T>
 
     /// <inheritdoc/>
 
-
-    /// <inheritdoc/>
-    /// <summary>
-    /// Surfaces the token and positional embedding tables, which are learned parameters the model
-    /// owns OUTSIDE <c>Layers</c>.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// In CLIP (Radford et al. 2021 §2.4) the text encoder's token embedding and positional
-    /// embedding are both learned — <c>nn.Embedding(vocab_size, width)</c> and an
-    /// <c>nn.Parameter</c> respectively — so they appear in <c>state_dict()</c>, receive gradients,
-    /// and survive a module copy. Here they are plain tensors built in the constructor, so without
-    /// this hook the <c>Layers</c>-only parameter walk never saw them and they were frozen at their
-    /// random initialization for the model's entire lifetime, never trained and never persisted.
-    /// </para>
-    /// <para>
-    /// The clone consequence was the sharper one. A copy re-runs the constructor, which
-    /// re-initializes both tables to FRESH random values, and nothing afterwards overwrote them:
-    /// the clone's text tower therefore computed a different function from the original's while
-    /// every tensor in <c>Layers</c> matched bit-for-bit (measured: 22/22 chunks and 48173/48173
-    /// parameters identical, parameter L2 equal to 17 digits, yet the outputs differed by 1.6e+00
-    /// on identical input, and MoreData_ShouldNotDegrade failed on the clone).
-    /// </para>
-    /// <para>
-    /// Yielding them here opts into the three base paths that already handle model-owned tensors:
-    /// the tape optimizer's step, the serialization round-trip, and the copy-on-write clone. Same
-    /// mechanism <see cref="AiDotNet.NeuralNetworks.VisionTransformer{T}"/> uses for its CLS and
-    /// positional tokens.
-    /// </para>
-    /// </remarks>
-    protected override IEnumerable<Tensor<T>> GetExtraTrainableTensors()
-    {
-        yield return _tokenEmbeddingTable;
-        yield return _positionalEmbeddingTable;
-    }
 
     /// <summary>
     /// (Re)binds the per-stage layer views to the current contents of <c>Layers</c>.
