@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
@@ -96,7 +96,7 @@ public class YamlConfigSourceGenerator : IIncrementalGenerator
         foreach (var name in builderMetadataNames)
         {
             if (name.Length == 0) continue;
-            builderType = compilation.GetTypeByMetadataName(name);
+            builderType = GeneratorHelpers.ResolveSourceType(compilation, name);
             if (builderType is not null) break;
         }
 
@@ -266,7 +266,7 @@ public class YamlConfigSourceGenerator : IIncrementalGenerator
             StringComparer.OrdinalIgnoreCase);
 
         // Find the YamlConfigurableAttribute type in the compilation.
-        var attrType = compilation.GetTypeByMetadataName("AiDotNet.Configuration.YamlConfigurableAttribute");
+        var attrType = GeneratorHelpers.ResolveSourceType(compilation, "AiDotNet.Configuration.YamlConfigurableAttribute");
         if (attrType is null) return results;
 
         // Walk all types looking for the attribute.

@@ -2153,7 +2153,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         var modelClasses = context.SyntaxProvider.CreateSyntaxProvider(
             predicate: static (node, _) => IsModelCandidate(node),
             transform: static (ctx, _) => GetModelClassOrNull(ctx) is INamedTypeSymbol symbol
-                ? MetadataNameOf(symbol)
+                ? GeneratorHelpers.MetadataNameOf(symbol)
                 : null)
             .Where(static s => s is not null);
 
@@ -2167,7 +2167,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         var activationClasses = context.SyntaxProvider.CreateSyntaxProvider(
             predicate: static (node, _) => IsModelCandidate(node),
             transform: static (ctx, _) => GetActivationFunctionOrNull(ctx) is INamedTypeSymbol symbol
-                ? MetadataNameOf(symbol)
+                ? GeneratorHelpers.MetadataNameOf(symbol)
                 : null)
             .Where(static s => s is not null);
 
@@ -2175,7 +2175,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         var lossClasses = context.SyntaxProvider.CreateSyntaxProvider(
             predicate: static (node, _) => IsModelCandidate(node),
             transform: static (ctx, _) => GetLossFunctionOrNull(ctx) is INamedTypeSymbol symbol
-                ? MetadataNameOf(symbol)
+                ? GeneratorHelpers.MetadataNameOf(symbol)
                 : null)
             .Where(static s => s is not null);
 
@@ -2183,7 +2183,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         var layerClasses = context.SyntaxProvider.CreateSyntaxProvider(
             predicate: static (node, _) => IsModelCandidate(node),
             transform: static (ctx, _) => GetLayerOrNull(ctx) is INamedTypeSymbol symbol
-                ? MetadataNameOf(symbol)
+                ? GeneratorHelpers.MetadataNameOf(symbol)
                 : null)
             .Where(static s => s is not null);
 
@@ -2191,7 +2191,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         var algorithmClasses = context.SyntaxProvider.CreateSyntaxProvider(
             predicate: static (node, _) => IsModelCandidate(node),
             transform: static (ctx, _) => GetNonModelAlgorithmOrNull(ctx) is INamedTypeSymbol symbol
-                ? MetadataNameOf(symbol)
+                ? GeneratorHelpers.MetadataNameOf(symbol)
                 : null)
             .Where(static s => s is not null);
 
@@ -2516,11 +2516,11 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         ImmutableArray<string?> testClassNames,
         Compilation compilation)
     {
-        var domainAttrSymbol = compilation.GetTypeByMetadataName(ModelDomainAttr);
-        var categoryAttrSymbol = compilation.GetTypeByMetadataName(ModelCategoryAttr);
-        var taskAttrSymbol = compilation.GetTypeByMetadataName(ModelTaskAttr);
-        var exemptAttrSymbol = compilation.GetTypeByMetadataName(ModelMetadataExemptAttr);
-        var architectureSymbol = compilation.GetTypeByMetadataName("AiDotNet.NeuralNetworks.NeuralNetworkArchitecture`1");
+        var domainAttrSymbol = GeneratorHelpers.ResolveSourceType(compilation, ModelDomainAttr);
+        var categoryAttrSymbol = GeneratorHelpers.ResolveSourceType(compilation, ModelCategoryAttr);
+        var taskAttrSymbol = GeneratorHelpers.ResolveSourceType(compilation, ModelTaskAttr);
+        var exemptAttrSymbol = GeneratorHelpers.ResolveSourceType(compilation, ModelMetadataExemptAttr);
+        var architectureSymbol = GeneratorHelpers.ResolveSourceType(compilation, "AiDotNet.NeuralNetworks.NeuralNetworkArchitecture`1");
 
         // Build test class name set for fast lookup
         var testNames = new HashSet<string>(System.StringComparer.OrdinalIgnoreCase);
@@ -2539,7 +2539,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         {
             if (modelMetadataName is null)
                 continue;
-            if (compilation.GetTypeByMetadataName(modelMetadataName) is not INamedTypeSymbol modelClass)
+            if (GeneratorHelpers.ResolveSourceType(compilation, modelMetadataName) is not INamedTypeSymbol modelClass)
                 continue;
 
             ProcessModelSymbol(modelClass, domainAttrSymbol, categoryAttrSymbol, taskAttrSymbol,
@@ -14969,7 +14969,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         foreach (var metadataName in activationClasses)
         {
             if (metadataName is null) continue;
-            if (compilation.GetTypeByMetadataName(metadataName) is not INamedTypeSymbol symbol) continue;
+            if (GeneratorHelpers.ResolveSourceType(compilation, metadataName) is not INamedTypeSymbol symbol) continue;
             var info = ExtractActivationInfo(symbol);
             if (info is not null && activationSeen.Add(info.FullyQualifiedName))
                 sourceActivations.Add(info);
@@ -14979,7 +14979,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         foreach (var metadataName in lossClasses)
         {
             if (metadataName is null) continue;
-            if (compilation.GetTypeByMetadataName(metadataName) is not INamedTypeSymbol symbol) continue;
+            if (GeneratorHelpers.ResolveSourceType(compilation, metadataName) is not INamedTypeSymbol symbol) continue;
             var info = ExtractLossInfo(symbol);
             if (info is not null && lossSeen.Add(info.FullyQualifiedName))
                 sourceLosses.Add(info);
@@ -15133,7 +15133,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         var baseTypeSymbols = new List<INamedTypeSymbol>();
         foreach (var name in testBaseClassFullNames)
         {
-            var baseType = compilation.GetTypeByMetadataName(name);
+            var baseType = GeneratorHelpers.ResolveSourceType(compilation, name);
             if (baseType is not null)
                 baseTypeSymbols.Add(baseType);
         }
@@ -15358,7 +15358,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         foreach (var metadataName in layerClasses)
         {
             if (metadataName is null) continue;
-            if (compilation.GetTypeByMetadataName(metadataName) is not INamedTypeSymbol symbol) continue;
+            if (GeneratorHelpers.ResolveSourceType(compilation, metadataName) is not INamedTypeSymbol symbol) continue;
             var info = ExtractLayerInfo(symbol);
             if (info is not null && layerSeen.Add(info.FullyQualifiedName))
                 sourceLayers.Add(info);
@@ -17676,7 +17676,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         foreach (var metadataName in algorithmClasses)
         {
             if (metadataName is null) continue;
-            if (compilation.GetTypeByMetadataName(metadataName) is not INamedTypeSymbol symbol) continue;
+            if (GeneratorHelpers.ResolveSourceType(compilation, metadataName) is not INamedTypeSymbol symbol) continue;
             var fqn = symbol.OriginalDefinition.ToDisplayString();
             if (!seen.Add(fqn)) continue;
 
@@ -18075,24 +18075,4 @@ public class TestScaffoldGenerator : IIncrementalGenerator
     }
 
 
-    /// <summary>
-    /// Builds the metadata name GetTypeByMetadataName expects, including the arity suffix for
-    /// generics and '+' separators for nested types.
-    /// </summary>
-    private static string MetadataNameOf(INamedTypeSymbol symbol)
-    {
-        var name = symbol.MetadataName;
-        for (var containing = symbol.ContainingType; containing is not null; containing = containing.ContainingType)
-        {
-            name = containing.MetadataName + "+" + name;
-        }
-
-        var ns = symbol.ContainingNamespace;
-        if (ns is not null && !ns.IsGlobalNamespace)
-        {
-            name = ns.ToDisplayString() + "." + name;
-        }
-
-        return name;
-    }
 }

@@ -1,4 +1,4 @@
-using System.Collections.Immutable;
+﻿using System.Collections.Immutable;
 using System.Linq;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
@@ -100,7 +100,7 @@ public class ModelMetadataValidationGenerator : IIncrementalGenerator
         var classNames = context.SyntaxProvider.CreateSyntaxProvider(
             predicate: static (node, _) => IsCandidate(node),
             transform: static (ctx, _) => GetModelClassOrNull(ctx) is INamedTypeSymbol symbol
-                ? MetadataNameOf(symbol)
+                ? GeneratorHelpers.MetadataNameOf(symbol)
                 : null)
             .Where(static n => n is not null)
             .Select(static (n, _) => n ?? string.Empty);
@@ -115,26 +115,6 @@ public class ModelMetadataValidationGenerator : IIncrementalGenerator
         });
     }
 
-    /// <summary>
-    /// Builds the metadata name GetTypeByMetadataName expects, including the arity suffix for
-    /// generics and '+' separators for nested types.
-    /// </summary>
-    private static string MetadataNameOf(INamedTypeSymbol symbol)
-    {
-        var name = symbol.MetadataName;
-        for (var containing = symbol.ContainingType; containing is not null; containing = containing.ContainingType)
-        {
-            name = containing.MetadataName + "+" + name;
-        }
-
-        var ns = symbol.ContainingNamespace;
-        if (ns is not null && !ns.IsGlobalNamespace)
-        {
-            name = ns.ToDisplayString() + "." + name;
-        }
-
-        return name;
-    }
 
     /// <summary>
     /// Fast syntax filter: only consider non-abstract class declarations that have base types.
@@ -226,14 +206,14 @@ public class ModelMetadataValidationGenerator : IIncrementalGenerator
             return;
 
         // Resolve attribute type symbols for comparison
-        var domainAttr = compilation.GetTypeByMetadataName(ModelDomainAttributeName);
-        var categoryAttr = compilation.GetTypeByMetadataName(ModelCategoryAttributeName);
-        var taskAttr = compilation.GetTypeByMetadataName(ModelTaskAttributeName);
-        var complexityAttr = compilation.GetTypeByMetadataName(ModelComplexityAttributeName);
-        var inputAttr = compilation.GetTypeByMetadataName(ModelInputAttributeName);
-        var paperAttr = compilation.GetTypeByMetadataName(ResearchPaperAttributeName);
+        var domainAttr = GeneratorHelpers.ResolveSourceType(compilation, ModelDomainAttributeName);
+        var categoryAttr = GeneratorHelpers.ResolveSourceType(compilation, ModelCategoryAttributeName);
+        var taskAttr = GeneratorHelpers.ResolveSourceType(compilation, ModelTaskAttributeName);
+        var complexityAttr = GeneratorHelpers.ResolveSourceType(compilation, ModelComplexityAttributeName);
+        var inputAttr = GeneratorHelpers.ResolveSourceType(compilation, ModelInputAttributeName);
+        var paperAttr = GeneratorHelpers.ResolveSourceType(compilation, ResearchPaperAttributeName);
 
-        var exemptAttr = compilation.GetTypeByMetadataName(ModelMetadataExemptAttributeName);
+        var exemptAttr = GeneratorHelpers.ResolveSourceType(compilation, ModelMetadataExemptAttributeName);
 
         // If attributes don't exist in the compilation yet, skip validation
         if (domainAttr is null || categoryAttr is null || taskAttr is null ||
@@ -252,7 +232,7 @@ public class ModelMetadataValidationGenerator : IIncrementalGenerator
             if (!seen.Add(metadataName))
                 continue;
 
-            if (compilation.GetTypeByMetadataName(metadataName) is not INamedTypeSymbol modelClass)
+            if (GeneratorHelpers.ResolveSourceType(compilation, metadataName) is not INamedTypeSymbol modelClass)
                 continue;
 
             // Skip classes marked with [ModelMetadataExempt]
@@ -273,7 +253,7 @@ public class ModelMetadataValidationGenerator : IIncrementalGenerator
     /// </summary>
     private static bool IsAiDotNetLibraryCompilation(Compilation compilation)
     {
-        var domainAttr = compilation.GetTypeByMetadataName(ModelDomainAttributeName);
+        var domainAttr = GeneratorHelpers.ResolveSourceType(compilation, ModelDomainAttributeName);
 
         // The attribute type must be DEFINED in this compilation's own assembly. When AiDotNet is
         // referenced (test project, downstream consumers), the symbol resolves to the referenced

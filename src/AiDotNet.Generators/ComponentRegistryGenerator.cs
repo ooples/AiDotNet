@@ -52,10 +52,10 @@ public class ComponentRegistryGenerator : IIncrementalGenerator
             return null;
 
         var compilation = ctx.SemanticModel.Compilation;
-        var componentTypeAttrSymbol = compilation.GetTypeByMetadataName(ComponentTypeAttr);
-        var pipelineStageAttrSymbol = compilation.GetTypeByMetadataName(PipelineStageAttr);
-        var componentDependencyAttrSymbol = compilation.GetTypeByMetadataName(ComponentDependencyAttr);
-        var researchPaperAttrSymbol = compilation.GetTypeByMetadataName(ResearchPaperAttr);
+        var componentTypeAttrSymbol = GeneratorHelpers.ResolveSourceType(compilation, ComponentTypeAttr);
+        var pipelineStageAttrSymbol = GeneratorHelpers.ResolveSourceType(compilation, PipelineStageAttr);
+        var componentDependencyAttrSymbol = GeneratorHelpers.ResolveSourceType(compilation, ComponentDependencyAttr);
+        var researchPaperAttrSymbol = GeneratorHelpers.ResolveSourceType(compilation, ResearchPaperAttr);
 
         if (componentTypeAttrSymbol is null)
             return null;

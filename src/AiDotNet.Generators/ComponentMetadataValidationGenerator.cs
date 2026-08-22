@@ -1,4 +1,4 @@
-using System.Collections.Immutable;
+﻿using System.Collections.Immutable;
 using System.Linq;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
@@ -136,11 +136,11 @@ public class ComponentMetadataValidationGenerator : IIncrementalGenerator
 
         var kind = ClassifyComponent(symbol);
         if (kind != ComponentKind.None)
-            return new ComponentCandidate(MetadataNameOf(symbol), kind);
+            return new ComponentCandidate(GeneratorHelpers.MetadataNameOf(symbol), kind);
 
         // Also include classes that have [ComponentType] or [PipelineStage] for Tier 2 validation
         if (HasComponentTypeOrPipelineStage(symbol))
-            return new ComponentCandidate(MetadataNameOf(symbol), ComponentKind.General);
+            return new ComponentCandidate(GeneratorHelpers.MetadataNameOf(symbol), ComponentKind.General);
 
         return null;
     }
@@ -214,7 +214,7 @@ public class ComponentMetadataValidationGenerator : IIncrementalGenerator
             if (!seen.Add(metadataName))
                 continue;
 
-            if (compilation.GetTypeByMetadataName(metadataName) is not INamedTypeSymbol symbol)
+            if (GeneratorHelpers.ResolveSourceType(compilation, metadataName) is not INamedTypeSymbol symbol)
                 continue;
 
             switch (candidate.Value.Kind)
@@ -406,26 +406,6 @@ public class ComponentMetadataValidationGenerator : IIncrementalGenerator
         }
     }
 
-    /// <summary>
-    /// Builds the metadata name GetTypeByMetadataName expects, including the arity suffix for
-    /// generics and '+' separators for nested types.
-    /// </summary>
-    private static string MetadataNameOf(INamedTypeSymbol symbol)
-    {
-        var name = symbol.MetadataName;
-        for (var containing = symbol.ContainingType; containing is not null; containing = containing.ContainingType)
-        {
-            name = containing.MetadataName + "+" + name;
-        }
-
-        var ns = symbol.ContainingNamespace;
-        if (ns is not null && !ns.IsGlobalNamespace)
-        {
-            name = ns.ToDisplayString() + "." + name;
-        }
-
-        return name;
-    }
 
     private enum ComponentKind
     {

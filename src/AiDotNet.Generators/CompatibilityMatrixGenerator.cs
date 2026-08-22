@@ -158,9 +158,9 @@ public class CompatibilityMatrixGenerator : IIncrementalGenerator
             return null;
 
         var compilation = ctx.SemanticModel.Compilation;
-        var categoryAttrSymbol = compilation.GetTypeByMetadataName(ModelCategoryAttr);
-        var exemptAttrSymbol = compilation.GetTypeByMetadataName(ModelMetadataExemptAttr);
-        var categoryEnumType = compilation.GetTypeByMetadataName("AiDotNet.Enums.ModelCategory");
+        var categoryAttrSymbol = GeneratorHelpers.ResolveSourceType(compilation, ModelCategoryAttr);
+        var exemptAttrSymbol = GeneratorHelpers.ResolveSourceType(compilation, ModelMetadataExemptAttr);
+        var categoryEnumType = GeneratorHelpers.ResolveSourceType(compilation, "AiDotNet.Enums.ModelCategory");
 
         if (categoryAttrSymbol is null)
             return null;
@@ -194,7 +194,7 @@ public class CompatibilityMatrixGenerator : IIncrementalGenerator
             modelClass.TypeParameters.Length,
             categories.ToImmutableArray(),
             names.ToImmutableArray(),
-            MetadataNameOf(modelClass));
+            GeneratorHelpers.MetadataNameOf(modelClass));
     }
 
     private static bool IsCandidate(SyntaxNode node)
@@ -263,7 +263,7 @@ public class CompatibilityMatrixGenerator : IIncrementalGenerator
             // report nothing, exactly as the previous no-location path did -- never an external
             // location that suppression cannot reach.
             var declaration = entry.MetadataName.Length > 0
-                ? compilation.GetTypeByMetadataName(entry.MetadataName)
+                ? GeneratorHelpers.ResolveSourceType(compilation, entry.MetadataName)
                 : null;
             var location = declaration?.Locations.FirstOrDefault(l => l.SourceTree is not null);
 
@@ -879,24 +879,4 @@ public class CompatibilityMatrixGenerator : IIncrementalGenerator
     }
 
 
-    /// <summary>
-    /// Builds the metadata name GetTypeByMetadataName expects, including the arity suffix for
-    /// generics and '+' separators for nested types.
-    /// </summary>
-    private static string MetadataNameOf(INamedTypeSymbol symbol)
-    {
-        var name = symbol.MetadataName;
-        for (var containing = symbol.ContainingType; containing is not null; containing = containing.ContainingType)
-        {
-            name = containing.MetadataName + "+" + name;
-        }
-
-        var ns = symbol.ContainingNamespace;
-        if (ns is not null && !ns.IsGlobalNamespace)
-        {
-            name = ns.ToDisplayString() + "." + name;
-        }
-
-        return name;
-    }
 }

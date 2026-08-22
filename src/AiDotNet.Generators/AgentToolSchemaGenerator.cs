@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
@@ -55,7 +55,7 @@ public class AgentToolSchemaGenerator : IIncrementalGenerator
                     if (ctx.SemanticModel.GetDeclaredSymbol(ctx.Node) is not IMethodSymbol method) return null;
                     if (!HasToolAttribute(method)) return null;
                     if (method.ContainingType is null) return null;
-                    return MetadataNameOf(method.ContainingType) + "|" + method.Name;
+                    return GeneratorHelpers.MetadataNameOf(method.ContainingType) + "|" + method.Name;
                 })
             .Where(static m => m is not null)
             .Select(static (m, _) => m ?? string.Empty)
@@ -84,7 +84,7 @@ public class AgentToolSchemaGenerator : IIncrementalGenerator
             int bar = key.LastIndexOf('|');
             if (bar <= 0) continue;
 
-            var owner = compilation.GetTypeByMetadataName(key.Substring(0, bar));
+            var owner = GeneratorHelpers.ResolveSourceType(compilation, key.Substring(0, bar));
             if (owner is null) continue;
 
             foreach (var member in owner.GetMembers(key.Substring(bar + 1)))
@@ -594,24 +594,4 @@ public class AgentToolSchemaGenerator : IIncrementalGenerator
         return sb.ToString();
     }
 
-    /// <summary>
-    /// Builds the metadata name GetTypeByMetadataName expects, including the arity suffix for
-    /// generics and '+' separators for nested types.
-    /// </summary>
-    private static string MetadataNameOf(INamedTypeSymbol symbol)
-    {
-        var name = symbol.MetadataName;
-        for (var containing = symbol.ContainingType; containing is not null; containing = containing.ContainingType)
-        {
-            name = containing.MetadataName + "+" + name;
-        }
-
-        var ns = symbol.ContainingNamespace;
-        if (ns is not null && !ns.IsGlobalNamespace)
-        {
-            name = ns.ToDisplayString() + "." + name;
-        }
-
-        return name;
-    }
 }

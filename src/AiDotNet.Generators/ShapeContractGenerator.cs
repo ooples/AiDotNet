@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
@@ -95,7 +95,7 @@ public class ShapeContractGenerator : IIncrementalGenerator
                     node is Microsoft.CodeAnalysis.CSharp.Syntax.TypeDeclarationSyntax { AttributeLists.Count: > 0 },
                 transform: static (ctx, _) =>
                     ctx.SemanticModel.GetDeclaredSymbol(ctx.Node) is INamedTypeSymbol symbol
-                        ? MetadataNameOf(symbol)
+                        ? GeneratorHelpers.MetadataNameOf(symbol)
                         : null)
             .Where(static n => n is not null)
             .Select(static (n, _) => n ?? string.Empty)
@@ -115,7 +115,7 @@ public class ShapeContractGenerator : IIncrementalGenerator
             if (metadataName.Length == 0) continue;
             if (!resolved.Add(metadataName)) continue;
 
-            if (compilation.GetTypeByMetadataName(metadataName) is not INamedTypeSymbol type) continue;
+            if (GeneratorHelpers.ResolveSourceType(compilation, metadataName) is not INamedTypeSymbol type) continue;
             if (!seen.Add(type.ToDisplayString())) continue;
 
             var elementWise = type.GetAttributes()
@@ -371,24 +371,4 @@ public class ShapeContractGenerator : IIncrementalGenerator
     private static string AxisName(int value) =>
         (Enum.IsDefined(typeof(Axis), value) ? (Axis)value : Axis.Other).ToString();
 
-    /// <summary>
-    /// Builds the metadata name GetTypeByMetadataName expects, including the arity suffix for
-    /// generics and '+' separators for nested types.
-    /// </summary>
-    private static string MetadataNameOf(INamedTypeSymbol symbol)
-    {
-        var name = symbol.MetadataName;
-        for (var containing = symbol.ContainingType; containing is not null; containing = containing.ContainingType)
-        {
-            name = containing.MetadataName + "+" + name;
-        }
-
-        var ns = symbol.ContainingNamespace;
-        if (ns is not null && !ns.IsGlobalNamespace)
-        {
-            name = ns.ToDisplayString() + "." + name;
-        }
-
-        return name;
-    }
 }

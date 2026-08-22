@@ -63,9 +63,9 @@ public class ComponentDiscoveryApiGenerator : IIncrementalGenerator
             return null;
 
         var compilation = ctx.SemanticModel.Compilation;
-        var componentTypeAttrSymbol = compilation.GetTypeByMetadataName(ComponentTypeAttr);
-        var pipelineStageAttrSymbol = compilation.GetTypeByMetadataName(PipelineStageAttr);
-        var paperAttrSymbol = compilation.GetTypeByMetadataName(ResearchPaperAttr);
+        var componentTypeAttrSymbol = GeneratorHelpers.ResolveSourceType(compilation, ComponentTypeAttr);
+        var pipelineStageAttrSymbol = GeneratorHelpers.ResolveSourceType(compilation, PipelineStageAttr);
+        var paperAttrSymbol = GeneratorHelpers.ResolveSourceType(compilation, ResearchPaperAttr);
 
         if (componentTypeAttrSymbol is null)
             return null;

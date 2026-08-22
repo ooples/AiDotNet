@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 using System.Text;
@@ -76,7 +76,7 @@ public class ModelParameterGenerator : IIncrementalGenerator
                     cds.Modifiers.Any(m => m.Text == "partial"),
                 transform: static (ctx, _) =>
                     ctx.SemanticModel.GetDeclaredSymbol(ctx.Node) is INamedTypeSymbol symbol
-                        ? MetadataNameOf(symbol)
+                        ? GeneratorHelpers.MetadataNameOf(symbol)
                         : null)
             .Where(static n => n is not null)
             .Select(static (n, _) => n ?? string.Empty);
@@ -86,26 +86,6 @@ public class ModelParameterGenerator : IIncrementalGenerator
             static (spc, source) => Execute(source.Left, source.Right, spc));
     }
 
-    /// <summary>
-    /// Builds the metadata name GetTypeByMetadataName expects, including the arity suffix for
-    /// generics and the '+' separators for nested types.
-    /// </summary>
-    private static string MetadataNameOf(INamedTypeSymbol symbol)
-    {
-        var name = symbol.MetadataName;
-        for (var containing = symbol.ContainingType; containing is not null; containing = containing.ContainingType)
-        {
-            name = containing.MetadataName + "+" + name;
-        }
-
-        var ns = symbol.ContainingNamespace;
-        if (ns is not null && !ns.IsGlobalNamespace)
-        {
-            name = ns.ToDisplayString() + "." + name;
-        }
-
-        return name;
-    }
 
     private static void Execute(Compilation compilation,
                                 ImmutableArray<string> classMetadataNames,
@@ -123,7 +103,7 @@ public class ModelParameterGenerator : IIncrementalGenerator
             // Partial classes contribute one name per declaration; resolve each distinct name once.
             if (!resolved.Add(metadataName)) continue;
 
-            if (compilation.GetTypeByMetadataName(metadataName) is not INamedTypeSymbol classSymbol) continue;
+            if (GeneratorHelpers.ResolveSourceType(compilation, metadataName) is not INamedTypeSymbol classSymbol) continue;
             var elem = ElementTypeParam(classSymbol);
             if (elem is null) continue;
 

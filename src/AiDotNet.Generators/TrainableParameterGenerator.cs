@@ -75,7 +75,7 @@ public class TrainableParameterGenerator : IIncrementalGenerator
                     cds.Modifiers.Any(m => m.Text == "partial"),
                 transform: static (ctx, _) =>
                     ctx.SemanticModel.GetDeclaredSymbol(ctx.Node) is INamedTypeSymbol symbol
-                        ? MetadataNameOf(symbol)
+                        ? GeneratorHelpers.MetadataNameOf(symbol)
                         : null)
             .Where(static n => n is not null)
             .Select(static (n, _) => n ?? string.Empty);
@@ -85,39 +85,19 @@ public class TrainableParameterGenerator : IIncrementalGenerator
         context.RegisterSourceOutput(compilationAndClasses, static (spc, source) => Execute(source.Left, source.Right, spc));
     }
 
-    /// <summary>
-    /// Builds the metadata name GetTypeByMetadataName expects, including the arity suffix for
-    /// generics and '+' separators for nested types.
-    /// </summary>
-    private static string MetadataNameOf(INamedTypeSymbol symbol)
-    {
-        var name = symbol.MetadataName;
-        for (var containing = symbol.ContainingType; containing is not null; containing = containing.ContainingType)
-        {
-            name = containing.MetadataName + "+" + name;
-        }
-
-        var ns = symbol.ContainingNamespace;
-        if (ns is not null && !ns.IsGlobalNamespace)
-        {
-            name = ns.ToDisplayString() + "." + name;
-        }
-
-        return name;
-    }
 
     private static void Execute(Compilation compilation, ImmutableArray<string> classMetadataNames, SourceProductionContext context)
     {
         if (classMetadataNames.IsDefaultOrEmpty) return;
 
-        var attributeSymbol = compilation.GetTypeByMetadataName(TrainableParameterAttributeName);
+        var attributeSymbol = GeneratorHelpers.ResolveSourceType(compilation, TrainableParameterAttributeName);
 
         // [AutoParameters] remains a migration marker, but it never assigns semantics. PyTorch can
         // infer from nn.Parameter because that is a distinct type; Tensor<T> is also used for
         // activations, caches, datasets and buffers, so treating its CLR type or nullability as a
         // role silently corrupts the parameter graph.
-        var autoParamsSymbol = compilation.GetTypeByMetadataName("AiDotNet.Attributes.AutoParametersAttribute");
-        var bufferSymbol = compilation.GetTypeByMetadataName("AiDotNet.Attributes.BufferAttribute");
+        var autoParamsSymbol = GeneratorHelpers.ResolveSourceType(compilation, "AiDotNet.Attributes.AutoParametersAttribute");
+        var bufferSymbol = GeneratorHelpers.ResolveSourceType(compilation, "AiDotNet.Attributes.BufferAttribute");
         // Bail only if NO discovery route exists. This used to return whenever
         // TrainableParameterAttribute was missing, which also disabled register-call discovery,
         // sub-layer registration, buffers and [AutoParameters] -- every mechanism, gated on one
@@ -135,7 +115,7 @@ public class TrainableParameterGenerator : IIncrementalGenerator
             if (metadataName.Length == 0) continue;
             if (!resolvedNames.Add(metadataName)) continue;
 
-            var classSymbol = compilation.GetTypeByMetadataName(metadataName);
+            var classSymbol = GeneratorHelpers.ResolveSourceType(compilation, metadataName);
             if (classSymbol is null) continue;
 
             // Check if class extends LayerBase<T>

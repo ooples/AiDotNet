@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
@@ -161,7 +161,7 @@ public sealed class TensorPortContractGenerator : IIncrementalGenerator
                         || declaration.Members.OfType<MethodDeclarationSyntax>()
                             .Any(method => method.AttributeLists.Count > 0)),
                 static (ctx, _) => ctx.SemanticModel.GetDeclaredSymbol(ctx.Node) is INamedTypeSymbol symbol
-                    ? MetadataNameOf(symbol)
+                    ? GeneratorHelpers.MetadataNameOf(symbol)
                     : null)
             .Where(static n => n is not null)
             .Select(static (n, _) => n ?? string.Empty)
@@ -198,7 +198,7 @@ public sealed class TensorPortContractGenerator : IIncrementalGenerator
         foreach (var metadataName in metadataNames)
         {
             if (metadataName.Length == 0 || !resolvedNames.Add(metadataName)) continue;
-            if (compilation.GetTypeByMetadataName(metadataName) is INamedTypeSymbol resolved)
+            if (GeneratorHelpers.ResolveSourceType(compilation, metadataName) is INamedTypeSymbol resolved)
                 resolvedSymbols.Add(resolved);
         }
         var symbols = resolvedSymbols.ToImmutableArray();
@@ -1402,24 +1402,4 @@ public sealed class TensorPortContractGenerator : IIncrementalGenerator
         public Domain Required { get; }
     }
 
-    /// <summary>
-    /// Builds the metadata name GetTypeByMetadataName expects, including the arity suffix for
-    /// generics and '+' separators for nested types.
-    /// </summary>
-    private static string MetadataNameOf(INamedTypeSymbol symbol)
-    {
-        var name = symbol.MetadataName;
-        for (var containing = symbol.ContainingType; containing is not null; containing = containing.ContainingType)
-        {
-            name = containing.MetadataName + "+" + name;
-        }
-
-        var ns = symbol.ContainingNamespace;
-        if (ns is not null && !ns.IsGlobalNamespace)
-        {
-            name = ns.ToDisplayString() + "." + name;
-        }
-
-        return name;
-    }
 }

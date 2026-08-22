@@ -61,12 +61,12 @@ public class DiscoveryApiGenerator : IIncrementalGenerator
             return null;
 
         var compilation = ctx.SemanticModel.Compilation;
-        var domainAttrSymbol = compilation.GetTypeByMetadataName(ModelDomainAttr);
-        var categoryAttrSymbol = compilation.GetTypeByMetadataName(ModelCategoryAttr);
-        var taskAttrSymbol = compilation.GetTypeByMetadataName(ModelTaskAttr);
-        var complexityAttrSymbol = compilation.GetTypeByMetadataName(ModelComplexityAttr);
-        var paperAttrSymbol = compilation.GetTypeByMetadataName(ResearchPaperAttr);
-        var exemptAttrSymbol = compilation.GetTypeByMetadataName(ModelMetadataExemptAttr);
+        var domainAttrSymbol = GeneratorHelpers.ResolveSourceType(compilation, ModelDomainAttr);
+        var categoryAttrSymbol = GeneratorHelpers.ResolveSourceType(compilation, ModelCategoryAttr);
+        var taskAttrSymbol = GeneratorHelpers.ResolveSourceType(compilation, ModelTaskAttr);
+        var complexityAttrSymbol = GeneratorHelpers.ResolveSourceType(compilation, ModelComplexityAttr);
+        var paperAttrSymbol = GeneratorHelpers.ResolveSourceType(compilation, ResearchPaperAttr);
+        var exemptAttrSymbol = GeneratorHelpers.ResolveSourceType(compilation, ModelMetadataExemptAttr);
 
         if (domainAttrSymbol is null || categoryAttrSymbol is null ||
             taskAttrSymbol is null || complexityAttrSymbol is null)
