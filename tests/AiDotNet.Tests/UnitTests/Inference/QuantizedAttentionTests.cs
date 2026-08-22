@@ -32,6 +32,27 @@ public class QuantizedAttentionTests
     }
 
     [Fact(Timeout = 60000)]
+    public async Task QuantizedAttention_MHA_ForwardDoesNotAllocatePerElementIndexArrays()
+    {
+        await Task.Yield();
+        const int seqLen = 16;
+        const int embDim = 64;
+        const int numHeads = 4;
+        var mha = new MultiHeadAttentionLayer<float>(numHeads, embDim / numHeads);
+        var quantized = new QuantizedAttentionLayer(mha);
+        var input = CreateRandomTensor(new[] { 1, seqLen, embDim });
+
+        _ = quantized.Forward(input); // JIT and initialize lazy paths before measuring.
+        long before = GC.GetAllocatedBytesForCurrentThread();
+        _ = quantized.Forward(input);
+        long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+
+        Assert.True(allocated < 1_000_000,
+            $"A single 16x64 quantized attention forward allocated {allocated:N0} bytes. " +
+            "The hot path must use flat spans instead of allocating an index array per tensor element.");
+    }
+
+    [Fact(Timeout = 60000)]
     public async Task QuantizedAttention_GQA_ForwardProducesValidOutput()
     {
         int seqLen = 4;

@@ -665,9 +665,10 @@ public class TrainableParameterGenerator : IIncrementalGenerator
             var sentinelRoots = new HashSet<string>(System.StringComparer.Ordinal);
             foreach (var pf in shapedFields)
             {
-                foreach (string axis in pf.Shape!.Split(',').Select(a => a.Trim()))
+                foreach (string axis in pf.Shape!.Split(',')
+                    .Select(a => a.Trim())
+                    .Where(axis => axis.Length > 0 && axis != "*"))
                 {
-                    if (axis.Length == 0 || axis == "*") continue;
                     string trimmed = TryGetAdaptiveAxisBinding(axis, out string bound) ? bound : axis;
 
                     // Each axis gets its own walk AND its own `visited` set. The hazard verdict is
