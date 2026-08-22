@@ -13,6 +13,11 @@ namespace AiDotNet.Tests.IntegrationTests.NeuralNetworks;
 /// </summary>
 public sealed class RecurrentGemmaTrainingRegressionTests
 {
+    // float.IsFinite does not exist on net471, which this test project still targets, so the two
+    // asserts below broke the build there (CS0117). IsNaN/IsInfinity have been on System.Single
+    // since .NET 1.1 and are the pattern the rest of these suites already use.
+    private static bool IsFinite(float value) => !float.IsNaN(value) && !float.IsInfinity(value);
+
     [Fact(Timeout = 30000)]
     public async Task SmallLanguageModel_TrainingChangesFiniteParameters()
     {
@@ -48,7 +53,7 @@ public sealed class RecurrentGemmaTrainingRegressionTests
 
         var after = model.GetParameters().ToArray();
         Assert.Equal(before.Length, after.Length);
-        Assert.All(after, value => Assert.True(float.IsFinite(value),
+        Assert.All(after, value => Assert.True(IsFinite(value),
             $"Training produced a non-finite parameter: {value}."));
         Assert.Contains(Enumerable.Range(0, before.Length),
             i => MathF.Abs(after[i] - before[i]) > 1e-8f);
@@ -79,7 +84,7 @@ public sealed class RecurrentGemmaTrainingRegressionTests
                     AiDotNet.Training.CompiledTapeTrainingStep<float>.GetFusedStepCount() > 0,
                     "The regression case must exercise the compiled optimizer before fallback.");
                 Assert.Equal(before.Length, after.Length);
-                Assert.All(after, value => Assert.True(float.IsFinite(value),
+                Assert.All(after, value => Assert.True(IsFinite(value),
                     $"Training produced a non-finite parameter: {value}."));
                 Assert.Contains(Enumerable.Range(0, before.Length), i => after[i] != before[i]);
             }
