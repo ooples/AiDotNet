@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 using System.Text;
@@ -32,18 +32,49 @@ public class DocumentationGenerator : IIncrementalGenerator
 
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
-        var classDeclarations = context.SyntaxProvider.CreateSyntaxProvider(
+        // Values, not symbols -- see DiscoveryApiGenerator for the full rationale.
+        var docEntries = context.SyntaxProvider.CreateSyntaxProvider(
             predicate: static (node, _) => IsCandidate(node),
-            transform: static (ctx, _) => GetModelClassOrNull(ctx))
-            .Where(static s => s is not null);
+            transform: static (ctx, _) => Analyze(ctx))
+            .Where(static e => e is not null)
+            .Select(static (e, _) => e ?? DocEntry.Empty);
 
-        var collected = classDeclarations.Collect().Combine(context.CompilationProvider);
+        context.RegisterSourceOutput(docEntries.Collect(), static (spc, collected) => Emit(spc, collected));
+    }
 
-        context.RegisterSourceOutput(collected, static (spc, source) =>
+    /// <summary>
+    /// Resolves one candidate class into a value-equatable entry, or null when it is not
+    /// documentable. All symbol access is confined to this method.
+    /// </summary>
+    private static DocEntry? Analyze(GeneratorSyntaxContext ctx)
+    {
+        if (GetModelClassOrNull(ctx) is not INamedTypeSymbol modelClass)
+            return null;
+
+        var compilation = ctx.SemanticModel.Compilation;
+        var domainAttrSymbol = compilation.GetTypeByMetadataName(ModelDomainAttr);
+        var categoryAttrSymbol = compilation.GetTypeByMetadataName(ModelCategoryAttr);
+        var taskAttrSymbol = compilation.GetTypeByMetadataName(ModelTaskAttr);
+        var complexityAttrSymbol = compilation.GetTypeByMetadataName(ModelComplexityAttr);
+        var paperAttrSymbol = compilation.GetTypeByMetadataName(ResearchPaperAttr);
+        var inputAttrSymbol = compilation.GetTypeByMetadataName(ModelInputAttr);
+        var exemptAttrSymbol = compilation.GetTypeByMetadataName(ModelMetadataExemptAttr);
+
+        if (domainAttrSymbol is null || categoryAttrSymbol is null ||
+            taskAttrSymbol is null || complexityAttrSymbol is null)
         {
-            var (candidates, compilation) = source;
-            Execute(spc, candidates, compilation);
-        });
+            return null;
+        }
+
+        if (exemptAttrSymbol is not null && HasAttribute(modelClass.GetAttributes(), exemptAttrSymbol))
+            return null;
+
+        var fullName = modelClass.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+        var entry = ExtractDocEntry(modelClass, fullName,
+            domainAttrSymbol, categoryAttrSymbol, taskAttrSymbol,
+            complexityAttrSymbol, paperAttrSymbol, inputAttrSymbol);
+
+        return entry.Domains.Length > 0 && entry.Tasks.Length > 0 && entry.HasComplexity ? entry : null;
     }
 
     private static bool IsCandidate(SyntaxNode node)
@@ -76,27 +107,13 @@ public class DocumentationGenerator : IIncrementalGenerator
         return null;
     }
 
-    private static void Execute(
-        SourceProductionContext context,
-        ImmutableArray<INamedTypeSymbol?> candidates,
-        Compilation compilation)
+    /// <summary>
+    /// Emits from already-resolved entries; symbol work and the admission rules moved into
+    /// <see cref="Analyze"/>, while dedupe and ordering stay here where the whole set is visible.
+    /// </summary>
+    private static void Emit(SourceProductionContext context, ImmutableArray<DocEntry> candidates)
     {
         if (candidates.IsDefaultOrEmpty)
-        {
-            EmitDocumentationClass(context, new List<DocEntry>());
-            return;
-        }
-
-        var domainAttrSymbol = compilation.GetTypeByMetadataName(ModelDomainAttr);
-        var categoryAttrSymbol = compilation.GetTypeByMetadataName(ModelCategoryAttr);
-        var taskAttrSymbol = compilation.GetTypeByMetadataName(ModelTaskAttr);
-        var complexityAttrSymbol = compilation.GetTypeByMetadataName(ModelComplexityAttr);
-        var paperAttrSymbol = compilation.GetTypeByMetadataName(ResearchPaperAttr);
-        var inputAttrSymbol = compilation.GetTypeByMetadataName(ModelInputAttr);
-        var exemptAttrSymbol = compilation.GetTypeByMetadataName(ModelMetadataExemptAttr);
-
-        if (domainAttrSymbol is null || categoryAttrSymbol is null ||
-            taskAttrSymbol is null || complexityAttrSymbol is null)
         {
             EmitDocumentationClass(context, new List<DocEntry>());
             return;
@@ -105,25 +122,12 @@ public class DocumentationGenerator : IIncrementalGenerator
         var entries = new List<DocEntry>();
         var seen = new HashSet<string>();
 
-        foreach (var modelClass in candidates)
+        foreach (var entry in candidates)
         {
-            if (modelClass is null) continue;
+            if (entry.FullyQualifiedName.Length == 0) continue;
+            if (!seen.Add(entry.FullyQualifiedName)) continue;
 
-            var fullName = modelClass.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
-            if (!seen.Add(fullName)) continue;
-
-            // Skip classes marked with [ModelMetadataExempt]
-            if (exemptAttrSymbol is not null && HasAttribute(modelClass.GetAttributes(), exemptAttrSymbol))
-                continue;
-
-            var entry = ExtractDocEntry(modelClass, fullName,
-                domainAttrSymbol, categoryAttrSymbol, taskAttrSymbol,
-                complexityAttrSymbol, paperAttrSymbol, inputAttrSymbol);
-
-            if (entry.Domains.Count > 0 && entry.Tasks.Count > 0 && entry.HasComplexity)
-            {
-                entries.Add(entry);
-            }
+            entries.Add(entry);
         }
 
         entries.Sort((a, b) => string.Compare(a.ClassName, b.ClassName, System.StringComparison.Ordinal));
@@ -141,12 +145,16 @@ public class DocumentationGenerator : IIncrementalGenerator
         INamedTypeSymbol? paperAttrSymbol,
         INamedTypeSymbol? inputAttrSymbol)
     {
-        var entry = new DocEntry
-        {
-            ClassName = modelClass.Name,
-            FullyQualifiedName = fullyQualifiedName,
-            TypeParameterCount = modelClass.TypeParameters.Length
-        };
+        var domains = new List<int>();
+        var categories = new List<int>();
+        var tasks = new List<int>();
+        var papers = new List<PaperInfo>();
+        int complexity = 0;
+        bool hasComplexity = false;
+        string inputTypeName = string.Empty;
+        string outputTypeName = string.Empty;
+        string summary = string.Empty;
+        string beginnerGuide = string.Empty;
 
         foreach (var attr in modelClass.GetAttributes())
         {
@@ -155,24 +163,24 @@ public class DocumentationGenerator : IIncrementalGenerator
             if (SymbolEqualityComparer.Default.Equals(attr.AttributeClass, domainAttrSymbol))
             {
                 if (attr.ConstructorArguments.Length >= 1 && attr.ConstructorArguments[0].Value is int d)
-                    entry.Domains.Add(d);
+                    domains.Add(d);
             }
             else if (SymbolEqualityComparer.Default.Equals(attr.AttributeClass, categoryAttrSymbol))
             {
                 if (attr.ConstructorArguments.Length >= 1 && attr.ConstructorArguments[0].Value is int c)
-                    entry.Categories.Add(c);
+                    categories.Add(c);
             }
             else if (SymbolEqualityComparer.Default.Equals(attr.AttributeClass, taskAttrSymbol))
             {
                 if (attr.ConstructorArguments.Length >= 1 && attr.ConstructorArguments[0].Value is int t)
-                    entry.Tasks.Add(t);
+                    tasks.Add(t);
             }
             else if (SymbolEqualityComparer.Default.Equals(attr.AttributeClass, complexityAttrSymbol))
             {
                 if (attr.ConstructorArguments.Length >= 1 && attr.ConstructorArguments[0].Value is int cx)
                 {
-                    entry.Complexity = cx;
-                    entry.HasComplexity = true;
+                    complexity = cx;
+                    hasComplexity = true;
                 }
             }
             else if (paperAttrSymbol is not null &&
@@ -189,7 +197,7 @@ public class DocumentationGenerator : IIncrementalGenerator
                         if (named.Key == "Year" && named.Value.Value is int y) year = y;
                         else if (named.Key == "Authors" && named.Value.Value is string a) authors = a;
                     }
-                    entry.Papers.Add(new PaperInfo { Title = title, Url = url, Year = year, Authors = authors });
+                    papers.Add(new PaperInfo { Title = title, Url = url, Year = year, Authors = authors });
                 }
             }
             else if (inputAttrSymbol is not null &&
@@ -200,9 +208,9 @@ public class DocumentationGenerator : IIncrementalGenerator
                     var inputType = attr.ConstructorArguments[0].Value as INamedTypeSymbol;
                     var outputType = attr.ConstructorArguments[1].Value as INamedTypeSymbol;
                     if (inputType is not null)
-                        entry.InputTypeName = inputType.Name;
+                        inputTypeName = inputType.Name;
                     if (outputType is not null)
-                        entry.OutputTypeName = outputType.Name;
+                        outputTypeName = outputType.Name;
                 }
             }
         }
@@ -215,11 +223,24 @@ public class DocumentationGenerator : IIncrementalGenerator
         }
         if (!string.IsNullOrWhiteSpace(xmlDoc))
         {
-            entry.Summary = ExtractXmlElement(xmlDoc, "summary");
-            entry.BeginnerGuide = ExtractBeginnerRemarks(xmlDoc);
+            summary = ExtractXmlElement(xmlDoc, "summary");
+            beginnerGuide = ExtractBeginnerRemarks(xmlDoc);
         }
 
-        return entry;
+        return new DocEntry(
+            modelClass.Name,
+            fullyQualifiedName,
+            modelClass.TypeParameters.Length,
+            domains.ToImmutableArray(),
+            categories.ToImmutableArray(),
+            tasks.ToImmutableArray(),
+            complexity,
+            hasComplexity,
+            papers.ToImmutableArray(),
+            inputTypeName,
+            outputTypeName,
+            summary,
+            beginnerGuide);
     }
 
     private static void EmitDocumentationClass(SourceProductionContext context, List<DocEntry> entries)
@@ -329,7 +350,7 @@ public class DocumentationGenerator : IIncrementalGenerator
             sb.AppendLine($"            ModelComplexity.{complexityEnum},");
 
             // Domains
-            if (entry.Domains.Count == 0)
+            if (entry.Domains.Length == 0)
                 sb.AppendLine("            Array.Empty<ModelDomain>(),");
             else
             {
@@ -340,7 +361,7 @@ public class DocumentationGenerator : IIncrementalGenerator
             }
 
             // Categories
-            if (entry.Categories.Count == 0)
+            if (entry.Categories.Length == 0)
                 sb.AppendLine("            Array.Empty<ModelCategory>(),");
             else
             {
@@ -351,7 +372,7 @@ public class DocumentationGenerator : IIncrementalGenerator
             }
 
             // Tasks
-            if (entry.Tasks.Count == 0)
+            if (entry.Tasks.Length == 0)
                 sb.AppendLine("            Array.Empty<ModelTask>(),");
             else
             {
@@ -364,7 +385,7 @@ public class DocumentationGenerator : IIncrementalGenerator
             sb.AppendLine($"            {EscapeString(entry.Summary)},");
             sb.AppendLine($"            {EscapeString(entry.BeginnerGuide)},");
 
-            var firstPaper = entry.Papers.Count > 0 ? entry.Papers[0] : null;
+            var firstPaper = entry.Papers.Length > 0 ? entry.Papers[0] : null;
             sb.AppendLine($"            {EscapeString(firstPaper?.Title ?? string.Empty)},");
             sb.AppendLine($"            {EscapeString(firstPaper?.Url ?? string.Empty)},");
             sb.AppendLine($"            {EscapeString(entry.InputTypeName)},");
@@ -582,28 +603,155 @@ public class DocumentationGenerator : IIncrementalGenerator
         return false;
     }
 
-    private class DocEntry
+    /// <summary>
+    /// One documented model, as plain values. Immutable and structurally equal so the incremental
+    /// pipeline can actually compare it; Papers is nested, so PaperInfo is equatable too.
+    /// </summary>
+    private sealed class DocEntry : System.IEquatable<DocEntry>
     {
-        public string ClassName { get; set; } = string.Empty;
-        public string FullyQualifiedName { get; set; } = string.Empty;
-        public int TypeParameterCount { get; set; }
-        public List<int> Domains { get; } = new List<int>();
-        public List<int> Categories { get; } = new List<int>();
-        public List<int> Tasks { get; } = new List<int>();
-        public int Complexity { get; set; }
-        public bool HasComplexity { get; set; }
-        public List<PaperInfo> Papers { get; } = new List<PaperInfo>();
-        public string InputTypeName { get; set; } = string.Empty;
-        public string OutputTypeName { get; set; } = string.Empty;
-        public string Summary { get; set; } = string.Empty;
-        public string BeginnerGuide { get; set; } = string.Empty;
+        public static readonly DocEntry Empty = new(
+            string.Empty, string.Empty, 0,
+            ImmutableArray<int>.Empty, ImmutableArray<int>.Empty, ImmutableArray<int>.Empty,
+            0, false, ImmutableArray<PaperInfo>.Empty,
+            string.Empty, string.Empty, string.Empty, string.Empty);
+
+        public DocEntry(
+            string className,
+            string fullyQualifiedName,
+            int typeParameterCount,
+            ImmutableArray<int> domains,
+            ImmutableArray<int> categories,
+            ImmutableArray<int> tasks,
+            int complexity,
+            bool hasComplexity,
+            ImmutableArray<PaperInfo> papers,
+            string inputTypeName,
+            string outputTypeName,
+            string summary,
+            string beginnerGuide)
+        {
+            ClassName = className;
+            FullyQualifiedName = fullyQualifiedName;
+            TypeParameterCount = typeParameterCount;
+            Domains = domains.IsDefault ? ImmutableArray<int>.Empty : domains;
+            Categories = categories.IsDefault ? ImmutableArray<int>.Empty : categories;
+            Tasks = tasks.IsDefault ? ImmutableArray<int>.Empty : tasks;
+            Complexity = complexity;
+            HasComplexity = hasComplexity;
+            Papers = papers.IsDefault ? ImmutableArray<PaperInfo>.Empty : papers;
+            InputTypeName = inputTypeName;
+            OutputTypeName = outputTypeName;
+            Summary = summary;
+            BeginnerGuide = beginnerGuide;
+        }
+
+        public string ClassName { get; }
+        public string FullyQualifiedName { get; }
+        public int TypeParameterCount { get; }
+        public ImmutableArray<int> Domains { get; }
+        public ImmutableArray<int> Categories { get; }
+        public ImmutableArray<int> Tasks { get; }
+        public int Complexity { get; }
+        public bool HasComplexity { get; }
+        public ImmutableArray<PaperInfo> Papers { get; }
+        public string InputTypeName { get; }
+        public string OutputTypeName { get; }
+        public string Summary { get; }
+        public string BeginnerGuide { get; }
+
+        public bool Equals(DocEntry? other)
+        {
+            if (other is null) return false;
+            if (ReferenceEquals(this, other)) return true;
+
+            return string.Equals(ClassName, other.ClassName, System.StringComparison.Ordinal)
+                && string.Equals(FullyQualifiedName, other.FullyQualifiedName, System.StringComparison.Ordinal)
+                && TypeParameterCount == other.TypeParameterCount
+                && Complexity == other.Complexity
+                && HasComplexity == other.HasComplexity
+                && string.Equals(InputTypeName, other.InputTypeName, System.StringComparison.Ordinal)
+                && string.Equals(OutputTypeName, other.OutputTypeName, System.StringComparison.Ordinal)
+                && string.Equals(Summary, other.Summary, System.StringComparison.Ordinal)
+                && string.Equals(BeginnerGuide, other.BeginnerGuide, System.StringComparison.Ordinal)
+                && IntsEqual(Domains, other.Domains)
+                && IntsEqual(Categories, other.Categories)
+                && IntsEqual(Tasks, other.Tasks)
+                && ItemsEqual(Papers, other.Papers);
+        }
+
+        public override bool Equals(object? obj) => Equals(obj as DocEntry);
+
+        public override int GetHashCode()
+        {
+            unchecked
+            {
+                int hash = 17;
+                hash = (hash * 31) + ClassName.GetHashCode();
+                hash = (hash * 31) + FullyQualifiedName.GetHashCode();
+                hash = (hash * 31) + TypeParameterCount;
+                hash = (hash * 31) + Complexity;
+                hash = (hash * 31) + (HasComplexity ? 1 : 0);
+                hash = (hash * 31) + InputTypeName.GetHashCode();
+                hash = (hash * 31) + OutputTypeName.GetHashCode();
+                hash = (hash * 31) + Summary.GetHashCode();
+                hash = (hash * 31) + BeginnerGuide.GetHashCode();
+                hash = (hash * 31) + Domains.Length;
+                hash = (hash * 31) + Categories.Length;
+                hash = (hash * 31) + Tasks.Length;
+                hash = (hash * 31) + Papers.Length;
+                return hash;
+            }
+        }
+
+        private static bool IntsEqual(ImmutableArray<int> left, ImmutableArray<int> right)
+        {
+            if (left.Length != right.Length) return false;
+            for (int i = 0; i < left.Length; i++)
+            {
+                if (left[i] != right[i]) return false;
+            }
+            return true;
+        }
+
+        private static bool ItemsEqual<TItem>(ImmutableArray<TItem> left, ImmutableArray<TItem> right)
+            where TItem : System.IEquatable<TItem>
+        {
+            if (left.Length != right.Length) return false;
+            for (int i = 0; i < left.Length; i++)
+            {
+                if (!left[i].Equals(right[i])) return false;
+            }
+            return true;
+        }
     }
 
-    private class PaperInfo
+    private sealed class PaperInfo : System.IEquatable<PaperInfo>
     {
         public string Title { get; set; } = string.Empty;
         public string Url { get; set; } = string.Empty;
         public int Year { get; set; }
         public string Authors { get; set; } = string.Empty;
+
+        public bool Equals(PaperInfo? other)
+            => other is not null
+            && string.Equals(Title, other.Title, System.StringComparison.Ordinal)
+            && string.Equals(Url, other.Url, System.StringComparison.Ordinal)
+            && Year == other.Year
+            && string.Equals(Authors, other.Authors, System.StringComparison.Ordinal);
+
+        public override bool Equals(object? obj) => Equals(obj as PaperInfo);
+
+        public override int GetHashCode()
+        {
+            unchecked
+            {
+                int hash = 17;
+                hash = (hash * 31) + Title.GetHashCode();
+                hash = (hash * 31) + Url.GetHashCode();
+                hash = (hash * 31) + Year;
+                hash = (hash * 31) + Authors.GetHashCode();
+                return hash;
+            }
+        }
     }
 }
