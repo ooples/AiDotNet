@@ -291,7 +291,13 @@ public partial class TabSynGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
         _diffMLPLayers.AddRange(LayerHelper<T>.CreateDefaultTabSynDiffusionLayers(
             diffInputDim, latentDim, _options.DiffusionMLPDimensions));
 
-        // Timestep projection
+        // Timestep projection: teDim -> teDim, and BOTH widths are declared.
+        // CreateTimestepEmbedding builds a sinusoidal vector of exactly TimestepEmbeddingDimension
+        // and projects it back to the same width, so the input width is known here. Constructing
+        // through the (outputSize, activation) overload left it at -1 for lazy inference, and a
+        // lazily-bound layer keeps the width of whichever tensor reaches it FIRST -- here a
+        // latentDim-wide (16) shape-inference probe, after which the real teDim-wide (64) embedding
+        // no longer fits: "Matrix dimensions incompatible: [1,64] x [16,64]".
         var silu = new SiLUActivation<T>() as IActivationFunction<T>;
         _timestepProjection = new FullyConnectedLayer<T>(teDim, teDim, silu);
     }

@@ -1,6 +1,7 @@
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks.Layers;
 using Xunit;
+using System.Linq;
 using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.NeuralNetworks;
@@ -240,6 +241,33 @@ public class MultiInputPortTests
         var single = layer.Forward(Tensor<double>.CreateRandom([1, 4, 8]));
         Assert.NotNull(single);
         Assert.True(single.Length > 0);
+
+        // AND THE VARIANT SURFACE SEPARATELY, which is #2035's contribution to this test: InputPorts
+        // is what InputContractManifest groups into variants (Variants = InputPorts.GroupBy(p =>
+        // p.Variant)), so the grouped view deserves its own assertions rather than being assumed
+        // from the flat list.
+        //
+        // MERGE NOTE (#2035 into #2010). #2035 asserted a variant named "named" with encoder_output
+        // REQUIRED, which is what the [TensorPort] attributes declare. This branch overrides
+        // InputPorts (see DecoderLayer.InputPorts) to publish the three ports with encoder_output
+        // OPTIONAL, because the documented single-input path exercised above is unreachable
+        // otherwise. The override is therefore what the manifest is now built from, and LayerPort
+        // defaults Variant to "default", so there is exactly one variant and its requiredness is the
+        // override's. The assertions follow the code rather than the attributes.
+        //
+        // Worth a reviewer's attention rather than silence: the attributes declare TWO variants
+        // ("default" and "named") and the override collapses them to one, so
+        // manifest.SelectVariant("named") no longer resolves for this layer.
+        var manifest = layer.GetInputContract();
+        var variant = Assert.Single(manifest.Variants);
+
+        Assert.Equal(3, variant.Ports.Count);
+        Assert.Equal("decoder_input", variant.Ports[0].Name);
+        Assert.True(variant.Ports[0].Required);
+        Assert.Equal("encoder_output", variant.Ports[1].Name);
+        Assert.False(variant.Ports[1].Required);
+        Assert.Equal("mask", variant.Ports[2].Name);
+        Assert.False(variant.Ports[2].Required);
     }
 
     #endregion
