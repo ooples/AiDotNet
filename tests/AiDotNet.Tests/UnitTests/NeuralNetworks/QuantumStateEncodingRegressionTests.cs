@@ -1,7 +1,9 @@
 using System;
+using AiDotNet.Helpers;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.Gpu;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
 
@@ -140,17 +142,8 @@ public class QuantumStateEncodingRegressionTests
     [Fact]
     public void QuantumLayer_GpuPrescaling_MatchesCpuForZeroAndSmallestSubnormalRows()
     {
-        DirectGpuTensorEngine gpu;
-        try
-        {
-            gpu = new DirectGpuTensorEngine();
-            if (!gpu.IsGpuAvailable)
-            {
-                gpu.Dispose();
-                return;
-            }
-        }
-        catch
+        using var gpu = new DirectGpuTensorEngine();
+        if (!gpu.IsGpuAvailable)
         {
             return;
         }
@@ -170,14 +163,16 @@ public class QuantumStateEncodingRegressionTests
             AiDotNetEngine.Current = gpu;
             using var gpuLayer = new QuantumLayer<float>(inputSize: 4, outputSize: 4, numQubits: 2);
             gpuLayer.SetParameters(parameters);
-            using var gpuInput = CreateZeroAndSubnormalRows();
-            using var gpuOutput = gpuLayer.Forward(gpuInput);
+            var backend = gpu.GetBackend();
+            Assert.NotNull(backend);
+            using var gpuHostInput = CreateZeroAndSubnormalRows();
+            using var gpuInput = GpuTensorHelper.UploadToGpu(backend, gpuHostInput, GpuTensorRole.Input);
+            using var gpuOutput = gpuLayer.ForwardGpu(gpuInput);
             gpuValues = gpuOutput.ToArray();
         }
         finally
         {
             AiDotNetEngine.Current = savedEngine;
-            gpu.Dispose();
         }
 
         Assert.Equal(cpuValues.Length, gpuValues.Length);

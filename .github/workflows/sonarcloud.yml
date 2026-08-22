@@ -2004,6 +2004,8 @@ jobs:
     permissions:
       actions: read
       contents: read
+    outputs:
+      verdict_enforced: ${{ steps.analyze.outputs.verdict_enforced }}
 
     steps:
       - name: Checkout code and baseline commit
@@ -2110,6 +2112,7 @@ jobs:
             OutputDirectory = 'test-regression-analysis'
             CurrentSha = $env:CURRENT_SHA
             RepositoryPath = '.'
+            ApprovedShardChangesPath = '.github/test-shard-changes.json'
           }
           $baselineReady = $env:COMPARE -eq 'true' -and $env:BASELINE_AVAILABLE -eq 'true' -and (
             ($env:BASELINE_MODE -eq 'ledger' -and $env:LEDGER_DOWNLOAD_OUTCOME -eq 'success') -or
@@ -2130,6 +2133,8 @@ jobs:
             "`n> [!WARNING]`n> $message The current inventory is still published, but no regression verdict is claimed.`n" |
               Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY
           }
+          "verdict_enforced=$($baselineReady.ToString().ToLowerInvariant())" |
+            Add-Content -LiteralPath $env:GITHUB_OUTPUT
           ./.github/scripts/test-regression-analysis.ps1 @arguments
 
       - name: Upload final TRX ledger and comparison report
@@ -2369,6 +2374,7 @@ jobs:
           BUILD_RESULT: ${{ needs.build.result }}
           TESTS_RESULT: ${{ needs.test-net10-sharded.result }}
           ANALYSIS_RESULT: ${{ needs.test-regression-analysis.result }}
+          VERDICT_ENFORCED: ${{ needs.test-regression-analysis.outputs.verdict_enforced }}
           SONAR_RESULT: ${{ needs.sonarcloud.result }}
           EVENT_NAME: ${{ github.event_name }}
         run: |
@@ -2381,14 +2387,15 @@ jobs:
           echo "| build | $BUILD_RESULT |" >> "$GITHUB_STEP_SUMMARY"
           echo "| test-net10-sharded | $TESTS_RESULT |" >> "$GITHUB_STEP_SUMMARY"
           echo "| test-regression-analysis | $ANALYSIS_RESULT |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| regression verdict enforced | ${VERDICT_ENFORCED:-false} |" >> "$GITHUB_STEP_SUMMARY"
           echo "| sonarcloud | $SONAR_RESULT |" >> "$GITHUB_STEP_SUMMARY"
 
           failed=0
           # Pull requests use the exact-baseline analyzer as the test verdict, so known master
-          # failures remain informational there. A master push creates the next baseline and has no
-          # comparison run; its raw shard result therefore remains a separate required gate.
+          # failures remain informational there. When that verdict cannot be enforced, the raw
+          # shard result becomes the fail-closed fallback. Master pushes also require raw shards.
           required_pairs=("build:$BUILD_RESULT" "test-regression-analysis:$ANALYSIS_RESULT" "sonarcloud:$SONAR_RESULT")
-          if [ "$EVENT_NAME" = "push" ]; then
+          if [ "$EVENT_NAME" = "push" ] || [ "$VERDICT_ENFORCED" != "true" ]; then
             required_pairs+=("test-net10-sharded:$TESTS_RESULT")
           fi
           for pair in "${required_pairs[@]}"; do

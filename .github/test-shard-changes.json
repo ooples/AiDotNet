@@ -1,0 +1,5 @@
+{
+  "schemaVersion": 1,
+  "description": "Explicit baseline shard renames, splits, or removals. Replacement keys must upload successfully before an old key is excused.",
+  "changes": []
+}

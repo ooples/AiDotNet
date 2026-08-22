@@ -374,19 +374,36 @@ public partial class QuantumLayer<T> : LayerBase<T>, IShapeContract
             backend.Fill(stateReal, 0.0f, batchSize * dimension);
             backend.Fill(stateImag, 0.0f, batchSize * dimension);
 
-            // Copy input data with padding using strided copy
+            // Copy input data while preserving each row's padding/truncation. OpenCL 0.129.0
+            // exposes Copy2DStrided but does not register its kernel, so invoking it throws before
+            // normalization. The offset-copy primitive is supported by every direct backend and
+            // keeps this path GPU-resident.
             int copyWidth = Math.Min(inputDim, dimension);
-            backend.Copy2DStrided(input.Buffer, stateReal, batchSize, copyWidth, dimension, 0);
+            if (inputDim == dimension)
+            {
+                backend.Copy(input.Buffer, stateReal, batchSize * dimension);
+            }
+            else
+            {
+                for (int batch = 0; batch < batchSize; batch++)
+                {
+                    backend.Copy(
+                        input.Buffer, batch * inputDim,
+                        stateReal, batch * dimension,
+                        copyWidth);
+                }
+            }
 
-            // Prescale by the per-row maximum before squaring, matching ForwardTraced. The wrapper
-            // borrows stateReal, so disposing it does not dispose the buffer owned by this scope.
-            using var stateTensor = GpuTensorHelper.UploadToGpu<T>(
-                backend, stateReal, [batchSize, dimension], GpuTensorRole.Intermediate, ownsBuffer: false);
-            using var absoluteState = Engine.TensorAbs(stateTensor);
-            using var maxMagnitude = gpuEngine.MaxAxisGpu(absoluteState, 1);
+            // Prescale by the per-row maximum before squaring, matching ForwardTraced. Stay on the
+            // direct backend here: the generic TensorAbs path can materialize a CPU tensor, which
+            // MaxAxisGpu correctly refuses to consume as a GPU buffer.
+            using var absoluteState = backend.AllocateBuffer(batchSize * dimension);
+            backend.Abs(stateReal, absoluteState, batchSize * dimension);
+            using var maxMagnitude = backend.AllocateBuffer(batchSize);
+            backend.MaxAxis(absoluteState, maxMagnitude, batchSize, dimension);
             using var safeMaxMagnitude = backend.AllocateBuffer(batchSize);
             backend.Clamp(
-                maxMagnitude.Buffer,
+                maxMagnitude,
                 safeMaxMagnitude,
                 float.Epsilon,
                 float.MaxValue,

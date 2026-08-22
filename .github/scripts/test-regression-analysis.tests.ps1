@@ -121,6 +121,15 @@ try {
     Assert-Equal $true (Test-Path -LiteralPath (Join-Path $comparisonOutput 'failures.csv')) 'a spreadsheet-ready failure inventory is emitted'
     Assert-Equal $true (Test-Path -LiteralPath (Join-Path $comparisonOutput 'shards.csv')) 'a spreadsheet-ready shard inventory is emitted'
 
+    $failedPolicyOutput = Join-Path $testRoot 'fail-on-policy-output'
+    $null = & pwsh -NoLogo -NoProfile -File $analyzer `
+        -CurrentResultsPath $currentRoot -BaselineResultsPath $baselineRoot `
+        -OutputDirectory $failedPolicyOutput -CurrentSha 'bbbb' -FailOnPolicy 2>&1
+    $failedPolicyExitCode = $LASTEXITCODE
+    Assert-Equal 1 $failedPolicyExitCode '-FailOnPolicy returns a nonzero process exit for a failed comparison'
+    Assert-Equal $true (Test-Path -LiteralPath (Join-Path $failedPolicyOutput 'summary.md')) `
+        '-FailOnPolicy still publishes the diagnostic summary before exiting'
+
     $retryOutput = Join-Path $testRoot 'retry-candidates.json'
     $actionOutput = Join-Path $testRoot 'github-output.txt'
     $previousActionOutput = $env:GITHUB_OUTPUT
@@ -279,6 +288,43 @@ internal static class TouchedRegressionProbe
     $neutral = Get-Content -LiteralPath (Join-Path $neutralOutput 'comparison.json') -Raw | ConvertFrom-Json
     Assert-Equal $true $neutral.criteria.verifiedFailureBalanceShrank 'a clean neutral comparison does not require an unrelated fixed failure'
     Assert-Equal $true $neutral.policyPassed 'a complete clean neutral comparison passes policy'
+
+    $passingPolicyOutput = Join-Path $testRoot 'passing-fail-on-policy-output'
+    $null = & pwsh -NoLogo -NoProfile -File $analyzer `
+        -CurrentResultsPath $neutralCurrentRoot -BaselineResultsPath $neutralBaselineRoot `
+        -OutputDirectory $passingPolicyOutput -CurrentSha $repositoryHeadSha `
+        -BaselineSha $repositoryBaseSha -RepositoryPath $repository -FailOnPolicy 2>&1
+    $passingPolicyExitCode = $LASTEXITCODE
+    Assert-Equal 0 $passingPolicyExitCode '-FailOnPolicy returns zero for a passing neutral comparison'
+    Assert-Equal $true (Test-Path -LiteralPath (Join-Path $passingPolicyOutput 'summary.md')) `
+        'a passing enforced comparison publishes its diagnostic summary'
+
+    $matrixBaselineRoot = Join-Path $testRoot 'matrix-baseline'
+    $matrixCurrentRoot = Join-Path $testRoot 'matrix-current'
+    $matrixOutput = Join-Path $testRoot 'matrix-output'
+    $matrixManifest = Join-Path $testRoot 'matrix-shard-changes.json'
+    Write-SyntheticShard $matrixBaselineRoot 'aa11' 'Old Rename' 'RenameTest' 'Passed'
+    Write-SyntheticShard $matrixBaselineRoot 'aa11' 'Old Split' 'SplitTest' 'Passed'
+    Write-SyntheticShard $matrixBaselineRoot 'aa11' 'Old Removed' 'RemovedTest' 'Passed'
+    Write-SyntheticShard $matrixCurrentRoot 'aa12' 'New Rename' 'RenameTest' 'Passed'
+    Write-SyntheticShard $matrixCurrentRoot 'aa12' 'New Split A' 'SplitTestA' 'Passed'
+    Write-SyntheticShard $matrixCurrentRoot 'aa12' 'New Split B' 'SplitTestB' 'Passed'
+    [PSCustomObject]@{
+        schemaVersion = 1
+        changes = @(
+            [PSCustomObject]@{ baselineKey = 'Old_Rename'; currentKeys = @('New_Rename'); reason = 'renamed' }
+            [PSCustomObject]@{ baselineKey = 'Old_Split'; currentKeys = @('New_Split_A', 'New_Split_B'); reason = 'split' }
+            [PSCustomObject]@{ baselineKey = 'Old_Removed'; currentKeys = @(); reason = 'removed intentionally' }
+        )
+    } | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $matrixManifest -Encoding utf8
+    & $analyzer -CurrentResultsPath $matrixCurrentRoot -BaselineResultsPath $matrixBaselineRoot `
+        -OutputDirectory $matrixOutput -CurrentSha $repositoryHeadSha -BaselineSha $repositoryBaseSha `
+        -RepositoryPath $repository -ApprovedShardChangesPath $matrixManifest
+    $matrix = Get-Content -LiteralPath (Join-Path $matrixOutput 'comparison.json') -Raw | ConvertFrom-Json
+    Assert-Equal 3 $matrix.counts.approvedShardChanges 'declared rename, split, and removal changes are inventoried'
+    Assert-Equal 0 $matrix.counts.missingCurrentShardArtifacts 'complete declared matrix changes are not missing artifacts'
+    Assert-Equal 0 $matrix.counts.greenToRedShards 'passing replacements do not create false green-to-red regressions'
+    Assert-Equal $true $matrix.policyPassed 'intentional complete matrix changes pass the comparison policy'
 
     $missingTrxBaselineRoot = Join-Path $testRoot 'missing-trx-baseline'
     $missingTrxCurrentRoot = Join-Path $testRoot 'missing-trx-current'

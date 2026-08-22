@@ -32,6 +32,7 @@ param(
     [string] $CurrentSha = $env:GITHUB_SHA,
     [string] $BaselineSha,
     [string] $RepositoryPath = '.',
+    [string] $ApprovedShardChangesPath,
     [switch] $FailOnPolicy
 )
 
@@ -234,6 +235,53 @@ function Read-LedgerFile {
         throw "Unsupported baseline ledger schema '$($ledger.schemaVersion)'; expected '$schemaVersion'."
     }
     return $ledger
+}
+
+function Read-ApprovedShardChanges {
+    param([string] $Path)
+
+    $changesByBaselineKey = @{}
+    if ([string]::IsNullOrWhiteSpace($Path)) { return $changesByBaselineKey }
+    if (-not (Test-Path -LiteralPath $Path)) {
+        throw "Approved shard-change manifest not found: $Path"
+    }
+
+    $manifest = Get-Content -LiteralPath $Path -Raw | ConvertFrom-Json
+    if ([int] $manifest.schemaVersion -ne 1) {
+        throw "Unsupported shard-change manifest schema '$($manifest.schemaVersion)'; expected '1'."
+    }
+
+    foreach ($change in @($manifest.changes)) {
+        $baselineKey = [string] $change.baselineKey
+        $reason = [string] $change.reason
+        if (-not $change.PSObject.Properties['currentKeys'] -or $null -eq $change.currentKeys) {
+            throw "Approved shard change '$baselineKey' requires currentKeys; use an explicit empty array for removal."
+        }
+        $currentKeys = @($change.currentKeys | ForEach-Object { [string] $_ })
+        if ([string]::IsNullOrWhiteSpace($baselineKey)) {
+            throw 'Every approved shard change requires a non-empty baselineKey.'
+        }
+        if ([string]::IsNullOrWhiteSpace($reason)) {
+            throw "Approved shard change '$baselineKey' requires a non-empty reason."
+        }
+        if ($changesByBaselineKey.ContainsKey($baselineKey)) {
+            throw "Duplicate approved shard change for baseline key '$baselineKey'."
+        }
+        if (@($currentKeys | Where-Object { [string]::IsNullOrWhiteSpace($_) }).Count -gt 0) {
+            throw "Approved shard change '$baselineKey' contains an empty current key."
+        }
+        if (@($currentKeys | Sort-Object -Unique).Count -ne $currentKeys.Count) {
+            throw "Approved shard change '$baselineKey' contains duplicate current keys."
+        }
+
+        $changesByBaselineKey[$baselineKey] = [PSCustomObject]@{
+            baselineKey = $baselineKey
+            currentKeys = $currentKeys
+            reason = $reason
+        }
+    }
+
+    return $changesByBaselineKey
 }
 
 function Get-TouchedTokens {
@@ -475,18 +523,40 @@ if (-not $baseline) {
     $currentShardMap = @{}
     foreach ($shard in $current.shards) { $currentShardMap[[string] $shard.key] = $shard }
 
+    $approvedShardChanges = Read-ApprovedShardChanges $ApprovedShardChangesPath
+    $approvedMissingShardChanges = New-Object System.Collections.Generic.List[object]
+    $approvedMissingShardKeys = New-Object System.Collections.Generic.HashSet[string]([StringComparer]::Ordinal)
+
     # An absent artifact is an incomplete shard, even when that shard was already red on master.
     # Without this synthetic entry, dropping a red artifact also drops its failures and can make a
-    # killed run look like an improvement. Baseline green shards are additionally caught below.
-    $missingCurrentShards = @($baseline.shards | Where-Object {
-        -not $currentShardMap.ContainsKey([string] $_.key)
-    } | ForEach-Object {
-        [PSCustomObject]@{
-            key = [string] $_.key
-            name = [string] $_.name
+    # killed run look like an improvement. A checked-in shard-change manifest is the only exception:
+    # rename/split replacements must all have uploaded artifacts, while removal needs an explicit
+    # reason. That distinguishes an intentional matrix edit from a host that failed to upload.
+    $missingCurrentShards = New-Object System.Collections.Generic.List[object]
+    foreach ($baselineShard in $baseline.shards) {
+        $baselineKey = [string] $baselineShard.key
+        if ($currentShardMap.ContainsKey($baselineKey)) { continue }
+
+        $approvedChange = $approvedShardChanges[$baselineKey]
+        $missingReplacementKeys = if ($null -ne $approvedChange) {
+            @($approvedChange.currentKeys | Where-Object { -not $currentShardMap.ContainsKey([string] $_) })
+        } else { @() }
+        if ($null -ne $approvedChange -and $missingReplacementKeys.Count -eq 0) {
+            [void] $approvedMissingShardKeys.Add($baselineKey)
+            $approvedMissingShardChanges.Add([PSCustomObject]@{
+                baselineKey = $baselineKey
+                currentKeys = @($approvedChange.currentKeys)
+                reason = [string] $approvedChange.reason
+            })
+            continue
+        }
+
+        $missingCurrentShards.Add([PSCustomObject]@{
+            key = $baselineKey
+            name = [string] $baselineShard.name
             status = 'Missing'
             policyStatus = 'Missing'
-            total = [int] $_.total
+            total = [int] $baselineShard.total
             executed = 0
             notExecuted = 0
             aborted = 0
@@ -496,8 +566,8 @@ if (-not $baseline) {
             missingTrx = $true
             parseErrors = @('No current artifact was uploaded for this baseline shard.')
             testStepOutcome = 'missing'
-        }
-    })
+        })
+    }
 
     $greenToRed = New-Object System.Collections.Generic.List[object]
     foreach ($entry in $baselineShardMap.GetEnumerator()) {
@@ -505,6 +575,29 @@ if (-not $baseline) {
             [string] $entry.Value.policyStatus
         } else { [string] $entry.Value.status }
         if ($beforeStatus -ne 'Passed') { continue }
+
+        if ($approvedMissingShardKeys.Contains([string] $entry.Key)) {
+            $approvedChange = $approvedShardChanges[[string] $entry.Key]
+            $replacementKeys = @($approvedChange.currentKeys)
+            if ($replacementKeys.Count -eq 0) { continue }
+
+            $replacementStatuses = @($replacementKeys | ForEach-Object {
+                $replacement = $currentShardMap[[string] $_]
+                if ($replacement.PSObject.Properties['policyStatus']) {
+                    [string] $replacement.policyStatus
+                } else { [string] $replacement.status }
+            })
+            $regressedReplacements = @($replacementStatuses | Where-Object { $_ -ne 'Passed' })
+            if ($regressedReplacements.Count -gt 0) {
+                $greenToRed.Add([PSCustomObject]@{
+                    key = $entry.Key
+                    name = [string] $entry.Value.name
+                    currentStatus = "Replacement $($regressedReplacements -join ', ')"
+                })
+            }
+            continue
+        }
+
         $now = $currentShardMap[$entry.Key]
         $nowStatus = if (-not $now) {
             'Missing'
@@ -531,7 +624,7 @@ if (-not $baseline) {
     $touchedSurfaceClean = $touchedNew.Count -eq 0 -and
         ($touchedSurfaceKnown -or $confirmedNew.Count -eq 0)
     $baselineIncomplete = @($baseline.shards | Where-Object status -eq 'Incomplete')
-    $effectiveCurrentIncomplete = @($currentIncomplete) + @($missingCurrentShards)
+    $effectiveCurrentIncomplete = @($currentIncomplete) + @($missingCurrentShards.ToArray())
     $baselineStats = Get-LedgerStatistics $baseline
     $baselineCategories = @(Get-FailureCategories $baselineFailures)
     $greenToRedArray = @($greenToRed | ForEach-Object { $_ })
@@ -578,6 +671,7 @@ if (-not $baseline) {
             baselineIncompleteShards = $baselineIncomplete.Count
             currentIncompleteShards = $effectiveCurrentIncomplete.Count
             missingCurrentShardArtifacts = $missingCurrentShards.Count
+            approvedShardChanges = $approvedMissingShardChanges.Count
             greenToRedShards = $greenToRed.Count
             touchedNewFailures = $touchedNew.Count
         }
@@ -590,7 +684,8 @@ if (-not $baseline) {
         persistentFailures = @($persistent)
         baselineFailuresNotObserved = @($notObserved)
         currentIncompleteShards = @($effectiveCurrentIncomplete)
-        missingCurrentShardArtifacts = @($missingCurrentShards)
+        missingCurrentShardArtifacts = $missingCurrentShards.ToArray()
+        approvedShardChanges = $approvedMissingShardChanges.ToArray()
         baselineFailureCategories = $baselineCategories
         currentFailureCategories = $currentCategories
         touchedTokens = $touchedTokens
@@ -640,6 +735,10 @@ if (-not $baseline) {
     Add-MarkdownList $lines 'One-run new failures that passed targeted retry' @($rerunPassedNew | ForEach-Object { "$($_.identity) [$($_.shard)]" })
     Add-MarkdownList $lines 'Fixed failures (explicit pass required)' @($fixed | ForEach-Object { "$($_.identity) [$($_.shard)]" })
     Add-MarkdownList $lines 'Incomplete or missing current shards' @($effectiveCurrentIncomplete | ForEach-Object { "$($_.name): executed $($_.executed)/$($_.total), status $($_.testStepOutcome)" })
+    Add-MarkdownList $lines 'Approved matrix shard changes' @($approvedMissingShardChanges | ForEach-Object {
+        $replacement = if ($_.currentKeys.Count -eq 0) { 'removed' } else { "replaced by $($_.currentKeys -join ', ')" }
+        "$($_.baselineKey): $replacement ($($_.reason))"
+    })
 }
 
 $lines | Set-Content -LiteralPath $summaryPath -Encoding utf8
