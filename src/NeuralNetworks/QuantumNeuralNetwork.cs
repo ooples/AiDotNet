@@ -393,7 +393,25 @@ public class QuantumNeuralNetwork<T> : VectorModelLayoutBase<T>
 
         for (int i = 0; i < flatInput.Length; i++)
         {
-            var amplitude = NumOps.Sqrt(flatInput[i]);
+            // Signed amplitude encoding: psi_i = sign(x_i) * sqrt(|x_i|).
+            //
+            // A bare NumOps.Sqrt(x_i) is NaN for every negative x_i, and PredictCore feeds the
+            // result straight through the layer chain, so ONE negative feature turned the whole
+            // prediction into NaN. That is not a corner case: the model-family suite's random
+            // input is signed, and every QuantumNeuralNetwork invariant that reads an output
+            // failed on it — ForwardPass_ShouldProduceFiniteOutput reported "Output[0] is NaN",
+            // and ScaledInput_ShouldChangeOutput reported "output didn't change" only because
+            // NaN != NaN makes two different NaN outputs compare as unchanged.
+            //
+            // Taking the root of the magnitude and carrying the sign keeps the Born-rule round
+            // trip this class is built on — MeasureQuantumState returns |psi_i|^2, which is
+            // |x_i| — and is EXACTLY the previous expression wherever the old one was defined,
+            // i.e. for every x_i >= 0. An amplitude is allowed to be negative; only its squared
+            // magnitude is a probability, so the sign costs nothing physically and is what makes
+            // two inputs differing only in sign encode to different states.
+            bool isNegative = NumOps.LessThan(flatInput[i], NumOps.Zero);
+            var magnitude = NumOps.Sqrt(isNegative ? NumOps.Negate(flatInput[i]) : flatInput[i]);
+            var amplitude = isNegative ? NumOps.Negate(magnitude) : magnitude;
             quantumState[i] = new Complex<T>(amplitude, NumOps.Zero);
         }
 
