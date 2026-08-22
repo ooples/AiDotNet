@@ -186,8 +186,8 @@ public partial class RMSNormalizationLayer<T> : LayerBase<T>, IShapeContract
         var invRms = Engine.TensorReciprocal(rms);
 
         // x · (1/rms), then apply per-feature γ. Both broadcast along the last axis.
-        var normalised = Engine.TensorBroadcastMultiply(input, invRms);
-        var output = Engine.TensorBroadcastMultiply(normalised, _gamma);
+        var normalised = Engine.TensorMultiply(input, invRms);
+        var output = Engine.TensorMultiply(normalised, _gamma);
 
         return output;
     }

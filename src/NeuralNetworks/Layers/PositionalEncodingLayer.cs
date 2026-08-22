@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.Gpu;
@@ -382,7 +382,7 @@ public partial class PositionalEncodingLayer<T> : LayerBase<T>, IShapeContract
             broadcastShape[rank - 1] = currentEmbeddingSize;
 
             var reshapedEncodings = Engine.Reshape(slicedEncodings, broadcastShape);
-            result = Engine.TensorBroadcastAdd(workingInput, reshapedEncodings);
+            result = Engine.TensorAdd(workingInput, reshapedEncodings);
         }
 
         // If input was 1D, reshape output back to 1D

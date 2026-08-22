@@ -83,8 +83,8 @@ public sealed class FeedforwardPolicyAgent<T> : IPortfolioAgent<T>
     /// <summary>Mean action tensor [actionDim,1] for one state tensor [stateDim,1]: tanh(meanW·tanh(W1·x+b1)+meanB).</summary>
     private Tensor<T> MeanOf(Tensor<T> x)
     {
-        var h = Engine.Tanh(Engine.TensorBroadcastAdd(Engine.TensorMatMul(_w1, x), _b1));
-        return Engine.Tanh(Engine.TensorBroadcastAdd(Engine.TensorMatMul(_meanW, h), _meanB));
+        var h = Engine.Tanh(Engine.TensorAdd(Engine.TensorMatMul(_w1, x), _b1));
+        return Engine.Tanh(Engine.TensorAdd(Engine.TensorMatMul(_meanW, h), _meanB));
     }
 
     public Vector<T> SelectAction(Vector<T> state, bool explore)

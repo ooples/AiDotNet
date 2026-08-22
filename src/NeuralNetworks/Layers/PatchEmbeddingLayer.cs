@@ -1,4 +1,4 @@
-﻿#pragma warning disable CS0649, CS0414, CS0169
+#pragma warning disable CS0649, CS0414, CS0169
 using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
@@ -609,7 +609,7 @@ public partial class PatchEmbeddingLayer<T> : LayerBase<T>, IShapeContract
         // GradFn chain alive (a cached reshape primed during inference would
         // disconnect _projectionBias from the backward walk).
         var biasBroadcast = Engine.Reshape(_projectionBias, new[] { 1, 1, _embeddingDim });
-        var preActivation = Engine.TensorBroadcastAdd(projected, biasBroadcast);
+        var preActivation = Engine.TensorAdd(projected, biasBroadcast);
 
         _lastPreActivation = preActivation;
         var output = ApplyActivation(preActivation);

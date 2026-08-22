@@ -1,4 +1,4 @@
-﻿using AiDotNet.Helpers;
+using AiDotNet.Helpers;
 using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Enums;
@@ -1254,7 +1254,7 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IShap
             AiDotNet.Tensors.Engines.Simd.Q8BlockGemm.MatMul(inF, _weightsQ8, _weightScalesQ8, outArr, mM, kK, nN);
             var linear = (Tensor<T>)(object)new Tensor<float>(outArr, [mM, nN]);
             // Bias + activation epilogue (matches the unfused training path's math).
-            var biased = Engine.TensorBroadcastAdd(linear, Engine.Reshape(_biases, [1, nN]));
+            var biased = Engine.TensorAdd(linear, Engine.Reshape(_biases, [1, nN]));
             result = ApplyActivation(biased);
         }
         else if (fusedActivation != FusedActivationType.None && !IsTrainingMode && !DeterministicForward)

@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 
@@ -205,11 +205,11 @@ public class CrossEntropyWithLogitsLoss<T> : LossFunctionBase<T>
         // forward value remains the stable engine LogSoftmax result.
         var stableForward = Engine.TensorLogSoftmax(logits, axis: normalizedAxis);
         var maxLogit = Engine.ReduceMax(logits, new[] { normalizedAxis }, keepDims: true, out _);
-        var shifted = Engine.TensorBroadcastAdd(logits, Engine.TensorNegate(maxLogit));
+        var shifted = Engine.TensorAdd(logits, Engine.TensorNegate(maxLogit));
         var expShifted = Engine.TensorExp(shifted);
         var sumExp = Engine.ReduceSum(expShifted, new[] { normalizedAxis }, keepDims: true);
         var logSumExp = Engine.TensorLog(sumExp);
-        var primitiveGradient = Engine.TensorBroadcastAdd(shifted, Engine.TensorNegate(logSumExp));
+        var primitiveGradient = Engine.TensorAdd(shifted, Engine.TensorNegate(logSumExp));
         var detachedForwardCorrection = Engine.StopGradient(Engine.TensorSubtract(stableForward, primitiveGradient));
         return Engine.TensorAdd(primitiveGradient, detachedForwardCorrection);
     }

@@ -141,7 +141,7 @@ public class DenseLayerGpuBenchmark
         var matmul = engine.TensorMatMul(_input, weightsTransposed);
 
         // Add bias
-        var withBias = engine.TensorBroadcastAdd(matmul, biases);
+        var withBias = engine.TensorAdd(matmul, biases);
 
         // Apply ReLU (element-wise)
         var data = withBias.ToArray();

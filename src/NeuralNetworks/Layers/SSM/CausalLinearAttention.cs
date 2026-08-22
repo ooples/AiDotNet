@@ -85,11 +85,11 @@ internal static class CausalLinearAttention
 
         var keyColumns = engine.TensorExpandDims(k, axis: 4);
         var valueRows = engine.TensorExpandDims(v, axis: 3);
-        var keyValue = engine.TensorBroadcastMultiply(keyColumns, valueRows);
+        var keyValue = engine.TensorMultiply(keyColumns, valueRows);
         var state = engine.TensorCumSum(keyValue, axis: 1);
         var normalizer = engine.TensorCumSum(k, axis: 1);
 
-        var weightedState = engine.TensorBroadcastMultiply(
+        var weightedState = engine.TensorMultiply(
             state,
             engine.TensorExpandDims(q, axis: 4));
         var numerator = engine.ReduceSum(weightedState, new[] { 3 }, keepDims: false);
@@ -98,7 +98,7 @@ internal static class CausalLinearAttention
             new[] { 3 },
             keepDims: true);
         var safeDenominator = engine.TensorAddScalar(denominator, epsilon);
-        var output = engine.TensorBroadcastDivide(numerator, safeDenominator);
+        var output = engine.TensorDivide(numerator, safeDenominator);
 
         return output;
     }

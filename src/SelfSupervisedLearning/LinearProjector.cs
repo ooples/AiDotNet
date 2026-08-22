@@ -120,7 +120,7 @@ public class LinearProjector<T> : IProjectorHead<T>
         if (_useBias && _bias is not null)
         {
             var bias2D = Engine.Reshape(_bias, new[] { 1, _outputDim });
-            output = Engine.TensorBroadcastAdd(output, bias2D);
+            output = Engine.TensorAdd(output, bias2D);
         }
         return output;
     }

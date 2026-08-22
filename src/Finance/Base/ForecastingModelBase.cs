@@ -300,7 +300,7 @@ public abstract class ForecastingModelBase<T> : FinancialModelBase<T>, IForecast
         var reduceAxis = new[] { 0 };
 
         var meanT = Engine.ReduceMean(flat, reduceAxis, keepDims: true);          // [1, features]
-        var centered = Engine.TensorBroadcastSubtract(flat, meanT);
+        var centered = Engine.TensorSubtract(flat, meanT);
         var varianceT = Engine.ReduceMean(
             Engine.TensorMultiply(centered, centered), reduceAxis, keepDims: true);
         var stdT = Engine.TensorSqrt(Engine.TensorAddScalar(varianceT, NumOps.FromDouble(epsilon)));
@@ -308,7 +308,7 @@ public abstract class ForecastingModelBase<T> : FinancialModelBase<T>, IForecast
         mean = ToVectorOffTape(meanT, features);
         std = ToVectorOffTape(stdT, features);
 
-        var normalized = Engine.TensorBroadcastDivide(centered, stdT);
+        var normalized = Engine.TensorDivide(centered, stdT);
         return Engine.Reshape(normalized, (int[])input._shape.Clone());
     }
 
@@ -320,7 +320,7 @@ public abstract class ForecastingModelBase<T> : FinancialModelBase<T>, IForecast
         var reduceAxis = new[] { 1 };
 
         var meanT = Engine.ReduceMean(flat, reduceAxis, keepDims: true);          // [rows, 1]
-        var centered = Engine.TensorBroadcastSubtract(flat, meanT);
+        var centered = Engine.TensorSubtract(flat, meanT);
         var varianceT = Engine.ReduceMean(
             Engine.TensorMultiply(centered, centered), reduceAxis, keepDims: true);
         var stdT = Engine.TensorSqrt(Engine.TensorAddScalar(varianceT, NumOps.FromDouble(epsilon)));
@@ -328,7 +328,7 @@ public abstract class ForecastingModelBase<T> : FinancialModelBase<T>, IForecast
         mean = ToVectorOffTape(meanT, rows);
         std = ToVectorOffTape(stdT, rows);
 
-        return Engine.TensorBroadcastDivide(centered, stdT);
+        return Engine.TensorDivide(centered, stdT);
     }
 
     /// <summary>

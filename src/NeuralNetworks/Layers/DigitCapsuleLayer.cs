@@ -630,7 +630,7 @@ public partial class DigitCapsuleLayer<T> : LayerBase<T>, IShapeContract
         // Engine-accelerated: broadcast multiply + reduce sum over the input-capsule-dim axis
         var inputExpanded = Engine.Reshape(processInput, [batchSize, _inputCapsules, 1, _inputCapsuleDimension, 1]);
         var weightsExpanded = Engine.Reshape(_weights, [1, _inputCapsules, _numClasses, _inputCapsuleDimension, _outputCapsuleDimension]);
-        var product = Engine.TensorBroadcastMultiply(inputExpanded, weightsExpanded);
+        var product = Engine.TensorMultiply(inputExpanded, weightsExpanded);
         var predictions = Engine.ReduceSum(product, new[] { 3 }, keepDims: false); // [B, I, C, D_out]
 
         var couplings = TensorAllocator.Rent<T>([batchSize, _inputCapsules, _numClasses]);
@@ -645,7 +645,7 @@ public partial class DigitCapsuleLayer<T> : LayerBase<T>, IShapeContract
 
             // weightedSum = sum_i routing * predictions
             var routingExpanded = Engine.Reshape(routingWeights, [batchSize, _inputCapsules, _numClasses, 1]);
-            var weightedPred = Engine.TensorBroadcastMultiply(predictions, routingExpanded);
+            var weightedPred = Engine.TensorMultiply(predictions, routingExpanded);
             var weightedSum = Engine.ReduceSum(weightedPred, new[] { 1 }, keepDims: false); // [B, C, outDim]
 
             // activation - SquashActivation expects 2D [numCapsules, capsuleDim]
@@ -660,7 +660,7 @@ public partial class DigitCapsuleLayer<T> : LayerBase<T>, IShapeContract
             {
                 // couplings += predictions · output
                 var outputExpanded = Engine.Reshape(output, [batchSize, 1, _numClasses, _outputCapsuleDimension]);
-                var dot = Engine.ReduceSum(Engine.TensorBroadcastMultiply(predictions, outputExpanded), new[] { 3 }, keepDims: false); // [B,I,C]
+                var dot = Engine.ReduceSum(Engine.TensorMultiply(predictions, outputExpanded), new[] { 3 }, keepDims: false); // [B,I,C]
                 couplings = Engine.TensorAdd(couplings, dot);
             }
         }
