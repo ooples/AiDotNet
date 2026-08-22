@@ -43,9 +43,17 @@ public class QuantizedAttentionTests
         var input = CreateRandomTensor(new[] { 1, seqLen, embDim });
 
         _ = quantized.Forward(input); // JIT and initialize lazy paths before measuring.
+#if NET5_0_OR_GREATER
         long before = GC.GetAllocatedBytesForCurrentThread();
+#else
+        long before = GC.GetTotalMemory(forceFullCollection: false);
+#endif
         _ = quantized.Forward(input);
+#if NET5_0_OR_GREATER
         long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+#else
+        long allocated = GC.GetTotalMemory(forceFullCollection: false) - before;
+#endif
 
         Assert.True(allocated < 1_000_000,
             $"A single 16x64 quantized attention forward allocated {allocated:N0} bytes. " +
