@@ -55,7 +55,7 @@ public class AgentToolSchemaGenerator : IIncrementalGenerator
                     if (ctx.SemanticModel.GetDeclaredSymbol(ctx.Node) is not IMethodSymbol method) return null;
                     if (!HasToolAttribute(method)) return null;
                     if (method.ContainingType is null) return null;
-                    return GeneratorHelpers.MetadataNameOf(method.ContainingType) + "|" + method.Name;
+                    return MethodKey(method);
                 })
             .Where(static m => m is not null)
             .Select(static (m, _) => m ?? string.Empty)
@@ -63,6 +63,34 @@ public class AgentToolSchemaGenerator : IIncrementalGenerator
             .Combine(context.CompilationProvider);
 
         context.RegisterSourceOutput(methods, static (spc, source) => Execute(spc, source.Left, source.Right));
+    }
+
+    /// <summary>
+    /// Identifies ONE method, overloads included: owner, name, arity, and each parameter's ref kind
+    /// and fully-qualified type.
+    /// </summary>
+    /// <remarks>
+    /// Owner plus name is not enough. Two [AgentTool] overloads share that key, so resolving it
+    /// meant expanding the first occurrence to EVERY attributed overload via GetMembers -- which
+    /// does not guarantee declaration order and, where overloads interleave with other tools,
+    /// reorders the emitted schema. The key now names exactly one method and resolves to exactly
+    /// one method, so emission order follows the pipeline order as it did before this refactor.
+    /// </remarks>
+    private static string MethodKey(IMethodSymbol method)
+    {
+        var sb = new StringBuilder();
+        sb.Append(GeneratorHelpers.MetadataNameOf(method.ContainingType));
+        sb.Append('|').Append(method.Name);
+        sb.Append('|').Append(method.Arity.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        foreach (var parameter in method.Parameters)
+        {
+            sb.Append('|')
+              .Append(parameter.RefKind.ToString())
+              .Append(' ')
+              .Append(parameter.Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat));
+        }
+
+        return sb.ToString();
     }
 
     private static bool HasToolAttribute(IMethodSymbol method) =>
@@ -74,22 +102,34 @@ public class AgentToolSchemaGenerator : IIncrementalGenerator
     {
         if (methodKeys.IsDefaultOrEmpty) return;
 
-        // Re-resolve. The [AgentTool] filter already ran in the transform; re-applying it here keeps
-        // the admission rule identical even if a name collides across overloads.
+        // Re-resolve one method per key, preserving pipeline order. Each key identifies a single
+        // overload, so this is a 1:1 mapping -- no GetMembers fan-out, and no dependence on member
+        // ordering. The [AgentTool] filter already ran in the transform; re-applying it keeps the
+        // admission rule identical.
         var resolved = new List<IMethodSymbol?>();
         var seenKeys = new HashSet<string>(System.StringComparer.Ordinal);
         foreach (var key in methodKeys)
         {
             if (key.Length == 0 || !seenKeys.Add(key)) continue;
-            int bar = key.LastIndexOf('|');
-            if (bar <= 0) continue;
 
-            var owner = GeneratorHelpers.ResolveSourceType(compilation, key.Substring(0, bar));
+            int firstBar = key.IndexOf('|');
+            if (firstBar <= 0) continue;
+            int secondBar = key.IndexOf('|', firstBar + 1);
+            if (secondBar < 0) continue;
+
+            var owner = GeneratorHelpers.ResolveSourceType(compilation, key.Substring(0, firstBar));
             if (owner is null) continue;
 
-            foreach (var member in owner.GetMembers(key.Substring(bar + 1)))
+            var name = key.Substring(firstBar + 1, secondBar - firstBar - 1);
+            foreach (var member in owner.GetMembers(name))
             {
-                if (member is IMethodSymbol m && HasToolAttribute(m)) resolved.Add(m);
+                if (member is IMethodSymbol m
+                    && HasToolAttribute(m)
+                    && string.Equals(MethodKey(m), key, System.StringComparison.Ordinal))
+                {
+                    resolved.Add(m);
+                    break;
+                }
             }
         }
 
