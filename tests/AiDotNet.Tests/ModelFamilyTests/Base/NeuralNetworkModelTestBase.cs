@@ -1464,9 +1464,19 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
     // If f(x) ≈ f(10x) for all x, the network ignores input magnitude.
     // =====================================================
 
+    /// <summary>
+    /// Whether "scaling the input must change the output" is a meaningful invariant for this
+    /// network. Default true. Override to false ONLY where insensitivity to a 10x input is the
+    /// architecture behaving correctly, and say why -- a network that ignores its input is the
+    /// exact defect this invariant exists to catch, so an unexplained opt-out hides a real bug.
+    /// </summary>
+    protected virtual bool ScaledInputInvariantApplicable => true;
+
     [Fact(Timeout = 120000)]
     public virtual async Task ScaledInput_ShouldChangeOutput()
     {
+        if (!ScaledInputInvariantApplicable) return;
+
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();

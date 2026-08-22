@@ -7,9 +7,13 @@ namespace AiDotNet.Tests.ModelFamilyTests.NeuralNetworks;
 
 public class SelfOrganizingMapTests : NeuralNetworkModelTestBase<float>
 {
-    // SOM with outputSize=64 adjusts to 10x6=60 neurons for golden ratio aspect
+    // outputSize=64 allocates EXACTLY 64 neurons. The old grow-then-shrink heuristic settled on a
+    // 10x6=60 grid and silently allocated fewer neurons than requested; SelfOrganizingMap now picks
+    // the factor pair closest to the golden ratio, which for 64 is 8x8 (#1789). This expectation
+    // said 60 and was stale -- it went unnoticed because Predict was returning an identity
+    // passthrough of the 128-length input, so the declared output shape was never exercised.
     protected override int[] InputShape => [128];
-    protected override int[] OutputShape => [60];
+    protected override int[] OutputShape => [64];
 
     protected override INeuralNetworkModel<float> CreateNetwork()
         => new SelfOrganizingMap<float>();
