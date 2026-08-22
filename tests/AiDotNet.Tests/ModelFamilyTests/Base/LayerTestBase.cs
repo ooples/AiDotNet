@@ -1020,6 +1020,103 @@ public abstract class LayerTestBase<T>
             "by manual data fills inside a Forward override.");
     }
 
+    /// <summary>
+    /// How many of this layer's trainable tensors are ALLOWED to receive no gradient at the tested
+    /// shape. Default 0.
+    /// </summary>
+    /// <remarks>
+    /// Override ONLY where a dead tensor is a property of the architecture at this shape rather
+    /// than a severed tape, and say why. A tensor that receives no gradient never learns, so an
+    /// unexplained allowance silently reintroduces exactly the defect
+    /// <see cref="TapeGradient_ShouldReachEveryTrainableParameter"/> exists to catch.
+    /// </remarks>
+    protected virtual int ExpectedDeadTrainableParameters => 0;
+
+    /// <summary>
+    /// EVERY trainable tensor must receive a gradient, not merely one of them.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <see cref="TapeGradient_ShouldReachAtLeastOneTrainableParameter"/> stops at the first
+    /// non-zero gradient it finds. That makes it blind to the failure it looks like it covers: a
+    /// layer with 12 of its 16 tensors severed from the tape passes it, because the other 4 still
+    /// backpropagate. Layers have shipped in exactly that state -- the q/k/v projections and all
+    /// three routers of a mixture layer dead, so training moved 4 of 16 declared parameters while
+    /// every gradient test stayed green.
+    /// </para>
+    /// <para>
+    /// This asserts the whole surface and names the dead tensors, so the count is a fact CI checks
+    /// rather than a number quoted in a pull request.
+    /// </para>
+    /// </remarks>
+    [Fact(Timeout = 120000)]
+    public async Task TapeGradient_ShouldReachEveryTrainableParameter()
+    {
+        await Task.Yield();
+        if (!ExpectsTrainableParameters || !ExpectsNonZeroGradients) return;
+
+        using var _arena = TensorArena.Create();
+        var layer = CreateLayer();
+        layer.SetTrainingMode(false);
+        var input = CreateConformingInput(layer, InputShape);
+
+        using var tape = new GradientTape<T>();
+        var output = layer.Forward(input);
+
+        var trainableParams = AiDotNet.Training.TapeTrainingStep<T>.CollectParameters(
+            new[] { layer }, structureVersion: -1);
+        if (trainableParams.Count == 0) return;
+
+        // Same tape-tracked random-projection loss as the at-least-one probe, so dL/doutput is
+        // dense and any parameter genuinely wired into the forward graph must see a non-zero
+        // gradient. A zero here means the tape does not reach that tensor.
+        var projection = CreateRandomTensor(output.Shape.ToArray(), seed: 12345);
+        var elementwise = AiDotNetEngine.Current.TensorMultiply(output, projection);
+        var allAxes = new int[elementwise.Shape.Length];
+        for (int i = 0; i < allAxes.Length; i++) allAxes[i] = i;
+        var lossTensor = AiDotNetEngine.Current.ReduceSum(elementwise, allAxes, keepDims: false);
+
+        var grads = tape.ComputeGradients(lossTensor, trainableParams);
+
+        // WALK THE REQUESTED PARAMETERS, NOT THE RETURNED DICTIONARY. A tensor severed from the tape
+        // is ABSENT from the gradient dictionary rather than present with zeros -- measured on the
+        // pre-fix SSM layers, ComputeGradients returned 4 entries for 16 requested parameters. So
+        // iterating the dictionary only ever visits tensors that already have gradients, which makes
+        // the check pass no matter how much of the layer is dead. That is the same blind spot that
+        // let TapeGradient_ShouldReachAtLeastOneTrainableParameter stay green on a layer with 12 of
+        // its 16 tensors receiving nothing.
+        var dead = new List<string>();
+        for (int index = 0; index < trainableParams.Count; index++)
+        {
+            var parameter = trainableParams[index];
+            bool alive = false;
+            int length = 0;
+
+            if (grads.TryGetValue(parameter, out var grad) && grad is not null)
+            {
+                length = grad.Length;
+                for (int i = 0; i < grad.Length; i++)
+                {
+                    if (Math.Abs(ToD(grad[i])) > Tolerance) { alive = true; break; }
+                }
+            }
+
+            if (!alive)
+            {
+                dead.Add($"#{index} (len {length})");
+            }
+        }
+
+        Assert.True(dead.Count <= ExpectedDeadTrainableParameters,
+            $"{dead.Count} of {trainableParams.Count} trainable tensors received NO gradient " +
+            $"(allowed: {ExpectedDeadTrainableParameters}). Dead: {string.Join(", ", dead)}. " +
+            "Those tensors never learn -- in real training as much as under gradcheck. Usual cause " +
+            "is a scalar NumOps loop in Forward where an Engine op is required: only Engine calls " +
+            "reach the autodiff tape, so everything upstream of such a loop is severed. If a dead " +
+            "tensor is genuinely correct at this shape, override ExpectedDeadTrainableParameters " +
+            "and state the reason.");
+    }
+
     // =========================================================================
     // INVARIANT 12: Numerical gradient correctness (finite differences).
     // For a sampled subset of trainable parameters (full sweep would be O(N×forward)
