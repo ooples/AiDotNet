@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
 	  <TargetFrameworks>net10.0;net471</TargetFrameworks>
@@ -58,6 +58,9 @@
          fire for AiDotNet's own library models but NOT for consumer/test IFullModel doubles) can
          be driven directly in a Roslyn generator unit test. Referenced above only as an analyzer,
          whose compiled assembly is not callable from tests. -->
+    <!-- Shared generator helpers (MetadataNameOf / ResolveSourceType). The generator sources below
+         are compiled directly into this assembly, so their shared dependency must come with them. -->
+    <Compile Include="..\..\src\AiDotNet.Generators\GeneratorHelpers.cs" Link="Generators\GeneratorHelpers.cs" />
     <Compile Include="..\..\src\AiDotNet.Generators\ModelMetadataValidationGenerator.cs" Link="Generators\ModelMetadataValidationGenerator.cs" />
     <Compile Include="..\..\src\AiDotNet.Generators\ComponentMetadataValidationGenerator.cs" Link="Generators\ComponentMetadataValidationGenerator.cs" />
     <Compile Include="..\..\src\AiDotNet.Generators\TensorPortContractGenerator.cs" Link="Generators\TensorPortContractGenerator.cs" />

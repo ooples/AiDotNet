@@ -59,31 +59,45 @@ public class TrainableParameterGenerator : IIncrementalGenerator
 
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
-        // Find all class declarations that might have [TrainableParameter] fields
-        var classDeclarations = context.SyntaxProvider
+        // The pipeline used to cache ClassDeclarationSyntax. A syntax node is the same class of
+        // leak as a symbol: it holds its SyntaxTree, which roots the entire Compilation, so every
+        // cached entry pinned a compilation in memory. It now carries only each candidate's
+        // metadata name, and the symbol is re-resolved from the compilation at the point of use.
+        //
+        // Same deliberate scope limit as ModelParameterGenerator: this fixes the retention, not the
+        // re-execution. The per-class analysis is large enough that moving it into the transform
+        // would carry more regression risk than the incremental win is worth, so
+        // CompilationProvider stays and the generator still runs every compilation -- it just no
+        // longer holds compilations alive.
+        var classNames = context.SyntaxProvider
             .CreateSyntaxProvider(
                 predicate: static (node, _) => node is ClassDeclarationSyntax cds &&
                     cds.Modifiers.Any(m => m.Text == "partial"),
-                transform: static (ctx, _) => (ClassDeclarationSyntax)ctx.Node)
-            .Where(static c => c is not null);
+                transform: static (ctx, _) =>
+                    ctx.SemanticModel.GetDeclaredSymbol(ctx.Node) is INamedTypeSymbol symbol
+                        ? GeneratorHelpers.MetadataNameOf(symbol)
+                        : null)
+            .Where(static n => n is not null)
+            .Select(static (n, _) => n ?? string.Empty);
 
-        var compilationAndClasses = context.CompilationProvider.Combine(classDeclarations.Collect());
+        var compilationAndClasses = context.CompilationProvider.Combine(classNames.Collect());
 
         context.RegisterSourceOutput(compilationAndClasses, static (spc, source) => Execute(source.Left, source.Right, spc));
     }
 
-    private static void Execute(Compilation compilation, ImmutableArray<ClassDeclarationSyntax> classes, SourceProductionContext context)
-    {
-        if (classes.IsDefaultOrEmpty) return;
 
-        var attributeSymbol = compilation.GetTypeByMetadataName(TrainableParameterAttributeName);
+    private static void Execute(Compilation compilation, ImmutableArray<string> classMetadataNames, SourceProductionContext context)
+    {
+        if (classMetadataNames.IsDefaultOrEmpty) return;
+
+        var attributeSymbol = GeneratorHelpers.ResolveSourceType(compilation, TrainableParameterAttributeName);
 
         // [AutoParameters] remains a migration marker, but it never assigns semantics. PyTorch can
         // infer from nn.Parameter because that is a distinct type; Tensor<T> is also used for
         // activations, caches, datasets and buffers, so treating its CLR type or nullability as a
         // role silently corrupts the parameter graph.
-        var autoParamsSymbol = compilation.GetTypeByMetadataName("AiDotNet.Attributes.AutoParametersAttribute");
-        var bufferSymbol = compilation.GetTypeByMetadataName("AiDotNet.Attributes.BufferAttribute");
+        var autoParamsSymbol = GeneratorHelpers.ResolveSourceType(compilation, "AiDotNet.Attributes.AutoParametersAttribute");
+        var bufferSymbol = GeneratorHelpers.ResolveSourceType(compilation, "AiDotNet.Attributes.BufferAttribute");
         // Bail only if NO discovery route exists. This used to return whenever
         // TrainableParameterAttribute was missing, which also disabled register-call discovery,
         // sub-layer registration, buffers and [AutoParameters] -- every mechanism, gated on one
@@ -93,10 +107,15 @@ public class TrainableParameterGenerator : IIncrementalGenerator
         // Group by containing class (multiple partial declarations possible)
         var processedClasses = new HashSet<string>();
 
-        foreach (var classDecl in classes)
+        // Partial classes contribute one name per declaration; resolve each distinct name once.
+        var resolvedNames = new HashSet<string>();
+
+        foreach (var metadataName in classMetadataNames)
         {
-            var model = compilation.GetSemanticModel(classDecl.SyntaxTree);
-            var classSymbol = model.GetDeclaredSymbol(classDecl) as INamedTypeSymbol;
+            if (metadataName.Length == 0) continue;
+            if (!resolvedNames.Add(metadataName)) continue;
+
+            var classSymbol = GeneratorHelpers.ResolveSourceType(compilation, metadataName);
             if (classSymbol is null) continue;
 
             // Check if class extends LayerBase<T>

@@ -2152,7 +2152,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // Collect model classes from source (works when running in the source project)
         var modelClasses = context.SyntaxProvider.CreateSyntaxProvider(
             predicate: static (node, _) => IsModelCandidate(node),
-            transform: static (ctx, _) => GetModelClassOrNull(ctx))
+            transform: static (ctx, _) => GetModelClassOrNull(ctx) is INamedTypeSymbol symbol
+                ? GeneratorHelpers.MetadataNameOf(symbol)
+                : null)
             .Where(static s => s is not null);
 
         // Collect test classes (classes ending in Tests/Test or containing [Fact]/[Theory])
@@ -2164,25 +2166,33 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // Collect activation function classes from source
         var activationClasses = context.SyntaxProvider.CreateSyntaxProvider(
             predicate: static (node, _) => IsModelCandidate(node),
-            transform: static (ctx, _) => GetActivationFunctionOrNull(ctx))
+            transform: static (ctx, _) => GetActivationFunctionOrNull(ctx) is INamedTypeSymbol symbol
+                ? GeneratorHelpers.MetadataNameOf(symbol)
+                : null)
             .Where(static s => s is not null);
 
         // Collect loss function classes from source
         var lossClasses = context.SyntaxProvider.CreateSyntaxProvider(
             predicate: static (node, _) => IsModelCandidate(node),
-            transform: static (ctx, _) => GetLossFunctionOrNull(ctx))
+            transform: static (ctx, _) => GetLossFunctionOrNull(ctx) is INamedTypeSymbol symbol
+                ? GeneratorHelpers.MetadataNameOf(symbol)
+                : null)
             .Where(static s => s is not null);
 
         // Collect layer classes from source
         var layerClasses = context.SyntaxProvider.CreateSyntaxProvider(
             predicate: static (node, _) => IsModelCandidate(node),
-            transform: static (ctx, _) => GetLayerOrNull(ctx))
+            transform: static (ctx, _) => GetLayerOrNull(ctx) is INamedTypeSymbol symbol
+                ? GeneratorHelpers.MetadataNameOf(symbol)
+                : null)
             .Where(static s => s is not null);
 
         // Collect non-model algorithm classes (causal discovery, active learning, etc.)
         var algorithmClasses = context.SyntaxProvider.CreateSyntaxProvider(
             predicate: static (node, _) => IsModelCandidate(node),
-            transform: static (ctx, _) => GetNonModelAlgorithmOrNull(ctx))
+            transform: static (ctx, _) => GetNonModelAlgorithmOrNull(ctx) is INamedTypeSymbol symbol
+                ? GeneratorHelpers.MetadataNameOf(symbol)
+                : null)
             .Where(static s => s is not null);
 
         var combined = modelClasses.Collect()
@@ -2502,15 +2512,15 @@ public class TestScaffoldGenerator : IIncrementalGenerator
 
     private static void Execute(
         SourceProductionContext context,
-        ImmutableArray<INamedTypeSymbol?> sourceModels,
+        ImmutableArray<string?> sourceModels,
         ImmutableArray<string?> testClassNames,
         Compilation compilation)
     {
-        var domainAttrSymbol = compilation.GetTypeByMetadataName(ModelDomainAttr);
-        var categoryAttrSymbol = compilation.GetTypeByMetadataName(ModelCategoryAttr);
-        var taskAttrSymbol = compilation.GetTypeByMetadataName(ModelTaskAttr);
-        var exemptAttrSymbol = compilation.GetTypeByMetadataName(ModelMetadataExemptAttr);
-        var architectureSymbol = compilation.GetTypeByMetadataName("AiDotNet.NeuralNetworks.NeuralNetworkArchitecture`1");
+        var domainAttrSymbol = GeneratorHelpers.ResolveSourceType(compilation, ModelDomainAttr);
+        var categoryAttrSymbol = GeneratorHelpers.ResolveSourceType(compilation, ModelCategoryAttr);
+        var taskAttrSymbol = GeneratorHelpers.ResolveSourceType(compilation, ModelTaskAttr);
+        var exemptAttrSymbol = GeneratorHelpers.ResolveSourceType(compilation, ModelMetadataExemptAttr);
+        var architectureSymbol = GeneratorHelpers.ResolveSourceType(compilation, "AiDotNet.NeuralNetworks.NeuralNetworkArchitecture`1");
 
         // Build test class name set for fast lookup
         var testNames = new HashSet<string>(System.StringComparer.OrdinalIgnoreCase);
@@ -2525,9 +2535,11 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         var seen = new HashSet<string>();
 
         // First: collect models from source (syntax-based discovery)
-        foreach (var modelClass in sourceModels)
+        foreach (var modelMetadataName in sourceModels)
         {
-            if (modelClass is null)
+            if (modelMetadataName is null)
+                continue;
+            if (GeneratorHelpers.ResolveSourceType(compilation, modelMetadataName) is not INamedTypeSymbol modelClass)
                 continue;
 
             ProcessModelSymbol(modelClass, domainAttrSymbol, categoryAttrSymbol, taskAttrSymbol,
@@ -14941,8 +14953,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
 
     private static void ExecuteActivationAndLossGeneration(
         SourceProductionContext context,
-        ImmutableArray<INamedTypeSymbol?> activationClasses,
-        ImmutableArray<INamedTypeSymbol?> lossClasses,
+        ImmutableArray<string?> activationClasses,
+        ImmutableArray<string?> lossClasses,
         Compilation compilation)
     {
         // Only generate in test projects
@@ -14954,18 +14966,20 @@ public class TestScaffoldGenerator : IIncrementalGenerator
 
         // Collect from source
         var sourceActivations = new List<ComponentTestInfo>();
-        foreach (var symbol in activationClasses)
+        foreach (var metadataName in activationClasses)
         {
-            if (symbol is null) continue;
+            if (metadataName is null) continue;
+            if (GeneratorHelpers.ResolveSourceType(compilation, metadataName) is not INamedTypeSymbol symbol) continue;
             var info = ExtractActivationInfo(symbol);
             if (info is not null && activationSeen.Add(info.FullyQualifiedName))
                 sourceActivations.Add(info);
         }
 
         var sourceLosses = new List<ComponentTestInfo>();
-        foreach (var symbol in lossClasses)
+        foreach (var metadataName in lossClasses)
         {
-            if (symbol is null) continue;
+            if (metadataName is null) continue;
+            if (GeneratorHelpers.ResolveSourceType(compilation, metadataName) is not INamedTypeSymbol symbol) continue;
             var info = ExtractLossInfo(symbol);
             if (info is not null && lossSeen.Add(info.FullyQualifiedName))
                 sourceLosses.Add(info);
@@ -15119,7 +15133,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         var baseTypeSymbols = new List<INamedTypeSymbol>();
         foreach (var name in testBaseClassFullNames)
         {
-            var baseType = compilation.GetTypeByMetadataName(name);
+            var baseType = GeneratorHelpers.ResolveSourceType(compilation, name);
             if (baseType is not null)
                 baseTypeSymbols.Add(baseType);
         }
@@ -15330,7 +15344,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
     /// </summary>
     private static void ExecuteLayerGeneration(
         SourceProductionContext context,
-        ImmutableArray<INamedTypeSymbol?> layerClasses,
+        ImmutableArray<string?> layerClasses,
         Compilation compilation)
     {
         string assemblyName = compilation.AssemblyName ?? string.Empty;
@@ -15341,9 +15355,10 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         var sourceLayers = new List<LayerTestInfo>();
 
         // Collect from source
-        foreach (var symbol in layerClasses)
+        foreach (var metadataName in layerClasses)
         {
-            if (symbol is null) continue;
+            if (metadataName is null) continue;
+            if (GeneratorHelpers.ResolveSourceType(compilation, metadataName) is not INamedTypeSymbol symbol) continue;
             var info = ExtractLayerInfo(symbol);
             if (info is not null && layerSeen.Add(info.FullyQualifiedName))
                 sourceLayers.Add(info);
@@ -17647,7 +17662,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
     /// </summary>
     private static void ExecuteNonModelAlgorithmGeneration(
         SourceProductionContext context,
-        ImmutableArray<INamedTypeSymbol?> algorithmClasses,
+        ImmutableArray<string?> algorithmClasses,
         Compilation compilation)
     {
         string assemblyName = compilation.AssemblyName ?? string.Empty;
@@ -17658,9 +17673,10 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         var algorithms = new List<(INamedTypeSymbol symbol, AlgorithmCategory category)>();
 
         // Collect from source
-        foreach (var symbol in algorithmClasses)
+        foreach (var metadataName in algorithmClasses)
         {
-            if (symbol is null) continue;
+            if (metadataName is null) continue;
+            if (GeneratorHelpers.ResolveSourceType(compilation, metadataName) is not INamedTypeSymbol symbol) continue;
             var fqn = symbol.OriginalDefinition.ToDisplayString();
             if (!seen.Add(fqn)) continue;
 
@@ -18057,5 +18073,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         sb.AppendLine("        public void Dispose() { }");
         sb.AppendLine("    }");
     }
+
 
 }
