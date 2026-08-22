@@ -45,6 +45,17 @@ namespace AiDotNet.Models.Options;
 public class TimeGANOptions<T> : RiskModelOptions<T>
 {
     /// <summary>
+    /// Creates an independent options snapshot whose structural values match a materialized model.
+    /// </summary>
+    internal TimeGANOptions<T> CreateMaterializedSnapshot(int hiddenDimension, int numLayers)
+    {
+        var snapshot = (TimeGANOptions<T>)MemberwiseClone();
+        snapshot.HiddenDimension = hiddenDimension;
+        snapshot.NumLayers = numLayers;
+        return snapshot;
+    }
+
+    /// <summary>
     /// Gets or sets the length of each time-series sequence.
     /// </summary>
     /// <value>Sequence length, defaulting to 24.</value>
