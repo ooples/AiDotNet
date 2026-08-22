@@ -26,17 +26,37 @@ Build src, diff src/Generated against snapshot at
 scratchpad/genbaseline (1245 files). Must be ZERO differences.
 NOTE: src/Generated is UNTRACKED and survives branch switches — re-snapshot from a clean build.
 
-## Status
-DONE+verified+committed: DiscoveryApi(24ac7a489), ComponentDiscoveryApi(749aff908), ComponentRegistry(688aa13ef)
-CONVERTED, compiles, verification pending: Documentation
-REMAINING (8): CompatibilityMatrix, ComponentMetadataValidation, ModelMetadataValidation,
-ModelParameter, ModelRegistry, TrainableParameter, YamlConfigSource, TestScaffold(18k lines - own PR)
+## Status: COMPLETE
 
-## Environment blockers
+All fifteen generators converted and verified. Nothing here is outstanding; this file is a record
+of the approach, not a work queue.
+
+Converted: DiscoveryApi, ComponentDiscoveryApi, ComponentRegistry, Documentation,
+CompatibilityMatrix, ModelRegistry, YamlConfigSource, ModelParameter, TrainableParameter,
+ModelMetadataValidation, ComponentMetadataValidation, TestScaffold, and then AgentToolSchema,
+ShapeContract, TensorPortContract.
+
+The last three were NOT in the original list of twelve. That list was scoped by "uses
+CompilationProvider", which is the wrong symptom -- they leak symbols without using it. Conversely
+YamlConfigSource legitimately needs CompilationProvider and keeps it. Scope by "symbols in cached
+pipeline state", never by the API used to reach them.
+
+## What is NOT fixed
+
+Retention only, for ModelParameter, TrainableParameter, both validation generators and the final
+three: they no longer hold compilations alive, but they still re-run every compilation because
+their symbol-walking bodies were left outside the transform. Making them genuinely cacheable is
+follow-up work.
+
+No memory win was demonstrated. Three successive builds against one compiler server measured
+192/165/165 MB before and 200/180/179 MB after -- neither arm grows, and the two are within noise.
+That harness does not reproduce the 12.6 GB VBCSCompiler seen during development, so a better
+experiment (design-time builds, or many more incremental compilations) is still owed.
+
+## Environment notes
 - Builds die in the GENERATION phase when free RAM is low. Fix: kill VBCSCompiler
   (it reached 10 GB), which restores several GB. Machine has 15.4 GB total.
 - Disk chronically near-full; NuGet global-packages already cleared once (35 GB).
-- Another session works in AiDotNet-pr2034 (PR #2035) — do NOT use that worktree.
 
 ## Deferred, not done
 SOM/RBF split: fix SelfOrganizingMap all-zero output as a product bug; exempt
