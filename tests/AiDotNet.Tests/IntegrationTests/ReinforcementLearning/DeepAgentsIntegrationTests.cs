@@ -227,7 +227,16 @@ public class DeepAgentsIntegrationTests
         AssertOneHot(a3cAction, DiscreteActionSize, "A3CAgent");
         var a3cLoss = a3c.Train();
         Assert.False(double.IsNaN(a3cLoss), "A3CAgent Train returned NaN.");
-        Assert.Equal(27, a3c.GetParameters().Length);
+        // BOTH HEADS, DERIVED -- not the literal 27, which counted the policy alone.
+        // policy: (2*4 + 4) + (4*3 + 3) = 27      value: (2*4 + 4) + (4*1 + 1) = 17   => 44
+        // GetParameters() covers the critic as well as the actor, and it must: the critic is
+        // trainable state, so a checkpoint that restored only the actor would not restore the
+        // agent. Spelled out from the configured sizes so an architecture change fails with an
+        // arithmetic mismatch instead of silently outdating a magic number.
+        const int a3cPolicyParameters =
+            (DiscreteStateSize * 4 + 4) + (4 * DiscreteActionSize + DiscreteActionSize);
+        const int a3cValueParameters = (DiscreteStateSize * 4 + 4) + (4 * 1 + 1);
+        Assert.Equal(a3cPolicyParameters + a3cValueParameters, a3c.GetParameters().Length);
         AssertAgentState(a3c, true);
 
         var ppo = new PPOAgent<double>(new PPOOptions<double>

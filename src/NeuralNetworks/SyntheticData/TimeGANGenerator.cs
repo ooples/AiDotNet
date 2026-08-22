@@ -101,6 +101,11 @@ public partial class TimeGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
     private int _dataWidth;
     private Random _random;
 
+    // HiddenDimension and NumLayers determine every component's shape. Options remain mutable so a
+    // caller can configure a later Fit, but changing them must not reinterpret materialized weights.
+    private int _materializedHiddenDimension;
+    private int _materializedNumLayers;
+
     // Embedder (auxiliary): data → latent
     private readonly List<FullyConnectedLayer<T>> _embedderLayers = new();
     private FullyConnectedLayer<T>? _embedderOutput;
@@ -136,6 +141,12 @@ public partial class TimeGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
     /// <summary>
     /// Gets the TimeGAN-specific options.
     /// </summary>
+    /// <remarks>
+    /// Changes to <see cref="TimeGANOptions{T}.HiddenDimension"/> or
+    /// <see cref="TimeGANOptions{T}.NumLayers"/> take effect on the next <see cref="Fit"/> call.
+    /// Existing trained layers, inference, cloning, serialization, and metadata retain the topology
+    /// that was materialized by the most recent construction or fit.
+    /// </remarks>
     public TimeGANOptions<T> TimeGanOptions => _options;
 
     /// <inheritdoc />
@@ -173,6 +184,7 @@ public partial class TimeGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
         : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), maxGradNorm)
     {
         _options = options ?? new TimeGANOptions<T>();
+        ValidateOptions();
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);
         AdamOptimizer<T, Tensor<T>, Tensor<T>> MakeAdam() =>
             new(this, new Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
@@ -194,6 +206,17 @@ public partial class TimeGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
         InitializeLayers();
     }
 
+    private void ValidateOptions()
+    {
+        if (_options.NumLayers < 1)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(TimeGANOptions<T>.NumLayers),
+                _options.NumLayers,
+                "TimeGAN requires at least one layer.");
+        }
+    }
+
     #region Layer Initialization (GANDALF Pattern)
 
     /// <summary>
@@ -201,6 +224,9 @@ public partial class TimeGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
     /// </summary>
     protected override void InitializeLayers()
     {
+        int hiddenDim = _options.HiddenDimension;
+        int numLayers = _options.NumLayers;
+
         if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
         {
             Layers.AddRange(Architecture.Layers);
@@ -208,30 +234,39 @@ public partial class TimeGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
         }
         else
         {
-            int hiddenDim = _options.HiddenDimension;
             var identity = new IdentityActivation<T>() as IActivationFunction<T>;
 
-            for (int i = 0; i < _options.NumLayers; i++)
+            for (int i = 0; i < numLayers; i++)
             {
                 Layers.Add(new FullyConnectedLayer<T>(hiddenDim, identity));
             }
             _usingCustomLayers = false;
         }
+
+        _materializedHiddenDimension = hiddenDim;
+        _materializedNumLayers = numLayers;
     }
 
     private void RebuildAllNetworks()
     {
         int hiddenDim = _options.HiddenDimension;
+        int numLayers = _options.NumLayers;
         var identity = new IdentityActivation<T>() as IActivationFunction<T>;
 
         // Rebuild generator (Layers) if not using custom
         if (!_usingCustomLayers)
         {
+            // DECLARE THE INPUT WIDTH. Every layerInput below was already being computed and then
+            // discarded, so each layer took the (outputSize, activation) overload and was left with
+            // an input of -1 for lazy inference -- binding permanently to whatever tensor reached it
+            // first rather than to the width it was designed for. That is the same defect this PR
+            // fixes in PATEGAN, TabSyn and TabDDPM, and it is what makes the generator's expected
+            // latent width unenforceable: a mismatched caller silently rebinds the stack instead of
+            // failing. The widths are known here, so they are stated.
             Layers.Clear();
-            for (int i = 0; i < _options.NumLayers; i++)
+            for (int i = 0; i < numLayers; i++)
             {
-                int layerInput = i == 0 ? hiddenDim : hiddenDim;
-                Layers.Add(new FullyConnectedLayer<T>(hiddenDim, identity));
+                Layers.Add(new FullyConnectedLayer<T>(hiddenDim, hiddenDim, identity));
             }
         }
 
@@ -240,38 +275,44 @@ public partial class TimeGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
 
         // Embedder
         _embedderLayers.Clear();
-        for (int i = 0; i < _options.NumLayers; i++)
+        for (int i = 0; i < numLayers; i++)
         {
             int layerInput = i == 0 ? _dataWidth : hiddenDim;
-            _embedderLayers.Add(new FullyConnectedLayer<T>(hiddenDim, identity));
+            _embedderLayers.Add(new FullyConnectedLayer<T>(layerInput, hiddenDim, identity));
         }
-        _embedderOutput = new FullyConnectedLayer<T>(hiddenDim, identity);
+        _embedderOutput = new FullyConnectedLayer<T>(hiddenDim, hiddenDim, identity);
 
-        // Recovery
+        // Recovery: latent -> latent hidden stack, then a projection back out to the data width.
         _recoveryLayers.Clear();
-        for (int i = 0; i < _options.NumLayers; i++)
+        for (int i = 0; i < numLayers; i++)
         {
-            _recoveryLayers.Add(new FullyConnectedLayer<T>(hiddenDim, identity));
+            _recoveryLayers.Add(new FullyConnectedLayer<T>(hiddenDim, hiddenDim, identity));
         }
-        _recoveryOutput = new FullyConnectedLayer<T>(_dataWidth, identity);
+        _recoveryOutput = new FullyConnectedLayer<T>(hiddenDim, _dataWidth, identity);
 
-        // Supervisor
+        // Supervisor: NOTE the loop bound is NumLayers - 1, so at NumLayers == 1 the hidden list is
+        // empty while _supervisorOutput still exists and performs a real projection. That is why
+        // GetNamedLayerActivations gates on the OUTPUT HEAD rather than on this list being non-empty.
         _supervisorLayers.Clear();
-        for (int i = 0; i < _options.NumLayers - 1; i++)
+        for (int i = 0; i < numLayers - 1; i++)
         {
-            _supervisorLayers.Add(new FullyConnectedLayer<T>(hiddenDim, identity));
+            _supervisorLayers.Add(new FullyConnectedLayer<T>(hiddenDim, hiddenDim, identity));
         }
-        _supervisorOutput = new FullyConnectedLayer<T>(hiddenDim, identity);
+        _supervisorOutput = new FullyConnectedLayer<T>(hiddenDim, hiddenDim, identity);
 
         // Discriminator
         _discriminatorLayers.Clear();
         _discDropoutLayers.Clear();
-        for (int i = 0; i < _options.NumLayers; i++)
+        for (int i = 0; i < numLayers; i++)
         {
             _discriminatorLayers.Add(new FullyConnectedLayer<T>(hiddenDim, identity));
             _discDropoutLayers.Add(new DropoutLayer<T>(_options.DiscriminatorDropout));
         }
         _discriminatorOutput = new FullyConnectedLayer<T>(1, identity);
+
+        // Commit the snapshot only after every component was rebuilt successfully.
+        _materializedHiddenDimension = hiddenDim;
+        _materializedNumLayers = numLayers;
     }
 
     #endregion
@@ -281,6 +322,10 @@ public partial class TimeGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
     /// <inheritdoc />
     public void Fit(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns, int epochs)
     {
+        // Options remain publicly accessible after construction, so validate again before using
+        // them to rebuild the component networks.
+        ValidateOptions();
+
         // Reject configurations that would silently no-op training. With
         // epochs <= 0 every phase loop runs zero iterations and IsFitted
         // would still flip true at the bottom (untrained model marked
@@ -297,7 +342,6 @@ public partial class TimeGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
 
         _columns = new List<ColumnMetadata>(columns);
         _dataWidth = data.Columns;
-        int hiddenDim = _options.HiddenDimension;
         int seqLen = _options.SequenceLength;
 
         RebuildAllNetworks();
@@ -388,7 +432,7 @@ public partial class TimeGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
         }
 
         int seqLen = _options.SequenceLength;
-        int hiddenDim = _options.HiddenDimension;
+        int hiddenDim = _materializedHiddenDimension;
 
         int numSequences = (int)Math.Ceiling((double)numSamples / seqLen);
         var allRows = new List<Vector<T>>();
@@ -728,7 +772,7 @@ public partial class TimeGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
         var xBatch = BuildFlattenedSequenceBatch(sequences, startIdx, endIdx);
         if (xBatch.Shape[0] == 0) return;
         int batchSize = xBatch.Shape[0];
-        int hiddenDim = _options.HiddenDimension;
+        int hiddenDim = _materializedHiddenDimension;
 
         // Real embedded sequence: x -> embedder. Fake: noise -> generator -> supervisor.
         // Both produced OUTSIDE the critic's tape so the critic only updates its own params.
@@ -786,7 +830,7 @@ public partial class TimeGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
     /// </summary>
     private void TrainGeneratorStepBatched(List<Matrix<T>> sequences, int startIdx, int endIdx)
     {
-        int hiddenDim = _options.HiddenDimension;
+        int hiddenDim = _materializedHiddenDimension;
 
         // Phase 3 joint loss (Yoon et al. 2019 §3.3) =
         //   L_U (unsupervised adversarial, non-saturating)
@@ -1047,16 +1091,91 @@ public partial class TimeGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
 
     #region NeuralNetworkBase Overrides
 
+    private Vector<T> GetGeneratorNoise(Tensor<T> input)
+    {
+        if (input is null)
+            throw new ArgumentNullException(nameof(input));
+
+        if (IsFitted && input.Length != _materializedHiddenDimension)
+        {
+            throw new ArgumentException(
+                $"A fitted TimeGAN generator requires latent input with exactly "
+                + $"{_materializedHiddenDimension} values (the HiddenDimension used by the fitted topology), "
+                + $"but received {input.Length}.",
+                nameof(input));
+        }
+
+        return TensorToVector(input, input.Length);
+    }
+
     /// <inheritdoc />
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         if (!IsFitted) return input;
 
-        var noise = TensorToVector(input, input.Length);
+        var noise = GetGeneratorNoise(input);
         var genOut = GeneratorForward(noise, isTraining: false);
         var supOut = SupervisorForward(genOut, isTraining: false);
         var recOut = RecoveryForward(supOut, isTraining: false);
         return VectorToTensor(recOut);
+    }
+
+    /// <summary>
+    /// Reports the three stages of the synthesis path: generator, supervisor and recovery.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// THE BASE STRATEGIES BOTH COME BACK EMPTY HERE, and not because the stacks are unobservable.
+    /// <see cref="PredictCore"/> opens with <c>if (!IsFitted) return input;</c>, so on a freshly
+    /// constructed generator no layer is invoked at all: the observer fallback records nothing, and
+    /// the sequential fold has nothing to fold because the embedder, recovery and supervisor stacks
+    /// live in their own lists rather than in <see cref="Layers"/>. The base then returned an empty
+    /// dictionary, which it documents as a failure to answer rather than an answer of "no
+    /// activations".
+    /// </para>
+    /// <para>
+    /// InitializeLayers constructs and initialises every stack, so the pipeline is well defined
+    /// before fitting -- structural introspection should not depend on fit state. This runs the same
+    /// generator -> supervisor -> recovery chain PredictCore runs after fitting, so the reported
+    /// activations are the model's real computation rather than a reconstruction of it.
+    /// </para>
+    /// </remarks>
+    public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input)
+    {
+        var activations = new Dictionary<string, Tensor<T>>();
+
+        var noise = GetGeneratorNoise(input);
+        var current = GeneratorForward(noise, isTraining: false);
+        activations["Generator"] = VectorToTensor(current);
+
+        // ONLY STAGES THAT ACTUALLY EXIST. RebuildAllNetworks -- which Fit calls -- is what creates
+        // the supervisor and recovery stacks; InitializeLayers alone populates just the generator's
+        // Layers. SupervisorForward and RecoveryForward iterate their stack, so on an unfitted model
+        // those loops have nothing to run and return their input UNCHANGED. Reporting them anyway
+        // published the generator's output three times under three names: an identity value dressed
+        // as a distinct stage, which passes a non-empty check while describing nothing.
+        //
+        // Reporting only the initialised stacks keeps every entry a real computation. The generator
+        // always exists after InitializeLayers, so the result is never empty.
+        // GATE ON THE OUTPUT HEAD, NOT THE HIDDEN LAYER LIST. SupervisorForward and RecoveryForward
+        // apply _supervisorOutput / _recoveryOutput independently of their loops, so a stack with an
+        // empty layer list but a constructed head still performs a real projection -- which is
+        // exactly the shape NumLayers == 1 produces for the supervisor. Gating on Count > 0 would
+        // have dropped a stage that does genuine work; the head is what RebuildAllNetworks creates
+        // last, so its presence is the honest signal that the stage exists.
+        if (_supervisorOutput is not null)
+        {
+            current = SupervisorForward(current, isTraining: false);
+            activations["Supervisor"] = VectorToTensor(current);
+        }
+
+        if (_recoveryOutput is not null)
+        {
+            current = RecoveryForward(current, isTraining: false);
+            activations["Recovery"] = VectorToTensor(current);
+        }
+
+        return activations;
     }
 
     /// <inheritdoc />
@@ -1067,14 +1186,6 @@ public partial class TimeGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
             TensorToVector(predicted, predicted.Length),
             TensorToVector(expectedOutput, expectedOutput.Length));
     }
-
-    // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
-    // exactly the same enumeration, so this said nothing the base does not already say.
-    /// <inheritdoc />
-
-
-    /// <inheritdoc />
-
 
     /// <inheritdoc />
     public override Dictionary<string, T> GetFeatureImportance()
@@ -1096,8 +1207,8 @@ public partial class TimeGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
             {
                 ["GeneratorType"] = "TimeGAN",
                 ["SequenceLength"] = _options.SequenceLength,
-                ["HiddenDimension"] = _options.HiddenDimension,
-                ["NumLayers"] = _options.NumLayers,
+                ["HiddenDimension"] = _materializedHiddenDimension,
+                ["NumLayers"] = _materializedNumLayers,
                 ["DataWidth"] = _dataWidth,
                 ["IsFitted"] = IsFitted
             }

@@ -1158,6 +1158,57 @@ public partial class EchoStateNetwork<T> : SequenceModelLayoutBase<T>
     }
 
     /// <summary>
+    /// Reports this network's two real computation stages: the settled reservoir state and the
+    /// linear readout.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// NEITHER BASE STRATEGY CAN SEE AN ECHO STATE NETWORK. An ESN computes with raw
+    /// <see cref="Matrix{T}"/> / <see cref="Vector{T}"/> algebra -- <c>_inputWeights</c>,
+    /// <c>_reservoirWeights</c>, <c>_outputWeights</c> -- and holds no <c>ILayer</c> instances at
+    /// all. So <see cref="Layers"/> is empty and the sequential fold reports nothing, and because no
+    /// <c>LayerBase.Forward</c> is ever invoked the observer fallback records nothing either. The
+    /// base returned an empty dictionary, which it documents as a failure to answer rather than an
+    /// answer of "no activations".
+    /// </para>
+    /// <para>
+    /// Overriding is the established route for exactly this shape: SwinTransformer does the same to
+    /// surface its <c>ExtractFeatures</c> stages. Both stages here come from the real forward path
+    /// (<c>SettleReservoirState</c> then <c>ComputeOutput</c>, the same pair
+    /// <see cref="PredictCore"/> runs), so the reported activations are what the model actually
+    /// computes, not a reconstruction.
+    /// </para>
+    /// </remarks>
+    public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input)
+    {
+        Vector<T> inputVector = input.ToVector();
+        if (inputVector.Length != _inputSize)
+        {
+            throw new ArgumentException(
+                $"Input vector length ({inputVector.Length}) does not match expected input size ({_inputSize}).",
+                nameof(input));
+        }
+
+        // The managed path deliberately, not TryForwardGpuOptimized: the intermediate reservoir
+        // state is the point of this method, and the fused GPU path only yields the final output.
+        SettleReservoirState(inputVector);
+
+        // CLONE, do not alias. Tensor<T>(shape, vector) wraps the vector it is handed, and
+        // SettleReservoirState zeroes _currentState IN PLACE on its next call -- so a previously
+        // returned "Reservoir" tensor would silently change underneath a caller that kept it, which
+        // is exactly what an activation snapshot must not do. ComputeOutput already returns a fresh
+        // vector, so only the reservoir state needs copying.
+        var reservoirState = new Tensor<T>([1, _reservoirSize], _currentState.Clone());
+        var readout = new Tensor<T>([1, _outputSize], ComputeOutput());
+
+        return new Dictionary<string, Tensor<T>>
+        {
+            ["Reservoir"] = reservoirState,
+            ["Readout"] = readout,
+        };
+    }
+
+    /// <summary>
     /// Processes a sequence of inputs through the Echo State Network.
     /// </summary>
     /// <param name="inputSequence">The sequence of input tensors.</param>
