@@ -295,7 +295,7 @@ public partial class MinLSTMLayer<T> : LayerBase<T>, IShapeContract
         var inputFlat = Engine.Reshape(input3D, new[] { batchSize * seqLen, _modelDimension });
         var projected = Engine.TensorMatMul(inputFlat, _inputProjectionWeights);
         var projBias = Engine.Reshape(_inputProjectionBias, new[] { 1, _expandedDimension });
-        projected = Engine.TensorBroadcastAdd(projected, projBias);
+        projected = Engine.TensorAdd(projected, projBias);
         var projected3D = Engine.Reshape(projected, new[] { batchSize, seqLen, _expandedDimension });
         _lastProjectedInput = projected3D;
 
@@ -303,7 +303,7 @@ public partial class MinLSTMLayer<T> : LayerBase<T>, IShapeContract
         var projFlat = Engine.Reshape(projected3D, new[] { batchSize * seqLen, _expandedDimension });
         var forgetRaw = Engine.TensorMatMul(projFlat, _forgetGateWeights);
         var fBias = Engine.Reshape(_forgetGateBias, new[] { 1, _expandedDimension });
-        forgetRaw = Engine.TensorBroadcastAdd(forgetRaw, fBias);
+        forgetRaw = Engine.TensorAdd(forgetRaw, fBias);
         var forgetRaw3D = Engine.Reshape(forgetRaw, new[] { batchSize, seqLen, _expandedDimension });
         var forgetSigmoid = Engine.Sigmoid(forgetRaw3D);
         _lastForgetGateRaw = forgetRaw3D;
@@ -312,7 +312,7 @@ public partial class MinLSTMLayer<T> : LayerBase<T>, IShapeContract
         // Step 3: Compute input gate i_t = sigma(W_i * x_proj + b_i)
         var inputGateRaw = Engine.TensorMatMul(projFlat, _inputGateWeights);
         var iBias = Engine.Reshape(_inputGateBias, new[] { 1, _expandedDimension });
-        inputGateRaw = Engine.TensorBroadcastAdd(inputGateRaw, iBias);
+        inputGateRaw = Engine.TensorAdd(inputGateRaw, iBias);
         var inputGateRaw3D = Engine.Reshape(inputGateRaw, new[] { batchSize, seqLen, _expandedDimension });
         var inputGateSigmoid = Engine.Sigmoid(inputGateRaw3D);
         _lastInputGateRaw = inputGateRaw3D;
@@ -333,7 +333,7 @@ public partial class MinLSTMLayer<T> : LayerBase<T>, IShapeContract
         // Step 5: Cell candidate c_tilde = W_c * x_proj + b_c (no activation -- pure linear)
         var cellCandRaw = Engine.TensorMatMul(projFlat, _cellCandidateWeights);
         var cBias = Engine.Reshape(_cellCandidateBias, new[] { 1, _expandedDimension });
-        cellCandRaw = Engine.TensorBroadcastAdd(cellCandRaw, cBias);
+        cellCandRaw = Engine.TensorAdd(cellCandRaw, cBias);
         var cellCandidate = Engine.Reshape(cellCandRaw, new[] { batchSize, seqLen, _expandedDimension });
         _lastCellCandidate = cellCandidate;
 
@@ -346,7 +346,7 @@ public partial class MinLSTMLayer<T> : LayerBase<T>, IShapeContract
         var recFlat = Engine.Reshape(recurrenceOutput, new[] { batchSize * seqLen, _expandedDimension });
         var outputFlat = Engine.TensorMatMul(recFlat, _outputProjectionWeights);
         var outBias = Engine.Reshape(_outputProjectionBias, new[] { 1, _modelDimension });
-        outputFlat = Engine.TensorBroadcastAdd(outputFlat, outBias);
+        outputFlat = Engine.TensorAdd(outputFlat, outBias);
         var output3D = Engine.Reshape(outputFlat, new[] { batchSize, seqLen, _modelDimension });
 
         var result = ApplyActivation(output3D);

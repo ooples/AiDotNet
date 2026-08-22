@@ -270,7 +270,7 @@ public abstract class NeckBase<T> : ModelBase<T, Tensor<T>, Tensor<T>>
         if (bias is not null)
         {
             var biasBroadcast = bias.Reshape(1, outChannels);
-            outputFlat = Engine.TensorBroadcastAdd(outputFlat, biasBroadcast);
+            outputFlat = Engine.TensorAdd(outputFlat, biasBroadcast);
         }
 
         // Reshape back to NCHW: [B*H*W, C_out] -> [B, C_out, H, W]

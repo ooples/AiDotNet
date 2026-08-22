@@ -265,13 +265,13 @@ public class FlagDiTPredictor<T> : NoisePredictorBase<T>
     /// <summary>adaLN modulation: x · (1 + scale) + shift, with [B,1,hidden] broadcast views.</summary>
     private Tensor<T> ApplyAdaLN(Tensor<T> x, Tensor<T> scaleView, Tensor<T> shiftView)
     {
-        var scaled = Engine.TensorBroadcastMultiply(x, Engine.TensorAddScalar(scaleView, NumOps.One));
-        return Engine.TensorBroadcastAdd(scaled, shiftView);
+        var scaled = Engine.TensorMultiply(x, Engine.TensorAddScalar(scaleView, NumOps.One));
+        return Engine.TensorAdd(scaled, shiftView);
     }
 
     /// <summary>Gated residual: x + gate · branch (gate is a [B,1,hidden] adaLN view).</summary>
     private Tensor<T> AddWithGate(Tensor<T> x, Tensor<T> branch, Tensor<T> gateView)
-        => Engine.TensorAdd(x, Engine.TensorBroadcastMultiply(branch, gateView));
+        => Engine.TensorAdd(x, Engine.TensorMultiply(branch, gateView));
 
     /// <summary>Mean-pools a context tensor to [B, hidden] after projecting from contextDim.</summary>
     private Tensor<T> PoolContext(Tensor<T> conditioning)

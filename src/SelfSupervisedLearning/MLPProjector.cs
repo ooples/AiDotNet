@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
@@ -349,7 +349,7 @@ public class MLPProjector<T> : IProjectorHead<T>
         // Vectorized: output = input @ weight + bias
         var output = Engine.TensorMatMul(input, weight);
         var bias2D = bias.Reshape(1, weight.Shape[1]);
-        return Engine.TensorBroadcastAdd(output, bias2D);
+        return Engine.TensorAdd(output, bias2D);
     }
 
     private (Tensor<T> inputGrad, Tensor<T> weightGrad, Tensor<T> biasGrad) LinearBackward(

@@ -670,11 +670,11 @@ public partial class RoomImpulseResponse<T> : AudioNeuralNetworkBase<T>, IAudioE
             // engine ops so the graph stays static.
             var head = eng.TensorNarrow(h, 1, 0, half);
             var tail = eng.TensorNarrow(h, 1, half, channels - half);
-            var conditioned = eng.TensorBroadcastAdd(eng.TensorBroadcastMultiply(head, scale), shift);
+            var conditioned = eng.TensorAdd(eng.TensorMultiply(head, scale), shift);
             return eng.TensorConcatenate([conditioned, tail], 1);
         }
 
-        return eng.TensorBroadcastAdd(eng.TensorBroadcastMultiply(h, scale), shift);
+        return eng.TensorAdd(eng.TensorMultiply(h, scale), shift);
     }
 
     /// <summary>Trims or zero-pads the time axis to exactly <paramref name="length"/>.</summary>

@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Enums;
 
@@ -130,7 +130,7 @@ public class SphericalSoftmaxActivation<T> : ActivationFunctionBase<T>
         var eps = Tensor<T>.CreateDefault(sumSquared._shape, NormalizationEpsilon);
         var safeSum = Engine.TensorAdd(sumSquared, eps);
         var norm = Engine.TensorSqrt(safeSum);
-        var normalized = Engine.TensorBroadcastDivide(input, norm);
+        var normalized = Engine.TensorDivide(input, norm);
         return Engine.Softmax(normalized, axis: lastAxis);
     }
 

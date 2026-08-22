@@ -1,4 +1,4 @@
-﻿using System.IO;
+using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Finance.Interfaces;
@@ -854,7 +854,7 @@ public partial class Autoformer<T> : ForecastingModelBase<T>
         }
 
         return Engine.TensorPermute(
-            Engine.TensorBroadcastMultiply(averaged, boundaryScale),
+            Engine.TensorMultiply(averaged, boundaryScale),
             new[] { 0, 2, 1 });
     }
 
@@ -923,8 +923,8 @@ public partial class Autoformer<T> : ForecastingModelBase<T>
             // RevIN stats themselves are treated as constants (paper-faithful: the
             // reversible affine just rescales the prediction), so d(output)/d(input)
             // = std and gradients flow through the layer stack.
-            var scaled = Engine.TensorBroadcastMultiply(input, _instanceStd);
-            return Engine.TensorBroadcastAdd(scaled, _instanceMean);
+            var scaled = Engine.TensorMultiply(input, _instanceStd);
+            return Engine.TensorAdd(scaled, _instanceMean);
         }
     }
 
