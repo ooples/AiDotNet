@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 using System.Text;
@@ -125,18 +125,67 @@ public class CompatibilityMatrixGenerator : IIncrementalGenerator
 
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
-        var classDeclarations = context.SyntaxProvider.CreateSyntaxProvider(
+        // Values, not symbols -- see DiscoveryApiGenerator. Note this generator also carried a
+        // Roslyn Location in its model, which is just as bad as a symbol: a Location holds its
+        // SyntaxTree, which roots the whole Compilation. It becomes a value-type SourceSpan here,
+        // the same trick LayerStateGenerator already uses, and is rehydrated into a Location only
+        // at the point a diagnostic is actually reported.
+        var compatEntries = context.SyntaxProvider.CreateSyntaxProvider(
             predicate: static (node, _) => IsCandidate(node),
-            transform: static (ctx, _) => GetModelClassOrNull(ctx))
-            .Where(static s => s is not null);
+            transform: static (ctx, _) => Analyze(ctx))
+            .Where(static e => e is not null)
+            .Select(static (e, _) => e ?? CompatEntry.Empty);
 
-        var collected = classDeclarations.Collect().Combine(context.CompilationProvider);
+        context.RegisterSourceOutput(compatEntries.Collect(), static (spc, collected) => Emit(spc, collected));
+    }
 
-        context.RegisterSourceOutput(collected, static (spc, source) =>
+    /// <summary>
+    /// Resolves one candidate class into a value-equatable entry, or null when it declares no
+    /// [ModelCategory]. All symbol access is confined to this method.
+    /// </summary>
+    private static CompatEntry? Analyze(GeneratorSyntaxContext ctx)
+    {
+        if (GetModelClassOrNull(ctx) is not INamedTypeSymbol modelClass)
+            return null;
+
+        var compilation = ctx.SemanticModel.Compilation;
+        var categoryAttrSymbol = compilation.GetTypeByMetadataName(ModelCategoryAttr);
+        var exemptAttrSymbol = compilation.GetTypeByMetadataName(ModelMetadataExemptAttr);
+        var categoryEnumType = compilation.GetTypeByMetadataName("AiDotNet.Enums.ModelCategory");
+
+        if (categoryAttrSymbol is null)
+            return null;
+
+        if (exemptAttrSymbol is not null && HasAttribute(modelClass.GetAttributes(), exemptAttrSymbol))
+            return null;
+
+        var categories = new List<int>();
+        foreach (var attr in modelClass.GetAttributes())
         {
-            var (candidates, compilation) = source;
-            Execute(spc, candidates, compilation);
-        });
+            if (attr.AttributeClass is not null &&
+                SymbolEqualityComparer.Default.Equals(attr.AttributeClass, categoryAttrSymbol))
+            {
+                if (attr.ConstructorArguments.Length >= 1 && attr.ConstructorArguments[0].Value is int c)
+                    categories.Add(c);
+            }
+        }
+
+        if (categories.Count == 0)
+            return null;
+
+        // Resolve display names here, while the enum symbol is in hand, so Emit needs no
+        // Compilation of its own.
+        var names = new List<string>();
+        foreach (var c in categories)
+            names.Add(GetCategoryName(c, categoryEnumType));
+
+        return new CompatEntry(
+            modelClass.Name,
+            modelClass.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat),
+            modelClass.TypeParameters.Length,
+            categories.ToImmutableArray(),
+            names.ToImmutableArray(),
+            modelClass.Locations.Length > 0 ? new SourceSpan(modelClass.Locations[0]) : SourceSpan.None);
     }
 
     private static bool IsCandidate(SyntaxNode node)
@@ -169,16 +218,9 @@ public class CompatibilityMatrixGenerator : IIncrementalGenerator
         return null;
     }
 
-    private static void Execute(
-        SourceProductionContext context,
-        ImmutableArray<INamedTypeSymbol?> candidates,
-        Compilation compilation)
+    private static void Emit(SourceProductionContext context, ImmutableArray<CompatEntry> candidates)
     {
-        var categoryAttrSymbol = compilation.GetTypeByMetadataName(ModelCategoryAttr);
-        var exemptAttrSymbol = compilation.GetTypeByMetadataName(ModelMetadataExemptAttr);
-        var categoryEnumType = compilation.GetTypeByMetadataName("AiDotNet.Enums.ModelCategory");
-
-        if (categoryAttrSymbol is null || candidates.IsDefaultOrEmpty)
+        if (candidates.IsDefaultOrEmpty)
         {
             EmitCompatibilityClass(context, new List<CompatEntry>());
             return;
@@ -187,41 +229,14 @@ public class CompatibilityMatrixGenerator : IIncrementalGenerator
         var entries = new List<CompatEntry>();
         var seen = new HashSet<string>();
 
-        foreach (var modelClass in candidates)
+        foreach (var entry in candidates)
         {
-            if (modelClass is null)
+            if (entry.FullyQualifiedName.Length == 0)
+                continue;
+            if (!seen.Add(entry.FullyQualifiedName))
                 continue;
 
-            var fullName = modelClass.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
-            if (!seen.Add(fullName))
-                continue;
-
-            // Skip classes marked with [ModelMetadataExempt]
-            if (exemptAttrSymbol is not null && HasAttribute(modelClass.GetAttributes(), exemptAttrSymbol))
-                continue;
-
-            var categories = new List<int>();
-            foreach (var attr in modelClass.GetAttributes())
-            {
-                if (attr.AttributeClass is not null &&
-                    SymbolEqualityComparer.Default.Equals(attr.AttributeClass, categoryAttrSymbol))
-                {
-                    if (attr.ConstructorArguments.Length >= 1 && attr.ConstructorArguments[0].Value is int c)
-                        categories.Add(c);
-                }
-            }
-
-            if (categories.Count > 0)
-            {
-                entries.Add(new CompatEntry
-                {
-                    ClassName = modelClass.Name,
-                    FullyQualifiedName = fullName,
-                    TypeParameterCount = modelClass.TypeParameters.Length,
-                    Categories = categories,
-                    Location = modelClass.Locations.Length > 0 ? modelClass.Locations[0] : null
-                });
-            }
+            entries.Add(entry);
         }
 
         entries.Sort((a, b) => string.Compare(a.ClassName, b.ClassName, System.StringComparison.Ordinal));
@@ -232,14 +247,14 @@ public class CompatibilityMatrixGenerator : IIncrementalGenerator
         foreach (var entry in entries)
         {
             var (_, _, _, warnings) = GetCompatibilityRules(entry.Categories);
-            if (warnings.Count > 0 && entry.Location is not null)
+            if (warnings.Count > 0 && !entry.Span.IsNone)
             {
-                var categoryNames = string.Join(", ", entry.Categories.Select(c => GetCategoryName(c, categoryEnumType)));
+                var categoryNames = string.Join(", ", entry.CategoryNames);
                 bool isImpossible = warnings.Any(w => w.StartsWith("IMPOSSIBLE:", System.StringComparison.Ordinal));
 
                 context.ReportDiagnostic(Diagnostic.Create(
                     isImpossible ? ImpossibleOptimizerCombination : SuspiciousOptimizer,
-                    entry.Location,
+                    entry.Span.ToLocation(),
                     entry.ClassName,
                     categoryNames));
             }
@@ -422,7 +437,7 @@ public class CompatibilityMatrixGenerator : IIncrementalGenerator
         context.AddSource("ModelCompatibility.g.cs", sb.ToString());
     }
 
-    private static (List<string> optimizers, List<string> lossFunctions, List<string> preprocessors, List<string> warnings) GetCompatibilityRules(List<int> categories)
+    private static (List<string> optimizers, List<string> lossFunctions, List<string> preprocessors, List<string> warnings) GetCompatibilityRules(ImmutableArray<int> categories)
     {
         var lossFunctions = new HashSet<string>();
         var preprocessors = new HashSet<string>();
@@ -769,12 +784,136 @@ public class CompatibilityMatrixGenerator : IIncrementalGenerator
         return false;
     }
 
-    private class CompatEntry
+    /// <summary>
+    /// One categorised model, as plain values. The declaration site is a SourceSpan rather than a
+    /// Roslyn Location: a Location holds its SyntaxTree and would root the whole Compilation.
+    /// </summary>
+    private sealed class CompatEntry : System.IEquatable<CompatEntry>
     {
-        public string ClassName { get; set; } = string.Empty;
-        public string FullyQualifiedName { get; set; } = string.Empty;
-        public int TypeParameterCount { get; set; }
-        public List<int> Categories { get; set; } = new List<int>();
-        public Location? Location { get; set; }
+        public static readonly CompatEntry Empty = new(
+            string.Empty, string.Empty, 0,
+            ImmutableArray<int>.Empty, ImmutableArray<string>.Empty, SourceSpan.None);
+
+        public CompatEntry(
+            string className,
+            string fullyQualifiedName,
+            int typeParameterCount,
+            ImmutableArray<int> categories,
+            ImmutableArray<string> categoryNames,
+            SourceSpan span)
+        {
+            ClassName = className;
+            FullyQualifiedName = fullyQualifiedName;
+            TypeParameterCount = typeParameterCount;
+            Categories = categories.IsDefault ? ImmutableArray<int>.Empty : categories;
+            CategoryNames = categoryNames.IsDefault ? ImmutableArray<string>.Empty : categoryNames;
+            Span = span;
+        }
+
+        public string ClassName { get; }
+        public string FullyQualifiedName { get; }
+        public int TypeParameterCount { get; }
+        public ImmutableArray<int> Categories { get; }
+        public ImmutableArray<string> CategoryNames { get; }
+        public SourceSpan Span { get; }
+
+        public bool Equals(CompatEntry? other)
+        {
+            if (other is null) return false;
+            if (ReferenceEquals(this, other)) return true;
+
+            if (!string.Equals(ClassName, other.ClassName, System.StringComparison.Ordinal)) return false;
+            if (!string.Equals(FullyQualifiedName, other.FullyQualifiedName, System.StringComparison.Ordinal)) return false;
+            if (TypeParameterCount != other.TypeParameterCount) return false;
+            if (!Span.Equals(other.Span)) return false;
+            if (Categories.Length != other.Categories.Length) return false;
+            for (int i = 0; i < Categories.Length; i++)
+            {
+                if (Categories[i] != other.Categories[i]) return false;
+            }
+            if (CategoryNames.Length != other.CategoryNames.Length) return false;
+            for (int i = 0; i < CategoryNames.Length; i++)
+            {
+                if (!string.Equals(CategoryNames[i], other.CategoryNames[i], System.StringComparison.Ordinal)) return false;
+            }
+            return true;
+        }
+
+        public override bool Equals(object? obj) => Equals(obj as CompatEntry);
+
+        public override int GetHashCode()
+        {
+            unchecked
+            {
+                int hash = 17;
+                hash = (hash * 31) + ClassName.GetHashCode();
+                hash = (hash * 31) + FullyQualifiedName.GetHashCode();
+                hash = (hash * 31) + TypeParameterCount;
+                hash = (hash * 31) + Categories.Length;
+                hash = (hash * 31) + CategoryNames.Length;
+                hash = (hash * 31) + Span.GetHashCode();
+                return hash;
+            }
+        }
+    }
+
+    /// <summary>
+    /// A declaration site reduced to plain values, so it can live in the incremental pipeline
+    /// without rooting a Compilation. Mirrors LayerStateGenerator.SourceSpan.
+    /// </summary>
+    private readonly struct SourceSpan : System.IEquatable<SourceSpan>
+    {
+        public static readonly SourceSpan None = default;
+
+        public SourceSpan(Location location)
+        {
+            var lineSpan = location.GetLineSpan();
+            FilePath = lineSpan.Path ?? string.Empty;
+            Start = location.SourceSpan.Start;
+            Length = location.SourceSpan.Length;
+            StartLine = lineSpan.StartLinePosition.Line;
+            StartChar = lineSpan.StartLinePosition.Character;
+            EndLine = lineSpan.EndLinePosition.Line;
+            EndChar = lineSpan.EndLinePosition.Character;
+        }
+
+        public string FilePath { get; }
+        public int Start { get; }
+        public int Length { get; }
+        public int StartLine { get; }
+        public int StartChar { get; }
+        public int EndLine { get; }
+        public int EndChar { get; }
+
+        public bool IsNone => string.IsNullOrEmpty(FilePath);
+
+        public Location ToLocation()
+            => string.IsNullOrEmpty(FilePath)
+                ? Location.None
+                : Location.Create(
+                    FilePath,
+                    new Microsoft.CodeAnalysis.Text.TextSpan(Start, Length),
+                    new Microsoft.CodeAnalysis.Text.LinePositionSpan(
+                        new Microsoft.CodeAnalysis.Text.LinePosition(StartLine, StartChar),
+                        new Microsoft.CodeAnalysis.Text.LinePosition(EndLine, EndChar)));
+
+        public bool Equals(SourceSpan other)
+            => FilePath == other.FilePath && Start == other.Start && Length == other.Length
+               && StartLine == other.StartLine && StartChar == other.StartChar
+               && EndLine == other.EndLine && EndChar == other.EndChar;
+
+        public override bool Equals(object? obj) => obj is SourceSpan sp && Equals(sp);
+
+        public override int GetHashCode()
+        {
+            unchecked
+            {
+                int hash = 17;
+                hash = (hash * 31) + (FilePath?.GetHashCode() ?? 0);
+                hash = (hash * 31) + Start;
+                hash = (hash * 31) + Length;
+                return hash;
+            }
+        }
     }
 }
