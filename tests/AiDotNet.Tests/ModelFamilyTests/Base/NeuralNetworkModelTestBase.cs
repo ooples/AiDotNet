@@ -1230,7 +1230,15 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         using var network = CreateNetwork();
         if (TrainingInvariantsNotApplicable(network)) return;
         var input = CreateRandomTensor(EffectiveInputShape, rng);
-        var target = CreateRandomTargetTensor(ShapeCheckedOutputShape, rng);
+        // Parameter movement must exercise the same well-posed public objective as every other
+        // supervised invariant. In particular, raw-logit language models need one categorical
+        // distribution per token; a dense uniform-random target makes softmax CE nearly constant,
+        // then global clipping can reduce a real update below the parameter-hash probe's resolution.
+        // Keep this policy in the shared base so generated model fixtures need no overrides.
+        var target = MakeTargetWellPosedForLoss(
+            network,
+            CreateRandomTargetTensor(ShapeCheckedOutputShape, rng),
+            rng);
 
         // Materialize lazy-initialized parameter tensors via a warmup
         // forward pass BEFORE snapshotting. Lazy layers (LayerNormalization
@@ -5376,10 +5384,12 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         // this extra proof and remains subject to the end-to-end update assertion below. An unexpected
         // accessor/training exception is allowed to escape rather than converting a broken probe to green.
         string gradientEvidence = "The published pre-optimizer gradient was unavailable.";
+        bool publishedGradientAvailable = false;
         if (TryMeanPublishedGradient(parameterProbe, network, input, targetA, out var gradientA, out double ownLossA)
             && TryMeanPublishedGradient(parameterProbe, network, input, targetA, out var gradientA2, out double ownLossA2)
             && TryMeanPublishedGradient(parameterProbe, network, input, targetB, out var gradientB, out double ownLossB))
         {
+            publishedGradientAvailable = true;
             double gradientSelfSimilarity = VectorCosine(gradientA, gradientA2);
             double gradientCrossSimilarity = VectorCosine(gradientA, gradientB);
             if (!double.IsNaN(gradientSelfSimilarity) && !double.IsNaN(gradientCrossSimilarity))
@@ -5399,6 +5409,25 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
                     return; // the target changes the true gradient; Adam masked it in the update
                 }
             }
+        }
+
+        // Closed-form and stateful trainers (ridge-regression readouts are the canonical example)
+        // have no pre-optimizer gradient, and restoring parameters alone does NOT restore their
+        // accumulated sufficient statistics. Comparing p_after - p_start therefore asks the wrong
+        // question: two different closed-form solutions can lie on the same side of a random p_start
+        // and have cosine +1 even though the target plainly changed the fitted endpoint. Worse, the
+        // second trajectory may inherit samples collected by the first.
+        //
+        // Re-run those models from a serialized model-state checkpoint. The same-target replay is the
+        // control; only an endpoint separation clearly above that control proves target dependence.
+        // This is generic base-fixture behavior -- model and layer authors need no reset hook or test
+        // override -- and gradient-based models retain the stricter gradient/direction evidence above.
+        if (!publishedGradientAvailable)
+        {
+            bool restoredStateProvesTargetDependence = TryProveTargetDependenceFromRestoredModelState(
+                parameterProbe, network, input, targetA, targetB, out string restoredStateEvidence);
+            gradientEvidence += " " + restoredStateEvidence;
+            if (restoredStateProvesTargetDependence) return;
         }
 
         string evidence = usedMirroredScalarTarget
@@ -5424,6 +5453,66 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
             + $"{network.ParameterCount}. {gradientEvidence}]";
         ReportGradientFinding(GradientReportFile, model, message);
         Assert.True(!GradientCorrectnessInvariantBlocking, message);
+    }
+
+    /// <summary>
+    /// Proves target dependence for a trainer that cannot publish gradients by comparing complete
+    /// fitted endpoints from the same serialized model state.
+    /// </summary>
+    private bool TryProveTargetDependenceFromRestoredModelState(
+        ParameterProbe probe,
+        INeuralNetworkModel<T> network,
+        Tensor<T> input,
+        Tensor<T> targetA,
+        Tensor<T> targetB,
+        out string evidence)
+    {
+        evidence = "A complete-state endpoint replay was unavailable.";
+
+        try
+        {
+            // Put the trainable tensors back first. Serializers for stateful solvers intentionally
+            // persist their durable model state, not an in-progress collection of training samples;
+            // Deserialize therefore recreates the pre-trajectory state for every replay.
+            probe.Restore();
+            byte[] checkpoint = network.Serialize();
+
+            Vector<T> RunFromCheckpoint(Tensor<T> target)
+            {
+                network.Deserialize(checkpoint);
+                if (network is AiDotNet.NeuralNetworks.NeuralNetworkBase<T> neuralNetwork)
+                    neuralNetwork.ResetBaseTrainOptimizerState();
+
+                int steps = Math.Max(1, TargetDependenceStepCount);
+                for (int i = 0; i < steps; i++) network.Train(input, target);
+                return probe.SampleCurrent();
+            }
+
+            var endpointA = RunFromCheckpoint(targetA);
+            var endpointA2 = RunFromCheckpoint(targetA);
+            var endpointB = RunFromCheckpoint(targetB);
+            network.Deserialize(checkpoint);
+
+            double selfDelta = MaxAbsParamDelta(endpointA, endpointA2);
+            double targetDelta = MaxAbsParamDelta(endpointA, endpointB);
+            evidence = $"Complete-state endpoint replay gave max parameter deltas "
+                + $"{targetDelta:E3} for different targets and {selfDelta:E3} for the same target.";
+
+            if (double.IsNaN(selfDelta) || double.IsNaN(targetDelta)) return false;
+
+            // 1e-7 is below a meaningful FP32 parameter update but above float conversion chatter.
+            // The same-target control handles stochastic serializers/trainers; the existing 4x ratio
+            // is reused so this fallback cannot credit ordinary replay noise as target signal.
+            return targetDelta > Math.Max(selfDelta * TargetDependenceDeficitRatio, 1e-7);
+        }
+        catch (Exception ex) when (ex is NotSupportedException
+                                   or InvalidOperationException
+                                   or ArgumentException)
+        {
+            evidence = $"Complete-state endpoint replay was unavailable ({ex.GetType().Name}).";
+            try { probe.Restore(); } catch { /* best-effort cleanup; the fixture owns the model */ }
+            return false;
+        }
     }
 
     /// <summary>
