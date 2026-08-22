@@ -233,6 +233,18 @@ public partial class RWKVLayer<T> : LayerBase<T>, IShapeContract
     public override bool SupportsTraining => true;
 
     /// <summary>
+    /// Every weight is sized from constructor arguments, so the parameter surface is known before
+    /// the first forward pass.
+    /// </summary>
+    /// <remarks>
+    /// <c>GetParameters()</c> already returns 13,664 values for <c>RWKVLayer<float>(4, 32, 4)</c>. Without this,
+    /// <c>IsShapeResolved</c> stays false and <see cref="LayerBase{T}.SetParameters"/> treats the
+    /// layer as shape-DEFERRED, parking a wrong-length vector as a pending restore instead of
+    /// rejecting it -- so mismatched weights fail silently and surface later somewhere unrelated.
+    /// </remarks>
+    protected override bool ParametersAreConstructionSized => true;
+
+    /// <summary>
     /// Gets the model dimension.
     /// </summary>
     public int ModelDimension => _modelDimension;
