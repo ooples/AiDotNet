@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Reflection;
 using System.Threading.Tasks;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Enums;
@@ -40,6 +41,94 @@ public sealed class FusedOptimizerCollection { }
 [Collection("FusedOptimizerGlobalState")]
 public class FusedOptimizerIntegrationTests
 {
+    /// <summary>
+    /// A model that composes a layer whose training graph cannot be safely replayed must be routed
+    /// to eager training by the shared network base. Model authors should not need to duplicate a
+    /// <c>SupportsFusedCompiledTraining</c> override merely because they use RG-LRU.
+    /// </summary>
+    [Fact(Timeout = 120000)]
+    public async Task EagerOnlyLayerCapability_AutomaticallyRoutesModelToFiniteEagerTraining()
+    {
+        await Task.CompletedTask;
+
+        var originalOptions = TensorCodecOptions.Current;
+        bool originalForceFresh = AiDotNet.Tensors.Helpers.TensorPool.ForceFreshAllocations;
+        try
+        {
+            TensorCodecOptions.SetCurrent(new TensorCodecOptions { EnableCompilation = true });
+            AiDotNet.Tensors.Helpers.TensorPool.ForceFreshAllocations = false;
+            CompiledTapeTrainingStep<float>.Invalidate();
+            CompiledTapeTrainingStep<float>.ResetFusedStepCount();
+
+            var architecture = new NeuralNetworkArchitecture<float>(
+                InputType.OneDimensional,
+                NeuralNetworkTaskType.Regression,
+                inputSize: 128,
+                outputSize: 4)
+            {
+                RandomSeed = 1
+            };
+            using var model = new RecurrentGemmaLanguageModel<float>(
+                architecture,
+                vocabSize: 4096);
+            model.StreamingTraining = StreamingTrainingMode.ForceOff;
+
+            var recurrentLayers = model.Layers
+                .OfType<AiDotNet.NeuralNetworks.Layers.SSM.RealGatedLinearRecurrenceLayer<float>>()
+                .ToArray();
+            Assert.NotEmpty(recurrentLayers);
+            foreach (var recurrentLayer in recurrentLayers)
+            {
+                var layerProperty = recurrentLayer.GetType().GetCustomAttribute<
+                    AiDotNet.Attributes.LayerPropertyAttribute>(inherit: false);
+                Assert.NotNull(layerProperty);
+                Assert.False(layerProperty.SupportsFusedCompiledTraining);
+            }
+
+            var input = new Tensor<float>(new[] { 32 });
+            for (int i = 0; i < input.Length; i++) input[i] = i + 1;
+
+            var prediction = model.Predict(input);
+            var target = new Tensor<float>(prediction.Shape.ToArray());
+            int rows = prediction.Length / 4096;
+            for (int row = 0; row < rows; row++)
+                target[row * 4096 + ((row * 127) % 4096)] = 1.0f;
+
+            var before = model.GetParameters();
+            model.Train(input, target);
+            var afterFirst = model.GetParameters();
+            var gradients = model.GetParameterGradients();
+
+            bool anyParameterChanged = false;
+            int nonFiniteParameters = 0;
+            int nonFiniteGradients = 0;
+            for (int i = 0; i < afterFirst.Length; i++)
+            {
+                if (before[i] != afterFirst[i]) anyParameterChanged = true;
+                if (float.IsNaN(afterFirst[i]) || float.IsInfinity(afterFirst[i])) nonFiniteParameters++;
+            }
+            for (int i = 0; i < gradients.Length; i++)
+                if (float.IsNaN(gradients[i]) || float.IsInfinity(gradients[i])) nonFiniteGradients++;
+
+            Assert.True(!float.IsNaN(model.GetLastLoss()) && !float.IsInfinity(model.GetLastLoss()),
+                $"The automatically selected eager step must have a finite loss; got {model.GetLastLoss()}.");
+            Assert.True(anyParameterChanged, "The automatically selected eager step did not update any parameter.");
+            Assert.Equal(0, nonFiniteParameters);
+            Assert.Equal(0, nonFiniteGradients);
+            Assert.Equal(0, CompiledTapeTrainingStep<float>.GetFusedStepCount());
+
+            model.Train(input, target);
+            Assert.True(!float.IsNaN(model.GetLastLoss()) && !float.IsInfinity(model.GetLastLoss()));
+            Assert.Equal(0, CompiledTapeTrainingStep<float>.GetFusedStepCount());
+        }
+        finally
+        {
+            AiDotNet.Tensors.Helpers.TensorPool.ForceFreshAllocations = originalForceFresh;
+            TensorCodecOptions.SetCurrent(originalOptions);
+            CompiledTapeTrainingStep<float>.Invalidate();
+        }
+    }
+
     /// <summary>
     /// With <see cref="TensorCodecOptions.EnableCompilation"/> true, <c>T=float</c>, and a plain
     /// Adam optimizer (no LR scheduler, no adaptive rates), <c>TryTrainWithFusedOptimizer</c>

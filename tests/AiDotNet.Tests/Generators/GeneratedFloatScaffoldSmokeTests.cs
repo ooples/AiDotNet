@@ -49,6 +49,33 @@ public class GeneratedFloatScaffoldSmokeTests
         return null;
     }
 
+    private sealed class RecurrentGemmaPolicyProbe
+        : global::AiDotNet.Tests.ModelFamilyTests.Generated.RecurrentGemmaLanguageModelTests
+    {
+        public int TrainingCount => TrainingIterations;
+        public int MemorizationCount => MemorizationTaskIterations;
+        public int GradientSamples => GradientCheckSampleCount;
+
+        public AiDotNet.NeuralNetworks.RecurrentGemmaLanguageModel<float> CreateModel()
+            => Assert.IsType<AiDotNet.NeuralNetworks.RecurrentGemmaLanguageModel<float>>(CreateNetwork());
+    }
+
+    [Fact]
+    public void RecurrentGemmaScaffold_FollowsFloatCapThenShrinkLadder()
+    {
+        var probe = new RecurrentGemmaPolicyProbe();
+
+        Assert.Equal(5, probe.TrainingCount);
+        Assert.Equal(5, probe.MemorizationCount);
+        Assert.Equal(1, probe.GradientSamples);
+
+        using var model = probe.CreateModel();
+        Assert.Equal(256, model.VocabSize);
+        Assert.Equal(32, model.ModelDimension);
+        Assert.Equal(1, model.NumLayers);
+        Assert.Equal(4, model.Layers.Count);
+    }
+
     [Fact]
     public void GeneratedScaffolds_FloatRewrite_FiresForSomeModelsAndNotAll()
     {

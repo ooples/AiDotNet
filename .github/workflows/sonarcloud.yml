@@ -1531,6 +1531,7 @@ jobs:
           # Create sanitized artifact name from shard name
           $slug = "${{ matrix.shard.name }}" -replace '[\\/:*?"<>|\s-]+', '_'
           echo "ARTIFACT_NAME=coverage-${{ github.sha }}-$slug" >> $env:GITHUB_ENV
+          echo "TEST_RESULTS_ARTIFACT_NAME=test-results-${{ github.sha }}-$slug" >> $env:GITHUB_ENV
 
       - name: Upload coverage + test results
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4
@@ -1542,6 +1543,21 @@ jobs:
             TestResults/**/coverage.opencover.xml
             TestResults/**/*.trx
           if-no-files-found: ignore
+
+      # Keep the aggregate diagnostic input small. Downloading every coverage XML merely to inspect
+      # TRX results makes the final reporter needlessly slow and expensive, while this artifact also
+      # retains hang-sequence evidence that the coverage artifact intentionally omits.
+      - name: Upload compact test diagnostics
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4
+        if: always()
+        continue-on-error: true
+        with:
+          name: ${{ env.TEST_RESULTS_ARTIFACT_NAME }}
+          path: |
+            TestResults/**/*.trx
+            TestResults/**/Sequence_*.xml
+          if-no-files-found: ignore
+          retention-days: 30
 
   parameter-enumeration-sweep:
     name: Parameter sweep (${{ matrix.label }})
@@ -2069,6 +2085,137 @@ jobs:
           echo "- Publish size: ${{ steps.size.outputs.current_mb }} MB" >> $GITHUB_STEP_SUMMARY
 
   # ---------------------------------------------------------------------------------------------
+  # One run-level diagnostic for the entire matrix. Per-shard reports remain useful for the stack
+  # trace, while this job answers the regression question directly: total and unique failures,
+  # affected shard/test categories, missing result artifacts, and new/resolved failures against the
+  # latest merged-PR analysis artifact. The checked-in seed is used only until a merged run has
+  # produced the new compact artifact format.
+  ci-test-analysis:
+    name: Test analysis (aggregate)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    if: "${{ always() && (github.event.pull_request.draft != true) && !startsWith(github.head_ref, 'release-please--') && !(github.event_name == 'push' && startsWith(github.event.head_commit.message, 'chore(master): release')) }}"
+    needs:
+      - test-net10-sharded
+    permissions:
+      actions: read
+      contents: read
+      pull-requests: read
+
+    steps:
+      - name: Checkout diagnostic scripts
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
+
+      - name: Verify aggregate analyzer
+        shell: pwsh
+        run: ./.github/scripts/test-analyze-test-results.ps1
+
+      - name: Initialize diagnostics directory
+        shell: pwsh
+        run: New-Item -ItemType Directory -Path TestDiagnostics -Force | Out-Null
+
+      - name: Download compact test diagnostics
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v4
+        continue-on-error: true
+        with:
+          pattern: test-results-${{ github.sha }}-*
+          path: TestDiagnostics
+
+      - name: Collect shard states and latest merged baseline
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_REF: ${{ github.base_ref || 'master' }}
+          CURRENT_PR: ${{ github.event.pull_request.number || '0' }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $headers = @{
+            Authorization = "Bearer $env:GH_TOKEN"
+            Accept = 'application/vnd.github+json'
+            'X-GitHub-Api-Version' = '2022-11-28'
+          }
+
+          # The matrix result only says failure/cancelled. Preserve every concrete shard conclusion
+          # so a cancelled or OOM-killed shard with no TRX cannot disappear from the totals.
+          $jobs = @()
+          $page = 1
+          do {
+            $response = Invoke-RestMethod -Headers $headers -Uri `
+              "$env:GITHUB_API_URL/repos/$env:GITHUB_REPOSITORY/actions/runs/$env:GITHUB_RUN_ID/jobs?per_page=100&page=$page"
+            $jobs += @($response.jobs)
+            $page++
+          } while ($response.jobs.Count -eq 100)
+          @($jobs) | ConvertTo-Json -Depth 8 | Set-Content current-jobs.json
+
+          $baselinePath = '.github/ci-test-baseline.json'
+          $baselineSource = 'checked-in seed'
+          $pulls = Invoke-RestMethod -Headers $headers -Uri `
+            "$env:GITHUB_API_URL/repos/$env:GITHUB_REPOSITORY/pulls?state=closed&base=$env:BASE_REF&sort=updated&direction=desc&per_page=100"
+          $merged = @($pulls | Where-Object {
+            $_.merged_at -and [string]$_.number -ne $env:CURRENT_PR
+          } | Sort-Object { [DateTime]$_.merged_at } -Descending)
+
+          foreach ($pull in $merged) {
+            # A merged push is keyed by the resulting merge/squash commit, while an earlier PR run
+            # may be keyed by the head commit. Prefer the merged commit so the baseline describes
+            # master exactly, then retain the head SHA as a compatibility fallback.
+            $candidateShas = @([string]$pull.merge_commit_sha, [string]$pull.head.sha) |
+              Where-Object { $_ } | Select-Object -Unique
+            foreach ($candidateSha in $candidateShas) {
+              $artifactName = "ci-test-analysis-$candidateSha"
+              $encodedName = [Uri]::EscapeDataString($artifactName)
+              $artifactResponse = Invoke-RestMethod -Headers $headers -Uri `
+                "$env:GITHUB_API_URL/repos/$env:GITHUB_REPOSITORY/actions/artifacts?name=$encodedName&per_page=100"
+              $artifact = @($artifactResponse.artifacts | Where-Object { -not $_.expired } |
+                Sort-Object { [DateTime]$_.created_at } -Descending | Select-Object -First 1)
+              if ($artifact.Count -eq 0) { continue }
+
+              $downloadDirectory = "baseline-download-$candidateSha"
+              $archivePath = "baseline-$candidateSha.zip"
+              New-Item -ItemType Directory -Path $downloadDirectory -Force | Out-Null
+              Invoke-WebRequest -Headers $headers -Uri $artifact[0].archive_download_url -OutFile $archivePath
+              Expand-Archive -LiteralPath $archivePath -DestinationPath $downloadDirectory -Force
+              $downloaded = Get-ChildItem $downloadDirectory -Recurse -Filter ci-test-analysis.json |
+                Select-Object -First 1
+              if ($downloaded) {
+                Copy-Item -LiteralPath $downloaded.FullName -Destination baseline.json
+                $baselinePath = 'baseline.json'
+                $baselineSource = "merged PR #$($pull.number) ($candidateSha)"
+                break
+              }
+            }
+            if ($baselinePath -eq 'baseline.json') { break }
+          }
+
+          "BASELINE_PATH=$baselinePath" >> $env:GITHUB_ENV
+          "BASELINE_SOURCE=$baselineSource" >> $env:GITHUB_ENV
+          "Baseline: $baselineSource" >> $env:GITHUB_STEP_SUMMARY
+
+      - name: Build aggregate failure analysis
+        shell: pwsh
+        env:
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          ./.github/scripts/analyze-test-results.ps1 `
+            -ResultsPath TestDiagnostics `
+            -OutputDirectory TestAnalysis `
+            -JobsPath current-jobs.json `
+            -BaselinePath $env:BASELINE_PATH `
+            -Repository '${{ github.repository }}' `
+            -CommitSha '${{ github.sha }}' `
+            -RunUrl $env:RUN_URL
+
+      - name: Upload aggregate test analysis
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4
+        with:
+          name: ci-test-analysis-${{ github.sha }}
+          path: TestAnalysis/
+          if-no-files-found: error
+          retention-days: 90
+
+  # ---------------------------------------------------------------------------------------------
   # Single aggregation gate. THIS is the job to mark as the required status check in the `Main`
   # ruleset -- not SonarCloud, and not the shards themselves.
   #
@@ -2088,6 +2235,7 @@ jobs:
     needs:
       - build
       - test-net10-sharded
+      - ci-test-analysis
       - sonarcloud
 
     steps:
@@ -2095,6 +2243,7 @@ jobs:
         env:
           BUILD_RESULT: ${{ needs.build.result }}
           TESTS_RESULT: ${{ needs.test-net10-sharded.result }}
+          ANALYSIS_RESULT: ${{ needs.ci-test-analysis.result }}
           SONAR_RESULT: ${{ needs.sonarcloud.result }}
         run: |
           set -euo pipefail
@@ -2105,10 +2254,11 @@ jobs:
           echo "|---|---|" >> "$GITHUB_STEP_SUMMARY"
           echo "| build | $BUILD_RESULT |" >> "$GITHUB_STEP_SUMMARY"
           echo "| test-net10-sharded | $TESTS_RESULT |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| ci-test-analysis | $ANALYSIS_RESULT |" >> "$GITHUB_STEP_SUMMARY"
           echo "| sonarcloud | $SONAR_RESULT |" >> "$GITHUB_STEP_SUMMARY"
 
           failed=0
-          for pair in "build:$BUILD_RESULT" "test-net10-sharded:$TESTS_RESULT" "sonarcloud:$SONAR_RESULT"; do
+          for pair in "build:$BUILD_RESULT" "test-net10-sharded:$TESTS_RESULT" "ci-test-analysis:$ANALYSIS_RESULT" "sonarcloud:$SONAR_RESULT"; do
             job="${pair%%:*}"
             result="${pair#*:}"
             # 'skipped' is deliberately NOT accepted: it is exactly how this gate used to fail

@@ -15,6 +15,20 @@ namespace AiDotNet.Tests.ModelFamilyTests.Base;
 /// </summary>
 public abstract class NERModelTestBase<T> : NeuralNetworkModelTestBase<T>
 {
+    private const int FallbackLabelCount = 9;
+
+    protected override ExternalTargetEncodingKind ExternalTargetEncoding
+        => ExternalTargetEncodingKind.SparseClassIndices;
+
+    protected override int ExternalCategoricalClassCount(
+        INeuralNetworkModel<T> network, Tensor<T> target)
+    {
+        var outputShape = ShapeCheckedOutputShape;
+        return outputShape.Length >= 2 && outputShape[^1] > 1
+            ? outputShape[^1]
+            : FallbackLabelCount;
+    }
+
     /// <summary>
     /// NER labels are categorical class indices (O, B-PER, I-PER, ...) per the
     /// CoNLL-2003 / OntoNotes convention used by the BERT-NER family (Devlin
@@ -36,13 +50,51 @@ public abstract class NERModelTestBase<T> : NeuralNetworkModelTestBase<T>
         // [seq] integer indices. Otherwise emit [shape[0]] integers as a
         // best-effort default.
         int seqLen = shape[0];
-        int numLabels = shape.Length >= 2 ? shape[shape.Length - 1] : 9;
-        if (numLabels < 2) numLabels = 9;  // sanity fallback
+        int numLabels = shape.Length >= 2 ? shape[shape.Length - 1] : FallbackLabelCount;
+        if (numLabels < 2) numLabels = FallbackLabelCount;  // sanity fallback
 
         var tensor = new Tensor<T>([seqLen]);
         for (int i = 0; i < seqLen; i++)
             tensor[i] = NumOps.FromDouble(rng.Next(numLabels));
         return tensor;
+    }
+
+    /// <summary>
+    /// Regression coverage for the shared target contract. Sparse per-token labels must survive the
+    /// loss-conditioning path unchanged, while the target-dependence contrast must change every token
+    /// to another legal class. This catches the rank-1-as-one-dense-vector regression that erased NER
+    /// supervision in the first #2032 iteration.
+    /// </summary>
+    [Fact(Timeout = 120000)]
+    public async Task SparseTrainingTargets_PreservePerTokenEncodingAndContrast()
+    {
+        await Task.Yield();
+        using var _arena = TensorArena.Create();
+        var rng = ModelTestHelpers.CreateSeededRandom();
+        using var network = CreateNetwork();
+        var outputShape = ShapeCheckedOutputShape;
+        var source = CreateRandomTargetTensor(outputShape, rng);
+        var prepared = MakeTargetWellPosedForLoss(network, source, rng);
+
+        Assert.Equal(source.Shape.ToArray(), prepared.Shape.ToArray());
+        Assert.Equal(source.Length, prepared.Length);
+        for (int i = 0; i < source.Length; i++)
+            Assert.Equal(NumOps.ToDouble(source[i]), NumOps.ToDouble(prepared[i]));
+
+        var input = CreateRandomTensor(EffectiveInputShape, rng);
+        var contrast = CreateContrastTarget(network, prepared, input);
+        int numClasses = ExternalCategoricalClassCount(network, prepared);
+        Assert.Equal(prepared.Shape.ToArray(), contrast.Shape.ToArray());
+
+        for (int i = 0; i < contrast.Length; i++)
+        {
+            double label = NumOps.ToDouble(contrast[i]);
+            Assert.True(label == Math.Truncate(label) && label >= 0.0 && label < numClasses,
+                $"Contrast label[{i}] is {label}; expected an integer in [0, {numClasses - 1}].");
+            double preparedLabel = NumOps.ToDouble(prepared[i]);
+            Assert.True(preparedLabel != label,
+                $"Contrast label[{i}] did not change from the prepared label {preparedLabel}.");
+        }
     }
 
     /// <summary>
