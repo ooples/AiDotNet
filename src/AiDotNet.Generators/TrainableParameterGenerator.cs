@@ -59,22 +59,56 @@ public class TrainableParameterGenerator : IIncrementalGenerator
 
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
-        // Find all class declarations that might have [TrainableParameter] fields
-        var classDeclarations = context.SyntaxProvider
+        // The pipeline used to cache ClassDeclarationSyntax. A syntax node is the same class of
+        // leak as a symbol: it holds its SyntaxTree, which roots the entire Compilation, so every
+        // cached entry pinned a compilation in memory. It now carries only each candidate's
+        // metadata name, and the symbol is re-resolved from the compilation at the point of use.
+        //
+        // Same deliberate scope limit as ModelParameterGenerator: this fixes the retention, not the
+        // re-execution. The per-class analysis is large enough that moving it into the transform
+        // would carry more regression risk than the incremental win is worth, so
+        // CompilationProvider stays and the generator still runs every compilation -- it just no
+        // longer holds compilations alive.
+        var classNames = context.SyntaxProvider
             .CreateSyntaxProvider(
                 predicate: static (node, _) => node is ClassDeclarationSyntax cds &&
                     cds.Modifiers.Any(m => m.Text == "partial"),
-                transform: static (ctx, _) => (ClassDeclarationSyntax)ctx.Node)
-            .Where(static c => c is not null);
+                transform: static (ctx, _) =>
+                    ctx.SemanticModel.GetDeclaredSymbol(ctx.Node) is INamedTypeSymbol symbol
+                        ? MetadataNameOf(symbol)
+                        : null)
+            .Where(static n => n is not null)
+            .Select(static (n, _) => n ?? string.Empty);
 
-        var compilationAndClasses = context.CompilationProvider.Combine(classDeclarations.Collect());
+        var compilationAndClasses = context.CompilationProvider.Combine(classNames.Collect());
 
         context.RegisterSourceOutput(compilationAndClasses, static (spc, source) => Execute(source.Left, source.Right, spc));
     }
 
-    private static void Execute(Compilation compilation, ImmutableArray<ClassDeclarationSyntax> classes, SourceProductionContext context)
+    /// <summary>
+    /// Builds the metadata name GetTypeByMetadataName expects, including the arity suffix for
+    /// generics and '+' separators for nested types.
+    /// </summary>
+    private static string MetadataNameOf(INamedTypeSymbol symbol)
     {
-        if (classes.IsDefaultOrEmpty) return;
+        var name = symbol.MetadataName;
+        for (var containing = symbol.ContainingType; containing is not null; containing = containing.ContainingType)
+        {
+            name = containing.MetadataName + "+" + name;
+        }
+
+        var ns = symbol.ContainingNamespace;
+        if (ns is not null && !ns.IsGlobalNamespace)
+        {
+            name = ns.ToDisplayString() + "." + name;
+        }
+
+        return name;
+    }
+
+    private static void Execute(Compilation compilation, ImmutableArray<string> classMetadataNames, SourceProductionContext context)
+    {
+        if (classMetadataNames.IsDefaultOrEmpty) return;
 
         var attributeSymbol = compilation.GetTypeByMetadataName(TrainableParameterAttributeName);
 
@@ -93,10 +127,15 @@ public class TrainableParameterGenerator : IIncrementalGenerator
         // Group by containing class (multiple partial declarations possible)
         var processedClasses = new HashSet<string>();
 
-        foreach (var classDecl in classes)
+        // Partial classes contribute one name per declaration; resolve each distinct name once.
+        var resolvedNames = new HashSet<string>();
+
+        foreach (var metadataName in classMetadataNames)
         {
-            var model = compilation.GetSemanticModel(classDecl.SyntaxTree);
-            var classSymbol = model.GetDeclaredSymbol(classDecl) as INamedTypeSymbol;
+            if (metadataName.Length == 0) continue;
+            if (!resolvedNames.Add(metadataName)) continue;
+
+            var classSymbol = compilation.GetTypeByMetadataName(metadataName);
             if (classSymbol is null) continue;
 
             // Check if class extends LayerBase<T>
